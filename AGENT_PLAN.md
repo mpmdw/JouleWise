@@ -7,6 +7,9 @@ as the first research application that validates the harness.
 
 ## Ground Rules For Agents
 
+- At the start of every substantial run, read `RUN_STATE.md` first.
+- At the end of every substantial run, update `RUN_STATE.md` and add or update a
+  detailed report in `docs/run_reports/`.
 - Do not modify `Energy_Benchmark_Architecture.docx` unless the user asks.
 - Keep run artifacts self-contained and reproducible.
 - Prefer small vertical slices that produce complete run bundles.
@@ -146,3 +149,16 @@ python3 -m joulewise validate-config configs/examples/mock_local.json
 python3 -m joulewise print-config-schema
 python3 -m joulewise print-output-schema
 ```
+
+## Run Report Protocol
+
+Every big run must leave a human-readable handoff note. The report should cover:
+
+- What changed.
+- What commands were run.
+- What passed or failed.
+- What local workspace state needs care.
+- What the next agent should do first.
+
+The root `RUN_STATE.md` is the current handoff. Dated reports live in
+`docs/run_reports/`.

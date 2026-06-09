@@ -13,7 +13,9 @@ The benchmark is designed around three stable ideas:
 - Run bundles preserve raw traces, events, metadata, logs, and summary metrics
   for later audit and analysis.
 
-See `AGENT_PLAN.md` for the phase-by-phase implementation checklist.
+See `AGENT_PLAN.md` for the phase-by-phase implementation checklist. See
+`RUN_STATE.md` before starting substantial work; it is the current handoff note
+for what was done and what should happen next.
 
 ## Current State
 
