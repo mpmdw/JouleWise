@@ -65,6 +65,8 @@ interfaces, docs, example configs, and CLI helpers.
   - Recorded that MLX/MLX-LM are not installed in the current Python
     environment.
   - Recorded current controller network-tool status for interconnect planning.
+- Resolved the unrelated Word-doc deletion: the user confirmed
+  `Energy_Benchmark_Architecture.docx` was not part of the actual project.
 
 ## Current Verification
 
@@ -98,22 +100,14 @@ valid config: configs/examples/mac_mlx_local.json target=macbook_m3_max runtime=
 - Remote: `git@github.com:mpmdw/JouleWise.git`
 - Branch: `main`, tracking `origin/main`
 - Use `git log --oneline --decorate -3` for the latest pushed commit. The
-  latest commit before this task-queue planning run was
-  `d3e6540 Add evidence-based planning gates`.
-- Current local caution: `Energy_Benchmark_Architecture.docx` appears deleted in
-  the working tree after the push. Do not commit that deletion unless the user
-  confirms it should be removed from the repo.
+  latest commit before this Word-doc cleanup run was
+  `1b10ff0 Record Phase 1 local evidence`.
 
 ## What Is Next
 
 The next substantive work should follow `TASK_QUEUE.md`.
 
-The current highest-ranked item is:
-
-1. Resolve the local `Energy_Benchmark_Architecture.docx` deletion decision
-   without accidentally committing it.
-
-The next Phase 1 continuation step after workspace safety is:
+The current highest-ranked Phase 1 item is:
 
 1. Capture supervisor approval and scope notes in
    `docs/phase_1/phase_1_exit_checklist.md`.
