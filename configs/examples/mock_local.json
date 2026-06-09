@@ -1,0 +1,40 @@
+{
+  "schema_version": "0.1",
+  "run_id": "example-mock-local",
+  "model": {
+    "name": "mock-model",
+    "family": "mock",
+    "weight_format": "mock",
+    "context_window": 1024
+  },
+  "quantization": {
+    "name": "none"
+  },
+  "hardware_target": {
+    "id": "mock_target",
+    "transport": "local",
+    "runtime_backend": "mock",
+    "telemetry_backend": "mock",
+    "device_kind": "test"
+  },
+  "workload_profile": {
+    "name": "mock_smoke",
+    "prompt_tokens": 32,
+    "output_tokens": 8,
+    "repetitions": 1,
+    "warmup_runs": 1
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 2.0,
+    "idle_seconds": 1.0,
+    "warmup_seconds": 0.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "test",
+    "tags": ["phase1", "mock"]
+  }
+}

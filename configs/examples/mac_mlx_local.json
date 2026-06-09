@@ -1,0 +1,43 @@
+{
+  "schema_version": "0.1",
+  "run_id": "example-mac-mlx-local",
+  "model": {
+    "name": "qwen-placeholder",
+    "family": "qwen",
+    "source": "local-or-huggingface",
+    "weight_format": "mlx",
+    "context_window": 4096
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "Phase 2 first real vertical slice."
+  },
+  "workload_profile": {
+    "name": "smoke_short_prompt_short_decode",
+    "prompt_text": "Summarize why idle-subtracted energy matters for LLM inference benchmarking.",
+    "output_tokens": 64,
+    "repetitions": 3,
+    "warmup_runs": 1
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 1.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "jon",
+    "tags": ["phase1", "mac", "smoke"]
+  }
+}

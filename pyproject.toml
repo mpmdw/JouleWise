@@ -1,0 +1,13 @@
+[project]
+name = "joulewise"
+version = "0.1.0"
+description = "Extensible energy-wise benchmark for LLM inference."
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["joulewise*"]
+
+[tool.joulewise]
+phase = "1"
+status = "schema-and-interface-skeleton"
