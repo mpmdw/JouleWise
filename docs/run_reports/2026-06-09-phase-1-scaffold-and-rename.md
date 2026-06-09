@@ -36,6 +36,16 @@ JouleWise as a nod to JouleSort and Splitwise.
   - README, docs, tests, and config metadata.
 - Added `.gitignore` for Python caches, virtualenvs, and future run bundles.
 - Committed and pushed the initial scaffold.
+- Added `RUN_STATE.md` and `docs/run_reports/` so future runs have a durable
+  "what I did and what is next" handoff.
+- Audited the Phase 1 plan and found that the remaining items were too
+  checklist-shaped.
+- Added `docs/planning_reflection_protocol.md` so every future phase or major
+  step starts with an evidence/assumption/acceptance-criteria review.
+- Added `docs/phase_1/phase_1_exit_checklist.md` to turn the remaining Phase 1
+  work into explicit evidence gates.
+- Added `docs/phase_1/network_plan.md` to make interconnect planning concrete
+  before Phase 3.
 
 ## Verification Performed
 
@@ -88,8 +98,11 @@ Important caution:
 
 ## What Is Next
 
-The next run should begin Phase 2 preparation without jumping directly into
-physical telemetry:
+The next run should first use `docs/planning_reflection_protocol.md`, then work
+through the evidence gates in `docs/phase_1/phase_1_exit_checklist.md`.
+
+After Phase 1 evidence gates are updated, Phase 2 preparation should begin
+without jumping directly into physical telemetry:
 
 1. Implement a run-bundle writer.
 2. Implement a mock controller lifecycle.
@@ -114,3 +127,4 @@ vertical slice.
 - Wall-meter availability.
 - Network plan for 1GbE, 2.5GbE, and optional 10GbE experiments.
 - Physical telemetry permission checks on Mac, NVIDIA nodes, Orin, and Pi/Hailo.
+- Phase 1 exit checklist needs real evidence from hardware/supervisor access.

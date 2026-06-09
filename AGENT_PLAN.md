@@ -8,6 +8,8 @@ as the first research application that validates the harness.
 ## Ground Rules For Agents
 
 - At the start of every substantial run, read `RUN_STATE.md` first.
+- At the start of each phase or major step, apply
+  `docs/planning_reflection_protocol.md` before implementation.
 - At the end of every substantial run, update `RUN_STATE.md` and add or update a
   detailed report in `docs/run_reports/`.
 - Do not modify `Energy_Benchmark_Architecture.docx` unless the user asks.
@@ -39,6 +41,8 @@ typed config
 Status: in progress.
 
 - [x] Create repo-local agent plan.
+- [x] Add reusable planning reflection protocol.
+- [x] Add evidence-based Phase 1 exit checklist.
 - [x] Define draft typed benchmark config contract.
 - [x] Define draft standardized run output contract.
 - [x] Define runtime/telemetry/transport adapter interfaces.
@@ -57,6 +61,8 @@ Acceptance criteria:
 - Example configs validate.
 - Mock adapter tests pass.
 - Measurement methodology is documented.
+- `docs/phase_1/phase_1_exit_checklist.md` has evidence for every required
+  Phase 1 item.
 - Every hardware target is classified as supported, pending, or intentionally
   unsupported.
 - Phase 2 can start with a clear Mac MLX + powermetrics vertical slice.
@@ -154,6 +160,7 @@ python3 -m joulewise print-output-schema
 
 Every big run must leave a human-readable handoff note. The report should cover:
 
+- Planning reflection performed at the start of the run.
 - What changed.
 - What commands were run.
 - What passed or failed.
@@ -162,3 +169,7 @@ Every big run must leave a human-readable handoff note. The report should cover:
 
 The root `RUN_STATE.md` is the current handoff. Dated reports live in
 `docs/run_reports/`.
+
+Every new phase also needs an exit checklist or equivalent section that states
+the evidence required to close that phase. See
+`docs/planning_reflection_protocol.md` for the reusable format.

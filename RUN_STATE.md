@@ -8,16 +8,19 @@ Before starting substantial work:
 
 1. Read this file.
 2. Read `AGENT_PLAN.md`.
-3. Check `git status --short --branch`.
-4. Run `python3 -m unittest discover -s tests` unless the task is docs-only.
-5. Do not commit local deletions or unrelated changes unless the user asks.
+3. Read `docs/planning_reflection_protocol.md`.
+4. Check whether the current phase has an evidence-based exit checklist.
+5. Check `git status --short --branch`.
+6. Run `python3 -m unittest discover -s tests` unless the task is docs-only.
+7. Do not commit local deletions or unrelated changes unless the user asks.
 
 At the end of substantial work:
 
 1. Update this file with what changed.
 2. Add or update a detailed report in `docs/run_reports/`.
 3. Record tests, commands, blockers, and the next best task.
-4. Call out any dirty working-tree state that should not be accidentally
+4. Record whether the plan had evidence gaps and how they were resolved.
+5. Call out any dirty working-tree state that should not be accidentally
    committed.
 
 ## Current Project Status
@@ -45,6 +48,11 @@ interfaces, docs, example configs, and CLI helpers.
 - Added unit tests for schemas, interfaces, and CLI helpers.
 - Renamed the project from the temporary `energybench` identity to JouleWise.
 - Committed and pushed the scaffold to `origin/main`.
+- Added run-report protocol and pushed it to `origin/main`.
+- Added a planning reflection protocol so future phase starts audit evidence,
+  assumptions, acceptance criteria, and fallbacks before implementation.
+- Added a Phase 1 exit checklist that turns remaining open items into
+  evidence-based gates.
 
 ## Current Verification
 
@@ -77,7 +85,7 @@ valid config: configs/examples/mac_mlx_local.json target=macbook_m3_max runtime=
 
 - Remote: `git@github.com:mpmdw/JouleWise.git`
 - Branch: `main`, tracking `origin/main`
-- Latest pushed commit: `6a11142 Initialize JouleWise benchmark scaffold`
+- Latest pushed commit before current local edits: `f177334 Add run-state handoff reports`
 - Current local caution: `Energy_Benchmark_Architecture.docx` appears deleted in
   the working tree after the push. Do not commit that deletion unless the user
   confirms it should be removed from the repo.
@@ -86,13 +94,15 @@ valid config: configs/examples/mac_mlx_local.json target=macbook_m3_max runtime=
 
 The next substantive implementation step is Phase 2 preparation:
 
-1. Add a run-bundle writer that creates the documented directory layout.
-2. Add a mock controller lifecycle:
+1. Close or update the evidence items in
+   `docs/phase_1/phase_1_exit_checklist.md`.
+2. Add a run-bundle writer that creates the documented directory layout.
+3. Add a mock controller lifecycle:
    `prepare -> idle -> warmup -> measured_run -> cleanup -> reduce`.
-3. Add a deterministic mock runtime and mock telemetry adapter.
-4. Add reducer logic for simple synthetic power traces.
-5. Make one command produce a complete mock run bundle.
-6. Only after that, begin the Mac-local MLX + powermetrics vertical slice.
+4. Add a deterministic mock runtime and mock telemetry adapter.
+5. Add reducer logic for simple synthetic power traces.
+6. Make one command produce a complete mock run bundle.
+7. Only after that, begin the Mac-local MLX + powermetrics vertical slice.
 
 ## Open Decisions And Blockers
 
@@ -101,5 +111,7 @@ The next substantive implementation step is Phase 2 preparation:
 - Wall-meter availability remains pending.
 - Local network plan for interconnect sweep remains pending.
 - Physical-target telemetry permissions remain pending.
+- Phase 1 evidence gates now live in
+  `docs/phase_1/phase_1_exit_checklist.md`.
 - Git author identity was auto-selected as `Edr <edr@Edrs-MacBook-Air.local>`
   for the first commit. Amend future commits if a different identity is needed.

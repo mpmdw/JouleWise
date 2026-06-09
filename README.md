@@ -15,7 +15,9 @@ The benchmark is designed around three stable ideas:
 
 See `AGENT_PLAN.md` for the phase-by-phase implementation checklist. See
 `RUN_STATE.md` before starting substantial work; it is the current handoff note
-for what was done and what should happen next.
+for what was done and what should happen next. Future phase starts should use
+`docs/planning_reflection_protocol.md` to audit whether each step has evidence
+and acceptance criteria before implementation begins.
 
 ## Current State
 
