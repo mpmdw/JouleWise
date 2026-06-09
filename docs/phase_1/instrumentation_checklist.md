@@ -47,6 +47,12 @@ Current verdict:
 - Telemetry permission: permission-blocked until a sudo workflow is approved.
 - Runtime: pending install or environment selection for MLX/MLX-LM.
 
+Next owner/action:
+
+- User will handle local-machine auth on 2026-06-10. After that, capture one
+  privileged `powermetrics` sample and record the available power/thermal fields
+  here.
+
 ## NVIDIA 3050
 
 - Runtime target: vLLM.

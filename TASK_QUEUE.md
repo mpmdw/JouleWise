@@ -59,7 +59,7 @@ Rank lower when a task:
 | Rank | ID | Priority | Status | Task | Evidence / Acceptance |
 |---:|---|---|---|---|---|
 | 1 | P1-001 | P1 Phase Gate | open | Capture supervisor approval and scope notes | Dated notes in `docs/phase_1/phase_1_exit_checklist.md`; `RUN_STATE.md` updated if scope changes |
-| 2 | P1-002 | P1 Phase Gate | partial | Complete Mac-local Phase 1 telemetry/runtime evidence | `powermetrics` binary/help/privilege behavior and MLX absence recorded; privileged sample fields and MLX install path still pending |
+| 2 | P1-002 | P1 Phase Gate | waiting-user | Complete Mac-local Phase 1 telemetry/runtime evidence | `powermetrics` binary/help/privilege behavior and MLX absence recorded; user will handle local-machine auth on 2026-06-10; privileged sample fields and MLX install path still pending |
 | 3 | P1-003 | P1 Phase Gate | open | Record wall-meter decision | Meter make/model or "unavailable" verdict plus measurement/export method |
 | 4 | P1-004 | P1 Phase Gate | partial | Fill network/interconnect topology plan | Controller command/tool status recorded; physical topology, link-speed paths, and throughput method still pending |
 | 5 | P1-005 | P1 Phase Gate | open | Complete Hailo feasibility verdict | Verdict code and evidence recorded in `docs/phase_1/hailo_feasibility.md` |

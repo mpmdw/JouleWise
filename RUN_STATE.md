@@ -67,6 +67,8 @@ interfaces, docs, example configs, and CLI helpers.
   - Recorded current controller network-tool status for interconnect planning.
 - Resolved the unrelated Word-doc deletion: the user confirmed
   `Energy_Benchmark_Architecture.docx` was not part of the actual project.
+- Recorded that the user will handle local-machine auth on 2026-06-10 so the
+  privileged `powermetrics` sample can be captured for the Mac telemetry gate.
 
 ## Current Verification
 
@@ -111,9 +113,12 @@ The current highest-ranked Phase 1 item is:
 
 1. Capture supervisor approval and scope notes in
    `docs/phase_1/phase_1_exit_checklist.md`.
-2. Record the wall-meter decision in
+2. After local auth is handled on 2026-06-10, capture one privileged
+   `powermetrics` sample and update
    `docs/phase_1/instrumentation_checklist.md`.
-3. Fill physical topology details in `docs/phase_1/network_plan.md`.
+3. Record the wall-meter decision in
+   `docs/phase_1/instrumentation_checklist.md`.
+4. Fill physical topology details in `docs/phase_1/network_plan.md`.
 
 The next Phase 2 preparation step, once Phase 1 gates are adequately planned or
 closed, is:
@@ -135,7 +140,7 @@ closed, is:
 - Physical-target telemetry permissions remain pending.
 - Mac-local evidence is partially checked: `powermetrics` is present but
   requires superuser privileges; MLX/MLX-LM are not installed in the current
-  Python environment.
+  Python environment. User will handle local-machine auth on 2026-06-10.
 - Phase 1 evidence gates now live in
   `docs/phase_1/phase_1_exit_checklist.md`.
 - Git author identity was auto-selected as `Edr <edr@Edrs-MacBook-Air.local>`
