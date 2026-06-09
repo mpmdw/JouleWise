@@ -60,9 +60,9 @@ Rank lower when a task:
 |---:|---|---|---|---|---|
 | 1 | Q-000 | P0 Safety | open | Resolve the local `Energy_Benchmark_Architecture.docx` deletion decision | User confirms restore/remove/ignore; no accidental commit of deletion |
 | 2 | P1-001 | P1 Phase Gate | open | Capture supervisor approval and scope notes | Dated notes in `docs/phase_1/phase_1_exit_checklist.md`; `RUN_STATE.md` updated if scope changes |
-| 3 | P1-002 | P1 Phase Gate | open | Complete Mac-local Phase 1 telemetry/runtime evidence | `powermetrics` privilege workflow, thermal fields, MLX availability recorded in instrumentation checklist |
+| 3 | P1-002 | P1 Phase Gate | partial | Complete Mac-local Phase 1 telemetry/runtime evidence | `powermetrics` binary/help/privilege behavior and MLX absence recorded; privileged sample fields and MLX install path still pending |
 | 4 | P1-003 | P1 Phase Gate | open | Record wall-meter decision | Meter make/model or "unavailable" verdict plus measurement/export method |
-| 5 | P1-004 | P1 Phase Gate | open | Fill network/interconnect topology plan | `docs/phase_1/network_plan.md` lists topology, link-speed paths, and verification method |
+| 5 | P1-004 | P1 Phase Gate | partial | Fill network/interconnect topology plan | Controller command/tool status recorded; physical topology, link-speed paths, and throughput method still pending |
 | 6 | P1-005 | P1 Phase Gate | open | Complete Hailo feasibility verdict | Verdict code and evidence recorded in `docs/phase_1/hailo_feasibility.md` |
 | 7 | P1-006 | P1 Phase Gate | open | Confirm NVIDIA/Orin telemetry access paths | SSH/runtime/telemetry command evidence recorded or marked pending with blocker |
 | 8 | P1-007 | P1 Phase Gate | open | Perform Phase 2 readiness review | `docs/phase_1/phase_1_exit_checklist.md` states mock-first Phase 2 can begin |

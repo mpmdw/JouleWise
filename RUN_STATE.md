@@ -60,6 +60,11 @@ interfaces, docs, example configs, and CLI helpers.
   recent handoffs, recent commits, and active phase gates.
 - Added `docs/phase_1/phase_1_continuation_plan.md` to begin Phase 1
   continuation planning.
+- Continued Phase 1 evidence gathering:
+  - Recorded Apple/Mac `powermetrics` availability and superuser requirement.
+  - Recorded that MLX/MLX-LM are not installed in the current Python
+    environment.
+  - Recorded current controller network-tool status for interconnect planning.
 
 ## Current Verification
 
@@ -110,8 +115,11 @@ The current highest-ranked item is:
 
 The next Phase 1 continuation step after workspace safety is:
 
-1. Close or update the evidence items in
+1. Capture supervisor approval and scope notes in
    `docs/phase_1/phase_1_exit_checklist.md`.
+2. Record the wall-meter decision in
+   `docs/phase_1/instrumentation_checklist.md`.
+3. Fill physical topology details in `docs/phase_1/network_plan.md`.
 
 The next Phase 2 preparation step, once Phase 1 gates are adequately planned or
 closed, is:
@@ -131,6 +139,9 @@ closed, is:
 - Wall-meter availability remains pending.
 - Local network plan for interconnect sweep remains pending.
 - Physical-target telemetry permissions remain pending.
+- Mac-local evidence is partially checked: `powermetrics` is present but
+  requires superuser privileges; MLX/MLX-LM are not installed in the current
+  Python environment.
 - Phase 1 evidence gates now live in
   `docs/phase_1/phase_1_exit_checklist.md`.
 - Git author identity was auto-selected as `Edr <edr@Edrs-MacBook-Air.local>`

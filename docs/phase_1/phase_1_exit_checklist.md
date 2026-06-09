@@ -34,8 +34,8 @@ Still required:
 | Supervisor approval and scope | pending | Written notes from meeting/email listing approved must-haves, stretch items, and out-of-scope items | This file and `RUN_STATE.md` |
 | Hailo feasibility | pending | Toolchain/version check plus one documented compile/runtime attempt or official limitation finding | `docs/phase_1/hailo_feasibility.md` |
 | Wall-meter availability | pending | Meter make/model, measurement resolution, export/manual logging method, and whether lab or purchased | `docs/phase_1/instrumentation_checklist.md` |
-| Network plan | pending | Topology, link-speed options, devices/adapters, isolation plan, and verification commands | `docs/phase_1/network_plan.md` |
-| Mac telemetry permissions | partially checked | `powermetrics` binary path, privilege requirement, sample command, accessible fields | `docs/phase_1/instrumentation_checklist.md` |
+| Network plan | partially checked | Controller command/tool status recorded; topology, devices/adapters, isolation plan, and throughput method still pending | `docs/phase_1/network_plan.md` |
+| Mac telemetry permissions | partially checked | `powermetrics` binary path and privilege requirement recorded; privileged sample fields still pending | `docs/phase_1/instrumentation_checklist.md` |
 | NVIDIA telemetry permissions | pending | SSH access, `nvidia-smi` path, power-query support, sample command output | `docs/phase_1/instrumentation_checklist.md` |
 | Orin telemetry permissions | pending | SSH access, selected telemetry source, sample command output, wall-meter fallback | `docs/phase_1/instrumentation_checklist.md` |
 | Pi/Hailo telemetry permissions | pending | SSH access, wall-meter path, Hailo runtime verdict | `docs/phase_1/instrumentation_checklist.md` |

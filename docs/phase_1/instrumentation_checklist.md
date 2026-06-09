@@ -2,20 +2,50 @@
 
 Status: pending physical-device confirmation.
 
-## MacBook Pro M3 Max
+## Apple Silicon / Mac Target
 
 - Runtime target: MLX.
 - Telemetry target: powermetrics.
 - Transport: local.
-- Phase 1 status: partially checked on current controller.
+- Phase 1 status: partially checked on current Apple Silicon controller; repeat
+  on the final M3 Max measurement target before claiming full support.
 - Observed:
   - Current machine architecture: `arm64`.
   - `powermetrics` binary found at `/usr/bin/powermetrics`.
+  - Current user id is non-root (`501`).
+  - `powermetrics --help` lists machine-readable `plist` output and samplers:
+    `thermal`, `cpu_power`, `gpu_power`, and `ane_power`.
+  - A direct sample attempt with
+    `powermetrics -n 1 -i 100 --samplers thermal,cpu_power,gpu_power,ane_power`
+    failed with: `powermetrics must be invoked as the superuser`.
+  - Python import checks show `mlx` and `mlx_lm` are not installed in the
+    current Python environment.
 - Checks:
   - [ ] MLX install path known.
+  - [ ] MLX/MLX-LM installed or installation procedure documented.
   - [x] `powermetrics` binary present.
-  - [ ] Required sudo/password workflow documented.
-  - [ ] Thermal fields available.
+  - [x] Required superuser workflow identified.
+  - [ ] Required sudo/password workflow approved for benchmark runs.
+  - [ ] `powermetrics` sample fields captured from a privileged run.
+  - [ ] Thermal fields available in captured samples.
+  - [ ] Output parser target selected: text or `plist`.
+
+Evidence commands run on 2026-06-09:
+
+```bash
+which powermetrics
+powermetrics --help
+powermetrics -n 1 -i 100 --samplers thermal,cpu_power,gpu_power,ane_power
+python3 -c "import importlib.util; print(importlib.util.find_spec('mlx') is not None)"
+uname -m
+id -u
+```
+
+Current verdict:
+
+- Telemetry binary: present.
+- Telemetry permission: permission-blocked until a sudo workflow is approved.
+- Runtime: pending install or environment selection for MLX/MLX-LM.
 
 ## NVIDIA 3050
 
