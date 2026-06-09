@@ -30,6 +30,10 @@ doc:
    recorded?
 8. What should not be changed during this run?
 
+For random or newly discovered user tasks, also update or consult
+`TASK_QUEUE.md` before implementation. The task should be ranked against current
+phase gates, recent commits, recent run reports, and workspace safety.
+
 ## Step Planning Quality Bar
 
 Each non-trivial step in a phase plan should include:
@@ -50,6 +54,7 @@ At the end of every substantial run, update `RUN_STATE.md` and a dated
 `docs/run_reports/` report with:
 
 - What changed.
+- How the work was ranked in `TASK_QUEUE.md`.
 - What was verified.
 - What failed or remained uncertain.
 - Whether the plan was accurate.

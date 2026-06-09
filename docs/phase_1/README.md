@@ -36,5 +36,7 @@ leave Phase 2 ready to implement the Mac MLX + powermetrics vertical slice.
 - `docs/phase_1/hailo_feasibility.md`: Hailo feasibility checklist.
 - `docs/phase_1/instrumentation_checklist.md`: target telemetry checklist.
 - `docs/phase_1/network_plan.md`: interconnect sweep planning checklist.
+- `docs/phase_1/phase_1_continuation_plan.md`: ordered plan for closing
+  remaining Phase 1 evidence gates.
 - `docs/phase_1/phase_1_exit_checklist.md`: evidence gates for Phase 1 exit.
 - `docs/phase_1/run_bundle_layout.md`: required artifact layout.

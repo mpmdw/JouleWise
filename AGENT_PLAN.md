@@ -8,6 +8,8 @@ as the first research application that validates the harness.
 ## Ground Rules For Agents
 
 - At the start of every substantial run, read `RUN_STATE.md` first.
+- For any new/random user task, triage it in `TASK_QUEUE.md` before deciding
+  whether it outranks the current phase work.
 - At the start of each phase or major step, apply
   `docs/planning_reflection_protocol.md` before implementation.
 - At the end of every substantial run, update `RUN_STATE.md` and add or update a
@@ -43,6 +45,8 @@ Status: in progress.
 - [x] Create repo-local agent plan.
 - [x] Add reusable planning reflection protocol.
 - [x] Add evidence-based Phase 1 exit checklist.
+- [x] Add task queue protocol for prioritizing new work against repo state and
+  recent handoffs.
 - [x] Define draft typed benchmark config contract.
 - [x] Define draft standardized run output contract.
 - [x] Define runtime/telemetry/transport adapter interfaces.
@@ -173,3 +177,17 @@ The root `RUN_STATE.md` is the current handoff. Dated reports live in
 Every new phase also needs an exit checklist or equivalent section that states
 the evidence required to close that phase. See
 `docs/planning_reflection_protocol.md` for the reusable format.
+
+## Task Queue Protocol
+
+Random or newly discovered work should be ranked in `TASK_QUEUE.md` before it is
+executed. The queue ranks tasks against:
+
+- Current repo state.
+- Recent commits.
+- Recent run reports.
+- Current phase exit gates.
+- Safety risk and implementation dependency order.
+
+If a task is executed immediately, the run report should state why it outranked
+the current top queued task.

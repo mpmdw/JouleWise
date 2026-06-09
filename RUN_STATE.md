@@ -7,20 +7,23 @@ Last updated: 2026-06-09
 Before starting substantial work:
 
 1. Read this file.
-2. Read `AGENT_PLAN.md`.
-3. Read `docs/planning_reflection_protocol.md`.
-4. Check whether the current phase has an evidence-based exit checklist.
-5. Check `git status --short --branch`.
-6. Run `python3 -m unittest discover -s tests` unless the task is docs-only.
-7. Do not commit local deletions or unrelated changes unless the user asks.
+2. Read `TASK_QUEUE.md`.
+3. Read `AGENT_PLAN.md`.
+4. Read `docs/planning_reflection_protocol.md`.
+5. Check whether the current phase has an evidence-based exit checklist.
+6. Check the last 2-3 commits with `git log --oneline --decorate -3`.
+7. Check `git status --short --branch`.
+8. Run `python3 -m unittest discover -s tests` unless the task is docs-only.
+9. Do not commit local deletions or unrelated changes unless the user asks.
 
 At the end of substantial work:
 
 1. Update this file with what changed.
-2. Add or update a detailed report in `docs/run_reports/`.
-3. Record tests, commands, blockers, and the next best task.
-4. Record whether the plan had evidence gaps and how they were resolved.
-5. Call out any dirty working-tree state that should not be accidentally
+2. Update `TASK_QUEUE.md` with completed, added, or re-ranked tasks.
+3. Add or update a detailed report in `docs/run_reports/`.
+4. Record tests, commands, blockers, and the next best task.
+5. Record whether the plan had evidence gaps and how they were resolved.
+6. Call out any dirty working-tree state that should not be accidentally
    committed.
 
 ## Current Project Status
@@ -53,6 +56,10 @@ interfaces, docs, example configs, and CLI helpers.
   assumptions, acceptance criteria, and fallbacks before implementation.
 - Added a Phase 1 exit checklist that turns remaining open items into
   evidence-based gates.
+- Added `TASK_QUEUE.md` so random/new tasks are ranked against repo state,
+  recent handoffs, recent commits, and active phase gates.
+- Added `docs/phase_1/phase_1_continuation_plan.md` to begin Phase 1
+  continuation planning.
 
 ## Current Verification
 
@@ -85,24 +92,37 @@ valid config: configs/examples/mac_mlx_local.json target=macbook_m3_max runtime=
 
 - Remote: `git@github.com:mpmdw/JouleWise.git`
 - Branch: `main`, tracking `origin/main`
-- Latest pushed commit before current local edits: `f177334 Add run-state handoff reports`
+- Use `git log --oneline --decorate -3` for the latest pushed commit. The
+  latest commit before this task-queue planning run was
+  `d3e6540 Add evidence-based planning gates`.
 - Current local caution: `Energy_Benchmark_Architecture.docx` appears deleted in
   the working tree after the push. Do not commit that deletion unless the user
   confirms it should be removed from the repo.
 
 ## What Is Next
 
-The next substantive implementation step is Phase 2 preparation:
+The next substantive work should follow `TASK_QUEUE.md`.
+
+The current highest-ranked item is:
+
+1. Resolve the local `Energy_Benchmark_Architecture.docx` deletion decision
+   without accidentally committing it.
+
+The next Phase 1 continuation step after workspace safety is:
 
 1. Close or update the evidence items in
    `docs/phase_1/phase_1_exit_checklist.md`.
-2. Add a run-bundle writer that creates the documented directory layout.
-3. Add a mock controller lifecycle:
+
+The next Phase 2 preparation step, once Phase 1 gates are adequately planned or
+closed, is:
+
+1. Add a run-bundle writer that creates the documented directory layout.
+2. Add a mock controller lifecycle:
    `prepare -> idle -> warmup -> measured_run -> cleanup -> reduce`.
-4. Add a deterministic mock runtime and mock telemetry adapter.
-5. Add reducer logic for simple synthetic power traces.
-6. Make one command produce a complete mock run bundle.
-7. Only after that, begin the Mac-local MLX + powermetrics vertical slice.
+3. Add a deterministic mock runtime and mock telemetry adapter.
+4. Add reducer logic for simple synthetic power traces.
+5. Make one command produce a complete mock run bundle.
+6. Only after that, begin the Mac-local MLX + powermetrics vertical slice.
 
 ## Open Decisions And Blockers
 

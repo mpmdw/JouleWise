@@ -19,6 +19,9 @@ for what was done and what should happen next. Future phase starts should use
 `docs/planning_reflection_protocol.md` to audit whether each step has evidence
 and acceptance criteria before implementation begins.
 
+Use `TASK_QUEUE.md` to triage new tasks against the current repo state, recent
+handoffs, recent commits, and active phase gates.
+
 ## Current State
 
 Phase 1 is underway. The repository currently contains:
