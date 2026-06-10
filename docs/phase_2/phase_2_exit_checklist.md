@@ -19,12 +19,12 @@ Companion plan: `docs/phase_2/phase_2_plan.md`.
 | 2E run + validate-bundle | required | pending | mock end-to-end in CI; result line + exit codes pinned by tests | CI run + test suite |
 | 2F repetitions + manifests | required | pending | 3-rep mock experiment test; partial-experiment test; cooldown gate recorded | test suite |
 | Model selection (D-016) | required | pending | decision-log entry closed: models, revisions, artifact paths, local mirror, fallback candidate | `docs/decision_log.md` |
-| 2G MLX adapter | required* | pending | real generation smoke on the Mac: bundle + token timeline in run report | run report + instrumentation checklist |
+| 2G MLX adapter | required* | pending | real generation smoke on the Mac: bundle + token timeline in run report | run report + applicability table below |
 | 2H powermetrics adapter | required* | pending | fixture-based parser tests; real idle baseline + measured window from privileged run | test suite + run report |
 | 2I Mac vertical slice | required* | pending | one-command real bundle; 3-rep variance; sanity checks logged | run report + bundles |
 | 2J report generator | required | pending | generated report from mock bundles; tests assert artifacts | test suite + run report |
-| 2K NVIDIA/vLLM/ssh | conditional (gate: P1-006 NVIDIA evidence) | pending | remote bundle from 3050, or documented access blocker | run report + instrumentation checklist |
-| 2L Orin adapter | conditional (gate: P1-006 Orin evidence) | pending | bundle from Orin, or documented blocker | run report + instrumentation checklist |
+| 2K NVIDIA/vLLM/ssh | conditional (gate: P1-006 NVIDIA evidence) | pending | remote bundle from 3050, or documented access blocker | run report + applicability table below |
+| 2L Orin adapter | conditional (gate: P1-006 Orin evidence) | pending | bundle from Orin, or documented blocker | run report + applicability table below |
 | 2M homogeneous baselines | required (scope = available targets) | pending | manifests + bundles for the workload matrix; baseline summary doc with variance and prefill/decode comparison | `docs/phase_2/baseline_results.md` |
 | CI green | required | pending | workflow passing on main including mock end-to-end | GitHub Actions |
 | Applicability table | required | pending | every attempted target × model combo classified supported / pending / unsupported with reason | this file (table below) |

@@ -50,7 +50,7 @@ be re-derived by a future agent gets an entry here.
 - Status: accepted
 - Phase: 2+
 
-Context: `docs/phase_1/run_bundle_layout.md` originally specified `config.yaml`
+Context: `docs/contracts/run_bundle_layout.md` originally specified `config.yaml`
 as the normalized config artifact, but the package is intentionally
 zero-dependency and the stdlib has no YAML parser. The Phase 1 CLI already
 rejects non-JSON configs.
@@ -196,7 +196,8 @@ Options considered:
    agent cannot answer the prompt.
 3. A `sudoers` rule scoped to exactly `/usr/bin/powermetrics` (NOPASSWD) for
    the benchmark user, installed once by the user, documented in the
-   instrumentation checklist. Controller pre-checks capability with
+   Phase 1 exit checklist's instrumentation section. Controller pre-checks
+   capability with
    `sudo -n /usr/bin/powermetrics -n 1 -i 100` style probe and fails with
    structured `permission_denied` if absent.
 4. A setuid wrapper binary. Con: writing setuid programs to avoid a sudoers
@@ -212,9 +213,10 @@ failure into an up-front structured failure, which the Phase 1 contract
 configs, or logs.
 
 Consequences: the powermetrics adapter (Slice 2H) always invokes via
-`sudo -n`; instrumentation checklist gains the exact sudoers line for the
-user to install during the 2026-06-10 auth session; `permission_denied`
-failures tell the operator precisely what to add.
+`sudo -n`; the Phase 1 exit checklist's instrumentation section gains the
+exact sudoers line for the user to install during the 2026-06-10 auth
+session; `permission_denied` failures tell the operator precisely what to
+add.
 
 Revisit when: macOS changes powermetrics privilege requirements, or the
 measurement machine is shared and the owner declines the sudoers rule (then

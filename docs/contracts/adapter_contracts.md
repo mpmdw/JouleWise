@@ -1,7 +1,9 @@
 # Adapter Contracts
 
-The benchmark separates runtime work from telemetry measurement. A target is a
-composition of transport, runtime adapter, and telemetry adapter.
+Living cross-phase contract, drafted in Phase 1; the executable form is
+`joulewise/interfaces.py`. The benchmark separates runtime work from
+telemetry measurement. A target is a composition of transport, runtime
+adapter, and telemetry adapter.
 
 ## Transport Adapter
 

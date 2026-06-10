@@ -56,8 +56,8 @@ Conventions:
 - Trigger: scoped sudoers rule (D-004) cannot be installed, or privileged
   sample capture fails after the auth session.
 - Mitigation: D-004 defines a minimal, single-binary sudoers rule with the
-  exact line documented in the instrumentation checklist; interactive-sudo
-  manual fallback documented for attended runs.
+  exact line documented in the Phase 1 exit checklist's instrumentation
+  section; interactive-sudo manual fallback documented for attended runs.
 - Fallback: attended runs with interactive sudo (operator present per
   experiment); if even that is unacceptable, the Mac becomes
   runtime-supported/telemetry-blocked and the first real slice moves to the
@@ -156,9 +156,9 @@ Conventions:
   Hailo as a feasibility investigation whose negative verdict is itself a
   reportable applicability finding.
 - Trigger: feasibility checklist closes with any non-`supported` verdict.
-- Mitigation: none needed; the verdict-code structure in
-  `docs/phase_1/hailo_feasibility.md` makes the outcome publishable either
-  way. Do not spend implementation effort before the verdict (standing
+- Mitigation: none needed; the verdict-code structure in the Phase 1 exit
+  checklist's Hailo section makes the outcome publishable either way. Do
+  not spend implementation effort before the verdict (standing
   do-not-do-yet rule).
 - Fallback: Pi 5 CPU-only llama.cpp with wall-meter telemetry becomes an
   optional low-power data point if the meter exists; otherwise Pi/Hailo

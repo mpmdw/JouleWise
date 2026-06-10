@@ -207,7 +207,8 @@ Actions: implement bench + composite-bundle writing (see 3.2 layout);
 loopback test in CI; first real two-node run on whatever pair P1-004/P1-006
 evidence permits.
 Evidence: loopback CI test; real-pair bundles with energy/GiB numbers in a
-run report; link verification commands recorded per the network plan.
+run report; link verification commands recorded per the Phase 1 exit
+checklist's network section.
 Acceptance: energy/GiB and effective throughput with uncertainty for at
 least one real link; methodology's clock-offset bound respected.
 Fallback: if no second node is available yet, the loopback path plus the
@@ -287,7 +288,7 @@ grid is the ambition, recorded subset is the plan):
 - Pairings: 3050<->Mac, 3050<->Orin, Orin<->Orin, Orin<->Mac, and
   GPU<->GPU during the 3080 Ti borrow window (R-006 runbook: tooling
   rehearsed beforehand; borrow time is execution-only).
-- Links: 1GbE, 2.5GbE, optional 10GbE (per network plan evidence; direct
+- Links: 1GbE, 2.5GbE, optional 10GbE (per the Phase 1 network evidence; direct
   cabling preferred per R-011).
 - Models: D-016 small + mid.
 - Prompt lengths: 512, 2048, 8192 (KV table column anchors), decode 256.

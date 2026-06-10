@@ -59,12 +59,12 @@ Rank lower when a task:
 | Rank | ID | Priority | Status | Task | Evidence / Acceptance |
 |---:|---|---|---|---|---|
 | 1 | P1-001 | P1 Phase Gate | open | Capture supervisor approval and scope notes | Dated notes in `docs/phase_1/phase_1_exit_checklist.md`; `RUN_STATE.md` updated if scope changes |
-| 2 | P1-002 | P1 Phase Gate | waiting-user | Complete Mac-local Phase 1 telemetry/runtime evidence | User handles local auth 2026-06-10; then capture one privileged `powermetrics` sample, record fields, and install the D-004 sudoers rule; MLX install path still pending |
+| 2 | P1-002 | P1 Phase Gate | waiting-user | Complete Mac-local Phase 1 telemetry/runtime evidence | User handles local auth 2026-06-10; then capture one privileged `powermetrics` sample, record fields, and install the D-004 sudoers rule (exit-checklist instrumentation section); MLX install path still pending |
 | 3 | P1-008 | P1 Phase Gate | waiting-user | Map phases to academic calendar | Colloquium/report dates + borrow window entered in `docs/milestones.md`; phase target dates derived |
-| 4 | P1-003 | P1 Phase Gate | open | Record wall-meter decision | Meter make/model or "unavailable" verdict plus measurement/export method (`docs/phase_1/instrumentation_checklist.md`; informs D-018 boundary calibration) |
-| 5 | P1-004 | P1 Phase Gate | partial | Fill network/interconnect topology plan | Physical topology, link-speed paths, and throughput method recorded in `docs/phase_1/network_plan.md` |
-| 6 | P1-005 | P1 Phase Gate | open | Complete Hailo feasibility verdict | Verdict code and evidence in `docs/phase_1/hailo_feasibility.md` |
-| 7 | P1-006 | P1 Phase Gate | open | Confirm NVIDIA/Orin telemetry access paths | SSH/runtime/telemetry command evidence recorded or marked pending with blocker (gates slices 2K/2L) |
+| 4 | P1-003 | P1 Phase Gate | open | Record wall-meter decision | Meter make/model or "unavailable" verdict plus measurement/export method (exit-checklist wall-meter section; informs D-018 boundary calibration) |
+| 5 | P1-004 | P1 Phase Gate | partial | Fill network/interconnect topology plan | Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section |
+| 6 | P1-005 | P1 Phase Gate | open | Complete Hailo feasibility verdict | Verdict code and evidence in the exit-checklist Hailo section |
+| 7 | P1-006 | P1 Phase Gate | open | Confirm NVIDIA/Orin telemetry access paths | SSH/runtime/telemetry command evidence in the exit-checklist instrumentation section, or marked pending with blocker (gates slices 2K/2L) |
 | 8 | P1-007 | P1 Phase Gate | open | Perform Phase 2 readiness review | `docs/phase_1/phase_1_exit_checklist.md` states mock-first Phase 2 can begin |
 | 9 | P2-001 | P2 Next Slice | queued | Mock vertical slice: slices 2A-2E per `docs/phase_2/phase_2_plan.md` | One command creates a complete mock run bundle; `validate-bundle` green; CI runs the mock end-to-end |
 | 10 | P2-002 | P2 Next Slice | queued | Repetitions + experiment manifests (slice 2F) | 3-rep mock experiment test; manifest contract per D-005 |
@@ -79,6 +79,7 @@ Rank lower when a task:
 | Q-000 | P0 Safety | 2026-06-09 | Resolve the local `Energy_Benchmark_Architecture.docx` deletion decision | User confirmed the Word doc was unrelated; deletion committed in `a5d7404` |
 | PLAN-001 | P1 Phase Gate | 2026-06-09 | Build evidence-shaped plans for Phases 2-5 (user-directed) | Per-phase plan + exit-checklist docs; `docs/decision_log.md` (D-001..D-019); `docs/risk_register.md`; `docs/milestones.md`; methodology/bundle-layout amendments; `AGENT_PLAN.md` restructured as index; run report `docs/run_reports/2026-06-09-phase-2-5-planning-buildout.md` |
 | CI-001 | P2 Next Slice | 2026-06-09 | Add core-tests CI workflow (D-017) | `.github/workflows/ci.yml`; green check on push pending first remote run |
+| DOC-001 | P4 Polish | 2026-06-09 | Unify Phase 1 doc scheme with Phases 2-5 (user-directed) | `docs/phase_1/` reduced to `phase_1_plan.md` + `phase_1_exit_checklist.md` (evidence dossier, all recorded evidence preserved); contracts moved to `docs/contracts/`; all live cross-references updated; run report `docs/run_reports/2026-06-09-phase-1-doc-unification.md` |
 
 ## Current Do-Not-Do-Yet List
 

@@ -1,4 +1,7 @@
-# Measurement Methodology Draft
+# Measurement Methodology
+
+Living cross-phase contract, drafted in Phase 1. Changes require a
+decision-log entry when they bind later work.
 
 ## Measurement Principle
 

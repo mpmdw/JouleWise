@@ -1,6 +1,7 @@
 # Run Bundle Layout
 
-Run bundles are the durable artifact for every benchmark execution.
+Living cross-phase contract, drafted in Phase 1. Run bundles are the
+durable artifact for every benchmark execution.
 
 ## Directory Shape
 

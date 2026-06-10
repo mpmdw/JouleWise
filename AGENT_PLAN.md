@@ -41,8 +41,9 @@ report.
 | `docs/decision_log.md` | design decisions, options, considerations |
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar constraints and phase target dates |
-| `docs/phase_1/measurement_methodology.md` | measurement rules (boundaries, clocks, statistics) |
-| `docs/phase_1/run_bundle_layout.md` | bundle artifact contract |
+| `docs/contracts/measurement_methodology.md` | measurement rules (boundaries, clocks, statistics) |
+| `docs/contracts/run_bundle_layout.md` | bundle artifact contract |
+| `docs/contracts/adapter_contracts.md` | adapter behavior contracts |
 
 ## Canonical Architecture
 
@@ -61,8 +62,9 @@ typed config
 
 ### Phase 1: Approval, Feasibility, And Measurement Design
 
-Status: in progress. Detail: `docs/phase_1/` (continuation plan, exit
-checklist, methodology, instrumentation, network plan, Hailo feasibility).
+Status: in progress. Detail: `docs/phase_1/phase_1_plan.md`. Exit:
+`docs/phase_1/phase_1_exit_checklist.md` (the evidence dossier). The
+contracts this phase produced live in `docs/contracts/`.
 
 - [x] Create repo-local agent plan.
 - [x] Add reusable planning reflection protocol.

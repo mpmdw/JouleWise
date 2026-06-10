@@ -32,59 +32,52 @@ At the end of substantial work:
 
 JouleWise is in Phase 1: approval, feasibility, and measurement design.
 
-The repo has a scaffolded, tested foundation (schemas, adapter interfaces,
-example configs, CLI helpers) and - as of this run - a fully built-out,
-evidence-shaped plan for Phases 2 through 5, plus a decision log, risk
-register, and milestone map. There is not yet a runnable measurement
-harness; that is Phase 2 slice work, which is now specified in detail.
+Every phase now follows one documentation scheme:
+`docs/phase_N/phase_N_plan.md` (steps with objectives, evidence, acceptance,
+fallbacks) + `docs/phase_N/phase_N_exit_checklist.md` (evidence dossier).
+Cross-phase contracts live in `docs/contracts/` (methodology, bundle layout,
+adapter contracts); cross-phase registries live in `docs/` (decision log,
+risk register, milestones). The repo has a scaffolded, tested foundation;
+the runnable harness is Phase 2 slice work, fully specified in its plan.
 
-## What This Run Did (2026-06-09, planning buildout)
+## What This Run Did (2026-06-09, Phase 1 doc-scheme unification)
 
-User-directed planning audit and buildout. Found that Phases 2-5 failed the
-repo's own planning bar (checklist-shaped, no evidence/acceptance per step,
-ordering drift vs the queue, undecided design questions, no risk/calendar
-tracking) and fixed it:
+User-directed: make Phase 1's documentation structurally uniform with
+Phases 2-5 by consolidation.
 
-- Added per-phase plans + exit checklists:
-  - `docs/phase_2/phase_2_plan.md` (13 slices, mock-first, gates) +
-    exit checklist with conditional-exit rules and applicability table.
-  - `docs/phase_3/phase_3_plan.md` (feasibility-first ladder per D-015,
-    KV-size model with worked tables, stages 3.0-3.4) + exit checklist.
-  - `docs/phase_4/phase_4_plan.md` (protocol ratification, aggregation,
-    figure registry F1-F8, claims-to-evidence index, sensitivity audit) +
-    exit checklist.
-  - `docs/phase_5/phase_5_plan.md` (verified quickstart/guide/samples,
-    dataset freeze, slides, report) + exit checklist.
-- Added `docs/decision_log.md` with D-001..D-019, each with options
-  considered and considerations (per user request for structural
-  auditability).
-- Added `docs/risk_register.md` (R-001..R-015) including the descope ladder
-  and the KV-portability risks the user flagged.
-- Added `docs/milestones.md` (calendar skeleton; dates TBD pending P1-008).
-- Amended `docs/phase_1/measurement_methodology.md`: measurement
-  boundaries table, clock sync/multi-node alignment, controller
-  co-residency, repetition/thermal protocol, statistical protocol,
-  `deserialize` phase label + split-stage accounting.
-- Amended `docs/phase_1/run_bundle_layout.md`: `config.json` (D-001),
-  `raw/` dir, completion-marker semantics (D-011), experiment manifests
-  (D-005), composite split-bundle preview.
-- Restructured `AGENT_PLAN.md` into the phase index with a single-source-
-  of-truth map; fixed the Phase 2 mock-first ordering drift; removed the
-  stale Word-doc ground rule.
-- Marked the resolved Word-doc step in
-  `docs/phase_1/phase_1_continuation_plan.md`.
-- Updated `TASK_QUEUE.md`: new tasks P1-008 (calendar), P2-004 (model
-  selection), P3-000 (KV spikes); slice references; expanded
-  do-not-do-yet list; PLAN-001 and CI-001 recorded complete.
-- Added `.github/workflows/ci.yml` (D-017: core tests on 3.11/3.14 +
-  config-validation smoke).
-- Added `.DS_Store` to `.gitignore`; README points to the new docs.
-
-Anomaly noted: two transient `EPERM: operation not permitted` errors while
-accessing `docs/phase_1/measurement_methodology.md` and listing
-directories mid-run (macOS Desktop permissions hiccup, most likely);
-access recovered on retry without intervention. If it recurs, check
-System Settings privacy permissions for the terminal.
+- Moved the cross-phase contracts out of `docs/phase_1/` into
+  `docs/contracts/` (git mv, history preserved):
+  `measurement_methodology.md` (retitled from "Draft", living-contract
+  header added), `run_bundle_layout.md`, `adapter_contracts.md`.
+- Created `docs/phase_1/phase_1_plan.md` in the uniform format: goal,
+  deliverables, agent protocol, constraints, and Steps 1-8 (supervisor
+  scope, Mac evidence, wall meter, network, Hailo, NVIDIA/Orin, calendar,
+  readiness review) with objective/inputs/actions/evidence/acceptance/
+  fallback each, statuses matching the queue.
+- Rewrote `docs/phase_1/phase_1_exit_checklist.md` as the phase's evidence
+  dossier: it now defines required evidence *and* records it - absorbing
+  the full recorded evidence from the former `hailo_feasibility.md`,
+  `network_plan.md`, and `instrumentation_checklist.md` (all 2026-06-09
+  observations preserved verbatim: powermetrics path/privilege/samplers,
+  MLX absence, arm64/uid, ifconfig/networksetup/iperf3 status, per-target
+  checkbox states, verdict codes).
+- Deleted the five superseded files: `docs/phase_1/README.md`,
+  `phase_1_continuation_plan.md`, `hailo_feasibility.md`,
+  `network_plan.md`, `instrumentation_checklist.md` (content merged; git
+  history retains the originals; old run reports intentionally keep their
+  historical references).
+- Stated the evidence-location convention (in the Phase 1 plan): evidence
+  lives in the phase exit checklist until a topic outgrows it, then moves
+  to a dedicated file under the phase dir (Phase 3's `kv_feasibility.md`
+  is the pattern).
+- Updated every live cross-reference: `AGENT_PLAN.md` (source-of-truth map
+  rows -> `docs/contracts/`, adapter-contracts row added, Phase 1 detail
+  line made uniform), `TASK_QUEUE.md` (P1-002..P1-006 evidence
+  destinations -> exit-checklist sections), `docs/decision_log.md`
+  (D-001/D-004), `docs/risk_register.md` (R-002/R-009),
+  `docs/phase_2/phase_2_plan.md` (contract paths; Phase 1 access evidence
+  vs Phase 2 applicability-table destinations split correctly),
+  `docs/phase_2/phase_2_exit_checklist.md`, `docs/phase_3/phase_3_plan.md`.
 
 ## Current Verification
 
@@ -94,37 +87,38 @@ Command:
 python3 -m unittest discover -s tests
 ```
 
-Result (this run, docs-only changes - expected unchanged):
+Result (docs-only change set):
 
 ```text
 Ran 14 tests
 OK
 ```
 
-CLI smoke:
-
-```bash
-python3 -m joulewise validate-config configs/examples/mac_mlx_local.json
-```
+Reference check: `grep -rn 'phase_1/\(measurement_methodology\|run_bundle_layout\|adapter_contracts\|instrumentation_checklist\|network_plan\|hailo_feasibility\|phase_1_continuation_plan\|README\)'`
+returns only historical run reports.
 
 ## Known Workspace State
 
 - Remote: `git@github.com:mpmdw/JouleWise.git`
 - Branch: `main`, tracking `origin/main`
 - Use `git log --oneline --decorate -3` for the latest pushed commit.
+- Known prior anomaly (2026-06-09, earlier run): transient `EPERM` errors
+  reading files under `docs/` that recovered on retry; suspected macOS
+  Desktop privacy hiccup. Watch for recurrence.
 
 ## What Is Next
 
 Follow `TASK_QUEUE.md`. The top items:
 
-1. P1-001: capture supervisor approval/scope notes in
-   `docs/phase_1/phase_1_exit_checklist.md`.
+1. P1-001: capture supervisor approval/scope notes in the supervisor
+   section of `docs/phase_1/phase_1_exit_checklist.md` (the question list
+   is in that section).
 2. P1-002 (after the user's 2026-06-10 auth session): capture one
-   privileged `powermetrics` sample, record available power/thermal fields
-   in `docs/phase_1/instrumentation_checklist.md`, and install/record the
-   D-004 scoped sudoers rule. Key command:
+   privileged `powermetrics` sample, record the available power/thermal
+   field names in the exit checklist's instrumentation section, and
+   install/verify the D-004 scoped sudoers rule. Key command:
    `powermetrics -n 1 -i 100 --samplers thermal,cpu_power,gpu_power,ane_power`
-   (and the same via `sudo -n` to verify the rule).
+   (then the same via `sudo -n` to verify the rule).
 3. P1-008: enter colloquium/report dates and the borrow window in
    `docs/milestones.md` when the user provides them.
 4. First implementation work when prioritized: P2-001 = slices 2A-2E per

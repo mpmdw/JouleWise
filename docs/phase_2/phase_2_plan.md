@@ -7,8 +7,8 @@ Companion docs:
 - Exit gates: `docs/phase_2/phase_2_exit_checklist.md`
 - Decisions referenced as `D-NNN`: `docs/decision_log.md`
 - Risks referenced as `R-NNN`: `docs/risk_register.md`
-- Measurement rules: `docs/phase_1/measurement_methodology.md`
-- Bundle contract: `docs/phase_1/run_bundle_layout.md`
+- Measurement rules: `docs/contracts/measurement_methodology.md`
+- Bundle contract: `docs/contracts/run_bundle_layout.md`
 
 ## Goal
 
@@ -394,7 +394,8 @@ Objective: real text generation on the Mac via mlx-lm, emitting the event
 taxonomy with per-token timestamps.
 
 Gates: model checkpoint (D-016 closed or provisional); MLX installed
-([mac] extra; R-003). Inputs: instrumentation checklist (MLX rows).
+([mac] extra; R-003). Inputs: the Phase 1 exit checklist's instrumentation
+section (Mac rows).
 
 Design notes:
 
@@ -421,8 +422,8 @@ documented for the real machine (commands + expected artifacts), executed
 when hardware time is available and captured in a run report.
 
 Evidence: unit tests in CI; smoke-run artifacts (response text, token
-timeline) recorded from the real Mac in a run report + instrumentation
-checklist update.
+timeline) recorded from the real Mac in a run report + the Phase 2 exit
+checklist's applicability table.
 
 Acceptance criteria: real generation produces a complete bundle (with mock
 telemetry if 2H is not done yet - composition is the point of the adapter
@@ -436,9 +437,9 @@ plan section updated, decision logged.
 Objective: real Apple Silicon power/thermal sampling into the bundle
 contract.
 
-Gates: privileged sample evidence captured (instrumentation checklist item,
-user auth session 2026-06-10; D-004 sudoers rule installed). Inputs:
-captured sample fields, D-002, D-004, D-018.
+Gates: privileged sample evidence captured (Phase 1 exit checklist
+instrumentation section, user auth session 2026-06-10; D-004 sudoers rule
+installed). Inputs: captured sample fields, D-002, D-004, D-018.
 
 Design notes:
 
@@ -453,8 +454,8 @@ Design notes:
   `gpu_power`, `ane_power`, in watts after mW conversion) per D-018, with
   the rail manifest declaring all three as the canonical sum.
 - Field names are pinned to the *captured sample*, not to documentation or
-  memory - macOS versions vary. The privileged sample lands in the
-  instrumentation checklist first; the parser cites it.
+  memory - macOS versions vary. The privileged sample lands in the Phase 1
+  exit checklist's instrumentation section first; the parser cites it.
 - `measure_idle`: a bounded `-n <count>` invocation for
   `sampling.idle_seconds`; mean/stddev computed from parsed samples.
 - Thermal: `thermal` sampler fields (pressure level) captured into
@@ -486,8 +487,8 @@ the chosen model.
 
 Actions: run the example config end-to-end; then a 3-repetition experiment;
 verify D-013 conduct (deferred logging on, controller quiescent); record
-everything in a run report; update the instrumentation checklist Mac verdict
-to `supported` (or the blocking finding).
+everything in a run report; set the Mac row of the Phase 2 applicability
+table to `supported` (or the blocking finding).
 
 Evidence: bundle paths + summary metrics + variance numbers in the run
 report; `validate-bundle` green on all bundles.
@@ -559,8 +560,9 @@ Actions: implement transport + adapters + runner script; CI-safe tests
 (local-loopback fake transport, CSV fixture parsing); real-node smoke when
 P1-006 evidence exists.
 
-Evidence: fixture tests; real-node bundle in a run report; instrumentation
-checklist NVIDIA rows updated with command outputs.
+Evidence: fixture tests; real-node bundle in a run report; Phase 1 exit
+checklist NVIDIA rows (access evidence) and the Phase 2 applicability
+table (verdict) updated.
 
 Acceptance criteria: one command on the controller produces a complete
 bundle for the remote 3050 target; structured failures for unreachable
@@ -582,8 +584,9 @@ INA3221 sysfs polling (VDD_IN rail, D-018) via a tiny remote poller script,
 falling back to `tegrastats` parsing; wall-meter fallback if neither
 (R-008).
 
-Actions/Evidence/Acceptance: mirror 2K with Orin specifics; instrumentation
-checklist updated; one complete bundle from the device.
+Actions/Evidence/Acceptance: mirror 2K with Orin specifics; Phase 1 exit
+checklist Orin rows and the Phase 2 applicability table updated; one
+complete bundle from the device.
 
 Fallback: R-008 - runtime-only target or drop to stretch.
 
