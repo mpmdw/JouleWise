@@ -26,8 +26,10 @@ Inherited assumptions:
 - The implementation should remain mock-first before physical telemetry work.
 - Physical hardware evidence may be unavailable in a given run; if so, record a
   blocker rather than pretending the item is complete.
-- The local `Energy_Benchmark_Architecture.docx` deletion must not be committed
-  without explicit user approval.
+- (Resolved 2026-06-09, queue item Q-000:) the
+  `Energy_Benchmark_Architecture.docx` deletion was confirmed unrelated to
+  the project and committed in `a5d7404`; it is no longer a workspace
+  concern.
 
 What should not change during Phase 1 continuation:
 
@@ -39,6 +41,15 @@ What should not change during Phase 1 continuation:
 ## Continuation Steps
 
 ### Step 0: Workspace Safety Check
+
+Status: resolved 2026-06-09. The Word-doc question (queue item Q-000) was
+answered by the user - the file was unrelated to the project - and the
+deletion was committed in `a5d7404`. The general habit this step encoded
+(check `git status` before substantial work; never commit unrelated local
+state) is now a standing rule in `RUN_STATE.md` and needs no per-run step
+here.
+
+Original step retained below for the audit trail:
 
 Objective:
 

@@ -13,14 +13,18 @@ The benchmark is designed around three stable ideas:
 - Run bundles preserve raw traces, events, metadata, logs, and summary metrics
   for later audit and analysis.
 
-See `AGENT_PLAN.md` for the phase-by-phase implementation checklist. See
+See `AGENT_PLAN.md` for the phase index and status summary; each phase has a
+detailed plan and an evidence-based exit checklist under `docs/phase_N/`. See
 `RUN_STATE.md` before starting substantial work; it is the current handoff note
 for what was done and what should happen next. Future phase starts should use
 `docs/planning_reflection_protocol.md` to audit whether each step has evidence
 and acceptance criteria before implementation begins.
 
 Use `TASK_QUEUE.md` to triage new tasks against the current repo state, recent
-handoffs, recent commits, and active phase gates.
+handoffs, recent commits, and active phase gates. Design decisions (with the
+options and considerations behind them) live in `docs/decision_log.md`; risks,
+triggers, and the descope ladder live in `docs/risk_register.md`; calendar
+constraints live in `docs/milestones.md`.
 
 ## Current State
 

@@ -1,0 +1,205 @@
+# Phase 4 Plan: Core Characterization And Analysis
+
+Status: planned. Gated by the Phase 4 readiness section of
+`docs/phase_3/phase_3_exit_checklist.md`.
+
+Companion docs:
+
+- Exit gates: `docs/phase_4/phase_4_exit_checklist.md`
+- Statistical protocol: D-014 in `docs/decision_log.md` and the
+  methodology doc's Statistical Protocol section
+- Boundary table: D-018 / methodology Measurement Boundaries section
+
+## Goal
+
+Turn the accumulated run bundles into defensible findings: every claim in
+the final report traces to a figure, every figure regenerates from a script
+over validated bundles, and uncertainty is quantified rather than implied.
+
+The threat model for this phase is the capstone defense: assume every
+number will be challenged with "how do you know?" and build the artifact
+chain that answers it.
+
+## Stages
+
+### Stage 4.0: Statistical Protocol Ratification
+
+Objective: confirm or amend D-014 against the variance actually observed in
+Phase 2/3 data, *before* computing headline results.
+
+Actions: compute per-condition coefficient of variation across the baseline
+dataset; check normality plausibility at n=5 (normal-quantile plots on a
+sample of conditions); run the planned bootstrap-vs-t sensitivity
+comparison; decide whether any element of D-014 changes (e.g., if CV is
+large, more reps for headline conditions); update D-014's status and the
+methodology section with findings.
+
+Evidence: a short analysis note (`docs/phase_4/protocol_ratification.md`)
+with the numbers and the decision.
+
+Acceptance: D-014 status updated with observed-variance justification; any
+amendment applied before Stage 4.2 figures are produced (auditable order:
+the ratification note is dated before the figure scripts' first results
+commit).
+
+Fallback: if data volume is too thin to ratify (heavy descoping happened),
+record that the protocol stands on its a-priori reasoning and flag wider
+intervals prominently.
+
+### Stage 4.1: Aggregation Layer
+
+Objective: one validated analysis dataset from all bundles.
+
+Design notes:
+
+- `python3 -m joulewise aggregate runs/ --output analysis/dataset.csv`
+  (pandas via `[analysis]`; CSV chosen over parquet for stdlib readability
+  and diff-ability of a small dataset - revisit if size argues otherwise).
+- Row = one run bundle: identity (run_id, experiment_id, config hash,
+  schema_version), dimensions (target, model, quantization, workload
+  profile, run_kind, link label, prompt/output tokens), all summary
+  metrics (incl. per-phase energy), quality fields, bundle path.
+- Inclusion rule: bundles must pass `validate-bundle`; failures are listed,
+  not skipped silently.
+- Exclusion log: `analysis/exclusions.md` - every excluded bundle with
+  reason (incomplete, superseded by re-run, quality-flagged with cause per
+  D-014). The aggregate command writes candidates; a human/agent confirms
+  with reasons. No silent exclusions anywhere in the pipeline.
+
+Actions: implement aggregate verb + tests (synthetic bundle set => exact
+expected rows; exclusion listing).
+
+Evidence: tests; `analysis/dataset.csv` generated from the real corpus with
+row count reconciled against bundle count + exclusion log.
+
+Acceptance: dataset rows + exclusions = bundles on disk, exactly.
+
+Fallback: none needed.
+
+### Stage 4.2: Figure Pipeline
+
+Objective: every report figure regenerates deterministically from the
+dataset by script.
+
+Design notes:
+
+- `scripts/make_figures.py --dataset analysis/dataset.csv --output figures/`
+  - one function per figure, a registry table mapping figure ID -> function
+  -> dataset filter -> output file; deterministic (sorted inputs, fixed
+  style, no randomness without fixed seed).
+- Notebooks may explore; only the script produces report figures. A figure
+  that exists only in a notebook does not exist.
+
+Figure registry (initial; extend by editing the table and script together):
+
+| ID | Figure | Primary question |
+|---|---|---|
+| F1 | Energy/token and energy/request by target × model (homogeneous), with 95% CIs and raw points | baseline characterization |
+| F2 | Exemplar power-trace timelines with lifecycle/phase shading, one per target | measurement validity |
+| F3 | Prefill vs decode: per-phase power and per-phase energy shares by target | motivates disaggregation |
+| F4 | Split decomposition stacked bars: prefill/transfer/deserialize/decode energy per pairing × link | Q1 |
+| F5 | Crossover curves: total energy vs prompt length, split vs both monolithic references, per link speed | Q1, Q2 |
+| F6 | Energy-latency Pareto: energy/token vs TTFT (and vs throughput), points = configurations, frontier marked | Q3 |
+| F7 | Interconnect: transfer energy/GiB and effective throughput vs payload size per link (synthetic sweep) | Q2 |
+| F8 | Measurement quality summary: observed vs requested sampling rate, idle stddev, thermal drift, cooldown-cap hits | honesty/limitations |
+
+Pareto definition (pinned now): a configuration is on the frontier if no
+other configuration in the same comparison set has both lower energy/token
+and lower latency metric; frontier computed per model, latency metric
+stated on the figure (TTFT for interactive framing, throughput-inverse for
+batch framing - both variants generated).
+
+Crossover definition: per pairing × link × model, the minimum prompt length
+where median split total energy < median of the better monolithic
+reference; absence of crossover within measured range is reported as such
+with the gap quantified.
+
+Actions: implement registry + functions; tests on synthetic dataset rows
+(figures render, files exist, no exceptions; numeric spot checks of the
+aggregation feeding F5).
+
+Evidence: `figures/` regenerated from scratch in CI-like conditions
+(documented single command), byte-stable except embedded timestamps.
+
+Acceptance: all registry figures render from the real dataset; each Q has
+its figures; regeneration command documented and tested.
+
+Fallback: figures degrade with the dataset (R-012 ladder): F4/F5 shrink to
+available pairings; F7 stands on synthetic data alone if needed.
+
+### Stage 4.3: Claims-To-Evidence Index
+
+Objective: the audit spine of the report.
+
+Design: `docs/phase_4/claims_index.md` - a table: claim ID, claim text
+(one sentence), supporting figure(s), script function, dataset filter,
+bundle/manifest IDs, status (`supported` / `weak` / `refuted` /
+`out-of-data`). Rule: no quantitative claim appears in the report or slides
+without a row here; a claim whose status is not `supported` appears only
+with its caveat.
+
+Actions: create with the first claims as figures land; review pass at the
+end of the stage walking every report-draft claim back to a row.
+
+Evidence: the index itself; spot-check three claims end-to-end (claim ->
+figure -> script -> bundles on disk).
+
+Acceptance: 100% of quantitative claims in the results draft have rows;
+spot-checks pass.
+
+Fallback: none - this is cheap bookkeeping with outsized defense value.
+
+### Stage 4.4: Results And Limitations Draft
+
+Objective: written findings for Q1/Q2/Q3 plus an honest limitations
+section.
+
+Required content:
+
+- Where splitting wins, loses, and *why* (mechanistic story tied to F3-F7:
+  bandwidth vs compute time, idle floor of the second node, transfer
+  energy share).
+- Effect-size honesty (Stage 4.5 feeds this): differences are claimed only
+  where CIs separate; "no measurable difference" is a stated result
+  category.
+- Limitations inherited by construction (each pre-seeded from earlier
+  decisions): measurement-boundary differences across targets (D-018
+  table); consumer-hardware sample of one per target; controller
+  co-residency residual (D-013); modeled-vs-measured composition where
+  fallbacks were exercised (R-004/R-005); network conditions (R-011).
+
+Actions: draft in `docs/phase_4/results_draft.md`; every quantitative
+sentence gets a claims-index row as written.
+
+Evidence: the draft + its index rows.
+
+Acceptance: a reader can challenge any number and be routed to bundles;
+limitations section covers every exercised fallback.
+
+Fallback: none needed.
+
+### Stage 4.5: Uncertainty And Sensitivity Audit
+
+Objective: verify the headline effects survive their error bars.
+
+Actions: for each headline comparison (split vs monolithic per pairing;
+link-speed deltas): compare effect size against CI widths; run the
+bootstrap sensitivity (4.0); audit thermal drift across reps in the
+underlying experiments (manifest order vs metric trend - a correlation
+means contamination); check clock-offset bounds vs shortest attributed
+windows in split runs.
+
+Evidence: sensitivity appendix in `results_draft.md` with a
+pass/concern/fail table per headline claim.
+
+Acceptance: every headline claim is marked effect>CI or explicitly
+downgraded in the claims index; no unexplained order-correlated trends.
+
+Fallback: claims that fail are downgraded or dropped - that is the stage
+working as designed, not a failure of the stage.
+
+## Exit
+
+Governed by `docs/phase_4/phase_4_exit_checklist.md`. The phase's product
+is: validated dataset + deterministic figures + claims index + ratified
+uncertainty story + results/limitations draft ready for Phase 5 packaging.

@@ -14,7 +14,9 @@ as the first research application that validates the harness.
   `docs/planning_reflection_protocol.md` before implementation.
 - At the end of every substantial run, update `RUN_STATE.md` and add or update a
   detailed report in `docs/run_reports/`.
-- Do not modify `Energy_Benchmark_Architecture.docx` unless the user asks.
+- Check `docs/decision_log.md` before re-deciding anything; record new design
+  decisions there with options and considerations.
+- Review `docs/risk_register.md` at phase starts and when a trigger fires.
 - Keep run artifacts self-contained and reproducible.
 - Prefer small vertical slices that produce complete run bundles.
 - Treat unsupported hardware/model combinations as structured outcomes, not
@@ -22,6 +24,25 @@ as the first research application that validates the harness.
 - Keep runtime adapters separate from telemetry adapters.
 - Make every result traceable to a config, raw power trace, event log, and
   reducer output.
+
+## Single Source Of Truth Map
+
+Detail lives in exactly one place; everything else links to it. When
+documents disagree, fix the drift in the same run and note it in the run
+report.
+
+| Artifact | Owns |
+|---|---|
+| `AGENT_PLAN.md` (this file) | phase index, status summary, acceptance criteria |
+| `docs/phase_N/phase_N_plan.md` | step/slice detail: objectives, design, actions, evidence, fallbacks |
+| `docs/phase_N/phase_N_exit_checklist.md` | evidence gates for closing phase N |
+| `TASK_QUEUE.md` | what to do next, and why it outranks the rest |
+| `RUN_STATE.md` | current handoff: state, verification, next step |
+| `docs/decision_log.md` | design decisions, options, considerations |
+| `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
+| `docs/milestones.md` | calendar constraints and phase target dates |
+| `docs/phase_1/measurement_methodology.md` | measurement rules (boundaries, clocks, statistics) |
+| `docs/phase_1/run_bundle_layout.md` | bundle artifact contract |
 
 ## Canonical Architecture
 
@@ -36,11 +57,12 @@ typed config
     -> dashboard / notebooks / report figures
 ```
 
-## Phase Checklist
+## Phase Index
 
 ### Phase 1: Approval, Feasibility, And Measurement Design
 
-Status: in progress.
+Status: in progress. Detail: `docs/phase_1/` (continuation plan, exit
+checklist, methodology, instrumentation, network plan, Hailo feasibility).
 
 - [x] Create repo-local agent plan.
 - [x] Add reusable planning reflection protocol.
@@ -54,11 +76,15 @@ Status: in progress.
 - [x] Add example configs for Mac-local and mock-local runs.
 - [x] Add schema/interface tests.
 - [x] Add Phase 1 CLI helpers for config validation and schema printing.
+- [x] Extend measurement methodology: boundaries, clock sync, co-residency,
+  repetition/thermal protocol, statistical protocol.
+- [x] Establish decision log, risk register, and milestone map.
 - [ ] Confirm supervisor expectations and final proposal scope.
 - [ ] Complete Hailo feasibility investigation.
 - [ ] Confirm wall-meter availability.
 - [ ] Confirm local network plan for interconnect sweep.
 - [ ] Confirm telemetry permissions on each physical target.
+- [ ] Map phases to the academic calendar (`docs/milestones.md`).
 
 Acceptance criteria:
 
@@ -69,23 +95,32 @@ Acceptance criteria:
   Phase 1 item.
 - Every hardware target is classified as supported, pending, or intentionally
   unsupported.
-- Phase 2 can start with a clear Mac MLX + powermetrics vertical slice.
+- Phase 2 can start with a clear mock-first path toward the Mac MLX +
+  powermetrics vertical slice.
 
 ### Phase 2: Harness, Mac Vertical Slice, And Homogeneous Baselines
 
-Status: planned.
+Status: planned. Detail: `docs/phase_2/phase_2_plan.md`. Exit:
+`docs/phase_2/phase_2_exit_checklist.md`.
 
-- [ ] Implement controller lifecycle:
-  `prepare -> idle -> warmup -> measured_run -> cleanup -> reduce`.
-- [ ] Implement run-bundle writer.
-- [ ] Implement Mac MLX runtime adapter.
-- [ ] Implement powermetrics telemetry adapter.
-- [ ] Implement summary reducer.
-- [ ] Implement dashboard v1 as a read-only run browser.
-- [ ] Add NVIDIA/vLLM + nvidia-smi adapter.
-- [ ] Add Orin adapter.
-- [ ] Run homogeneous baselines.
-- [ ] Reproduce prefill/decode qualitative power behavior.
+Mock-first ordering (matches `TASK_QUEUE.md`; the real-hardware slices are
+gated on Phase 1 evidence):
+
+- [ ] 2A Run-bundle writer.
+- [ ] 2B Clock seam + built-in mock adapters.
+- [ ] 2C Controller lifecycle with structured failure paths.
+- [ ] 2D Reducer v1 with closed-form tests.
+- [ ] 2E One-command run + `validate-bundle` (mock end-to-end in CI).
+- [ ] 2F Repetitions, experiment manifests, cooldown gate.
+- [ ] Model selection checkpoint (decision D-016).
+- [ ] 2G MLX runtime adapter (gated).
+- [ ] 2H powermetrics telemetry adapter (gated on privileged-sample
+  evidence).
+- [ ] 2I Mac vertical slice integration with variance.
+- [ ] 2J Static report generator v1.
+- [ ] 2K NVIDIA/vLLM + nvidia-smi + SSH transport (gated on P1-006).
+- [ ] 2L Orin adapter (gated on P1-006).
+- [ ] 2M Homogeneous baselines + prefill/decode qualitative reproduction.
 
 Acceptance criteria:
 
@@ -96,32 +131,40 @@ Acceptance criteria:
 
 ### Phase 3: Disaggregation, Offline KV Replay, And Interconnect Sweep
 
-Status: planned.
+Status: planned. Detail: `docs/phase_3/phase_3_plan.md`. Exit:
+`docs/phase_3/phase_3_exit_checklist.md`. Feasibility-first per decision
+D-015: spikes before hardware scheduling, synthetic-transfer floor
+guarantees a crossover dataset.
 
-- [ ] Implement split-run orchestration.
-- [ ] Build offline decode replay path before live KV transfer.
-- [ ] Measure serialization, payload size, transfer time, and transfer energy.
-- [ ] Run GPU-to-Apple experiments.
-- [ ] Run GPU-to-GPU experiments during 3080 Ti borrow window.
-- [ ] Run Orin-to-Orin and Orin-to-Apple experiments.
-- [ ] Run 1GbE, 2.5GbE, and optional 10GbE sweep.
+- [ ] 3.0 KV persistence feasibility spikes (kv-size helper; mlx-lm;
+  llama.cpp incl. cross-machine portability; vLLM time-boxed; verdict
+  consolidation).
+- [ ] 3.1 Schema v0.2 (`run_kind` + `split_plan`) + transfer
+  microbenchmark with both-end energy.
+- [ ] 3.2 Offline split runs with per-stage decomposition
+  (prefill/transfer/deserialize/decode).
+- [ ] 3.3 Live split (stretch; droppable).
+- [ ] 3.4 Interconnect sweep + crossover dataset (1GbE, 2.5GbE, optional
+  10GbE; 3080 Ti borrow window per runbook).
 
 Acceptance criteria:
 
 - Split runs decompose prefill, transfer, and decode energy.
-- Offline replay produces valid decode-energy measurements.
+- Offline replay produces valid decode-energy measurements (or its
+  documented fallback was exercised).
 - Interconnect data supports a crossover curve.
 
 ### Phase 4: Core Characterization And Analysis
 
-Status: planned.
+Status: planned. Detail: `docs/phase_4/phase_4_plan.md`. Exit:
+`docs/phase_4/phase_4_exit_checklist.md`.
 
-- [ ] Aggregate homogeneous and split runs.
-- [ ] Compute uncertainty intervals from repeated runs.
-- [ ] Generate energy/token and energy/request figures.
-- [ ] Generate interconnect crossover figures.
-- [ ] Generate energy-latency Pareto frontier.
-- [ ] Draft results and limitations.
+- [ ] 4.0 Statistical protocol ratification against observed variance.
+- [ ] 4.1 Aggregation layer with exclusion-log discipline.
+- [ ] 4.2 Deterministic figure pipeline (registry F1-F8).
+- [ ] 4.3 Claims-to-evidence index.
+- [ ] 4.4 Results and limitations draft.
+- [ ] 4.5 Uncertainty and sensitivity audit.
 
 Acceptance criteria:
 
@@ -131,14 +174,16 @@ Acceptance criteria:
 
 ### Phase 5: Presentation, Repository Polish, And Final Submission
 
-Status: planned.
+Status: planned. Detail: `docs/phase_5/phase_5_plan.md`. Exit:
+`docs/phase_5/phase_5_exit_checklist.md`.
 
-- [ ] Write runnable README quickstart.
-- [ ] Write backend-extension guide.
-- [ ] Publish sample run bundle.
-- [ ] Validate final dataset bundles against schemas.
-- [ ] Prepare colloquium slides.
-- [ ] Prepare final report.
+- [ ] 5.0 Verified README quickstart.
+- [ ] 5.1 Backend-extension guide verified by a shipped tutorial adapter.
+- [ ] 5.2 Sample bundle publication with CI validation.
+- [ ] 5.3 Dataset freeze and release tag.
+- [ ] 5.4 Colloquium slides on frozen figures.
+- [ ] 5.5 Final report assembly with claims-index final pass.
+- [ ] 5.6 Repository final pass and project-complete handoff.
 
 Acceptance criteria:
 
@@ -170,6 +215,7 @@ Every big run must leave a human-readable handoff note. The report should cover:
 - What passed or failed.
 - What local workspace state needs care.
 - What the next agent should do first.
+- New or updated decision-log entries and risk-register statuses.
 
 The root `RUN_STATE.md` is the current handoff. Dated reports live in
 `docs/run_reports/`.

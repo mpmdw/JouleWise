@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # 3.11 is the supported floor (pyproject); 3.14 matches local dev.
+        python-version: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Unit tests (stdlib core only, per D-009/D-017)
+        run: python -m unittest discover -s tests -v
+      - name: CLI smoke - validate example configs
+        run: |
+          python -m joulewise validate-config configs/examples/mock_local.json
+          python -m joulewise validate-config configs/examples/mac_mlx_local.json
+      # Phase 2 Slice 2E extends this job with the mock end-to-end run:
+      #   python -m joulewise run configs/examples/mock_local.json --runs-dir ci-runs
+      #   python -m joulewise validate-bundle ci-runs/<id>
