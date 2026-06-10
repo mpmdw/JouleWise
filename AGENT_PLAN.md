@@ -13,7 +13,9 @@ as the first research application that validates the harness.
 - At the start of each phase or major step, apply
   `docs/planning_reflection_protocol.md` before implementation.
 - At the end of every substantial run, update `RUN_STATE.md` and add or update a
-  detailed report in `docs/run_reports/`.
+  detailed report in `docs/run_reports/`. If advisor-visible state changed (a
+  phase or gate closed, a verdict landed, the schedule moved), refresh
+  `PROJECT_STATUS.md` too.
 - Check `docs/decision_log.md` before re-deciding anything; record new design
   decisions there with options and considerations.
 - Review `docs/risk_register.md` at phase starts and when a trigger fires.
@@ -34,6 +36,7 @@ report.
 | Artifact | Owns |
 |---|---|
 | `AGENT_PLAN.md` (this file) | phase index, status summary, acceptance criteria |
+| `PROJECT_STATUS.md` | advisor-facing status/plan/architecture summary (derived; update when advisor-visible state changes) |
 | `docs/phase_N/phase_N_plan.md` | step/slice detail: objectives, design, actions, evidence, fallbacks |
 | `docs/phase_N/phase_N_exit_checklist.md` | evidence gates for closing phase N |
 | `TASK_QUEUE.md` | what to do next, and why it outranks the rest |

@@ -80,6 +80,7 @@ Rank lower when a task:
 | PLAN-001 | P1 Phase Gate | 2026-06-09 | Build evidence-shaped plans for Phases 2-5 (user-directed) | Per-phase plan + exit-checklist docs; `docs/decision_log.md` (D-001..D-019); `docs/risk_register.md`; `docs/milestones.md`; methodology/bundle-layout amendments; `AGENT_PLAN.md` restructured as index; run report `docs/run_reports/2026-06-09-phase-2-5-planning-buildout.md` |
 | CI-001 | P2 Next Slice | 2026-06-09 | Add core-tests CI workflow (D-017) | `.github/workflows/ci.yml`; green check on push pending first remote run |
 | DOC-001 | P4 Polish | 2026-06-09 | Unify Phase 1 doc scheme with Phases 2-5 (user-directed) | `docs/phase_1/` reduced to `phase_1_plan.md` + `phase_1_exit_checklist.md` (evidence dossier, all recorded evidence preserved); contracts moved to `docs/contracts/`; all live cross-references updated; run report `docs/run_reports/2026-06-09-phase-1-doc-unification.md` |
+| DOC-002 | P4 Polish | 2026-06-09 | Add advisor-facing status/plan/architecture doc + audit original sketch (user-directed) | Root `PROJECT_STATUS.md` (standalone, mirrors the original architecture sketch's shape, includes sketch-evolution audit table); maintenance rule in `AGENT_PLAN.md`/`RUN_STATE.md`; run report `docs/run_reports/2026-06-09-advisor-status-doc.md` |
 
 ## Current Do-Not-Do-Yet List
 

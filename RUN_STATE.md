@@ -25,7 +25,9 @@ At the end of substantial work:
 3. Add or update a detailed report in `docs/run_reports/`.
 4. Record tests, commands, blockers, and the next best task.
 5. Record new decision-log entries and any risk-register status changes.
-6. Call out any dirty working-tree state that should not be accidentally
+6. Refresh `PROJECT_STATUS.md` if advisor-visible state changed (phase or
+   gate closed, verdict landed, schedule moved).
+7. Call out any dirty working-tree state that should not be accidentally
    committed.
 
 ## Current Project Status
@@ -40,7 +42,34 @@ adapter contracts); cross-phase registries live in `docs/` (decision log,
 risk register, milestones). The repo has a scaffolded, tested foundation;
 the runnable harness is Phase 2 slice work, fully specified in its plan.
 
-## What This Run Did (2026-06-09, Phase 1 doc-scheme unification)
+## What This Run Did (2026-06-09, advisor status doc + sketch audit)
+
+User-directed follow-up to the doc unification:
+
+- Added root-level `PROJECT_STATUS.md`: standalone advisor-facing status,
+  plan, and architecture document, shaped after the original
+  "Energy Benchmark Architecture And Expanded Plan" sketch (found at
+  `../Energy_Benchmark_Architecture.docx`, the source of the user's
+  paste) and extended with status-at-a-glance, methodology highlights,
+  the experiment plan, risk/floor summary, timeline asks, and a
+  repository map. Maintenance rule added to `AGENT_PLAN.md` ground rules
+  and this file's end-of-run list: refresh it when advisor-visible state
+  changes.
+- Audited the original sketch against current thinking: architecture
+  survives intact; refinements are documented decisions (JSON/stdlib over
+  YAML/Pydantic for now, mock-first before the Mac slice, static-HTML
+  dashboard, KV feasibility ladder with same-runtime rule replacing the
+  implicit GPU-to-Apple live-split assumption, added
+  boundaries/clock/statistics rigor). No contradictions found; the
+  audit's mapping table lives in `PROJECT_STATUS.md` ("Evolution From The
+  Original Architecture Sketch") and the run report.
+- Note: queue history (Q-000) records the repo *copy* of that .docx as
+  removed per user instruction; the file in the parent folder is the
+  proposal-era sketch and remains outside the repo. Its content is
+  superseded by the in-repo plans; `PROJECT_STATUS.md` is now the
+  maintained equivalent.
+
+## Prior Run (2026-06-09, Phase 1 doc-scheme unification)
 
 User-directed: make Phase 1's documentation structurally uniform with
 Phases 2-5 by consolidation.
