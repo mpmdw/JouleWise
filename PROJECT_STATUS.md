@@ -23,11 +23,10 @@ accelerator was confirmed unable to run LLM workloads — a clean, documented
 **On track:** real-hardware measurement (Mac, then NVIDIA/Jetson) is the next
 step and is fully specified — it is execution, not design.
 
-**What I need from you (one meeting + two dates):** a short scope-confirmation
+**What I need from you (sanity check):** a short scope-confirmation
 that the reusable harness is the primary deliverable and split inference the
 validating study — this unblocks model selection and the first real Mac
-measurements — plus the colloquium and report-deadline dates so I can set
-phase targets.
+measurements. Any other thoughts are welcome
 
 ## Summary
 
