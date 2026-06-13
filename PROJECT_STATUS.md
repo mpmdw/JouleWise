@@ -10,6 +10,25 @@ are provided for anyone who wants the full evidence trail.
   hardware-independent harness core is complete and runnable
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 
+## This Update (2026-06-12) — 30-second read
+
+**Progress:** the benchmark harness now runs end to end. One command turns a
+typed experiment config into a complete, auditable energy + latency
+measurement bundle, validated today on a deterministic software target so the
+measurement logic is proven before any hardware time is spent. The test suite
+(169 checks) runs green in CI on every change. The Raspberry Pi/Hailo
+accelerator was confirmed unable to run LLM workloads — a clean, documented
+"not applicable" result, not a setback.
+
+**On track:** real-hardware measurement (Mac, then NVIDIA/Jetson) is the next
+step and is fully specified — it is execution, not design.
+
+**What I need from you (one meeting + two dates):** a short scope-confirmation
+that the reusable harness is the primary deliverable and split inference the
+validating study — this unblocks model selection and the first real Mac
+measurements — plus the colloquium and report-deadline dates so I can set
+phase targets.
+
 ## Summary
 
 JouleWise is a reusable, typed, extensible benchmark harness for measuring
