@@ -32,13 +32,25 @@ constraints live in `docs/milestones.md`.
 
 ## Current State
 
-Phase 1 is underway. The repository currently contains:
+Phase 1 is in its final stretch; **Phase 2's hardware-independent core is
+complete and runnable**. From a typed config, the harness produces a complete,
+schema-valid, auditable run bundle and reduces it to energy/latency summary
+metrics — today from deterministic mock adapters (so the controller, bundle
+contract, and reducer math are proven without hardware). Real backends (Mac
+MLX + powermetrics, NVIDIA/vLLM, Jetson Orin) plug into the same adapter
+interfaces and are the next, hardware-gated slices.
 
-- Draft config and output schemas.
-- Runtime, telemetry, and transport interface contracts.
+The repository currently contains:
+
+- Typed config and output schemas with JSON-Schema export and validation.
+- Runtime, telemetry, and transport interface contracts, with shipped mock
+  adapters and a backend registry.
+- The runnable harness: bundle writer, controller lifecycle, reducer, static
+  HTML report generator, and a CLI (`run`, `validate-bundle`, `report`).
 - Example Mac-local and mock-local configs.
-- Phase 1 methodology and feasibility docs.
-- Unit tests for the schema and interfaces.
+- Phase 1 methodology, feasibility, and measurement-design docs.
+- A test suite (169 tests) run in CI on every push, including a mock
+  end-to-end run + bundle validation.
 
 ## Verify
 
@@ -46,22 +58,31 @@ Phase 1 is underway. The repository currently contains:
 python3 -m unittest discover -s tests
 ```
 
-## Phase 1 CLI
+(8 tests skip unless the `[analysis]` extra is installed — they are the
+report-generator chart tests.)
 
-Validate an example config:
+## Run The Harness (mock target — no hardware or extras needed)
+
+```bash
+# Produce a complete run bundle from the mock target (deterministic):
+python3 -m joulewise run configs/examples/mock_local.json --runs-dir runs
+
+# Structurally verify any bundle:
+python3 -m joulewise validate-bundle runs/example-mock-local
+
+# Render a static HTML run browser (needs: pip install 'joulewise[analysis]'):
+python3 -m joulewise report runs --output report
+```
+
+A run bundle (`runs/<run_id>/`) contains the normalized `config.json`,
+`metadata.json`, the `events.jsonl` lifecycle/phase/token log, the raw
+`power_trace.csv`, model outputs, per-component logs, and the reduced
+`summary_metrics.json` (written last; its presence marks a complete bundle).
+
+## Config And Schema Verbs
 
 ```bash
 python3 -m joulewise validate-config configs/examples/mock_local.json
-```
-
-Print the draft config schema:
-
-```bash
 python3 -m joulewise print-config-schema
-```
-
-Print the draft output schema:
-
-```bash
 python3 -m joulewise print-output-schema
 ```

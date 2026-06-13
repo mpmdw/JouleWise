@@ -155,15 +155,21 @@ Conventions:
 - Phase: 1. Likelihood: high. Impact: low - *by design*: the plan treats
   Hailo as a feasibility investigation whose negative verdict is itself a
   reportable applicability finding.
+- Status: **realized as expected, 2026-06-12** — verdict
+  `unsupported_workload`. The trigger fired (a non-`supported` verdict),
+  the by-design mitigation held, and the outcome is the publishable
+  applicability finding the plan anticipated. No schedule impact.
 - Trigger: feasibility checklist closes with any non-`supported` verdict.
+  (Fired 2026-06-12.)
 - Mitigation: none needed; the verdict-code structure in the Phase 1 exit
   checklist's Hailo section makes the outcome publishable either way. Do
-  not spend implementation effort before the verdict (standing
-  do-not-do-yet rule).
+  not spend implementation effort on a Hailo backend (the verdict is now
+  recorded; the standing do-not-do-yet rule becomes "report, don't
+  implement").
 - Fallback: Pi 5 CPU-only llama.cpp with wall-meter telemetry becomes an
   optional low-power data point if the meter exists; otherwise Pi/Hailo
   appears only in the applicability table.
-- Owner: user (device access), agent (verdict documentation).
+- Owner: user (device access), agent (verdict documentation - done).
 
 ## R-010: Controller-as-DUT contamination on Mac runs
 

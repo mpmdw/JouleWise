@@ -1,6 +1,6 @@
 # JouleWise Run State
 
-Last updated: 2026-06-09
+Last updated: 2026-06-12
 
 ## Start Here For Every Big Run
 
@@ -25,146 +25,134 @@ At the end of substantial work:
 3. Add or update a detailed report in `docs/run_reports/`.
 4. Record tests, commands, blockers, and the next best task.
 5. Record new decision-log entries and any risk-register status changes.
-6. Refresh `PROJECT_STATUS.md` if advisor-visible state changed (phase or
-   gate closed, verdict landed, schedule moved).
+6. Refresh `PROJECT_STATUS.md` if advisor-visible state changed.
 7. Call out any dirty working-tree state that should not be accidentally
    committed.
 
 ## Current Project Status
 
-JouleWise is in Phase 1: approval, feasibility, and measurement design.
+Phase 1 is in its final stretch (most design/feasibility items closed; the
+remaining gates need external/hardware input). **Phase 2's
+hardware-independent core is complete and runnable**: one command produces a
+complete, schema-valid, correctly-reduced run bundle from deterministic mock
+adapters. The remaining Phase 2 slices are hardware-gated.
 
-Every phase now follows one documentation scheme:
-`docs/phase_N/phase_N_plan.md` (steps with objectives, evidence, acceptance,
-fallbacks) + `docs/phase_N/phase_N_exit_checklist.md` (evidence dossier).
-Cross-phase contracts live in `docs/contracts/` (methodology, bundle layout,
-adapter contracts); cross-phase registries live in `docs/` (decision log,
-risk register, milestones). The repo has a scaffolded, tested foundation;
-the runnable harness is Phase 2 slice work, fully specified in its plan.
+Every phase follows one documentation scheme:
+`docs/phase_N/phase_N_plan.md` + `docs/phase_N/phase_N_exit_checklist.md`.
+Cross-phase contracts live in `docs/contracts/`; registries in `docs/`
+(decision log, risk register, milestones). Code-level specs for the gated
+Phase 2 slices live in `docs/phase_2/hardware_slice_implementation_guide.md`.
 
-## What This Run Did (2026-06-09, advisor status doc + sketch audit)
+## What This Run Did (2026-06-12, Phase 2 mock vertical slice + Phase 1 closures)
 
-User-directed follow-up to the doc unification:
+Implemented and tested the Phase 2 mock vertical slice (slices 2A-2F + 2J),
+closed two Phase 1 gates, and recorded the supporting decisions. Full detail:
+`docs/run_reports/2026-06-12-phase-2-mock-vertical-slice.md`.
 
-- Added root-level `PROJECT_STATUS.md`: standalone advisor-facing status,
-  plan, and architecture document, shaped after the original
-  "Energy Benchmark Architecture And Expanded Plan" sketch (found at
-  `../Energy_Benchmark_Architecture.docx`, the source of the user's
-  paste) and extended with status-at-a-glance, methodology highlights,
-  the experiment plan, risk/floor summary, timeline asks, and a
-  repository map. Maintenance rule added to `AGENT_PLAN.md` ground rules
-  and this file's end-of-run list: refresh it when advisor-visible state
-  changes.
-- Audited the original sketch against current thinking: architecture
-  survives intact; refinements are documented decisions (JSON/stdlib over
-  YAML/Pydantic for now, mock-first before the Mac slice, static-HTML
-  dashboard, KV feasibility ladder with same-runtime rule replacing the
-  implicit GPU-to-Apple live-split assumption, added
-  boundaries/clock/statistics rigor). No contradictions found; the
-  audit's mapping table lives in `PROJECT_STATUS.md` ("Evolution From The
-  Original Architecture Sketch") and the run report.
-- Note: queue history (Q-000) records the repo *copy* of that .docx as
-  removed per user instruction; the file in the parent folder is the
-  proposal-era sketch and remains outside the repo. Its content is
-  superseded by the in-repo plans; `PROJECT_STATUS.md` is now the
-  maintained equivalent.
+New `joulewise/` modules:
 
-## Prior Run (2026-06-09, Phase 1 doc-scheme unification)
+- `clock.py` (D-019): `Clock` protocol, `SystemClock`, `FakeClock` — the only
+  place the package reads wall-clock time.
+- `bundle.py` (2A): `RunBundleWriter` — bundle layout, run-ID scheme (D-010,
+  refined by D-022), write-order/immutability invariants (D-011), config
+  hashing (D-001), experiment-manifest helper (D-005).
+- `adapters/` (2B): registry + deterministic mock runtime/telemetry + local
+  transport; unimplemented backends return structured failures (D-009/D-012).
+- `controller.py` (2C/2D/2F): `run_benchmark` + `run_experiment`; full
+  lifecycle, D-012 status mapping, D-011 completeness invariant, D-013
+  quiescent measured window, events flushed before reduce (D-021).
+- `reduce.py` (2D): `reduce_bundle` — pure post-hoc reduction over on-disk
+  artifacts (D-002); trapezoidal energy, D-018 rail summation, idle
+  subtraction, per-phase attribution; closed-form-tested.
+- `report.py` (2J): static HTML run browser (D-006); matplotlib behind the
+  `[analysis]` extra with graceful structured failure when absent.
+- `cli.py`: new verbs `run`, `validate-bundle`, `report`; `run` dispatches to
+  the experiment runner when `repetitions > 1`.
+- `schemas.py`: two additive output fields only (R-015): `phase_energy_j`,
+  `cooldown_cap_hit`.
+- `pyproject.toml`: `[analysis]`/`[mac]` extras; phase bumped to 2.
+- `.github/workflows/ci.yml`: mock end-to-end `run` + `validate-bundle` step.
 
-User-directed: make Phase 1's documentation structurally uniform with
-Phases 2-5 by consolidation.
+Built by a multi-agent workflow (2A∥2B→2C→2D→2E→2F→2J), each slice gated on a
+green suite, then an adversarial contract-review pass: zero critical/major
+findings, eight confirmed minor findings (four code, four test-gaps) all
+fixed, two findings correctly refuted. Decisions D-020 (CLI clock selection),
+D-021 (events flushed before reduce), D-022 (config-hash run-ID suffix) added.
 
-- Moved the cross-phase contracts out of `docs/phase_1/` into
-  `docs/contracts/` (git mv, history preserved):
-  `measurement_methodology.md` (retitled from "Draft", living-contract
-  header added), `run_bundle_layout.md`, `adapter_contracts.md`.
-- Created `docs/phase_1/phase_1_plan.md` in the uniform format: goal,
-  deliverables, agent protocol, constraints, and Steps 1-8 (supervisor
-  scope, Mac evidence, wall meter, network, Hailo, NVIDIA/Orin, calendar,
-  readiness review) with objective/inputs/actions/evidence/acceptance/
-  fallback each, statuses matching the queue.
-- Rewrote `docs/phase_1/phase_1_exit_checklist.md` as the phase's evidence
-  dossier: it now defines required evidence *and* records it - absorbing
-  the full recorded evidence from the former `hailo_feasibility.md`,
-  `network_plan.md`, and `instrumentation_checklist.md` (all 2026-06-09
-  observations preserved verbatim: powermetrics path/privilege/samplers,
-  MLX absence, arm64/uid, ifconfig/networksetup/iperf3 status, per-target
-  checkbox states, verdict codes).
-- Deleted the five superseded files: `docs/phase_1/README.md`,
-  `phase_1_continuation_plan.md`, `hailo_feasibility.md`,
-  `network_plan.md`, `instrumentation_checklist.md` (content merged; git
-  history retains the originals; old run reports intentionally keep their
-  historical references).
-- Stated the evidence-location convention (in the Phase 1 plan): evidence
-  lives in the phase exit checklist until a topic outgrows it, then moves
-  to a dedicated file under the phase dir (Phase 3's `kv_feasibility.md`
-  is the pattern).
-- Updated every live cross-reference: `AGENT_PLAN.md` (source-of-truth map
-  rows -> `docs/contracts/`, adapter-contracts row added, Phase 1 detail
-  line made uniform), `TASK_QUEUE.md` (P1-002..P1-006 evidence
-  destinations -> exit-checklist sections), `docs/decision_log.md`
-  (D-001/D-004), `docs/risk_register.md` (R-002/R-009),
-  `docs/phase_2/phase_2_plan.md` (contract paths; Phase 1 access evidence
-  vs Phase 2 applicability-table destinations split correctly),
-  `docs/phase_2/phase_2_exit_checklist.md`, `docs/phase_3/phase_3_plan.md`.
+Phase 1 closures:
+
+- P1-005 Hailo feasibility: verdict `unsupported_workload` (official-source
+  desk research; Hailo-8L has no autoregressive-LLM path, GenAI is
+  Hailo-10H-only). Recorded in the Phase 1 exit checklist Hailo section.
+- P1-007 Phase 2 readiness review: recorded; verdict "mock-first Phase 2 may
+  begin".
+
+Also added `docs/phase_2/hardware_slice_implementation_guide.md` (code-level
+specs for the gated slices 2G-2M).
 
 ## Current Verification
-
-Command:
 
 ```bash
 python3 -m unittest discover -s tests
 ```
 
-Result (docs-only change set):
+Result (2026-06-12):
 
 ```text
-Ran 14 tests
-OK
+Ran 169 tests
+OK (skipped=8)
 ```
 
-Reference check: `grep -rn 'phase_1/\(measurement_methodology\|run_bundle_layout\|adapter_contracts\|instrumentation_checklist\|network_plan\|hailo_feasibility\|phase_1_continuation_plan\|README\)'`
-returns only historical run reports.
+The 8 skips are the matplotlib `[analysis]`-extra chart tests in
+`test_report.py`; they skip cleanly where the extra is absent (CI, bare
+checkout) and run where it is installed. End-to-end verified:
+`python3 -m joulewise run configs/examples/mock_local.json` → complete
+bundle → `validate-bundle` green; reducer values match the closed-form mock
+constants exactly; identical config + clock ⇒ byte-identical events.
 
 ## Known Workspace State
 
-- Remote: `git@github.com:mpmdw/JouleWise.git`
-- Branch: `main`, tracking `origin/main`
-- Use `git log --oneline --decorate -3` for the latest pushed commit.
-- Known prior anomaly (2026-06-09, earlier run): transient `EPERM` errors
-  reading files under `docs/` that recovered on retry; suspected macOS
-  Desktop privacy hiccup. Watch for recurrence.
+- Remote: `git@github.com:mpmdw/JouleWise.git`; branch `main`.
+- **2026-06-12 environment incident:** while finishing the docs/commit, the
+  repo-root directory became OS-locked (read/readdir EPERM; git "Unable to
+  read current working directory"), spreading across subtrees over time, with
+  the iCloud Drive file provider (`bird`) active. The repo lives under
+  `~/Desktop/`, which is iCloud "Desktop & Documents"-synced. The code and
+  `docs/` changes all landed and the suite was green (169) before the lock;
+  iCloud eviction makes files cloud-only, not lost. The lock cleared on its
+  own and this run's work was committed normally; the suite was re-run green
+  (169) afterward to confirm no eviction corruption. **Durable fix to avoid a
+  recurrence: move this git repo off the iCloud-synced Desktop** (e.g.
+  `mv ~/Desktop/CapstoneRivoire ~/code/`); a work tree under iCloud "Optimize
+  Mac Storage" will intermittently EPERM-lock the root.
 
 ## What Is Next
 
-Follow `TASK_QUEUE.md`. The top items:
+Follow `TASK_QUEUE.md`. The top items are all gated:
 
-1. P1-001: capture supervisor approval/scope notes in the supervisor
-   section of `docs/phase_1/phase_1_exit_checklist.md` (the question list
-   is in that section).
-2. P1-002 (after the user's 2026-06-10 auth session): capture one
-   privileged `powermetrics` sample, record the available power/thermal
-   field names in the exit checklist's instrumentation section, and
-   install/verify the D-004 scoped sudoers rule. Key command:
-   `powermetrics -n 1 -i 100 --samplers thermal,cpu_power,gpu_power,ane_power`
-   (then the same via `sudo -n` to verify the rule).
-3. P1-008: enter colloquium/report dates and the borrow window in
-   `docs/milestones.md` when the user provides them.
-4. First implementation work when prioritized: P2-001 = slices 2A-2E per
-   `docs/phase_2/phase_2_plan.md`, in order, one slice per session.
+1. P2-004: close D-016 model selection (decision step; needs P1-001
+   supervisor scope or explicit user go-ahead + disk-space check) — unblocks
+   2G/2K install targets.
+2. P2-003: Mac MLX + powermetrics vertical slice (2G/2H/2I) — gated on P1-002
+   (privileged powermetrics sample + D-004 sudoers) and D-016. Spec:
+   `docs/phase_2/hardware_slice_implementation_guide.md`.
+3. P2-005: remote targets (2K NVIDIA/vLLM/ssh, 2L Orin) — gated on P1-006.
+4. P2-006: homogeneous baselines (2M) — after 2I + ≥1 remote target.
+
+Remaining Phase 1 external gates: supervisor scope (P1-001), calendar
+(P1-008), wall meter (P1-003), network topology (P1-004), NVIDIA/Orin access
+(P1-006).
 
 ## Open Decisions And Blockers
 
-- Supervisor approval and scope confirmation pending (P1-001, R-001).
-- Calendar dates pending user input (P1-008, R-012).
-- Hailo feasibility pending (P1-005; expected-negative is fine, R-009).
+- Supervisor approval and scope pending (P1-001, R-001); also gates D-016.
+- Calendar dates pending (P1-008, R-012).
 - Wall-meter decision pending (P1-003, R-007).
 - Physical network topology pending (P1-004, R-011).
-- NVIDIA/Orin access evidence pending (P1-006; gates slices 2K/2L).
-- Mac evidence partially captured; privileged powermetrics sample waits on
-  the 2026-06-10 auth session (P1-002, R-002).
-- D-016 (model selection) is open with criteria fixed; closes during
-  Phase 2 at the model checkpoint.
-- Git author identity was auto-selected as `Edr <edr@Edrs-MacBook-Air.local>`
-  for the first commit. Amend future commits if a different identity is
-  needed.
+- NVIDIA/Orin access evidence pending (P1-006; gates 2K/2L).
+- Mac privileged powermetrics sample pending (P1-002, R-002; gates 2H).
+- D-016 model selection open (criteria fixed; needs P1-001 + install
+  evidence).
+- Git author identity was auto-selected as
+  `Edr <edr@Edrs-MacBook-Air.local>` for the first commit. Amend future
+  commits if a different identity is needed.

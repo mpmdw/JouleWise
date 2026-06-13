@@ -164,12 +164,19 @@ Design notes:
   names + versions (from adapter metadata), clock info (D-003), git commit
   of the harness when available (`git rev-parse`, recorded as unknown
   outside a checkout).
-- API surface: `create(runs_root, config) -> RunBundleWriter`; methods
+- API surface: `create(runs_root, config, clock) -> RunBundleWriter`
+  (the `clock` parameter was added during implementation per the D-003/D-019
+  rule that every timestamp — including the run-ID timestamp and the
+  `run_finalized` event — comes from the injected clock; this note
+  reconciles the original `create(runs_root, config)` sketch); methods
   `append_event(RuntimeEvent)`, `write_power_trace(list[PowerSample])`,
   `write_metadata(dict)`, `write_output(name, text)`, `log_path(name)`,
   `write_summary(SummaryMetrics)` + `finalize()`. Power trace CSV header:
   `timestamp_s,power_w,source,rail` with one row per rail per sample
-  (D-018).
+  (D-018). Implemented metadata.json carries `model` + `quantization`
+  blocks (the bundle-layout contract enumerates "model"); adapter-supplied
+  metadata is serialized with `default=str` so it can never break the
+  D-011 completion invariant.
 - Experiment manifests (D-005): `runs/experiments/<experiment_id>.json` with
   experiment_id, config hash, member bundle IDs, executed condition order
   (D-014), created timestamp. Written/extended by the controller in 2F, but

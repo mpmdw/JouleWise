@@ -1,0 +1,199 @@
+"""Tests for the static HTML report generator (Slice 2J; D-006, D-009, D-011).
+
+Bundles are built the real way - via ``run_benchmark`` on a ``FakeClock`` (the
+all-mock vertical slice) into a temp runs dir - so the report renders genuine
+artifact shapes, not hand-rolled fixtures.
+
+Matplotlib is the ``[analysis]`` extra and CI installs no extras, so the
+chart-producing tests are gated on ``HAS_MPL`` and skip cleanly when it is
+absent: the suite must be green both with and without matplotlib. The always-run
+tests cover the missing-matplotlib failure path (forced by masking the module in
+``sys.modules`` so the import raises even when matplotlib happens to be
+installed) through both ``generate_report`` and ``cli.main``.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import io
+import json
+import sys
+import tempfile
+import unittest
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+from unittest import mock
+
+from joulewise.clock import FakeClock
+from joulewise.controller import run_benchmark
+from joulewise.report import ReportError, generate_report
+from joulewise.schemas import BenchmarkConfig
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
+
+#: matplotlib is the [analysis] extra; the chart tests skip when it is absent.
+HAS_MPL = importlib.util.find_spec("matplotlib") is not None
+
+
+def _build_bundle(runs_dir: Path, run_id: str, *, unsupported: bool = False) -> Path:
+    """Run one mock benchmark into ``runs_dir`` and return the bundle path."""
+    data = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+    data["run_id"] = run_id
+    if unsupported:
+        data["model"]["name"] = "mock-unsupported"
+    config = BenchmarkConfig.from_mapping(data)
+    bundle_path, _summary = run_benchmark(config, runs_dir, FakeClock())
+    return bundle_path
+
+
+class ReportTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp = Path(tmp.name)
+        self.runs_dir = self.tmp / "runs"
+        self.output_dir = self.tmp / "report"
+        # One succeeded run and one unsupported run, the contract's two shapes.
+        _build_bundle(self.runs_dir, "report-success")
+        _build_bundle(self.runs_dir, "report-unsupported", unsupported=True)
+
+
+# ---------------------------------------------------------------------------
+# Missing-matplotlib path (always runs - masks the module so the import raises)
+
+
+class MissingMatplotlibTests(ReportTestCase):
+    """matplotlib absent => ReportError naming [analysis], before any output."""
+
+    def test_generate_report_raises_report_error_naming_extra(self) -> None:
+        with mock.patch.dict(
+            sys.modules, {"matplotlib": None, "matplotlib.pyplot": None}
+        ):
+            with self.assertRaises(ReportError) as caught:
+                generate_report(self.runs_dir, self.output_dir)
+        self.assertIn("[analysis]", str(caught.exception))
+        # No output may be written when the extra is missing.
+        self.assertFalse(self.output_dir.exists())
+
+    def test_cli_report_missing_matplotlib_exits_2(self) -> None:
+        from joulewise.cli import main
+
+        out = io.StringIO()
+        err = io.StringIO()
+        with mock.patch.dict(
+            sys.modules, {"matplotlib": None, "matplotlib.pyplot": None}
+        ):
+            with redirect_stdout(out), redirect_stderr(err):
+                exit_code = main(
+                    ["report", str(self.runs_dir), "--output", str(self.output_dir)]
+                )
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(out.getvalue(), "")
+        self.assertTrue(err.getvalue().startswith("error: "), err.getvalue())
+        self.assertIn("[analysis]", err.getvalue())
+
+
+class BadRunsDirTests(unittest.TestCase):
+    """A non-existent runs dir is a ReportError regardless of matplotlib."""
+
+    def test_missing_runs_dir_raises_before_matplotlib(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        missing = Path(tmp.name) / "no-such-runs"
+        with self.assertRaises(ReportError):
+            generate_report(missing, Path(tmp.name) / "report")
+
+
+# ---------------------------------------------------------------------------
+# Chart-producing rendering (gated on matplotlib)
+
+
+@unittest.skipUnless(HAS_MPL, "matplotlib ([analysis] extra) not installed")
+class RenderWithMatplotlibTests(ReportTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.index_path = generate_report(self.runs_dir, self.output_dir)
+        self.index_html = self.index_path.read_text()
+
+    def test_index_exists_and_lists_both_runs_and_statuses(self) -> None:
+        self.assertTrue(self.index_path.is_file())
+        self.assertEqual(self.index_path, self.output_dir / "index.html")
+        self.assertIn("report-success", self.index_html)
+        self.assertIn("report-unsupported", self.index_html)
+        self.assertIn("succeeded", self.index_html)
+        self.assertIn("unsupported", self.index_html)
+
+    def test_per_run_pages_exist(self) -> None:
+        success_page = self.output_dir / "run" / "report-success.html"
+        unsupported_page = self.output_dir / "run" / "report-unsupported.html"
+        self.assertTrue(success_page.is_file())
+        self.assertTrue(unsupported_page.is_file())
+
+    def test_succeeded_run_has_png_chart(self) -> None:
+        png = self.output_dir / "run" / "report-success.png"
+        self.assertTrue(png.is_file())
+        self.assertGreater(png.stat().st_size, 0)
+        page = (self.output_dir / "run" / "report-success.html").read_text()
+        self.assertIn("report-success.png", page)
+
+    def test_unsupported_page_has_failure_box_with_reason(self) -> None:
+        page = (self.output_dir / "run" / "report-unsupported.html").read_text()
+        self.assertIn("failure-box", page)
+        self.assertIn("did_not_fit", page)
+        # An unsupported run wrote no power trace, so the chart is omitted with
+        # a note rather than a broken <img>.
+        self.assertNotIn("report-unsupported.png", page)
+        self.assertFalse((self.output_dir / "run" / "report-unsupported.png").exists())
+
+    def test_incomplete_dir_listed_without_detail_page(self) -> None:
+        # A bare directory with only config.json is an incomplete bundle (the
+        # harness died, D-011): listed as incomplete, no detail page.
+        incomplete = self.runs_dir / "report-incomplete"
+        incomplete.mkdir()
+        (incomplete / "config.json").write_text(json.dumps({"schema_version": "0.1"}))
+
+        index_path = generate_report(self.runs_dir, self.output_dir)
+        index_html = index_path.read_text()
+        self.assertIn("report-incomplete", index_html)
+        self.assertIn("incomplete", index_html)
+        self.assertFalse((self.output_dir / "run" / "report-incomplete.html").exists())
+
+    def test_experiments_dir_excluded_from_discovery(self) -> None:
+        # runs/experiments holds manifests, not bundles; it is never listed.
+        experiments = self.runs_dir / "experiments"
+        experiments.mkdir()
+        (experiments / "exp.json").write_text(json.dumps({"experiment_id": "exp"}))
+        index_html = generate_report(self.runs_dir, self.output_dir).read_text()
+        self.assertNotIn(">experiments<", index_html)
+        self.assertFalse((self.output_dir / "run" / "experiments.html").exists())
+
+    def test_index_is_self_contained_no_javascript(self) -> None:
+        self.assertNotIn("<script", self.index_html.lower())
+        self.assertIn("<style", self.index_html.lower())
+
+
+@unittest.skipUnless(HAS_MPL, "matplotlib ([analysis] extra) not installed")
+class CliReportSuccessTests(ReportTestCase):
+    def test_cli_report_prints_index_and_run_count(self) -> None:
+        from joulewise.cli import main
+
+        out = io.StringIO()
+        err = io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            exit_code = main(
+                ["report", str(self.runs_dir), "--output", str(self.output_dir)]
+            )
+        self.assertEqual(exit_code, 0, err.getvalue())
+        # matplotlib may print an unrelated one-time "building the font cache"
+        # notice to stderr on first import; the verb itself must not emit an
+        # "error:" line on success.
+        self.assertNotIn("error:", err.getvalue())
+        line = out.getvalue().strip()
+        self.assertTrue(line.startswith("report: "), line)
+        self.assertIn(str(self.output_dir / "index.html"), line)
+        self.assertIn("runs=2", line)
+
+
+if __name__ == "__main__":
+    unittest.main()

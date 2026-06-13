@@ -6,4 +6,7 @@ __pycache__/
 .venv/
 venv/
 runs/
+ci-runs/
+report/
+.claude/
 .DS_Store

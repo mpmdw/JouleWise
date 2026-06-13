@@ -464,10 +464,28 @@ class MeasurementQuality:
     idle_power_w_stddev: float | None = None
     thermal_drift_c: float | None = None
     telemetry_source: str | None = None
+    #: True when the D-014 cooldown gate hit its 5-minute cap before THIS
+    #: repetition started (idle power had not recovered to within 10% of the
+    #: previous rep's baseline). Additive Slice 2F field (R-015): ``None`` when
+    #: no cooldown gate preceded the run (single runs, the first rep, mock
+    #: telemetry, or a recovered gate); the controller records the cap hit
+    #: against the following rep via ``run_benchmark(extra_metadata=...)`` and
+    #: the reducer copies the flag back out of ``metadata.json``.
+    cooldown_cap_hit: bool | None = None
 
 
 @dataclass(frozen=True)
 class SummaryMetrics:
+    """Reducer output for one run.
+
+    ``phase_energy_j`` is an additive Phase 2 (Slice 2D) output field per
+    R-015: a ``{phase_name: joules}`` map of per-workload-phase energy
+    attribution (``prefill``/``decode``, and later ``serialize``/``transfer``/
+    ``deserialize``), integrated over each phase's ``phase_start``/``phase_end``
+    window. It is optional (``None`` when no phase windows exist); adding it
+    leaves every prior field and the required set unchanged.
+    """
+
     status: RunStatus
     energy_request_j: float | None = None
     energy_token_j: float | None = None
@@ -480,6 +498,7 @@ class SummaryMetrics:
     idle_baseline: IdleBaseline | None = None
     uncertainty: UncertaintyInterval | None = None
     measurement_quality: MeasurementQuality | None = None
+    phase_energy_j: dict[str, float] | None = None
     failure_reason: FailureReason | None = None
     failure_message: str | None = None
 
@@ -514,6 +533,7 @@ class SummaryMetrics:
                 "idle_baseline": {"type": ["object", "null"]},
                 "uncertainty": {"type": ["object", "null"]},
                 "measurement_quality": {"type": ["object", "null"]},
+                "phase_energy_j": {"type": ["object", "null"]},
                 "failure_reason": {
                     "anyOf": [_string_enum_schema(FailureReason), {"type": "null"}]
                 },

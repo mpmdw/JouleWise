@@ -5,8 +5,9 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-06-09
-- Project phase: 1 of 5 (approval, feasibility, and measurement design)
+- Last updated: 2026-06-12
+- Project phase: Phase 1 closing; Phase 2 in progress - the
+  hardware-independent harness core is complete and runnable
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 
 ## Summary
@@ -38,17 +39,24 @@ Research questions:
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; evidence gates open |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | planned (fully specified, 13 slices) |
+| 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - mock vertical slice (2A-2F, 2J) complete and runnable; hardware slices (2G-2M) gated |
 | 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
 
 Complete so far (all verifiable in the repository):
 
-- Typed config and output schemas with validation, JSON-Schema export, a
-  CLI (`validate-config`), and a passing test suite (14 tests, run in CI
-  on every push).
+- A runnable harness: from a typed config, one command
+  (`python3 -m joulewise run ...`) produces a complete, schema-valid,
+  auditable run bundle and reduces it to energy/latency summary metrics -
+  today from deterministic mock adapters (controller, bundle contract, and
+  reducer math proven without hardware). Bundle writer, controller
+  lifecycle, reducer, static-HTML report generator, and CLI verbs `run` /
+  `validate-bundle` / `report`.
+- Typed config and output schemas with validation, JSON-Schema export, and
+  a CLI, plus a passing test suite (169 tests, run in CI on every push,
+  including a mock end-to-end run + bundle validation).
 - Adapter interface contracts (runtime / telemetry / transport), the run
   bundle artifact contract, and the measurement methodology (idle
   subtraction, measurement boundaries, clock synchronization, statistical
@@ -61,10 +69,12 @@ Complete so far (all verifiable in the repository):
   requirement confirmed on Apple Silicon; useful samplers identified
   (CPU/GPU/ANE power, thermal); MLX installation requirement recorded.
 
-Not yet started: the runnable harness itself (controller, adapters,
-reducer). That is deliberate - Phase 2 implementation begins against
-locked contracts, mock-first, so measurement code is never debugging the
-harness and the instrument at the same time.
+Not yet started: the real-hardware adapters (Mac MLX + powermetrics,
+NVIDIA/vLLM, Jetson Orin). These are the gated Phase 2 slices 2G-2M;
+code-level specs are in
+`docs/phase_2/hardware_slice_implementation_guide.md`. The mock-first core
+landed first by design, so measurement code is never debugging the harness
+and the instrument at the same time.
 
 Currently blocked on external input:
 
@@ -74,8 +84,11 @@ Currently blocked on external input:
    than must-succeed backend; stretch items. One meeting closes this.
 2. Calendar anchors: colloquium date, report deadline, and the 3080 Ti
    borrow window, to derive phase target dates.
-3. A local authorization session (scheduled 2026-06-10) to capture the
-   first privileged `powermetrics` sample.
+3. A local authorization session to capture the first privileged
+   `powermetrics` sample (gates the powermetrics adapter, slice 2H).
+
+Closed since the last revision (2026-06-12): the Hailo feasibility verdict
+(`unsupported_workload`) and the Phase 2 readiness review.
 
 ## Architecture
 
@@ -105,7 +118,7 @@ Key elements:
   | macbook_m3_max | local | mlx | powermetrics |
   | nvidia_3050 | ssh | vllm (llama.cpp-CUDA fallback) | nvidia-smi |
   | orin_nano | ssh | tbd | board rails (INA3221) |
-  | pi5_hailo | ssh | hailo if viable | wall meter |
+  | pi5_hailo | ssh | hailo - unsupported (verdict 2026-06-12) | wall meter |
 
 - **Every run writes a self-contained run bundle**: normalized config,
   device/environment metadata, timestamped event log (lifecycle + phase +

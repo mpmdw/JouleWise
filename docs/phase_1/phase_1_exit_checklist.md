@@ -31,10 +31,17 @@ Still required:
 - Mac telemetry/runtime evidence completion (Step 2).
 - Wall-meter decision (Step 3).
 - Network/interconnect plan with physical topology (Step 4).
-- Hailo feasibility verdict (Step 5).
 - NVIDIA/Orin access evidence (Step 6).
 - Calendar mapping (Step 7).
-- Phase 2 readiness review (Step 8).
+
+Complete since the last revision:
+
+- Hailo feasibility verdict (Step 5) - `unsupported_workload`, recorded
+  2026-06-12 in the Hailo section below from official-source desk
+  research (optional local reproduction noted there).
+- Phase 2 readiness review (Step 8) - recorded 2026-06-12 in the
+  readiness section below; mock-first Phase 2 implementation began the
+  same day.
 
 ## Evidence Matrix
 
@@ -45,12 +52,12 @@ Still required:
 | Mac runtime (MLX) | pending | Install path decided; install or documented procedure | Instrumentation section below |
 | Wall-meter availability | pending | Meter make/model, resolution, export/manual logging method, lab-or-purchased | Wall-meter section below |
 | Network plan | partially checked | Controller tool status recorded; topology, link-speed paths, isolation plan, throughput method still pending | Network section below |
-| Hailo feasibility | pending | Toolchain/version check plus one documented compile/runtime attempt or official limitation finding; verdict code | Hailo section below |
+| Hailo feasibility | complete (2026-06-12, desk research) | Toolchain/version check plus one documented compile/runtime attempt or official limitation finding; verdict code | Hailo section below (`unsupported_workload`) |
 | NVIDIA telemetry permissions | pending | SSH access, `nvidia-smi` path, power-query support, sample command output | Instrumentation section below |
 | Orin telemetry permissions | pending | SSH access, selected telemetry source, sample command output, wall-meter fallback | Instrumentation section below |
 | Pi/Hailo telemetry permissions | pending | SSH access, wall-meter path, Hailo runtime verdict | Instrumentation + Hailo sections below |
 | Calendar mapping | pending | Dates in `docs/milestones.md`; phase targets derived | `docs/milestones.md` |
-| Phase 2 readiness | pending | Review confirming mock-first Phase 2 can begin without hardware access | Readiness section below |
+| Phase 2 readiness | complete (2026-06-12) | Review confirming mock-first Phase 2 can begin without hardware access | Readiness section below |
 
 ## Supervisor Approval
 
@@ -92,10 +99,57 @@ Verdict codes: `supported` (include in Phase 2/3 backend work),
 `runtime_unavailable`, `format_unavailable`, `unsupported_workload`,
 `telemetry_unavailable`, `pending`.
 
-Current verdict: `pending`.
+Current verdict: `unsupported_workload` (desk research, 2026-06-12;
+confidence high; optional local reproduction step recorded below).
 
-Recorded evidence: none yet (toolchain version, command outputs, and the
-attempted-or-blocked compile path go here).
+Recorded evidence (2026-06-12, official-source desk research):
+
+- Hailo staff state the Hailo-8/8L cannot run LLMs by design: the 8-class
+  parts have no DDR interface, so a multi-billion-parameter model would
+  need 100+ host-managed context switches; they redirect LLM users to the
+  Hailo-10H, which "adds a DDR interface and local DDR memory".
+  Sources: community.hailo.ai/t/running-local-llm-using-hailo-8l/1093 and
+  community.hailo.ai/t/can-the-raspberry-pi-ai-kit-support-running-large-language-models-llms/1217
+  (the second names the Pi AI Kit / Hailo-8L specifically).
+- A documented compile attempt of a real decoder-only LLM on the 8-class
+  toolchain fails at parse: Llama-3-8B translation aborts with
+  `UnsupportedModelError: Unexpected zero dimension in shape [-1, 0]`
+  (dynamic shapes); staff add that multi-head self-attention "looks
+  different than what the SW knows how to parse".
+  Source: community.hailo.ai/t/translating-llm-llama-3-8b-fails/1754.
+- The Hailo-8/8L Model Zoo (github.com/hailo-ai/hailo_model_zoo) contains
+  zero decoder-only LLMs; its transformers are all vision/embedding
+  encoders (ViT, DETR, CLIP/SigLIP, SegFormer, ...). LLMs live in a
+  separate GenAI zoo (github.com/hailo-ai/hailo_model_zoo_genai) whose
+  models all list the Hailo-10H module as a prerequisite.
+- Hailo's own product positioning draws the line on exactly this
+  capability: the 10H GA announcement says it brings LLM/VLM inference to
+  the edge "for the first time", complementing Hailo-8's vision-AI role
+  (hailo.ai/products/ai-accelerators/hailo-10h-ai-accelerator/).
+- Anti-confusion note: the 8L does run encoder transformers and the
+  Whisper encoder-decoder demo; only the decoder-only autoregressive
+  token-by-token workload class is unsupported. The 8L shares the
+  Hailo-8's dataflow architecture, compiler, and no-DRAM memory model, so
+  the 8-class findings apply to it.
+
+Per-question answers: toolchain cannot compile decoder-only models (parse
+failure on dynamic shapes/attention); operator set covers encoder
+attention only, no KV-cache access pattern; no token-by-token decode
+runtime path exists on the 8L (HailoRT GenAI serving is 10H-only); power
+measurement is moot for an unrunnable workload (wall-meter path remains
+for any non-LLM Pi work).
+
+Optional hardening (not required to consume the verdict): on the actual
+Pi 5 + Hailo-8L, compile any small decoder-only ONNX (GPT-2/TinyLlama)
+through the Dataflow Compiler and record the parse failure, converting
+"documented limitation" into "reproduced locally". Re-check the GenAI
+zoo's device matrix at whatever toolchain version is installed, in case
+attention-op coverage changes.
+
+Consequence for scope (R-009 expected-negative case): `pi5_hailo` is
+reported as a hardware-applicability finding, not implemented as a
+backend; Slice 2-era work for it is limited to the wall-meter path if the
+Pi is kept as a non-LLM comparison point at all.
 
 Acceptance: a final verdict future phases can consume without
 re-litigating feasibility.
@@ -301,4 +355,21 @@ NVIDIA/vLLM integration, Hailo work, or report-generator polish - those
 follow the mock bundle/reducer path, and the hardware slices additionally
 wait on their gates.
 
-Recorded readiness review: none yet (Step 8 writes it here).
+Recorded readiness review (2026-06-12, Step 8):
+
+- Schemas validate both example configs; adapter contracts exist
+  (`docs/contracts/adapter_contracts.md` + `joulewise/interfaces.py`);
+  bundle layout is documented (`docs/contracts/run_bundle_layout.md`).
+  Verified by the passing test suite and `validate-config` on both
+  examples.
+- Every open hardware question (Steps 1-7) carries an evidence plan and a
+  fallback in `docs/phase_1/phase_1_plan.md`; none of them gates the mock
+  vertical slice (the Phase 2 plan marks slices 2A-2F and 2J
+  hardware-independent).
+- The next implementation target is explicitly mock-first: slices 2A-2E
+  per `docs/phase_2/phase_2_plan.md`, then 2F/2J.
+
+Verdict: **mock-first Phase 2 implementation may begin.** The hardware
+slices (2G/2H/2K/2L) remain gated on their Phase 1 evidence (P1-002,
+P1-006, D-016) and are untouched by this verdict. Phase 1 itself stays
+open: Steps 1-7 still need their external evidence.

@@ -75,6 +75,18 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertIn("status", schema["required"])
         self.assertIn("failure_reason", schema["properties"])
 
+    def test_summary_metrics_schema_has_phase_energy_field(self) -> None:
+        # Additive Phase 2 (Slice 2D) output field per R-015.
+        schema = SummaryMetrics.json_schema()
+        self.assertEqual(
+            schema["properties"]["phase_energy_j"], {"type": ["object", "null"]}
+        )
+        self.assertNotIn("phase_energy_j", schema["required"])
+        payload = SummaryMetrics(
+            status=RunStatus.SUCCEEDED, phase_energy_j={"prefill": 1.0, "decode": 2.0}
+        ).to_dict()
+        self.assertEqual(payload["phase_energy_j"], {"prefill": 1.0, "decode": 2.0})
+
 
 if __name__ == "__main__":
     unittest.main()

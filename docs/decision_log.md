@@ -41,6 +41,9 @@ be re-derived by a future agent gets an entry here.
 | D-017 | CI scope | accepted |
 | D-018 | Per-backend `power_w` definition and rail policy | accepted |
 | D-019 | Mock adapters use simulated time via an injectable clock | accepted |
+| D-020 | CLI binds `FakeClock` for all-mock runs, `SystemClock` otherwise | accepted |
+| D-021 | Controller flushes `events.jsonl` before the reduce stage | accepted |
+| D-022 | Auto-generated run-ID suffix is config-hash-derived, not random | accepted |
 
 ---
 
@@ -871,3 +874,150 @@ Consequences: controller and adapters take a clock parameter; no module ever
 calls `time.time()`/`time.sleep()` directly except `SystemClock`.
 
 Revisit when: never expected.
+
+---
+
+## D-020: CLI binds `FakeClock` for all-mock runs, `SystemClock` otherwise
+
+- Date: 2026-06-12
+- Status: accepted
+- Phase: 2
+
+Context: D-019 created the clock seam but left open which clock the
+`run` verb binds. With `SystemClock`, a mock end-to-end run sleeps
+through real idle/warmup seconds and produces nondeterministic
+timestamps; the mock path's whole value (fast CI substrate, exact
+closed-form expectations, byte-identical reruns) depends on simulated
+time.
+
+Options considered:
+
+1. Always `SystemClock`. Pro: one rule. Con: mock e2e takes wall-clock
+   seconds in CI for no measurement benefit; timestamps differ per run,
+   so determinism can only be asserted in unit tests, never on real CLI
+   artifacts.
+2. An explicit `--fake-clock` flag. Pro: caller control. Con: the flag
+   would be mandatory-in-practice for mock runs and dangerous-if-misused
+   for real runs (simulated timestamps in a hardware bundle would corrupt
+   evidence silently).
+3. Selection by composition at the CLI boundary: `FakeClock` if and only
+   if both `runtime_backend` and `telemetry_backend` are `mock`,
+   `SystemClock` otherwise. The clock kind is recorded in
+   `metadata.json` (`clock.kind`), so every bundle states which time base
+   produced it.
+
+Decision: option 3.
+
+Considerations: this is not the controller-branches-on-mocks anti-pattern
+D-019 rejected - the controller code path is identical; only the injected
+dependency differs, chosen at the outermost boundary. Mixed compositions
+(e.g. Slice 2G's real MLX runtime + mock telemetry) correctly get
+`SystemClock`, because real workload execution needs real time even when
+power is synthetic. Library callers of `run_benchmark` always pass their
+own clock explicitly; the rule binds only the CLI default.
+
+Consequences: `cli.py`'s `run` verb implements the rule with a comment
+citing this entry; the CI mock end-to-end step is effectively instant;
+`metadata.json` discloses the time base per bundle.
+
+Revisit when: a mixed mock/real composition needs simulated time, or a
+test needs to drive the CLI with a seeded clock (then add the explicit
+flag from option 2 with a refuse-on-real-telemetry guard).
+
+---
+
+## D-021: Controller flushes `events.jsonl` before the reduce stage
+
+- Date: 2026-06-12
+- Status: accepted
+- Phase: 2
+
+Context: the controller buffers all events in memory and flushes them
+only at `_finish()` (D-013 deferred logging keeps the measured window
+quiescent). Slice 2D's reducer is a pure function over the on-disk bundle
+artifacts (D-002), including `events.jsonl`, and the controller calls it
+during the reduce stage - which originally ran *before* the buffered
+events were written. The reducer would have read an empty `events.jsonl`
+(no measured-run window, no token events). The 2C author flagged this for
+2D.
+
+Options considered:
+
+1. Pass the in-memory events to the reducer directly. Con: breaks the
+   D-002 contract that `reduce_bundle(path)` is pure over on-disk
+   artifacts - the same function is reused by `validate-bundle` and the
+   report generator, which only have the files; two code paths would
+   diverge.
+2. Flush `events.jsonl` once, before the reducer runs in the reduce
+   stage, and have `_finish()` (the failure paths included) flush only if
+   not already flushed. `finalize()` still appends `run_finalized` last
+   and writes `summary_metrics.json` last (D-011 unchanged).
+
+Decision: option 2. The flush is a delta flush keyed on a flushed-count,
+not a strict one-shot: the reduce stage's own `stage_completed` event is
+buffered *after* the in-reduce flush, so a strict one-shot would drop it
+and break the event-sequence contract. Each `_flush_events` call appends
+only events buffered since the previous flush, stable-sorted within the
+batch; later batches are strictly later in time, so global order holds.
+
+Considerations: this keeps the reducer honest (pure over files, so a
+reducer bug is fixed by re-reducing the bundle, never by re-running
+hardware) while preserving D-011 (summary still last) and D-013 (the
+flush happens in the reduce stage, well after `stop_sampling`).
+
+Consequences: `events.jsonl` exists and is complete (minus the trailing
+`run_finalized`) at reduce time; failure paths, which never reach reduce,
+still flush their buffered events exactly once in `_finish()`.
+
+Revisit when: events grow large enough that buffering the whole run in
+memory is a problem (then stream to a temp file and swap on finalize).
+
+---
+
+## D-022: Auto-generated run-ID suffix is config-hash-derived, not random
+
+- Date: 2026-06-12
+- Status: accepted (refines D-010)
+- Phase: 2
+
+Context: D-010 specified the auto-generated run ID as
+`<ts>__<target>__<workload>__<4 hex>` with the 4-hex suffix from
+`secrets.token_hex(2)` to prevent same-second collisions. A random suffix
+makes the run ID - which is embedded in the `run_started` event and in
+`metadata.json` - differ across otherwise-identical runs, violating the
+Slice 2B acceptance criterion "identical config + clock seed =>
+byte-identical events" for any valid config that omits `run_id` (the
+adversarial review confirmed this empirically).
+
+Options considered:
+
+1. Keep `secrets.token_hex(2)`. Con: breaks the determinism criterion for
+   the no-`run_id` case; the byte-identity guarantee then silently
+   depends on the operator always supplying a `run_id`.
+2. Drop the suffix entirely. Con: loses cross-config disambiguation when
+   two different configs share a target/workload/second.
+3. Derive the 4-hex suffix from the config's content hash (first 4 hex of
+   the SHA-256 over the canonical config bytes, the same bytes that feed
+   `config_sha256`). Deterministic per config; different configs get
+   different suffixes; identical configs get identical IDs.
+
+Decision: option 3. The suffix is `config_sha256[:4]`.
+
+Considerations: this satisfies the determinism criterion (identical
+config + clock => byte-identical run ID, events, and metadata) while
+keeping cross-config disambiguation. The residual collision case -
+identical config, same UTC second, same runs dir - now produces the same
+ID and is refused by the immutable-evidence rule (D-010: never overwrite
+a bundle), which is the correct response to "you are about to write a
+second bundle for the identical config in the same second". Repetitions
+never collide: the experiment runner assigns distinct `__rN` run IDs
+(D-005/D-010), each a supplied `run_id` that bypasses the generated form.
+
+Consequences: `generate_run_id` computes the suffix from the config hash;
+`metadata.run_id` and the `run_started` event are now deterministic for a
+fixed config; a run-benchmark-level determinism regression test pins it.
+
+Revisit when: a use case genuinely needs two same-config same-second
+bundles in one directory without the experiment runner (then reintroduce
+a disambiguator, e.g. a monotonic counter rather than randomness, to keep
+determinism).

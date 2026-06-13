@@ -58,43 +58,53 @@ Rank lower when a task:
 
 | Rank | ID | Priority | Status | Task | Evidence / Acceptance |
 |---:|---|---|---|---|---|
-| 1 | P1-001 | P1 Phase Gate | open | Capture supervisor approval and scope notes | Dated notes in `docs/phase_1/phase_1_exit_checklist.md`; `RUN_STATE.md` updated if scope changes |
-| 2 | P1-002 | P1 Phase Gate | waiting-user | Complete Mac-local Phase 1 telemetry/runtime evidence | User handles local auth 2026-06-10; then capture one privileged `powermetrics` sample, record fields, and install the D-004 sudoers rule (exit-checklist instrumentation section); MLX install path still pending |
+| 1 | P1-001 | P1 Phase Gate | waiting-user | Capture supervisor approval and scope notes | Dated notes in `docs/phase_1/phase_1_exit_checklist.md`; `RUN_STATE.md` updated if scope changes. Also unblocks D-016 (P2-004). |
+| 2 | P1-002 | P1 Phase Gate | waiting-user | Complete Mac-local Phase 1 telemetry/runtime evidence | User handles local auth; then capture one privileged `powermetrics` sample, record fields, and install the D-004 sudoers rule (exit-checklist instrumentation section); MLX install path still pending. Gates 2G/2H. |
 | 3 | P1-008 | P1 Phase Gate | waiting-user | Map phases to academic calendar | Colloquium/report dates + borrow window entered in `docs/milestones.md`; phase target dates derived |
 | 4 | P1-003 | P1 Phase Gate | open | Record wall-meter decision | Meter make/model or "unavailable" verdict plus measurement/export method (exit-checklist wall-meter section; informs D-018 boundary calibration) |
 | 5 | P1-004 | P1 Phase Gate | partial | Fill network/interconnect topology plan | Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section |
-| 6 | P1-005 | P1 Phase Gate | open | Complete Hailo feasibility verdict | Verdict code and evidence in the exit-checklist Hailo section |
-| 7 | P1-006 | P1 Phase Gate | open | Confirm NVIDIA/Orin telemetry access paths | SSH/runtime/telemetry command evidence in the exit-checklist instrumentation section, or marked pending with blocker (gates slices 2K/2L) |
-| 8 | P1-007 | P1 Phase Gate | open | Perform Phase 2 readiness review | `docs/phase_1/phase_1_exit_checklist.md` states mock-first Phase 2 can begin |
-| 9 | P2-001 | P2 Next Slice | queued | Mock vertical slice: slices 2A-2E per `docs/phase_2/phase_2_plan.md` | One command creates a complete mock run bundle; `validate-bundle` green; CI runs the mock end-to-end |
-| 10 | P2-002 | P2 Next Slice | queued | Repetitions + experiment manifests (slice 2F) | 3-rep mock experiment test; manifest contract per D-005 |
-| 11 | P2-004 | P2 Next Slice | queued | Close model selection (D-016) | Decision-log entry: models, revisions, artifact paths, local mirror, fallback candidate |
-| 12 | P2-003 | P2 Next Slice | queued | Mac MLX + powermetrics vertical slice (slices 2G-2I) | Gated on P1-002 evidence + D-016; real bundle + 3-rep variance in a run report |
-| 13 | P3-000 | P3 Research Expansion | queued | KV persistence feasibility spikes (Phase 3 Stage 3.0) | Verdicts in `docs/phase_3/kv_feasibility.md`; gated on Mac slice; must complete before any borrow-window scheduling |
+| 6 | P1-006 | P1 Phase Gate | open | Confirm NVIDIA/Orin telemetry access paths | SSH/runtime/telemetry command evidence in the exit-checklist instrumentation section, or marked pending with blocker (gates slices 2K/2L) |
+| 7 | P2-004 | P2 Next Slice | gated (P1-001) | Close model selection (D-016) | Decision-log entry: models, revisions, artifact paths, local mirror, fallback candidate. Decision step, not code; needs supervisor scope or explicit user go-ahead + disk-space check. Unblocks 2G/2K install targets. |
+| 8 | P2-003 | P2 Next Slice | gated (P1-002 + D-016) | Mac MLX + powermetrics vertical slice (slices 2G-2I) | Real bundle + 3-rep variance in a run report. Code-level spec: `docs/phase_2/hardware_slice_implementation_guide.md`. |
+| 9 | P2-005 | P2 Next Slice | gated (P1-006) | Remote targets (slices 2K NVIDIA/vLLM/ssh, 2L Orin) | Remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide. |
+| 10 | P2-006 | P2 Next Slice | gated (2I + ≥1 remote) | Homogeneous baselines (slice 2M) | Workload-matrix manifests + bundles; `docs/phase_2/baseline_results.md` with variance + prefill/decode comparison |
+| 11 | P3-000 | P3 Research Expansion | queued | KV persistence feasibility spikes (Phase 3 Stage 3.0) | Verdicts in `docs/phase_3/kv_feasibility.md`; gated on Mac slice; must complete before any borrow-window scheduling |
 
 ## Completed Queue Items
 
 | ID | Priority | Completed | Task | Evidence |
 |---|---|---|---|---|
+| P2-001 | P2 Next Slice | 2026-06-12 | Mock vertical slice: slices 2A-2E | Harness runs end-to-end; `validate-bundle` green; CI mock e2e step added; 169 tests. `joulewise/{bundle,clock,controller,reduce,cli}.py` + `adapters/`; run report `2026-06-12-phase-2-mock-vertical-slice.md` |
+| P2-002 | P2 Next Slice | 2026-06-12 | Repetitions + experiment manifests (slice 2F) | `run_experiment` + cooldown gate; 3-rep + kill-after-rep-2 + cooldown tests; manifest per D-005. Same run report |
+| P2-J | P2 Next Slice | 2026-06-12 | Static report generator (slice 2J) | `joulewise/report.py`; matplotlib behind `[analysis]`; graceful structured failure when absent; tests skip cleanly without the extra |
+| P1-005 | P1 Phase Gate | 2026-06-12 | Hailo feasibility verdict | `unsupported_workload` from official-source desk research; recorded in the Phase 1 exit checklist Hailo section |
+| P1-007 | P1 Phase Gate | 2026-06-12 | Phase 2 readiness review | Recorded in the Phase 1 exit checklist; verdict "mock-first Phase 2 may begin" |
 | Q-000 | P0 Safety | 2026-06-09 | Resolve the local `Energy_Benchmark_Architecture.docx` deletion decision | User confirmed the Word doc was unrelated; deletion committed in `a5d7404` |
 | PLAN-001 | P1 Phase Gate | 2026-06-09 | Build evidence-shaped plans for Phases 2-5 (user-directed) | Per-phase plan + exit-checklist docs; `docs/decision_log.md` (D-001..D-019); `docs/risk_register.md`; `docs/milestones.md`; methodology/bundle-layout amendments; `AGENT_PLAN.md` restructured as index; run report `docs/run_reports/2026-06-09-phase-2-5-planning-buildout.md` |
-| CI-001 | P2 Next Slice | 2026-06-09 | Add core-tests CI workflow (D-017) | `.github/workflows/ci.yml`; green check on push pending first remote run |
-| DOC-001 | P4 Polish | 2026-06-09 | Unify Phase 1 doc scheme with Phases 2-5 (user-directed) | `docs/phase_1/` reduced to `phase_1_plan.md` + `phase_1_exit_checklist.md` (evidence dossier, all recorded evidence preserved); contracts moved to `docs/contracts/`; all live cross-references updated; run report `docs/run_reports/2026-06-09-phase-1-doc-unification.md` |
-| DOC-002 | P4 Polish | 2026-06-09 | Add advisor-facing status/plan/architecture doc + audit original sketch (user-directed) | Root `PROJECT_STATUS.md` (standalone, mirrors the original architecture sketch's shape, includes sketch-evolution audit table); maintenance rule in `AGENT_PLAN.md`/`RUN_STATE.md`; run report `docs/run_reports/2026-06-09-advisor-status-doc.md` |
+| CI-001 | P2 Next Slice | 2026-06-09 | Add core-tests CI workflow (D-017) | `.github/workflows/ci.yml`; extended 2026-06-12 with the mock end-to-end run |
+| DOC-001 | P4 Polish | 2026-06-09 | Unify Phase 1 doc scheme with Phases 2-5 (user-directed) | `docs/phase_1/` reduced to `phase_1_plan.md` + `phase_1_exit_checklist.md`; contracts moved to `docs/contracts/`; run report `docs/run_reports/2026-06-09-phase-1-doc-unification.md` |
+| DOC-002 | P4 Polish | 2026-06-09 | Add advisor-facing status/plan/architecture doc + audit original sketch (user-directed) | Root `PROJECT_STATUS.md`; run report `docs/run_reports/2026-06-09-advisor-status-doc.md` |
 
 ## Current Do-Not-Do-Yet List
 
-- Do not start dashboard/report polish before the mock bundle/reducer path
-  exists (slices 2A-2E).
-- Do not start live MLX/powermetrics implementation before the mock lifecycle
-  is runnable.
-- Do not spend time on Hailo implementation until feasibility has a verdict.
+- (satisfied 2026-06-12) The mock bundle/reducer path and report generator
+  now exist; dashboard/report work is no longer blocked.
+- (satisfied 2026-06-12) The mock lifecycle is runnable, so live
+  MLX/powermetrics implementation may proceed once its hardware gates open
+  (P1-002 + D-016); follow `docs/phase_2/hardware_slice_implementation_guide.md`.
+- (resolved 2026-06-12) Hailo feasibility has a verdict
+  (`unsupported_workload`); do not implement a Hailo backend — report it as
+  an applicability finding.
 - Do not implement schema v0.2 before Phase 3 Stage 3.1 (design is fixed in
   D-008; implementation waits).
+- Do not start Phase 3 work before its readiness gate — the Mac vertical
+  slice (2I) and baselines (2M) must exist first (both hardware-gated).
 - Do not schedule the 3080 Ti borrow window before Stage 3.0 verdicts and the
   rehearsed runbook exist (R-006).
 - Do not start Phase 3 live-split work (3.3) before offline replay (3.2) has
   produced data.
+- Do not close D-016 (model selection) without P1-001 supervisor scope or an
+  explicit user go-ahead.
 
 ## Queue Maintenance
 

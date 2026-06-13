@@ -23,6 +23,11 @@ jobs:
         run: |
           python -m joulewise validate-config configs/examples/mock_local.json
           python -m joulewise validate-config configs/examples/mac_mlx_local.json
-      # Phase 2 Slice 2E extends this job with the mock end-to-end run:
-      #   python -m joulewise run configs/examples/mock_local.json --runs-dir ci-runs
-      #   python -m joulewise validate-bundle ci-runs/<id>
+      - name: Mock end-to-end run + validate-bundle (slice 2E, D-017)
+        run: |
+          set -euo pipefail
+          line=$(python -m joulewise run configs/examples/mock_local.json --runs-dir ci-runs)
+          echo "$line"
+          bundle=${line#bundle: }
+          bundle=${bundle%% *}
+          python -m joulewise validate-bundle "$bundle"

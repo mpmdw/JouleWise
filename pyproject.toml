@@ -5,9 +5,16 @@ description = "Extensible energy-wise benchmark for LLM inference."
 requires-python = ">=3.11"
 dependencies = []
 
+# Optional extras (D-009): the core package is stdlib-only; heavy dependencies
+# live behind extras and adapters import them lazily. CI installs no extras, so
+# every command that needs one degrades to a structured failure without it.
+[project.optional-dependencies]
+analysis = ["matplotlib"]
+mac = ["mlx-lm"]
+
 [tool.setuptools.packages.find]
 include = ["joulewise*"]
 
 [tool.joulewise]
-phase = "1"
-status = "schema-and-interface-skeleton"
+phase = "2"
+status = "phase-2-mock-vertical-slice"

@@ -65,8 +65,9 @@ typed config
 
 ### Phase 1: Approval, Feasibility, And Measurement Design
 
-Status: in progress. Detail: `docs/phase_1/phase_1_plan.md`. Exit:
-`docs/phase_1/phase_1_exit_checklist.md` (the evidence dossier). The
+Status: in progress (most design/feasibility items closed; the remaining
+gates need external/hardware input). Detail: `docs/phase_1/phase_1_plan.md`.
+Exit: `docs/phase_1/phase_1_exit_checklist.md` (the evidence dossier). The
 contracts this phase produced live in `docs/contracts/`.
 
 - [x] Create repo-local agent plan.
@@ -84,8 +85,12 @@ contracts this phase produced live in `docs/contracts/`.
 - [x] Extend measurement methodology: boundaries, clock sync, co-residency,
   repetition/thermal protocol, statistical protocol.
 - [x] Establish decision log, risk register, and milestone map.
+- [x] Complete Hailo feasibility investigation — verdict
+  `unsupported_workload` (2026-06-12, desk research; Hailo-8L has no
+  autoregressive-LLM path, the GenAI path is Hailo-10H-only).
+- [x] Confirm Phase 2 readiness (mock-first can begin) — recorded
+  2026-06-12.
 - [ ] Confirm supervisor expectations and final proposal scope.
-- [ ] Complete Hailo feasibility investigation.
 - [ ] Confirm wall-meter availability.
 - [ ] Confirm local network plan for interconnect sweep.
 - [ ] Confirm telemetry permissions on each physical target.
@@ -105,24 +110,28 @@ Acceptance criteria:
 
 ### Phase 2: Harness, Mac Vertical Slice, And Homogeneous Baselines
 
-Status: planned. Detail: `docs/phase_2/phase_2_plan.md`. Exit:
-`docs/phase_2/phase_2_exit_checklist.md`.
+Status: in progress — the hardware-independent core (2A-2F, 2J) is complete
+and runnable (2026-06-12); the remaining slices are hardware-gated. Detail:
+`docs/phase_2/phase_2_plan.md`. Exit: `docs/phase_2/phase_2_exit_checklist.md`.
+Gated-slice specs: `docs/phase_2/hardware_slice_implementation_guide.md`.
 
 Mock-first ordering (matches `TASK_QUEUE.md`; the real-hardware slices are
-gated on Phase 1 evidence):
+gated on Phase 1 evidence). The hardware-independent core (2A-2F, 2J) is
+complete and runnable as of 2026-06-12; code-level specs for the gated
+slices live in `docs/phase_2/hardware_slice_implementation_guide.md`.
 
-- [ ] 2A Run-bundle writer.
-- [ ] 2B Clock seam + built-in mock adapters.
-- [ ] 2C Controller lifecycle with structured failure paths.
-- [ ] 2D Reducer v1 with closed-form tests.
-- [ ] 2E One-command run + `validate-bundle` (mock end-to-end in CI).
-- [ ] 2F Repetitions, experiment manifests, cooldown gate.
-- [ ] Model selection checkpoint (decision D-016).
-- [ ] 2G MLX runtime adapter (gated).
+- [x] 2A Run-bundle writer.
+- [x] 2B Clock seam + built-in mock adapters.
+- [x] 2C Controller lifecycle with structured failure paths.
+- [x] 2D Reducer v1 with closed-form tests.
+- [x] 2E One-command run + `validate-bundle` (mock end-to-end in CI).
+- [x] 2F Repetitions, experiment manifests, cooldown gate.
+- [ ] Model selection checkpoint (decision D-016) — gated on P1-001 scope.
+- [ ] 2G MLX runtime adapter (gated: D-016 + `[mac]` install).
 - [ ] 2H powermetrics telemetry adapter (gated on privileged-sample
-  evidence).
-- [ ] 2I Mac vertical slice integration with variance.
-- [ ] 2J Static report generator v1.
+  evidence + D-004 sudoers).
+- [ ] 2I Mac vertical slice integration with variance (gated: 2F+2G+2H).
+- [x] 2J Static report generator v1.
 - [ ] 2K NVIDIA/vLLM + nvidia-smi + SSH transport (gated on P1-006).
 - [ ] 2L Orin adapter (gated on P1-006).
 - [ ] 2M Homogeneous baselines + prefill/decode qualitative reproduction.
@@ -202,12 +211,18 @@ Acceptance criteria:
 python3 -m unittest discover -s tests
 ```
 
-Useful Phase 1 commands:
+Useful commands:
 
 ```bash
+# Phase 1: config + schema verbs
 python3 -m joulewise validate-config configs/examples/mock_local.json
 python3 -m joulewise print-config-schema
 python3 -m joulewise print-output-schema
+
+# Phase 2: run the harness (mock, deterministic) and verify the bundle
+python3 -m joulewise run configs/examples/mock_local.json --runs-dir runs
+python3 -m joulewise validate-bundle runs/example-mock-local
+python3 -m joulewise report runs --output report   # needs the [analysis] extra
 ```
 
 ## Run Report Protocol
