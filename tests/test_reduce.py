@@ -100,6 +100,7 @@ class BundleBuilder:
         idle: dict | None = DEFAULT_IDLE,
         thermal_pre_c: float | None = None,
         thermal_post_c: float | None = None,
+        workload_observed: dict | None = None,
     ) -> Path:
         extra: dict = {
             "device": {"telemetry": "mock", "rail_manifest": rail_manifest},
@@ -111,6 +112,8 @@ class BundleBuilder:
             extra["thermal_pre"] = {"timestamp_s": 0.0, "temperature_c": thermal_pre_c}
         if thermal_post_c is not None:
             extra["thermal_post"] = {"timestamp_s": 0.0, "temperature_c": thermal_post_c}
+        if workload_observed is not None:
+            extra["workload_observed"] = workload_observed
         self._writer.write_metadata(extra)
         return self.path
 
@@ -444,6 +447,57 @@ class ThermalDriftTests(ReduceTestCase):
         builder.write_metadata(rail_manifest=["mock"], thermal_pre_c=40.0, thermal_post_c=43.5)
         summary = reduce_module.reduce_bundle(builder.path)
         self.assertAlmostEqual(summary.measurement_quality.thermal_drift_c, 3.5, places=9)
+
+
+class TokenFallbackTests(ReduceTestCase):
+    """Slice 2N.3: energy_token_j falls back to the runtime's observed token
+    counts in metadata when the config supplies no prompt_tokens, and the
+    summary records which source was used."""
+
+    PROMPT_TEXT_PROFILE = {"name": "prompt-text-only", "prompt_text": "count the joules"}
+
+    def build(self, *, workload_profile: dict | None = None, workload_observed: dict | None = None):
+        overrides = {}
+        if workload_profile is not None:
+            overrides["workload_profile"] = workload_profile
+        builder = self.builder(**overrides)
+        start_s, end_s = 100.0, 110.0
+        builder.measured_window(start_s, end_s)
+        # 4 tokens inside the window so output_token_count comes from events.
+        for index, t in enumerate((102.0, 104.0, 106.0, 108.0)):
+            builder.add_token(index, t)
+        builder.write_trace(constant_samples(start_s, end_s, hz=1.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"], workload_observed=workload_observed)
+        return reduce_module.reduce_bundle(builder.path)
+
+    def test_prompt_text_only_falls_back_to_observed_counts(self) -> None:
+        summary = self.build(
+            workload_profile=self.PROMPT_TEXT_PROFILE,
+            workload_observed={"token_count": 20, "output_token_count": 4},
+        )
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        # energy_request = 75 - 50 = 25 J over 20 observed total tokens.
+        self.assertAlmostEqual(summary.energy_token_j, 25.0 / 20.0, places=9)
+        self.assertEqual(
+            summary.measurement_quality.token_count_source, "runtime_observed"
+        )
+
+    def test_config_supplied_counts_still_win(self) -> None:
+        # The example config pins prompt_tokens=32; 4 token events observed.
+        summary = self.build(
+            workload_observed={"token_count": 999, "output_token_count": 4},
+        )
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertAlmostEqual(summary.energy_token_j, 25.0 / (32 + 4), places=9)
+        self.assertEqual(summary.measurement_quality.token_count_source, "config")
+
+    def test_neither_source_yields_none_unchanged(self) -> None:
+        summary = self.build(workload_profile=self.PROMPT_TEXT_PROFILE)
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNone(summary.energy_token_j)
+        self.assertIsNone(summary.measurement_quality.token_count_source)
+        # The per-output-token metric never needed prompt counts and is intact.
+        self.assertAlmostEqual(summary.energy_output_token_j, 25.0 / 4.0, places=9)
 
 
 class StructuredReadFailureTests(ReduceTestCase):

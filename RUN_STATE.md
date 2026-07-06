@@ -1,6 +1,6 @@
 # JouleWise Run State
 
-Last updated: 2026-07-05
+Last updated: 2026-07-06
 
 ## Start Here For Every Big Run
 
@@ -36,13 +36,34 @@ At the end of substantial work:
 
 Phase 1 is in its final stretch (remaining gates need external/hardware
 input; per-item status in `docs/phase_1/phase_1_exit_checklist.md`).
-Phase 2's hardware-independent core (2A-2F, 2J) is complete and runnable;
-the new Slice 2N (pre-hardware hardening, ungated) is the top
-implementable work; the hardware slices stay gated. Work paused
+Phase 2's hardware-independent work is now ALL complete and runnable:
+the core (2A-2F, 2J, 2026-06-12) and Slice 2N pre-hardware hardening
+(2026-07-06, D-024..D-029). Every remaining Phase 2 slice is
+hardware/decision-gated; real adapters can be written against the
+post-2N seams without touching controller/bundle internals. Work paused
 2026-06-13 through 2026-07-04 (planned break, recorded in
 `docs/milestones.md`).
 
-## What The Latest Run Did (2026-07-06, architecture review intake)
+## What The Latest Run Did (2026-07-06, Slice 2N implementation)
+
+Full detail: `docs/run_reports/2026-07-06-slice-2n-pre-hardware-hardening.md`.
+Preflight per playbook M0 plus a user-requested filesystem health check
+(repo at canonical path, git synced, suite green; deleted the verified
+stale `~/Desktop/CapstoneRivoire` remnant; `~/jw_pending_edits/` was
+already gone). Then executed Mission M1 end-to-end: all nine Slice 2N
+items landed as the three planned commits — the adapter seam
+(2N.1 RunContext + raw evidence, 2N.2 sampling-window markers, D-026),
+the read layer (2N.8 shared `BundleReader` per D-025, 2N.4 rail
+alignment contract D-027, 2N.7 report/reducer alignment, 2N.6 `reduce`
+verb + D-028), and schema + metrics (2N.5 nullable-optionals schema +
+pinned config hashes D-029, 2N.3 observed-token fallback with
+`token_count_source`, 2N.9 v0.2 compatibility note — one flag for
+Stage 3.1: put the composite event node tag inside event `metadata`,
+not a sixth key). Suite grew 169 -> 216, green after every item; the
+exit-checklist 2N row is closed; queue P2-007 done. Commits are local,
+NOT pushed.
+
+## Previous Run (2026-07-06, architecture review intake)
 
 Full detail: `docs/run_reports/2026-07-06-architecture-review-intake.md`.
 An external architecture review (Codex) was triaged; agreed items landed
@@ -60,7 +81,7 @@ relaunch. A same-day second review pass confirmed the intake and drove
 three housekeeping fixes (D-024/D-025 "pending" wording, R-017 marked
 mitigated, 2N three-commit grouping in playbook M1).
 
-## Previous Run (2026-07-05, docs/meta-layer cleanup + repo move)
+## Older Run (2026-07-05, docs/meta-layer cleanup + repo move)
 
 Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 
@@ -86,22 +107,26 @@ Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 python3 -m unittest discover -s tests
 ```
 
-Result (2026-07-05, at the new repo location, after all changes):
-`Ran 169 tests, OK (skipped=8)` — the 8 skips are the
-`[analysis]`-extra chart tests.
+Result (2026-07-06, after all Slice 2N changes):
+`Ran 216 tests, OK (skipped=10)` — 8 `[analysis]`-extra chart skips,
+one matplotlib-gated report-alignment test, one optional-jsonschema
+round-trip test. Also verified end-to-end: mock `run` ->
+`validate-bundle` green -> `reduce` re-derives an identical summary;
+`raw/mock_samples.json` present (D-002 via the new context seam).
 
 ## Known Workspace State
 
-- **Repo moved 2026-07-05:** the canonical path is now
-  `~/code/CapstoneRivoire/Capstone` (off the iCloud-synced Desktop, per
-  R-017, after the EPERM lock recurred mid-run). Git and the suite were
-  verified green at the new path. Any stale `~/Desktop/CapstoneRivoire`
-  references in shells/editors should be repointed.
+- Canonical path: `~/code/CapstoneRivoire/Capstone` (off iCloud, R-017).
+  The stale `~/Desktop/CapstoneRivoire` remnant was verified (only a
+  harness-recreated settings file) and deleted 2026-07-06;
+  `~/jw_pending_edits/` is gone. No stale-path cleanup remains.
 - Remote: `git@github.com:mpmdw/JouleWise.git`; branch `main`.
-- The 2026-07-05 cleanup changes are uncommitted at handoff (the lock
-  blocked `.git` during the run; commit them as one docs/meta-cleanup
-  commit). Insurance copies live in `~/jw_pending_edits/`; delete that
-  directory once the commit lands and pushes.
+- **Three local commits are NOT pushed** (Slice 2N groups A/B/C). Push
+  when the user confirms, then verify CI goes green (the mock e2e step
+  now also exercises the marker events and raw evidence; expected suite
+  line is 216/OK).
+- Git author identity remains the auto-selected
+  `Edr <edr@Edrs-MacBook-Air.local>`.
 
 ## What Is Next
 
@@ -109,21 +134,19 @@ Follow `TASK_QUEUE.md`; execute via the mission guides in
 `docs/agent_playbook.md` (start every session with its Mission M0). In
 order:
 
-1. P2-007: Slice 2N pre-hardware hardening — top ungated implementation
-   work (playbook Mission M1; spec in `phase_2_plan.md` Slice 2N — now
-   nine items; D-024/D-025 are pre-decided, implement them).
+1. Push the three Slice 2N commits (user confirmation), then verify CI
+   green on main.
 2. P0-002: corpus backup protocol (R-016) — must close before 2I data
    (playbook M2; needs the user to name a destination).
-3. P3-001: related-work draft (Stage 4.6) — ungated desk filler
-   (playbook M3).
+3. P3-001: related-work draft (Stage 4.6) — top implementable work
+   needing no user input (playbook M3).
 4. The external gates when the user can: P1-001 (scope), P1-002 (auth
    session, rescheduled), P1-008 (calendar), P1-003/P1-004/P1-006 —
-   these open playbook missions M4-M8.
+   these open playbook missions M4-M8. Once D-016 + the Mac gates open,
+   2G/2H build directly on the post-2N seams (playbook M5/M6).
 
-Done 2026-07-05 (second commit of the day): cleanup commit `ae48abe`
-pushed, CI run #7 green on main (mock e2e included) — Phase 2 CI row
-closed; agent playbook added; Stage 4.6 seeded with the named 2025-26
-competitor set from a landscape search.
+Done 2026-07-06: Slice 2N complete (P2-007; all nine items, three local
+commits, D-024..D-029, 216 tests green, exit-checklist row closed).
 
 ## Open Decisions And Blockers
 

@@ -65,18 +65,18 @@ Rank lower when a task:
 | 5 | P1-003 | P1 Phase Gate | open | Record wall-meter decision | Meter make/model or "unavailable" verdict plus measurement/export method (exit-checklist wall-meter section; informs D-018 boundary calibration) |
 | 6 | P1-004 | P1 Phase Gate | partial | Fill network/interconnect topology plan | Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section |
 | 7 | P1-006 | P1 Phase Gate | open | Confirm NVIDIA/Orin telemetry access paths | SSH/runtime/telemetry command evidence in the exit-checklist instrumentation section, or marked pending with blocker (gates slices 2K/2L) |
-| 8 | P2-007 | P2 Next Slice | open (ungated — top implementable work) | Slice 2N pre-hardware hardening | Tests per work item; suite green; run report. Spec: `docs/phase_2/phase_2_plan.md` Slice 2N |
+| 8 | P3-001 | P3 Research Expansion | open (ungated desk work — top implementable work now that 2N is done) | Background/related-work draft (Phase 4 Stage 4.6) | `docs/phase_4/related_work_draft.md` with resolvable citations |
 | 9 | P2-004 | P2 Next Slice | gated (P1-001) | Close model selection (D-016) | Decision-log entry: models, revisions, artifact paths, local mirror, fallback candidate. Decision step, not code; needs supervisor scope or explicit user go-ahead + disk-space check. Unblocks 2G/2K install targets. |
-| 10 | P2-003 | P2 Next Slice | gated (P1-002 + D-016 + 2N) | Mac MLX + powermetrics vertical slice (slices 2G-2I) | Real bundle + 3-rep variance in a run report. Code-level spec: `docs/phase_2/hardware_slice_implementation_guide.md`. |
+| 10 | P2-003 | P2 Next Slice | gated (P1-002 + D-016; 2N landed 2026-07-06) | Mac MLX + powermetrics vertical slice (slices 2G-2I) | Real bundle + 3-rep variance in a run report. Code-level spec: `docs/phase_2/hardware_slice_implementation_guide.md`. |
 | 11 | P2-005 | P2 Next Slice | gated (P1-006) | Remote targets (slices 2K NVIDIA/vLLM/ssh, 2L Orin) | Remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide. |
 | 12 | P2-006 | P2 Next Slice | gated (2I; Mac-only floor allowed per the plan) | Homogeneous baselines (slice 2M) | Workload-matrix manifests + bundles; `docs/phase_2/baseline_results.md` with variance + prefill/decode comparison |
-| 13 | P3-001 | P3 Research Expansion | open (ungated desk work) | Background/related-work draft (Phase 4 Stage 4.6) | `docs/phase_4/related_work_draft.md` with resolvable citations |
-| 14 | P3-000 | P3 Research Expansion | queued | KV persistence feasibility spikes (Phase 3 Stage 3.0) | Verdicts in `docs/phase_3/kv_feasibility.md`; gated on Mac slice; must complete before any borrow-window scheduling |
+| 13 | P3-000 | P3 Research Expansion | queued | KV persistence feasibility spikes (Phase 3 Stage 3.0) | Verdicts in `docs/phase_3/kv_feasibility.md`; gated on Mac slice; must complete before any borrow-window scheduling |
 
 ## Completed Queue Items
 
 | ID | Priority | Completed | Task | Evidence |
 |---|---|---|---|---|
+| P2-007 | P2 Next Slice | 2026-07-06 | Slice 2N pre-hardware hardening (all nine items, three commits) | Run report `2026-07-06-slice-2n-pre-hardware-hardening.md`; D-024..D-029; 216 tests OK; exit-checklist 2N row closed |
 | DOC-005 | P4 Polish | 2026-07-06 | External architecture review intake (user-directed): D-024 RunContext, D-025 shared bundle reader, node-worker protocol contract, 2N items 8-9 | Run report `2026-07-06-architecture-review-intake.md`; `docs/contracts/node_worker_protocol.md` |
 | DOC-004 | P4 Polish | 2026-07-05 | Agent playbook (user-directed): per-mission execution guides for all remaining steps | `docs/agent_playbook.md`; pointers in `README.md`/`AGENT_PLAN.md`; Stage 4.6 seeded with named competitor set |
 | P0-001 | P0 Safety | 2026-07-05 | Move repo off iCloud-synced Desktop (R-017) | New path `~/code/CapstoneRivoire/Capstone`; git + suite verified green at the new location; recorded in `RUN_STATE.md` |
@@ -112,8 +112,10 @@ Rank lower when a task:
   produced data.
 - Do not close D-016 (model selection) without P1-001 supervisor scope or an
   explicit user go-ahead.
-- Do not start 2G/2H before Slice 2N lands (the seams it fixes are exactly
-  what the real adapters build on).
+- (satisfied 2026-07-06) Slice 2N landed; 2G/2H may start once their own
+  gates (D-016 + `[mac]` install; privileged sample + D-004 sudoers) open —
+  build on the post-2N seams (RunContext raw evidence, D-026 markers,
+  D-027 rail rows, 2N.3 observed-token fallback).
 
 ## Queue Maintenance
 

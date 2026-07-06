@@ -554,6 +554,35 @@ class RunContextSeamTests(ControllerTestCase):
         self.assertEqual(len(raw_samples), len(trace_lines) - 1)
         self.assertTrue(all(sample["rail"] == "mock" for sample in raw_samples))
 
+    def test_node_role_context_passes_through_untouched(self) -> None:
+        # 2N.9 (D-008/D-024 compatibility): a Phase 3 split-run context with a
+        # node_role must flow through today's adapters with no code change -
+        # mocks ignore fields they do not need (single lifecycle code path).
+        from joulewise.interfaces import RunContext
+
+        config = make_config("context-node-role")
+        bundle_dir = self.runs_root / "synthetic-prefill-node"
+        raw_dir = bundle_dir / "raw"
+        raw_dir.mkdir(parents=True)
+        context = RunContext(
+            config=config,
+            clock=self.clock,
+            run_id="synthetic-prefill-node",
+            bundle_path=bundle_dir,
+            raw_dir=raw_dir,
+            logs_dir=bundle_dir / "logs",
+            outputs_dir=bundle_dir / "outputs",
+            node_role="prefill",
+        )
+        self.assertEqual(context.node_role, "prefill")
+        telemetry, failure = adapters.resolve_telemetry(config, self.clock)
+        self.assertIsNone(failure)
+        self.assertTrue(telemetry.start_sampling(config, context).ok)
+        self.clock.sleep(1.0)
+        samples = telemetry.stop_sampling(config, context)
+        self.assertGreaterEqual(len(samples), 2)
+        self.assertTrue((raw_dir / "mock_samples.json").is_file())
+
     def test_stop_sampling_without_context_writes_no_raw_output(self) -> None:
         # Out-of-run invocations (the cooldown gate, direct adapter use) pass
         # no context; the adapter must tolerate that with no raw output.

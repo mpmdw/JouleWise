@@ -50,6 +50,7 @@ be re-derived by a future agent gets an entry here.
 | D-026 | Measured window is bounded by sampling-active marker events | accepted |
 | D-027 | Per-rail rows must share per-sample timestamps; misalignment is a structured failure | accepted |
 | D-028 | `reduce` verb rewrites `summary_metrics.json` in place (the one sanctioned post-finalize mutation) | accepted |
+| D-029 | Config schema declares nullable optionals; serialization (and config hashes) unchanged | accepted |
 
 ---
 
@@ -1351,3 +1352,51 @@ gains this exception; CLI help documents the verb.
 Revisit when: Phase 4 aggregation needs to distinguish "reduced by
 which harness version" across a corpus (then a provenance field inside
 the summary - additive, R-015 - beats a versioned file).
+
+---
+
+## D-029: Config schema declares nullable optionals; serialization unchanged
+
+- Date: 2026-07-06
+- Status: accepted (Slice 2N.5)
+- Phase: 2
+
+Context: `BenchmarkConfig.to_dict()` (dataclass `asdict`) emits `null`
+for absent optionals, but the hand-written exported JSON Schema declared
+those properties non-nullable - so a bundle's normalized `config.json`
+failed external validation against `print-config-schema` output. The
+harness's own `from_mapping` tolerated the nulls, hiding the mismatch
+from every internal path.
+
+Options considered:
+
+1. Omit-None serialization: `to_dict()` drops null-valued keys. Pro:
+   smaller, arguably cleaner artifact. Con: changes the config bytes and
+   therefore every config SHA-256 - which is run identity (D-001 bundle
+   hash, D-022 run-ID suffixes, D-005 experiment grouping). Acceptable
+   only while no real bundles exist, and it buys nothing measurable.
+2. Schema declares nullable optionals (`"type": ["string", "null"]`
+   etc.), serialization untouched. Pro: hashes stable; an explicit
+   `"field": null` and an absent field validate identically; the schema
+   now tells external consumers the truth about emitted artifacts.
+
+Decision: option 2 (also what the Phase 2 plan's 2N.5 text pins). Every
+optional the emitter can produce as `null` is declared nullable;
+numeric constraints (`minimum`) are unaffected by the null arm under
+JSON Schema 2020-12.
+
+Considerations: config-hash stability is worth protecting even
+pre-hardware - the mock e2e byte-determinism tests (D-022) already
+depend on it. A pinned-hash test now guards the serialization: any
+future change to `to_dict()` bytes fails loudly and must come back
+through this log.
+
+Consequences: `schemas.py` `json_schema()` updated; round-trip tests
+assert (a) every null-emitted field is schema-nullable and every
+emitted key is schema-known on bare Python, (b) full `jsonschema`
+validation where that package happens to be installed (D-009: CI has no
+extras), (c) pinned SHA-256 per example config.
+
+Revisit when: schema v0.2 (D-008) - the v0.2 exporter must keep the
+nullable-optionals rule; or if a downstream consumer requires
+omit-None artifacts (then revisit WITH a hash-migration plan).

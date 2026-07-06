@@ -51,11 +51,12 @@ The repository currently contains:
 - Typed config and output schemas with JSON-Schema export and validation.
 - Runtime, telemetry, and transport interface contracts, with shipped mock
   adapters and a backend registry.
-- The runnable harness: bundle writer, controller lifecycle, reducer, static
-  HTML report generator, and a CLI (`run`, `validate-bundle`, `report`).
+- The runnable harness: bundle writer, controller lifecycle, reducer, a
+  shared bundle read layer, static HTML report generator, and a CLI
+  (`run`, `validate-bundle`, `reduce`, `report`).
 - Example Mac-local and mock-local configs.
 - Phase 1 methodology, feasibility, and measurement-design docs.
-- A test suite (169 tests) run in CI on every push, including a mock
+- A test suite (216 tests) run in CI on every push, including a mock
   end-to-end run + bundle validation.
 
 ## Verify
@@ -64,8 +65,9 @@ The repository currently contains:
 python3 -m unittest discover -s tests
 ```
 
-(8 tests skip unless the `[analysis]` extra is installed — they are the
-report-generator chart tests.)
+(9 tests skip unless the `[analysis]` extra is installed — the
+report-generator chart tests; 1 more skips unless `jsonschema` happens to
+be installed.)
 
 ## Run The Harness (mock target — no hardware or extras needed)
 
@@ -75,6 +77,9 @@ python3 -m joulewise run configs/examples/mock_local.json --runs-dir runs
 
 # Structurally verify any bundle:
 python3 -m joulewise validate-bundle runs/example-mock-local
+
+# Re-derive summary metrics from a bundle's raw evidence (post-hoc):
+python3 -m joulewise reduce runs/example-mock-local
 
 # Render a static HTML run browser (needs: pip install 'joulewise[analysis]'):
 python3 -m joulewise report runs --output report

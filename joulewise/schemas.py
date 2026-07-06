@@ -336,6 +336,12 @@ class BenchmarkConfig:
 
     @staticmethod
     def json_schema() -> dict[str, Any]:
+        # Optional fields are declared nullable (D-029, Slice 2N.5):
+        # ``to_dict()`` emits ``null`` for absent optionals (dataclass
+        # ``asdict``), and a bundle's normalized ``config.json`` must validate
+        # against this exported schema (round-trip pinned by tests).
+        nullable_string = {"type": ["string", "null"]}
+        nullable_positive_int = {"type": ["integer", "null"], "minimum": 1}
         return {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "title": "JouleWise BenchmarkConfig",
@@ -349,7 +355,7 @@ class BenchmarkConfig:
             ],
             "properties": {
                 "schema_version": {"type": "string"},
-                "run_id": {"type": "string"},
+                "run_id": nullable_string,
                 "model": {"$ref": "#/$defs/model"},
                 "quantization": {"$ref": "#/$defs/quantization"},
                 "hardware_target": {"$ref": "#/$defs/hardware_target"},
@@ -364,11 +370,11 @@ class BenchmarkConfig:
                     "required": ["name"],
                     "properties": {
                         "name": {"type": "string"},
-                        "family": {"type": "string"},
-                        "source": {"type": "string"},
-                        "revision": {"type": "string"},
-                        "weight_format": {"type": "string"},
-                        "context_window": {"type": "integer", "minimum": 1},
+                        "family": nullable_string,
+                        "source": nullable_string,
+                        "revision": nullable_string,
+                        "weight_format": nullable_string,
+                        "context_window": nullable_positive_int,
                     },
                 },
                 "quantization": {
@@ -376,8 +382,8 @@ class BenchmarkConfig:
                     "required": ["name"],
                     "properties": {
                         "name": {"type": "string"},
-                        "bits": {"type": "integer", "minimum": 1},
-                        "group_size": {"type": "integer", "minimum": 1},
+                        "bits": nullable_positive_int,
+                        "group_size": nullable_positive_int,
                     },
                 },
                 "hardware_target": {
@@ -388,9 +394,9 @@ class BenchmarkConfig:
                         "transport": _string_enum_schema(TransportKind),
                         "runtime_backend": _string_enum_schema(RuntimeBackend),
                         "telemetry_backend": _string_enum_schema(TelemetryBackend),
-                        "host": {"type": "string"},
-                        "device_kind": {"type": "string"},
-                        "notes": {"type": "string"},
+                        "host": nullable_string,
+                        "device_kind": nullable_string,
+                        "notes": nullable_string,
                     },
                 },
                 "workload_profile": {
@@ -398,10 +404,10 @@ class BenchmarkConfig:
                     "required": ["name"],
                     "properties": {
                         "name": {"type": "string"},
-                        "prompt_tokens": {"type": "integer", "minimum": 1},
-                        "output_tokens": {"type": "integer", "minimum": 1},
-                        "prompt_text": {"type": "string"},
-                        "dataset_ref": {"type": "string"},
+                        "prompt_tokens": nullable_positive_int,
+                        "output_tokens": nullable_positive_int,
+                        "prompt_text": nullable_string,
+                        "dataset_ref": nullable_string,
                         "repetitions": {"type": "integer", "minimum": 1},
                         "warmup_runs": {"type": "integer", "minimum": 1},
                     },
@@ -410,8 +416,8 @@ class BenchmarkConfig:
                     "type": "object",
                     "properties": {
                         "name": {"type": "string"},
-                        "link_speed_mbps": {"type": "number", "minimum": 0},
-                        "notes": {"type": "string"},
+                        "link_speed_mbps": {"type": ["number", "null"], "minimum": 0},
+                        "notes": nullable_string,
                     },
                 },
                 "sampling": {
@@ -427,9 +433,9 @@ class BenchmarkConfig:
                     "required": ["project"],
                     "properties": {
                         "project": {"type": "string"},
-                        "operator": {"type": "string"},
-                        "ambient_temp_c": {"type": "number"},
-                        "notes": {"type": "string"},
+                        "operator": nullable_string,
+                        "ambient_temp_c": {"type": ["number", "null"]},
+                        "notes": nullable_string,
                         "tags": {"type": "array", "items": {"type": "string"}},
                     },
                 },
@@ -472,6 +478,13 @@ class MeasurementQuality:
     #: against the following rep via ``run_benchmark(extra_metadata=...)`` and
     #: the reducer copies the flag back out of ``metadata.json``.
     cooldown_cap_hit: bool | None = None
+    #: Which source supplied the total token count behind ``energy_token_j``
+    #: (additive Slice 2N.3 field, R-015): ``"config"`` when
+    #: ``workload_profile.prompt_tokens`` was set, ``"runtime_observed"`` when
+    #: the reducer fell back to the runtime's observed counts recorded in
+    #: ``metadata.json`` (``workload_observed.token_count``), ``None`` when
+    #: neither was available (``energy_token_j`` is then ``None`` too).
+    token_count_source: str | None = None
 
 
 @dataclass(frozen=True)

@@ -26,17 +26,19 @@ Companion plan: `docs/phase_2/phase_2_plan.md`.
 | 2K NVIDIA/vLLM/ssh | conditional (gate: P1-006 NVIDIA evidence) | pending | remote bundle from 3050, or documented access blocker | run report + applicability table below; spec in `hardware_slice_implementation_guide.md` |
 | 2L Orin adapter | conditional (gate: P1-006 Orin evidence) | pending | bundle from Orin, or documented blocker | run report + applicability table below; spec in `hardware_slice_implementation_guide.md` |
 | 2M homogeneous baselines | required (scope = available targets) | pending (gated: 2I; wants ≥1 remote target for the cross-target table, Mac-only is the documented floor per the plan) | manifests + bundles for the workload matrix; baseline summary doc with variance and prefill/decode comparison | `docs/phase_2/baseline_results.md` |
-| 2N pre-hardware hardening | required before 2G/2H | pending (ungated) | tests per work item (RunContext/raw seam per D-024, window boundaries, token fallback, rail contract, schema round-trip, reduce verb, shared reader per D-025 with report alignment, v0.2 compatibility note); suite green | `phase_2_plan.md` Slice 2N; run report |
+| 2N pre-hardware hardening | required before 2G/2H | **complete (2026-07-06)** | all nine items landed as three commits (`dcfa474` seam, `7357c83` read layer, schema+metrics commit): RunContext/raw seam (D-024), D-026 window markers with latency-invariance test, token fallback (`token_count_source`), rail contract (D-027), schema round-trip + pinned config hashes (D-029), `reduce` verb (D-028), shared `BundleReader` (D-025) with report alignment, v0.2 compatibility note in the run report; suite 216 tests OK | run report `2026-07-06-slice-2n-pre-hardware-hardening.md`; D-024..D-029 |
 | CI green | required | **complete (2026-07-05)** | workflow passing on main including mock end-to-end | GitHub Actions run #7 on `main` (`ae48abe`): conclusion `success`, mock e2e step included |
 | Applicability table | required | in progress | every attempted target × model combo classified supported / pending / unsupported with reason | this file (table below) |
 
-Status summary (2026-07-05): the hardware-independent core — slices 2A-2F
-and 2J — is **complete** (2026-06-12), tested (169 tests, 8 matplotlib
-skips), and runnable end-to-end (`python3 -m joulewise run ...` → complete
-bundle → `validate-bundle` green; closed-form reducer values verified).
-The harness is trustworthy without hardware. Remaining Phase 2 work is
-Slice 2N (ungated, next), then the hardware-gated slices and D-016;
-code-level specs live in
+Status summary (2026-07-06): the hardware-independent work — slices 2A-2F,
+2J, and now 2N (pre-hardware hardening) — is **complete**, tested (216
+tests; skips are the `[analysis]`-extra chart tests plus one optional
+jsonschema test), and runnable end-to-end (`python3 -m joulewise run ...`
+→ complete bundle → `validate-bundle` green → post-hoc `reduce`
+re-derives an identical summary). Real adapters can now be written
+against the post-2N seams without touching controller/bundle internals.
+Remaining Phase 2 work is entirely hardware/decision-gated: D-016, then
+2G/2H/2I, 2K/2L, 2M; code-level specs live in
 `docs/phase_2/hardware_slice_implementation_guide.md`.
 
 *The Mac slice (2G/2H/2I) is required unless R-002/R-003 fallbacks were

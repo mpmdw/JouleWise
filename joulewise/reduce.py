@@ -173,6 +173,44 @@ def _config_prompt_tokens(config: BenchmarkConfig) -> int | None:
     return config.workload_profile.prompt_tokens
 
 
+def _observed_total_tokens(metadata: dict[str, Any]) -> int | None:
+    """The runtime's observed total token count from ``metadata.json``.
+
+    The controller records ``workload_observed.token_count`` (prompt + output
+    as the runtime counted them) whenever the runtime reports it (Slice 2C);
+    Slice 2N.3 makes the reducer fall back to it so a ``prompt_text``-only
+    config still gets the headline per-token metric.
+    """
+    workload = metadata.get("workload_observed")
+    if isinstance(workload, dict):
+        value = workload.get("token_count")
+        if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+            return value
+    return None
+
+
+def _total_tokens(
+    config: BenchmarkConfig,
+    metadata: dict[str, Any],
+    output_token_count: int | None,
+) -> tuple[int | None, str | None]:
+    """``(total token count, source)`` for ``energy_token_j`` (Slice 2N.3).
+
+    Config-supplied counts win: when ``workload_profile.prompt_tokens`` is set
+    (and an output count exists) the total is ``prompt + output`` with source
+    ``"config"`` - the pre-2N behavior. Otherwise the runtime's observed total
+    from metadata is used with source ``"runtime_observed"``. Neither present
+    yields ``(None, None)`` and the metric stays ``None``.
+    """
+    prompt_tokens = _config_prompt_tokens(config)
+    if prompt_tokens is not None and output_token_count is not None:
+        return prompt_tokens + output_token_count, "config"
+    observed = _observed_total_tokens(metadata)
+    if observed is not None:
+        return observed, "runtime_observed"
+    return None, None
+
+
 # ----------------------------------------------------------------------------
 # Measurement quality
 
@@ -291,9 +329,9 @@ def _reduce(
 
     token_timestamps = reader.token_timestamps()
     output_token_count = _output_token_count(config, token_timestamps)
-    prompt_tokens = _config_prompt_tokens(config)
+    total_tokens, token_count_source = _total_tokens(config, metadata, output_token_count)
 
-    energy_token_j = _energy_token_j(energy_request_j, prompt_tokens, output_token_count)
+    energy_token_j = _energy_token_j(energy_request_j, total_tokens)
     energy_output_token_j = _energy_output_token_j(energy_request_j, output_token_count)
 
     ttft_s = _ttft_s(token_timestamps, window)
@@ -312,6 +350,7 @@ def _reduce(
         thermal_drift_c=_thermal_drift_c(metadata),
         telemetry_source=_telemetry_source(metadata),
         cooldown_cap_hit=_cooldown_cap_hit(metadata),
+        token_count_source=token_count_source,
     )
 
     return SummaryMetrics(
@@ -341,10 +380,10 @@ def _zero_window_summary(
     """A zero-length measured window: energies are exactly 0.0 (not an error)."""
     token_timestamps = reader.token_timestamps()
     output_token_count = _output_token_count(config, token_timestamps)
-    prompt_tokens = _config_prompt_tokens(config)
+    total_tokens, token_count_source = _total_tokens(config, metadata, output_token_count)
 
     energy_request_j = 0.0 if idle_baseline is not None else None
-    energy_token_j = _energy_token_j(energy_request_j, prompt_tokens, output_token_count)
+    energy_token_j = _energy_token_j(energy_request_j, total_tokens)
     energy_output_token_j = _energy_output_token_j(energy_request_j, output_token_count)
     quality = MeasurementQuality(
         requested_sampling_hz=config.sampling.power_hz,
@@ -354,6 +393,7 @@ def _zero_window_summary(
         thermal_drift_c=_thermal_drift_c(metadata),
         telemetry_source=_telemetry_source(metadata),
         cooldown_cap_hit=_cooldown_cap_hit(metadata),
+        token_count_source=token_count_source,
     )
     return SummaryMetrics(
         status=RunStatus.SUCCEEDED,
@@ -386,14 +426,9 @@ def _output_token_count(
 
 
 def _energy_token_j(
-    energy_request_j: float | None,
-    prompt_tokens: int | None,
-    output_token_count: int | None,
+    energy_request_j: float | None, total_tokens: int | None
 ) -> float | None:
-    if energy_request_j is None or prompt_tokens is None or output_token_count is None:
-        return None
-    total_tokens = prompt_tokens + output_token_count
-    if total_tokens == 0:
+    if energy_request_j is None or not total_tokens:
         return None
     return energy_request_j / total_tokens
 

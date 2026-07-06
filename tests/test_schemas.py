@@ -1,6 +1,9 @@
+import hashlib
+import importlib.util
 import json
 import unittest
 from pathlib import Path
+from typing import Any
 
 from joulewise.schemas import (
     BenchmarkConfig,
@@ -12,6 +15,21 @@ from joulewise.schemas import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+#: jsonschema is NOT a project dependency (D-009: CI runs bare Python); the
+#: full-validator round-trip test is a bonus that runs only where it happens
+#: to be installed. The field-level nullability checks below run everywhere.
+HAS_JSONSCHEMA = importlib.util.find_spec("jsonschema") is not None
+
+#: Pinned SHA-256 of each example config's normalized (sorted-key, 2-space,
+#: trailing-newline) ``to_dict()`` JSON - the exact D-001/D-022 hash input.
+#: A serialization change silently changes config hashes and therefore run
+#: identity (D-022 suffixes, experiment grouping); this pin makes any such
+#: change fail loudly so it can be decided deliberately (2N.5 / D-029).
+PINNED_CONFIG_SHA256 = {
+    "mock_local.json": "15a556a8ea5853f6aef1d5d6a814d97264f6bc0b9dd11274755c98a7ec686355",
+    "mac_mlx_local.json": "c4028c8a3937b5b3acb1080914966ac0db6a2dc4174a2c52a0ac7a57ce0a35d8",
+}
 
 
 class BenchmarkConfigTests(unittest.TestCase):
@@ -86,6 +104,94 @@ class SummaryMetricsTests(unittest.TestCase):
             status=RunStatus.SUCCEEDED, phase_energy_j={"prefill": 1.0, "decode": 2.0}
         ).to_dict()
         self.assertEqual(payload["phase_energy_j"], {"prefill": 1.0, "decode": 2.0})
+
+
+def _resolve_ref(schema: dict[str, Any], node: dict[str, Any]) -> dict[str, Any]:
+    """Resolve a local ``#/$defs/...`` $ref one level deep (all this schema has)."""
+    ref = node.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/$defs/"):
+        return schema["$defs"][ref.split("/")[-1]]
+    return node
+
+
+class EmittedConfigRoundTripTests(unittest.TestCase):
+    """Slice 2N.5 (D-029): a bundle's normalized ``config.json`` (the
+    ``to_dict()`` form, which emits ``null`` for absent optionals) must
+    validate against the exported ``print-config-schema`` schema."""
+
+    def emitted_examples(self) -> list[tuple[str, dict[str, Any]]]:
+        emitted = []
+        for path in sorted((ROOT / "configs" / "examples").glob("*.json")):
+            config = BenchmarkConfig.from_mapping(json.loads(path.read_text()))
+            emitted.append((path.name, config.to_dict()))
+        return emitted
+
+    def test_every_null_valued_field_is_nullable_in_the_schema(self) -> None:
+        # Bare-Python nullability check (CI installs no jsonschema, D-009):
+        # every key that to_dict() emits as null must be declared nullable.
+        schema = BenchmarkConfig.json_schema()
+        for name, emitted in self.emitted_examples():
+            for section_key, section_value in emitted.items():
+                section_schema = _resolve_ref(
+                    schema, schema["properties"][section_key]
+                )
+                if section_value is None:
+                    with self.subTest(config=name, field=section_key):
+                        self.assertIn("null", section_schema.get("type", []))
+                    continue
+                if not isinstance(section_value, dict):
+                    continue
+                for key, value in section_value.items():
+                    if value is not None:
+                        continue
+                    with self.subTest(config=name, field=f"{section_key}.{key}"):
+                        field_schema = section_schema["properties"][key]
+                        self.assertIn(
+                            "null",
+                            field_schema.get("type", []),
+                            f"{section_key}.{key} is emitted as null but the "
+                            "schema does not allow null",
+                        )
+
+    def test_emitted_sections_carry_no_unknown_keys(self) -> None:
+        # The schema must know every key to_dict() emits, or the round-trip
+        # guarantee is vacuous for those keys.
+        schema = BenchmarkConfig.json_schema()
+        for name, emitted in self.emitted_examples():
+            self.assertEqual(
+                set(emitted), set(schema["properties"]), f"top-level keys ({name})"
+            )
+            for section_key, section_value in emitted.items():
+                if not isinstance(section_value, dict):
+                    continue
+                section_schema = _resolve_ref(schema, schema["properties"][section_key])
+                with self.subTest(config=name, section=section_key):
+                    self.assertEqual(
+                        set(section_value), set(section_schema["properties"])
+                    )
+
+    @unittest.skipUnless(HAS_JSONSCHEMA, "jsonschema not installed (optional)")
+    def test_full_validator_round_trip(self) -> None:
+        import jsonschema
+
+        schema = BenchmarkConfig.json_schema()
+        for name, emitted in self.emitted_examples():
+            with self.subTest(config=name):
+                jsonschema.validate(emitted, schema)
+
+    def test_config_hash_is_pinned(self) -> None:
+        # D-022/D-001: the config hash is identity. Any serialization change
+        # must fail here and be decided deliberately, not slip in.
+        for path in sorted((ROOT / "configs" / "examples").glob("*.json")):
+            config = BenchmarkConfig.from_mapping(json.loads(path.read_text()))
+            config_bytes = (
+                json.dumps(config.to_dict(), indent=2, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            with self.subTest(config=path.name):
+                self.assertEqual(
+                    hashlib.sha256(config_bytes).hexdigest(),
+                    PINNED_CONFIG_SHA256[path.name],
+                )
 
 
 if __name__ == "__main__":

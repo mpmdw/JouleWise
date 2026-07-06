@@ -115,16 +115,15 @@ Acceptance criteria:
 
 ### Phase 2: Harness, Mac Vertical Slice, And Homogeneous Baselines
 
-Status: in progress — the hardware-independent core (2A-2F, 2J) is complete
-and runnable (2026-06-12); Slice 2N (pre-hardware hardening, ungated) is
-next; the remaining slices are hardware-gated. Detail:
+Status: in progress — all hardware-independent work (2A-2F, 2J, and 2N
+pre-hardware hardening, landed 2026-07-06) is complete and runnable; every
+remaining slice is hardware/decision-gated. Detail:
 `docs/phase_2/phase_2_plan.md`. Exit: `docs/phase_2/phase_2_exit_checklist.md`.
 Gated-slice specs: `docs/phase_2/hardware_slice_implementation_guide.md`.
 
 Mock-first ordering (matches `TASK_QUEUE.md`; the real-hardware slices are
-gated on Phase 1 evidence). The hardware-independent core (2A-2F, 2J) is
-complete and runnable as of 2026-06-12; code-level specs for the gated
-slices live in `docs/phase_2/hardware_slice_implementation_guide.md`.
+gated on Phase 1 evidence); code-level specs for the gated slices live in
+`docs/phase_2/hardware_slice_implementation_guide.md`.
 
 - [x] 2A Run-bundle writer.
 - [x] 2B Clock seam + built-in mock adapters.
@@ -138,8 +137,10 @@ slices live in `docs/phase_2/hardware_slice_implementation_guide.md`.
   evidence + D-004 sudoers).
 - [ ] 2I Mac vertical slice integration with variance (gated: 2F+2G+2H).
 - [x] 2J Static report generator v1.
-- [ ] 2N Pre-hardware hardening (ungated; land before 2G/2H) — added
-  2026-07-05 from the external code review; see the Phase 2 plan.
+- [x] 2N Pre-hardware hardening (landed 2026-07-06: RunContext seam,
+  window markers, shared BundleReader, rail contract, reduce verb,
+  schema round-trip, token fallback, v0.2 compatibility note;
+  D-024..D-029).
 - [ ] 2K NVIDIA/vLLM + nvidia-smi + SSH transport (gated on P1-006).
 - [ ] 2L Orin adapter (gated on P1-006).
 - [ ] 2M Homogeneous baselines + prefill/decode qualitative reproduction.
@@ -232,6 +233,7 @@ python3 -m joulewise print-output-schema
 # Phase 2: run the harness (mock, deterministic) and verify the bundle
 python3 -m joulewise run configs/examples/mock_local.json --runs-dir runs
 python3 -m joulewise validate-bundle runs/example-mock-local
+python3 -m joulewise reduce runs/example-mock-local   # post-hoc re-reduction (D-028)
 python3 -m joulewise report runs --output report   # needs the [analysis] extra
 ```
 

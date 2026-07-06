@@ -5,31 +5,37 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-05
+- Last updated: 2026-07-06
 - Project phase: Phase 1 closing; Phase 2 in progress - the
   hardware-independent harness core is complete and runnable
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 
-## This Update (2026-07-05) — 30-second read
+## This Update (2026-07-06) — 30-second read
 
-**Progress:** work paused for a planned break (June 13 – July 4) and resumed
-with a full external audit of the code and plans. The harness core is
-unchanged and verified green (169 checks). The audit tightened the planning
-corpus (one status authority per phase, duplication removed), added two
-tracked risks with fixes in hand (measurement-data backup; the repository
-was moved off iCloud after a sync-lock recurrence), and defined one new
-engineering slice (2N: seam hardening the real Mac adapters will build on —
-next up, needs no hardware or approvals).
+**Progress:** the pre-hardware hardening slice (2N) identified by last
+week's external reviews is now fully implemented and tested (suite grew
+169 → 216 checks, all green). In plain terms: the harness now (a) lets a
+real power sampler preserve its raw output verbatim inside every run's
+evidence bundle, (b) excludes sampler startup/shutdown cost from the
+measured energy window, (c) detects — rather than silently mis-summing —
+misaligned multi-rail power data, (d) can re-derive any run's summary
+numbers from raw evidence with one command (a metrics bug never costs
+hardware re-runs), and (e) guarantees charts can never disagree with the
+reported numbers, because every consumer now reads bundles through one
+shared, tested code path. With this, every remaining Phase 2 work item
+is gated only on hardware access or the scope confirmation below — the
+software side is ready.
 
-**Context from the previous update (2026-06-12):** the benchmark harness
-runs end to end — one command turns a typed experiment config into a
-complete, auditable energy + latency measurement bundle, proven on a
-deterministic software target before any hardware time is spent. The
-Raspberry Pi/Hailo accelerator was confirmed unable to run LLM workloads —
-a clean, documented "not applicable" result, not a setback.
+**Context from previous updates:** the benchmark harness runs end to end
+— one command turns a typed experiment config into a complete, auditable
+energy + latency measurement bundle, proven on a deterministic software
+target before any hardware time is spent (2026-06-12). A planned break
+(June 13 – July 4) was followed by an external audit that defined the
+hardening slice now completed.
 
-**On track:** real-hardware measurement (Mac, then NVIDIA/Jetson) remains
-next after 2N and is fully specified — it is execution, not design.
+**On track:** real-hardware measurement (Mac, then NVIDIA/Jetson) is the
+next implementation work and is fully specified — it is execution, not
+design, and it now builds on hardened, contract-tested seams.
 
 **What I need from you (sanity check):** unchanged — a short
 scope-confirmation that the reusable harness is the primary deliverable and
@@ -66,7 +72,7 @@ Research questions:
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - mock vertical slice (2A-2F, 2J) complete and runnable; hardening slice 2N queued (ungated); hardware slices (2G-2M) gated |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - all hardware-independent work complete and runnable (mock slice 2A-2F/2J + hardening slice 2N, 2026-07-06); hardware slices (2G-2M) gated |
 | 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
@@ -79,15 +85,20 @@ Complete so far (all verifiable in the repository):
   today from deterministic mock adapters (controller, bundle contract, and
   reducer math proven without hardware). Bundle writer, controller
   lifecycle, reducer, static-HTML report generator, and CLI verbs `run` /
-  `validate-bundle` / `report`.
+  `validate-bundle` / `reduce` (post-hoc re-derivation of summary metrics
+  from raw evidence) / `report`. All bundle consumers read through one
+  shared, tested read layer, so displayed numbers can never diverge from
+  reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (169 tests, run in CI on every push,
-  including a mock end-to-end run + bundle validation).
+  a CLI, plus a passing test suite (216 tests, run in CI on every push,
+  including a mock end-to-end run + bundle validation); emitted configs
+  round-trip their own published schema, and config hashes (run identity)
+  are pinned by test.
 - Adapter interface contracts (runtime / telemetry / transport), the run
   bundle artifact contract, and the measurement methodology (idle
   subtraction, measurement boundaries, clock synchronization, statistical
   protocol - highlights below).
-- Evidence-shaped plans for every phase, a design-decision log (19
+- Evidence-shaped plans for every phase, a design-decision log (29
   decisions, each with the alternatives considered), a risk register with
   an explicit descope ladder, and example configs for the Mac and mock
   targets.
@@ -338,7 +349,7 @@ first privileged power sample). Work paused 2026-06-13 to 2026-07-04
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (169 tests, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (216 tests, CI-enforced) |
 
 ## Maintenance Of This Document
 
