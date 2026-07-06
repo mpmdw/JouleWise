@@ -221,6 +221,19 @@ Scope (survey targets, extended as reading reveals more):
   boundaries, sampling, idle subtraction - tie to D-018/D-013/D-014).
 - Edge/heterogeneous LLM inference measurement studies (Apple Silicon,
   Jetson-class devices).
+- Named starting set from the 2026-07-05 landscape search - these are the
+  closest recent works and the related-work section must position against
+  each: TokenPowerBench (AAAI, Dec 2025 - LLM power benchmarking with
+  prefill/decode decomposition, GPU/datacenter-focused); the ML.ENERGY
+  Benchmark (arXiv:2505.06371 - Zeus-based, NVIDIA-focused);
+  "Intelligence per Watt" (arXiv:2511.07885 - local-AI tokens/joule
+  study across Apple Silicon and consumer GPUs); Bench360
+  (arXiv:2511.16682 - local LLM inference benchmarking); "Where Do the
+  Joules Go?" (arXiv:2601.22076 - inference energy diagnosis).
+  JouleWise's distinguishing claims against this set: boundary-honest
+  cross-device methodology (D-018), auditable raw run bundles rather
+  than leaderboard numbers, and split-inference energy on local
+  interconnects (none of the above measure disaggregation energy).
 
 Actions: draft `docs/phase_4/related_work_draft.md` - per source: one
 paragraph of what it establishes, and one sentence of how JouleWise

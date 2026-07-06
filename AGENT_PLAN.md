@@ -43,6 +43,7 @@ report.
 | `docs/phase_N/phase_N_plan.md` | step/slice detail: objectives, design, actions, evidence, fallbacks |
 | `docs/phase_N/phase_N_exit_checklist.md` | evidence gates for closing phase N, and per-item status (the authority, D-023) |
 | `TASK_QUEUE.md` | what to do next, and why it outranks the rest |
+| `docs/agent_playbook.md` | per-mission execution guides for agents: read-first lists, code-level routes, verification, handoff checklists |
 | `RUN_STATE.md` | current handoff: state, verification, next step |
 | `docs/decision_log.md` | design decisions, options, considerations |
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |

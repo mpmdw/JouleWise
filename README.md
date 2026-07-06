@@ -25,6 +25,11 @@ for what was done and what should happen next. Future phase starts should use
 `docs/planning_reflection_protocol.md` to audit whether each step has evidence
 and acceptance criteria before implementation begins.
 
+**Agents executing "the next step" start with `docs/agent_playbook.md`** —
+self-contained, ordered mission guides (read-first lists, code-level
+routes, verification commands, handoff checklists) for every remaining
+step of the project.
+
 Use `TASK_QUEUE.md` to triage new tasks against the current repo state, recent
 handoffs, recent commits, and active phase gates. Design decisions (with the
 options and considerations behind them) live in `docs/decision_log.md`; risks,

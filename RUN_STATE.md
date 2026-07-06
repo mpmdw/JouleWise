@@ -87,17 +87,24 @@ Result (2026-07-05, at the new repo location, after all changes):
 
 ## What Is Next
 
-Follow `TASK_QUEUE.md`. In order:
+Follow `TASK_QUEUE.md`; execute via the mission guides in
+`docs/agent_playbook.md` (start every session with its Mission M0). In
+order:
 
-1. Commit the 2026-07-05 docs/meta cleanup (one commit), push, and
-   confirm CI green (closes the Phase 2 checklist's "pending push
-   verification" row).
-2. P2-007: Slice 2N pre-hardware hardening — top ungated implementation
-   work (`phase_2_plan.md` Slice 2N).
-3. P0-002: corpus backup protocol (R-016) — must close before 2I data.
+1. P2-007: Slice 2N pre-hardware hardening — top ungated implementation
+   work (playbook Mission M1; spec in `phase_2_plan.md` Slice 2N).
+2. P0-002: corpus backup protocol (R-016) — must close before 2I data
+   (playbook M2; needs the user to name a destination).
+3. P3-001: related-work draft (Stage 4.6) — ungated desk filler
+   (playbook M3).
 4. The external gates when the user can: P1-001 (scope), P1-002 (auth
-   session, rescheduled), P1-008 (calendar), P1-003/P1-004/P1-006.
-5. P3-001: related-work draft (Stage 4.6) — ungated desk filler.
+   session, rescheduled), P1-008 (calendar), P1-003/P1-004/P1-006 —
+   these open playbook missions M4-M8.
+
+Done 2026-07-05 (second commit of the day): cleanup commit `ae48abe`
+pushed, CI run #7 green on main (mock e2e included) — Phase 2 CI row
+closed; agent playbook added; Stage 4.6 seeded with the named 2025-26
+competitor set from a landscape search.
 
 ## Open Decisions And Blockers
 

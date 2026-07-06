@@ -108,8 +108,27 @@ gh run list --repo mpmdw/JouleWise      # unauthenticated; CI not re-verified re
 ## What Passed / Failed
 
 - Test suite green before and after (docs-only changes; run as a guard).
-- Remote CI verification not possible this session (`gh` not logged in);
-  the Phase 2 exit-checklist CI row stays "pending push verification".
+- Remote CI verification not possible at cleanup time (`gh` not logged
+  in); verified later the same day via the public API — see follow-up.
+
+## Follow-Up (same day): commit, CI, playbook
+
+- The cleanup was committed as `ae48abe` (rebased onto the user's
+  2026-06-13 `ffdb312` PROJECT_STATUS edit, whose softened advisor-ask
+  phrasing — "sanity check", no dates demand — was preserved in the
+  refreshed section) and pushed; GitHub Actions run #7 on `main`
+  concluded `success` including the mock e2e step, closing the Phase 2
+  exit checklist's CI row.
+- Insurance backups (`~/jw_pending_edits/`) deleted after the push.
+- Added `docs/agent_playbook.md`: ordered, self-contained mission guides
+  (M0 preflight; M1 Slice 2N with code-level routes per work item; M2
+  backup protocol; M3 related work; M4 D-016; M5-M9 hardware slices +
+  baselines; M10 Phase 3 spikes), with pointers wired into `README.md`,
+  `AGENT_PLAN.md`'s source-of-truth map, and `RUN_STATE.md`.
+- A landscape search (2026-07-05) found the nearest recent competitors
+  (TokenPowerBench, ML.ENERGY, Intelligence per Watt, Bench360, "Where
+  Do the Joules Go?"); they are now the named starting set in Phase 4
+  Stage 4.6 with JouleWise's distinguishing claims to argue.
 
 ## Next Agent Should
 

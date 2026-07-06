@@ -27,7 +27,7 @@ Companion plan: `docs/phase_2/phase_2_plan.md`.
 | 2L Orin adapter | conditional (gate: P1-006 Orin evidence) | pending | bundle from Orin, or documented blocker | run report + applicability table below; spec in `hardware_slice_implementation_guide.md` |
 | 2M homogeneous baselines | required (scope = available targets) | pending (gated: 2I; wants ≥1 remote target for the cross-target table, Mac-only is the documented floor per the plan) | manifests + bundles for the workload matrix; baseline summary doc with variance and prefill/decode comparison | `docs/phase_2/baseline_results.md` |
 | 2N pre-hardware hardening | required before 2G/2H | pending (ungated) | tests per work item (raw seam, window boundaries, token fallback, rail contract, schema round-trip, reduce verb, report alignment); suite green | `phase_2_plan.md` Slice 2N; run report |
-| CI green | required | pending push verification | workflow passing on main including mock end-to-end | GitHub Actions (step added to `ci.yml`; 169 tests green locally) |
+| CI green | required | **complete (2026-07-05)** | workflow passing on main including mock end-to-end | GitHub Actions run #7 on `main` (`ae48abe`): conclusion `success`, mock e2e step included |
 | Applicability table | required | in progress | every attempted target × model combo classified supported / pending / unsupported with reason | this file (table below) |
 
 Status summary (2026-07-05): the hardware-independent core — slices 2A-2F
