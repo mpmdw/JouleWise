@@ -26,22 +26,26 @@ the bracketing samples; an edge outside the sample span is clamped to the
 nearest sample's value (the curve is held flat past its first/last sample).
 A zero-length window integrates to ``0.0``.
 
-Degenerate inputs are structured failures, never crashes (Slice 2D): a missing
-``measured_run`` window or fewer than two in-window samples (after boundary
-handling) yields a ``SummaryMetrics`` with ``status=FAILED`` and
+Degenerate inputs are structured failures, never crashes (Slice 2D, hardened
+in Slice 2N.6): a missing ``measured_run`` window, fewer than two in-window
+samples (after boundary handling), missing/corrupt ``config.json`` or
+``metadata.json``, or a D-027 rail misalignment all yield a
+``SummaryMetrics`` with ``status=FAILED`` and
 ``failure_reason=UNKNOWN_ERROR``. A zero-length measured window is *not* an
 error - it reduces to zero energy.
+
+Artifact parsing and interpretation policy (rail summation, measured/phase
+windows, token events) live in :class:`joulewise.bundle_read.BundleReader`
+(D-025); this module keeps only the metrics math.
 """
 
 from __future__ import annotations
 
-import csv
-import json
 import statistics
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window
 from joulewise.schemas import (
     BenchmarkConfig,
     FailureReason,
@@ -55,87 +59,15 @@ from joulewise.schemas import (
 __all__ = ["reduce_bundle"]
 
 
-# ----------------------------------------------------------------------------
-# Internal value objects
-
-
-@dataclass(frozen=True)
-class _Point:
-    """One point on the summed power curve: ``power_w`` at ``t``."""
-
-    t: float
-    power_w: float
-
-
-@dataclass(frozen=True)
-class _Window:
-    start_s: float
-    end_s: float
-
-    @property
-    def duration_s(self) -> float:
-        return self.end_s - self.start_s
-
-
 class _ReduceError(Exception):
     """A structured, non-crashing reduction failure (mapped to FAILED)."""
-
-
-# ----------------------------------------------------------------------------
-# Artifact loading
-
-
-def _load_json(path: Path) -> Any:
-    return json.loads(path.read_text())
-
-
-def _load_events(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    events: list[dict[str, Any]] = []
-    for line in path.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        events.append(json.loads(line))
-    return events
-
-
-def _load_trace_rows(path: Path) -> list[dict[str, str]]:
-    if not path.exists():
-        return []
-    with path.open(newline="") as handle:
-        return list(csv.DictReader(handle))
-
-
-# ----------------------------------------------------------------------------
-# Curve construction (D-018 rail summation)
-
-
-def _summed_curve(
-    rows: list[dict[str, str]], rail_manifest: list[str]
-) -> list[_Point]:
-    """Sum ``power_w`` per exact ``timestamp_s`` over manifest rails (D-018).
-
-    Rows whose ``rail`` is not in the manifest are ignored; rows are grouped by
-    their exact ``timestamp_s`` value, and the result is sorted by time.
-    """
-    manifest = set(rail_manifest)
-    totals: dict[float, float] = {}
-    for row in rows:
-        rail = row.get("rail") or ""
-        if rail not in manifest:
-            continue
-        timestamp_s = float(row["timestamp_s"])
-        totals[timestamp_s] = totals.get(timestamp_s, 0.0) + float(row["power_w"])
-    return [_Point(t=t, power_w=totals[t]) for t in sorted(totals)]
 
 
 # ----------------------------------------------------------------------------
 # Interpolation + trapezoidal integration
 
 
-def _interpolate(curve: list[_Point], t: float) -> float:
+def _interpolate(curve: list[TracePoint], t: float) -> float:
     """Return the curve value at ``t`` (linear between samples, clamped past
     the first/last sample)."""
     if t <= curve[0].t:
@@ -152,7 +84,7 @@ def _interpolate(curve: list[_Point], t: float) -> float:
     return curve[-1].power_w  # pragma: no cover - covered by the clamps above
 
 
-def _integrate(curve: list[_Point], start_s: float, end_s: float) -> float:
+def _integrate(curve: list[TracePoint], start_s: float, end_s: float) -> float:
     """Trapezoidal integral of the summed curve over ``[start_s, end_s]`` with
     linear interpolation at both window edges (clamped past the sample span)."""
     if end_s <= start_s:
@@ -172,78 +104,8 @@ def _integrate(curve: list[_Point], start_s: float, end_s: float) -> float:
     return total
 
 
-def _in_window_sample_count(curve: list[_Point], window: _Window) -> int:
+def _in_window_sample_count(curve: list[TracePoint], window: Window) -> int:
     return sum(1 for point in curve if window.start_s <= point.t <= window.end_s)
-
-
-# ----------------------------------------------------------------------------
-# Event extraction
-
-
-def _measured_window(events: list[dict[str, Any]]) -> _Window | None:
-    """The window the reducer integrates over (D-026).
-
-    Preferred bounds are the ``sampling_started``/``sampling_stopped`` marker
-    events (sampling confirmed active; stamped so sampler spawn latency and
-    stop-side parsing stay outside the window). Bundles written before the
-    markers existed (pre-2N.2) fall back to the ``measured_run`` stage
-    boundaries.
-    """
-    marker_start: float | None = None
-    marker_end: float | None = None
-    stage_start: float | None = None
-    stage_end: float | None = None
-    for event in events:
-        if event.get("phase") != "measured_run":
-            continue
-        event_type = event.get("event_type")
-        if event_type == "sampling_started":
-            marker_start = float(event["timestamp_s"])
-        elif event_type == "sampling_stopped":
-            marker_end = float(event["timestamp_s"])
-        elif event_type == "stage_started":
-            stage_start = float(event["timestamp_s"])
-        elif event_type == "stage_completed":
-            stage_end = float(event["timestamp_s"])
-    if marker_start is not None and marker_end is not None:
-        return _Window(start_s=marker_start, end_s=marker_end)
-    if stage_start is None or stage_end is None:
-        return None
-    return _Window(start_s=stage_start, end_s=stage_end)
-
-
-def _token_timestamps(events: list[dict[str, Any]]) -> list[float]:
-    return [
-        float(event["timestamp_s"])
-        for event in events
-        if event.get("event_type") == "token"
-    ]
-
-
-def _phase_windows(events: list[dict[str, Any]]) -> dict[str, list[_Window]]:
-    """Pair ``phase_start``/``phase_end`` events by phase name in order.
-
-    Multiple intervals with the same phase name are all returned (the caller
-    sums their energies).
-    """
-    open_starts: dict[str, list[float]] = {}
-    windows: dict[str, list[_Window]] = {}
-    for event in events:
-        event_type = event.get("event_type")
-        phase = event.get("phase")
-        if not isinstance(phase, str):
-            continue
-        if event_type == "phase_start":
-            open_starts.setdefault(phase, []).append(float(event["timestamp_s"]))
-        elif event_type == "phase_end":
-            starts = open_starts.get(phase)
-            if not starts:
-                continue
-            start_s = starts.pop(0)
-            windows.setdefault(phase, []).append(
-                _Window(start_s=start_s, end_s=float(event["timestamp_s"]))
-            )
-    return windows
 
 
 # ----------------------------------------------------------------------------
@@ -261,15 +123,6 @@ def _idle_baseline(metadata: dict[str, Any]) -> IdleBaseline | None:
         sample_count=int(raw["sample_count"]),
         telemetry_backend=TelemetryBackend(raw["telemetry_backend"]),
     )
-
-
-def _rail_manifest(metadata: dict[str, Any]) -> list[str]:
-    device = metadata.get("device")
-    if isinstance(device, dict):
-        manifest = device.get("rail_manifest")
-        if isinstance(manifest, list):
-            return [str(rail) for rail in manifest]
-    return []
 
 
 def _thermal_drift_c(metadata: dict[str, Any]) -> float | None:
@@ -324,7 +177,7 @@ def _config_prompt_tokens(config: BenchmarkConfig) -> int | None:
 # Measurement quality
 
 
-def _observed_sampling_hz(curve: list[_Point]) -> float | None:
+def _observed_sampling_hz(curve: list[TracePoint]) -> float | None:
     if len(curve) < 2:
         return None
     gaps = [right.t - left.t for left, right in zip(curve, curve[1:])]
@@ -334,7 +187,7 @@ def _observed_sampling_hz(curve: list[_Point]) -> float | None:
     return 1.0 / median_gap
 
 
-def _dropped_samples(curve: list[_Point], requested_hz: float) -> int:
+def _dropped_samples(curve: list[TracePoint], requested_hz: float) -> int:
     if len(curve) < 2 or requested_hz <= 0:
         return 0
     nominal = 1.0 / requested_hz
@@ -349,21 +202,30 @@ def _dropped_samples(curve: list[_Point], requested_hz: float) -> int:
 def reduce_bundle(path: Path) -> SummaryMetrics:
     """Reduce the bundle at ``path`` to a :class:`SummaryMetrics`.
 
-    Pure over the on-disk artifacts (D-002): re-runnable post hoc and reused by
-    ``validate-bundle`` and the report generator. Works on a not-yet-finalized
-    bundle (``summary_metrics.json`` absent). Degenerate inputs yield a
-    structured ``FAILED``/``unknown_error`` summary rather than raising.
+    Pure over the on-disk artifacts (D-002): re-runnable post hoc (the
+    ``reduce`` CLI verb, Slice 2N.6) and by the controller's reduce stage.
+    Works on a not-yet-finalized bundle (``summary_metrics.json`` absent).
+    Degenerate inputs - including missing/corrupt ``config.json`` or
+    ``metadata.json`` and D-027 rail misalignment - yield a structured
+    ``FAILED``/``unknown_error`` summary rather than raising.
     """
-    path = Path(path)
-    config = BenchmarkConfig.from_mapping(_load_json(path / "config.json"))
-    metadata = _load_json(path / "metadata.json")
-    events = _load_events(path / "events.jsonl")
-    trace_rows = _load_trace_rows(path / "power_trace.csv")
+    reader = BundleReader(Path(path))
+    try:
+        config = reader.config()
+        metadata = reader.metadata()
+    except BundleReadError as exc:
+        # Without a readable config there is no sampling_hz for a quality
+        # block; status/reason/message still make the failure structured.
+        return SummaryMetrics(
+            status=RunStatus.FAILED,
+            failure_reason=FailureReason.UNKNOWN_ERROR,
+            failure_message=str(exc),
+        )
 
     idle_baseline = _idle_baseline(metadata)
     try:
-        return _reduce(config, metadata, events, trace_rows, idle_baseline)
-    except _ReduceError as exc:
+        return _reduce(reader, config, metadata, idle_baseline)
+    except (_ReduceError, BundleReadError) as exc:
         return SummaryMetrics(
             status=RunStatus.FAILED,
             failure_reason=FailureReason.UNKNOWN_ERROR,
@@ -390,27 +252,25 @@ def _failed_quality(
 
 
 def _reduce(
+    reader: BundleReader,
     config: BenchmarkConfig,
     metadata: dict[str, Any],
-    events: list[dict[str, Any]],
-    trace_rows: list[dict[str, str]],
     idle_baseline: IdleBaseline | None,
 ) -> SummaryMetrics:
-    window = _measured_window(events)
+    window = reader.measured_window()
     if window is None:
         raise _ReduceError(
             "no measured_run window in events.jsonl "
             "(missing stage_started/stage_completed for phase 'measured_run')"
         )
 
-    rail_manifest = _rail_manifest(metadata)
-    curve = _summed_curve(trace_rows, rail_manifest)
+    curve = reader.summed_curve()
 
     # A zero-length measured window is a valid degenerate result, not an error:
     # every energy is exactly 0.0 and there is nothing to integrate.
     if window.duration_s == 0.0:
         return _zero_window_summary(
-            config, metadata, events, idle_baseline, window, curve
+            reader, config, metadata, idle_baseline, window, curve
         )
 
     if _in_window_sample_count(curve, window) < 2:
@@ -429,7 +289,7 @@ def _reduce(
         )
     energy_request_j = idle_subtracted_energy_j
 
-    token_timestamps = _token_timestamps(events)
+    token_timestamps = reader.token_timestamps()
     output_token_count = _output_token_count(config, token_timestamps)
     prompt_tokens = _config_prompt_tokens(config)
 
@@ -440,7 +300,7 @@ def _reduce(
     decode_latency_s = _decode_latency_s(token_timestamps)
     throughput_tokens_s = _throughput_tokens_s(token_timestamps, output_token_count)
 
-    phase_energy_j = _phase_energy(events, curve)
+    phase_energy_j = _phase_energy(reader.phase_windows(), curve)
 
     quality = MeasurementQuality(
         requested_sampling_hz=config.sampling.power_hz,
@@ -471,15 +331,15 @@ def _reduce(
 
 
 def _zero_window_summary(
+    reader: BundleReader,
     config: BenchmarkConfig,
     metadata: dict[str, Any],
-    events: list[dict[str, Any]],
     idle_baseline: IdleBaseline | None,
-    window: _Window,
-    curve: list[_Point],
+    window: Window,
+    curve: list[TracePoint],
 ) -> SummaryMetrics:
     """A zero-length measured window: energies are exactly 0.0 (not an error)."""
-    token_timestamps = _token_timestamps(events)
+    token_timestamps = reader.token_timestamps()
     output_token_count = _output_token_count(config, token_timestamps)
     prompt_tokens = _config_prompt_tokens(config)
 
@@ -507,7 +367,7 @@ def _zero_window_summary(
         throughput_tokens_s=_throughput_tokens_s(token_timestamps, output_token_count),
         idle_baseline=idle_baseline,
         measurement_quality=quality,
-        phase_energy_j=_phase_energy(events, curve),
+        phase_energy_j=_phase_energy(reader.phase_windows(), curve),
     )
 
 
@@ -546,7 +406,7 @@ def _energy_output_token_j(
     return energy_request_j / output_token_count
 
 
-def _ttft_s(token_timestamps: list[float], window: _Window) -> float | None:
+def _ttft_s(token_timestamps: list[float], window: Window) -> float | None:
     if not token_timestamps:
         return None
     return token_timestamps[0] - window.start_s
@@ -570,16 +430,15 @@ def _throughput_tokens_s(
 
 
 def _phase_energy(
-    events: list[dict[str, Any]], curve: list[_Point]
+    windows: dict[str, list[Window]], curve: list[TracePoint]
 ) -> dict[str, float] | None:
-    """Energy (J) per workload phase from ``phase_start``/``phase_end`` pairs.
+    """Energy (J) per workload phase from the reader's paired phase windows.
 
     A zero-length phase contributes ``0.0``; multiple intervals sharing a phase
     name sum. Returns ``None`` when no phase windows exist. Integration over a
     phase with too few samples to interpolate still yields ``0.0`` via the
     clamped/flat curve, so phase attribution never raises.
     """
-    windows = _phase_windows(events)
     if not windows:
         return None
     result: dict[str, float] = {}

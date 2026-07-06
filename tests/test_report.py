@@ -172,6 +172,20 @@ class RenderWithMatplotlibTests(ReportTestCase):
         self.assertNotIn("<script", self.index_html.lower())
         self.assertIn("<style", self.index_html.lower())
 
+    def test_manifest_mismatch_omits_chart_instead_of_fallback_sum(self) -> None:
+        # 2N.7 (D-025): the report reads the same summed curve the reducer
+        # integrated. A bundle whose manifest matches no trace rail must NOT
+        # fall back to summing all rails - the chart is omitted with a note.
+        bundle = self.runs_dir / "report-success"
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["device"]["rail_manifest"] = ["no-such-rail"]
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        generate_report(self.runs_dir, self.output_dir)
+        page = (self.output_dir / "run" / "report-success.html").read_text()
+        self.assertIn("No power-trace chart", page)
+        self.assertNotIn('src="report-success.png"', page)
+
 
 @unittest.skipUnless(HAS_MPL, "matplotlib ([analysis] extra) not installed")
 class CliReportSuccessTests(ReportTestCase):

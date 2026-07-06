@@ -331,5 +331,59 @@ class ValidateBundleTests(CliRunTestCase):
         self.assertTrue(any("metadata.json" in problem for problem in problems))
 
 
+class ReduceVerbTests(CliRunTestCase):
+    """Slice 2N.6 (D-028): post-hoc re-reduction of an existing bundle."""
+
+    def make_bundle(self, run_id: str) -> Path:
+        exit_code, out, _ = self.run_verb(self.write_config(run_id))
+        self.assertEqual(exit_code, 0)
+        return self.bundle_path_from_line(out.splitlines()[0])
+
+    def test_reduce_rederives_identical_summary_exit_0(self) -> None:
+        bundle = self.make_bundle("reduce-identical")
+        original = json.loads((bundle / "summary_metrics.json").read_text())
+        # Clobber the summary to prove reduce rewrites it from raw evidence.
+        (bundle / "summary_metrics.json").write_text('{"status": "failed"}')
+        exit_code, out, err = _run(["reduce", str(bundle)])
+        self.assertEqual(exit_code, 0, err)
+        self.assertRegex(out.splitlines()[0], SUCCEEDED_LINE)
+        rederived = json.loads((bundle / "summary_metrics.json").read_text())
+        self.assertEqual(rederived, original)
+        # The re-reduced bundle still validates structurally.
+        self.assertEqual(validate_bundle(bundle), [])
+
+    def test_reduce_corrupt_metadata_exit_3_structured_summary(self) -> None:
+        bundle = self.make_bundle("reduce-corrupt")
+        (bundle / "metadata.json").write_text("{broken")
+        exit_code, out, _ = _run(["reduce", str(bundle)])
+        self.assertEqual(exit_code, 3)
+        self.assertIn("status=failed", out)
+        self.assertIn("reason=unknown_error", out)
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        self.assertEqual(summary["status"], "failed")
+        self.assertIn("metadata.json", summary["failure_message"])
+
+    def test_reduce_non_bundle_directory_exit_2_no_write(self) -> None:
+        not_a_bundle = self.tmp / "not-a-bundle"
+        not_a_bundle.mkdir()
+        exit_code, _, err = _run(["reduce", str(not_a_bundle)])
+        self.assertEqual(exit_code, 2)
+        self.assertIn("not a run bundle", err)
+        # Evidence is never invented inside an arbitrary directory.
+        self.assertFalse((not_a_bundle / "summary_metrics.json").exists())
+
+    def test_reduce_missing_path_exit_2(self) -> None:
+        exit_code, _, err = _run(["reduce", str(self.tmp / "missing")])
+        self.assertEqual(exit_code, 2)
+        self.assertIn("error:", err)
+
+    def test_reduce_help_names_the_verb(self) -> None:
+        out = io.StringIO()
+        with redirect_stdout(out), self.assertRaises(SystemExit) as ctx:
+            main(["--help"])
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn("reduce", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

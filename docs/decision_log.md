@@ -46,8 +46,10 @@ be re-derived by a future agent gets an entry here.
 | D-022 | Auto-generated run-ID suffix is config-hash-derived, not random | accepted |
 | D-023 | Per-item phase status lives solely in the exit checklists | accepted |
 | D-024 | Adapters receive a `RunContext`, not piecemeal parameters | accepted; implemented (2N.1, 2026-07-06) |
-| D-025 | One shared bundle read layer for reducer, report, validation, and aggregation | accepted; implementation pending (Slice 2N.8) |
+| D-025 | One shared bundle read layer for reducer, report, validation, and aggregation | accepted; implemented (2N.8, 2026-07-06) |
 | D-026 | Measured window is bounded by sampling-active marker events | accepted |
+| D-027 | Per-rail rows must share per-sample timestamps; misalignment is a structured failure | accepted |
+| D-028 | `reduce` verb rewrites `summary_metrics.json` in place (the one sanctioned post-finalize mutation) | accepted |
 
 ---
 
@@ -1152,7 +1154,7 @@ writer - they write into `context.raw_dir` directly.
 ## D-025: One shared bundle read layer for all bundle consumers
 
 - Date: 2026-07-06
-- Status: accepted, to be implemented in Slice 2N item 2N.8 (the reader does NOT exist yet)
+- Status: accepted; implemented in Slice 2N.8 (2026-07-06, `joulewise/bundle_read.py`)
 - Phase: 2
 
 Context: three code paths already parse bundles independently -
@@ -1252,3 +1254,100 @@ pins the exclusion.
 Revisit when: a real adapter cannot confirm sampling start
 synchronously (would need an async readiness probe), or Phase 3 split
 runs need per-node windows (D-008 composite bundles).
+
+---
+
+## D-027: Per-rail rows must share per-sample timestamps; misalignment is a structured failure
+
+- Date: 2026-07-06
+- Status: accepted (Slice 2N.4)
+- Phase: 2
+
+Context: `power(t)` sums `power_w` over the manifest rails grouped by
+exact `timestamp_s` equality (D-018). A real multi-rail adapter (e.g.
+Jetson rails) emitting per-rail rows with slightly skewed timestamps
+would silently produce an interleaved per-rail curve whose integral
+badly undersums the true power - a wrong number with no error, the worst
+failure mode for a measurement harness. The grouping rule lived only in
+a `bundle.py` comment.
+
+Options considered:
+
+1. Bucket timestamps within a tolerance derived from the sampling
+   interval. Con: silently rewrites the data; the bucket width is a new
+   free parameter; boundary cases (a sample near a bucket edge) move
+   energy between samples invisibly.
+2. Detect-and-fail: with a multi-rail manifest, every timestamp on the
+   summed curve must carry exactly the full manifest rail set; a subset
+   is a structured failure naming the timestamp and missing rail(s).
+
+Decision: option 2. The contract is now explicit: a telemetry adapter
+emits one row per rail per sample instant, all sharing that instant's
+single timestamp (row fan-out per rail, one clock read per sample).
+Adapters that sample rails at genuinely different instants must
+resample/align before emitting rows - alignment policy belongs to the
+adapter that knows its hardware, not to a generic bucketer.
+
+Considerations: honesty over convenience - the project's core promise is
+boundary-honest energy numbers, so a detectably wrong sum must fail
+loudly (R-015 unaffected: no schema change). Single-rail manifests
+cannot misalign; the check costs one set comparison per timestamp.
+Enforcement lives in `BundleReader.summed_curve` (D-025), so the
+reducer, report, and any future consumer inherit it identically.
+
+Consequences: `adapter_contracts.md` telemetry section documents the
+row contract; the reducer converts the reader's misalignment failure
+into a structured FAILED summary; skewed/aligned twin fixtures pin both
+sides.
+
+Revisit when: a real telemetry backend cannot share one timestamp
+across rails at source (then the adapter grows an explicit, tested
+alignment step - still adapter-side, not reader-side).
+
+---
+
+## D-028: `reduce` verb rewrites `summary_metrics.json` in place
+
+- Date: 2026-07-06
+- Status: accepted (Slice 2N.6)
+- Phase: 2
+
+Context: D-002's promise - a reducer bug never re-runs hardware - needs
+a user-facing path: `python3 -m joulewise reduce <bundle-dir>`
+re-derives the summary from the raw artifacts. D-011 makes
+`summary_metrics.json` the completion marker written last by
+`finalize()`, and bundles are otherwise immutable evidence (D-010), so
+where the re-derived summary lands is a real policy choice.
+
+Options considered:
+
+1. Rewrite `summary_metrics.json` in place. Pro: one summary, every
+   consumer (validate-bundle, report, Phase 4 aggregate) keeps working
+   unchanged; the summary is by definition derived from the raw
+   artifacts, so rewriting it destroys no evidence.
+2. Write a versioned name (`summary_metrics.v2.json`). Con: every
+   consumer needs a resolution rule for which summary wins; the D-011
+   completion marker becomes ambiguous; stale headline numbers linger in
+   the canonical file.
+
+Decision: option 1. In-place rewrite is the ONE sanctioned
+post-finalize bundle mutation; everything else in a finalized bundle
+stays immutable. The verb refuses paths without a `config.json` (exit
+2, no write) so evidence is never invented inside an arbitrary
+directory; degenerate bundle contents produce a structured FAILED
+summary (exit 3); success exits 0 - matching `run`'s exit scheme, with
+the same greppable `bundle:` result line.
+
+Considerations: the raw artifacts (config, events, trace, raw/, logs)
+remain the evidence of record; the summary is a cache of derivation.
+If provenance of a re-reduction ever matters, the harness git commit is
+already in `metadata.json` and the rewrite is reproducible from it.
+
+Consequences: `reduce_bundle` returns structured failures for
+missing/corrupt `config.json`/`metadata.json` (keeping its docstring's
+"never crashes" promise); `run_bundle_layout.md`'s immutability language
+gains this exception; CLI help documents the verb.
+
+Revisit when: Phase 4 aggregation needs to distinguish "reduced by
+which harness version" across a corpus (then a provenance field inside
+the summary - additive, R-015 - beats a versioned file).

@@ -446,5 +446,78 @@ class ThermalDriftTests(ReduceTestCase):
         self.assertAlmostEqual(summary.measurement_quality.thermal_drift_c, 3.5, places=9)
 
 
+class StructuredReadFailureTests(ReduceTestCase):
+    """Slice 2N.6: missing/corrupt artifacts reduce to structured failures,
+    never tracebacks (the docstring's 'never crashes' promise, now kept)."""
+
+    def test_corrupt_config_is_structured_failure(self) -> None:
+        builder = self.builder()
+        builder.measured_window(100.0, 110.0)
+        builder.write_trace(constant_samples(100.0, 110.0, hz=1.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"])
+        (builder.path / "config.json").write_text("{broken json")
+        summary = reduce_module.reduce_bundle(builder.path)
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertIn("config.json", summary.failure_message)
+
+    def test_missing_metadata_is_structured_failure(self) -> None:
+        builder = self.builder()
+        builder.measured_window(100.0, 110.0)
+        builder.write_trace(constant_samples(100.0, 110.0, hz=1.0, power_w=7.5))
+        # write_metadata never called: metadata.json is absent.
+        summary = reduce_module.reduce_bundle(builder.path)
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertIn("metadata.json", summary.failure_message)
+
+    def test_malformed_event_line_is_structured_failure(self) -> None:
+        builder = self.builder()
+        builder.write_trace(constant_samples(100.0, 110.0, hz=1.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"])
+        (builder.path / "events.jsonl").write_text("not json\n")
+        summary = reduce_module.reduce_bundle(builder.path)
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertIn("events.jsonl", summary.failure_message)
+
+
+class RailMisalignmentTests(ReduceTestCase):
+    """D-027 (2N.4): skewed per-rail timestamps are a structured reduction
+    failure naming the misalignment - never a silently undersummed curve."""
+
+    def test_skewed_rails_reduce_to_structured_failure(self) -> None:
+        builder = self.builder()
+        builder.measured_window(0.0, 2.0)
+        samples = [
+            PowerSample(timestamp_s=0.0, power_w=3.0, source="m", rail="a"),
+            PowerSample(timestamp_s=0.001, power_w=4.0, source="m", rail="b"),
+            PowerSample(timestamp_s=1.0, power_w=3.0, source="m", rail="a"),
+            PowerSample(timestamp_s=1.001, power_w=4.0, source="m", rail="b"),
+        ]
+        builder.write_trace(samples)
+        builder.write_metadata(rail_manifest=["a", "b"])
+        summary = reduce_module.reduce_bundle(builder.path)
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertIn("misaligned", summary.failure_message)
+        # Quality context still present (config/metadata were readable).
+        self.assertIsNotNone(summary.measurement_quality)
+
+    def test_aligned_rails_unchanged_to_nine_decimals(self) -> None:
+        # The aligned twin of the skewed fixture: identical powers, shared
+        # timestamps; sums exactly per D-018.
+        builder = self.builder()
+        builder.measured_window(0.0, 2.0)
+        samples = []
+        for t in (0.0, 1.0, 2.0):
+            samples.append(PowerSample(timestamp_s=t, power_w=3.0, source="m", rail="a"))
+            samples.append(PowerSample(timestamp_s=t, power_w=4.0, source="m", rail="b"))
+        builder.write_trace(samples)
+        builder.write_metadata(rail_manifest=["a", "b"])
+        summary = reduce_module.reduce_bundle(builder.path)
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertAlmostEqual(summary.gross_energy_j, 14.0, places=9)
+
+
 if __name__ == "__main__":
     unittest.main()

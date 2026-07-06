@@ -22,25 +22,27 @@ browser entirely from on-disk bundle artifacts:
 The generator is pure over the on-disk artifacts and writes only under
 ``output_dir``. Its content is deterministic apart from the chart PNGs (whose
 bytes matplotlib does not guarantee to be reproducible).
+
+All bundle parsing and interpretation policy comes from
+:class:`joulewise.bundle_read.BundleReader` (D-025, Slice 2N.7/2N.8): the
+chart's summed curve is the reducer's summed curve (manifest rails only, D-027
+alignment enforced), and the shaded measured window is the reducer's D-026
+window - the chart can never display energy the summary excluded. When the
+curve cannot be read (empty/missing manifest, rail misalignment, corrupt
+trace), the run page notes the omission instead of inventing a fallback.
 """
 
 from __future__ import annotations
 
-import csv
 import html
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.schemas import RunStatus
 
 __all__ = ["ReportError", "generate_report"]
-
-#: The exact ``power_trace.csv`` header (D-018); the chart reader pins it.
-_RAIL_COLUMN = "rail"
-_TIMESTAMP_COLUMN = "timestamp_s"
-_POWER_COLUMN = "power_w"
 
 #: A chart needs at least this many points on the summed curve to draw a line.
 _MIN_TRACE_ROWS = 2
@@ -85,6 +87,7 @@ class _Bundle:
     config: dict[str, Any]
     metadata: dict[str, Any]
     summary: dict[str, Any]
+    reader: BundleReader
 
     @property
     def status(self) -> str:
@@ -135,13 +138,6 @@ def _as_float(value: Any) -> float | None:
     return float(value)
 
 
-def _load_json_or_none(path: Path) -> Any | None:
-    try:
-        return json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
 def _discover_bundles(runs_dir: Path) -> list[_Bundle]:
     """Return the run bundles under ``runs_dir`` sorted by run id (D-011).
 
@@ -154,18 +150,16 @@ def _discover_bundles(runs_dir: Path) -> list[_Bundle]:
     for child in sorted(runs_dir.iterdir(), key=lambda p: p.name):
         if not child.is_dir() or child.name == "experiments":
             continue
-        summary = _load_json_or_none(child / "summary_metrics.json")
-        complete = isinstance(summary, dict)
-        config = _load_json_or_none(child / "config.json")
-        metadata = _load_json_or_none(child / "metadata.json")
+        reader = BundleReader(child)
         bundles.append(
             _Bundle(
                 run_id=child.name,
                 path=child,
-                complete=complete,
-                config=config if isinstance(config, dict) else {},
-                metadata=metadata if isinstance(metadata, dict) else {},
-                summary=summary if isinstance(summary, dict) else {},
+                complete=reader.is_complete(),
+                config=reader.raw_config() or {},
+                metadata=reader.raw_metadata() or {},
+                summary=reader.raw_summary() or {},
+                reader=reader,
             )
         )
     return bundles
@@ -174,113 +168,6 @@ def _discover_bundles(runs_dir: Path) -> list[_Bundle]:
 # ---------------------------------------------------------------------------
 # Power-trace chart
 
-
-def _rail_manifest(metadata: dict[str, Any]) -> list[str]:
-    device = metadata.get("device")
-    if isinstance(device, dict):
-        manifest = device.get("rail_manifest")
-        if isinstance(manifest, list):
-            return [str(rail) for rail in manifest]
-    return []
-
-
-def _summed_trace(rows: list[dict[str, str]], rail_manifest: list[str]) -> list[tuple[float, float]]:
-    """Sum ``power_w`` per timestamp over the manifest rails (D-018).
-
-    When the manifest is empty (or no row matches it) every present rail is
-    summed instead, so a chart still renders rather than collapsing to nothing.
-    """
-    manifest = set(rail_manifest)
-    totals: dict[float, float] = {}
-    matched = False
-    for row in rows:
-        rail = row.get(_RAIL_COLUMN) or ""
-        if manifest and rail not in manifest:
-            continue
-        try:
-            timestamp_s = float(row[_TIMESTAMP_COLUMN])
-            power_w = float(row[_POWER_COLUMN])
-        except (KeyError, ValueError, TypeError):
-            continue
-        totals[timestamp_s] = totals.get(timestamp_s, 0.0) + power_w
-        matched = True
-    if not matched and manifest:
-        return _summed_trace(rows, [])
-    return [(t, totals[t]) for t in sorted(totals)]
-
-
-def _load_trace_rows(path: Path) -> list[dict[str, str]]:
-    if not path.is_file():
-        return []
-    try:
-        with path.open(newline="") as handle:
-            return list(csv.DictReader(handle))
-    except OSError:
-        return []
-
-
-def _stage_span(events: list[dict[str, Any]], phase: str) -> tuple[float, float] | None:
-    """First ``stage_started`` / last ``stage_completed`` timestamps for ``phase``."""
-    start: float | None = None
-    end: float | None = None
-    for event in events:
-        if event.get("phase") != phase:
-            continue
-        event_type = event.get("event_type")
-        timestamp = _as_float(event.get("timestamp_s"))
-        if timestamp is None:
-            continue
-        if event_type == "stage_started" and start is None:
-            start = timestamp
-        elif event_type == "stage_completed":
-            end = timestamp
-    if start is None or end is None:
-        return None
-    return (start, end)
-
-
-def _phase_spans(events: list[dict[str, Any]]) -> list[tuple[str, float, float]]:
-    """Pair ``phase_start``/``phase_end`` events by phase name, in order."""
-    open_starts: dict[str, list[float]] = {}
-    spans: list[tuple[str, float, float]] = []
-    for event in events:
-        phase = event.get("phase")
-        if not isinstance(phase, str):
-            continue
-        timestamp = _as_float(event.get("timestamp_s"))
-        if timestamp is None:
-            continue
-        event_type = event.get("event_type")
-        if event_type == "phase_start":
-            open_starts.setdefault(phase, []).append(timestamp)
-        elif event_type == "phase_end":
-            starts = open_starts.get(phase)
-            if starts:
-                spans.append((phase, starts.pop(0), timestamp))
-    return spans
-
-
-def _load_events(path: Path) -> list[dict[str, Any]]:
-    if not path.is_file():
-        return []
-    events: list[dict[str, Any]] = []
-    try:
-        text = path.read_text()
-    except OSError:
-        return []
-    for line in text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(record, dict):
-            events.append(record)
-    return events
-
-
 #: Phase-span shading colors keyed by phase name (others fall back to grey).
 _PHASE_COLORS = {"prefill": "#f4a259", "decode": "#5b8e7d"}
 
@@ -288,40 +175,52 @@ _PHASE_COLORS = {"prefill": "#f4a259", "decode": "#5b8e7d"}
 def _render_chart(pyplot: Any, bundle: _Bundle, output_path: Path) -> bool:
     """Render the power-trace chart PNG for ``bundle``; return whether it drew.
 
-    A line plot of summed power vs time. The ``measured_run`` stage span and the
-    ``prefill``/``decode`` phase spans (from ``events.jsonl``) are shaded with
-    labels. Returns ``False`` (drawing nothing) when no trace exists or it has
-    fewer than two summed points - the caller then notes the omission.
+    A line plot of the reader's summed power curve vs time - exactly the curve
+    the reducer integrated (D-025/2N.7), so the chart never shows energy the
+    summary excluded. The D-026 measured window and the ``prefill``/``decode``
+    phase spans are shaded with labels. Returns ``False`` (drawing nothing)
+    when the curve cannot be read (missing trace, empty manifest, D-027
+    misalignment, corrupt rows/events) or has fewer than two summed points -
+    the caller then notes the omission.
     """
-    rows = _load_trace_rows(bundle.path / "power_trace.csv")
-    curve = _summed_trace(rows, _rail_manifest(bundle.metadata))
+    try:
+        curve = bundle.reader.summed_curve()
+    except BundleReadError:
+        return False
     if len(curve) < _MIN_TRACE_ROWS:
         return False
 
-    events = _load_events(bundle.path / "events.jsonl")
-    times = [point[0] for point in curve]
-    powers = [point[1] for point in curve]
+    try:
+        measured = bundle.reader.measured_window()
+        phase_windows = bundle.reader.phase_windows()
+    except BundleReadError:
+        measured = None
+        phase_windows = {}
+    times = [point.t for point in curve]
+    powers = [point.power_w for point in curve]
 
     figure, axes = pyplot.subplots(figsize=(9, 4))
     try:
         axes.plot(times, powers, color="#264653", linewidth=1.5, label="summed power")
 
-        measured = _stage_span(events, "measured_run")
         if measured is not None:
             axes.axvspan(
-                measured[0],
-                measured[1],
+                measured.start_s,
+                measured.end_s,
                 color="#2a9d8f",
                 alpha=0.10,
                 label="measured_run",
             )
 
         seen_labels: set[str] = set()
-        for phase, start_s, end_s in _phase_spans(events):
-            color = _PHASE_COLORS.get(phase, "#b0b0b0")
-            label = phase if phase not in seen_labels else None
-            seen_labels.add(phase)
-            axes.axvspan(start_s, end_s, color=color, alpha=0.25, label=label)
+        for phase, intervals in phase_windows.items():
+            for interval in intervals:
+                color = _PHASE_COLORS.get(phase, "#b0b0b0")
+                label = phase if phase not in seen_labels else None
+                seen_labels.add(phase)
+                axes.axvspan(
+                    interval.start_s, interval.end_s, color=color, alpha=0.25, label=label
+                )
 
         axes.set_xlabel("time (s, epoch UTC)")
         axes.set_ylabel("summed power (W)")
@@ -476,8 +375,11 @@ def _render_run_page(bundle: _Bundle, chart_rel: str | None) -> str:
         )
     else:
         parts.append(
-            '<p class="note">No power-trace chart: this bundle has no '
-            "power_trace.csv with at least two samples.</p>"
+            '<p class="note">No power-trace chart: this bundle has no readable '
+            "summed power curve (missing power_trace.csv, fewer than two "
+            "in-manifest samples, an empty rail manifest, or misaligned rail "
+            "rows) - the chart only ever shows the curve the reducer "
+            "integrated.</p>"
         )
 
     parts.append("<h2>Metadata</h2>")

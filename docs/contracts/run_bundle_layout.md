@@ -42,7 +42,10 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
   file is written last and is the bundle completion marker (decision
   D-011): a directory without a schema-valid `summary_metrics.json` is an
   incomplete bundle (harness died), distinct from a failed run, which gets
-  a complete bundle with `status=failed`.
+  a complete bundle with `status=failed`. Rewriting this file via the
+  post-hoc `reduce` verb is the ONE sanctioned post-finalize bundle
+  mutation (decision D-028): the summary is derived, never evidence; every
+  other artifact in a finalized bundle stays immutable.
 
 Backend-native raw artifacts under `raw/` are preserved verbatim and are
 the source of truth for the derived `power_trace.csv`; a parser bug can be

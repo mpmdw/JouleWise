@@ -91,13 +91,26 @@ Telemetry answers how power and thermal state are measured.
 
 Required behavior:
 
-- Report device metadata.
+- Report device metadata, including the rail manifest: the exact rail
+  names whose per-timestamp sum defines the backend's canonical
+  `power_w` (D-018).
 - Measure idle baseline.
 - Start power sampling.
 - Stop power sampling.
 - Emit raw power samples.
 - Report thermal state when available.
 - Return structured failure if telemetry permission is missing.
+
+Rail-row timestamp contract (D-027, Slice 2N.4): one sample instant is
+one clock read, fanned out to one row per manifest rail, all carrying
+that instant's single `timestamp_s`. With a multi-rail manifest, a
+timestamp carrying only a subset of the manifest rails is a
+misalignment: the shared bundle reader raises a structured failure (the
+reducer reports FAILED; the report omits the chart) rather than
+silently producing an interleaved, undersummed curve. An adapter whose
+hardware samples rails at genuinely different instants must
+resample/align to shared timestamps before emitting rows - alignment
+policy belongs to the adapter that knows its hardware.
 
 Initial telemetry backends:
 

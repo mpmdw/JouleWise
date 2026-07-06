@@ -6,36 +6,32 @@ headline ``run`` verb (one command -> a complete run bundle) and the
 ``validate-bundle`` verb (structural verification of any bundle, reused by CI
 now and by Phase 5 dataset publication later). Slice 2J adds the ``report``
 verb (a static HTML run browser; D-006), which needs the ``[analysis]`` extra.
+Slice 2N.6 adds the ``reduce`` verb (post-hoc re-reduction of an existing
+bundle - a reducer bug never re-runs hardware, D-002/D-028).
 """
 
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import sys
 from pathlib import Path
 from typing import Any
 
 from joulewise.bundle import BundleError
+from joulewise.bundle_read import BundleReader
 from joulewise.clock import Clock, FakeClock, SystemClock
 from joulewise.controller import run_benchmark, run_experiment
+from joulewise.reduce import reduce_bundle
 from joulewise.report import ReportError, generate_report
 from joulewise.schemas import (
     BenchmarkConfig,
-    FailureReason,
     RunStatus,
     RuntimeBackend,
     SchemaError,
     SummaryMetrics,
     TelemetryBackend,
 )
-
-#: Exact ``power_trace.csv`` header (D-018); ``validate-bundle`` pins it.
-_POWER_TRACE_HEADER = "timestamp_s,power_w,source,rail"
-
-#: The five keys every ``events.jsonl`` record must carry, no more, no less.
-_EVENT_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
 
 
 def _load_config(path: Path) -> dict[str, Any]:
@@ -136,153 +132,19 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
-# validate-bundle verb (Slice 2E) - check functions kept importable so CI now
-# and Phase 5 dataset publication later reuse them without the CLI shell.
-
-_REQUIRED_ARTIFACTS = ("config.json", "metadata.json", "events.jsonl", "summary_metrics.json")
-_JSON_ARTIFACTS = ("config.json", "metadata.json", "summary_metrics.json")
+# validate-bundle verb (Slice 2E) - the checks live in the shared read layer
+# (BundleReader.problems, D-025); this importable wrapper is kept so CI now and
+# Phase 5 dataset publication later reuse it without the CLI shell.
 
 
 def validate_bundle(path: Path) -> list[str]:
     """Return a list of structural problems with the bundle at ``path``.
 
     An empty list means the bundle is valid. Performs every check (no
-    short-circuit) so a single invocation reports all problems. Reused by the
-    ``validate-bundle`` CLI verb, by CI, and by Phase 5 dataset publication.
+    short-circuit) so a single invocation reports all problems. Thin wrapper
+    over :meth:`joulewise.bundle_read.BundleReader.problems` (D-025).
     """
-    path = Path(path)
-    if not path.exists():
-        return [f"path does not exist: {path}"]
-    if not path.is_dir():
-        return [f"path is not a directory: {path}"]
-
-    problems: list[str] = []
-
-    missing = [name for name in _REQUIRED_ARTIFACTS if not (path / name).is_file()]
-    for name in missing:
-        problems.append(f"missing required artifact: {name}")
-
-    parsed: dict[str, Any] = {}
-    for name in _JSON_ARTIFACTS:
-        if name in missing:
-            continue
-        try:
-            parsed[name] = json.loads((path / name).read_text())
-        except (OSError, json.JSONDecodeError) as exc:
-            problems.append(f"{name} is not valid JSON: {exc}")
-
-    if "config.json" in parsed:
-        try:
-            BenchmarkConfig.from_mapping(parsed["config.json"])
-        except SchemaError as exc:
-            problems.append(f"config.json does not re-validate: {exc}")
-
-    summary = parsed.get("summary_metrics.json")
-    if summary is not None:
-        problems.extend(_check_summary(summary))
-
-    if "events.jsonl" not in missing:
-        problems.extend(_check_events(path / "events.jsonl"))
-
-    problems.extend(_check_power_trace(path, summary))
-
-    return problems
-
-
-def _check_summary(summary: Any) -> list[str]:
-    """Status is a valid RunStatus; failure_reason consistency (D-012 shape)."""
-    if not isinstance(summary, dict):
-        return ["summary_metrics.json is not a JSON object"]
-    problems: list[str] = []
-    raw_status = summary.get("status")
-    try:
-        status = RunStatus(raw_status)
-    except ValueError:
-        return [f"summary status is not a valid RunStatus: {raw_status!r}"]
-    raw_reason = summary.get("failure_reason")
-    if status in {RunStatus.FAILED, RunStatus.UNSUPPORTED}:
-        if raw_reason is None:
-            problems.append(f"summary status is {status.value} but failure_reason is missing")
-        else:
-            try:
-                FailureReason(raw_reason)
-            except ValueError:
-                problems.append(
-                    f"summary failure_reason is not a valid FailureReason: {raw_reason!r}"
-                )
-    elif raw_reason is not None:
-        problems.append(
-            f"summary status is succeeded but carries failure_reason {raw_reason!r}"
-        )
-    return problems
-
-
-def _check_events(events_path: Path) -> list[str]:
-    """Every line a JSON object with exactly the five keys; non-decreasing
-    timestamps; the last event is ``run_finalized``."""
-    try:
-        text = events_path.read_text()
-    except OSError as exc:
-        return [f"events.jsonl cannot be read: {exc}"]
-    lines = [line for line in text.splitlines() if line.strip()]
-    if not lines:
-        return ["events.jsonl has no event records"]
-    problems: list[str] = []
-    records: list[dict[str, Any]] = []
-    for index, line in enumerate(lines):
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError as exc:
-            problems.append(f"events.jsonl line {index + 1} is not valid JSON: {exc}")
-            continue
-        if not isinstance(record, dict):
-            problems.append(f"events.jsonl line {index + 1} is not a JSON object")
-            continue
-        if set(record) != _EVENT_KEYS:
-            problems.append(
-                f"events.jsonl line {index + 1} keys are "
-                f"{sorted(record)}, expected {sorted(_EVENT_KEYS)}"
-            )
-            continue
-        records.append(record)
-    if len(records) != len(lines):
-        # A malformed line already produced a problem; remaining checks need a
-        # clean record set, so stop here.
-        return problems
-    timestamps = [record["timestamp_s"] for record in records]
-    if any(later < earlier for earlier, later in zip(timestamps, timestamps[1:])):
-        problems.append("events.jsonl timestamps are not non-decreasing")
-    if records[-1]["event_type"] != "run_finalized":
-        problems.append(
-            "events.jsonl last event is "
-            f"{records[-1]['event_type']!r}, expected 'run_finalized'"
-        )
-    return problems
-
-
-def _check_power_trace(path: Path, summary: Any) -> list[str]:
-    """power_trace.csv is required for succeeded runs, optional otherwise;
-    whenever present, its header must be exactly the D-018 header."""
-    trace_path = path / "power_trace.csv"
-    status_value = summary.get("status") if isinstance(summary, dict) else None
-    succeeded = status_value == RunStatus.SUCCEEDED.value
-    if not trace_path.is_file():
-        if succeeded:
-            return ["power_trace.csv is required when status is succeeded but is missing"]
-        return []
-    try:
-        with trace_path.open(newline="") as handle:
-            header = next(csv.reader(handle), None)
-    except OSError as exc:
-        return [f"power_trace.csv cannot be read: {exc}"]
-    if header is None:
-        return ["power_trace.csv is empty (no header line)"]
-    if ",".join(header) != _POWER_TRACE_HEADER:
-        return [
-            "power_trace.csv header is "
-            f"{','.join(header)!r}, expected {_POWER_TRACE_HEADER!r}"
-        ]
-    return []
+    return BundleReader(Path(path)).problems()
 
 
 def _cmd_validate_bundle(args: argparse.Namespace) -> int:
@@ -293,6 +155,37 @@ def _cmd_validate_bundle(args: argparse.Namespace) -> int:
         return 2
     print(f"valid bundle: {args.path}")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# reduce verb (Slice 2N.6) - post-hoc re-reduction: a reducer bug never
+# re-runs hardware (D-002); the bundle is re-reduced in place.
+
+
+def _cmd_reduce(args: argparse.Namespace) -> int:
+    """Re-derive and rewrite ``summary_metrics.json`` for an existing bundle.
+
+    Rewriting the summary is the one sanctioned post-finalize bundle mutation
+    (D-028): the raw artifacts stay immutable evidence, and the summary is by
+    definition derived from them. A path that is not a bundle directory (no
+    ``config.json``) is refused with exit 2 and no write, so evidence is never
+    invented inside an arbitrary directory. Degenerate bundle contents reduce
+    to a structured FAILED summary (exit 3), matching ``run``'s exit scheme:
+    0 succeeded, 2 usage/not-a-bundle, 3 reduced-to-failure.
+    """
+    bundle_path = Path(args.path)
+    if not bundle_path.is_dir() or not (bundle_path / "config.json").is_file():
+        print(
+            f"error: not a run bundle directory (no config.json): {bundle_path}",
+            file=sys.stderr,
+        )
+        return 2
+    summary = reduce_bundle(bundle_path)
+    (bundle_path / "summary_metrics.json").write_text(
+        json.dumps(summary.to_dict(), indent=2, sort_keys=True) + "\n"
+    )
+    print(_bundle_line(bundle_path, summary))
+    return 0 if summary.status == RunStatus.SUCCEEDED else 3
 
 
 # ---------------------------------------------------------------------------
@@ -344,6 +237,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     validate_bundle_parser.add_argument("path", help="path to a run bundle directory")
     validate_bundle_parser.set_defaults(func=_cmd_validate_bundle)
+
+    reduce_parser = subparsers.add_parser(
+        "reduce",
+        help="re-derive summary_metrics.json for an existing bundle (post-hoc reduction)",
+    )
+    reduce_parser.add_argument("path", help="path to a run bundle directory")
+    reduce_parser.set_defaults(func=_cmd_reduce)
 
     report = subparsers.add_parser(
         "report", help="render a static HTML run browser (needs the [analysis] extra)"
