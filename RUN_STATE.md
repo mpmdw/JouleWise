@@ -60,8 +60,8 @@ pinned config hashes D-029, 2N.3 observed-token fallback with
 `token_count_source`, 2N.9 v0.2 compatibility note — one flag for
 Stage 3.1: put the composite event node tag inside event `metadata`,
 not a sixth key). Suite grew 169 -> 216, green after every item; the
-exit-checklist 2N row is closed; queue P2-007 done. Commits are local,
-NOT pushed.
+exit-checklist 2N row is closed; queue P2-007 done. All commits pushed
+same-session at the user's request; CI green (run #11).
 
 ## Previous Run (2026-07-06, architecture review intake)
 
