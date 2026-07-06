@@ -56,7 +56,9 @@ compatibility check), and a sqlite-before-DuckDB clause in Stage 4.1.
 Operational note: agent sessions should be launched from
 `~/code/CapstoneRivoire/Capstone`; the old Desktop path holds only a
 harness-recreated `.claude/settings.local.json` and can be deleted after
-relaunch.
+relaunch. A same-day second review pass confirmed the intake and drove
+three housekeeping fixes (D-024/D-025 "pending" wording, R-017 marked
+mitigated, 2N three-commit grouping in playbook M1).
 
 ## Previous Run (2026-07-05, docs/meta-layer cleanup + repo move)
 

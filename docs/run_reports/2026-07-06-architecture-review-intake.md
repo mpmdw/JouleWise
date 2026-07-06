@@ -90,4 +90,24 @@ should relaunch agent sessions from `~/code/CapstoneRivoire/Capstone`.
 ## Decision Log / Risk Register Deltas
 
 - New: D-024 (RunContext), D-025 (shared bundle reader).
-- Risk register: no status changes.
+- Risk register: no status changes at intake time; see follow-up.
+
+## Follow-Up (same day): second review pass, housekeeping fixes
+
+The reviewer re-checked the live repo and endorsed the intake; its three
+housekeeping catches were all valid and are fixed:
+
+1. **Wording:** D-024/D-025 statuses now read "accepted; implementation
+   pending / to be implemented in Slice 2N" — the earlier "implemented
+   in Slice 2N" phrasing could mislead a future agent into assuming the
+   seam/reader already exist. They do not.
+2. **R-017 staleness:** the register still said the repo move was
+   queued after `RUN_STATE.md`/`TASK_QUEUE.md` recorded it complete — a
+   drift violation of our own rules. R-017 is now marked mitigated
+   (2026-07-05 move), likelihood high→low, with the residual exposure
+   (stale session launch paths; never placing repo or `runs/` under
+   iCloud) kept live.
+3. **2N sizing:** playbook M1 now prescribes landing 2N as three commit
+   groups (A: RunContext/window seam; B: BundleReader + policies + CLI;
+   C: schema/metrics/v0.2 note) with the suite green after every item,
+   and names a completed group as the clean mid-slice handoff point.

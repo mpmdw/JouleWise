@@ -45,8 +45,8 @@ be re-derived by a future agent gets an entry here.
 | D-021 | Controller flushes `events.jsonl` before the reduce stage | accepted |
 | D-022 | Auto-generated run-ID suffix is config-hash-derived, not random | accepted |
 | D-023 | Per-item phase status lives solely in the exit checklists | accepted |
-| D-024 | Adapters receive a `RunContext`, not piecemeal parameters | accepted (design; implemented in Slice 2N) |
-| D-025 | One shared bundle read layer for reducer, report, validation, and aggregation | accepted (design; implemented in Slice 2N) |
+| D-024 | Adapters receive a `RunContext`, not piecemeal parameters | accepted; implementation pending (Slice 2N.1) |
+| D-025 | One shared bundle read layer for reducer, report, validation, and aggregation | accepted; implementation pending (Slice 2N.8) |
 
 ---
 
@@ -1087,7 +1087,7 @@ adding discipline.
 ## D-024: Adapters receive a `RunContext`, not piecemeal parameters
 
 - Date: 2026-07-06
-- Status: accepted (design; implementation lands in Slice 2N item 2N.1)
+- Status: accepted, to be implemented in Slice 2N item 2N.1 (the seam does NOT exist yet)
 - Phase: 2
 
 Context: mock adapters get by on `config` (plus `clock` at construction),
@@ -1139,7 +1139,7 @@ context mutable - mutability is the line not to cross.
 ## D-025: One shared bundle read layer for all bundle consumers
 
 - Date: 2026-07-06
-- Status: accepted (design; implementation lands in Slice 2N item 2N.8)
+- Status: accepted, to be implemented in Slice 2N item 2N.8 (the reader does NOT exist yet)
 - Phase: 2
 
 Context: three code paths already parse bundles independently -

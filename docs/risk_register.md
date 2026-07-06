@@ -34,7 +34,7 @@ Conventions:
 | R-014 | Model weights become unavailable or gated | 2+ | low | medium | open |
 | R-015 | Schema changes after data collection starts | 2+ | low | high | mitigated |
 | R-016 | Measurement-corpus loss (`runs/` has no backup path) | 2-5 | low | high | open (protocol due before first real data) |
-| R-017 | Repo on iCloud-synced Desktop (EPERM lock recurrence) | all | high | medium | open (move queued P0-001) |
+| R-017 | Repo on iCloud-synced Desktop (EPERM lock recurrence) | all | low | medium | mitigated (repo moved 2026-07-05; residual: session launch paths) |
 
 ## R-001: Supervisor approval delayed or scope shifts
 
@@ -288,21 +288,25 @@ Conventions:
 
 ## R-017: Repo lives on iCloud-synced Desktop (EPERM lock recurrence)
 
-- Phase: all. Likelihood: high (recurred; see below). Impact: medium
-  (blocks work sessions mid-run; small integrity risk around eviction
-  during writes).
+- Phase: all. Likelihood: low (mitigated; was high while on Desktop).
+  Impact: medium (blocks work sessions mid-run; small integrity risk
+  around eviction during writes).
+- Status: **mitigated 2026-07-05** - the repo moved to
+  `~/code/CapstoneRivoire/Capstone` (P0-001 complete; git + suite
+  verified green at the new path). Residual exposure: agent sessions
+  launched from the stale Desktop path (delete the leftover
+  `~/Desktop/CapstoneRivoire` husk after relaunching from the new
+  path), and any future placement of repo or `runs/` data under an
+  iCloud-synced directory - do not.
 - Trigger: any `Operation not permitted` on read/readdir inside the repo
   with the iCloud file provider (`bird`) active.
 - History: first incident 2026-06-12 (documented in `RUN_STATE.md`);
   recurred 2026-07-05 mid-run - `docs/`, `joulewise/`, `tests/`, `.git`,
   and the repo root EPERM-locked intermittently during an active iCloud
   full-sync, clearing and re-locking per subtree. Both incidents match
-  iCloud "Optimize Mac Storage" behavior on `~/Desktop/`.
-- Mitigation: move the repository off the iCloud-synced Desktop (e.g.
-  `~/code/`); queued as P0-001 (user action - the move must not happen
-  mid-agent-session). Until moved: verify the suite green after any lock
-  clears; never schedule measurement sessions while a sync is active.
-- Fallback: if a lock strikes mid-run, wait for it to clear (both
+  iCloud "Optimize Mac Storage" behavior on `~/Desktop/`. The move
+  landed the same day as the second incident.
+- Fallback: if a lock ever strikes again, wait for it to clear (both
   incidents did), then re-verify with the test suite before continuing;
   the remote (`origin/main`) bounds code loss to the working tree.
-- Owner: user (move), agent (post-lock verification discipline).
+- Owner: user (launch paths), agent (post-lock verification discipline).

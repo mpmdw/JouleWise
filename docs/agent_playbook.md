@@ -85,7 +85,23 @@ Read first: `phase_2_plan.md` Slice 2N + Cross-Slice Contracts;
 `joulewise/bundle.py`, `controller.py`, `reduce.py`, `interfaces.py`
 (skim whole files — they are small and the invariants interlock).
 
-Suggested order (each item = tests green before the next; items 1+2
+2N is one mission but NOT one sitting: it touches adapter interfaces,
+controller timing, reducer behavior, report parsing, CLI, schema export,
+and validation policy. Work item-by-item with the suite green after each,
+and land it as roughly three commits so a failure bisects cleanly:
+
+- **Commit A — the adapter seam:** 2N.1 (RunContext + raw evidence),
+  2N.2 (measured-window boundaries). Both touch controller/interfaces.
+- **Commit B — the read layer:** 2N.8 (BundleReader), with 2N.4 (rail
+  contract), 2N.7 (report alignment), and 2N.6's structured read
+  failures implemented on top of it. 2N.6's CLI verb rides along.
+- **Commit C — schema + metrics:** 2N.5 (schema round-trip), 2N.3
+  (token-count fallback), 2N.9 (v0.2 compatibility note).
+
+If a session ends mid-slice, a completed commit group is a clean
+handoff point — say which group landed in `RUN_STATE.md`.
+
+Per-item detail (each item = tests green before the next; items 1+2
 change the controller/adapter contract and go first):
 
 ### 2N.1 `RunContext` seam + raw evidence
