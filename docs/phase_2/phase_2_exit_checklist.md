@@ -31,7 +31,7 @@ Companion plan: `docs/phase_2/phase_2_plan.md`.
 | Applicability table | required | in progress | every attempted target × model combo classified supported / pending / unsupported with reason | this file (table below) |
 
 Status summary (2026-07-06): the hardware-independent work — slices 2A-2F,
-2J, and now 2N (pre-hardware hardening) — is **complete**, tested (216
+2J, and now 2N (pre-hardware hardening) — is **complete**, tested (226
 tests; skips are the `[analysis]`-extra chart tests plus one optional
 jsonschema test), and runnable end-to-end (`python3 -m joulewise run ...`
 → complete bundle → `validate-bundle` green → post-hoc `reduce`

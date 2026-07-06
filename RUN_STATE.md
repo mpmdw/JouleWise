@@ -44,7 +44,28 @@ post-2N seams without touching controller/bundle internals. Work paused
 2026-06-13 through 2026-07-04 (planned break, recorded in
 `docs/milestones.md`).
 
-## What The Latest Run Did (2026-07-06, Slice 2N implementation)
+## What The Latest Run Did (2026-07-06, status-review intake + fixes)
+
+Full detail: `docs/run_reports/2026-07-06-status-review-fixes.md`. An
+independent project status review
+(`docs/run_reports/2026-07-06-project-status-review.md`) was examined at
+the user's direction; all three findings were verified by reproduction
+and fixed same-session, in the reviewer's suggested order: **P1**
+(`0803d1f`) — `BundleReader.events()` centrally validates `timestamp_s`
+as a finite number, so corrupt event timestamps become structured FAILED
+summaries / `invalid:` problems instead of raw
+`ValueError`/`TypeError`; **P3** (same commit) — new
+`joulewise.bundle.write_raw_artifact(context, name, data)` gives
+adapters the validated no-overwrite raw-evidence write (mock converted;
+contract updated); **P2** (`80c3d49`, **D-030**) — new
+`validate-bundle --strict` requires succeeded bundles to be
+reducer-consumable and their summary to equal a fresh re-reduction
+(both reviewer reproductions pinned as tests; Phase 4 inclusion rule and
+Phase 5 Stage 5.2 now specify `--strict`). Suite 216 -> 226, green.
+The review's remaining precondition for real measurement — P0-002
+backup protocol — stays open at the top of the queue.
+
+## Previous Run (2026-07-06, Slice 2N implementation)
 
 Full detail: `docs/run_reports/2026-07-06-slice-2n-pre-hardware-hardening.md`.
 Preflight per playbook M0 plus a user-requested filesystem health check
@@ -107,8 +128,8 @@ Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 python3 -m unittest discover -s tests
 ```
 
-Result (2026-07-06, after all Slice 2N changes):
-`Ran 216 tests, OK (skipped=10)` — 8 `[analysis]`-extra chart skips,
+Result (2026-07-06, after Slice 2N + the status-review fixes):
+`Ran 226 tests, OK (skipped=10)` — 8 `[analysis]`-extra chart skips,
 one matplotlib-gated report-alignment test, one optional-jsonschema
 round-trip test. Also verified end-to-end: mock `run` ->
 `validate-bundle` green -> `reduce` re-derives an identical summary;
@@ -123,7 +144,11 @@ round-trip test. Also verified end-to-end: mock `run` ->
 - Remote: `git@github.com:mpmdw/JouleWise.git`; branch `main`.
 - Slice 2N commits (groups A/B/C) pushed 2026-07-06 at the user's
   request; CI run #11 on `5cb1dfc` completed green (mock e2e included,
-  now exercising the marker events and raw evidence; suite 216/OK).
+  now exercising the marker events and raw evidence).
+- Status-review fix commits (`0803d1f` P1+P3, `80c3d49` P2/D-030, plus
+  bookkeeping) pushed 2026-07-06; CI green (run numbers in the fixes
+  run report's Verification section refer to `RUN_STATE`; latest run
+  status checked after push).
 - Git author identity remains the auto-selected
   `Edr <edr@Edrs-MacBook-Air.local>`.
 

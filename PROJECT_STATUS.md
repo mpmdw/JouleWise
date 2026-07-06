@@ -14,7 +14,7 @@ are provided for anyone who wants the full evidence trail.
 
 **Progress:** the pre-hardware hardening slice (2N) identified by last
 week's external reviews is now fully implemented and tested (suite grew
-169 → 216 checks, all green). In plain terms: the harness now (a) lets a
+169 → 226 checks, all green). In plain terms: the harness now (a) lets a
 real power sampler preserve its raw output verbatim inside every run's
 evidence bundle, (b) excludes sampler startup/shutdown cost from the
 measured energy window, (c) detects — rather than silently mis-summing —
@@ -90,7 +90,7 @@ Complete so far (all verifiable in the repository):
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (216 tests, run in CI on every push,
+  a CLI, plus a passing test suite (226 tests, run in CI on every push,
   including a mock end-to-end run + bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
   are pinned by test.
@@ -98,7 +98,7 @@ Complete so far (all verifiable in the repository):
   bundle artifact contract, and the measurement methodology (idle
   subtraction, measurement boundaries, clock synchronization, statistical
   protocol - highlights below).
-- Evidence-shaped plans for every phase, a design-decision log (29
+- Evidence-shaped plans for every phase, a design-decision log (30
   decisions, each with the alternatives considered), a risk register with
   an explicit descope ladder, and example configs for the Mac and mock
   targets.
@@ -349,7 +349,7 @@ first privileged power sample). Work paused 2026-06-13 to 2026-07-04
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (216 tests, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (226 tests, CI-enforced) |
 
 ## Maintenance Of This Document
 
