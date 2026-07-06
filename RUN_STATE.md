@@ -42,7 +42,23 @@ implementable work; the hardware slices stay gated. Work paused
 2026-06-13 through 2026-07-04 (planned break, recorded in
 `docs/milestones.md`).
 
-## What This Run Did (2026-07-05, docs/meta-layer cleanup + repo move)
+## What The Latest Run Did (2026-07-06, architecture review intake)
+
+Full detail: `docs/run_reports/2026-07-06-architecture-review-intake.md`.
+An external architecture review (Codex) was triaged; agreed items landed
+as design decisions and plan updates: **D-024** (adapters receive an
+immutable `RunContext` — settles 2N.1's open seam question), **D-025**
+(shared `BundleReader` for reducer/report/validate/aggregate — new item
+2N.8; 2N.7 must build on it), a new cross-cutting contract
+`docs/contracts/node_worker_protocol.md` (remote execution shape, pinned
+during 2K, reused by 2L + Phase 3), item 2N.9 (design-only v0.2
+compatibility check), and a sqlite-before-DuckDB clause in Stage 4.1.
+Operational note: agent sessions should be launched from
+`~/code/CapstoneRivoire/Capstone`; the old Desktop path holds only a
+harness-recreated `.claude/settings.local.json` and can be deleted after
+relaunch.
+
+## Previous Run (2026-07-05, docs/meta-layer cleanup + repo move)
 
 Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 
@@ -92,7 +108,8 @@ Follow `TASK_QUEUE.md`; execute via the mission guides in
 order:
 
 1. P2-007: Slice 2N pre-hardware hardening — top ungated implementation
-   work (playbook Mission M1; spec in `phase_2_plan.md` Slice 2N).
+   work (playbook Mission M1; spec in `phase_2_plan.md` Slice 2N — now
+   nine items; D-024/D-025 are pre-decided, implement them).
 2. P0-002: corpus backup protocol (R-016) — must close before 2I data
    (playbook M2; needs the user to name a destination).
 3. P3-001: related-work draft (Stage 4.6) — ungated desk filler

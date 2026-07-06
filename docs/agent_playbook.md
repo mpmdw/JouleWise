@@ -88,23 +88,27 @@ Read first: `phase_2_plan.md` Slice 2N + Cross-Slice Contracts;
 Suggested order (each item = tests green before the next; items 1+2
 change the controller/adapter contract and go first):
 
-### 2N.1 Raw-evidence seam (`write_raw`)
+### 2N.1 `RunContext` seam + raw evidence
 
 - Today: `RunBundleWriter._ensure_layout` creates `raw/` (bundle.py
   ~line 160) but no method writes into it, and adapters never see the
   bundle path — so a real telemetry adapter cannot honor D-002 ("raw
   file retained verbatim").
-- Change: add `RunBundleWriter.raw_path(name) -> Path` (validated,
-  collision-checked) and/or `write_raw(name, data)`; have the controller
-  pass the raw directory to the telemetry adapter at `start_sampling`
-  time. Changing the `TelemetryAdapter.start_sampling` signature
-  (interfaces.py ~line 72-91) is an adapter-contract change: record a
-  decision-log entry (options: new parameter vs adapter receives writer
-  at construction vs a context object) and update
-  `docs/contracts/adapter_contracts.md` in the same run.
-- Tests: mock telemetry writes a fixture raw file; bundle contains it;
-  immutability (no overwrite after finalize); the no-raw-output mock
-  path still passes.
+- Change: implement **D-024** (already decided — read it first): an
+  immutable `RunContext` dataclass (config, clock, run_id, bundle_path,
+  raw_dir, logs_dir, outputs_dir, optional node_role=None) constructed
+  by the controller after bundle creation and passed to adapter
+  lifecycle methods (exact placement — per-method parameter vs
+  construction-time — is yours to pin; record the choice as a D-024
+  amendment note). Add `RunBundleWriter.raw_path(name)`/`write_raw` as
+  the writer-side counterpart (validated, collision-checked). Update
+  `docs/contracts/adapter_contracts.md` in the same run. Do NOT hand
+  adapters the writer itself — D-024 rejects that option; context is
+  data, not capability.
+- Tests: mock telemetry writes a fixture raw file via the context;
+  bundle contains it; immutability (no overwrite after finalize); the
+  no-raw-output mock path still passes; mocks ignore unused context
+  fields (single lifecycle code path preserved).
 
 ### 2N.2 Measured window excludes sampler startup
 
@@ -191,23 +195,54 @@ change the controller/adapter contract and go first):
 - Tests: reduce a valid bundle → identical metrics; corrupt/missing
   artifacts → structured failure + correct exit code; CLI help updated.
 
-### 2N.7 Report/reducer rail-policy alignment
+### 2N.7 Report/reducer rail-policy alignment (via 2N.8)
 
 - Today: the report's trace chart falls back to summing ALL rails when
   the manifest is empty or matches nothing (report.py ~lines 187-209),
   while the reducer excludes non-manifest rails or fails — a chart can
   display energy the summary excluded.
-- Change: align the chart with the reducer's policy (same failure/
-  exclusion), or clearly annotate the chart when fallback rails are
-  shown. Prefer alignment; the report must never contradict the
-  summary.
+- Change: do 2N.8 first, then implement both consumers' rail policy in
+  the shared reader (D-025 is explicit: no spot fix). The report must
+  never contradict the summary.
 - Tests: manifest-mismatch bundle renders with the aligned behavior;
   normal bundle chart unchanged.
 
+### 2N.8 Shared bundle read layer (`BundleReader`)
+
+- Today: `reduce.py`, `report.py`, and `cli.py`'s `validate-bundle`
+  each parse bundles independently; they have already diverged once
+  (2N.7). Phase 4's `aggregate` would be a fourth parser.
+- Change: implement **D-025** (read it first): a `BundleReader` — in
+  `joulewise/bundle.py` or a new `joulewise/bundle_read.py` — owning
+  parsing and interpretation policy: config, metadata, events, power
+  trace, rail manifest, measured/phase windows, completion state,
+  structural problems. Port the three existing consumers onto it;
+  metrics math stays in `reduce.py`. This naturally absorbs parts of
+  2N.4 (rail timestamp contract) and 2N.6 (structured read failures) —
+  sequence them together.
+- Tests: existing reducer/report/validate suites keep passing unchanged
+  (the port is behavior-preserving except where 2N.4/2N.7 deliberately
+  change policy); reader-level tests for completion state and window
+  extraction on happy/corrupt fixtures.
+
+### 2N.9 Schema v0.2 compatibility check (design-only, no code required)
+
+- Read D-008 (`run_kind`/`split_plan` design), the composite-bundle
+  block in `docs/contracts/run_bundle_layout.md`, and Phase 3 Stage 3.1.
+- Check: would the RunContext fields (esp. `node_role`) and the
+  BundleReader API survive composite/split bundles without redesign?
+  Optionally add a synthetic test constructing a RunContext with
+  `node_role="prefill"` to prove nothing chokes.
+- Deliverable: a findings paragraph in the run report; amend
+  D-008/D-024/D-025 if a conflict surfaced. Explicitly NO schema change
+  (R-015).
+
 **Done when:** all Slice 2N acceptance criteria in the plan hold, suite
 green, new tests cover each item, decision-log entries exist for every
-contract choice (expect roughly D-024..D-027), `adapter_contracts.md`
-updated, exit-checklist 2N row closed with evidence, run report written.
+contract choice (D-024/D-025 are pre-decided — implement them; expect
+~2 more for the 2N.2 window semantics and 2N.5 serialization choices),
+`adapter_contracts.md` updated, exit-checklist 2N row closed with
+evidence, run report written.
 
 ---
 
@@ -352,8 +387,12 @@ Wrapper notes:
   VRAM) is itself recordable work if the user provides access during the
   session: capture command outputs into the Phase 1 exit checklist
   instrumentation section first, then implement.
-- The remote-runner protocol is reused by Phase 3 — design decisions
-  here bind later work; log them.
+- The remote runner is a project-wide contract, not an SSH detail:
+  `docs/contracts/node_worker_protocol.md` owns the conceptual shape
+  (controller sends JSON task → node worker executes → returns
+  artifacts/events/status) and lists Phase 3's requirements. Pin the
+  wire-level details INTO that contract as you implement 2K — it is
+  reused by 2L and all of Phase 3, so decisions here bind later work.
 - One target per session (2K, then 2L).
 
 ## Mission M9: Slice 2M — Homogeneous Baselines

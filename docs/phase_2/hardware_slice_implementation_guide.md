@@ -194,12 +194,15 @@ self-contained remote runner script (shipped to the node), and matching
 tests. **Touch:** the registry (`ssh` transport, `vllm` runtime, `nvidia_smi`
 telemetry branches).
 
-**Design center - the remote-runner protocol (reused by 2L and Phase 3):**
-the runtime adapter ships a self-contained runner script to the node, runs it
-with a JSON args file, and collects an artifacts dir (events JSON, output
-text, token timeline, runner log, exit code) back into the bundle. The runner
-depends only on the remote env (vLLM); the `joulewise` package is **not**
-installed remotely.
+**Design center - the node worker protocol:** the transport-independent
+contract lives in `docs/contracts/node_worker_protocol.md` (conceptual
+shape + the requirements checklist the wire format must satisfy — read
+it first; pin the wire-level details into it as you implement). In
+short: ship a self-contained runner script to the node, run it with a
+JSON task file, collect an artifacts dir (events JSON, output text,
+token timeline, runner log, status) back into the bundle. The runner
+depends only on the remote env (vLLM); the `joulewise` package is
+**not** installed remotely.
 
 **Pinned pieces:**
 

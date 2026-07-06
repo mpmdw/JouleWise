@@ -45,6 +45,8 @@ be re-derived by a future agent gets an entry here.
 | D-021 | Controller flushes `events.jsonl` before the reduce stage | accepted |
 | D-022 | Auto-generated run-ID suffix is config-hash-derived, not random | accepted |
 | D-023 | Per-item phase status lives solely in the exit checklists | accepted |
+| D-024 | Adapters receive a `RunContext`, not piecemeal parameters | accepted (design; implemented in Slice 2N) |
+| D-025 | One shared bundle read layer for reducer, report, validation, and aggregation | accepted (design; implemented in Slice 2N) |
 
 ---
 
@@ -1079,3 +1081,106 @@ pointers.
 Revisit when: the `AGENT_PLAN.md` coarse mirror is found drifted again -
 then replace the mirror with a generated table (option 3) rather than
 adding discipline.
+
+---
+
+## D-024: Adapters receive a `RunContext`, not piecemeal parameters
+
+- Date: 2026-07-06
+- Status: accepted (design; implementation lands in Slice 2N item 2N.1)
+- Phase: 2
+
+Context: mock adapters get by on `config` (plus `clock` at construction),
+but real adapters need more: a place to write raw telemetry evidence
+(D-002; powermetrics plist), log/output paths, the run ID, and - in
+Phase 3 - the node's role in a split run. Slice 2N.1 originally left the
+delivery mechanism open (new parameter vs writer injection vs context
+object). An external architecture review (Codex, 2026-07-06) recommended
+deciding now, before any real adapter is written against a narrower
+seam.
+
+Options considered:
+
+1. Add parameters piecemeal as needs appear (e.g.
+   `start_sampling(raw_dir=...)`). Con: every future need is another
+   signature break across all adapters and their tests; Phase 3 alone
+   would force two more rounds.
+2. Inject the `RunBundleWriter` into adapters. Con: hands adapters the
+   power to write summaries/finalize - far more authority than they
+   need; couples every adapter to the writer's full API.
+3. A small immutable `RunContext` dataclass passed to adapter lifecycle
+   methods: `config`, `clock`, `run_id`, `bundle_path`, `raw_dir`,
+   `logs_dir`, `outputs_dir`, and optional `node_role` (None for
+   single-node runs; used by Phase 3 split orchestration).
+
+Decision: option 3. One additive seam that covers the known Phase 2
+needs (raw evidence, logs) and the foreseen Phase 3 needs (node role,
+composite bundles) without granting adapters bundle-lifecycle authority.
+
+Considerations: the context is data, not capability - adapters get paths
+and identity, not the writer; write-order/immutability invariants stay
+with the controller and writer. `node_role` rides along as an optional
+field now precisely so the v0.2 compatibility check (2N.9) can exercise
+it without any schema change (R-015 intact). Mocks accept the context
+and ignore what they do not need, keeping one lifecycle code path.
+
+Consequences: `interfaces.py` adapter protocols take a context in their
+lifecycle methods (exact placement pinned during 2N.1);
+`adapter_contracts.md` updated in the same run; the controller
+constructs the context after bundle creation.
+
+Revisit when: a need appears that is per-call rather than per-run (then
+a per-call argument is correct, not a context field), or Phase 3's
+composite-bundle design (D-008) demands fields that would make the
+context mutable - mutability is the line not to cross.
+
+---
+
+## D-025: One shared bundle read layer for all bundle consumers
+
+- Date: 2026-07-06
+- Status: accepted (design; implementation lands in Slice 2N item 2N.8)
+- Phase: 2
+
+Context: three code paths already parse bundles independently -
+`reduce.py` (trace/events/manifest for metrics), `report.py` (the same
+for charts), and `cli.py` `validate-bundle` (structural checks) - and
+they have already diverged once: the report sums all rails when the
+manifest matches nothing while the reducer excludes/fails (2N.7
+finding). Phase 4's `aggregate` verb would be a fourth parser. An
+external architecture review (2026-07-06) recommended a shared read
+layer before the divergence class grows.
+
+Options considered:
+
+1. Keep per-consumer parsing, fix mismatches as found. Con: the 2N.7
+   bug recurs in new forms; every policy (rail manifest, measured
+   window, completeness) must be kept aligned by vigilance across four
+   files.
+2. A shared `BundleReader` (in `joulewise/bundle.py` or a new
+   `bundle_read.py`): loads config, metadata, events, power trace, rail
+   manifest, measured/phase windows, completion state, and structural
+   problems - one implementation of every bundle-interpretation policy;
+   consumers apply presentation/reduction on top.
+3. Full ORM/database layer now. Con: heavyweight; Phase 4's CSV plan
+   plus a possible stdlib-sqlite cache (Stage 4.1 note) already covers
+   querying needs.
+
+Decision: option 2. Reducer, report, `validate-bundle`, and (later)
+`aggregate` all consume the shared reader; policy questions like "which
+rails sum to `power_w`" are answered in exactly one place.
+
+Considerations: this is the code-level analogue of D-023's one-fact-one-
+home rule; the reducer's math (`_integrate`, idle subtraction) stays in
+`reduce.py` - the reader owns parsing and policy, not metrics. The 2N.7
+report/reducer alignment must be implemented BY building on the reader,
+not as a spot fix, or the divergence just reappears at the next
+consumer.
+
+Consequences: Slice 2N gains item 2N.8; 2N.7 is implemented on top of
+it; Phase 4 Stage 4.1's aggregate verb builds on the reader (noted in
+the Phase 4 plan).
+
+Revisit when: bundle schema v0.2 lands (the reader is where composite-
+bundle reading concentrates), or a consumer needs streaming reads that
+the whole-bundle reader cannot serve.

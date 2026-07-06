@@ -56,7 +56,12 @@ Design notes:
 
 - `python3 -m joulewise aggregate runs/ --output analysis/dataset.csv`
   (pandas via `[analysis]`; CSV chosen over parquet for stdlib readability
-  and diff-ability of a small dataset - revisit if size argues otherwise).
+  and diff-ability of a small dataset - revisit if size argues otherwise;
+  if it does, the escalation path is stdlib `sqlite3` as a local cache
+  before any DuckDB dependency, preserving D-009).
+- The aggregate verb reads bundles through the shared `BundleReader`
+  (D-025, built in Slice 2N) - it must not become a fourth independent
+  bundle parser.
 - Row = one run bundle: identity (run_id, experiment_id, config hash,
   schema_version), dimensions (target, model, quantization, workload
   profile, run_kind, link label, prompt/output tokens), all summary

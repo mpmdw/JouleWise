@@ -402,10 +402,15 @@ report's findings; D-002, D-011, D-018.
 
 Work items (each with tests; deviations get a decision-log entry):
 
-1. **Raw-evidence seam (D-002).** `RunBundleWriter` gains a `write_raw`
-   path (or adapters receive the bundle's `raw/` directory) so a real
-   telemetry adapter can preserve its native sampler output verbatim.
-   Today `raw/` is created but nothing can write to it.
+1. **`RunContext` seam (D-024) + raw evidence (D-002).** Adapters
+   receive an immutable `RunContext` (config, clock, run_id,
+   bundle/raw/logs/outputs paths, optional `node_role`) in their
+   lifecycle methods, so a real telemetry adapter can preserve its
+   native sampler output verbatim under `raw/` - today `raw/` is created
+   but nothing can write to it. One seam covers the powermetrics plist
+   (2H), remote artifact collection (2K), and Phase 3 node roles;
+   design settled in D-024, exact method placement pinned during
+   implementation.
 2. **Measured-window boundaries exclude sampler startup.** The
    `measured_run` stage timestamp currently lands before `thermal_state`
    and `start_sampling`; under `SystemClock` real sampler spawn latency
@@ -439,8 +444,21 @@ Work items (each with tests; deviations get a decision-log entry):
 7. **Report/reducer rail-policy alignment.** The report's trace chart
    falls back to summing all rails when the manifest matches nothing,
    while the reducer fails; align the report with the reducer's policy
-   (or annotate the chart) so a chart can never show energy the summary
-   excluded.
+   so a chart can never show energy the summary excluded. Implement BY
+   building both on 2N.8's shared reader (D-025), not as a spot fix.
+8. **Shared bundle read layer (D-025).** A `BundleReader` that owns
+   bundle parsing and interpretation policy (config, metadata, events,
+   trace, rail manifest, measured/phase windows, completion state,
+   structural problems); `reduce.py`, `report.py`, and `validate-bundle`
+   consume it (Phase 4 `aggregate` will be the fourth consumer). The
+   reducer keeps the math; the reader keeps the policy.
+9. **Schema v0.2 compatibility check (design-only).** Verify the
+   RunContext fields (esp. `node_role`) and the BundleReader API against
+   D-008's planned `run_kind`/`split_plan` and the composite-bundle
+   layout, so Phase 3 does not force a redesign of either. Deliverable:
+   a short findings note in the run report (and D-008/D-024/D-025
+   amendments if a conflict is found). Explicitly NO schema change
+   (R-015; implementation stays at Phase 3 Stage 3.1).
 
 Also fold in (small): document the deterministic rerun-collision
 behavior in the README (done 2026-07-05); note the O(n^2) `_integrate`
@@ -451,7 +469,9 @@ Evidence: tests for each item; suite green; run report.
 
 Acceptance criteria: a real telemetry adapter can be written against the
 post-2N seams without touching controller/bundle internals; the emitted
-config round-trips its own schema; reduction failures are structured.
+config round-trips its own schema; reduction failures are structured;
+every bundle consumer reads through the shared reader (no per-consumer
+parsing policies remain); the v0.2 compatibility note exists.
 
 Fallback: none needed (pure local code work). If an item proves to need
 a contract change (e.g. adapter signature), it gets a decision-log entry

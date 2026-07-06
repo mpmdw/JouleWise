@@ -51,6 +51,7 @@ report.
 | `docs/contracts/measurement_methodology.md` | measurement rules (boundaries, clocks, statistics) |
 | `docs/contracts/run_bundle_layout.md` | bundle artifact contract |
 | `docs/contracts/adapter_contracts.md` | adapter behavior contracts |
+| `docs/contracts/node_worker_protocol.md` | remote-execution protocol (transport-independent; pinned during 2K, reused by 2L + Phase 3) |
 
 ## Canonical Architecture
 
