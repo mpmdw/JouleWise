@@ -5,6 +5,43 @@ Living cross-phase contract, drafted in Phase 1; the executable form is
 telemetry measurement. A target is a composition of transport, runtime
 adapter, and telemetry adapter.
 
+## Run Context (D-024, Slice 2N.1)
+
+Every adapter lifecycle method takes a trailing optional
+`context: RunContext | None = None` parameter. The `RunContext` is an
+immutable dataclass the controller constructs once per run, after bundle
+creation: `config`, `clock`, `run_id`, `bundle_path`, `raw_dir`,
+`logs_dir`, `outputs_dir`, and optional `node_role` (None for single-node
+runs; reserved for Phase 3 split orchestration).
+
+Rules:
+
+- Context is data, not capability: adapters receive paths and identity,
+  never the bundle writer. Write-order and immutability invariants stay
+  with the controller and `RunBundleWriter`.
+- The controller always passes the context. Out-of-run invocations - the
+  D-014 cooldown gate's `measure_idle` between repetitions, direct adapter
+  tests - pass `None`; adapters must tolerate a missing context by
+  producing no raw output (one lifecycle code path either way).
+- Raw evidence (D-002): a telemetry adapter preserves its native sampler
+  output verbatim under `context.raw_dir` (e.g. the powermetrics plist).
+  Raw artifacts are immutable once written; plain file names only.
+- Adapters must ignore context fields they do not need.
+
+## Measured-Window Markers (D-026, Slice 2N.2)
+
+The controller emits `sampling_started` (stamped only after
+`start_sampling` returns ok - sampling confirmed active) and
+`sampling_stopped` (stamped before `stop_sampling` is invoked) events on
+the `measured_run` phase. The reducer integrates energy between these
+markers, so sampler spawn latency (sudo probe, process start, first
+sample) and wind-down cost (process stop, output parsing) never land
+inside the measured window. Telemetry adapters therefore must:
+
+- Return from `start_sampling` only once sampling is actually running.
+- Do stop-side parsing inside `stop_sampling` (after the window closes),
+  not lazily during the window.
+
 ## Transport Adapter
 
 Transport answers where commands execute.

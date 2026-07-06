@@ -23,8 +23,10 @@ Fault-injection conventions (internal convention per the Phase 2 plan, Slice
 
 from __future__ import annotations
 
+import json
+
 from joulewise.clock import Clock
-from joulewise.interfaces import AdapterResult, PowerSample, ThermalState
+from joulewise.interfaces import AdapterResult, PowerSample, RunContext, ThermalState
 from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline, TelemetryBackend
 
 #: hardware_target.notes value that triggers the permission_denied fault
@@ -39,6 +41,12 @@ MEASURED_POWER_W = 7.5
 #: The single mock rail; sums to the canonical power_w by itself (D-018).
 RAIL_NAME = "mock"
 
+#: Raw-evidence file the mock writes under ``RunContext.raw_dir`` (D-002/D-024):
+#: the mock analogue of a real sampler's native output (e.g. the powermetrics
+#: plist), preserved verbatim so the raw-evidence seam is exercised on every
+#: mock run.
+RAW_SAMPLES_NAME = "mock_samples.json"
+
 
 class MockTelemetryAdapter:
     """Deterministic, clock-driven implementation of ``TelemetryAdapter``."""
@@ -49,14 +57,18 @@ class MockTelemetryAdapter:
         self._clock = clock
         self._sampling_start_s: float | None = None
 
-    def device_metadata(self, config: BenchmarkConfig) -> dict:
+    def device_metadata(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> dict:
         return {
             "device": config.hardware_target.id,
             "telemetry": "mock",
             "rail_manifest": [RAIL_NAME],
         }
 
-    def measure_idle(self, config: BenchmarkConfig) -> IdleBaseline:
+    def measure_idle(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> IdleBaseline:
         duration_s = config.sampling.idle_seconds
         self._clock.sleep(duration_s)
         return IdleBaseline(
@@ -67,7 +79,9 @@ class MockTelemetryAdapter:
             telemetry_backend=TelemetryBackend.MOCK,
         )
 
-    def start_sampling(self, config: BenchmarkConfig) -> AdapterResult:
+    def start_sampling(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> AdapterResult:
         if config.hardware_target.notes == TELEMETRY_DENIED_NOTE:
             return AdapterResult(
                 ok=False,
@@ -83,7 +97,9 @@ class MockTelemetryAdapter:
         self._sampling_start_s = start
         return AdapterResult(ok=True, metadata={"start_timestamp_s": start})
 
-    def stop_sampling(self, config: BenchmarkConfig) -> list[PowerSample]:
+    def stop_sampling(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> list[PowerSample]:
         if self._sampling_start_s is None:
             return []
         start = self._sampling_start_s
@@ -101,9 +117,31 @@ class MockTelemetryAdapter:
         # A final sample at exactly t = end guarantees >= 2 samples for any
         # nonzero window, keeping trapezoidal integration well-defined.
         samples.append(self._sample(end))
+        # D-002 via D-024: preserve the sampler's native output verbatim under
+        # raw/. Out-of-run invocations (context None, e.g. the cooldown gate)
+        # produce no raw output.
+        if context is not None:
+            (context.raw_dir / RAW_SAMPLES_NAME).write_text(
+                json.dumps(
+                    [
+                        {
+                            "timestamp_s": sample.timestamp_s,
+                            "power_w": sample.power_w,
+                            "source": sample.source,
+                            "rail": sample.rail,
+                        }
+                        for sample in samples
+                    ],
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n"
+            )
         return samples
 
-    def thermal_state(self, config: BenchmarkConfig) -> ThermalState:
+    def thermal_state(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> ThermalState:
         return ThermalState(
             timestamp_s=self._clock.now(),
             temperature_c=42.0,

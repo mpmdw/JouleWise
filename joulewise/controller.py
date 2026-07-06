@@ -17,7 +17,13 @@ manifests arrive with the experiment runner in Slice 2F) and applies:
 - D-013: controller-as-DUT mitigation - all events and log records buffer in
   memory and flush only after ``stop_sampling``; between ``start_sampling``
   and ``stop_sampling`` the controller does nothing but block on the runtime
-  (no file writes, no event appends, no logging).
+  (no file writes, no disk event appends, no logging; the two in-memory
+  ``sampling_started``/``sampling_stopped`` marker appends of D-026 are the
+  sole - and negligible - buffer touches inside the window).
+- D-026: the reducer's measured window is bounded by the
+  ``sampling_started``/``sampling_stopped`` marker events (stage boundaries
+  are the fallback for pre-2N bundles), so sampler spawn latency and stop-side
+  parsing never land inside the integrated window.
 
 Lifecycle stages, in order: ``validate``, ``prepare``, ``idle_baseline``,
 ``warmup``, ``measured_run``, ``cleanup``, ``reduce``. ``run_finalized``
@@ -64,6 +70,7 @@ from joulewise.clock import Clock
 from joulewise.interfaces import (
     AdapterResult,
     PowerSample,
+    RunContext,
     RuntimeAdapter,
     RuntimeEvent,
     RuntimeResult,
@@ -213,6 +220,18 @@ class _Execution:
         self._registry = registry
         self._reducer = reducer
         self._extra_metadata = dict(extra_metadata) if extra_metadata else {}
+        # D-024: one immutable context, constructed after bundle creation,
+        # passed to every adapter lifecycle call. Context is data (paths and
+        # identity), never the writer.
+        self._context = RunContext(
+            config=config,
+            clock=clock,
+            run_id=writer.run_id,
+            bundle_path=writer.path,
+            raw_dir=writer.path / "raw",
+            logs_dir=writer.path / "logs",
+            outputs_dir=writer.path / "outputs",
+        )
         # Deferred buffers (D-013): nothing below touches disk until _finish
         # or the explicitly post-window artifact writes.
         self._events: list[RuntimeEvent] = []
@@ -308,9 +327,11 @@ class _Execution:
         self._begin_stage("prepare")
         assert self._transport is not None and self._runtime is not None
         assert self._telemetry is not None
-        self._connection_metadata = self._transport.connection_metadata(self._config)
-        self._device_metadata = self._telemetry.device_metadata(self._config)
-        result = self._runtime.prepare(self._config)
+        self._connection_metadata = self._transport.connection_metadata(
+            self._config, self._context
+        )
+        self._device_metadata = self._telemetry.device_metadata(self._config, self._context)
+        result = self._runtime.prepare(self._config, self._context)
         self._check(result, "prepare", "runtime prepare failed")
         self._prepare_metadata = dict(result.metadata)
         self._log(self._runtime_log, "runtime prepare succeeded")
@@ -319,7 +340,7 @@ class _Execution:
     def _stage_idle_baseline(self) -> None:
         self._begin_stage("idle_baseline")
         assert self._telemetry is not None
-        self._baseline = self._telemetry.measure_idle(self._config)
+        self._baseline = self._telemetry.measure_idle(self._config, self._context)
         self._log(
             self._telemetry_log,
             f"idle baseline: mean {self._baseline.power_w_mean} W over "
@@ -338,7 +359,7 @@ class _Execution:
         assert self._runtime is not None
         warmup_runs = self._config.workload_profile.warmup_runs
         for index in range(warmup_runs):
-            result = self._runtime.warmup(self._config)
+            result = self._runtime.warmup(self._config, self._context)
             self._check(result, "warmup", f"runtime warmup run {index} failed")
         self._log(self._runtime_log, f"completed {warmup_runs} warmup run(s)")
         self._complete_stage("warmup", {"warmup_runs": warmup_runs})
@@ -346,19 +367,42 @@ class _Execution:
     def _stage_measured_run(self) -> None:
         self._begin_stage("measured_run")
         assert self._runtime is not None and self._telemetry is not None
-        self._thermal_pre = self._telemetry.thermal_state(self._config)
-        start_result = self._telemetry.start_sampling(self._config)
+        self._thermal_pre = self._telemetry.thermal_state(self._config, self._context)
+        start_result = self._telemetry.start_sampling(self._config, self._context)
         self._check(start_result, "measured_run", "telemetry start_sampling failed")
         self._sampling_active = True
+        # D-026: the measured window the reducer integrates is bounded by the
+        # sampling_started/sampling_stopped marker events, not the stage
+        # boundaries, so sampler spawn latency (sudo probe, process start,
+        # first sample) and stop-side parsing stay outside the window. The
+        # start marker is stamped only after start_sampling confirms; the stop
+        # marker is stamped before stop_sampling is asked to wind down.
+        self._buffer_event(
+            "sampling_started", "measured_run", "telemetry sampling confirmed active"
+        )
         # D-013 quiescent window: between start_sampling and stop_sampling the
-        # controller only blocks on the runtime - no file writes, no event
-        # appends, no logging (all buffers are touched after the window).
-        runtime_result = self._runtime.run_workload(self._config)
-        self._samples = self._telemetry.stop_sampling(self._config)
+        # controller only blocks on the runtime - no file writes, no disk event
+        # appends, no logging (buffers flush after the window).
+        runtime_result = self._runtime.run_workload(self._config, self._context)
+        # The stop marker's timestamp is captured before stop_sampling so the
+        # sampler's wind-down (process stop, plist parsing) stays outside the
+        # window; the event itself is appended after the runtime events so the
+        # stable flush-sort keeps it bracketing them.
+        sampling_stopped_s = self._clock.now()
+        self._samples = self._telemetry.stop_sampling(self._config, self._context)
         self._sampling_active = False
         self._runtime_result = runtime_result
-        self._thermal_post = self._telemetry.thermal_state(self._config)
+        self._thermal_post = self._telemetry.thermal_state(self._config, self._context)
         self._events.extend(runtime_result.events)
+        self._events.append(
+            RuntimeEvent(
+                timestamp_s=sampling_stopped_s,
+                event_type="sampling_stopped",
+                phase="measured_run",
+                message="telemetry sampling stopped",
+                metadata={},
+            )
+        )
         self._write_outputs()
         self._write_trace()
         self._log(
@@ -381,7 +425,7 @@ class _Execution:
         assert self._runtime is not None
         metadata: dict[str, Any] = {"cleanup_ok": True}
         try:
-            result = self._runtime.cleanup(self._config)
+            result = self._runtime.cleanup(self._config, self._context)
         except Exception as exc:  # noqa: BLE001 - best-effort cleanup
             metadata = {
                 "cleanup_ok": False,
@@ -459,8 +503,14 @@ class _Execution:
         if not self._sampling_active or self._telemetry is None:
             return
         self._sampling_active = False
+        # D-026: even on the failure path the sampling window gets its closing
+        # marker, stamped before the stop call, so post-hoc re-reduction sees
+        # the same window semantics as a successful run.
+        self._buffer_event(
+            "sampling_stopped", "measured_run", "telemetry sampling stopping (failure path)"
+        )
         try:
-            self._samples = self._telemetry.stop_sampling(self._config)
+            self._samples = self._telemetry.stop_sampling(self._config, self._context)
         except Exception:  # noqa: BLE001 - evidence salvage must not mask the failure
             self._log(
                 self._controller_log,
@@ -472,7 +522,7 @@ class _Execution:
         if self._runtime is None:
             return
         try:
-            result = self._runtime.cleanup(self._config)
+            result = self._runtime.cleanup(self._config, self._context)
         except Exception:  # noqa: BLE001 - best-effort cleanup must not mask the failure
             self._log(
                 self._controller_log,

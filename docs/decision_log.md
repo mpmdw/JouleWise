@@ -45,8 +45,9 @@ be re-derived by a future agent gets an entry here.
 | D-021 | Controller flushes `events.jsonl` before the reduce stage | accepted |
 | D-022 | Auto-generated run-ID suffix is config-hash-derived, not random | accepted |
 | D-023 | Per-item phase status lives solely in the exit checklists | accepted |
-| D-024 | Adapters receive a `RunContext`, not piecemeal parameters | accepted; implementation pending (Slice 2N.1) |
+| D-024 | Adapters receive a `RunContext`, not piecemeal parameters | accepted; implemented (2N.1, 2026-07-06) |
 | D-025 | One shared bundle read layer for reducer, report, validation, and aggregation | accepted; implementation pending (Slice 2N.8) |
+| D-026 | Measured window is bounded by sampling-active marker events | accepted |
 
 ---
 
@@ -1087,7 +1088,7 @@ adding discipline.
 ## D-024: Adapters receive a `RunContext`, not piecemeal parameters
 
 - Date: 2026-07-06
-- Status: accepted, to be implemented in Slice 2N item 2N.1 (the seam does NOT exist yet)
+- Status: accepted; implemented in Slice 2N.1 (2026-07-06)
 - Phase: 2
 
 Context: mock adapters get by on `config` (plus `clock` at construction),
@@ -1133,6 +1134,18 @@ Revisit when: a need appears that is per-call rather than per-run (then
 a per-call argument is correct, not a context field), or Phase 3's
 composite-bundle design (D-008) demands fields that would make the
 context mutable - mutability is the line not to cross.
+
+Amendment (2026-07-06, 2N.1 implementation): placement is pinned as a
+trailing optional per-method parameter (`context: RunContext | None =
+None`) on every adapter lifecycle method, not construction-time
+injection. Rationale: the D-014 cooldown gate invokes `measure_idle`
+between repetitions when no bundle is open, and direct adapter tests
+call methods outside any run; optionality keeps one lifecycle code path
+while the controller always supplies the context. Adapters must produce
+no raw output when the context is absent. The writer-side counterpart is
+`RunBundleWriter.raw_path`/`write_raw` (validated plain file names,
+collision-checked, closed by `finalize()`); adapters never receive the
+writer - they write into `context.raw_dir` directly.
 
 ---
 
@@ -1184,3 +1197,58 @@ the Phase 4 plan).
 Revisit when: bundle schema v0.2 lands (the reader is where composite-
 bundle reading concentrates), or a consumer needs streaming reads that
 the whole-bundle reader cannot serve.
+
+---
+
+## D-026: Measured window is bounded by sampling-active marker events
+
+- Date: 2026-07-06
+- Status: accepted (Slice 2N.2)
+- Phase: 2
+
+Context: the reducer integrated energy between the `measured_run`
+`stage_started` and `stage_completed` events. `stage_started` is stamped
+before `thermal_state` and `start_sampling`, and `stage_completed` after
+`stop_sampling`, `thermal_state`, and the outputs/trace writes - so under
+`SystemClock`, real sampler spawn latency (sudo probe, process start,
+first sample) and wind-down cost (process stop, plist parsing) land
+inside the integrated window, inflating gross energy, the
+idle-subtraction duration, and TTFT. `FakeClock` collapses these
+intervals to zero, so the mock suite could never catch it.
+
+Options considered:
+
+1. Reorder the stage boundary: stamp `stage_started(measured_run)` only
+   after `start_sampling` confirms. Con: a `start_sampling` failure would
+   then be attributed to a stage that never started, breaking the event
+   invariant that a failing stage has a `stage_started`; and the stage
+   end would still include post-window artifact writes.
+2. Explicit `sampling_started`/`sampling_stopped` marker events on the
+   `measured_run` phase; the reducer integrates between markers, falling
+   back to stage boundaries for pre-2N bundles.
+
+Decision: option 2. `sampling_started` is stamped only after
+`start_sampling` returns ok (sampling confirmed active);
+`sampling_stopped` is stamped before `stop_sampling` is invoked (the
+wind-down happens after the window closes). TTFT is measured from
+`sampling_started`. The failure path's best-effort stop records the same
+closing marker, so post-hoc re-reduction sees identical window semantics.
+
+Considerations: stage boundaries keep their operational meaning (what the
+controller was doing when) while the markers own the measurement
+semantics - two facts, two event types. The two marker buffer-appends are
+the only in-memory buffer touches inside the D-013 quiescent window
+(negligible; nothing touches disk). The stop marker is appended to the
+buffer after the runtime events so the stable flush-sort keeps it
+bracketing them. Additive event types keep R-015 intact
+(`validate-bundle` checks event keys, not a type whitelist).
+
+Consequences: `_measured_window` in `joulewise/reduce.py` prefers the
+markers and falls back to stage boundaries; telemetry adapters must not
+return from `start_sampling` before sampling is actually running
+(recorded in `adapter_contracts.md`); a latency-simulating telemetry test
+pins the exclusion.
+
+Revisit when: a real adapter cannot confirm sampling start
+synchronously (would need an async readiness probe), or Phase 3 split
+runs need per-node windows (D-008 composite bundles).

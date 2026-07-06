@@ -26,7 +26,7 @@ import json
 
 from joulewise import __version__
 from joulewise.clock import Clock
-from joulewise.interfaces import AdapterResult, RuntimeEvent, RuntimeResult
+from joulewise.interfaces import AdapterResult, RunContext, RuntimeEvent, RuntimeResult
 from joulewise.schemas import BenchmarkConfig, FailureReason
 
 #: model.name value that triggers the did_not_fit fault injection (see module
@@ -51,7 +51,9 @@ class MockRuntimeAdapter:
     def __init__(self, clock: Clock) -> None:
         self._clock = clock
 
-    def prepare(self, config: BenchmarkConfig) -> AdapterResult:
+    def prepare(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> AdapterResult:
         if config.model.name == UNSUPPORTED_MODEL_NAME:
             return AdapterResult(
                 ok=False,
@@ -68,11 +70,15 @@ class MockRuntimeAdapter:
             metadata={"adapter": "mock_runtime", "version": __version__},
         )
 
-    def warmup(self, config: BenchmarkConfig) -> AdapterResult:
+    def warmup(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> AdapterResult:
         self._clock.sleep(WARMUP_SECONDS)
         return AdapterResult(ok=True)
 
-    def run_workload(self, config: BenchmarkConfig) -> RuntimeResult:
+    def run_workload(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> RuntimeResult:
         prompt_tokens = self._prompt_tokens(config)
         output_tokens = config.workload_profile.output_tokens or DEFAULT_OUTPUT_TOKENS
         clock = self._clock
@@ -116,7 +122,9 @@ class MockRuntimeAdapter:
             output_token_count=output_tokens,
         )
 
-    def cleanup(self, config: BenchmarkConfig) -> AdapterResult:
+    def cleanup(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> AdapterResult:
         return AdapterResult(ok=True)
 
     def _event(self, event_type: str, phase: str, message: str) -> RuntimeEvent:

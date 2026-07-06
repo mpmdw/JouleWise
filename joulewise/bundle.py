@@ -268,6 +268,44 @@ class RunBundleWriter:
         path.write_text(text)
         return path
 
+    def raw_path(self, name: str) -> Path:
+        """Return ``raw/<name>`` (ensuring ``raw/`` exists); writes nothing.
+
+        ``name`` must be a plain file name: path separators and ``..`` are
+        rejected so a raw artifact can never escape the bundle (D-002).
+        """
+        if (
+            not name
+            or name in {".", ".."}
+            or "/" in name
+            or "\\" in name
+        ):
+            raise BundleError(f"raw artifact name must be a plain file name: {name!r}")
+        raw_dir = self._path / "raw"
+        raw_dir.mkdir(exist_ok=True)
+        return raw_dir / name
+
+    def write_raw(self, name: str, data: bytes | str) -> Path:
+        """Write ``raw/<name>`` verbatim and return its path (D-002).
+
+        Raw artifacts are immutable evidence: writing over an existing raw
+        file - or writing after ``finalize()`` - is an error. Adapters do not
+        get this method (D-024: context is data, not capability); they write
+        into ``RunContext.raw_dir`` directly, and this is the controller-side
+        counterpart for raw evidence the controller itself collects.
+        """
+        self._require_open(f"write raw {name!r}")
+        path = self.raw_path(name)
+        if path.exists():
+            raise BundleError(
+                f"raw artifact already exists: {path} (raw evidence is immutable)"
+            )
+        if isinstance(data, bytes):
+            path.write_bytes(data)
+        else:
+            path.write_text(data)
+        return path
+
     def log_path(self, name: str) -> Path:
         """Return ``logs/<name>`` (ensuring ``logs/`` exists); writes nothing."""
         logs_dir = self._path / "logs"

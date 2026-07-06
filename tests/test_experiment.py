@@ -100,14 +100,14 @@ class _StubTelemetry:
         self._cooldown_index += 1
         return self._cooldown_means[index]
 
-    def device_metadata(self, config: BenchmarkConfig) -> dict:
+    def device_metadata(self, config: BenchmarkConfig, context=None) -> dict:
         return {
             "device": config.hardware_target.id,
             "telemetry": self.name,
             "rail_manifest": ["stub"],
         }
 
-    def measure_idle(self, config: BenchmarkConfig) -> IdleBaseline:
+    def measure_idle(self, config: BenchmarkConfig, context=None) -> IdleBaseline:
         duration_s = config.sampling.idle_seconds
         self._clock.sleep(duration_s)
         is_cooldown_subwindow = duration_s == COOLDOWN_SUBWINDOW_S
@@ -120,11 +120,11 @@ class _StubTelemetry:
             telemetry_backend=TelemetryBackend.POWERMETRICS,
         )
 
-    def start_sampling(self, config: BenchmarkConfig) -> AdapterResult:
+    def start_sampling(self, config: BenchmarkConfig, context=None) -> AdapterResult:
         self._start = self._clock.now()
         return AdapterResult(ok=True)
 
-    def stop_sampling(self, config: BenchmarkConfig) -> list[PowerSample]:
+    def stop_sampling(self, config: BenchmarkConfig, context=None) -> list[PowerSample]:
         start = self._start if self._start is not None else self._clock.now()
         end = self._clock.now()
         samples = [
@@ -134,7 +134,7 @@ class _StubTelemetry:
         self._start = None
         return samples
 
-    def thermal_state(self, config: BenchmarkConfig) -> ThermalState:
+    def thermal_state(self, config: BenchmarkConfig, context=None) -> ThermalState:
         return ThermalState(timestamp_s=self._clock.now(), temperature_c=42.0)
 
 
@@ -183,18 +183,18 @@ class _KillingRuntime:
     def name(self) -> str:
         return self._inner.name
 
-    def prepare(self, config: BenchmarkConfig) -> AdapterResult:
+    def prepare(self, config: BenchmarkConfig, context=None) -> AdapterResult:
         if config.run_id is not None and config.run_id.endswith(f"__r{self._kill_rep}"):
             raise KeyboardInterrupt("simulated kill during rep prepare")
         return self._inner.prepare(config)
 
-    def warmup(self, config: BenchmarkConfig) -> AdapterResult:
+    def warmup(self, config: BenchmarkConfig, context=None) -> AdapterResult:
         return self._inner.warmup(config)
 
-    def run_workload(self, config: BenchmarkConfig):
+    def run_workload(self, config: BenchmarkConfig, context=None):
         return self._inner.run_workload(config)
 
-    def cleanup(self, config: BenchmarkConfig) -> AdapterResult:
+    def cleanup(self, config: BenchmarkConfig, context=None) -> AdapterResult:
         return self._inner.cleanup(config)
 
 

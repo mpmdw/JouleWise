@@ -376,6 +376,48 @@ class RunBundleWriterTests(unittest.TestCase):
         self.assertTrue((self.runs_root / writer.run_id).is_dir())
 
 
+class RawEvidenceTests(unittest.TestCase):
+    """Writer-side raw-evidence counterpart of the D-024 context seam (2N.1)."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.runs_root = Path(self._tmp.name) / "runs"
+        self.clock = FakeClock(start=1_768_000_000.0)
+        self.writer = RunBundleWriter.create(
+            self.runs_root, load_example_config(), self.clock
+        )
+
+    def test_write_raw_text_and_bytes_land_under_raw(self) -> None:
+        text_path = self.writer.write_raw("sampler_output.txt", "verbatim text\n")
+        bytes_path = self.writer.write_raw("sampler_output.plist", b"\x00\x01binary")
+        self.assertEqual(text_path, self.writer.path / "raw" / "sampler_output.txt")
+        self.assertEqual(text_path.read_text(), "verbatim text\n")
+        self.assertEqual(bytes_path.read_bytes(), b"\x00\x01binary")
+
+    def test_raw_path_returns_location_without_writing(self) -> None:
+        path = self.writer.raw_path("powermetrics.plist")
+        self.assertEqual(path, self.writer.path / "raw" / "powermetrics.plist")
+        self.assertFalse(path.exists())
+
+    def test_write_raw_collision_raises(self) -> None:
+        self.writer.write_raw("once.json", "{}")
+        with self.assertRaises(BundleError):
+            self.writer.write_raw("once.json", "{}")
+
+    def test_write_raw_after_finalize_raises(self) -> None:
+        self.writer.write_metadata({})
+        self.writer.write_summary(make_summary())
+        self.writer.finalize()
+        with self.assertRaises(BundleError):
+            self.writer.write_raw("late.json", "{}")
+
+    def test_raw_name_must_be_plain_file_name(self) -> None:
+        for bad in ("", ".", "..", "a/b.json", "..\\evil", "/abs.json"):
+            with self.assertRaises(BundleError, msg=bad):
+                self.writer.raw_path(bad)
+
+
 class ExperimentManifestTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()

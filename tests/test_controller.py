@@ -47,6 +47,7 @@ HAPPY_PATH_SEQUENCE = (
         ("stage_started", "warmup"),
         ("stage_completed", "warmup"),
         ("stage_started", "measured_run"),
+        ("sampling_started", "measured_run"),
         ("phase_start", "prefill"),
         ("phase_end", "prefill"),
         ("phase_start", "decode"),
@@ -54,6 +55,7 @@ HAPPY_PATH_SEQUENCE = (
     + [("token", "decode")] * 8
     + [
         ("phase_end", "decode"),
+        ("sampling_stopped", "measured_run"),
         ("stage_completed", "measured_run"),
         ("stage_started", "cleanup"),
         ("stage_completed", "cleanup"),
@@ -85,16 +87,16 @@ class ExplodingRuntime:
 
     name = "exploding"
 
-    def prepare(self, config: BenchmarkConfig) -> AdapterResult:
+    def prepare(self, config: BenchmarkConfig, context=None) -> AdapterResult:
         return AdapterResult(ok=True, metadata={"adapter": "exploding"})
 
-    def warmup(self, config: BenchmarkConfig) -> AdapterResult:
+    def warmup(self, config: BenchmarkConfig, context=None) -> AdapterResult:
         return AdapterResult(ok=True)
 
-    def run_workload(self, config: BenchmarkConfig) -> Any:
+    def run_workload(self, config: BenchmarkConfig, context=None) -> Any:
         raise RuntimeError("injected workload explosion")
 
-    def cleanup(self, config: BenchmarkConfig) -> AdapterResult:
+    def cleanup(self, config: BenchmarkConfig, context=None) -> AdapterResult:
         return AdapterResult(ok=True)
 
 
@@ -120,25 +122,25 @@ class PoisonTelemetry:
     def __init__(self, inner: Any) -> None:
         self._inner = inner
 
-    def device_metadata(self, config: BenchmarkConfig) -> dict:
+    def device_metadata(self, config: BenchmarkConfig, context=None) -> dict:
         # An object() is not JSON-serializable; write_metadata must coerce it
         # via default=str rather than abort the bundle (D-011).
         return {"poison": object()}
 
-    def measure_idle(self, config: BenchmarkConfig):
+    def measure_idle(self, config: BenchmarkConfig, context=None):
         return self._inner.measure_idle(config)
 
-    def thermal_state(self, config: BenchmarkConfig):
+    def thermal_state(self, config: BenchmarkConfig, context=None):
         return self._inner.thermal_state(config)
 
-    def start_sampling(self, config: BenchmarkConfig) -> AdapterResult:
+    def start_sampling(self, config: BenchmarkConfig, context=None) -> AdapterResult:
         return AdapterResult(
             ok=False,
             failure_reason=FailureReason.UNKNOWN_ERROR,
             message="injected start_sampling failure",
         )
 
-    def stop_sampling(self, config: BenchmarkConfig):
+    def stop_sampling(self, config: BenchmarkConfig, context=None):
         return self._inner.stop_sampling(config)
 
 
@@ -475,6 +477,161 @@ class DeterministicRunIdTests(ControllerTestCase):
         self.assertEqual(
             (first_path / "power_trace.csv").read_bytes(),
             (second_path / "power_trace.csv").read_bytes(),
+        )
+
+
+class LatencyTelemetry:
+    """Wraps the mock telemetry, simulating sampler spawn and wind-down latency
+    on the injected clock (2N.2: FakeClock alone collapses these intervals)."""
+
+    name = "latency"
+
+    def __init__(self, inner: Any, clock: Clock, start_latency_s: float, stop_latency_s: float) -> None:
+        self._inner = inner
+        self._clock = clock
+        self._start_latency_s = start_latency_s
+        self._stop_latency_s = stop_latency_s
+
+    def device_metadata(self, config: BenchmarkConfig, context=None) -> dict:
+        return self._inner.device_metadata(config, context)
+
+    def measure_idle(self, config: BenchmarkConfig, context=None):
+        return self._inner.measure_idle(config, context)
+
+    def start_sampling(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        # Simulated spawn latency (sudo probe, process start, first sample)
+        # BEFORE sampling is confirmed active.
+        self._clock.sleep(self._start_latency_s)
+        return self._inner.start_sampling(config, context)
+
+    def stop_sampling(self, config: BenchmarkConfig, context=None):
+        samples = self._inner.stop_sampling(config, context)
+        # Simulated wind-down latency (process stop, plist parsing) AFTER the
+        # samples were collected.
+        self._clock.sleep(self._stop_latency_s)
+        return samples
+
+    def thermal_state(self, config: BenchmarkConfig, context=None):
+        return self._inner.thermal_state(config, context)
+
+
+class LatencyRegistry:
+    """Real mock adapters, telemetry wrapped with simulated sampler latency."""
+
+    def __init__(self, clock: Clock, start_latency_s: float, stop_latency_s: float) -> None:
+        self._clock = clock
+        self._start_latency_s = start_latency_s
+        self._stop_latency_s = stop_latency_s
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            telemetry = LatencyTelemetry(
+                telemetry, self._clock, self._start_latency_s, self._stop_latency_s
+            )
+        return telemetry, failure
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
+class RunContextSeamTests(ControllerTestCase):
+    """2N.1 (D-024/D-002): adapters can preserve raw evidence via the context."""
+
+    def test_mock_run_preserves_raw_sampler_output(self) -> None:
+        bundle_path, summary = run_benchmark(
+            make_config("context-raw"), self.runs_root, self.clock
+        )
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        raw_path = bundle_path / "raw" / "mock_samples.json"
+        self.assertTrue(raw_path.is_file())
+        raw_samples = json.loads(raw_path.read_text())
+        trace_lines = (bundle_path / "power_trace.csv").read_text().splitlines()
+        # Raw evidence matches the trace: one raw record per trace row.
+        self.assertEqual(len(raw_samples), len(trace_lines) - 1)
+        self.assertTrue(all(sample["rail"] == "mock" for sample in raw_samples))
+
+    def test_stop_sampling_without_context_writes_no_raw_output(self) -> None:
+        # Out-of-run invocations (the cooldown gate, direct adapter use) pass
+        # no context; the adapter must tolerate that with no raw output.
+        telemetry, failure = adapters.resolve_telemetry(
+            make_config("context-none"), self.clock
+        )
+        self.assertIsNone(failure)
+        config = make_config("context-none")
+        self.assertTrue(telemetry.start_sampling(config).ok)
+        self.clock.sleep(1.0)
+        samples = telemetry.stop_sampling(config)
+        self.assertGreaterEqual(len(samples), 2)
+
+
+class SamplingWindowTests(ControllerTestCase):
+    """2N.2 (D-026): the measured window excludes sampler start/stop latency."""
+
+    def run_with_latency(
+        self, run_id: str, start_latency_s: float, stop_latency_s: float
+    ) -> tuple[Path, SummaryMetrics]:
+        clock = FakeClock(start=1_700_000_000.0)
+        registry = LatencyRegistry(clock, start_latency_s, stop_latency_s)
+        return run_benchmark(
+            make_config(run_id), self.runs_root, clock, registry=registry
+        )
+
+    def test_marker_events_bracket_the_runtime_events(self) -> None:
+        bundle_path, _ = run_benchmark(
+            make_config("markers"), self.runs_root, self.clock
+        )
+        events = self.read_events(bundle_path)
+        types = [event["event_type"] for event in events]
+        self.assertIn("sampling_started", types)
+        self.assertIn("sampling_stopped", types)
+        started = types.index("sampling_started")
+        stopped = types.index("sampling_stopped")
+        first_token = types.index("token")
+        last_token = len(types) - 1 - types[::-1].index("token")
+        self.assertLess(started, first_token)
+        self.assertGreater(stopped, last_token)
+        self.assertEqual(events[started]["phase"], "measured_run")
+        self.assertEqual(events[stopped]["phase"], "measured_run")
+
+    def test_sampler_latency_does_not_change_measured_metrics(self) -> None:
+        _, baseline_summary = self.run_with_latency("latency-zero", 0.0, 0.0)
+        _, latency_summary = self.run_with_latency("latency-real", 3.0, 2.0)
+
+        self.assertEqual(baseline_summary.status, RunStatus.SUCCEEDED)
+        self.assertEqual(latency_summary.status, RunStatus.SUCCEEDED)
+        for metric in (
+            "gross_energy_j",
+            "idle_subtracted_energy_j",
+            "energy_request_j",
+            "ttft_s",
+            "decode_latency_s",
+        ):
+            self.assertAlmostEqual(
+                getattr(baseline_summary, metric),
+                getattr(latency_summary, metric),
+                places=9,
+                msg=metric,
+            )
+
+    def test_stage_window_still_contains_the_latency(self) -> None:
+        # The stage boundaries DO include the simulated latency - proving the
+        # markers (not the stage span) are what keep it out of the metrics.
+        bundle_path, _ = self.run_with_latency("latency-stage", 3.0, 2.0)
+        events = self.read_events(bundle_path)
+        by_type = {
+            event["event_type"]: event["timestamp_s"]
+            for event in events
+            if event["phase"] == "measured_run"
+        }
+        self.assertAlmostEqual(
+            by_type["sampling_started"] - by_type["stage_started"], 3.0, places=9
+        )
+        self.assertGreaterEqual(
+            by_type["stage_completed"] - by_type["sampling_stopped"], 2.0
         )
 
 

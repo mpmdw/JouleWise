@@ -14,7 +14,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 
-from joulewise.interfaces import AdapterResult
+from joulewise.interfaces import AdapterResult, RunContext
 from joulewise.schemas import BenchmarkConfig, FailureReason
 
 #: Hard cap on local command duration; a hung command becomes a structured
@@ -34,10 +34,17 @@ class LocalTransport:
 
     name = "local"
 
-    def connection_metadata(self, config: BenchmarkConfig) -> dict:
+    def connection_metadata(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> dict:
         return {"transport": "local", "host": "localhost"}
 
-    def run_command(self, config: BenchmarkConfig, command: list[str]) -> AdapterResult:
+    def run_command(
+        self,
+        config: BenchmarkConfig,
+        command: list[str],
+        context: RunContext | None = None,
+    ) -> AdapterResult:
         try:
             completed = subprocess.run(
                 command,
@@ -61,7 +68,13 @@ class LocalTransport:
             metadata={"returncode": completed.returncode},
         )
 
-    def collect_artifact(self, config: BenchmarkConfig, source: str, destination: str) -> AdapterResult:
+    def collect_artifact(
+        self,
+        config: BenchmarkConfig,
+        source: str,
+        destination: str,
+        context: RunContext | None = None,
+    ) -> AdapterResult:
         try:
             copied_to = shutil.copy2(source, destination)
         except OSError as exc:

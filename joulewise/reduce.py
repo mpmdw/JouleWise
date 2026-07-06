@@ -181,18 +181,35 @@ def _in_window_sample_count(curve: list[_Point], window: _Window) -> int:
 
 
 def _measured_window(events: list[dict[str, Any]]) -> _Window | None:
-    start: float | None = None
-    end: float | None = None
+    """The window the reducer integrates over (D-026).
+
+    Preferred bounds are the ``sampling_started``/``sampling_stopped`` marker
+    events (sampling confirmed active; stamped so sampler spawn latency and
+    stop-side parsing stay outside the window). Bundles written before the
+    markers existed (pre-2N.2) fall back to the ``measured_run`` stage
+    boundaries.
+    """
+    marker_start: float | None = None
+    marker_end: float | None = None
+    stage_start: float | None = None
+    stage_end: float | None = None
     for event in events:
         if event.get("phase") != "measured_run":
             continue
-        if event.get("event_type") == "stage_started":
-            start = float(event["timestamp_s"])
-        elif event.get("event_type") == "stage_completed":
-            end = float(event["timestamp_s"])
-    if start is None or end is None:
+        event_type = event.get("event_type")
+        if event_type == "sampling_started":
+            marker_start = float(event["timestamp_s"])
+        elif event_type == "sampling_stopped":
+            marker_end = float(event["timestamp_s"])
+        elif event_type == "stage_started":
+            stage_start = float(event["timestamp_s"])
+        elif event_type == "stage_completed":
+            stage_end = float(event["timestamp_s"])
+    if marker_start is not None and marker_end is not None:
+        return _Window(start_s=marker_start, end_s=marker_end)
+    if stage_start is None or stage_end is None:
         return None
-    return _Window(start_s=start, end_s=end)
+    return _Window(start_s=stage_start, end_s=stage_end)
 
 
 def _token_timestamps(events: list[dict[str, Any]]) -> list[float]:
