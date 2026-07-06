@@ -22,8 +22,8 @@ Already complete:
   repetition/thermal, statistics (`docs/contracts/measurement_methodology.md`).
 - Mac-local and mock-local example configs validate.
 - Schema, interface, and CLI tests pass.
-- Run-report protocol, task queue, decision log (D-001..D-019), risk
-  register (R-001..R-015), milestone map.
+- Run-report protocol, task queue, decision log, risk register, milestone
+  map (ID ranges live in those files; they grow).
 
 Still required:
 
@@ -48,7 +48,7 @@ Complete since the last revision:
 | Item | Status | Required Evidence | Recorded In |
 |---|---|---|---|
 | Supervisor approval and scope | pending | Written notes from meeting/email listing approved must-haves, stretch items, and out-of-scope items | Supervisor section below; `RUN_STATE.md` if scope changes |
-| Mac telemetry permissions | partially checked | `powermetrics` binary path and privilege requirement recorded; privileged sample fields + sudoers rule pending the 2026-06-10 auth session | Instrumentation section below |
+| Mac telemetry permissions | partially checked | `powermetrics` binary path and privilege requirement recorded; privileged sample fields + sudoers rule pending a local auth session (to be rescheduled; the planned 2026-06-10 slot passed without one) | Instrumentation section below |
 | Mac runtime (MLX) | pending | Install path decided; install or documented procedure | Instrumentation section below |
 | Wall-meter availability | pending | Meter make/model, resolution, export/manual logging method, lab-or-purchased | Wall-meter section below |
 | Network plan | partially checked | Controller tool status recorded; topology, link-speed paths, isolation plan, throughput method still pending | Network section below |
@@ -285,7 +285,7 @@ id -u
   - [ ] MLX/MLX-LM installed or installation procedure documented.
 - Current verdict: telemetry binary present; permission-blocked until the
   sudo workflow is in place; runtime pending install.
-- Next owner/action: user handles local auth on 2026-06-10; then capture
+- Next owner/action: user schedules a local auth session; then capture
   the privileged sample and record field names here, and install the
   D-004 sudoers line.
 

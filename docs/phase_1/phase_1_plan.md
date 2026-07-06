@@ -1,8 +1,8 @@
 # Phase 1 Plan: Approval, Feasibility, And Measurement Design
 
-Status: in progress - contracts and planning infrastructure are complete;
-the remaining steps are evidence gates, most waiting on user, supervisor,
-or hardware access.
+Status: tracked in `docs/phase_1/phase_1_exit_checklist.md` (the single
+per-item status authority, per D-023). This file is the timeless spec:
+objectives, steps, evidence definitions, fallbacks.
 
 Companion docs:
 
@@ -37,16 +37,19 @@ the trail):
 - Planning infrastructure: per-phase plans and exit checklists, decision
   log, risk register, milestone map.
 
-Remaining (the steps below; evidence recorded in the exit checklist):
+Also complete (closed 2026-06-12; evidence in the exit checklist):
+
+- Hailo feasibility verdict (`unsupported_workload`).
+- Phase 2 readiness review ("mock-first Phase 2 may begin").
+
+Remaining (the steps below; per-item status in the exit checklist):
 
 - Supervisor approval and scope confirmation.
 - Mac telemetry/runtime evidence completion.
 - Wall-meter decision.
 - Network/interconnect plan with physical topology.
-- Hailo feasibility verdict.
 - NVIDIA/Orin access evidence.
 - Calendar mapping.
-- Phase 2 readiness review.
 
 ## How To Execute This Plan (Agent Protocol)
 
@@ -76,7 +79,7 @@ Remaining (the steps below; evidence recorded in the exit checklist):
 
 ### Step 1: Supervisor Scope Evidence (queue P1-001)
 
-Status: open. This is the highest-impact gate (R-001).
+This is the highest-impact gate (R-001).
 
 Objective: lock what the capstone must deliver and what can slip.
 
@@ -101,15 +104,16 @@ harness work and mark hardware purchases/borrows blocked-on-approval.
 
 ### Step 2: Mac-Local Evidence (queue P1-002)
 
-Status: partially complete; waiting-user (auth session 2026-06-10).
 Captured so far (full detail in the exit checklist's instrumentation
 section): `powermetrics` present but requires superuser; useful samplers
-identified; MLX/MLX-LM not installed.
+identified; MLX/MLX-LM not installed. The rest needs a local user auth
+session (the originally planned 2026-06-10 slot passed without one;
+reschedule).
 
 Objective: make the first real vertical-slice target concrete for Phase 2.
 
-Inputs: the MacBook; the 2026-06-10 auth session; D-004 (privilege
-workflow).
+Inputs: the MacBook; a local user auth session (to be scheduled); D-004
+(privilege workflow).
 
 Actions (post-auth): capture one privileged `powermetrics` sample
 (`powermetrics -n 1 -i 100 --samplers thermal,cpu_power,gpu_power,ane_power`);
@@ -128,8 +132,6 @@ and keep Phase 2 mock-first; if the sudoers rule is declined, R-002
 fallbacks apply.
 
 ### Step 3: Wall-Meter Decision (queue P1-003)
-
-Status: open.
 
 Objective: decide whether system-level AC power is available for boundary
 calibration (D-018) and Pi/Hailo coverage.
@@ -150,8 +152,8 @@ comparisons carry the D-018 boundary caveat permanently (R-007).
 
 ### Step 4: Network Plan Evidence (queue P1-004)
 
-Status: partial - controller-side tool status captured 2026-06-09; the
-physical topology, link-speed paths, and throughput method are pending.
+Captured 2026-06-09: controller-side tool status. The physical topology,
+link-speed paths, and throughput method are still to be recorded.
 
 Objective: make the Phase 3 interconnect sweep executable before hardware
 time is spent.
@@ -177,8 +179,10 @@ physical verification pending.
 
 ### Step 5: Hailo Verdict (queue P1-005)
 
-Status: open. Expected-negative is an acceptable outcome by design
-(R-009): the verdict itself is a reportable applicability finding.
+Closed 2026-06-12 - verdict `unsupported_workload`, recorded in the exit
+checklist's Hailo section. Expected-negative was an acceptable outcome by
+design (R-009): the verdict itself is a reportable applicability finding.
+Spec kept below for the record.
 
 Objective: decide whether Pi + Hailo enters implementation or becomes an
 unsupported-hardware finding.
@@ -205,7 +209,7 @@ exactly what access is missing.
 
 ### Step 6: Remote NVIDIA/Orin Evidence (queue P1-006)
 
-Status: open. Gates Phase 2 slices 2K and 2L.
+Gates Phase 2 slices 2K and 2L.
 
 Objective: know which remote targets can serve Phase 2 baselines and
 Phase 3 splits.
@@ -229,8 +233,6 @@ mock-first/Mac-local.
 
 ### Step 7: Calendar Mapping (queue P1-008)
 
-Status: waiting-user.
-
 Objective: anchor the phase plan to real deadlines (R-012).
 
 Inputs: colloquium date, report due date, borrow window, from the user.
@@ -250,7 +252,8 @@ structure in `docs/milestones.md` is the schedule.
 
 ### Step 8: Phase 2 Readiness Review (queue P1-007)
 
-Status: open; last step - consumes all the others.
+Last step - consumes all the others. Closed 2026-06-12; the readiness
+review is recorded in the exit checklist.
 
 Objective: decide whether implementation can responsibly start.
 

@@ -1,6 +1,8 @@
 # Phase 2 Plan: Harness, Mac Vertical Slice, And Homogeneous Baselines
 
-Status: planned. Do not start slices 2G+ before their listed gates.
+Status: tracked in `docs/phase_2/phase_2_exit_checklist.md` (the single
+per-item status authority, per D-023). Do not start slices 2G+ before
+their listed gates.
 
 Companion docs:
 
@@ -56,6 +58,10 @@ with reported variance.
                  ▼
         2M homogeneous baselines (uses every target that reached "supported")
 ```
+
+Slice 2N (pre-hardware hardening, added 2026-07-05) is not in the diagram:
+it is ungated, depends only on 2A-2F, and should land before 2G/2H so the
+real adapters are written against finished seams.
 
 Rationale for mock-first (restating the standing decision): the mock path
 proves the controller lifecycle, bundle contract, and reducer math with exact
@@ -384,6 +390,73 @@ behavior visible in manifest/quality fields.
 
 Fallback: none needed.
 
+## Slice 2N: Pre-Hardware Hardening
+
+Objective: close the seam gaps the 2026-07-05 external code review found
+between the mock core and what a real (MLX/powermetrics) adapter needs,
+so hardware sessions never debug harness seams. All items are
+hardware-independent and testable with mocks/fixtures.
+
+Gates: none (always-safe work, like 2A-2F). Inputs: the 2026-07-05 run
+report's findings; D-002, D-011, D-018.
+
+Work items (each with tests; deviations get a decision-log entry):
+
+1. **Raw-evidence seam (D-002).** `RunBundleWriter` gains a `write_raw`
+   path (or adapters receive the bundle's `raw/` directory) so a real
+   telemetry adapter can preserve its native sampler output verbatim.
+   Today `raw/` is created but nothing can write to it.
+2. **Measured-window boundaries exclude sampler startup.** The
+   `measured_run` stage timestamp currently lands before `thermal_state`
+   and `start_sampling`; under `SystemClock` real sampler spawn latency
+   (sudo, process start, first sample) falls inside the integrated
+   window, inflating gross energy and TTFT. Reorder (open the window
+   after sampling is confirmed started) or record explicit
+   sampling-active markers the reducer uses. FakeClock cannot catch
+   this; add a test with a latency-simulating fake telemetry adapter.
+3. **Reducer token-count fallback.** `energy_token_j` currently requires
+   `workload_profile.prompt_tokens` from config; a `prompt_text` config
+   (the Mac example) silently loses the headline per-token metric. The
+   reducer falls back to the runtime's observed token counts already
+   written to `metadata.json`, and records which source it used.
+4. **Rail-summation timestamp contract.** `_summed_curve` groups rails
+   by exact float timestamp equality; per-rail rows with skewed
+   timestamps silently produce a wrong (interleaved) curve. Either
+   detect-and-fail (structured reduction failure naming the rail/skew)
+   or bucket within a tolerance derived from the sampling interval;
+   document the choice in the adapter contract.
+5. **Config schema accepts emitted configs.** `to_dict()` emits `null`
+   for absent optionals but the exported JSON Schema declares those
+   properties non-nullable, so a bundle's normalized `config.json` fails
+   external validation against `print-config-schema` output. Fix the
+   schema (nullable optionals) and add a round-trip test: every emitted
+   normalized config validates against the exported schema.
+6. **Post-hoc reduction entry point.** Add a `reduce` CLI verb over
+   `reduce_bundle` (the "reducer bug never re-runs hardware" story needs
+   a user-facing path), and make `reduce_bundle` return structured
+   failures instead of raising on missing/corrupt `config.json` /
+   `metadata.json` (its docstring already promises this).
+7. **Report/reducer rail-policy alignment.** The report's trace chart
+   falls back to summing all rails when the manifest matches nothing,
+   while the reducer fails; align the report with the reducer's policy
+   (or annotate the chart) so a chart can never show energy the summary
+   excluded.
+
+Also fold in (small): document the deterministic rerun-collision
+behavior in the README (done 2026-07-05); note the O(n^2) `_integrate`
+interpolation scan as acceptable-for-now with a `bisect` upgrade before
+long real traces (revisit at 2I if reduce time is noticeable).
+
+Evidence: tests for each item; suite green; run report.
+
+Acceptance criteria: a real telemetry adapter can be written against the
+post-2N seams without touching controller/bundle internals; the emitted
+config round-trips its own schema; reduction failures are structured.
+
+Fallback: none needed (pure local code work). If an item proves to need
+a contract change (e.g. adapter signature), it gets a decision-log entry
+in the same run.
+
 ## Model Selection Checkpoint (Before 2G)
 
 Objective: close D-016 enough to pick install targets for 2G/2K.
@@ -404,29 +477,10 @@ Gates: model checkpoint (D-016 closed or provisional); MLX installed
 ([mac] extra; R-003). Inputs: the Phase 1 exit checklist's instrumentation
 section (Mac rows).
 
-Design notes:
-
-- In-process adapter using the mlx_lm Python API: load at `prepare`
-  (recording load time + library versions into adapter metadata), one short
-  generation at `warmup`, streaming generation at `run_workload` capturing
-  a timestamp per token from the stream callback.
-- Phase boundary approximation: prefill_end ≈ first-token emission;
-  decode = first token -> last token. Recorded as an approximation in
-  metadata (`phase_boundary_method: "first_token"`); exact prefill timing,
-  if mlx-lm exposes it, upgrades this later without schema change.
-- Tokens: every token timestamp+index to `outputs/tokens.jsonl`; `token`
-  events per the taxonomy; full text to `outputs/response.txt`.
-- Workload mapping: `prompt_text` used directly; `prompt_tokens` without
-  text => deterministic synthetic prompt of that token count (tokenizer-
-  measured); `output_tokens` => max_tokens with EOS suppressed/recorded.
-- Lazy import: missing mlx_lm => structured `runtime_unavailable` naming
-  the `[mac]` extra (D-009/D-012 ambiguity note applies: run report must
-  distinguish "not installed" from "cannot install").
-
-Actions: implement + unit tests that run without MLX (structured-failure
-path, workload mapping with a fake tokenizer); a manual smoke procedure
-documented for the real machine (commands + expected artifacts), executed
-when hardware time is available and captured in a run report.
+Design and implementation detail (pinned adapter API, phase-boundary
+approximation, workload mapping, CI-safe tests, real-machine smoke
+procedure): `hardware_slice_implementation_guide.md` §2G — the how lives
+there; this section owns the what/when/done (D-023 dedup, 2026-07-05).
 
 Evidence: unit tests in CI; smoke-run artifacts (response text, token
 timeline) recorded from the real Mac in a run report + the Phase 2 exit
@@ -445,34 +499,14 @@ Objective: real Apple Silicon power/thermal sampling into the bundle
 contract.
 
 Gates: privileged sample evidence captured (Phase 1 exit checklist
-instrumentation section, user auth session 2026-06-10; D-004 sudoers rule
-installed). Inputs: captured sample fields, D-002, D-004, D-018.
+instrumentation section, via a local user auth session — to be
+rescheduled; D-004 sudoers rule installed). Inputs: captured sample
+fields, D-002, D-004, D-018.
 
-Design notes:
-
-- Spawn per D-002/D-004:
-  `sudo -n /usr/bin/powermetrics -i <ms> --samplers cpu_power,gpu_power,ane_power,thermal --format plist -o <bundle>/raw/powermetrics.plist`
-  with interval from `sampling.power_hz`. Stop by terminating the sudo
-  process (sudo relays SIGTERM to the child); confirm child exit; raw file
-  retained verbatim.
-- Parsing: powermetrics plist streams are NUL-separated plist documents
-  (verify against the captured sample - this is exactly why the slice is
-  gated); parse with stdlib `plistlib`; emit rows per rail (`cpu_power`,
-  `gpu_power`, `ane_power`, in watts after mW conversion) per D-018, with
-  the rail manifest declaring all three as the canonical sum.
-- Field names are pinned to the *captured sample*, not to documentation or
-  memory - macOS versions vary. The privileged sample lands in the Phase 1
-  exit checklist's instrumentation section first; the parser cites it.
-- `measure_idle`: a bounded `-n <count>` invocation for
-  `sampling.idle_seconds`; mean/stddev computed from parsed samples.
-- Thermal: `thermal` sampler fields (pressure level) captured into
-  ThermalState before/after measured window.
-- Capability pre-check at `prepare`: `sudo -n` probe per D-004; failure =>
-  `permission_denied` with the sudoers line to install in the message.
-
-Actions: implement + tests against a fixture file built from the captured
-sample (parser correctness, rail manifest, idle stats); real-machine smoke
-procedure documented and executed when gated evidence exists.
+Design and implementation detail (spawn command, plist parsing, rail
+manifest, capability pre-check, fixture-based tests, real-machine smoke
+procedure): `hardware_slice_implementation_guide.md` §2H (D-023 dedup,
+2026-07-05).
 
 Evidence: fixture-based tests in CI; a real idle baseline + measured window
 from the Mac recorded in a run report.
@@ -543,29 +577,10 @@ the SSH transport.
 Gates: P1-006 evidence (SSH reachable, `nvidia-smi` power queries work,
 vLLM installable, VRAM documented). Do not start on assumption.
 
-Design notes:
-
-- SSH transport: wraps `ssh`/`scp` subprocesses (no paramiko; D-009);
-  `run_command` with timeout + structured `transport_unavailable`;
-  `collect_artifact` via scp; connection metadata records host, user,
-  and round-trip marker timing (D-003).
-- Remote runtime execution protocol (the design center of this slice): the
-  adapter ships a self-contained runner script to the node, executes it
-  with a JSON args file, and collects an artifacts dir (events JSON, output
-  text, token timeline, runner log, exit code). The runner depends only on
-  the remote env (vLLM) - the joulewise package is not installed remotely.
-  This protocol is reused by 2L and Phase 3.
-- Telemetry: remote
-  `nvidia-smi --query-gpu=timestamp,power.draw,temperature.gpu --format=csv,noheader,nounits -lms <interval>`
-  started in background with a pidfile, stopped by pid kill, CSV collected
-  to `raw/`; parser to trace rows; rail manifest: `gpu_board` (D-018
-  boundary: board power only - host CPU/DRAM excluded; recorded limitation).
-- Clock: marker events before/after remote stages bound node clock offset
-  (D-003); offset bound into metadata; methodology rule applies.
-
-Actions: implement transport + adapters + runner script; CI-safe tests
-(local-loopback fake transport, CSV fixture parsing); real-node smoke when
-P1-006 evidence exists.
+Design and implementation detail (SSH transport, the remote-runner
+protocol — the design center, reused by 2L and Phase 3 — nvidia-smi
+telemetry, clock-offset markers, CI-safe tests):
+`hardware_slice_implementation_guide.md` §2K (D-023 dedup, 2026-07-05).
 
 Evidence: fixture tests; real-node bundle in a run report; Phase 1 exit
 checklist NVIDIA rows (access evidence) and the Phase 2 applicability
@@ -585,13 +600,11 @@ Objective: Jetson Orin Nano as a measured target.
 
 Gates: P1-006 Orin evidence (SSH, runtime choice, telemetry mechanism).
 
-Design notes: runtime via the 2K remote-runner protocol (llama.cpp CUDA or
-vendor stack - pick with evidence, log decision); telemetry preferring
-INA3221 sysfs polling (VDD_IN rail, D-018) via a tiny remote poller script,
-falling back to `tegrastats` parsing; wall-meter fallback if neither
-(R-008).
+Design and implementation detail (2K remote-runner protocol with Orin
+specifics, INA3221/tegrastats telemetry ladder):
+`hardware_slice_implementation_guide.md` §2L (D-023 dedup, 2026-07-05).
 
-Actions/Evidence/Acceptance: mirror 2K with Orin specifics; Phase 1 exit
+Evidence/Acceptance: mirror 2K with Orin specifics; Phase 1 exit
 checklist Orin rows and the Phase 2 applicability table updated; one
 complete bundle from the device.
 

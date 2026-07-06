@@ -33,6 +33,8 @@ Conventions:
 | R-013 | Thermal throttling confounds measurements | 2-4 | medium | medium | mitigated by D-014 |
 | R-014 | Model weights become unavailable or gated | 2+ | low | medium | open |
 | R-015 | Schema changes after data collection starts | 2+ | low | high | mitigated |
+| R-016 | Measurement-corpus loss (`runs/` has no backup path) | 2-5 | low | high | open (protocol due before first real data) |
+| R-017 | Repo on iCloud-synced Desktop (EPERM lock recurrence) | all | high | medium | open (move queued P0-001) |
 
 ## R-001: Supervisor approval delayed or scope shifts
 
@@ -40,6 +42,12 @@ Conventions:
 - Trigger: Phase 2 implementation slices ready to start (2A-2F complete)
   with P1-001 still open; or any supervisor communication contradicting
   `AGENT_PLAN.md` scope.
+- Status note (2026-07-05): the first trigger fired 2026-06-12 (2A-2F
+  completed with P1-001 still open). The mitigation is holding as
+  designed - all work since has been hardware-independent and
+  harness-shaped (mock slice, docs, Slice 2N is next and is also
+  ungated) - and the fallback ("continue only mock/local work; hardware
+  purchases/borrows blocked-on-approval") is effectively in force.
 - Mitigation: the queue keeps P1-001 ranked first; all work until approval
   stays hardware-independent and harness-shaped (valuable under any scope);
   the Phase 1 exit checklist lists the exact questions to put to the
@@ -51,8 +59,9 @@ Conventions:
 
 ## R-002: powermetrics sudo workflow not approved on measurement Mac
 
-- Phase: 2. Likelihood: low (user controls the machine; auth session planned
-  2026-06-10). Impact: high (no Mac telemetry = no flagship vertical slice).
+- Phase: 2. Likelihood: low (user controls the machine; a local auth
+  session needs rescheduling - the planned 2026-06-10 slot passed without
+  one). Impact: high (no Mac telemetry = no flagship vertical slice).
 - Trigger: scoped sudoers rule (D-004) cannot be installed, or privileged
   sample capture fails after the auth session.
 - Mitigation: D-004 defines a minimal, single-binary sudoers rule with the
@@ -256,3 +265,44 @@ Conventions:
 - Fallback: a dated migration note in this repo plus a one-shot migration
   script; never edit bundles in place (they are evidence).
 - Owner: agent.
+
+## R-016: Measurement-corpus loss (runs/ has no backup path)
+
+- Phase: 2-5. Likelihood: low. Impact: high (the dataset behind every
+  claim is a gitignored directory on one disk; a disk failure or an
+  errant delete erases the evidence the defense rests on, and hardware
+  re-collection needs access windows that may not recur).
+- Trigger: first real (non-mock) bundle written; any data-affecting
+  incident (disk error, iCloud eviction anomaly, accidental delete).
+- Mitigation: before the first real measurement session (gate on 2I data
+  collection, tracked as queue task P0-002), define and record the backup
+  protocol here: destination (external disk and/or cloud location outside
+  the repo), cadence (after every measurement session), method (rsync of
+  `runs/` plus experiment manifests), and a restore test performed once.
+  Configs + manifests already make re-collection well-defined; backups
+  make it unnecessary.
+- Fallback: re-run affected experiments from their configs (the config
+  hash separates old/new data cleanly per D-005/D-010); report any
+  unrecoverable gap honestly in the exclusion log.
+- Owner: user (destination/media), agent (protocol doc + restore test).
+
+## R-017: Repo lives on iCloud-synced Desktop (EPERM lock recurrence)
+
+- Phase: all. Likelihood: high (recurred; see below). Impact: medium
+  (blocks work sessions mid-run; small integrity risk around eviction
+  during writes).
+- Trigger: any `Operation not permitted` on read/readdir inside the repo
+  with the iCloud file provider (`bird`) active.
+- History: first incident 2026-06-12 (documented in `RUN_STATE.md`);
+  recurred 2026-07-05 mid-run - `docs/`, `joulewise/`, `tests/`, `.git`,
+  and the repo root EPERM-locked intermittently during an active iCloud
+  full-sync, clearing and re-locking per subtree. Both incidents match
+  iCloud "Optimize Mac Storage" behavior on `~/Desktop/`.
+- Mitigation: move the repository off the iCloud-synced Desktop (e.g.
+  `~/code/`); queued as P0-001 (user action - the move must not happen
+  mid-agent-session). Until moved: verify the suite green after any lock
+  clears; never schedule measurement sessions while a sync is active.
+- Fallback: if a lock strikes mid-run, wait for it to clear (both
+  incidents did), then re-verify with the test suite before continuing;
+  the remote (`origin/main`) bounds code loss to the working tree.
+- Owner: user (move), agent (post-lock verification discipline).

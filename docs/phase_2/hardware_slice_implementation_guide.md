@@ -2,10 +2,12 @@
 
 Audience: the next implementing agent (or human) who picks up the **gated**
 Phase 2 slices once their hardware/evidence gates open. The mock vertical
-slice (2A-2F, 2J) is done and committed; this guide turns the higher-level
-`phase_2_plan.md` slice sections into code-level, pinned-API detail in the
-same style that the mock slices were specified, so you can implement against
-locked contracts without re-deriving the design.
+slice (2A-2F, 2J) is done and committed; this guide holds the code-level,
+pinned-API detail for the gated slices. Division of labor (D-023 dedup,
+2026-07-05): `phase_2_plan.md` owns each slice's what/when/done -
+objective, gates, evidence, acceptance, fallback - and this guide owns the
+how: files, pinned APIs, commands, tests. One fact, one home; when they
+seem to disagree, the plan wins and the drift is fixed in the same run.
 
 Read first, every time:
 
@@ -68,11 +70,12 @@ incremental bring-up (e.g. real MLX + mock telemetry before 2H exists).
 
 ## Slice 2G: MLX Runtime Adapter
 
-**Gate:** a chosen model (D-016 closed or provisional) **and** `mlx_lm`
-installed in a Mac venv (`pip install 'joulewise[mac]'`; R-003). Until then,
-the registry's `mlx` branch already returns the correct
+**Gate, acceptance, fallback:** `phase_2_plan.md` Slice 2G. Until the gate
+opens, the registry's `mlx` branch already returns the correct
 `runtime_unavailable` naming the `[mac]` extra - that path is testable now
-and must keep working.
+and must keep working. (Fallback implementation shape if R-003 fires:
+subprocess to a `llama-cli`-style binary with GGUF weights; the
+composition contract is unchanged.)
 
 **New files:** `joulewise/adapters/mlx_runtime.py`, `tests/test_mlx_runtime.py`.
 **Touch:** `joulewise/adapters/__init__.py` (wire the `mlx` branch to the real
@@ -119,26 +122,15 @@ smoke procedure** (commands + expected artifacts) is documented for the real
 Mac and executed when hardware time exists; capture `response.txt` + the token
 timeline in a run report.
 
-**Acceptance:** real generation produces a complete bundle (with mock
-telemetry if 2H is not done - composition is the point); token timeline
-monotonic; `ttft_s > 0` and `< total`.
-
-**Fallback (R-003):** if MLX cannot install/run, a `llama.cpp`-Metal adapter
-becomes the Mac runtime (subprocess to a `llama-cli`-style binary, GGUF
-weights); update the plan and log the decision. The composition contract is
-unchanged.
-
 ---
 
 ## Slice 2H: powermetrics Telemetry Adapter
 
-**Gate:** a captured **privileged** `powermetrics` sample whose field names
-are recorded in the Phase 1 exit checklist instrumentation section (the
-parser pins to the *captured sample*, not to docs/memory - macOS versions
-vary), plus the D-004 scoped sudoers rule installed
-(`<user> ALL=(root) NOPASSWD: /usr/bin/powermetrics`). The privileged sample
-is captured during the user's local auth session; do not start the parser
-without it.
+**Gate, acceptance, fallback:** `phase_2_plan.md` Slice 2H. Operational
+notes the gate implies: the parser pins to the *captured sample*, not to
+docs/memory (macOS versions vary) - do not start the parser without it;
+the D-004 sudoers line to install is
+`<user> ALL=(root) NOPASSWD: /usr/bin/powermetrics`.
 
 **New files:** `joulewise/adapters/powermetrics.py`,
 `tests/test_powermetrics.py` (+ a fixture file built from the captured
@@ -178,42 +170,23 @@ mean/stddev on a known fixture; the `permission_denied` path when `sudo -n`
 fails (monkeypatch the probe). A **real-machine smoke** records an idle
 baseline + a measured window in a run report.
 
-**Acceptance:** real samples flow `raw -> parsed -> trace -> reducer`;
-`observed_sampling_hz` within 20% of requested at 1-10 Hz; permission-denied
-path yields the documented structured failure.
-
-**Fallback:** if plist framing fights back, `--format text` parsing of the
-same fields (same contract, uglier parser); if sudo policy is refused,
-R-002 fallbacks (operator-attended runs).
-
 ---
 
 ## Slice 2I: Mac Vertical Slice Integration (the flagship demo)
 
-**Gate:** 2F, 2G, 2H all done. No new module - this is an integration +
-evidence slice.
-
-**Actions:** run `mac_mlx_local.json` end-to-end (`python3 -m joulewise run
-configs/examples/mac_mlx_local.json`); then a 3-repetition experiment
-(`repetitions: 3` => the 2F experiment runner + cooldown gate, which is now a
-**real** idle-power-recovery gate, not the mock skip); verify D-013 conduct
-(deferred logging on, controller quiescent during the window);
-`validate-bundle` green on all bundles; generate the report (2J). Set the Mac
-row of the Phase 2 applicability table to `supported` (or record the blocking
-finding).
-
-**Acceptance (Phase 2 headline, instantiated):** one command -> complete Mac
-bundle; 3 reps report mean/stddev via the manifest with cooldown gates
-recorded; sanity: idle mean < measured mean, `ttft < total`, energy/token
-within an order of magnitude of public Apple-Silicon LLM figures (a sanity
-bound, recorded in the report).
+Integration + evidence slice, no new module - gate, actions, and
+acceptance live in `phase_2_plan.md` Slice 2I. Implementation notes: the
+literal command is `python3 -m joulewise run
+configs/examples/mac_mlx_local.json`, then `repetitions: 3` (the 2F
+experiment runner's cooldown gate is now a **real** idle-power-recovery
+gate, not the mock skip).
 
 ---
 
 ## Slice 2K: NVIDIA/vLLM + nvidia-smi + SSH Transport
 
-**Gate:** P1-006 NVIDIA evidence (SSH reachable; `nvidia-smi` power queries
-work; vLLM installable; VRAM documented). Do not start on assumption.
+**Gate, acceptance, fallback:** `phase_2_plan.md` Slice 2K. Do not start
+on assumption.
 
 **New files:** `joulewise/adapters/ssh_transport.py`,
 `joulewise/adapters/vllm_runtime.py`, `joulewise/adapters/nvidia_smi.py`, a
@@ -249,74 +222,35 @@ installed remotely.
 nvidia-smi; runner-script arg handling. Real-node smoke when P1-006 evidence
 exists; record a remote bundle in a run report; fill the applicability table.
 
-**Acceptance:** one command on the controller produces a complete bundle for
-the remote 3050 target; structured failures for unreachable host / missing
-nvidia-smi demonstrated.
-
-**Fallback:** if vLLM is too heavy for 8 GB (R-006 cousin), `llama.cpp`-CUDA
-becomes this target's runtime (also satisfies D-015's portability
-preference); log the decision.
-
 ---
 
 ## Slice 2L: Orin Adapter
 
-**Gate:** P1-006 Orin evidence (SSH, runtime choice, telemetry mechanism).
+**Gate, acceptance, fallback:** `phase_2_plan.md` Slice 2L.
 
 Mirror 2K with Orin specifics: runtime via the 2K remote-runner protocol
 (llama.cpp-CUDA or a vendor stack - pick with evidence, log the decision);
 telemetry preferring INA3221 sysfs polling (VDD_IN rail, D-018) via a tiny
 remote poller, falling back to `tegrastats` parsing, with a wall-meter last
-resort (R-008). One complete bundle from the device; applicability table +
-Phase 1 Orin rows updated.
-
-**Fallback (R-008):** runtime-only target, or drop to stretch.
+resort (R-008).
 
 ---
 
 ## Slice 2M: Homogeneous Baselines + Qualitative Reproduction
 
-**Gate:** 2I plus at least one of {2K, 2L} (two targets minimum for the
-cross-target table; Mac-only is the degraded-but-publishable floor, R-012).
-
-**New:** a config-matrix generator script under `scripts/`, and
-`docs/phase_2/baseline_results.md` (the summary doc with figures). The
-workload matrix (per target x model, from D-016):
-
-| Profile | prompt_tokens | output_tokens | reps |
-|---|---|---|---|
-| short_short | 128 | 64 | 5 |
-| long_short (prefill-heavy) | 4096* | 64 | 5 |
-| short_long (decode-heavy) | 128 | 512 | 5 |
-| mid_mid | 1024 | 256 | 5 |
-
-*capped at model context / target memory; the capped value is recorded.
-
-**Protocol:** D-014 in full (n>=5, round-robin interleaving where reload cost
-permits, cooldown gates, raw points kept); per-target idle characterization
-(5-minute idle trace) once per session.
-
-**Acceptance:** energy/token and energy/request with 95% t-intervals per
-target x profile; prefill-heavy vs decode-heavy show the expected power
-asymmetry **or** the deviation is reported with the traces (acceptance is
-"measured and explained", not "matched expectations"); every attempted
-target x model ends `supported` or a recorded structured failure.
+**Gate, workload matrix, protocol, acceptance:** `phase_2_plan.md` Slice
+2M owns all of it (the matrix is experiment design, not implementation).
+Implementation surface here: a config-matrix generator script under
+`scripts/`, and `docs/phase_2/baseline_results.md` (the summary doc with
+figures, generated via 2J/Phase-4-preview scripts).
 
 ---
 
 ## Cross-cutting: closing D-016 (model selection) before 2G/2K
 
-D-016 is a decision step, not code, and it gates 2G/2K install targets. Apply
-its fixed criteria (runs on all primary targets; fits the smallest VRAM at
-the chosen quantization; KV-per-token in an interesting transfer range; open
-weights permitting academic use + local mirroring; prefer one small + one mid
-model from one family). Record in the decision log: chosen model(s), exact
-revisions, per-runtime artifact paths (MLX repo, GGUF file, HF repo for
-vLLM), KV bytes/token (for the Phase 3 table), and the fallback candidate;
-mirror weights locally (R-014). Requires P1-001 supervisor scope (or explicit
-user say-so) and a disk-space check. The candidate set
-(Qwen2.5-1.5B/7B-Instruct, Llama-3.2-1B/3B-Instruct, Llama-3.1-8B-Instruct)
-is narrowed with load evidence on Mac MLX + one CUDA target.
+See `phase_2_plan.md` "Model Selection Checkpoint (Before 2G)" and D-016
+in the decision log (criteria, candidate set, and what the closing entry
+must record). Not restated here.
 
 ---
 

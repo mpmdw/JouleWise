@@ -5,28 +5,36 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-06-12
+- Last updated: 2026-07-05
 - Project phase: Phase 1 closing; Phase 2 in progress - the
   hardware-independent harness core is complete and runnable
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 
-## This Update (2026-06-12) — 30-second read
+## This Update (2026-07-05) — 30-second read
 
-**Progress:** the benchmark harness now runs end to end. One command turns a
-typed experiment config into a complete, auditable energy + latency
-measurement bundle, validated today on a deterministic software target so the
-measurement logic is proven before any hardware time is spent. The test suite
-(169 checks) runs green in CI on every change. The Raspberry Pi/Hailo
-accelerator was confirmed unable to run LLM workloads — a clean, documented
-"not applicable" result, not a setback.
+**Progress:** work paused for a planned break (June 13 – July 4) and resumed
+with a full external audit of the code and plans. The harness core is
+unchanged and verified green (169 checks). The audit tightened the planning
+corpus (one status authority per phase, duplication removed), added two
+tracked risks with fixes in hand (measurement-data backup; the repository
+was moved off iCloud after a sync-lock recurrence), and defined one new
+engineering slice (2N: seam hardening the real Mac adapters will build on —
+next up, needs no hardware or approvals).
 
-**On track:** real-hardware measurement (Mac, then NVIDIA/Jetson) is the next
-step and is fully specified — it is execution, not design.
+**Context from the previous update (2026-06-12):** the benchmark harness
+runs end to end — one command turns a typed experiment config into a
+complete, auditable energy + latency measurement bundle, proven on a
+deterministic software target before any hardware time is spent. The
+Raspberry Pi/Hailo accelerator was confirmed unable to run LLM workloads —
+a clean, documented "not applicable" result, not a setback.
 
-**What I need from you (sanity check):** a short scope-confirmation
-that the reusable harness is the primary deliverable and split inference the
-validating study — this unblocks model selection and the first real Mac
-measurements. Any other thoughts are welcome
+**On track:** real-hardware measurement (Mac, then NVIDIA/Jetson) remains
+next after 2N and is fully specified — it is execution, not design.
+
+**What I need from you (sanity check):** unchanged — a short
+scope-confirmation that the reusable harness is the primary deliverable and
+split inference the validating study — this unblocks model selection and
+the first real Mac measurements. Any other thoughts are welcome.
 
 ## Summary
 
@@ -58,7 +66,7 @@ Research questions:
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - mock vertical slice (2A-2F, 2J) complete and runnable; hardware slices (2G-2M) gated |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - mock vertical slice (2A-2F, 2J) complete and runnable; hardening slice 2N queued (ungated); hardware slices (2G-2M) gated |
 | 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
@@ -103,7 +111,9 @@ Currently blocked on external input:
 2. Calendar anchors: colloquium date, report deadline, and the 3080 Ti
    borrow window, to derive phase target dates.
 3. A local authorization session to capture the first privileged
-   `powermetrics` sample (gates the powermetrics adapter, slice 2H).
+   `powermetrics` sample (gates the powermetrics adapter, slice 2H). The
+   originally planned 2026-06-10 slot passed without one; needs
+   rescheduling.
 
 Closed since the last revision (2026-06-12): the Hailo feasibility verdict
 (`unsupported_workload`) and the Phase 2 readiness review.
@@ -241,7 +251,9 @@ recorded evidence or a documented blocker.
 - **Phase 4** - `docs/phase_4/`: statistics ratification, aggregation,
   figures F1-F8 (baselines, traces, phase asymmetry, split decomposition,
   crossover curves, Pareto frontier, interconnect costs, measurement
-  quality), claims index, results + limitations draft.
+  quality), claims index, results + limitations draft, background /
+  related-work draft (new stage 4.6 — the report's background chapter now
+  has an owner).
 - **Phase 5** - `docs/phase_5/`: verified README quickstart, backend
   extension guide (verified by a shipped tutorial adapter), sample
   bundles, dataset freeze with hash manifest and release tag, colloquium
@@ -298,8 +310,9 @@ then, the dependency structure is the schedule: Phase 4 is deskwork and
 serves as the buffer; hardware-gated steps are scheduled around access
 windows with desk work filling gaps.
 
-Known: local Mac authorization session 2026-06-10 (unblocks the first
-privileged power sample).
+Known: a local Mac authorization session needs rescheduling (unblocks the
+first privileged power sample). Work paused 2026-06-13 to 2026-07-04
+(planned break, recorded in `docs/milestones.md`).
 
 ## Deliverables At Completion
 
@@ -325,7 +338,7 @@ privileged power sample).
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | schemas, interfaces, CLI; 14 tests, CI-enforced |
+| `joulewise/`, `tests/` | the harness package + test suite (169 tests, CI-enforced) |
 
 ## Maintenance Of This Document
 

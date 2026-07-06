@@ -44,6 +44,7 @@ be re-derived by a future agent gets an entry here.
 | D-020 | CLI binds `FakeClock` for all-mock runs, `SystemClock` otherwise | accepted |
 | D-021 | Controller flushes `events.jsonl` before the reduce stage | accepted |
 | D-022 | Auto-generated run-ID suffix is config-hash-derived, not random | accepted |
+| D-023 | Per-item phase status lives solely in the exit checklists | accepted |
 
 ---
 
@@ -1021,3 +1022,60 @@ Revisit when: a use case genuinely needs two same-config same-second
 bundles in one directory without the experiment runner (then reintroduce
 a disambiguator, e.g. a monotonic counter rather than randomness, to keep
 determinism).
+
+---
+
+## D-023: Per-item phase status lives solely in the exit checklists
+
+- Date: 2026-07-05
+- Status: accepted
+- Phase: all
+
+Context: project status was being recorded on six surfaces (phase plan
+headers and per-step lines, exit checklists, `AGENT_PLAN.md` checkboxes,
+`TASK_QUEUE.md`, `RUN_STATE.md`, `PROJECT_STATUS.md`). The 2026-07-05
+planning audit found same-day drift from the 2026-06-12 run:
+`phase_1_plan.md` still marked the Hailo verdict and readiness review
+"open" after the checklist closed them, and `phase_2_plan.md`'s header
+still read "planned" with 7 of 13 slices complete. The replication
+exceeded one operator's update discipline on the project's busiest day,
+which is exactly when drift is most misleading.
+
+Options considered:
+
+1. Keep all six surfaces and try harder. Con: already failed empirically;
+   discipline does not scale with excitement or fatigue.
+2. Exit checklists become the single per-item status authority; phase
+   plan files carry no status (header points at the checklist; per-step
+   status lines removed); `AGENT_PLAN.md` keeps a coarse checkbox mirror
+   updated at slice/phase closes; `TASK_QUEUE.md`/`RUN_STATE.md` remain
+   work-selection and handoff views (different content, not duplicated
+   status); `PROJECT_STATUS.md` remains the derived advisor summary.
+3. Generate a status dashboard from one machine-readable source. Con:
+   tooling investment the project does not need yet; a script is its own
+   maintenance surface.
+
+Decision: option 2. The evidence matrix in
+`docs/phase_N/phase_N_exit_checklist.md` is the only place a per-item
+status is asserted; every other document either points there or mirrors
+coarsely and says so.
+
+Considerations: plans stay useful as timeless specs (objectives, gates,
+design, acceptance) that do not rot when work completes; the checklist
+was already the evidence dossier, so status naturally colocates with the
+evidence that justifies it; the coarse `AGENT_PLAN.md` mirror is retained
+because it is the cross-phase index agents read first, and its checkbox
+grain (one line per slice) is cheap to keep honest. The same audit drove
+a companion dedup: `phase_2_plan.md` owns each gated slice's
+what/when/done while the hardware guide owns the how, replacing the
+previous near-verbatim duplication.
+
+Consequences: all five plan headers now read "Status: tracked in the
+exit checklist"; `phase_1_plan.md` per-step status lines removed; the
+source-of-truth map in `AGENT_PLAN.md` updated to name the checklists as
+status authority; plan/guide duplication for slices 2G-2M cut to
+pointers.
+
+Revisit when: the `AGENT_PLAN.md` coarse mirror is found drifted again -
+then replace the mirror with a generated table (option 3) rather than
+adding discipline.

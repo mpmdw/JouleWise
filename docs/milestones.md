@@ -9,7 +9,8 @@ every phase start.
 
 | Constraint | Date | Source |
 |---|---|---|
-| Mac local-machine auth session (unblocks privileged powermetrics sample) | 2026-06-10 | user, recorded 2026-06-09 |
+| Mac local-machine auth session (unblocks privileged powermetrics sample) | to reschedule (the planned 2026-06-10 slot passed with no session/evidence recorded) | user; updated 2026-07-05 |
+| Project pause (vacation) | 2026-06-13 through 2026-07-04 | user; recorded 2026-07-05 so the run-report gap reads as planned, not stalled |
 | Supervisor approval meeting | TBD | P1-001 |
 | 3080 Ti borrow window | TBD | R-006; needed during Phase 3 Stage 3.4 |
 | Colloquium date | TBD | user/program |
@@ -22,7 +23,7 @@ then, the dependency structure is the schedule.
 
 | Phase | Depends on | Hardware-critical window | Target end |
 |---|---|---|---|
-| 1: Approval, feasibility, measurement design | supervisor + device access | auth session 2026-06-10; lab answers | TBD |
+| 1: Approval, feasibility, measurement design | supervisor + device access | local auth session (to reschedule); lab answers | TBD |
 | 2: Harness + Mac slice + baselines | Phase 1 readiness gate | Mac sessions; remote-node access | TBD |
 | 3: Disaggregation + interconnect sweep | Phase 2 readiness gate | borrow window; network hardware | TBD |
 | 4: Analysis | dataset frozen | none (desk work) | TBD |
@@ -43,3 +44,9 @@ then, the dependency structure is the schedule.
 - Slides (5.4) want frozen figures >=1 week before the colloquium;
   the report (5.5) wants the claims-index final pass >=1 week before
   submission. Work backwards from there when dates land.
+- Heartbeat (added 2026-07-05): if more than 14 days pass with no run
+  report and no recorded break in this file, the next session starts with
+  a milestones + risk-register review before any other work - a
+  calendar-risk-dominated project must notice its own silence. Planned
+  breaks are recorded in the constraints table above so they do not
+  trip this rule.

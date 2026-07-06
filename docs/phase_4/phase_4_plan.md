@@ -1,7 +1,9 @@
 # Phase 4 Plan: Core Characterization And Analysis
 
-Status: planned. Gated by the Phase 4 readiness section of
-`docs/phase_3/phase_3_exit_checklist.md`.
+Status: tracked in `docs/phase_4/phase_4_exit_checklist.md` (per-item
+status authority, per D-023). Gated by the Phase 4 readiness section of
+`docs/phase_3/phase_3_exit_checklist.md` — except Stage 4.6, which is
+ungated desk work and may start any time.
 
 Companion docs:
 
@@ -198,8 +200,47 @@ downgraded in the claims index; no unexplained order-correlated trends.
 Fallback: claims that fail are downgraded or dropped - that is the stage
 working as designed, not a failure of the stage.
 
+### Stage 4.6: Background And Related-Work Draft
+
+Objective: the report's background chapter - previously unowned anywhere
+in the plan - drafted from a focused survey, so Stage 5.5 assembles
+rather than writes it.
+
+This is ungated desk work: it may start any time (it needs no data) and
+is good fill-in work while hardware gates are closed.
+
+Scope (survey targets, extended as reading reveals more):
+
+- Naming lineage and framing: JouleSort (energy-efficiency benchmarking),
+  Splitwise (prefill/decode disaggregation - the direct motivator).
+- Disaggregated LLM inference: DistServe, Mooncake, and successors;
+  where JouleWise's energy focus differs from their latency/throughput
+  focus.
+- Energy measurement of ML systems: MLPerf Power, Zeus, and
+  software-power-measurement literature (methodology comparisons:
+  boundaries, sampling, idle subtraction - tie to D-018/D-013/D-014).
+- Edge/heterogeneous LLM inference measurement studies (Apple Silicon,
+  Jetson-class devices).
+
+Actions: draft `docs/phase_4/related_work_draft.md` - per source: one
+paragraph of what it establishes, and one sentence of how JouleWise
+relates (adopts, extends, differs, or measures what it left open).
+Every JouleWise design choice that mirrors or departs from prior art
+cites the source here.
+
+Evidence: the draft; citations resolvable (DOI/arXiv/URL recorded).
+
+Acceptance: the report's background chapter can be assembled from this
+draft plus the methodology doc without new research; the "why energy,
+why split, why now" story is sourced, not asserted.
+
+Fallback: scope the survey to the direct-motivator set (JouleSort,
+Splitwise, MLPerf Power, Zeus) if time compresses - breadth of the
+periphery is the cuttable part, the motivator set is not.
+
 ## Exit
 
 Governed by `docs/phase_4/phase_4_exit_checklist.md`. The phase's product
 is: validated dataset + deterministic figures + claims index + ratified
-uncertainty story + results/limitations draft ready for Phase 5 packaging.
+uncertainty story + results/limitations draft + background/related-work
+draft ready for Phase 5 packaging.

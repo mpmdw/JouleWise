@@ -1,6 +1,7 @@
 # Phase 5 Plan: Presentation, Repository Polish, And Final Submission
 
-Status: planned. Gated by the Phase 5 readiness section of
+Status: tracked in `docs/phase_5/phase_5_exit_checklist.md` (per-item
+status authority, per D-023). Gated by the Phase 5 readiness section of
 `docs/phase_4/phase_4_exit_checklist.md`. Calendar anchors live in
 `docs/milestones.md` (dates TBD until P1-008 closes).
 
@@ -126,12 +127,12 @@ Fallback: none needed beyond ordinary iteration.
 
 Objective: the written deliverable.
 
-Actions: assemble from existing audited parts - methodology (Phase 1 doc,
-updated), harness design (plan docs distilled), results (4.4 draft),
-limitations (4.4), reproducibility appendix (quickstart + regeneration
-commands + manifest), applicability findings; final pass walking the
-claims index against the text (every quantitative sentence has its row;
-every row's status caveat is honored).
+Actions: assemble from existing audited parts - background/related work
+(4.6 draft), methodology (Phase 1 doc, updated), harness design (plan
+docs distilled), results (4.4 draft), limitations (4.4), reproducibility
+appendix (quickstart + regeneration commands + manifest), applicability
+findings; final pass walking the claims index against the text (every
+quantitative sentence has its row; every row's status caveat is honored).
 
 Evidence: report source in repo; claims-index final-pass note.
 

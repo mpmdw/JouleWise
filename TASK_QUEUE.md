@@ -58,22 +58,27 @@ Rank lower when a task:
 
 | Rank | ID | Priority | Status | Task | Evidence / Acceptance |
 |---:|---|---|---|---|---|
-| 1 | P1-001 | P1 Phase Gate | waiting-user | Capture supervisor approval and scope notes | Dated notes in `docs/phase_1/phase_1_exit_checklist.md`; `RUN_STATE.md` updated if scope changes. Also unblocks D-016 (P2-004). |
-| 2 | P1-002 | P1 Phase Gate | waiting-user | Complete Mac-local Phase 1 telemetry/runtime evidence | User handles local auth; then capture one privileged `powermetrics` sample, record fields, and install the D-004 sudoers rule (exit-checklist instrumentation section); MLX install path still pending. Gates 2G/2H. |
-| 3 | P1-008 | P1 Phase Gate | waiting-user | Map phases to academic calendar | Colloquium/report dates + borrow window entered in `docs/milestones.md`; phase target dates derived |
-| 4 | P1-003 | P1 Phase Gate | open | Record wall-meter decision | Meter make/model or "unavailable" verdict plus measurement/export method (exit-checklist wall-meter section; informs D-018 boundary calibration) |
-| 5 | P1-004 | P1 Phase Gate | partial | Fill network/interconnect topology plan | Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section |
-| 6 | P1-006 | P1 Phase Gate | open | Confirm NVIDIA/Orin telemetry access paths | SSH/runtime/telemetry command evidence in the exit-checklist instrumentation section, or marked pending with blocker (gates slices 2K/2L) |
-| 7 | P2-004 | P2 Next Slice | gated (P1-001) | Close model selection (D-016) | Decision-log entry: models, revisions, artifact paths, local mirror, fallback candidate. Decision step, not code; needs supervisor scope or explicit user go-ahead + disk-space check. Unblocks 2G/2K install targets. |
-| 8 | P2-003 | P2 Next Slice | gated (P1-002 + D-016) | Mac MLX + powermetrics vertical slice (slices 2G-2I) | Real bundle + 3-rep variance in a run report. Code-level spec: `docs/phase_2/hardware_slice_implementation_guide.md`. |
-| 9 | P2-005 | P2 Next Slice | gated (P1-006) | Remote targets (slices 2K NVIDIA/vLLM/ssh, 2L Orin) | Remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide. |
-| 10 | P2-006 | P2 Next Slice | gated (2I + ≥1 remote) | Homogeneous baselines (slice 2M) | Workload-matrix manifests + bundles; `docs/phase_2/baseline_results.md` with variance + prefill/decode comparison |
-| 11 | P3-000 | P3 Research Expansion | queued | KV persistence feasibility spikes (Phase 3 Stage 3.0) | Verdicts in `docs/phase_3/kv_feasibility.md`; gated on Mac slice; must complete before any borrow-window scheduling |
+| 1 | P0-002 | P0 Safety | open (must close before 2I data collection) | Define measurement-corpus backup protocol (R-016) | Protocol recorded in R-016 (destination, cadence, method); one restore test performed |
+| 2 | P1-001 | P1 Phase Gate | waiting-user | Capture supervisor approval and scope notes | Dated notes in `docs/phase_1/phase_1_exit_checklist.md`; `RUN_STATE.md` updated if scope changes. Also unblocks D-016 (P2-004). |
+| 3 | P1-002 | P1 Phase Gate | waiting-user (auth session to reschedule) | Complete Mac-local Phase 1 telemetry/runtime evidence | Privileged `powermetrics` sample + field list, D-004 sudoers rule verified, MLX install path (exit-checklist instrumentation section). Gates 2G/2H. |
+| 4 | P1-008 | P1 Phase Gate | waiting-user | Map phases to academic calendar | Colloquium/report dates + borrow window entered in `docs/milestones.md`; phase target dates derived |
+| 5 | P1-003 | P1 Phase Gate | open | Record wall-meter decision | Meter make/model or "unavailable" verdict plus measurement/export method (exit-checklist wall-meter section; informs D-018 boundary calibration) |
+| 6 | P1-004 | P1 Phase Gate | partial | Fill network/interconnect topology plan | Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section |
+| 7 | P1-006 | P1 Phase Gate | open | Confirm NVIDIA/Orin telemetry access paths | SSH/runtime/telemetry command evidence in the exit-checklist instrumentation section, or marked pending with blocker (gates slices 2K/2L) |
+| 8 | P2-007 | P2 Next Slice | open (ungated — top implementable work) | Slice 2N pre-hardware hardening | Tests per work item; suite green; run report. Spec: `docs/phase_2/phase_2_plan.md` Slice 2N |
+| 9 | P2-004 | P2 Next Slice | gated (P1-001) | Close model selection (D-016) | Decision-log entry: models, revisions, artifact paths, local mirror, fallback candidate. Decision step, not code; needs supervisor scope or explicit user go-ahead + disk-space check. Unblocks 2G/2K install targets. |
+| 10 | P2-003 | P2 Next Slice | gated (P1-002 + D-016 + 2N) | Mac MLX + powermetrics vertical slice (slices 2G-2I) | Real bundle + 3-rep variance in a run report. Code-level spec: `docs/phase_2/hardware_slice_implementation_guide.md`. |
+| 11 | P2-005 | P2 Next Slice | gated (P1-006) | Remote targets (slices 2K NVIDIA/vLLM/ssh, 2L Orin) | Remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide. |
+| 12 | P2-006 | P2 Next Slice | gated (2I; Mac-only floor allowed per the plan) | Homogeneous baselines (slice 2M) | Workload-matrix manifests + bundles; `docs/phase_2/baseline_results.md` with variance + prefill/decode comparison |
+| 13 | P3-001 | P3 Research Expansion | open (ungated desk work) | Background/related-work draft (Phase 4 Stage 4.6) | `docs/phase_4/related_work_draft.md` with resolvable citations |
+| 14 | P3-000 | P3 Research Expansion | queued | KV persistence feasibility spikes (Phase 3 Stage 3.0) | Verdicts in `docs/phase_3/kv_feasibility.md`; gated on Mac slice; must complete before any borrow-window scheduling |
 
 ## Completed Queue Items
 
 | ID | Priority | Completed | Task | Evidence |
 |---|---|---|---|---|
+| P0-001 | P0 Safety | 2026-07-05 | Move repo off iCloud-synced Desktop (R-017) | New path `~/code/CapstoneRivoire/Capstone`; git + suite verified green at the new location; recorded in `RUN_STATE.md` |
+| DOC-003 | P4 Polish | 2026-07-05 | Docs/meta-layer cleanup (user-directed): drift fixes, D-023 status consolidation, plan/guide dedup, R-016/R-017, Slice 2N + Stage 4.6 planned | Run report `2026-07-05-docs-meta-cleanup.md`; D-023; risk register updated |
 | P2-001 | P2 Next Slice | 2026-06-12 | Mock vertical slice: slices 2A-2E | Harness runs end-to-end; `validate-bundle` green; CI mock e2e step added; 169 tests. `joulewise/{bundle,clock,controller,reduce,cli}.py` + `adapters/`; run report `2026-06-12-phase-2-mock-vertical-slice.md` |
 | P2-002 | P2 Next Slice | 2026-06-12 | Repetitions + experiment manifests (slice 2F) | `run_experiment` + cooldown gate; 3-rep + kill-after-rep-2 + cooldown tests; manifest per D-005. Same run report |
 | P2-J | P2 Next Slice | 2026-06-12 | Static report generator (slice 2J) | `joulewise/report.py`; matplotlib behind `[analysis]`; graceful structured failure when absent; tests skip cleanly without the extra |
@@ -105,6 +110,8 @@ Rank lower when a task:
   produced data.
 - Do not close D-016 (model selection) without P1-001 supervisor scope or an
   explicit user go-ahead.
+- Do not start 2G/2H before Slice 2N lands (the seams it fixes are exactly
+  what the real adapters build on).
 
 ## Queue Maintenance
 

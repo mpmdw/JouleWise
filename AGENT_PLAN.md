@@ -18,6 +18,9 @@ as the first research application that validates the harness.
   `PROJECT_STATUS.md` too.
 - Check `docs/decision_log.md` before re-deciding anything; record new design
   decisions there with options and considerations.
+- Per-item phase status is asserted only in
+  `docs/phase_N/phase_N_exit_checklist.md` (D-023); this file's checkboxes
+  are a coarse mirror updated at slice/phase closes.
 - Review `docs/risk_register.md` at phase starts and when a trigger fires.
 - Keep run artifacts self-contained and reproducible.
 - Prefer small vertical slices that produce complete run bundles.
@@ -35,10 +38,10 @@ report.
 
 | Artifact | Owns |
 |---|---|
-| `AGENT_PLAN.md` (this file) | phase index, status summary, acceptance criteria |
+| `AGENT_PLAN.md` (this file) | phase index, coarse status mirror, acceptance criteria (per-item status authority: the exit checklists, D-023) |
 | `PROJECT_STATUS.md` | advisor-facing status/plan/architecture summary (derived; update when advisor-visible state changes) |
 | `docs/phase_N/phase_N_plan.md` | step/slice detail: objectives, design, actions, evidence, fallbacks |
-| `docs/phase_N/phase_N_exit_checklist.md` | evidence gates for closing phase N |
+| `docs/phase_N/phase_N_exit_checklist.md` | evidence gates for closing phase N, and per-item status (the authority, D-023) |
 | `TASK_QUEUE.md` | what to do next, and why it outranks the rest |
 | `RUN_STATE.md` | current handoff: state, verification, next step |
 | `docs/decision_log.md` | design decisions, options, considerations |
@@ -111,7 +114,8 @@ Acceptance criteria:
 ### Phase 2: Harness, Mac Vertical Slice, And Homogeneous Baselines
 
 Status: in progress — the hardware-independent core (2A-2F, 2J) is complete
-and runnable (2026-06-12); the remaining slices are hardware-gated. Detail:
+and runnable (2026-06-12); Slice 2N (pre-hardware hardening, ungated) is
+next; the remaining slices are hardware-gated. Detail:
 `docs/phase_2/phase_2_plan.md`. Exit: `docs/phase_2/phase_2_exit_checklist.md`.
 Gated-slice specs: `docs/phase_2/hardware_slice_implementation_guide.md`.
 
@@ -132,6 +136,8 @@ slices live in `docs/phase_2/hardware_slice_implementation_guide.md`.
   evidence + D-004 sudoers).
 - [ ] 2I Mac vertical slice integration with variance (gated: 2F+2G+2H).
 - [x] 2J Static report generator v1.
+- [ ] 2N Pre-hardware hardening (ungated; land before 2G/2H) — added
+  2026-07-05 from the external code review; see the Phase 2 plan.
 - [ ] 2K NVIDIA/vLLM + nvidia-smi + SSH transport (gated on P1-006).
 - [ ] 2L Orin adapter (gated on P1-006).
 - [ ] 2M Homogeneous baselines + prefill/decode qualitative reproduction.
@@ -179,6 +185,8 @@ Status: planned. Detail: `docs/phase_4/phase_4_plan.md`. Exit:
 - [ ] 4.3 Claims-to-evidence index.
 - [ ] 4.4 Results and limitations draft.
 - [ ] 4.5 Uncertainty and sensitivity audit.
+- [ ] 4.6 Background and related-work draft (ungated desk work; may start
+  any time).
 
 Acceptance criteria:
 

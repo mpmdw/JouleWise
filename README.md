@@ -17,8 +17,9 @@ The benchmark is designed around three stable ideas:
 plan, and architecture document - start there for a monitoring view of the
 project.
 
-See `AGENT_PLAN.md` for the phase index and status summary; each phase has a
-detailed plan and an evidence-based exit checklist under `docs/phase_N/`. See
+See `AGENT_PLAN.md` for the phase index; each phase has a detailed plan and
+an evidence-based exit checklist under `docs/phase_N/` — the exit checklist
+is the per-item status authority (D-023). See
 `RUN_STATE.md` before starting substantial work; it is the current handoff note
 for what was done and what should happen next. Future phase starts should use
 `docs/planning_reflection_protocol.md` to audit whether each step has evidence
@@ -78,6 +79,10 @@ A run bundle (`runs/<run_id>/`) contains the normalized `config.json`,
 `metadata.json`, the `events.jsonl` lifecycle/phase/token log, the raw
 `power_trace.csv`, model outputs, per-component logs, and the reduced
 `summary_metrics.json` (written last; its presence marks a complete bundle).
+
+Bundles are immutable evidence: re-running the same config into the same
+`--runs-dir` fails by design with a run-ID collision (delete the old
+bundle directory, change `run_id`, or use a fresh runs dir).
 
 ## Config And Schema Verbs
 

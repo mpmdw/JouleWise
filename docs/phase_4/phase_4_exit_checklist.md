@@ -14,6 +14,7 @@ Companion plan: `docs/phase_4/phase_4_plan.md`.
 | 4.3 claims index | required | pending | 100% of quantitative claims have rows; 3 spot-checks traced claim->figure->script->bundles | `docs/phase_4/claims_index.md` |
 | 4.4 results draft | required | pending | findings for Q1/Q2/Q3; limitations cover boundary table, co-residency, exercised fallbacks, network conditions | `docs/phase_4/results_draft.md` |
 | 4.5 sensitivity audit | required | pending | per-headline-claim effect-vs-CI table; thermal-order audit; clock-bound audit | sensitivity appendix in results draft |
+| 4.6 related-work draft | required (ungated; may close early) | pending | sourced background draft; every design choice mirroring/departing from prior art cited; citations resolvable | `docs/phase_4/related_work_draft.md` |
 | Repro check | required | pending | clean checkout + runs corpus => dataset + figures regenerate, performed once end-to-end and logged | run report |
 
 ## Phase 5 Readiness Gate

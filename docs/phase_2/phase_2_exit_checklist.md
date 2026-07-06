@@ -25,16 +25,18 @@ Companion plan: `docs/phase_2/phase_2_plan.md`.
 | 2J report generator | required | **complete (2026-06-12)** | generated report from mock bundles; tests assert artifacts | `joulewise/report.py` + `tests/test_report.py` (8 chart tests skip without `[analysis]`) |
 | 2K NVIDIA/vLLM/ssh | conditional (gate: P1-006 NVIDIA evidence) | pending | remote bundle from 3050, or documented access blocker | run report + applicability table below; spec in `hardware_slice_implementation_guide.md` |
 | 2L Orin adapter | conditional (gate: P1-006 Orin evidence) | pending | bundle from Orin, or documented blocker | run report + applicability table below; spec in `hardware_slice_implementation_guide.md` |
-| 2M homogeneous baselines | required (scope = available targets) | pending (gated: 2I + ≥1 remote target) | manifests + bundles for the workload matrix; baseline summary doc with variance and prefill/decode comparison | `docs/phase_2/baseline_results.md` |
+| 2M homogeneous baselines | required (scope = available targets) | pending (gated: 2I; wants ≥1 remote target for the cross-target table, Mac-only is the documented floor per the plan) | manifests + bundles for the workload matrix; baseline summary doc with variance and prefill/decode comparison | `docs/phase_2/baseline_results.md` |
+| 2N pre-hardware hardening | required before 2G/2H | pending (ungated) | tests per work item (raw seam, window boundaries, token fallback, rail contract, schema round-trip, reduce verb, report alignment); suite green | `phase_2_plan.md` Slice 2N; run report |
 | CI green | required | pending push verification | workflow passing on main including mock end-to-end | GitHub Actions (step added to `ci.yml`; 169 tests green locally) |
 | Applicability table | required | in progress | every attempted target × model combo classified supported / pending / unsupported with reason | this file (table below) |
 
-Status summary (2026-06-12): the hardware-independent core — slices 2A-2F
-and 2J — is **complete**, tested (169 tests, 8 matplotlib skips), and
-runnable end-to-end (`python3 -m joulewise run ...` → complete bundle →
-`validate-bundle` green; closed-form reducer values verified). The harness
-is trustworthy without hardware. Remaining Phase 2 work is the
-hardware-gated slices and D-016; code-level specs for them live in
+Status summary (2026-07-05): the hardware-independent core — slices 2A-2F
+and 2J — is **complete** (2026-06-12), tested (169 tests, 8 matplotlib
+skips), and runnable end-to-end (`python3 -m joulewise run ...` → complete
+bundle → `validate-bundle` green; closed-form reducer values verified).
+The harness is trustworthy without hardware. Remaining Phase 2 work is
+Slice 2N (ungated, next), then the hardware-gated slices and D-016;
+code-level specs live in
 `docs/phase_2/hardware_slice_implementation_guide.md`.
 
 *The Mac slice (2G/2H/2I) is required unless R-002/R-003 fallbacks were

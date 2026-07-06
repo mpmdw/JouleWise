@@ -1,6 +1,7 @@
 # Phase 3 Plan: Disaggregation, KV Replay, And Interconnect Sweep
 
-Status: planned. Gated by the Phase 3 readiness section of
+Status: tracked in `docs/phase_3/phase_3_exit_checklist.md` (per-item
+status authority, per D-023). Gated by the Phase 3 readiness section of
 `docs/phase_2/phase_2_exit_checklist.md`.
 
 Companion docs:
