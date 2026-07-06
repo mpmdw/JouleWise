@@ -360,6 +360,66 @@ class ValidateBundleTests(CliRunTestCase):
         self.assertTrue(any("metadata.json" in problem for problem in problems))
 
 
+class StrictValidateTests(CliRunTestCase):
+    """D-030 (2026-07-06 status review P2): --strict catches succeeded
+    bundles whose summary no longer follows from the raw evidence."""
+
+    def make_bundle(self, run_id: str) -> Path:
+        exit_code, out, _ = self.run_verb(self.write_config(run_id))
+        self.assertEqual(exit_code, 0)
+        return self.bundle_path_from_line(out.splitlines()[0])
+
+    def test_fresh_succeeded_bundle_passes_strict(self) -> None:
+        bundle = self.make_bundle("strict-clean")
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+        exit_code, out, _ = _run(["validate-bundle", "--strict", str(bundle)])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("valid bundle:", out)
+
+    def test_emptied_rail_manifest_fails_strict_only(self) -> None:
+        # Review repro (a): default validation blesses it; strict must not.
+        bundle = self.make_bundle("strict-manifest")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["device"]["rail_manifest"] = []
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+        self.assertEqual(validate_bundle(bundle), [])
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("reducer-consumable" in p for p in problems), problems
+        )
+        self.assertTrue(
+            any("does not match a fresh re-reduction" in p for p in problems),
+            problems,
+        )
+
+    def test_tampered_summary_metric_fails_strict_only(self) -> None:
+        # Review repro (b): a nonsense energy_request_j must not be blessed.
+        bundle = self.make_bundle("strict-tampered")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["energy_request_j"] = 999999.0
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.assertEqual(validate_bundle(bundle), [])
+        problems = validate_bundle(bundle, strict=True)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("does not match a fresh re-reduction", problems[0])
+        self.assertIn("energy_request_j", problems[0])
+        exit_code, out, _ = _run(["validate-bundle", "--strict", str(bundle)])
+        self.assertEqual(exit_code, 2)
+        self.assertIn("invalid: strict:", out)
+
+    def test_strict_adds_nothing_for_non_succeeded_bundles(self) -> None:
+        # Failed/unsupported summaries are controller-written from partial
+        # evidence; strict only judges claims of success.
+        exit_code, out, _ = self.run_verb(
+            self.write_unsupported_config("strict-unsupported")
+        )
+        self.assertEqual(exit_code, 3)
+        bundle = self.bundle_path_from_line(out.splitlines()[0])
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+
 class ReduceVerbTests(CliRunTestCase):
     """Slice 2N.6 (D-028): post-hoc re-reduction of an existing bundle."""
 

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.bundle import BundleError
-from joulewise.bundle_read import BundleReader
+from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.clock import Clock, FakeClock, SystemClock
 from joulewise.controller import run_benchmark, run_experiment
 from joulewise.reduce import reduce_bundle
@@ -137,18 +137,77 @@ def _cmd_run(args: argparse.Namespace) -> int:
 # Phase 5 dataset publication later reuse it without the CLI shell.
 
 
-def validate_bundle(path: Path) -> list[str]:
-    """Return a list of structural problems with the bundle at ``path``.
+def validate_bundle(path: Path, strict: bool = False) -> list[str]:
+    """Return a list of problems with the bundle at ``path``.
 
     An empty list means the bundle is valid. Performs every check (no
-    short-circuit) so a single invocation reports all problems. Thin wrapper
-    over :meth:`joulewise.bundle_read.BundleReader.problems` (D-025).
+    short-circuit) so a single invocation reports all problems. The default
+    checks are structural, via
+    :meth:`joulewise.bundle_read.BundleReader.problems` (D-025).
+
+    ``strict=True`` (D-030) adds analysis-grade checks for ``succeeded``
+    bundles: the measured window and summed curve must be
+    reducer-consumable, and ``summary_metrics.json`` must match a fresh
+    re-reduction of the raw artifacts - so a bundle whose summary no longer
+    follows from its evidence cannot be blessed into a dataset. Strict mode
+    lives here (not in the reader) because it composes the reader with the
+    reducer, which itself consumes the reader.
     """
-    return BundleReader(Path(path)).problems()
+    reader = BundleReader(Path(path))
+    problems = reader.problems()
+    if strict:
+        problems.extend(_strict_problems(reader))
+    return problems
+
+
+def _strict_problems(reader: BundleReader) -> list[str]:
+    """The D-030 analysis-grade checks; applies only to succeeded bundles.
+
+    Failed/unsupported summaries are controller-written from partial
+    evidence, and incomplete bundles already fail structurally, so a fresh
+    reduction is only comparable when the summary claims success.
+    """
+    summary = reader.raw_summary()
+    if not isinstance(summary, dict) or summary.get("status") != RunStatus.SUCCEEDED.value:
+        return []
+    problems: list[str] = []
+    try:
+        window = reader.measured_window()
+    except BundleReadError as exc:
+        return [f"strict: {exc}"]
+    if window is None:
+        return ["strict: succeeded bundle has no measured window in events.jsonl"]
+    try:
+        curve = reader.summed_curve()
+    except BundleReadError as exc:
+        problems.append(f"strict: {exc}")
+        return problems
+    if window.duration_s > 0:
+        in_window = sum(
+            1 for point in curve if window.start_s <= point.t <= window.end_s
+        )
+        if in_window < 2:
+            problems.append(
+                f"strict: only {in_window} summed power sample(s) inside the "
+                "measured window; a succeeded summary needs a "
+                "reducer-consumable curve"
+            )
+    fresh = reduce_bundle(reader.path).to_dict()
+    if fresh != summary:
+        differing = sorted(
+            key
+            for key in set(fresh) | set(summary)
+            if fresh.get(key) != summary.get(key)
+        )
+        problems.append(
+            "strict: summary_metrics.json does not match a fresh re-reduction "
+            f"of the raw artifacts (differing keys: {', '.join(differing)})"
+        )
+    return problems
 
 
 def _cmd_validate_bundle(args: argparse.Namespace) -> int:
-    problems = validate_bundle(Path(args.path))
+    problems = validate_bundle(Path(args.path), strict=args.strict)
     if problems:
         for problem in problems:
             print(f"invalid: {problem}")
@@ -236,6 +295,15 @@ def build_parser() -> argparse.ArgumentParser:
         "validate-bundle", help="structurally verify a run bundle directory"
     )
     validate_bundle_parser.add_argument("path", help="path to a run bundle directory")
+    validate_bundle_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "additionally require succeeded bundles to be reducer-consumable "
+            "and their summary to match a fresh re-reduction (D-030; use for "
+            "dataset publication gates)"
+        ),
+    )
     validate_bundle_parser.set_defaults(func=_cmd_validate_bundle)
 
     reduce_parser = subparsers.add_parser(

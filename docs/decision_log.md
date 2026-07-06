@@ -51,6 +51,7 @@ be re-derived by a future agent gets an entry here.
 | D-027 | Per-rail rows must share per-sample timestamps; misalignment is a structured failure | accepted |
 | D-028 | `reduce` verb rewrites `summary_metrics.json` in place (the one sanctioned post-finalize mutation) | accepted |
 | D-029 | Config schema declares nullable optionals; serialization (and config hashes) unchanged | accepted |
+| D-030 | `validate-bundle` stays structural by default; `--strict` adds re-reduction checks for succeeded bundles | accepted |
 
 ---
 
@@ -1400,3 +1401,54 @@ extras), (c) pinned SHA-256 per example config.
 Revisit when: schema v0.2 (D-008) - the v0.2 exporter must keep the
 nullable-optionals rule; or if a downstream consumer requires
 omit-None artifacts (then revisit WITH a hash-migration plan).
+
+---
+
+## D-030: `validate-bundle` stays structural by default; `--strict` adds re-reduction checks
+
+- Date: 2026-07-06
+- Status: accepted (from the 2026-07-06 project status review, finding P2)
+- Phase: 2 (matters most at Phase 5 dataset publication)
+
+Context: the independent status review demonstrated that the default
+validator blesses succeeded bundles whose derived metrics no longer
+follow from their raw evidence - an emptied rail manifest and a tampered
+`energy_request_j` both validated clean. Structural checks alone cannot
+gate a published dataset.
+
+Options considered:
+
+1. Broaden the default `validate-bundle` to include analysis checks.
+   Con: the default is used in CI and on failed/unsupported/incomplete
+   bundles, where a fresh reduction is not comparable (failure summaries
+   are controller-written from partial evidence); a heavier default also
+   makes the structural verb slower and noisier for its most common use.
+2. A `--strict` opt-in mode: for `status=succeeded` bundles only, (a)
+   the measured window must exist, (b) the summed curve must be
+   reducer-consumable (>= 2 in-window samples for a nonzero window), and
+   (c) `summary_metrics.json` must equal a fresh `reduce_bundle` of the
+   raw artifacts (exact-key diff reported). Failed/unsupported bundles
+   pass strict untouched.
+
+Decision: option 2. Default semantics are unchanged; strict mode is the
+gate for any "all bundles intended for analysis pass validation" claim -
+Phase 5 dataset publication (Stage 5.2) and Phase 4 aggregation intake
+should run `validate-bundle --strict`.
+
+Considerations: the re-reduction comparison is exact (the reducer is
+deterministic over on-disk artifacts, D-002, and JSON round-trips floats
+exactly), so any drift - tampering, a reducer version change, partial
+rewrites - surfaces as a named key diff. Strict mode lives in `cli.py`,
+not the reader: it composes the reader with the reducer, and the reducer
+already consumes the reader (D-025), so putting it in `bundle_read`
+would create an import cycle.
+
+Consequences: `validate_bundle(path, strict=False)` keeps its importable
+signature; CLI gains `--strict`; the reviewer's two reproductions are
+pinned as tests (manifest emptied, summary tampered); Phase 5 Stage 5.2
+should adopt `--strict` for the published sample bundles.
+
+Revisit when: bundle schema v0.2 lands (composite summaries need their
+own strict semantics), or a reducer version bump makes historical
+summaries legitimately differ from fresh reductions (then strict needs
+a provenance-aware comparison, see D-028's revisit note).

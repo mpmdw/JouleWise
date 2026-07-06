@@ -69,8 +69,11 @@ Actions: select one mock bundle and one real Mac bundle (small model, short
 workload); apply the size policy - committed bundles <= ~2 MB each, with
 oversized raw artifacts (e.g., big plists) truncated *by documented script*
 (`scripts/trim_bundle.py`) that records what was removed in the bundle's
-metadata; place under `examples/runs/`; wire `validate-bundle` over them
-into CI.
+metadata; place under `examples/runs/`; wire `validate-bundle --strict`
+(D-030) over them into CI. Note: a trimmed bundle whose summary predates
+the trim still re-reduces identically as long as trimming only removes
+`raw/` artifacts (the reducer reads the derived trace, not raw/); if a
+trim ever touches reducer inputs, the strict gate will catch it.
 
 Evidence: CI validating the samples on every push; README links them.
 
