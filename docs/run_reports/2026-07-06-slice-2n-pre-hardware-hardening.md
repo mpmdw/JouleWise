@@ -163,9 +163,9 @@ config/summary/event element is additive; serialization untouched).
 
 ## Workspace State
 
-- Working tree clean after the three commits; **not pushed** (push when
-  the user confirms, then check CI — the suite-count expectation in
-  playbook M0 was updated to 216).
+- Working tree clean after the three commits; pushed same-session at
+  the user's request. CI run #11 on `5cb1dfc`: completed, success (the
+  suite-count expectation in playbook M0 was updated to 216).
 - Old Desktop remnant `~/Desktop/CapstoneRivoire` deleted (verified to
   contain only the harness-recreated settings file first).
 - Smoke bundles were written to the session scratchpad, not the repo.

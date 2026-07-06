@@ -121,10 +121,9 @@ round-trip test. Also verified end-to-end: mock `run` ->
   harness-recreated settings file) and deleted 2026-07-06;
   `~/jw_pending_edits/` is gone. No stale-path cleanup remains.
 - Remote: `git@github.com:mpmdw/JouleWise.git`; branch `main`.
-- **Three local commits are NOT pushed** (Slice 2N groups A/B/C). Push
-  when the user confirms, then verify CI goes green (the mock e2e step
-  now also exercises the marker events and raw evidence; expected suite
-  line is 216/OK).
+- Slice 2N commits (groups A/B/C) pushed 2026-07-06 at the user's
+  request; CI run #11 on `5cb1dfc` completed green (mock e2e included,
+  now exercising the marker events and raw evidence; suite 216/OK).
 - Git author identity remains the auto-selected
   `Edr <edr@Edrs-MacBook-Air.local>`.
 
@@ -134,19 +133,18 @@ Follow `TASK_QUEUE.md`; execute via the mission guides in
 `docs/agent_playbook.md` (start every session with its Mission M0). In
 order:
 
-1. Push the three Slice 2N commits (user confirmation), then verify CI
-   green on main.
-2. P0-002: corpus backup protocol (R-016) — must close before 2I data
+1. P0-002: corpus backup protocol (R-016) — must close before 2I data
    (playbook M2; needs the user to name a destination).
-3. P3-001: related-work draft (Stage 4.6) — top implementable work
+2. P3-001: related-work draft (Stage 4.6) — top implementable work
    needing no user input (playbook M3).
-4. The external gates when the user can: P1-001 (scope), P1-002 (auth
+3. The external gates when the user can: P1-001 (scope), P1-002 (auth
    session, rescheduled), P1-008 (calendar), P1-003/P1-004/P1-006 —
    these open playbook missions M4-M8. Once D-016 + the Mac gates open,
    2G/2H build directly on the post-2N seams (playbook M5/M6).
 
-Done 2026-07-06: Slice 2N complete (P2-007; all nine items, three local
-commits, D-024..D-029, 216 tests green, exit-checklist row closed).
+Done 2026-07-06: Slice 2N complete (P2-007; all nine items, three
+commits pushed, CI run #11 green, D-024..D-029, 216 tests green,
+exit-checklist row closed).
 
 ## Open Decisions And Blockers
 
