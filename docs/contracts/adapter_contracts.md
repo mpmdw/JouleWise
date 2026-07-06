@@ -24,8 +24,11 @@ Rules:
   tests - pass `None`; adapters must tolerate a missing context by
   producing no raw output (one lifecycle code path either way).
 - Raw evidence (D-002): a telemetry adapter preserves its native sampler
-  output verbatim under `context.raw_dir` (e.g. the powermetrics plist).
-  Raw artifacts are immutable once written; plain file names only.
+  output verbatim under `context.raw_dir` (e.g. the powermetrics plist),
+  via `joulewise.bundle.write_raw_artifact(context, name, data)` - the
+  helper enforces the plain-file-name and no-overwrite rules without
+  handing the adapter the bundle writer. Adapters must not write `raw/`
+  paths directly (2026-07-06 status review P3).
 - Adapters must ignore context fields they do not need.
 
 ## Measured-Window Markers (D-026, Slice 2N.2)

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,15 @@ _JSON_ARTIFACTS = ("config.json", "metadata.json", "summary_metrics.json")
 
 class BundleReadError(Exception):
     """A structured, non-crashing bundle read/interpretation failure."""
+
+
+def _is_finite_number(value: Any) -> bool:
+    """True for a real, finite number (bool is JSON true/false, not a time)."""
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, (int, float))
+        and math.isfinite(value)
+    )
 
 
 @dataclass(frozen=True)
@@ -122,7 +132,14 @@ class BundleReader:
 
     def events(self) -> list[dict[str, Any]]:
         """Parsed ``events.jsonl`` records (a missing file is an empty list;
-        a malformed line raises :class:`BundleReadError`)."""
+        a malformed line raises :class:`BundleReadError`).
+
+        Field types are validated centrally here (2N follow-up, 2026-07-06
+        status review P1): every record's ``timestamp_s`` must be a finite
+        real number, so the window/token/phase accessors below can cast
+        without consumers ever seeing a raw ``ValueError``/``TypeError`` from
+        a corrupt event line.
+        """
         if "events" not in self._cache:
             path = self._path / "events.jsonl"
             if not path.is_file():
@@ -146,6 +163,11 @@ class BundleReader:
                 if not isinstance(record, dict):
                     raise BundleReadError(
                         f"events.jsonl line {index + 1} is not a JSON object"
+                    )
+                if not _is_finite_number(record.get("timestamp_s")):
+                    raise BundleReadError(
+                        f"events.jsonl line {index + 1} timestamp_s is not a "
+                        f"finite number: {record.get('timestamp_s')!r}"
                     )
                 events.append(record)
             self._cache["events"] = events
@@ -415,8 +437,9 @@ def _check_summary(summary: Any) -> list[str]:
 
 
 def _check_events(events_path: Path) -> list[str]:
-    """Every line a JSON object with exactly the five keys; non-decreasing
-    timestamps; the last event is ``run_finalized``."""
+    """Every line a JSON object with exactly the five keys and a finite
+    numeric ``timestamp_s``; non-decreasing timestamps; the last event is
+    ``run_finalized``."""
     try:
         text = events_path.read_text()
     except OSError as exc:
@@ -439,6 +462,12 @@ def _check_events(events_path: Path) -> list[str]:
             problems.append(
                 f"events.jsonl line {index + 1} keys are "
                 f"{sorted(record)}, expected {sorted(EVENT_KEYS)}"
+            )
+            continue
+        if not _is_finite_number(record["timestamp_s"]):
+            problems.append(
+                f"events.jsonl line {index + 1} timestamp_s is not a finite "
+                f"number: {record['timestamp_s']!r}"
             )
             continue
         records.append(record)

@@ -321,6 +321,35 @@ class ValidateBundleTests(CliRunTestCase):
         )
         self.assert_invalid(bundle)
 
+    def test_events_nonnumeric_timestamp_is_problem_not_crash(self) -> None:
+        # 2026-07-06 status review P1: a nonnumeric timestamp must produce an
+        # invalid: problem, never a raw TypeError from the ordering check.
+        bundle = self.make_bundle("vb-events-bad-ts")
+        lines = self._events_lines(bundle)
+        record = json.loads(lines[0])
+        record["timestamp_s"] = "not-a-number"
+        lines[0] = json.dumps(record)
+        (bundle / "events.jsonl").write_text("\n".join(lines) + "\n")
+        problems = validate_bundle(bundle)
+        self.assertTrue(
+            any("timestamp_s is not a finite number" in p for p in problems),
+            problems,
+        )
+        self.assert_invalid(bundle)
+
+    def test_events_mixed_type_timestamps_no_type_error(self) -> None:
+        bundle = self.make_bundle("vb-events-mixed-ts")
+        records = [json.loads(line) for line in self._events_lines(bundle)]
+        records[1]["timestamp_s"] = True  # bool: JSON-valid, not a time
+        (bundle / "events.jsonl").write_text(
+            "".join(json.dumps(rec) + "\n" for rec in records)
+        )
+        problems = validate_bundle(bundle)  # must not raise
+        self.assertTrue(
+            any("timestamp_s is not a finite number" in p for p in problems),
+            problems,
+        )
+
     def test_validate_bundle_helper_is_importable_and_pure(self) -> None:
         bundle = self.make_bundle("vb-helper")
         problems = validate_bundle(bundle)

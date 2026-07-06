@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 
+from joulewise.bundle import write_raw_artifact
 from joulewise.clock import Clock
 from joulewise.interfaces import AdapterResult, PowerSample, RunContext, ThermalState
 from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline, TelemetryBackend
@@ -118,10 +119,13 @@ class MockTelemetryAdapter:
         # nonzero window, keeping trapezoidal integration well-defined.
         samples.append(self._sample(end))
         # D-002 via D-024: preserve the sampler's native output verbatim under
-        # raw/. Out-of-run invocations (context None, e.g. the cooldown gate)
-        # produce no raw output.
+        # raw/, through the validated no-overwrite helper (adapters must not
+        # write raw/ paths directly). Out-of-run invocations (context None,
+        # e.g. the cooldown gate) produce no raw output.
         if context is not None:
-            (context.raw_dir / RAW_SAMPLES_NAME).write_text(
+            write_raw_artifact(
+                context,
+                RAW_SAMPLES_NAME,
                 json.dumps(
                     [
                         {
@@ -135,7 +139,7 @@ class MockTelemetryAdapter:
                     indent=2,
                     sort_keys=True,
                 )
-                + "\n"
+                + "\n",
             )
         return samples
 

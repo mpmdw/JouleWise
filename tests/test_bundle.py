@@ -16,9 +16,10 @@ from joulewise.bundle import (
     generate_run_id,
     sanitize_id_component,
     write_experiment_manifest,
+    write_raw_artifact,
 )
 from joulewise.clock import FakeClock
-from joulewise.interfaces import PowerSample, RuntimeEvent
+from joulewise.interfaces import PowerSample, RunContext, RuntimeEvent
 from joulewise.schemas import (
     BenchmarkConfig,
     FailureReason,
@@ -416,6 +417,34 @@ class RawEvidenceTests(unittest.TestCase):
         for bad in ("", ".", "..", "a/b.json", "..\\evil", "/abs.json"):
             with self.assertRaises(BundleError, msg=bad):
                 self.writer.raw_path(bad)
+
+    def _context(self) -> RunContext:
+        return RunContext(
+            config=load_example_config(),
+            clock=self.clock,
+            run_id=self.writer.run_id,
+            bundle_path=self.writer.path,
+            raw_dir=self.writer.path / "raw",
+            logs_dir=self.writer.path / "logs",
+            outputs_dir=self.writer.path / "outputs",
+        )
+
+    def test_adapter_helper_writes_validates_and_refuses_overwrite(self) -> None:
+        # 2026-07-06 status review P3: adapters get the same validation and
+        # no-overwrite rule as the writer, without the writer's authority.
+        context = self._context()
+        path = write_raw_artifact(context, "sampler.plist", b"\x00raw")
+        self.assertEqual(path, self.writer.path / "raw" / "sampler.plist")
+        self.assertEqual(path.read_bytes(), b"\x00raw")
+        with self.assertRaises(BundleError):
+            write_raw_artifact(context, "sampler.plist", b"again")
+        with self.assertRaises(BundleError):
+            write_raw_artifact(context, "../escape.plist", b"nope")
+
+    def test_adapter_helper_and_writer_share_the_collision_space(self) -> None:
+        self.writer.write_raw("shared.json", "{}")
+        with self.assertRaises(BundleError):
+            write_raw_artifact(self._context(), "shared.json", "{}")
 
 
 class ExperimentManifestTests(unittest.TestCase):

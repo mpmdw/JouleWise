@@ -93,10 +93,31 @@ class StrictAccessorTests(ReaderTestCase):
 
     def test_malformed_event_line_is_structured_read_error(self) -> None:
         writer = self.make_bundle("bad-events")
-        (writer.path / "events.jsonl").write_text('{"ok": 1}\nnot json\n')
+        (writer.path / "events.jsonl").write_text(
+            '{"timestamp_s": 1.0}\nnot json\n'
+        )
         with self.assertRaises(BundleReadError) as ctx:
             BundleReader(writer.path).events()
         self.assertIn("line 2", str(ctx.exception))
+
+    def test_bad_event_timestamps_are_structured_read_errors(self) -> None:
+        # 2026-07-06 status review P1: nonnumeric, missing, bool, and
+        # non-finite timestamps must become BundleReadError, never a raw
+        # ValueError/TypeError from a float() cast downstream.
+        cases = [
+            ("nonnumeric", '{"timestamp_s": "not-a-number"}\n'),
+            ("missing", '{"event_type": "token"}\n'),
+            ("bool", '{"timestamp_s": true}\n'),
+            ("nonfinite", '{"timestamp_s": Infinity}\n'),
+            ("nan", '{"timestamp_s": NaN}\n'),
+        ]
+        for label, line in cases:
+            writer = self.make_bundle(f"bad-ts-{label}")
+            (writer.path / "events.jsonl").write_text(line)
+            with self.subTest(label=label):
+                with self.assertRaises(BundleReadError) as ctx:
+                    BundleReader(writer.path).events()
+                self.assertIn("timestamp_s is not a finite number", str(ctx.exception))
 
     def test_valid_bundle_parses_config_and_metadata(self) -> None:
         writer = self.make_bundle("valid")

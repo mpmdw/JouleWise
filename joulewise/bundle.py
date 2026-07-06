@@ -35,7 +35,7 @@ from typing import Any
 
 import joulewise
 from joulewise.clock import Clock
-from joulewise.interfaces import PowerSample, RuntimeEvent
+from joulewise.interfaces import PowerSample, RunContext, RuntimeEvent
 from joulewise.schemas import BenchmarkConfig, SummaryMetrics
 
 _ID_ALLOWED = set("abcdefghijklmnopqrstuvwxyz0123456789_-")
@@ -96,6 +96,47 @@ def write_experiment_manifest(runs_root: Path, manifest: dict) -> Path:
     path = experiments_dir / f"{sanitize_id_component(experiment_id)}.json"
     path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     return path
+
+
+def _validated_raw_path(raw_dir: Path, name: str) -> Path:
+    """Validate ``name`` as a plain file name and return ``raw_dir/name``.
+
+    Path separators and ``..`` are rejected so a raw artifact can never
+    escape the bundle (D-002). Ensures ``raw_dir`` exists; writes nothing.
+    """
+    if not name or name in {".", ".."} or "/" in name or "\\" in name:
+        raise BundleError(f"raw artifact name must be a plain file name: {name!r}")
+    raw_dir.mkdir(exist_ok=True)
+    return raw_dir / name
+
+
+def _write_raw_file(raw_dir: Path, name: str, data: bytes | str) -> Path:
+    """Write ``raw_dir/name`` verbatim; an existing file is an error."""
+    path = _validated_raw_path(raw_dir, name)
+    if path.exists():
+        raise BundleError(
+            f"raw artifact already exists: {path} (raw evidence is immutable)"
+        )
+    if isinstance(data, bytes):
+        path.write_bytes(data)
+    else:
+        path.write_text(data)
+    return path
+
+
+def write_raw_artifact(context: RunContext, name: str, data: bytes | str) -> Path:
+    """Adapter-side raw-evidence write: ``context.raw_dir/name``, verbatim.
+
+    The one sanctioned way for an adapter to preserve its native sampler
+    output under ``raw/`` (D-002 via the D-024 context seam; 2026-07-06
+    status review P3): the name must be a plain file name and an existing
+    file is a :class:`BundleError` - the same validation and no-overwrite
+    rule as :meth:`RunBundleWriter.write_raw`, without handing the adapter
+    the writer's bundle-lifecycle authority. Raw writes after ``finalize()``
+    are not reachable through the controller (adapters are only invoked
+    while the run is open), so no open-check is needed here.
+    """
+    return _write_raw_file(context.raw_dir, name, data)
 
 
 def _git_commit() -> str:
@@ -274,37 +315,20 @@ class RunBundleWriter:
         ``name`` must be a plain file name: path separators and ``..`` are
         rejected so a raw artifact can never escape the bundle (D-002).
         """
-        if (
-            not name
-            or name in {".", ".."}
-            or "/" in name
-            or "\\" in name
-        ):
-            raise BundleError(f"raw artifact name must be a plain file name: {name!r}")
-        raw_dir = self._path / "raw"
-        raw_dir.mkdir(exist_ok=True)
-        return raw_dir / name
+        return _validated_raw_path(self._path / "raw", name)
 
     def write_raw(self, name: str, data: bytes | str) -> Path:
         """Write ``raw/<name>`` verbatim and return its path (D-002).
 
         Raw artifacts are immutable evidence: writing over an existing raw
         file - or writing after ``finalize()`` - is an error. Adapters do not
-        get this method (D-024: context is data, not capability); they write
-        into ``RunContext.raw_dir`` directly, and this is the controller-side
-        counterpart for raw evidence the controller itself collects.
+        get this method (D-024: context is data, not capability); they use
+        the module-level :func:`write_raw_artifact` against their
+        ``RunContext``, and this is the controller-side counterpart for raw
+        evidence the controller itself collects.
         """
         self._require_open(f"write raw {name!r}")
-        path = self.raw_path(name)
-        if path.exists():
-            raise BundleError(
-                f"raw artifact already exists: {path} (raw evidence is immutable)"
-            )
-        if isinstance(data, bytes):
-            path.write_bytes(data)
-        else:
-            path.write_text(data)
-        return path
+        return _write_raw_file(self._path / "raw", name, data)
 
     def log_path(self, name: str) -> Path:
         """Return ``logs/<name>`` (ensuring ``logs/`` exists); writes nothing."""

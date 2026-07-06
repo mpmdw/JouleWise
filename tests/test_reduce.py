@@ -534,6 +534,22 @@ class StructuredReadFailureTests(ReduceTestCase):
         self.assertEqual(summary.status, RunStatus.FAILED)
         self.assertIn("events.jsonl", summary.failure_message)
 
+    def test_nonnumeric_event_timestamp_is_structured_failure(self) -> None:
+        # 2026-07-06 status review P1 repro: a corrupted marker timestamp
+        # must reduce to a structured failure, not raise ValueError.
+        builder = self.builder()
+        builder.add_event("sampling_started", "measured_run", 100.0)
+        builder.add_event("sampling_stopped", "measured_run", 110.0)
+        builder.write_trace(constant_samples(100.0, 110.0, hz=1.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"])
+        events_path = builder.path / "events.jsonl"
+        corrupted = events_path.read_text().replace('100.0', '"not-a-number"', 1)
+        events_path.write_text(corrupted)
+        summary = reduce_module.reduce_bundle(builder.path)
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertIn("timestamp_s is not a finite number", summary.failure_message)
+
 
 class RailMisalignmentTests(ReduceTestCase):
     """D-027 (2N.4): skewed per-rail timestamps are a structured reduction
