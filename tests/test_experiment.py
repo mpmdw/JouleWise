@@ -18,6 +18,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Any
 
+from joulewise.aggregate import aggregate_experiment
 from joulewise.adapters import resolve_runtime, resolve_transport
 from joulewise.clock import Clock, FakeClock
 from joulewise.cli import main, validate_bundle
@@ -241,6 +242,21 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
         self.assertIn("created_at_s", manifest)
         self.assertIsInstance(manifest["created_at_s"], (int, float))
         self.assertRegex(manifest["config_sha256"], _HEX64)
+        self.assertIn("aggregate", manifest)
+        aggregate = manifest["aggregate"]
+        self.assertEqual(aggregate["members_total"], 3)
+        self.assertEqual(aggregate["members_succeeded"], 3)
+        energy_request = aggregate["metrics"]["energy_request_j"]
+        self.assertEqual(energy_request["repetitions"], 3)
+        self.assertTrue(energy_request["interval_available"])
+        self.assertTrue(energy_request["below_headline_protocol"])
+        self.assertFalse(energy_request["below_minimum_protocol"])
+        poisoned_manifest = dict(manifest)
+        poisoned_manifest["aggregate"] = {"poison": "must be ignored"}
+        self.assertEqual(
+            aggregate_experiment(self.runs_root, poisoned_manifest),
+            aggregate,
+        )
 
         # Two cooldown gates (between r1/r2 and r2/r3), both skipped for mock.
         cooldown = manifest["cooldown"]
@@ -260,6 +276,42 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
         manifest_path, _ = run_experiment(config, self.runs_root, clock)
         manifest = json.loads(manifest_path.read_text())
         self.assertEqual(manifest["config_sha256"], _config_sha256(config))
+
+    def test_aggregate_reruns_from_minimal_manifest(self) -> None:
+        """D-002: the aggregate is reconstructable from member bundles alone."""
+        config = make_config("exp-minimal-aggregate", repetitions=3)
+        manifest_path, _ = run_experiment(config, self.runs_root, FakeClock())
+        manifest = json.loads(manifest_path.read_text())
+        minimal_manifest = {
+            "experiment_id": manifest["experiment_id"],
+            "members": manifest["members"],
+            "aggregate": {"poison": "must be ignored"},
+        }
+
+        self.assertEqual(
+            aggregate_experiment(self.runs_root, minimal_manifest),
+            manifest["aggregate"],
+        )
+
+    def test_partial_manifest_aggregates_only_listed_members(self) -> None:
+        """D-005: a partial experiment manifest is a valid aggregate input."""
+        config = make_config("exp-partial-aggregate", repetitions=3)
+        manifest_path, _ = run_experiment(config, self.runs_root, FakeClock())
+        manifest = json.loads(manifest_path.read_text())
+        partial_manifest = {
+            "experiment_id": manifest["experiment_id"],
+            "members": manifest["members"][:2],
+        }
+
+        aggregate = aggregate_experiment(self.runs_root, partial_manifest)
+
+        self.assertEqual(aggregate["members_total"], 2)
+        self.assertEqual(aggregate["members_read"], 2)
+        self.assertEqual(aggregate["members_succeeded"], 2)
+        self.assertEqual(
+            aggregate["metrics"]["energy_request_j"]["repetitions"],
+            2,
+        )
 
 
 # ---------------------------------------------------------------------------
