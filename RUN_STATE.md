@@ -29,13 +29,17 @@ At the end of substantial work:
 4. Record tests, commands, blockers, and the next best task.
 5. Record new decision-log entries and any risk-register status changes.
 6. Refresh `PROJECT_STATUS.md` if advisor-visible state changed.
-7. Run a docs-consistency sweep before the final bookkeeping commit
+7. Push green commits promptly (small doc/bookkeeping commits straight
+   to main; multi-commit code series as branch + PR per D-031). Do not
+   accumulate unpushed local state — the remote and the high-level docs
+   (README, PROJECT_STATUS) are the user's and advisor's view.
+8. Run a docs-consistency sweep before the final bookkeeping commit
    (delegate to a fast subagent): stale test counts, gate-state
    contradictions between prose summaries and checklist matrix rows,
    numbers cited in multiple places. Adopted 2026-07-07 (council log
    C-002) after a sweep caught drift in 6 files; prose status summaries
    must carry an as-of date and defer to matrix rows (D-023 extension).
-8. Call out any dirty working-tree state that should not be accidentally
+9. Call out any dirty working-tree state that should not be accidentally
    committed.
 
 ## Current Project Status
@@ -52,7 +56,19 @@ closure needs P1-001, user-deferred). P1-002 fully complete (sample +
 sudoers). Backup protocol active with an interim same-disk destination
 (P0-003 meta). Related-work draft (P3-001) done. Suite: 254 tests.
 
-## What The Latest Run Did (2026-07-06 night, Slice 2I — FIRST REAL ENERGY NUMBERS)
+## What The Latest Run Did (2026-07-07, merge + research councils + flagship model)
+
+PR #1 (the 11-commit vertical-slice series) merged to main after C-002
+review; CI green on both matrix legs. Research councils C-003/C-004 ran
+(see `docs/council_log.md`): Q4-Q6 promoted, `docs/research_question_bank.md`
+created, new queue items P2-009/P2-010/P2-011. User-directed flagship
+model selected by web-verified research: `mlx-community/Qwen3.5-122B-A10B-4bit`
+(69.6 GB, 122B MoE/10B active, rev `e9c67b0`) — mirror download in
+progress; the flagship benchmark run on it is the immediate next action.
+Standing loop addition: push green commits promptly; refresh high-level
+docs each session (steps 7-8 above).
+
+## Previous Run (2026-07-06 night, Slice 2I — FIRST REAL ENERGY NUMBERS)
 
 Full detail: `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md`.
 The user installed the D-004 sudoers line (P1-002 now fully complete).
