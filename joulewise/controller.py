@@ -67,8 +67,8 @@ from joulewise.bundle import (
     sanitize_id_component,
     write_experiment_manifest,
 )
-from joulewise.clock import Clock
-from joulewise.environment import collect_environment_snapshot
+from joulewise.clock import Clock, FakeClock
+from joulewise.environment import collect_environment_snapshot, empty_environment_snapshot
 from joulewise.interfaces import (
     AdapterFailure,
     AdapterResult,
@@ -128,6 +128,7 @@ STATUS_BY_REASON: dict[FailureReason, RunStatus] = {
 
 #: Post-hoc summary derivation over a bundle directory (Slice 2D).
 Reducer = Callable[[Path], SummaryMetrics]
+_ENVIRONMENT_UNSET = object()
 
 
 class AdapterRegistry(Protocol):
@@ -153,6 +154,7 @@ def run_benchmark(
     registry: AdapterRegistry | None = None,
     reducer: Reducer | None = None,
     extra_metadata: dict[str, Any] | None = None,
+    environment_snapshot: dict[str, Any] | None | object = _ENVIRONMENT_UNSET,
 ) -> tuple[Path, SummaryMetrics]:
     """Run one benchmark and return ``(bundle path, summary)``.
 
@@ -174,7 +176,15 @@ def run_benchmark(
     if registry is None:
         registry = joulewise.adapters
     writer = RunBundleWriter.create(runs_root, config, clock)
-    return _Execution(config, writer, clock, registry, reducer, extra_metadata).execute()
+    return _Execution(
+        config,
+        writer,
+        clock,
+        registry,
+        reducer,
+        extra_metadata,
+        environment_snapshot,
+    ).execute()
 
 
 class _StageFailure(Exception):
@@ -216,6 +226,7 @@ class _Execution:
         registry: AdapterRegistry,
         reducer: Reducer | None,
         extra_metadata: dict[str, Any] | None = None,
+        environment_snapshot: dict[str, Any] | None | object = _ENVIRONMENT_UNSET,
     ) -> None:
         self._config = config
         self._writer = writer
@@ -223,6 +234,7 @@ class _Execution:
         self._registry = registry
         self._reducer = reducer
         self._extra_metadata = dict(extra_metadata) if extra_metadata else {}
+        self._environment_snapshot = environment_snapshot
         # D-024: one immutable context, constructed after bundle creation,
         # passed to every adapter lifecycle call. Context is data (paths and
         # identity), never the writer.
@@ -299,7 +311,9 @@ class _Execution:
             {"run_id": self._writer.run_id},
         )
         self._log(self._controller_log, f"run {self._writer.run_id} started")
-        self._environment = collect_environment_snapshot()
+        self._environment = _environment_for_run(
+            self._clock, provided=self._environment_snapshot
+        )
         self._stage_validate()
         self._stage_prepare()
         self._stage_idle_baseline()
@@ -767,6 +781,54 @@ def _within_tolerance(value: float, reference: float, tolerance: float) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Environment snapshot policy (INT-002)
+
+
+def _environment_for_run(
+    clock: Clock,
+    *,
+    provided: dict[str, Any] | None | object = _ENVIRONMENT_UNSET,
+) -> dict[str, Any] | None:
+    if provided is not _ENVIRONMENT_UNSET:
+        return dict(provided) if provided is not None else None
+    return _capture_environment(clock, capture_scope="run", captured_for_rep=None)
+
+
+def _environment_for_experiment(clock: Clock) -> dict[str, Any]:
+    return _capture_environment(clock, capture_scope="experiment", captured_for_rep=1)
+
+
+def _capture_environment(
+    clock: Clock,
+    *,
+    capture_scope: str,
+    captured_for_rep: int | None,
+) -> dict[str, Any]:
+    if isinstance(clock, FakeClock):
+        snapshot = empty_environment_snapshot()
+        snapshot.update(
+            {
+                "capture_skipped": True,
+                "skip_reason": "fake_clock",
+                "capture_scope": capture_scope,
+                "captured_for_rep": captured_for_rep,
+                "captured_at_s": None,
+            }
+        )
+        return snapshot
+    snapshot = collect_environment_snapshot()
+    snapshot.update(
+        {
+            "capture_skipped": False,
+            "capture_scope": capture_scope,
+            "captured_for_rep": captured_for_rep,
+            "captured_at_s": clock.now(),
+        }
+    )
+    return snapshot
+
+
+# ---------------------------------------------------------------------------
 # Experiment runner (D-005: one bundle per rep + experiment manifest;
 # D-014: cooldown gate between live reps)
 
@@ -805,6 +867,7 @@ def run_experiment(
     created_at_s = clock.now()
     condition_name = config.workload_profile.name
     repetitions = config.workload_profile.repetitions
+    environment_snapshot = _environment_for_experiment(clock)
 
     manifest: dict[str, Any] = {
         "experiment_id": experiment_id,
@@ -828,6 +891,7 @@ def run_experiment(
             clock,
             registry=registry,
             extra_metadata=next_extra_metadata,
+            environment_snapshot=environment_snapshot,
         )
         next_extra_metadata = None
         results.append((bundle_path, summary))

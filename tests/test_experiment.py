@@ -12,11 +12,13 @@ from __future__ import annotations
 import io
 import json
 import re
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from joulewise.aggregate import aggregate_experiment
 from joulewise.adapters import resolve_runtime, resolve_transport
@@ -57,6 +59,49 @@ def make_config(run_id: str, repetitions: int, **overrides: Any) -> BenchmarkCon
     for key, value in overrides.items():
         data[key] = value
     return BenchmarkConfig.from_mapping(data)
+
+
+class DeterministicClock:
+    """Non-Fake test clock that advances instantly without host time."""
+
+    def __init__(self, start: float = 1_700_000_000.0) -> None:
+        self._start = float(start)
+        self._now = float(start)
+
+    def now(self) -> float:
+        return self._now
+
+    def sleep(self, seconds: float) -> None:
+        if seconds < 0:
+            raise ValueError("cannot sleep a negative duration")
+        self._now += seconds
+
+    def info(self) -> dict[str, Any]:
+        return {"kind": "deterministic-test", "start_s": self._start}
+
+
+def fake_environment_run(command, **kwargs):
+    if tuple(command) == ("git", "rev-parse", "HEAD"):
+        return subprocess.CompletedProcess(command, 0, "0" * 40 + "\n", "")
+    outputs = {
+        ("pmset", "-g", "batt"): "Now drawing from 'AC Power'\n -InternalBattery-0 100%; charged; 0:00 remaining\n",
+        ("pmset", "-g"): " lowpowermode 0\n",
+        ("pmset", "-g", "assertions"): "   PreventUserIdleDisplaySleep    0\n",
+        ("memory_pressure", "-Q"): "System-wide memory free percentage: 42.0%\n",
+        ("uptime",): "12:00 up 1 day, load averages: 1.00 2.00 3.00\n",
+        ("sw_vers",): "ProductName:\t\tmacOS\nProductVersion:\t\t14.0\nBuildVersion:\t\t23A344\n",
+        (
+            "sysctl",
+            "-n",
+            "hw.model",
+            "hw.ncpu",
+            "machdep.cpu.brand_string",
+        ): "MacTest1,1\n8\nTest CPU\n",
+    }
+    key = tuple(command)
+    if key not in outputs:
+        return subprocess.CompletedProcess(command, 1, "", "unexpected command")
+    return subprocess.CompletedProcess(command, 0, outputs[key], "")
 
 
 # ---------------------------------------------------------------------------
@@ -265,6 +310,31 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
             self.assertEqual(note["result"], "skipped")
             self.assertEqual(note["reason"], "mock telemetry")
             self.assertEqual(note["after_member"], f"exp-test__r{index}")
+
+    def test_experiment_members_share_one_environment_snapshot(self) -> None:
+        config = make_config("exp-env", repetitions=3)
+        clock = DeterministicClock()
+        with patch(
+            "joulewise.environment.subprocess.run",
+            side_effect=fake_environment_run,
+        ) as run:
+            _manifest_path, members = run_experiment(config, self.runs_root, clock)
+
+        environment_calls = [
+            call for call in run.call_args_list if call.args[0][0] != "git"
+        ]
+        self.assertEqual(len(environment_calls), 7)
+        environments = [
+            json.loads((bundle / "metadata.json").read_text())["environment"]
+            for bundle, _summary in members
+        ]
+        self.assertEqual(environments[0], environments[1])
+        self.assertEqual(environments[1], environments[2])
+        self.assertFalse(environments[0]["capture_skipped"])
+        self.assertEqual(environments[0]["capture_scope"], "experiment")
+        self.assertEqual(environments[0]["captured_for_rep"], 1)
+        self.assertIsInstance(environments[0]["captured_at_s"], (int, float))
+        self.assertEqual(environments[0]["power_source"], "AC Power")
 
     def test_config_hash_is_over_as_given_shared_config(self) -> None:
         # The manifest hash is the bundle writer's D-001 hash of the SHARED

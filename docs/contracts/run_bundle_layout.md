@@ -36,6 +36,10 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
   metadata).
 - `metadata.json`: device, runtime, telemetry, model, environment, clock,
   and rail-manifest metadata.
+- `metadata.environment` includes nullable capture provenance fields such as
+  `capture_scope`, `captured_for_rep`, and `captured_at_s`; experiment members
+  may intentionally share one snapshot, and `FakeClock` runs mark capture
+  skipped.
 - `events.jsonl`: timestamped lifecycle, phase, token, transfer, and failure
   events.
 - `power_trace.csv`: raw power samples in watts, one row per rail per

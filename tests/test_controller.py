@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import unittest
 from dataclasses import replace
@@ -207,6 +208,55 @@ class SuspectIdleRegistry:
         return adapters.resolve_transport(config)
 
 
+class DeterministicClock:
+    """Non-Fake test clock that advances instantly without host time."""
+
+    def __init__(self, start: float = 1_700_000_000.0) -> None:
+        self._start = float(start)
+        self._now = float(start)
+
+    def now(self) -> float:
+        return self._now
+
+    def sleep(self, seconds: float) -> None:
+        if seconds < 0:
+            raise ValueError("cannot sleep a negative duration")
+        self._now += seconds
+
+    def info(self) -> dict[str, Any]:
+        return {"kind": "deterministic-test", "start_s": self._start}
+
+
+def fake_environment_run(command, **kwargs):
+    if tuple(command) == ("git", "rev-parse", "HEAD"):
+        return subprocess.CompletedProcess(command, 0, "0" * 40 + "\n", "")
+    outputs = {
+        ("pmset", "-g", "batt"): "Now drawing from 'AC Power'\n -InternalBattery-0 100%; charged; 0:00 remaining\n",
+        ("pmset", "-g"): " lowpowermode 0\n",
+        ("pmset", "-g", "assertions"): "   PreventUserIdleDisplaySleep    0\n",
+        ("memory_pressure", "-Q"): "System-wide memory free percentage: 42.0%\n",
+        ("uptime",): "12:00 up 1 day, load averages: 1.00 2.00 3.00\n",
+        ("sw_vers",): "ProductName:\t\tmacOS\nProductVersion:\t\t14.0\nBuildVersion:\t\t23A344\n",
+        (
+            "sysctl",
+            "-n",
+            "hw.model",
+            "hw.ncpu",
+            "machdep.cpu.brand_string",
+        ): "MacTest1,1\n8\nTest CPU\n",
+    }
+    key = tuple(command)
+    if key not in outputs:
+        return subprocess.CompletedProcess(command, 1, "", "unexpected command")
+    return subprocess.CompletedProcess(command, 0, outputs[key], "")
+
+
+def fake_git_only_run(command, **kwargs):
+    if tuple(command) == ("git", "rev-parse", "HEAD"):
+        return subprocess.CompletedProcess(command, 0, "0" * 40 + "\n", "")
+    raise AssertionError(f"FakeClock must not probe host environment: {command}")
+
+
 class ControllerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -347,19 +397,39 @@ class HappyPathTests(ControllerTestCase):
             {"token_count": 40, "output_token_count": 8},
         )
 
-    def test_metadata_carries_environment_snapshot(self) -> None:
-        environment = {
-            "power_source": "AC Power",
-            "memory_free_percent": 42.0,
-            "errors": {},
-        }
+    def test_single_run_captures_environment_snapshot(self) -> None:
+        config = make_config("controller-environment")
+        clock = DeterministicClock()
         with patch(
-            "joulewise.controller.collect_environment_snapshot",
-            return_value=environment,
+            "joulewise.environment.subprocess.run",
+            side_effect=fake_environment_run,
+        ) as run:
+            bundle_path, _ = run_benchmark(config, self.runs_root, clock)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        environment = metadata["environment"]
+        environment_calls = [
+            call for call in run.call_args_list if call.args[0][0] != "git"
+        ]
+        self.assertEqual(len(environment_calls), 7)
+        self.assertEqual(environment["power_source"], "AC Power")
+        self.assertEqual(environment["memory_free_percent"], 42.0)
+        self.assertFalse(environment["capture_skipped"])
+        self.assertEqual(environment["capture_scope"], "run")
+        self.assertIsNone(environment["captured_for_rep"])
+        self.assertIsInstance(environment["captured_at_s"], (int, float))
+
+    def test_fake_clock_skips_environment_subprocesses(self) -> None:
+        with patch(
+            "joulewise.environment.subprocess.run",
+            side_effect=fake_git_only_run,
         ):
             bundle_path, _ = self.run_happy()
         metadata = json.loads((bundle_path / "metadata.json").read_text())
-        self.assertEqual(metadata["environment"], environment)
+        environment = metadata["environment"]
+        self.assertTrue(environment["capture_skipped"])
+        self.assertEqual(environment["skip_reason"], "fake_clock")
+        self.assertEqual(environment["capture_scope"], "run")
+        self.assertIsNone(environment["captured_at_s"])
 
     def test_suspect_idle_flag_does_not_fail_successful_run(self) -> None:
         config = make_config("controller-suspect-idle")

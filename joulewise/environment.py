@@ -9,17 +9,9 @@ from typing import Any
 COMMAND_TIMEOUT_S = 3.0
 
 
-def collect_environment_snapshot(timeout_s: float = COMMAND_TIMEOUT_S) -> dict[str, Any]:
-    """Return a best-effort machine-wide environment snapshot.
-
-    Every subprocess is sudo-free and independently optional: missing commands,
-    nonzero exits, timeouts, and parse failures leave that command's fields as
-    ``None`` and add a terse entry to ``errors``. This function never raises.
-
-    ``memory_pressure_percent`` is derived from a free-memory percentage when
-    available; it is a pressure proxy, not the kernel's memorystatus level.
-    """
-    snapshot: dict[str, Any] = {
+def empty_environment_snapshot() -> dict[str, Any]:
+    """Return the nullable environment shape without probing the host."""
+    return {
         "power_source": None,
         "battery_percent": None,
         "battery_state": None,
@@ -38,6 +30,19 @@ def collect_environment_snapshot(timeout_s: float = COMMAND_TIMEOUT_S) -> dict[s
         "cpu_brand": None,
         "errors": {},
     }
+
+
+def collect_environment_snapshot(timeout_s: float = COMMAND_TIMEOUT_S) -> dict[str, Any]:
+    """Return a best-effort machine-wide environment snapshot.
+
+    Every subprocess is sudo-free and independently optional: missing commands,
+    nonzero exits, timeouts, and parse failures leave that command's fields as
+    ``None`` and add a terse entry to ``errors``. This function never raises.
+
+    ``memory_pressure_percent`` is derived from a free-memory percentage when
+    available; it is a pressure proxy, not the kernel's memorystatus level.
+    """
+    snapshot: dict[str, Any] = empty_environment_snapshot()
     errors: dict[str, str] = {}
 
     _apply_command(
