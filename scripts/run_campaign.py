@@ -186,6 +186,15 @@ def discover_configs(config_dir: Path) -> list[Path]:
     return sorted(config_dir.glob("*.json"))
 
 
+def print_config_file_list(configs: list[Path]) -> None:
+    print("Config files to execute:")
+    if not configs:
+        print("  <none>")
+        return
+    for config in configs:
+        print(f"  {config}")
+
+
 def backup_script_path(backup_arg: str) -> Path:
     if backup_arg:
         return Path(backup_arg)
@@ -343,7 +352,13 @@ def run_campaign(args: argparse.Namespace) -> int:
         raise ValueError("--max-failures must be >= 1")
 
     configs = discover_configs(config_dir)
+    print_config_file_list(configs)
     items = read_config_infos(configs)
+    config_errors = [item for item in items if isinstance(item, ConfigError)]
+    if config_errors:
+        for item in config_errors:
+            print(f"error: {item.message}", file=sys.stderr)
+        return 2
     duplicate_error = duplicate_run_id_error(items)
     if duplicate_error is not None:
         print(f"error: {duplicate_error}", file=sys.stderr)

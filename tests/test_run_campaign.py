@@ -255,6 +255,8 @@ class RunCampaignTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse(sentinel.exists())
+            self.assertIn("Config files to execute:", result.stdout)
+            self.assertIn(str(config_path), result.stdout)
             self.assertIn("Dry run", result.stdout)
             self.assertIn("dry_run one: would run", result.stdout)
             self.assertIn(str(fake_cli), result.stdout)
@@ -519,15 +521,16 @@ class RunCampaignTests(unittest.TestCase):
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual([row["status"] for row in rows], ["incomplete_existing"])
 
-    def test_config_error_logs_and_campaign_continues(self) -> None:
+    def test_config_error_aborts_before_invocation_or_log_writes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            write_config(config_dir, "01-good.json", "good")
-            (config_dir / "02-bad.json").write_text('{"run_id": ', encoding="utf-8")
-            write_config(config_dir, "03-later.json", "later")
+            good = write_config(config_dir, "01-good.json", "good")
+            bad = config_dir / "02-bad.json"
+            bad.write_text('{"run_id": ', encoding="utf-8")
+            later = write_config(config_dir, "03-later.json", "later")
             fake_cli = make_fake_cli(tmp_path)
 
             result = run_campaign(
@@ -537,12 +540,15 @@ class RunCampaignTests(unittest.TestCase):
                 max_failures=2,
             )
 
-            self.assertEqual(result.returncode, 1)
-            self.assertEqual((runs_dir / "order.log").read_text(encoding="utf-8").splitlines(), ["good", "later"])
-            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
-            self.assertEqual([row["status"] for row in rows], ["ok", "config_error", "ok"])
-            self.assertIsNone(rows[1]["run_id"])
-            self.assertIn("config_error: 1", result.stdout)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("Config files to execute:", result.stdout)
+            self.assertIn(str(good), result.stdout)
+            self.assertIn(str(bad), result.stdout)
+            self.assertIn(str(later), result.stdout)
+            self.assertIn("config is not valid JSON", result.stderr)
+            self.assertIn(str(bad), result.stderr)
+            self.assertFalse((runs_dir / "order.log").exists())
+            self.assertFalse((runs_dir / "campaign_log.jsonl").exists())
 
     def test_duplicate_sanitized_run_ids_abort_before_invocation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -39,6 +39,7 @@ PROFILE_MATRIX = (
     ("mid_mid", 1024, 256),
 )
 MODEL_TAG_RE = re.compile(r"^[a-z0-9_-]+$")
+PROFILE_NAMES = tuple(profile_name for profile_name, _, _ in PROFILE_MATRIX)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -113,6 +114,34 @@ def write_config(path: Path, config: dict[str, Any]) -> None:
     path.write_text(rendered, encoding="utf-8")
 
 
+def expected_output_paths(out_dir: Path, model_tag: str) -> set[Path]:
+    return {
+        out_dir / f"{model_tag}-{profile_name}.json"
+        for profile_name, _, _ in PROFILE_MATRIX
+    }
+
+
+def stale_same_tag_paths(out_dir: Path, model_tag: str, expected_paths: set[Path]) -> list[Path]:
+    expected_names = {path.name for path in expected_paths}
+    stale_paths: list[Path] = []
+    for path in sorted(out_dir.glob(f"{model_tag}-*.json")):
+        if path.name in expected_names:
+            continue
+        generated_tag = model_tag_from_generated_filename(path.name)
+        if generated_tag is not None and generated_tag != model_tag:
+            continue
+        stale_paths.append(path)
+    return stale_paths
+
+
+def model_tag_from_generated_filename(filename: str) -> str | None:
+    for profile_name in PROFILE_NAMES:
+        suffix = f"-{profile_name}.json"
+        if filename.endswith(suffix):
+            return filename[: -len(suffix)]
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if not MODEL_TAG_RE.fullmatch(args.model_tag):
@@ -127,6 +156,14 @@ def main(argv: list[str] | None = None) -> int:
         BenchmarkConfig.from_mapping(base).validate()
         out_dir = Path(args.out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
+        expected_paths = expected_output_paths(out_dir, args.model_tag)
+        stale_paths = stale_same_tag_paths(out_dir, args.model_tag, expected_paths)
+        if stale_paths:
+            stale_list = ", ".join(str(path) for path in stale_paths)
+            raise ValueError(
+                f"refusing to write into {out_dir}: stale same-tag JSON file(s) "
+                f"would be left in place: {stale_list}"
+            )
         written: list[Path] = []
         for profile_name, prompt_tokens, output_tokens in PROFILE_MATRIX:
             config = build_config(base, args.model_tag, profile_name, prompt_tokens, output_tokens)

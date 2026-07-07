@@ -77,7 +77,7 @@ class GenerateMatrixTests(unittest.TestCase):
             for left, right in zip(files_a, files_b, strict=True):
                 self.assertEqual(left.read_bytes(), right.read_bytes(), left.name)
 
-    def test_reusing_out_dir_overwrites_byte_identically(self) -> None:
+    def test_reusing_out_dir_overwrites_expected_files_byte_identically(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = Path(tmp) / "out"
             base, tag = BASE_CONFIGS[0]
@@ -91,8 +91,6 @@ class GenerateMatrixTests(unittest.TestCase):
             self.assertEqual(set(first_bytes), expected_filenames(tag))
             deleted_name = f"{tag}-long_short.json"
             (out_dir / deleted_name).unlink()
-            stale_name = "stale-extra.json"
-            (out_dir / stale_name).write_text('{"stale": true}\n', encoding="utf-8")
 
             second = run_generator(base, tag, out_dir)
             second_bytes = {
@@ -101,9 +99,46 @@ class GenerateMatrixTests(unittest.TestCase):
             }
 
             self.assertEqual(second.returncode, 0, second.stderr)
-            self.assertEqual(set(second_bytes), expected_filenames(tag) | {stale_name})
+            self.assertEqual(set(second_bytes), expected_filenames(tag))
             self.assertEqual(second_bytes[deleted_name], first_bytes[deleted_name])
-            self.assertEqual(second_bytes[stale_name], b'{"stale": true}\n')
+
+    def test_reusing_out_dir_with_stale_same_tag_file_refuses_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            base, tag = BASE_CONFIGS[0]
+
+            first = run_generator(base, tag, out_dir)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            expected_name = f"{tag}-short_short.json"
+            (out_dir / expected_name).write_text("corrupt expected file\n", encoding="utf-8")
+            stale_name = f"{tag}-stale-profile.json"
+            (out_dir / stale_name).write_text('{"stale": true}\n', encoding="utf-8")
+
+            second = run_generator(base, tag, out_dir)
+
+            self.assertEqual(second.returncode, 1)
+            self.assertIn("stale same-tag JSON", second.stderr)
+            self.assertIn(stale_name, second.stderr)
+            self.assertEqual(
+                (out_dir / expected_name).read_text(encoding="utf-8"),
+                "corrupt expected file\n",
+            )
+
+    def test_reusing_out_dir_with_other_tag_files_keeps_working(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            base, tag = BASE_CONFIGS[0]
+            other_tag = f"{tag}-variant"
+
+            other = run_generator(base, other_tag, out_dir)
+            current = run_generator(base, tag, out_dir)
+
+            self.assertEqual(other.returncode, 0, other.stderr)
+            self.assertEqual(current.returncode, 0, current.stderr)
+            self.assertEqual(
+                {path.name for path in out_dir.glob("*.json")},
+                expected_filenames(other_tag) | expected_filenames(tag),
+            )
 
     def test_both_example_base_configs_produce_eight_distinct_run_ids(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
