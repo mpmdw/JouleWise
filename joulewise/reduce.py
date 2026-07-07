@@ -122,7 +122,29 @@ def _idle_baseline(metadata: dict[str, Any]) -> IdleBaseline | None:
         duration_s=float(raw["duration_s"]),
         sample_count=int(raw["sample_count"]),
         telemetry_backend=TelemetryBackend(raw["telemetry_backend"]),
+        gpu_idle_ratio_mean=_optional_float(raw.get("gpu_idle_ratio_mean")),
+        gpu_idle_ratio_min=_optional_float(raw.get("gpu_idle_ratio_min")),
+        gpu_freq_hz_mean=_optional_float(raw.get("gpu_freq_hz_mean")),
+        idle_window_suspect=_optional_bool(raw.get("idle_window_suspect")),
     )
+
+
+def _optional_float(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+def _optional_bool(value: Any) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def _idle_window_suspect(idle_baseline: IdleBaseline | None) -> bool | None:
+    if idle_baseline is None:
+        return None
+    return idle_baseline.idle_window_suspect
 
 
 def _thermal_drift_c(metadata: dict[str, Any]) -> float | None:
@@ -286,6 +308,7 @@ def _failed_quality(
         thermal_drift_c=_thermal_drift_c(metadata),
         telemetry_source=_telemetry_source(metadata),
         cooldown_cap_hit=_cooldown_cap_hit(metadata),
+        idle_window_suspect=_idle_window_suspect(idle_baseline),
     )
 
 
@@ -351,6 +374,7 @@ def _reduce(
         telemetry_source=_telemetry_source(metadata),
         cooldown_cap_hit=_cooldown_cap_hit(metadata),
         token_count_source=token_count_source,
+        idle_window_suspect=_idle_window_suspect(idle_baseline),
     )
 
     return SummaryMetrics(
@@ -394,6 +418,7 @@ def _zero_window_summary(
         telemetry_source=_telemetry_source(metadata),
         cooldown_cap_hit=_cooldown_cap_hit(metadata),
         token_count_source=token_count_source,
+        idle_window_suspect=_idle_window_suspect(idle_baseline),
     )
     return SummaryMetrics(
         status=RunStatus.SUCCEEDED,

@@ -11,6 +11,8 @@ runs/<run_id>/
   metadata.json
   events.jsonl
   power_trace.csv
+  rich_telemetry.jsonl
+  rich_telemetry_idle.jsonl
   summary_metrics.json
   raw/
     (backend-native artifacts, e.g. powermetrics.plist, nvidia_smi.csv)
@@ -51,6 +53,21 @@ Backend-native raw artifacts under `raw/` are preserved verbatim and are
 the source of truth for the derived `power_trace.csv`; a parser bug can be
 fixed and the bundle re-reduced without re-running hardware (decision
 D-002).
+
+`rich_telemetry.jsonl` and `rich_telemetry_idle.jsonl` are optional,
+additive, derived powermetrics artifacts: one JSON object per plist document
+from the measured capture and idle-baseline capture, respectively. They are
+byte-regenerable from `raw/powermetrics.plist` and
+`raw/powermetrics_idle.plist` alone, so the raw plists remain the source of
+truth. To keep that regenerability, rich `timestamp_s` is plist-native (the
+plist's 1-second-resolution first `timestamp` plus cumulative `elapsed_ns`)
+and is NOT on the same clock as `power_trace.csv`/`events.jsonl`
+timestamps; join rich rows to power-trace rows by document order
+(`index`/`elapsed_ns`), or correct with the `plist_anchor_offset_s`
+recorded in device metadata. The rich records preserve powermetrics
+frequency values verbatim: Apple GPU `freq_hz` values observed in the
+fixture are reported in MHz, while cluster/core `freq_hz` values are
+reported in Hz.
 
 ## Event Log Minimum Fields
 

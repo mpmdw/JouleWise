@@ -107,6 +107,18 @@ class SummaryMetricsTests(unittest.TestCase):
         ).to_dict()
         self.assertEqual(payload["phase_energy_j"], {"prefill": 1.0, "decode": 2.0})
 
+    def test_summary_metrics_schema_has_idle_gpu_quality_fields(self) -> None:
+        schema = SummaryMetrics.json_schema()
+        idle_props = schema["$defs"]["idle_baseline"]["properties"]
+        quality_schema = schema["$defs"]["measurement_quality"]
+        quality_props = quality_schema["properties"]
+        self.assertEqual(idle_props["gpu_idle_ratio_mean"], {"type": ["number", "null"]})
+        self.assertEqual(idle_props["gpu_idle_ratio_min"], {"type": ["number", "null"]})
+        self.assertEqual(idle_props["gpu_freq_hz_mean"], {"type": ["number", "null"]})
+        self.assertEqual(idle_props["idle_window_suspect"], {"type": ["boolean", "null"]})
+        self.assertEqual(quality_schema["required"], ["requested_sampling_hz"])
+        self.assertEqual(quality_props["idle_window_suspect"], {"type": ["boolean", "null"]})
+
 
 def _resolve_ref(schema: dict[str, Any], node: dict[str, Any]) -> dict[str, Any]:
     """Resolve a local ``#/$defs/...`` $ref one level deep (all this schema has)."""

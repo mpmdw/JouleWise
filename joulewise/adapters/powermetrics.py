@@ -9,6 +9,7 @@ in milliwatts; JouleWise emits watts.
 from __future__ import annotations
 
 import getpass
+import json
 import math
 import plistlib
 import statistics
@@ -21,7 +22,7 @@ from pathlib import Path
 from typing import Any
 from xml.parsers.expat import ExpatError
 
-from joulewise.bundle import write_raw_artifact
+from joulewise.bundle import BundleError, write_derived_artifact, write_raw_artifact
 from joulewise.clock import Clock
 from joulewise.interfaces import (
     AdapterFailure,
@@ -35,10 +36,15 @@ from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline, Tele
 POWER_METRICS = "/usr/bin/powermetrics"
 RAW_SAMPLES_NAME = "powermetrics.plist"
 RAW_IDLE_NAME = "powermetrics_idle.plist"
+RICH_TELEMETRY_NAME = "rich_telemetry.jsonl"
+RICH_IDLE_NAME = "rich_telemetry_idle.jsonl"
 RAIL_MANIFEST = ["cpu_power", "gpu_power", "ane_power"]
 SAMPLERS = "cpu_power,gpu_power,ane_power,thermal"
 READINESS_TIMEOUT_S = 15.0
 READINESS_POLL_S = 0.05
+IDLE_GPU_IDLE_RATIO_THRESHOLD = 0.80
+IDLE_GPU_LOW_IDLE_FRACTION_THRESHOLD = 0.40
+IDLE_GPU_FREQ_MEAN_MHZ_THRESHOLD = 800.0
 TIMESTAMP_DERIVATION = (
     "timestamp_s = start_sampling readiness clock.now() UTC epoch seconds + "
     "cumulative elapsed_ns through the current plist document; start_sampling "
@@ -97,15 +103,28 @@ class PowermetricsTelemetryAdapter:
         if context is not None:
             write_raw_artifact(context, RAW_IDLE_NAME, data)
         records = parse_powermetrics_records(data, timestamp_anchor_s=capture_start_s)
+        rich_records = decode_rich_telemetry(data)
+        if context is not None:
+            self._write_rich_artifact(
+                context=context,
+                name=RICH_IDLE_NAME,
+                data=rich_telemetry_jsonl_from_records(rich_records),
+                error_key="rich_telemetry_idle_error",
+            )
         self._remember_records(records, timestamp_anchor_s=capture_start_s)
         totals = [record.combined_power_w for record in records]
         duration_s = sum(record.elapsed_ns for record in records) / 1_000_000_000.0
+        idle_quality = idle_window_gpu_quality(rich_records)
         return IdleBaseline(
             power_w_mean=statistics.mean(totals) if totals else 0.0,
             power_w_stddev=statistics.stdev(totals) if len(totals) > 1 else 0.0,
             duration_s=duration_s,
             sample_count=len(totals),
             telemetry_backend=TelemetryBackend.POWERMETRICS,
+            gpu_idle_ratio_mean=idle_quality["gpu_idle_ratio_mean"],
+            gpu_idle_ratio_min=idle_quality["gpu_idle_ratio_min"],
+            gpu_freq_hz_mean=idle_quality["gpu_freq_hz_mean"],
+            idle_window_suspect=idle_quality["idle_window_suspect"],
         )
 
     def start_sampling(
@@ -179,8 +198,33 @@ class PowermetricsTelemetryAdapter:
         if context is not None:
             write_raw_artifact(context, RAW_SAMPLES_NAME, data)
         records = parse_powermetrics_records(data, timestamp_anchor_s=clock_start_s)
+        if context is not None:
+            try:
+                rich_data = rich_telemetry_jsonl(data)
+            except ValueError as exc:
+                self._device_metadata["rich_telemetry_error"] = _terse_error(exc)
+            else:
+                self._write_rich_artifact(
+                    context=context,
+                    name=RICH_TELEMETRY_NAME,
+                    data=rich_data,
+                    error_key="rich_telemetry_error",
+                )
         self._remember_records(records, timestamp_anchor_s=clock_start_s)
         return samples_from_records(records)
+
+    def _write_rich_artifact(
+        self,
+        *,
+        context: RunContext,
+        name: str,
+        data: str,
+        error_key: str,
+    ) -> None:
+        try:
+            write_derived_artifact(context, name, data)
+        except (BundleError, OSError, ValueError) as exc:
+            self._device_metadata[error_key] = _terse_error(exc)
 
     def thermal_state(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -441,17 +485,7 @@ def parse_powermetrics_records(
     data: bytes, *, timestamp_anchor_s: float | None = None
 ) -> list[PowermetricsRecord]:
     """Parse a NUL-framed powermetrics plist stream into interval records."""
-    documents = []
-    for index, part in enumerate(part for part in data.split(b"\0") if part.strip()):
-        try:
-            document = plistlib.loads(part)
-        except (ExpatError, plistlib.InvalidFileException, ValueError, TypeError) as exc:
-            raise ValueError(
-                f"powermetrics document {index} is not a valid plist: {exc}"
-            ) from exc
-        if not isinstance(document, dict):
-            raise ValueError(f"powermetrics document {index} is not a dictionary")
-        documents.append(document)
+    documents = _powermetrics_documents(data)
     if not documents:
         return []
 
@@ -507,6 +541,128 @@ def parse_powermetrics_records(
     return records
 
 
+def decode_rich_telemetry(
+    data: bytes, *, timestamp_anchor_s: float | None = None
+) -> list[dict[str, Any]]:
+    """Decode additive per-sample powermetrics fields from a plist stream."""
+    documents = _powermetrics_documents(data)
+    if not documents:
+        return []
+
+    plist_first_timestamp = _timestamp_epoch_utc(
+        _required(documents[0], "timestamp", 0)
+    )
+    anchor_s = plist_first_timestamp if timestamp_anchor_s is None else timestamp_anchor_s
+    cumulative_elapsed_s = 0.0
+    rich_records: list[dict[str, Any]] = []
+    for index, document in enumerate(documents):
+        elapsed_ns = _required_int(document, "elapsed_ns", index)
+        if timestamp_anchor_s is None:
+            timestamp_s = anchor_s + cumulative_elapsed_s
+            cumulative_elapsed_s += elapsed_ns / 1_000_000_000.0
+        else:
+            cumulative_elapsed_s += elapsed_ns / 1_000_000_000.0
+            timestamp_s = anchor_s + cumulative_elapsed_s
+        processor = document.get("processor")
+        processor_combined_power_w = None
+        rail_sum_power_w = None
+        combined_delta_w = None
+        if isinstance(processor, dict):
+            combined_mw = _number_or_none(processor.get("combined_power"))
+            if combined_mw is not None:
+                processor_combined_power_w = combined_mw / 1000.0
+            rail_values = [
+                _number_or_none(processor.get(rail)) for rail in RAIL_MANIFEST
+            ]
+            if all(value is not None for value in rail_values):
+                rail_sum_power_w = sum(value for value in rail_values if value is not None) / 1000.0
+                if processor_combined_power_w is not None:
+                    combined_delta_w = processor_combined_power_w - rail_sum_power_w
+        rich_records.append(
+            {
+                "index": index,
+                "timestamp_s": timestamp_s,
+                "elapsed_ns": elapsed_ns,
+                "gpu": _rich_gpu(document.get("gpu")),
+                "clusters": _rich_clusters(processor.get("clusters") if isinstance(processor, dict) else None),
+                "processor_combined_power_w": processor_combined_power_w,
+                "rail_sum_power_w": rail_sum_power_w,
+                "combined_power_delta_w": combined_delta_w,
+            }
+        )
+    return rich_records
+
+
+def rich_telemetry_jsonl(
+    data: bytes, *, timestamp_anchor_s: float | None = None
+) -> str:
+    return rich_telemetry_jsonl_from_records(
+        decode_rich_telemetry(data, timestamp_anchor_s=timestamp_anchor_s)
+    )
+
+
+def rich_telemetry_jsonl_from_records(records: list[dict[str, Any]]) -> str:
+    if not records:
+        return ""
+    return "".join(json.dumps(record, sort_keys=True) + "\n" for record in records)
+
+
+def idle_window_gpu_quality(records: list[dict[str, Any]]) -> dict[str, float | bool | None]:
+    """Return the idle-window GPU quality stats and suspect flag.
+
+    Thresholds are pinned to the fixture and C-004 contamination evidence:
+    the clean-ish fixture has min GPU idle_ratio 0.846584 and mean reported GPU
+    freq 325.9 MHz, while the observed contaminated idle pattern held the GPU
+    near 1363 MHz with low/zero idle_ratio. A single low-idle blip in the
+    5-sample fixture is 0.2 of the window and is not suspect; the C-004
+    half-window contamination is 0.5 and is suspect.
+    """
+    idle_ratios: list[float] = []
+    freqs: list[float] = []
+    for record in records:
+        gpu = record.get("gpu")
+        if not isinstance(gpu, dict):
+            continue
+        idle_ratio = _number_or_none(gpu.get("idle_ratio"))
+        freq = _number_or_none(gpu.get("freq_hz"))
+        if idle_ratio is not None:
+            idle_ratios.append(idle_ratio)
+        if freq is not None:
+            freqs.append(freq)
+    if not idle_ratios and not freqs:
+        return {
+            "gpu_idle_ratio_mean": None,
+            "gpu_idle_ratio_min": None,
+            "gpu_freq_hz_mean": None,
+            "idle_window_suspect": None,
+        }
+    idle_mean = statistics.mean(idle_ratios) if idle_ratios else None
+    idle_min = min(idle_ratios) if idle_ratios else None
+    freq_mean = statistics.mean(freqs) if freqs else None
+    low_idle_fraction = (
+        sum(1 for ratio in idle_ratios if ratio < IDLE_GPU_IDLE_RATIO_THRESHOLD)
+        / len(idle_ratios)
+        if idle_ratios
+        else 0.0
+    )
+    suspect = (
+        (
+            idle_ratios
+            and low_idle_fraction >= IDLE_GPU_LOW_IDLE_FRACTION_THRESHOLD
+        )
+        or (
+            freq_mean is not None
+            and freq_mean > IDLE_GPU_FREQ_MEAN_MHZ_THRESHOLD
+        )
+    )
+    return {
+        "gpu_idle_ratio_mean": idle_mean,
+        "gpu_idle_ratio_min": idle_min,
+        "gpu_freq_hz_mean": freq_mean,
+        "idle_window_suspect": suspect,
+    }
+
+
 def samples_from_records(records: list[PowermetricsRecord]) -> list[PowerSample]:
     samples: list[PowerSample] = []
     for record in records:
@@ -520,6 +676,132 @@ def samples_from_records(records: list[PowermetricsRecord]) -> list[PowerSample]
                 )
             )
     return samples
+
+
+def _powermetrics_documents(data: bytes) -> list[dict[str, Any]]:
+    documents = []
+    for index, part in enumerate(part for part in data.split(b"\0") if part.strip()):
+        try:
+            document = plistlib.loads(part)
+        except (ExpatError, plistlib.InvalidFileException, ValueError, TypeError) as exc:
+            raise ValueError(
+                f"powermetrics document {index} is not a valid plist: {exc}"
+            ) from exc
+        if not isinstance(document, dict):
+            raise ValueError(f"powermetrics document {index} is not a dictionary")
+        documents.append(document)
+    return documents
+
+
+def _rich_gpu(value: object) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    dvfm_states = _state_entries(value.get("dvfm_states"), ("freq", "used_ns", "used_ratio"))
+    # powermetrics labels this GPU field freq_hz, but observed Apple GPU values
+    # are reported in MHz; cluster/core freq_hz values are reported in Hz.
+    return {
+        "freq_hz": _number_or_none(value.get("freq_hz")),
+        "idle_ratio": _number_or_none(value.get("idle_ratio")),
+        "idle_ns": _int_or_none(value.get("idle_ns")),
+        "gpu_energy": _int_or_none(value.get("gpu_energy")),
+        "active_freq_mhz_weighted": _weighted_freq(dvfm_states),
+        "dvfm_states": dvfm_states,
+        "sw_state": _state_entries(value.get("sw_state"), ("sw_state", "used_ns", "used_ratio")),
+        "sw_requested_state": _state_entries(
+            value.get("sw_requested_state"),
+            ("sw_req_state", "used_ns", "used_ratio"),
+        ),
+    }
+
+
+def _rich_clusters(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    clusters = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        clusters.append(
+            {
+                "name": _optional_string(item.get("name")),
+                # Unlike GPU freq_hz, cluster/core freq_hz values are reported
+                # in Hz; preserve every frequency field verbatim.
+                "freq_hz": _number_or_none(item.get("freq_hz")),
+                "idle_ratio": _number_or_none(item.get("idle_ratio")),
+                "down_ratio": _number_or_none(item.get("down_ratio")),
+                "online_ratio": _number_or_none(item.get("online_ratio")),
+                "dvfm_states": _state_entries(
+                    item.get("dvfm_states"),
+                    ("freq", "used_ns", "used_ratio"),
+                ),
+                "cpus": _rich_cpus(item.get("cpus")),
+            }
+        )
+    return clusters
+
+
+def _rich_cpus(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    cpus = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        cpus.append(
+            {
+                "cpu": _int_or_none(item.get("cpu")),
+                "freq_hz": _number_or_none(item.get("freq_hz")),
+                "idle_ratio": _number_or_none(item.get("idle_ratio")),
+                "down_ratio": _number_or_none(item.get("down_ratio")),
+                "online_ratio": _number_or_none(item.get("online_ratio")),
+            }
+        )
+    return cpus
+
+
+def _state_entries(value: object, keys: tuple[str, ...]) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    entries = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        entry = {
+            key: _json_scalar(item[key])
+            for key in keys
+            if key in item and _json_scalar(item[key]) is not None
+        }
+        if entry:
+            entries.append(entry)
+    return entries
+
+
+def _weighted_freq(states: list[dict[str, Any]]) -> float | None:
+    weighted = 0.0
+    total = 0.0
+    for state in states:
+        freq = _number_or_none(state.get("freq"))
+        ratio = _number_or_none(state.get("used_ratio"))
+        if freq is None or ratio is None:
+            continue
+        weighted += freq * ratio
+        total += ratio
+    if total <= 0:
+        return None
+    return weighted / total
+
+
+def _json_scalar(value: object) -> str | int | float | bool | None:
+    if isinstance(value, bool | str | int | float) or value is None:
+        return value
+    return None
+
+
+def _terse_error(exc: Exception) -> str:
+    message = str(exc).strip()
+    if not message:
+        return type(exc).__name__
+    return f"{type(exc).__name__}: {message}"
 
 
 def sudoers_line() -> str:
@@ -538,6 +820,22 @@ def _timestamp_epoch_utc(value: object) -> float:
 
 def _optional_string(value: object) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _number_or_none(value: object) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    return None
+
+
+def _int_or_none(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return int(value)
+    return None
 
 
 def _required(mapping: dict[str, Any], key: str, document_index: int) -> Any:

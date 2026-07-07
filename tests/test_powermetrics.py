@@ -11,12 +11,18 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from joulewise.bundle import BundleError
 from joulewise.adapters import resolve_telemetry
 from joulewise.adapters.powermetrics import (
     RAIL_MANIFEST,
+    RICH_IDLE_NAME,
+    RICH_TELEMETRY_NAME,
     RAW_SAMPLES_NAME,
     PowermetricsTelemetryAdapter,
+    decode_rich_telemetry,
+    idle_window_gpu_quality,
     parse_powermetrics_records,
+    rich_telemetry_jsonl,
     samples_from_records,
     sudoers_line,
 )
@@ -58,6 +64,10 @@ def make_config(**overrides: Any) -> BenchmarkConfig:
 def fixture_documents() -> list[dict[str, Any]]:
     data = FIXTURE.read_bytes()
     return [plistlib.loads(part) for part in data.split(b"\0") if part.strip()]
+
+
+def documents_to_stream(documents: list[dict[str, Any]]) -> bytes:
+    return b"\0".join(plistlib.dumps(document) for document in documents)
 
 
 def utc_epoch(value) -> float:
@@ -144,6 +154,219 @@ class PowermetricsParserTests(unittest.TestCase):
         self.assertIsNone(state.temperature_c)
         self.assertEqual(state.thermal_pressure, "Nominal")
 
+    def test_rich_telemetry_jsonl_decodes_fixture_fields(self) -> None:
+        lines = rich_telemetry_jsonl(FIXTURE.read_bytes()).splitlines()
+        self.assertEqual(len(lines), 5)
+        first = json.loads(lines[0])
+        self.assertEqual(first["index"], 0)
+        self.assertEqual(first["elapsed_ns"], fixture_documents()[0]["elapsed_ns"])
+        self.assertAlmostEqual(first["gpu"]["freq_hz"], 338.0, places=12)
+        self.assertAlmostEqual(first["gpu"]["idle_ratio"], 0.997924, places=12)
+        self.assertEqual(len(first["gpu"]["dvfm_states"]), 13)
+        self.assertAlmostEqual(first["gpu"]["active_freq_mhz_weighted"], 338.0, places=9)
+        self.assertAlmostEqual(first["processor_combined_power_w"], 1.47572, places=12)
+        self.assertEqual([cluster["name"] for cluster in first["clusters"]], [
+            "E-Cluster",
+            "P0-Cluster",
+            "P1-Cluster",
+        ])
+        self.assertEqual([len(cluster["cpus"]) for cluster in first["clusters"]], [4, 6, 6])
+        self.assertAlmostEqual(first["clusters"][0]["freq_hz"], 1_416_230_000.0, places=3)
+        self.assertIn("idle_ratio", first["clusters"][1]["cpus"][0])
+
+    def test_rich_telemetry_omits_empty_malformed_state_entries(self) -> None:
+        documents = fixture_documents()
+        documents[0]["gpu"]["dvfm_states"] = [
+            {"freq": {}},
+            {"used_ratio": []},
+            {"freq": 338, "used_ratio": 1.0},
+        ]
+        first = json.loads(rich_telemetry_jsonl(documents_to_stream(documents)).splitlines()[0])
+        self.assertEqual(first["gpu"]["dvfm_states"], [{"freq": 338, "used_ratio": 1.0}])
+
+    def test_idle_window_gpu_quality_clean_fixture_and_contaminated_sequence(self) -> None:
+        clean = idle_window_gpu_quality(decode_rich_telemetry(FIXTURE.read_bytes()))
+        self.assertAlmostEqual(clean["gpu_idle_ratio_mean"], 0.9611138, places=12)
+        self.assertAlmostEqual(clean["gpu_idle_ratio_min"], 0.846584, places=12)
+        self.assertAlmostEqual(clean["gpu_freq_hz_mean"], 325.9148, places=12)
+        self.assertIs(clean["idle_window_suspect"], False)
+
+        documents = fixture_documents()
+        for document in documents[:3]:
+            document["gpu"]["freq_hz"] = 1363.0
+            document["gpu"]["idle_ratio"] = 0.0
+        contaminated = idle_window_gpu_quality(
+            decode_rich_telemetry(documents_to_stream(documents))
+        )
+        self.assertIs(contaminated["idle_window_suspect"], True)
+
+        documents = fixture_documents()
+        documents[0]["gpu"]["freq_hz"] = 338.0
+        documents[0]["gpu"]["idle_ratio"] = 0.0
+        single_blip = idle_window_gpu_quality(
+            decode_rich_telemetry(documents_to_stream(documents))
+        )
+        self.assertIs(single_blip["idle_window_suspect"], False)
+
+    def test_idle_window_gpu_quality_absent_gpu_is_unknown(self) -> None:
+        documents = fixture_documents()
+        for document in documents:
+            document.pop("gpu", None)
+        quality = idle_window_gpu_quality(decode_rich_telemetry(documents_to_stream(documents)))
+        self.assertIsNone(quality["gpu_idle_ratio_mean"])
+        self.assertIsNone(quality["gpu_idle_ratio_min"])
+        self.assertIsNone(quality["gpu_freq_hz_mean"])
+        self.assertIsNone(quality["idle_window_suspect"])
+
+    def test_rich_decode_tolerates_missing_optional_gpu_and_cluster_shapes(self) -> None:
+        documents = fixture_documents()
+        documents[0].pop("gpu", None)
+        documents[0]["processor"].pop("clusters", None)
+        for key in ("dvfm_states", "sw_state", "sw_requested_state"):
+            documents[1]["gpu"].pop(key, None)
+        documents[1]["processor"]["clusters"] = [
+            "not-a-cluster",
+            {"name": "partial", "freq_hz": 123.0},
+        ]
+        documents[2]["gpu"]["dvfm_states"] = []
+        documents[2]["processor"]["clusters"][0]["cpus"] = [
+            "not-a-core",
+            {"cpu": 0},
+            {"freq_hz": 456.0},
+        ]
+
+        records = decode_rich_telemetry(documents_to_stream(documents))
+
+        self.assertIsNone(records[0]["gpu"])
+        self.assertEqual(records[0]["clusters"], [])
+        self.assertEqual(records[1]["gpu"]["dvfm_states"], [])
+        self.assertEqual(records[1]["gpu"]["sw_state"], [])
+        self.assertEqual(records[1]["gpu"]["sw_requested_state"], [])
+        self.assertEqual(len(records[1]["clusters"]), 1)
+        self.assertEqual(records[1]["clusters"][0]["name"], "partial")
+        self.assertEqual(records[1]["clusters"][0]["cpus"], [])
+        self.assertIsNone(records[2]["gpu"]["active_freq_mhz_weighted"])
+        self.assertEqual(records[2]["clusters"][0]["cpus"][0]["cpu"], 0)
+        self.assertIsNone(records[2]["clusters"][0]["cpus"][0]["freq_hz"])
+        self.assertEqual(records[2]["clusters"][0]["cpus"][1]["freq_hz"], 456.0)
+
+    def test_decode_rich_telemetry_rejects_garbage_trailing_document(self) -> None:
+        with self.assertRaisesRegex(ValueError, "document 5"):
+            decode_rich_telemetry(FIXTURE.read_bytes() + b"\0garbage")
+
+    def test_rich_helpers_handle_zero_document_streams(self) -> None:
+        self.assertEqual(decode_rich_telemetry(b"\0\0"), [])
+        self.assertEqual(rich_telemetry_jsonl(b"\0\0"), "")
+        quality = idle_window_gpu_quality([])
+        self.assertIsNone(quality["gpu_idle_ratio_mean"])
+        self.assertIsNone(quality["gpu_idle_ratio_min"])
+        self.assertIsNone(quality["gpu_freq_hz_mean"])
+        self.assertIsNone(quality["idle_window_suspect"])
+
+    def test_idle_window_gpu_quality_boundary_semantics(self) -> None:
+        documents = fixture_documents()
+        for document in documents:
+            document["gpu"]["freq_hz"] = 338.0
+            document["gpu"]["idle_ratio"] = 1.0
+
+        one_low = fixture_documents()
+        for document in one_low:
+            document["gpu"]["freq_hz"] = 338.0
+            document["gpu"]["idle_ratio"] = 1.0
+        one_low[0]["gpu"]["idle_ratio"] = 0.0
+        self.assertIs(
+            idle_window_gpu_quality(
+                decode_rich_telemetry(documents_to_stream(one_low))
+            )["idle_window_suspect"],
+            False,
+        )
+
+        two_low = fixture_documents()
+        for document in two_low:
+            document["gpu"]["freq_hz"] = 338.0
+            document["gpu"]["idle_ratio"] = 1.0
+        two_low[0]["gpu"]["idle_ratio"] = 0.0
+        two_low[1]["gpu"]["idle_ratio"] = 0.0
+        self.assertIs(
+            idle_window_gpu_quality(
+                decode_rich_telemetry(documents_to_stream(two_low))
+            )["idle_window_suspect"],
+            True,
+        )
+
+        exact_idle_threshold = fixture_documents()
+        for document in exact_idle_threshold:
+            document["gpu"]["freq_hz"] = 338.0
+            document["gpu"]["idle_ratio"] = 0.80
+        self.assertIs(
+            idle_window_gpu_quality(
+                decode_rich_telemetry(documents_to_stream(exact_idle_threshold))
+            )["idle_window_suspect"],
+            False,
+        )
+
+        exact_freq_threshold = fixture_documents()
+        for document in exact_freq_threshold:
+            document["gpu"]["freq_hz"] = 800.0
+            document["gpu"]["idle_ratio"] = 1.0
+        self.assertIs(
+            idle_window_gpu_quality(
+                decode_rich_telemetry(documents_to_stream(exact_freq_threshold))
+            )["idle_window_suspect"],
+            False,
+        )
+
+        above_freq_threshold = fixture_documents()
+        for document in above_freq_threshold:
+            document["gpu"]["freq_hz"] = 800.001
+            document["gpu"]["idle_ratio"] = 1.0
+        self.assertIs(
+            idle_window_gpu_quality(
+                decode_rich_telemetry(documents_to_stream(above_freq_threshold))
+            )["idle_window_suspect"],
+            True,
+        )
+
+    def test_rich_telemetry_jsonl_format_round_trips_and_preserves_order(self) -> None:
+        documents = fixture_documents()
+        lines = rich_telemetry_jsonl(FIXTURE.read_bytes()).splitlines()
+        self.assertEqual(len(lines), len(documents))
+
+        parsed = [json.loads(line) for line in lines]
+        self.assertEqual(lines, [json.dumps(record, sort_keys=True) for record in parsed])
+        self.assertEqual([record["index"] for record in parsed], list(range(len(parsed))))
+        self.assertEqual([record["index"] for record in parsed], sorted(record["index"] for record in parsed))
+
+        timestamps = [record["timestamp_s"] for record in parsed]
+        self.assertEqual(timestamps, sorted(timestamps))
+        self.assertEqual(len(set(timestamps)), len(timestamps))
+        first = utc_epoch(documents[0]["timestamp"])
+        cumulative_s = 0.0
+        expected_timestamps = []
+        for document in documents:
+            expected_timestamps.append(first + cumulative_s)
+            cumulative_s += int(document["elapsed_ns"]) / 1_000_000_000.0
+        self.assertEqual(timestamps, expected_timestamps)
+
+        for record in parsed:
+            self.assertEqual(
+                set(record),
+                {
+                    "clusters",
+                    "combined_power_delta_w",
+                    "elapsed_ns",
+                    "gpu",
+                    "index",
+                    "processor_combined_power_w",
+                    "rail_sum_power_w",
+                    "timestamp_s",
+                },
+            )
+            self.assertIsInstance(record["clusters"], list)
+            self.assertTrue(record["gpu"] is None or isinstance(record["gpu"], dict))
+            for key in ("combined_power_delta_w", "processor_combined_power_w", "rail_sum_power_w"):
+                self.assertTrue(record[key] is None or isinstance(record[key], float))
+
 
 class PowermetricsAdapterTests(unittest.TestCase):
     def test_device_metadata_declares_manifest_and_timestamp_derivation(self) -> None:
@@ -180,6 +403,112 @@ class PowermetricsAdapterTests(unittest.TestCase):
         self.assertAlmostEqual(baseline.power_w_mean, 0.466464226, places=12)
         self.assertAlmostEqual(baseline.power_w_stddev, 0.5963032492730296, places=12)
         self.assertAlmostEqual(baseline.duration_s, 5.091935956, places=12)
+        self.assertAlmostEqual(baseline.gpu_idle_ratio_min, 0.846584, places=12)
+        self.assertAlmostEqual(baseline.gpu_freq_hz_mean, 325.9148, places=12)
+        self.assertIs(baseline.idle_window_suspect, False)
+
+    def test_measure_idle_preserves_raw_and_rich_idle_artifacts_with_context(self) -> None:
+        fixture = FIXTURE.read_bytes()
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        adapter = PowermetricsTelemetryAdapter(FakeClock(start=200.0))
+        config = make_config()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            context = RunContext(
+                config=config,
+                clock=FakeClock(start=200.0),
+                run_id="run-1",
+                bundle_path=root,
+                raw_dir=root / "raw",
+                logs_dir=root / "logs",
+                outputs_dir=root / "outputs",
+            )
+            with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
+                adapter.measure_idle(config, context)
+
+            self.assertEqual((root / "raw" / "powermetrics_idle.plist").read_bytes(), fixture)
+            rich_lines = (root / RICH_IDLE_NAME).read_text().splitlines()
+            self.assertEqual(len(rich_lines), 5)
+            self.assertEqual(json.loads(rich_lines[0])["index"], 0)
+
+    def test_measure_idle_rich_write_failure_does_not_break_baseline(self) -> None:
+        fixture = FIXTURE.read_bytes()
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        adapter = PowermetricsTelemetryAdapter(FakeClock(start=200.0))
+        config = make_config()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            context = RunContext(
+                config=config,
+                clock=FakeClock(start=200.0),
+                run_id="run-1",
+                bundle_path=root,
+                raw_dir=root / "raw",
+                logs_dir=root / "logs",
+                outputs_dir=root / "outputs",
+            )
+            with (
+                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+                patch(
+                    "joulewise.adapters.powermetrics.write_derived_artifact",
+                    side_effect=BundleError("boom"),
+                ),
+            ):
+                baseline = adapter.measure_idle(config, context)
+
+            self.assertEqual(baseline.sample_count, 5)
+            self.assertEqual((root / "raw" / "powermetrics_idle.plist").read_bytes(), fixture)
+            self.assertIn(
+                "BundleError: boom",
+                adapter.device_metadata(config)["rich_telemetry_idle_error"],
+            )
+
+    def test_measure_idle_rich_write_oserror_does_not_break_baseline(self) -> None:
+        fixture = FIXTURE.read_bytes()
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        adapter = PowermetricsTelemetryAdapter(FakeClock(start=200.0))
+        config = make_config()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            context = RunContext(
+                config=config,
+                clock=FakeClock(start=200.0),
+                run_id="run-1",
+                bundle_path=root,
+                raw_dir=root / "raw",
+                logs_dir=root / "logs",
+                outputs_dir=root / "outputs",
+            )
+            with (
+                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+                patch(
+                    "joulewise.adapters.powermetrics.write_derived_artifact",
+                    side_effect=OSError("disk full"),
+                ),
+            ):
+                baseline = adapter.measure_idle(config, context)
+
+            self.assertEqual(baseline.sample_count, 5)
+            self.assertEqual((root / "raw" / "powermetrics_idle.plist").read_bytes(), fixture)
+            self.assertIn(
+                "OSError: disk full",
+                adapter.device_metadata(config)["rich_telemetry_idle_error"],
+            )
 
     def test_start_sampling_permission_denied_names_exact_sudoers_line(self) -> None:
         def fake_run(command, **kwargs):
@@ -273,11 +602,224 @@ class PowermetricsAdapterTests(unittest.TestCase):
             self.assertIn("-i", FakePopen.command)
             self.assertEqual(FakePopen.command[FakePopen.command.index("-i") + 1], "500")
             self.assertEqual((root / "raw" / RAW_SAMPLES_NAME).read_bytes(), fixture)
+            rich_lines = (root / RICH_TELEMETRY_NAME).read_text().splitlines()
+            self.assertEqual(len(rich_lines), 5)
+            self.assertAlmostEqual(
+                json.loads(rich_lines[0])["processor_combined_power_w"],
+                1.47572,
+                places=12,
+            )
             self.assertEqual(len(samples), 15)
             for offset in range(0, len(samples), 3):
                 rows = samples[offset : offset + 3]
                 self.assertEqual([sample.rail for sample in rows], RAIL_MANIFEST)
                 self.assertEqual(len({sample.timestamp_s for sample in rows}), 1)
+
+    def test_stop_sampling_rich_write_failure_does_not_break_samples(self) -> None:
+        fixture = FIXTURE.read_bytes()
+        config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
+        clock = FakeClock(start=100.0)
+        adapter = PowermetricsTelemetryAdapter(clock)
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        class FakePopen:
+            def __init__(self, command, **kwargs):
+                Path(command[command.index("-o") + 1]).write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            context = RunContext(
+                config=config,
+                clock=clock,
+                run_id="run-1",
+                bundle_path=root,
+                raw_dir=root / "raw",
+                logs_dir=root / "logs",
+                outputs_dir=root / "outputs",
+            )
+            with (
+                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+                patch(
+                    "joulewise.adapters.powermetrics.write_derived_artifact",
+                    side_effect=BundleError("boom"),
+                ),
+            ):
+                self.assertTrue(adapter.start_sampling(config, context).ok)
+                samples = adapter.stop_sampling(config, context)
+
+            self.assertEqual(len(samples), 15)
+            self.assertEqual((root / "raw" / RAW_SAMPLES_NAME).read_bytes(), fixture)
+            self.assertIn(
+                "BundleError: boom",
+                adapter.device_metadata(config)["rich_telemetry_error"],
+            )
+
+    def test_stop_sampling_rich_write_oserror_does_not_break_samples(self) -> None:
+        fixture = FIXTURE.read_bytes()
+        config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
+        clock = FakeClock(start=100.0)
+        adapter = PowermetricsTelemetryAdapter(clock)
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        class FakePopen:
+            def __init__(self, command, **kwargs):
+                Path(command[command.index("-o") + 1]).write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            context = RunContext(
+                config=config,
+                clock=clock,
+                run_id="run-1",
+                bundle_path=root,
+                raw_dir=root / "raw",
+                logs_dir=root / "logs",
+                outputs_dir=root / "outputs",
+            )
+            with (
+                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+                patch(
+                    "joulewise.adapters.powermetrics.write_derived_artifact",
+                    side_effect=OSError("disk full"),
+                ),
+            ):
+                self.assertTrue(adapter.start_sampling(config, context).ok)
+                samples = adapter.stop_sampling(config, context)
+
+            self.assertEqual(len(samples), 15)
+            self.assertEqual((root / "raw" / RAW_SAMPLES_NAME).read_bytes(), fixture)
+            self.assertIn(
+                "OSError: disk full",
+                adapter.device_metadata(config)["rich_telemetry_error"],
+            )
+
+    def test_stop_sampling_preserves_raw_before_trailing_garbage_parse_failure(self) -> None:
+        config = make_config()
+        adapter = PowermetricsTelemetryAdapter(FakeClock(start=10.0))
+        garbage_stream = FIXTURE.read_bytes() + b"\0garbage"
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
+            return completed(command)
+
+        class GarbagePopen:
+            def __init__(self, command, **kwargs):
+                self.path = Path(command[command.index("-o") + 1])
+                self.path.write_bytes(FIXTURE.read_bytes())
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.path.write_bytes(garbage_stream)
+                self.returncode = 0
+                return b"", b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            context = RunContext(
+                config=config,
+                clock=FakeClock(start=10.0),
+                run_id="run-1",
+                bundle_path=root,
+                raw_dir=root / "raw",
+                logs_dir=root / "logs",
+                outputs_dir=root / "outputs",
+            )
+            with (
+                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+                patch("joulewise.adapters.powermetrics.subprocess.Popen", GarbagePopen),
+            ):
+                self.assertTrue(adapter.start_sampling(config, context).ok)
+                with self.assertRaisesRegex(ValueError, "document 5"):
+                    adapter.stop_sampling(config, context)
+
+            self.assertEqual((root / "raw" / RAW_SAMPLES_NAME).read_bytes(), garbage_stream)
+            self.assertFalse((root / RICH_TELEMETRY_NAME).exists())
+
+    def test_rich_telemetry_file_is_regenerable_from_preserved_raw_plist(self) -> None:
+        fixture = FIXTURE.read_bytes()
+        config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
+        clock = FakeClock(start=100.0)
+        adapter = PowermetricsTelemetryAdapter(clock)
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        class FakePopen:
+            def __init__(self, command, **kwargs):
+                Path(command[command.index("-o") + 1]).write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            context = RunContext(
+                config=config,
+                clock=clock,
+                run_id="run-1",
+                bundle_path=root,
+                raw_dir=root / "raw",
+                logs_dir=root / "logs",
+                outputs_dir=root / "outputs",
+            )
+            with (
+                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+            ):
+                self.assertTrue(adapter.start_sampling(config, context).ok)
+                adapter.stop_sampling(config, context)
+
+            raw_bytes = (root / "raw" / RAW_SAMPLES_NAME).read_bytes()
+            self.assertEqual((root / RICH_TELEMETRY_NAME).read_text(), rich_telemetry_jsonl(raw_bytes))
 
     def test_corrupt_stop_preserves_raw_before_parse_failure(self) -> None:
         config = make_config()
