@@ -142,7 +142,7 @@ than a numbered question.
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2G/2H/2I, 2026-07-06: 3-rep real energy bundles, ~47 J / 512 tokens on the M3 Max); 2M baselines unblocked (Mac-only floor); 2K/2L gated on device access |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation) — 2M baselines are fully tooled and NEXT; 2K/2L gated on device access |
 | 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
@@ -429,6 +429,95 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
 | `joulewise/`, `tests/` | the harness package + test suite (369 tests, CI-enforced) |
+
+## If You Want To Read More: How This Project Is Actually Built
+
+This project is developed by a human researcher directing a multi-agent
+AI system he designed and iteratively engineered over the course of the
+project — the orchestration itself is a second, deliberate piece of
+engineering alongside the benchmark, and by now it is interesting in its
+own right.
+
+**The division of labor.** Ed sets the research direction, the
+methodology standards (the decision log's non-negotiables: raw-evidence
+bundles, idle subtraction, named measurement boundaries, no
+unauditable claims), the hardware and access decisions, and — the part
+that is easy to underrate — the *process policy*: every rule below
+exists because he observed a failure or an opportunity and issued a
+standing instruction. The AI staff executes: a lead agent (Claude,
+Anthropic's Fable-class model) orchestrates, reviews, verifies on real
+hardware, and keeps the books; per-stream orchestrator agents (also
+Fable) own one work stream each; and a second, independent model
+(OpenAI Codex gpt-5.5) does the volume — implementation, adversarial
+code review, test writing, and test review. Cross-model review is
+load-bearing by design: different models have uncorrelated blind spots,
+and the catch record proves it.
+
+**The machinery, briefly.** Independent tasks run as parallel git
+worktrees, each with its own orchestrator driving its own Codex thread.
+Every implementation passes through a layered pipeline: a design
+argument round (the implementer must argue trade-offs before coding),
+fresh-instance counterreview lenses, a test-amplification round, a
+writer-never-reviews-its-own-tests audit, an orchestrator diff gate,
+and finally lead-side live verification on real hardware — the one
+layer that is never delegated, because it has caught every
+hardware-integration bug to date. After parallel streams merge, a
+dedicated integration review hunts the cross-stream defects no
+per-stream review can see (it found two on its first outing). An
+event-driven review council convenes for contract-bearing work, and —
+per Ed's instruction — its *deliberations* are recorded, not just its
+verdicts: the council log preserves positions, the reasoning exchanged,
+who prevailed and why, and overridden dissents, so a future reader (or
+model) can reconstruct why any decision was made. The whole loop is
+self-instrumenting: every review layer's unique catches are attributed
+and tallied, and a layer that stops earning its keep is dropped by its
+own evidence rule (one already has been). Lessons are folded into the
+process documentation the same session they are learned — measurably:
+one failure mode recurred five times before its fix was distilled, and
+zero times after.
+
+**What one day of this looks like (2026-07-07).** Five implementation
+streams plus a repo-wide test audit ran concurrently: statistical
+uncertainty (per-metric confidence intervals, re-derivable
+byte-for-byte from raw evidence), contamination detection, deep DVFS
+telemetry, campaign automation, and a KV-cache size model. All five
+merged the same day; the test suite grew 254 → 369; the layered review
+recorded thirteen attributed catches including three blockers that no
+single reviewer — human-style solo review included — would plausibly
+have found together (one blocker was caught only by running the real
+CLI against code whose own tests were green, because the tests encoded
+the same wrong assumption as the code). Roughly 6–7 million tokens of
+implementation and review work were delegated to the second model,
+about five times the volume the orchestrating side spent. The most
+satisfying data point: the new contamination gate's first live act was
+to correctly flag the lead agent's *own verification run* as
+contaminated — the instrument now audits its operators.
+
+**How the scope grew.** The project began as an architecture sketch for
+"measure LLM inference energy on edge hardware." Contracts-first
+engineering turned that into an auditable instrument: typed configs,
+self-contained evidence bundles, a strict re-reduction validator. The
+mock vertical slice proved the math without hardware; the Mac slice
+produced the first real joules; the flagship run put a 122-billion-
+parameter mixture-of-experts model through the identical harness and
+yielded the first real finding (energy per token tracks ACTIVE
+parameters while decode power stays nearly flat — the big model costs
+time, not watts). This week the instrument gained the statistical and
+forensic machinery above, and a steelmanned, devil's-advocated research
+agenda of 31 tiered questions — 16 answerable on the current hardware
+alone (`docs/research_question_bank.md`). The pattern throughout:
+capability first, claims only when the instrument can defend them.
+
+**Where to look.** `docs/council_log.md` (C-001…C-006) is the
+deliberation record — C-006 is a full orchestration trace of the
+five-stream day, including what each review layer uniquely caught and
+what it cost. `docs/decision_log.md` holds the 31 binding design
+decisions with alternatives considered. `docs/run_reports/` narrates
+each working session. The orchestration playbooks themselves live
+outside this repository as reusable skills (council, delegation,
+multi-stream worktrees, adversarial review, and a top-level
+operation-loop that sequences them), so the machinery survives this
+project and transfers to the next one.
 
 ## Maintenance Of This Document
 
