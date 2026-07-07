@@ -1,0 +1,571 @@
+"""Apple ``powermetrics`` telemetry adapter (D-002, D-004, D-018).
+
+The parser is pinned to the captured plist stream fixture landed for Slice 2H:
+NUL-separated XML plist documents, with Apple SoC power rails under the
+top-level ``processor`` dictionary. ``powermetrics`` reports those rail values
+in milliwatts; JouleWise emits watts.
+"""
+
+from __future__ import annotations
+
+import getpass
+import math
+import plistlib
+import statistics
+import subprocess
+import tempfile
+import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+from xml.parsers.expat import ExpatError
+
+from joulewise.bundle import write_raw_artifact
+from joulewise.clock import Clock
+from joulewise.interfaces import (
+    AdapterFailure,
+    AdapterResult,
+    PowerSample,
+    RunContext,
+    ThermalState,
+)
+from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline, TelemetryBackend
+
+POWER_METRICS = "/usr/bin/powermetrics"
+RAW_SAMPLES_NAME = "powermetrics.plist"
+RAW_IDLE_NAME = "powermetrics_idle.plist"
+RAIL_MANIFEST = ["cpu_power", "gpu_power", "ane_power"]
+SAMPLERS = "cpu_power,gpu_power,ane_power,thermal"
+READINESS_TIMEOUT_S = 15.0
+READINESS_POLL_S = 0.05
+TIMESTAMP_DERIVATION = (
+    "timestamp_s = start_sampling readiness clock.now() UTC epoch seconds + "
+    "cumulative elapsed_ns through the current plist document; start_sampling "
+    "waits until the first plist document is parseable before returning, so "
+    "the reducer's sampling_started marker is emitted only after the sampler "
+    "is producing. The plist timestamp is 1-second resolution and is recorded "
+    "only as plist_anchor_offset_s evidence."
+)
+
+
+@dataclass(frozen=True)
+class PowermetricsRecord:
+    timestamp_s: float
+    elapsed_ns: int
+    rail_power_w: dict[str, float]
+    combined_power_w: float
+    rail_energy_mj: dict[str, int]
+    thermal_pressure: str | None
+    metadata: dict[str, Any]
+
+
+class PowermetricsTelemetryAdapter:
+    """Telemetry adapter backed by macOS ``powermetrics`` plist output."""
+
+    name = "powermetrics"
+
+    def __init__(self, clock: Clock) -> None:
+        self._clock = clock
+        self._process: subprocess.Popen[bytes] | None = None
+        self._capture_path: Path | None = None
+        self._clock_start_s: float | None = None
+        self._device_metadata = self._base_device_metadata(None)
+        self._capability: AdapterResult | None = None
+        self._last_records: list[PowermetricsRecord] = []
+
+    def device_metadata(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> dict:
+        self._device_metadata.update(self._base_device_metadata(config))
+        return self._device_metadata
+
+    def measure_idle(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> IdleBaseline:
+        capability = self._ensure_capability()
+        if not capability.ok:
+            raise AdapterFailure(
+                capability.failure_reason or FailureReason.UNKNOWN_ERROR,
+                capability.message or "powermetrics idle measurement unavailable",
+                capability.metadata,
+            )
+
+        count = self._idle_count(config)
+        capture_start_s = self._clock.now()
+        data = self._run_bounded_capture(config, count=count)
+        if context is not None:
+            write_raw_artifact(context, RAW_IDLE_NAME, data)
+        records = parse_powermetrics_records(data, timestamp_anchor_s=capture_start_s)
+        self._remember_records(records, timestamp_anchor_s=capture_start_s)
+        totals = [record.combined_power_w for record in records]
+        duration_s = sum(record.elapsed_ns for record in records) / 1_000_000_000.0
+        return IdleBaseline(
+            power_w_mean=statistics.mean(totals) if totals else 0.0,
+            power_w_stddev=statistics.stdev(totals) if len(totals) > 1 else 0.0,
+            duration_s=duration_s,
+            sample_count=len(totals),
+            telemetry_backend=TelemetryBackend.POWERMETRICS,
+        )
+
+    def start_sampling(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> AdapterResult:
+        capability = self._ensure_capability()
+        if not capability.ok:
+            return capability
+        if self._process is not None:
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.UNKNOWN_ERROR,
+                message="powermetrics sampling is already active",
+            )
+
+        self._capture_path = self._new_capture_path()
+        command = self._command(
+            config,
+            self._capture_path,
+            count=None,
+            interval_ms=self._interval_ms(config),
+        )
+        try:
+            self._process = subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except FileNotFoundError as exc:
+            self._capture_path.unlink(missing_ok=True)
+            self._capture_path = None
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.TELEMETRY_UNAVAILABLE,
+                message=f"powermetrics launcher unavailable: {exc}",
+            )
+        ready = self._wait_until_ready(self._process, self._capture_path)
+        if not ready.ok:
+            self._stop_process(self._process)
+            self._process = None
+            self._capture_path.unlink(missing_ok=True)
+            self._capture_path = None
+            return ready
+        self._clock_start_s = self._clock.now()
+        return AdapterResult(
+            ok=True,
+            metadata={
+                "command": command,
+                "raw_artifact": RAW_SAMPLES_NAME,
+                "timestamp_derivation": TIMESTAMP_DERIVATION,
+                "readiness": ready.metadata,
+            },
+        )
+
+    def stop_sampling(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> list[PowerSample]:
+        process = self._process
+        self._process = None
+        capture_path = self._capture_path
+        self._capture_path = None
+        clock_start_s = self._clock_start_s
+        self._clock_start_s = None
+        if process is not None:
+            self._stop_process(process)
+        if capture_path is None or not capture_path.exists():
+            return []
+
+        data = capture_path.read_bytes()
+        capture_path.unlink(missing_ok=True)
+        if context is not None:
+            write_raw_artifact(context, RAW_SAMPLES_NAME, data)
+        records = parse_powermetrics_records(data, timestamp_anchor_s=clock_start_s)
+        self._remember_records(records, timestamp_anchor_s=clock_start_s)
+        return samples_from_records(records)
+
+    def thermal_state(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> ThermalState:
+        if self._last_records:
+            pressure = self._last_records[-1].thermal_pressure
+        else:
+            pressure = None
+        return ThermalState(
+            timestamp_s=self._clock.now(),
+            temperature_c=None,
+            thermal_pressure=pressure,
+            metadata={"source": "powermetrics", "temperature_c_available": False},
+        )
+
+    def _ensure_capability(self) -> AdapterResult:
+        if self._capability is None:
+            self._capability = self._probe_capability()
+        return self._capability
+
+    def _probe_capability(self) -> AdapterResult:
+        capture_path = self._new_capture_path()
+        command = self._probe_command(capture_path)
+        try:
+            completed = subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=15.0,
+                check=False,
+            )
+        except FileNotFoundError as exc:
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.TELEMETRY_UNAVAILABLE,
+                message=f"powermetrics unavailable: {exc}",
+            )
+        except subprocess.TimeoutExpired as exc:
+            capture_path.unlink(missing_ok=True)
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.UNKNOWN_ERROR,
+                message=f"powermetrics capability probe timed out: {exc}",
+            )
+
+        if completed.returncode != 0:
+            stderr = completed.stderr.decode("utf-8", errors="replace").strip()
+            capture_path.unlink(missing_ok=True)
+            self._device_metadata["capability_precheck"] = {
+                "ok": False,
+                "failure_reason": FailureReason.PERMISSION_DENIED.value,
+                "sudoers_line": sudoers_line(),
+            }
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.PERMISSION_DENIED,
+                message=(
+                    "powermetrics requires passwordless non-interactive sudo. "
+                    f"Install this sudoers line: {sudoers_line()}"
+                    + (f" (probe stderr: {stderr})" if stderr else "")
+                ),
+                metadata={"command": command, "returncode": completed.returncode},
+            )
+
+        if capture_path.exists():
+            try:
+                data = capture_path.read_bytes()
+                records = parse_powermetrics_records(data)
+            except ValueError:
+                records = []
+            self._remember_records(records)
+            capture_path.unlink(missing_ok=True)
+        self._device_metadata["capability_precheck"] = {"ok": True}
+        return AdapterResult(ok=True, metadata={"command": command})
+
+    def _run_bounded_capture(self, config: BenchmarkConfig, *, count: int) -> bytes:
+        capture_path = self._new_capture_path()
+        command = self._command(config, capture_path, count=count)
+        timeout_s = self._capture_timeout_s(config, count)
+        try:
+            completed = subprocess.run(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                timeout=timeout_s,
+                check=False,
+            )
+            if completed.returncode != 0:
+                stderr = completed.stderr.decode("utf-8", errors="replace").strip()
+                raise RuntimeError(f"powermetrics capture failed: {stderr}")
+            return capture_path.read_bytes()
+        finally:
+            capture_path.unlink(missing_ok=True)
+
+    def _remember_records(
+        self,
+        records: list[PowermetricsRecord],
+        *,
+        timestamp_anchor_s: float | None = None,
+    ) -> None:
+        self._last_records = records
+        if not records:
+            return
+        metadata = records[0].metadata
+        for key in ("hw_model", "kern_osversion", "kern_bootargs", "kern_boottime"):
+            value = metadata.get(key)
+            if value is not None:
+                self._device_metadata[key] = value
+        plist_first_timestamp_s = metadata.get("plist_first_timestamp_s")
+        if timestamp_anchor_s is not None and isinstance(plist_first_timestamp_s, float):
+            self._device_metadata["plist_anchor_offset_s"] = (
+                plist_first_timestamp_s - timestamp_anchor_s
+            )
+
+    def _base_device_metadata(self, config: BenchmarkConfig | None) -> dict[str, Any]:
+        return {
+            "device": config.hardware_target.id if config is not None else None,
+            "telemetry": self.name,
+            "rail_manifest": list(RAIL_MANIFEST),
+            "boundary": "Apple SoC CPU + GPU + ANE package power",
+            "timestamp_derivation": TIMESTAMP_DERIVATION,
+            "power_units": "powermetrics milliwatts converted to watts",
+        }
+
+    @staticmethod
+    def _interval_ms(config: BenchmarkConfig) -> int:
+        return max(1, int(round(1000.0 / config.sampling.power_hz)))
+
+    def _idle_count(self, config: BenchmarkConfig) -> int:
+        interval_s = self._interval_ms(config) / 1000.0
+        return max(1, int(math.ceil(config.sampling.idle_seconds / interval_s)))
+
+    def _capture_timeout_s(self, config: BenchmarkConfig, count: int) -> float:
+        nominal_s = count * (self._interval_ms(config) / 1000.0)
+        return max(15.0, nominal_s * 1.5 + 10.0)
+
+    def _command(
+        self,
+        config: BenchmarkConfig,
+        output_path: Path,
+        *,
+        count: int | None,
+        interval_ms: int | None = None,
+    ) -> list[str]:
+        command = [
+            "sudo",
+            "-n",
+            POWER_METRICS,
+        ]
+        if count is not None:
+            command.extend(["-n", str(count)])
+        command.extend(
+            [
+                "-b",
+                "0",
+                "-i",
+                str(interval_ms if interval_ms is not None else self._interval_ms(config)),
+                "--samplers",
+                SAMPLERS,
+                "--format",
+                "plist",
+                "-o",
+                str(output_path),
+            ]
+        )
+        return command
+
+    @staticmethod
+    def _probe_command(output_path: Path) -> list[str]:
+        return [
+            "sudo",
+            "-n",
+            POWER_METRICS,
+            "-n",
+            "1",
+            "-b",
+            "0",
+            "-i",
+            "100",
+            "--samplers",
+            SAMPLERS,
+            "--format",
+            "plist",
+            "-o",
+            str(output_path),
+        ]
+
+    @staticmethod
+    def _new_capture_path() -> Path:
+        handle = tempfile.NamedTemporaryFile(
+            prefix="joulewise-powermetrics-", suffix=".plist", delete=False
+        )
+        path = Path(handle.name)
+        handle.close()
+        path.unlink(missing_ok=True)
+        return path
+
+    @staticmethod
+    def _wait_until_ready(
+        process: subprocess.Popen[bytes],
+        capture_path: Path,
+    ) -> AdapterResult:
+        deadline = time.monotonic() + READINESS_TIMEOUT_S
+        last_parse_error: str | None = None
+        while time.monotonic() < deadline:
+            if capture_path.exists() and capture_path.stat().st_size > 0:
+                data = capture_path.read_bytes()
+                first_document = data.split(b"\0", 1)[0]
+                if first_document.strip():
+                    try:
+                        parse_powermetrics_records(first_document)
+                    except ValueError as exc:
+                        last_parse_error = str(exc)
+                    else:
+                        return AdapterResult(
+                            ok=True,
+                            metadata={
+                                "ready_bytes": len(data),
+                                "ready_check": "first_parseable_plist_document",
+                            },
+                        )
+            if process.poll() is not None:
+                return AdapterResult(
+                    ok=False,
+                    failure_reason=FailureReason.UNKNOWN_ERROR,
+                    message=(
+                        "powermetrics exited before producing a parseable plist "
+                        f"document (returncode {process.returncode})"
+                    ),
+                    metadata={"last_parse_error": last_parse_error},
+                )
+            # Operational wait for an external process, deliberately outside the
+            # benchmark clock discipline: this delay is excluded from the
+            # measured window by D-026 because start_sampling has not returned.
+            time.sleep(READINESS_POLL_S)
+        return AdapterResult(
+            ok=False,
+            failure_reason=FailureReason.UNKNOWN_ERROR,
+            message=(
+                "powermetrics did not produce a parseable plist document within "
+                f"{READINESS_TIMEOUT_S} s of launch"
+            ),
+            metadata={"last_parse_error": last_parse_error},
+        )
+
+    @staticmethod
+    def _stop_process(process: subprocess.Popen[bytes]) -> None:
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.communicate(timeout=10.0)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+
+
+def parse_powermetrics_records(
+    data: bytes, *, timestamp_anchor_s: float | None = None
+) -> list[PowermetricsRecord]:
+    """Parse a NUL-framed powermetrics plist stream into interval records."""
+    documents = []
+    for index, part in enumerate(part for part in data.split(b"\0") if part.strip()):
+        try:
+            document = plistlib.loads(part)
+        except (ExpatError, plistlib.InvalidFileException, ValueError, TypeError) as exc:
+            raise ValueError(
+                f"powermetrics document {index} is not a valid plist: {exc}"
+            ) from exc
+        if not isinstance(document, dict):
+            raise ValueError(f"powermetrics document {index} is not a dictionary")
+        documents.append(document)
+    if not documents:
+        return []
+
+    plist_first_timestamp = _timestamp_epoch_utc(
+        _required(documents[0], "timestamp", 0)
+    )
+    anchor_s = plist_first_timestamp if timestamp_anchor_s is None else timestamp_anchor_s
+    cumulative_elapsed_s = 0.0
+    records: list[PowermetricsRecord] = []
+    for index, document in enumerate(documents):
+        elapsed_ns = _required_int(document, "elapsed_ns", index)
+        if timestamp_anchor_s is None:
+            timestamp_s = anchor_s + cumulative_elapsed_s
+            cumulative_elapsed_s += elapsed_ns / 1_000_000_000.0
+        else:
+            cumulative_elapsed_s += elapsed_ns / 1_000_000_000.0
+            timestamp_s = anchor_s + cumulative_elapsed_s
+        processor = document.get("processor")
+        if not isinstance(processor, dict):
+            raise ValueError(
+                f"powermetrics document {index} is missing processor dictionary"
+            )
+        rail_power_w = {
+            rail: _required_float(processor, rail, index) / 1000.0
+            for rail in RAIL_MANIFEST
+        }
+        rail_energy_mj = {
+            "cpu_energy": _required_int(processor, "cpu_energy", index),
+            "gpu_energy": _required_int(processor, "gpu_energy", index),
+            "ane_energy": _required_int(processor, "ane_energy", index),
+        }
+        records.append(
+            PowermetricsRecord(
+                timestamp_s=timestamp_s,
+                elapsed_ns=elapsed_ns,
+                rail_power_w=rail_power_w,
+                combined_power_w=sum(rail_power_w.values()),
+                rail_energy_mj=rail_energy_mj,
+                thermal_pressure=_optional_string(document.get("thermal_pressure")),
+                metadata={
+                    key: document[key]
+                    for key in (
+                        "hw_model",
+                        "kern_osversion",
+                        "kern_bootargs",
+                        "kern_boottime",
+                    )
+                    if key in document
+                }
+                | {"plist_first_timestamp_s": plist_first_timestamp},
+            )
+        )
+    return records
+
+
+def samples_from_records(records: list[PowermetricsRecord]) -> list[PowerSample]:
+    samples: list[PowerSample] = []
+    for record in records:
+        for rail in RAIL_MANIFEST:
+            samples.append(
+                PowerSample(
+                    timestamp_s=record.timestamp_s,
+                    power_w=record.rail_power_w[rail],
+                    source="powermetrics",
+                    rail=rail,
+                )
+            )
+    return samples
+
+
+def sudoers_line() -> str:
+    return f"{getpass.getuser()} ALL=(root) NOPASSWD: {POWER_METRICS}"
+
+
+def _timestamp_epoch_utc(value: object) -> float:
+    if not isinstance(value, datetime):
+        raise ValueError(f"powermetrics timestamp is not a datetime: {value!r}")
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+    return value.timestamp()
+
+
+def _optional_string(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _required(mapping: dict[str, Any], key: str, document_index: int) -> Any:
+    try:
+        return mapping[key]
+    except KeyError as exc:
+        raise ValueError(
+            f"powermetrics document {document_index} is missing key {key!r}"
+        ) from exc
+
+
+def _required_int(mapping: dict[str, Any], key: str, document_index: int) -> int:
+    value = _required(mapping, key, document_index)
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"powermetrics document {document_index} key {key!r} is not an integer: "
+            f"{value!r}"
+        ) from exc
+
+
+def _required_float(mapping: dict[str, Any], key: str, document_index: int) -> float:
+    value = _required(mapping, key, document_index)
+    try:
+        return float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"powermetrics document {document_index} key {key!r} is not a number: "
+            f"{value!r}"
+        ) from exc

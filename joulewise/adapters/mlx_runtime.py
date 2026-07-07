@@ -1,0 +1,383 @@
+"""MLX runtime adapter for local Apple Silicon generation (Slice 2G).
+
+The core package remains stdlib-only: this module is importable without MLX,
+and ``mlx_lm`` is imported only inside ``prepare``. Tests exercise the workload
+mapping and event shape with fakes, while real runs use the same adapter path.
+"""
+
+from __future__ import annotations
+
+import importlib
+import json
+from collections.abc import Iterable
+from importlib import metadata as importlib_metadata
+from pathlib import Path
+from typing import Any
+
+from joulewise.clock import Clock
+from joulewise.interfaces import AdapterResult, RunContext, RuntimeEvent, RuntimeResult
+from joulewise.schemas import BenchmarkConfig, FailureReason
+
+DEFAULT_OUTPUT_TOKENS = 8
+WARMUP_TOKENS = 4
+SYNTHETIC_PROMPT_SEED = "JouleWise synthetic prompt token sequence."
+
+
+class MlxRuntimeAdapter:
+    """RuntimeAdapter implementation backed by ``mlx_lm``."""
+
+    name = "mlx"
+
+    def __init__(self, clock: Clock) -> None:
+        self._clock = clock
+        self._mlx_lm: Any | None = None
+        self._model: Any | None = None
+        self._tokenizer: Any | None = None
+        self._model_config: dict[str, Any] | None = None
+        self._original_eos_token_ids: set[int] | None = None
+
+    def prepare(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> AdapterResult:
+        source = config.model.source
+        if not source:
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                message=(
+                    "runtime backend 'mlx' requires model.source to be a local "
+                    "MLX model path; install the [mac] extra and configure a "
+                    "local mirror to avoid network downloads"
+                ),
+            )
+
+        try:
+            mlx_lm = self._import_mlx_lm()
+        except ImportError as exc:
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                message=(
+                    "runtime backend 'mlx' is not installed; install the "
+                    "[mac] extra (pip install 'joulewise[mac]'). If MLX cannot "
+                    f"be installed on this host, use another runtime. Import "
+                    f"error: {exc}"
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001 - imports can fail during backend init
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                message=(
+                    "runtime backend 'mlx' could not initialize; install/use "
+                    "the [mac] extra on an Apple Silicon session with GPU "
+                    f"access. {type(exc).__name__}: {exc}"
+                ),
+            )
+
+        start_s = self._clock.now()
+        try:
+            loaded = mlx_lm.load(
+                source,
+                revision=config.model.revision,
+                return_config=True,
+            )
+        except Exception as exc:  # noqa: BLE001 - structured adapter failure (D-012)
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                message=(
+                    "runtime backend 'mlx' could not load the configured local "
+                    f"model source {source!r}; install/use the [mac] extra and "
+                    f"verify the local mirror is complete. {type(exc).__name__}: {exc}"
+                ),
+            )
+        end_s = self._clock.now()
+
+        self._mlx_lm = mlx_lm
+        self._model, self._tokenizer, self._model_config = loaded
+        self._original_eos_token_ids = _tokenizer_eos_ids(self._tokenizer)
+
+        metadata = {
+            "adapter": "mlx_runtime",
+            "mlx_lm_version": _module_or_distribution_version(mlx_lm, "mlx-lm"),
+            "mlx_version": _distribution_version("mlx"),
+            "model_source": str(Path(source).expanduser()),
+            "model_source_is_local_path": Path(source).expanduser().exists(),
+            "model_revision": config.model.revision,
+            "load_wall_time_s": end_s - start_s,
+            "weight_format": config.model.weight_format,
+            "quantization": config.quantization.name,
+        }
+        if isinstance(self._model_config, dict):
+            metadata["model_config_name"] = self._model_config.get("model_type")
+            metadata["model_config_eos_token_id"] = self._model_config.get("eos_token_id")
+        return AdapterResult(ok=True, metadata=metadata)
+
+    def warmup(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> AdapterResult:
+        if self._mlx_lm is None or self._model is None or self._tokenizer is None:
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                message="runtime backend 'mlx' warmup called before prepare succeeded",
+            )
+        prompt, _ = self._prompt_for_workload(config)
+        try:
+            for _ in self._mlx_lm.stream_generate(
+                self._model,
+                self._tokenizer,
+                prompt,
+                max_tokens=WARMUP_TOKENS,
+            ):
+                pass
+        except Exception as exc:  # noqa: BLE001 - structured adapter failure (D-012)
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
+                message=f"runtime backend 'mlx' warmup failed: {type(exc).__name__}: {exc}",
+            )
+        return AdapterResult(ok=True)
+
+    def run_workload(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> RuntimeResult:
+        if self._mlx_lm is None or self._model is None or self._tokenizer is None:
+            raise RuntimeError("runtime backend 'mlx' run_workload called before prepare")
+
+        prompt, prompt_tokens = self._prompt_for_workload(config)
+        max_tokens = config.workload_profile.output_tokens or DEFAULT_OUTPUT_TOKENS
+        original_eos_ids = self._suppress_eos()
+        eos_suppressed = original_eos_ids is not None
+
+        events: list[RuntimeEvent] = [
+            self._event(
+                "phase_start",
+                "prefill",
+                "mlx prefill started",
+                {
+                    "phase_boundary_method": "first_token",
+                    "prompt_tokens": prompt_tokens,
+                    "requested_output_tokens": max_tokens,
+                    "eos_suppressed": eos_suppressed,
+                },
+            )
+        ]
+        token_records: list[dict[str, float | int]] = []
+        text_parts: list[str] = []
+
+        try:
+            stream = self._mlx_lm.stream_generate(
+                self._model,
+                self._tokenizer,
+                prompt,
+                max_tokens=max_tokens,
+            )
+            for index, response in enumerate(stream):
+                if index == 0:
+                    events.append(
+                        self._event(
+                            "phase_end",
+                            "prefill",
+                            "mlx prefill completed",
+                            {"phase_boundary_method": "first_token"},
+                        )
+                    )
+                    events.append(
+                        self._event(
+                            "phase_start",
+                            "decode",
+                            "mlx decode started",
+                            {
+                                "phase_boundary_method": "first_token",
+                                "max_tokens": max_tokens,
+                                "eos_suppressed": eos_suppressed,
+                                "original_eos_token_ids": (
+                                    sorted(original_eos_ids)
+                                    if original_eos_ids is not None
+                                    else None
+                                ),
+                            },
+                        )
+                    )
+                timestamp_s = self._clock.now()
+                text_parts.append(str(getattr(response, "text", "")))
+                events.append(
+                    RuntimeEvent(
+                        timestamp_s=timestamp_s,
+                        event_type="token",
+                        phase="decode",
+                        message=f"mlx token {index}",
+                        metadata={"index": index},
+                    )
+                )
+                token_records.append({"index": index, "timestamp_s": timestamp_s})
+        finally:
+            self._restore_eos(original_eos_ids)
+
+        if not token_records:
+            boundary_event = self._event(
+                "phase_end",
+                "prefill",
+                "mlx prefill completed without emitted tokens",
+                {"phase_boundary_method": "first_token"},
+            )
+            events.append(boundary_event)
+            events.append(
+                RuntimeEvent(
+                    timestamp_s=boundary_event.timestamp_s,
+                    event_type="phase_start",
+                    phase="decode",
+                    message="mlx decode started without emitted tokens",
+                    metadata={
+                        "phase_boundary_method": "first_token",
+                        "max_tokens": max_tokens,
+                        "eos_suppressed": eos_suppressed,
+                    },
+                )
+            )
+
+        events.append(
+            self._event(
+                "phase_end",
+                "decode",
+                "mlx decode completed",
+                {
+                    "phase_boundary_method": "first_token",
+                    "emitted_tokens": len(token_records),
+                    "requested_output_tokens": max_tokens,
+                },
+            )
+        )
+
+        response_text = "".join(text_parts)
+        tokens_jsonl = "".join(
+            json.dumps(record, sort_keys=True) + "\n" for record in token_records
+        )
+        output_tokens = len(token_records)
+        return RuntimeResult(
+            events=events,
+            output_artifacts={
+                "response.txt": response_text,
+                "tokens.jsonl": tokens_jsonl,
+            },
+            token_count=prompt_tokens + output_tokens,
+            output_token_count=output_tokens,
+        )
+
+    def cleanup(
+        self, config: BenchmarkConfig, context: RunContext | None = None
+    ) -> AdapterResult:
+        self._model = None
+        self._tokenizer = None
+        self._model_config = None
+        self._mlx_lm = None
+        self._original_eos_token_ids = None
+        return AdapterResult(ok=True)
+
+    def _import_mlx_lm(self) -> Any:
+        return importlib.import_module("mlx_lm")
+
+    def _prompt_for_workload(self, config: BenchmarkConfig) -> tuple[str | list[int], int]:
+        profile = config.workload_profile
+        if profile.prompt_text is not None:
+            return profile.prompt_text, self._count_prompt_tokens(profile.prompt_text)
+        if profile.prompt_tokens is not None:
+            prompt_tokens = _synthetic_prompt_tokens(self._tokenizer, profile.prompt_tokens)
+            return prompt_tokens, len(prompt_tokens)
+        if profile.dataset_ref is not None:
+            prompt = f"Dataset reference: {profile.dataset_ref}"
+            return prompt, self._count_prompt_tokens(prompt)
+        raise RuntimeError("workload_profile must define prompt_text, prompt_tokens, or dataset_ref")
+
+    def _count_prompt_tokens(self, prompt: str) -> int:
+        encoded = _encode(self._tokenizer, prompt, add_special_tokens=True)
+        return len(encoded)
+
+    def _suppress_eos(self) -> set[int] | None:
+        original = _tokenizer_eos_ids(self._tokenizer)
+        if original is None:
+            return None
+        try:
+            setattr(self._tokenizer, "eos_token_ids", set())
+        except Exception:  # noqa: BLE001 - some tokenizer wrappers may not expose this
+            return None
+        return original
+
+    def _restore_eos(self, eos_ids: set[int] | None) -> None:
+        if eos_ids is None:
+            return
+        try:
+            setattr(self._tokenizer, "eos_token_ids", eos_ids)
+        except Exception:
+            pass
+
+    def _event(
+        self,
+        event_type: str,
+        phase: str,
+        message: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> RuntimeEvent:
+        return RuntimeEvent(
+            timestamp_s=self._clock.now(),
+            event_type=event_type,
+            phase=phase,
+            message=message,
+            metadata=metadata or {},
+        )
+
+
+def _encode(tokenizer: Any, text: str, *, add_special_tokens: bool) -> list[int]:
+    try:
+        encoded = tokenizer.encode(text, add_special_tokens=add_special_tokens)
+    except TypeError:
+        encoded = tokenizer.encode(text)
+    return list(encoded)
+
+
+def _synthetic_prompt_tokens(tokenizer: Any, target_tokens: int) -> list[int]:
+    seed = _encode(tokenizer, SYNTHETIC_PROMPT_SEED, add_special_tokens=False)
+    if not seed:
+        seed = _encode(tokenizer, "JouleWise", add_special_tokens=False)
+    if not seed:
+        seed = [0]
+    repeated: list[int] = []
+    while len(repeated) < target_tokens:
+        repeated.extend(seed)
+    return repeated[:target_tokens]
+
+
+def _tokenizer_eos_ids(tokenizer: Any) -> set[int] | None:
+    if tokenizer is None:
+        return None
+    try:
+        value = getattr(tokenizer, "eos_token_ids")
+    except Exception:  # noqa: BLE001 - wrappers may forward oddly
+        return None
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return {value}
+    if isinstance(value, Iterable):
+        result: set[int] = set()
+        for item in value:
+            if isinstance(item, int) and not isinstance(item, bool):
+                result.add(item)
+        return result or None
+    return None
+
+
+def _module_or_distribution_version(module: Any, distribution: str) -> str | None:
+    value = getattr(module, "__version__", None)
+    if isinstance(value, str):
+        return value
+    return _distribution_version(distribution)
+
+
+def _distribution_version(distribution: str) -> str | None:
+    try:
+        return importlib_metadata.version(distribution)
+    except importlib_metadata.PackageNotFoundError:
+        return None

@@ -33,7 +33,7 @@ Conventions:
 | R-013 | Thermal throttling confounds measurements | 2-4 | medium | medium | mitigated by D-014 |
 | R-014 | Model weights become unavailable or gated | 2+ | low | medium | open |
 | R-015 | Schema changes after data collection starts | 2+ | low | high | mitigated |
-| R-016 | Measurement-corpus loss (`runs/` has no backup path) | 2-5 | low | high | open (protocol due before first real data) |
+| R-016 | Measurement-corpus loss (`runs/` has no backup path) | 2-5 | low | high | mitigated-interim (protocol + restore test 2026-07-06; final destination pending user) |
 | R-017 | Repo on iCloud-synced Desktop (EPERM lock recurrence) | all | low | medium | mitigated (repo moved 2026-07-05; residual: session launch paths) |
 
 ## R-001: Supervisor approval delayed or scope shifts
@@ -281,6 +281,17 @@ Conventions:
   `runs/` plus experiment manifests), and a restore test performed once.
   Configs + manifests already make re-collection well-defined; backups
   make it unnecessary.
+- **Protocol recorded (2026-07-06, P0-002 closed interim).** Destination:
+  `~/JouleWise-backup` — a user-directed INTERIM location on the same
+  disk ("cursory... I'll handle that later"); it protects against errant
+  deletes but not disk failure, so the user still owes an external/cloud
+  destination for full mitigation. Cadence: after every measurement
+  session. Method: `scripts/backup_runs.sh [RUNS_DIR] [DEST]` (rsync -a,
+  never `--delete`; dated UTC log line per invocation appended to
+  `DEST/backup.log`). Restore test performed 2026-07-06: mock bundle
+  backed up, restored to a temp dir, `validate-bundle` green on the
+  restored copy. Swapping in the final destination is a one-argument
+  change (or edit the script default) plus one fresh restore test.
 - Fallback: re-run affected experiments from their configs (the config
   hash separates old/new data cleanly per D-005/D-010); report any
   unrecoverable gap honestly in the exclusion log.

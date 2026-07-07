@@ -48,6 +48,28 @@ class AdapterResult:
     message: str | None = None
 
 
+class AdapterFailure(Exception):
+    """Structured adapter failure for lifecycle methods without AdapterResult.
+
+    Most lifecycle methods report operational failures through
+    :class:`AdapterResult`. A few legacy-shaped methods return data directly
+    (for example ``TelemetryAdapter.measure_idle``), so they use this exception
+    to preserve the same stable ``FailureReason`` without smuggling sentinel
+    values into measurement objects.
+    """
+
+    def __init__(
+        self,
+        failure_reason: FailureReason,
+        message: str,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.failure_reason = failure_reason
+        self.message = message
+        self.metadata = dict(metadata) if metadata else {}
+
+
 @dataclass(frozen=True)
 class RuntimeEvent:
     timestamp_s: float

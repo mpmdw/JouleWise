@@ -18,27 +18,26 @@ Companion plan: `docs/phase_2/phase_2_plan.md`.
 | 2D reducer v1 | required | **complete (2026-06-12)** | closed-form energy tests exact; phase attribution test | `joulewise/reduce.py` + `tests/test_reduce.py` |
 | 2E run + validate-bundle | required | **complete (2026-06-12)** | mock end-to-end in CI; result line + exit codes pinned by tests | `joulewise/cli.py` + `tests/test_cli_run.py`; CI step added |
 | 2F repetitions + manifests | required | **complete (2026-06-12)** | 3-rep mock experiment test; partial-experiment test; cooldown gate recorded | `joulewise/controller.py` (`run_experiment`) + `tests/test_experiment.py` |
-| Model selection (D-016) | required | pending (gated: P1-001 scope) | decision-log entry closed: models, revisions, artifact paths, local mirror, fallback candidate | `docs/decision_log.md` |
-| 2G MLX adapter | required* | pending (gated: D-016 + `[mac]` install) | real generation smoke on the Mac: bundle + token timeline in run report | run report + applicability table below; spec in `hardware_slice_implementation_guide.md` |
-| 2H powermetrics adapter | required* | pending (gated: privileged sample + D-004 sudoers) | fixture-based parser tests; real idle baseline + measured window from privileged run | test suite + run report; spec in `hardware_slice_implementation_guide.md` |
-| 2I Mac vertical slice | required* | pending (gated: 2F+2G+2H) | one-command real bundle; 3-rep variance; sanity checks logged | run report + bundles |
-| 2J report generator | required | **complete (2026-06-12)** | generated report from mock bundles; tests assert artifacts | `joulewise/report.py` + `tests/test_report.py` (8 chart tests skip without `[analysis]`) |
+| Model selection (D-016) | required | partial (provisional small-model pick 2026-07-06 with user go-ahead; full closure still gated: P1-001 scope) | decision-log entry closed: models, revisions, artifact paths, local mirror, fallback candidate | `docs/decision_log.md` D-016 provisional note; run report `2026-07-06-autonomous-buildout.md` |
+| 2G MLX adapter | required* | **complete (2026-07-06)** | real generation smoke on the Mac: bundle + token timeline in run report | commit `3eb0acd`; live bundle `example-mac-mlx-mock-telemetry` (real MLX + mock telemetry): succeeded, `--strict` valid, TTFT 81.5 ms, 265.8 tok/s, 64 tokens monotonic, `token_count_source=runtime_observed`; run report `2026-07-06-autonomous-buildout.md`; suite 230 |
+| 2H powermetrics adapter | required* | **complete (2026-07-06)** | fixture-based parser tests; real idle baseline + measured window from privileged run | commits `26dca41` + `b4d4173` (readiness wait, -b 0, clock-anchored timestamps, fail-fast AdapterFailure); real idle baseline 0.16-3.5 W + measured windows at 8.8-8.9 Hz observed (±20% band met); permission_denied path live-verified; run reports `2026-07-06-slice-2h-powermetrics.md` + `2026-07-06-slice-2i-first-real-energy.md`; suite 254 |
+| 2I Mac vertical slice | required* | **complete (2026-07-06)** | one-command real bundle; 3-rep variance; sanity checks logged | 3/3 reps succeeded, all `--strict` valid: gross 46.6-48.0 J (CV 1.4%), ~77-88 mJ/output-token, TTFT 92.8-94.9 ms, 257 tok/s, real cooldown gate; bundles in `runs/` + `~/JouleWise-backup`; run report `2026-07-06-slice-2i-first-real-energy.md` |
+| 2J report generator | required | **complete (2026-06-12)** | generated report from mock bundles; tests assert artifacts | `joulewise/report.py` + `tests/test_report.py` (9 chart tests skip without `[analysis]`) |
 | 2K NVIDIA/vLLM/ssh | conditional (gate: P1-006 NVIDIA evidence) | pending | remote bundle from 3050, or documented access blocker | run report + applicability table below; spec in `hardware_slice_implementation_guide.md` |
 | 2L Orin adapter | conditional (gate: P1-006 Orin evidence) | pending | bundle from Orin, or documented blocker | run report + applicability table below; spec in `hardware_slice_implementation_guide.md` |
-| 2M homogeneous baselines | required (scope = available targets) | pending (gated: 2I; wants ≥1 remote target for the cross-target table, Mac-only is the documented floor per the plan) | manifests + bundles for the workload matrix; baseline summary doc with variance and prefill/decode comparison | `docs/phase_2/baseline_results.md` |
+| 2M homogeneous baselines | required (scope = available targets) | UNBLOCKED (2I complete 2026-07-06; wants ≥1 remote target for the cross-target table, Mac-only is the documented floor per the plan) | manifests + bundles for the workload matrix; baseline summary doc with variance and prefill/decode comparison | `docs/phase_2/baseline_results.md` |
 | 2N pre-hardware hardening | required before 2G/2H | **complete (2026-07-06)** | all nine items landed as three commits (`dcfa474` seam, `7357c83` read layer, schema+metrics commit): RunContext/raw seam (D-024), D-026 window markers with latency-invariance test, token fallback (`token_count_source`), rail contract (D-027), schema round-trip + pinned config hashes (D-029), `reduce` verb (D-028), shared `BundleReader` (D-025) with report alignment, v0.2 compatibility note in the run report; suite 216 tests OK | run report `2026-07-06-slice-2n-pre-hardware-hardening.md`; D-024..D-029 |
-| CI green | required | **complete (2026-07-05)** | workflow passing on main including mock end-to-end | GitHub Actions run #7 on `main` (`ae48abe`): conclusion `success`, mock e2e step included |
+| CI green | required | **complete (latest: run #11, 2026-07-06)** | workflow passing on main including mock end-to-end | GitHub Actions run #11 on `main` (`5cb1dfc`): conclusion `success`, mock e2e step included; the 2026-07-06 vertical-slice series awaits push/PR CI |
 | Applicability table | required | in progress | every attempted target × model combo classified supported / pending / unsupported with reason | this file (table below) |
 
-Status summary (2026-07-06): the hardware-independent work — slices 2A-2F,
-2J, and now 2N (pre-hardware hardening) — is **complete**, tested (226
-tests; skips are the `[analysis]`-extra chart tests plus one optional
-jsonschema test), and runnable end-to-end (`python3 -m joulewise run ...`
-→ complete bundle → `validate-bundle` green → post-hoc `reduce`
-re-derives an identical summary). Real adapters can now be written
-against the post-2N seams without touching controller/bundle internals.
-Remaining Phase 2 work is entirely hardware/decision-gated: D-016, then
-2G/2H/2I, 2K/2L, 2M; code-level specs live in
+Status summary (as of 2026-07-07; the matrix rows above are the per-item
+authority per D-023 — this paragraph is a dated narrative, not a second
+status source): the Mac vertical slice is COMPLETE — 2G, 2H, and 2I all
+landed 2026-07-06 against the post-2N seams with no controller/bundle
+contract changes beyond the reviewed `AdapterFailure` channel, ending in
+three strict-valid real energy bundles on the M3 Max. Suite is 254 tests
+(9 `[analysis]`-extra chart skips + 1 optional-jsonschema skip). See the
+matrix rows for what remains and its gates; code-level specs live in
 `docs/phase_2/hardware_slice_implementation_guide.md`.
 
 *The Mac slice (2G/2H/2I) is required unless R-002/R-003 fallbacks were
@@ -49,7 +48,7 @@ documented telemetry block) substitutes, per the plan's fallback sections.
 
 | Target | Runtime | Telemetry | Verdict | Evidence link |
 |---|---|---|---|---|
-| macbook_m3_max | mlx | powermetrics | pending | |
+| macbook_m3_max | mlx | powermetrics | **supported (2026-07-06)** — full vertical slice: Qwen2.5-1.5B-Instruct-4bit, 3-rep real energy bundles (~47 J gross / 512 tokens, 257 tok/s, 8.8-8.9 Hz observed) | run report `2026-07-06-slice-2i-first-real-energy.md` |
 | nvidia_3050 | vllm (or llama.cpp-cuda) | nvidia_smi | pending | |
 | orin_nano | tbd (D-016/2L) | jetson_rails | pending | |
 

@@ -68,6 +68,7 @@ from joulewise.bundle import (
 )
 from joulewise.clock import Clock
 from joulewise.interfaces import (
+    AdapterFailure,
     AdapterResult,
     PowerSample,
     RunContext,
@@ -267,6 +268,14 @@ class _Execution:
             summary = self._run_lifecycle()
         except _StageFailure as failure:
             summary = self._handle_failure(failure)
+        except AdapterFailure as failure:
+            summary = self._handle_failure(
+                _StageFailure(
+                    stage=self._current_stage,
+                    reason=failure.failure_reason,
+                    message=failure.message,
+                )
+            )
         except Exception as exc:  # noqa: BLE001 - D-011: a controller bug must still finalize
             summary = self._handle_failure(
                 _StageFailure(
@@ -859,7 +868,17 @@ def _cooldown_between_reps(
         note.update({"result": "skipped", "reason": reason})
         return note, False
 
-    gate = cooldown_gate(telemetry, summary.idle_baseline, config, clock)
+    try:
+        gate = cooldown_gate(telemetry, summary.idle_baseline, config, clock)
+    except AdapterFailure as failure:
+        note.update(
+            {
+                "result": "skipped",
+                "reason": failure.message,
+                "failure_reason": failure.failure_reason.value,
+            }
+        )
+        return note, False
     note.update(gate)
     return note, gate["result"] == "cap_hit"
 

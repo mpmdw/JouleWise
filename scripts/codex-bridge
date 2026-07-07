@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/codex-bridge new [PROMPT...]
+  scripts/codex-bridge resume [--last|SESSION_ID] [PROMPT...]
+  scripts/codex-bridge review [PROMPT...]
+
+Prompt text may also be piped on stdin. The last Codex response is mirrored to
+.codex-bridge/last-message.md for Claude Code to read or quote back.
+USAGE
+}
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+bridge_dir="${CODEX_BRIDGE_DIR:-"$repo_root/.codex-bridge"}"
+mkdir -p "$bridge_dir"
+
+codex_bin="${CODEX_BIN:-codex}"
+last_message="$bridge_dir/last-message.md"
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+log_file="$bridge_dir/$stamp.log"
+
+if [[ $# -lt 1 ]]; then
+  usage
+  exit 64
+fi
+
+mode="$1"
+shift
+
+run_codex() {
+  (cd "$repo_root" && "$codex_bin" "$@") 2>&1 | tee "$log_file"
+}
+
+case "$mode" in
+  new)
+    if [[ $# -gt 0 ]]; then
+      run_codex exec -C "$repo_root" -s workspace-write -o "$last_message" "$*"
+    else
+      run_codex exec -C "$repo_root" -s workspace-write -o "$last_message" -
+    fi
+    ;;
+  resume)
+    if [[ $# -eq 0 ]]; then
+      run_codex exec resume --last -o "$last_message"
+    elif [[ "$1" == "--last" ]]; then
+      shift
+      if [[ $# -gt 0 ]]; then
+        run_codex exec resume --last -o "$last_message" "$*"
+      else
+        run_codex exec resume --last -o "$last_message" -
+      fi
+    else
+      session_id="$1"
+      shift
+      if [[ $# -gt 0 ]]; then
+        run_codex exec resume -o "$last_message" "$session_id" "$*"
+      else
+        run_codex exec resume -o "$last_message" "$session_id" -
+      fi
+    fi
+    ;;
+  review)
+    if [[ $# -gt 0 ]]; then
+      run_codex exec review -o "$last_message" "$*"
+    else
+      run_codex exec review -o "$last_message" -
+    fi
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    echo "Unknown mode: $mode" >&2
+    usage >&2
+    exit 64
+    ;;
+esac

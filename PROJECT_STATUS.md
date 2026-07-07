@@ -5,26 +5,37 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-06
-- Project phase: Phase 1 closing; Phase 2 in progress - the
-  hardware-independent harness core is complete and runnable
+- Last updated: 2026-07-07
+- Project phase: Phase 1 closing; Phase 2 in progress - Mac vertical
+  slice COMPLETE with real energy measurements; baselines next
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 
-## This Update (2026-07-06) — 30-second read
+## This Update (2026-07-06, third update) — 30-second read
 
-**Progress:** the pre-hardware hardening slice (2N) identified by last
-week's external reviews is now fully implemented and tested (suite grew
-169 → 226 checks, all green). In plain terms: the harness now (a) lets a
-real power sampler preserve its raw output verbatim inside every run's
-evidence bundle, (b) excludes sampler startup/shutdown cost from the
-measured energy window, (c) detects — rather than silently mis-summing —
-misaligned multi-rail power data, (d) can re-derive any run's summary
-numbers from raw evidence with one command (a metrics bug never costs
-hardware re-runs), and (e) guarantees charts can never disagree with the
-reported numbers, because every consumer now reads bundles through one
-shared, tested code path. With this, every remaining Phase 2 work item
-is gated only on hardware access or the scope confirmation below — the
-software side is ready.
+**Progress: the flagship works — the project has its first real energy
+measurements.** The complete Mac vertical slice (MLX runtime +
+`powermetrics` power sampling + integration, slices 2G/2H/2I) landed in
+one day and produced three repetition bundles, all passing strict
+validation ("strict" = the bundle re-reduces from its raw power trace and
+event log to an identical summary): **~47 J per 512-token request
+(~77-88 mJ per generated token) on the M3 Max**, gross energy repeatable to 1.4% across reps,
+prefill/decode energy split resolved (0.03 J vs ~47 J), time-to-first-
+token ~94 ms at 257 tokens/s, real idle baselines and a real
+idle-recovery cooldown gate between repetitions. Two hardware realities
+were caught by the harness's own evidence trail and fixed same-day
+(powermetrics' ~1 s startup latency; idle-baseline contamination right
+after model load — now a protocol note for the statistics phase).
+Also landed today: the related-work survey draft (11 sources, verified
+citations), a backup protocol with a passed restore test, and the suite
+grew 226 → 254 checks. Homogeneous baselines (2M) and the Phase 3
+feasibility spikes are now unblocked and need no further inputs.
+
+**Earlier today:** the pre-hardware hardening slice (2N) from last
+week's external reviews was completed (raw evidence preserved verbatim,
+sampler start/stop cost excluded from the measured window, misaligned
+rail data detected, one-command re-derivation, one shared bundle read
+path) — 2G then plugged into those seams without touching controller or
+bundle internals, validating the design.
 
 **Context from previous updates:** the benchmark harness runs end to end
 — one command turns a typed experiment config into a complete, auditable
@@ -33,14 +44,19 @@ target before any hardware time is spent (2026-06-12). A planned break
 (June 13 – July 4) was followed by an external audit that defined the
 hardening slice now completed.
 
-**On track:** real-hardware measurement (Mac, then NVIDIA/Jetson) is the
-next implementation work and is fully specified — it is execution, not
-design, and it now builds on hardened, contract-tested seams.
+**On track:** with the Mac slice measured, the next work is homogeneous
+baselines (2M, a workload matrix over the Mac target) and the Phase 3
+feasibility spikes — both fully specified and unblocked. NVIDIA/Jetson
+remain the only hardware-gated targets (device access).
 
-**What I need from you (sanity check):** unchanged — a short
-scope-confirmation that the reusable harness is the primary deliverable and
-split inference the validating study — this unblocks model selection and
-the first real Mac measurements. Any other thoughts are welcome.
+**What I need from you (sanity check, no longer blocking):** the short
+scope-confirmation — reusable harness as primary deliverable, split
+inference as the validating study — is still worth a meeting, but nothing
+waits on it anymore: the Mac measurements above used a provisional,
+config-swappable model choice, and all current work proceeds under the
+documented fallback (harness-shaped work valuable under any scope). Your
+confirmation finalizes model selection for the cross-target comparisons.
+Any other thoughts are welcome.
 
 ## Summary
 
@@ -72,7 +88,7 @@ Research questions:
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - all hardware-independent work complete and runnable (mock slice 2A-2F/2J + hardening slice 2N, 2026-07-06); hardware slices (2G-2M) gated |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2G/2H/2I, 2026-07-06: 3-rep real energy bundles, ~47 J / 512 tokens on the M3 Max); 2M baselines unblocked (Mac-only floor); 2K/2L gated on device access |
 | 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
@@ -82,15 +98,16 @@ Complete so far (all verifiable in the repository):
 - A runnable harness: from a typed config, one command
   (`python3 -m joulewise run ...`) produces a complete, schema-valid,
   auditable run bundle and reduces it to energy/latency summary metrics -
-  today from deterministic mock adapters (controller, bundle contract, and
-  reducer math proven without hardware). Bundle writer, controller
+  proven first on deterministic mock adapters (controller, bundle
+  contract, and reducer math verified without hardware) and now running
+  live on the Mac target. Bundle writer, controller
   lifecycle, reducer, static-HTML report generator, and CLI verbs `run` /
   `validate-bundle` / `reduce` (post-hoc re-derivation of summary metrics
   from raw evidence) / `report`. All bundle consumers read through one
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (226 tests, run in CI on every push,
+  a CLI, plus a passing test suite (254 tests, run in CI on every push,
   including a mock end-to-end run + bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
   are pinned by test.
@@ -98,36 +115,43 @@ Complete so far (all verifiable in the repository):
   bundle artifact contract, and the measurement methodology (idle
   subtraction, measurement boundaries, clock synchronization, statistical
   protocol - highlights below).
-- Evidence-shaped plans for every phase, a design-decision log (30
+- Evidence-shaped plans for every phase, a design-decision log (31
   decisions, each with the alternatives considered), a risk register with
   an explicit descope ladder, and example configs for the Mac and mock
   targets.
-- First hardware evidence: `powermetrics` located and its superuser
-  requirement confirmed on Apple Silicon; useful samplers identified
-  (CPU/GPU/ANE power, thermal); MLX installation requirement recorded.
+- The complete Mac vertical slice: the MLX runtime adapter (2G), the
+  `powermetrics` telemetry adapter (2H, parser pinned to a captured
+  privileged sample, raw plists preserved verbatim in every bundle), and
+  the flagship integration (2I) — three strict-valid repetition bundles
+  of real energy measurements on the M3 Max (~47 J gross per 512-token
+  request, ~77-88 mJ/generated token, TTFT ~94 ms at 257 tokens/s,
+  provisional model Qwen2.5-1.5B-Instruct-4bit mirrored locally).
+- The report's related-work survey draft (11 sources with verified
+  citations and an honest positioning audit) and a measurement-data
+  backup protocol with a passed restore test.
 
-Not yet started: the real-hardware adapters (Mac MLX + powermetrics,
-NVIDIA/vLLM, Jetson Orin). These are the gated Phase 2 slices 2G-2M;
-code-level specs are in
+Not yet started: the remote real-hardware adapters — NVIDIA/vLLM +
+Jetson Orin (2K/2L, gated on device access). Code-level specs are in
 `docs/phase_2/hardware_slice_implementation_guide.md`. The mock-first core
 landed first by design, so measurement code is never debugging the harness
 and the instrument at the same time.
 
-Currently blocked on external input:
+Waiting on external input (none of it blocks the current work):
 
-1. **Advisor scope confirmation** (the top project gate): confirm the
-   harness is the primary artifact and disaggregation the validating
-   study; required hardware scope; Hailo as feasibility-finding rather
-   than must-succeed backend; stretch items. One meeting closes this.
+1. NVIDIA / Jetson Orin device access evidence — the one hard gate left,
+   for the remote-target slices 2K/2L. (The `nvidia_3050` in the
+   architecture table is the owned always-available NVIDIA target; the
+   3080 Ti is a separate, borrowed card used only for Phase 3's
+   interconnect sweep.)
 2. Calendar anchors: colloquium date, report deadline, and the 3080 Ti
    borrow window, to derive phase target dates.
-3. A local authorization session to capture the first privileged
-   `powermetrics` sample (gates the powermetrics adapter, slice 2H). The
-   originally planned 2026-06-10 slot passed without one; needs
-   rescheduling.
+3. Advisor scope confirmation (see the sanity-check note above) —
+   finalizes model selection; deliberately deprioritized while all work
+   remains harness-shaped and valuable under any scope.
 
-Closed since the last revision (2026-06-12): the Hailo feasibility verdict
-(`unsupported_workload`) and the Phase 2 readiness review.
+Closed since the last revision: the Mac privileged-telemetry gate — the
+`powermetrics` sample was captured and the scoped sudo rule installed
+(2026-07-06), which is what enabled the vertical slice above.
 
 ## Architecture
 
@@ -321,9 +345,10 @@ then, the dependency structure is the schedule: Phase 4 is deskwork and
 serves as the buffer; hardware-gated steps are scheduled around access
 windows with desk work filling gaps.
 
-Known: a local Mac authorization session needs rescheduling (unblocks the
-first privileged power sample). Work paused 2026-06-13 to 2026-07-04
-(planned break, recorded in `docs/milestones.md`).
+Known: the Mac authorization gate closed 2026-07-06 (privileged sample
+captured, scoped sudo rule installed); remote-device access (NVIDIA,
+Orin) is the remaining hardware gate. Work paused 2026-06-13 to
+2026-07-04 (planned break, recorded in `docs/milestones.md`).
 
 ## Deliverables At Completion
 
@@ -349,7 +374,7 @@ first privileged power sample). Work paused 2026-06-13 to 2026-07-04
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (226 tests, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (254 tests, CI-enforced) |
 
 ## Maintenance Of This Document
 

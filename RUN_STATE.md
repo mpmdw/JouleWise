@@ -29,22 +29,84 @@ At the end of substantial work:
 4. Record tests, commands, blockers, and the next best task.
 5. Record new decision-log entries and any risk-register status changes.
 6. Refresh `PROJECT_STATUS.md` if advisor-visible state changed.
-7. Call out any dirty working-tree state that should not be accidentally
+7. Run a docs-consistency sweep before the final bookkeeping commit
+   (delegate to a fast subagent): stale test counts, gate-state
+   contradictions between prose summaries and checklist matrix rows,
+   numbers cited in multiple places. Adopted 2026-07-07 (council log
+   C-002) after a sweep caught drift in 6 files; prose status summaries
+   must carry an as-of date and defer to matrix rows (D-023 extension).
+8. Call out any dirty working-tree state that should not be accidentally
    committed.
 
 ## Current Project Status
 
-Phase 1 is in its final stretch (remaining gates need external/hardware
-input; per-item status in `docs/phase_1/phase_1_exit_checklist.md`).
-Phase 2's hardware-independent work is now ALL complete and runnable:
-the core (2A-2F, 2J, 2026-06-12) and Slice 2N pre-hardware hardening
-(2026-07-06, D-024..D-029). Every remaining Phase 2 slice is
-hardware/decision-gated; real adapters can be written against the
-post-2N seams without touching controller/bundle internals. Work paused
-2026-06-13 through 2026-07-04 (planned break, recorded in
-`docs/milestones.md`).
+**The Mac vertical slice is COMPLETE (2026-07-06): the project has real
+energy numbers.** Slices 2G (MLX runtime), 2H (powermetrics telemetry),
+and 2I (flagship integration) all landed in one day on the M3 Max:
+3/3 strict-valid repetition bundles at ~47 J gross / 512 output tokens
+(~77-88 mJ/token, TTFT ~94 ms, 257 tok/s, 8.8-8.9 Hz observed sampling).
+2A-2F, 2J, 2N complete. Now unblocked: 2M homogeneous baselines
+(Mac-only floor) and Phase 3 Stage 3.0 spikes. Still gated: 2K/2L
+(P1-006 device access). D-016 provisional small-model pick stands (full
+closure needs P1-001, user-deferred). P1-002 fully complete (sample +
+sudoers). Backup protocol active with an interim same-disk destination
+(P0-003 meta). Related-work draft (P3-001) done. Suite: 254 tests.
 
-## What The Latest Run Did (2026-07-06, status-review intake + fixes)
+## What The Latest Run Did (2026-07-06 night, Slice 2I — FIRST REAL ENERGY NUMBERS)
+
+Full detail: `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md`.
+The user installed the D-004 sudoers line (P1-002 now fully complete).
+First flagship attempt failed instructively (powermetrics ~1 s startup
+latency vs a 0.32 s measured window → 0-byte capture); fix (`b4d4173`,
+Codex from parent diagnosis): start_sampling readiness wait (first
+parseable plist doc, 15 s bound), `-b 0` unbuffered, flagship workload
+64→512 tokens at 10 Hz. Then **3/3 reps succeeded, all --strict valid**:
+gross 46.6-48.0 J (CV 1.4%), 77-88 mJ/output-token, prefill 0.03 J vs
+decode ~47 J, TTFT 92.8-94.9 ms, 257 tok/s, 8.8-8.9 Hz observed (in
+band). Methodological finding: rep 1's idle baseline (3.5 W vs 0.2-0.3 W)
+shows post-model-load settling contamination → Stage 4.0 protocol note.
+Corpus backed up per R-016. **Slices 2H and 2I are COMPLETE; the Mac
+vertical slice (P2-003) is done; 2M and Phase 3 Stage 3.0 are unblocked.**
+Suite: 254.
+
+## Previous Run (2026-07-06 evening, P1-002 + Slice 2H)
+
+Full detail: `docs/run_reports/2026-07-06-slice-2h-powermetrics.md`. The
+user captured the privileged powermetrics sample (P1-002 → framing +
+field names pinned in the Phase 1 checklist; fixture committed). Slice
+2H then landed (`26dca41`) through a review/counterreview loop: Codex
+implemented; a 22-agent adversarial review confirmed 10 findings (1
+blocker: measure_idle fabricated a 0.0 W baseline and delayed failure
+past warmup); Codex counterreviewed, accepted all 10, and contributed
+the AdapterFailure design (structured exception → controller maps the
+true FailureReason). Suite 251 green both interpreters. Live-verified:
+mlx+powermetrics fails at idle_baseline with permission_denied, no
+warmup, no fabricated baseline. User re-prioritized: P1-001 and P0-003
+→ meta/deferred. Remaining before first real energy numbers: the D-004
+sudoers line, then one `mac_mlx_local.json` run (= 2H smoke + 2I).
+
+## Previous Run (2026-07-06, autonomous build-out)
+
+Full detail: `docs/run_reports/2026-07-06-autonomous-buildout.md`.
+User-directed maximal build-out on a NEW machine (M3 Max, 128 GB; fresh
+clone at `~/code/JouleWise`), with implementation delegated to the local
+Codex CLI through the new repo bridge (`scripts/codex-bridge`, commit
+`10a570d`) and reviewed/live-verified by Claude. Landed, in order:
+**P0-002** (`5b12332`) backup script + real restore test, interim
+destination `~/JouleWise-backup`, R-016 updated; **P3-001** (`c31ffac`)
+related-work draft — 11 sources, verified citations, positioning claims
+honestly narrowed (claims 1-2) with claim 3 standing; **D-016
+provisional** (decision log) Qwen2.5-1.5B-Instruct-4bit @ `8b40312`
+mirrored to `~/jw_models/`, KV row verified (28,672 B/token);
+**Slice 2G** (`3eb0acd`) MLX runtime adapter per the pinned guide, suite
+226→230 green under both system python3 and the `[mac]` venv
+(`transformers<5.13` pin — 5.13 breaks mlx_lm import), live smoke
+succeeded + `--strict` + `reduce` green. The first live smoke failed
+usefully and exposed a mock-telemetry × SystemClock composition edge
+(samples stamped outside the D-026 window) — worked around at 20 Hz in
+the bring-up config, hardening queued as **P2-008**.
+
+## Previous Run (2026-07-06, status-review intake + fixes)
 
 Full detail: `docs/run_reports/2026-07-06-status-review-fixes.md`. An
 independent project status review
@@ -125,32 +187,36 @@ Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 ## Current Verification
 
 ```bash
-python3 -m unittest discover -s tests
+python3 -m unittest discover -s tests           # 254 tests, OK (skipped=10)
+.venv/bin/python -m unittest discover -s tests  # 254 tests, OK (skipped=10)
 ```
 
-Result (2026-07-06, after Slice 2N + the status-review fixes):
-`Ran 226 tests, OK (skipped=10)` — 8 `[analysis]`-extra chart skips,
-one matplotlib-gated report-alignment test, one optional-jsonschema
-round-trip test. Also verified end-to-end: mock `run` ->
-`validate-bundle` green -> `reduce` re-derives an identical summary;
-`raw/mock_samples.json` present (D-002 via the new context seam).
+Result (2026-07-06, after Slices 2G + 2H): green under BOTH the system
+python3 (CI-equivalent, no mlx) and the `[mac]` venv. Also verified
+live: the 2G bundle (`example-mac-mlx-mock-telemetry`) succeeded with
+`validate-bundle --strict` + `reduce` green; the 2H permission_denied
+path fails at idle_baseline before warmup with no fabricated baseline;
+backup restore test green.
 
 ## Known Workspace State
 
-- Canonical path: `~/code/CapstoneRivoire/Capstone` (off iCloud, R-017).
-  The stale `~/Desktop/CapstoneRivoire` remnant was verified (only a
-  harness-recreated settings file) and deleted 2026-07-06;
-  `~/jw_pending_edits/` is gone. No stale-path cleanup remains.
-- Remote: `git@github.com:mpmdw/JouleWise.git`; branch `main`.
-- Slice 2N commits (groups A/B/C) pushed 2026-07-06 at the user's
-  request; CI run #11 on `5cb1dfc` completed green (mock e2e included,
-  now exercising the marker events and raw evidence).
-- Status-review fix commits (`0803d1f` P1+P3, `80c3d49` P2/D-030, plus
-  bookkeeping) pushed 2026-07-06; CI green (run numbers in the fixes
-  run report's Verification section refer to `RUN_STATE`; latest run
-  status checked after push).
-- Git author identity remains the auto-selected
-  `Edr <edr@Edrs-MacBook-Air.local>`.
+- **New machine (2026-07-06):** MacBook Pro M3 Max / 128 GB. Canonical
+  path here: `~/code/JouleWise` (fresh clone; the previous machine's
+  `~/code/CapstoneRivoire/Capstone` notes are historical).
+- Remote: `https://github.com/mpmdw/JouleWise`; branch `main`. NINE
+  local commits NOT pushed (awaiting user): `10a570d` Codex bridge,
+  `5b12332` backup script, `c31ffac` related-work draft, `3eb0acd`
+  Slice 2G, `c5cf3ac` build-out bookkeeping, `26dca41` Slice 2H, `243a4f1` 2H bookkeeping, `b4d4173` Slice 2I,
+  plus the 2I bookkeeping commit.
+- Git author auto-selected as `Ed R <edr@Eds-MacBook-Pro.local>` on this
+  machine (previous machine used `Edr <edr@Edrs-MacBook-Air.local>`).
+- Machine-local, intentionally uncommitted (`.gitignore`): `.venv/`
+  (mlx_lm 0.31.3 / mlx 0.31.2 / transformers 5.12.1), `.claude/`
+  (Codex agent/command/skill files), `.codex-bridge/` logs.
+- Model mirror (R-014): `~/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit`
+  (839 MB, rev `8b40312`). Interim backup destination: `~/JouleWise-backup`.
+- Codex CLI 0.142.5 at `/Applications/Codex.app/Contents/Resources/codex`,
+  symlinked to `~/.local/bin/codex`.
 
 ## What Is Next
 
@@ -158,31 +224,31 @@ Follow `TASK_QUEUE.md`; execute via the mission guides in
 `docs/agent_playbook.md` (start every session with its Mission M0). In
 order:
 
-1. P0-002: corpus backup protocol (R-016) — must close before 2I data
-   (playbook M2; needs the user to name a destination).
-2. P3-001: related-work draft (Stage 4.6) — top implementable work
-   needing no user input (playbook M3).
-3. The external gates when the user can: P1-001 (scope), P1-002 (auth
-   session, rescheduled), P1-008 (calendar), P1-003/P1-004/P1-006 —
-   these open playbook missions M4-M8. Once D-016 + the Mac gates open,
-   2G/2H build directly on the post-2N seams (playbook M5/M6).
+1. 2M homogeneous baselines on the Mac target (queue rank 1; Mac-only
+   floor allowed) — playbook M9.
+2. Phase 3 Stage 3.0.0 (kv-size helper) + 3.0.1 (mlx-lm prompt-cache
+   spike) — queue rank 2, inputs satisfied.
+3. P2-008 mock-telemetry × SystemClock hardening — queue rank 3; must
+   land before 2K/2L bring-up (they pair real runtimes with mock
+   telemetry again in loopback tests).
+4. Deferred at user direction (meta rows in the queue): P1-001
+   supervisor scope (gates full D-016), P0-003 real backup destination.
+   P1-008 calendar dates remain open when convenient.
 
-Done 2026-07-06: Slice 2N complete (P2-007; all nine items, three
-commits pushed, CI run #11 green, D-024..D-029, 216 tests green,
-exit-checklist row closed).
+Done 2026-07-06 (this session): P0-002 interim, P3-001, D-016
+provisional, Slice 2G with live real-generation evidence, Codex bridge.
 
 ## Open Decisions And Blockers
 
 - Supervisor approval and scope pending (P1-001, R-001 — trigger fired
-  2026-06-12, mitigation holding); also gates D-016.
+  2026-06-12, mitigation holding); gates FULL D-016 closure (a
+  provisional small-model pick opened 2G on 2026-07-06).
+- Real backup destination pending (P0-003; interim same-disk location
+  active, R-016 mitigated-interim).
 - Calendar dates pending (P1-008, R-012).
 - Wall-meter decision pending (P1-003, R-007).
 - Physical network topology pending (P1-004, R-011).
 - NVIDIA/Orin access evidence pending (P1-006; gates 2K/2L).
-- Mac privileged powermetrics sample pending (P1-002, R-002; gates 2H;
-  auth session to be rescheduled).
-- D-016 model selection open (criteria fixed; needs P1-001 + install
-  evidence).
-- Git author identity was auto-selected as
-  `Edr <edr@Edrs-MacBook-Air.local>` for the first commit. Amend future
-  commits if a different identity is needed.
+- Git author identity on this machine auto-selected as
+  `Ed R <edr@Eds-MacBook-Pro.local>`. Amend future commits if a
+  different identity is needed.

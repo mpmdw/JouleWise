@@ -37,7 +37,7 @@ be re-derived by a future agent gets an entry here.
 | D-013 | Controller-as-DUT mitigation for Mac-local runs | accepted |
 | D-014 | Statistical protocol for repeated runs | accepted |
 | D-015 | Split-mechanism priority and same-runtime rule | accepted |
-| D-016 | Benchmark model selection | open |
+| D-016 | Benchmark model selection | open (provisional small-model pick 2026-07-06; opens 2G only) |
 | D-017 | CI scope | accepted |
 | D-018 | Per-backend `power_w` definition and rail policy | accepted |
 | D-019 | Mock adapters use simulated time via an injectable clock | accepted |
@@ -52,6 +52,7 @@ be re-derived by a future agent gets an entry here.
 | D-028 | `reduce` verb rewrites `summary_metrics.json` in place (the one sanctioned post-finalize mutation) | accepted |
 | D-029 | Config schema declares nullable optionals; serialization (and config hashes) unchanged | accepted |
 | D-030 | `validate-bundle` stays structural by default; `--strict` adds re-reduction checks for succeeded bundles | accepted |
+| D-031 | Multi-model council review; PR convention for multi-commit sessions; D-023 extension + end-of-session consistency sweep | accepted |
 
 ---
 
@@ -755,6 +756,22 @@ Decision pending; leaning small+mid pair from one family, final call
 recorded here with per-runtime artifact paths and exact revisions when
 closed.
 
+**Provisional pick recorded (2026-07-06, user-directed build-out session;
+gate = explicit user go-ahead, recorded in the run report):**
+Qwen2.5-1.5B-Instruct as the small model, MLX 4-bit artifact
+`mlx-community/Qwen2.5-1.5B-Instruct-4bit`, revision
+`8b403126fc14f14cfc99bb4cfa72ecbc129ea677`, mirrored locally (R-014) at
+`/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit` (839 MB).
+Evidence: HF repo verified via API 2026-07-06; loaded and generated on
+the M3 Max via Slice 2G (bundle `example-mac-mlx-mock-telemetry`,
+265.8 tok/s decode); KV row verified against the mirrored config.json
+(28,672 B/token fp16, matches the Phase 3 table). This opens the 2G gate
+("closed or provisional") ONLY. Full closure still requires: P1-001
+supervisor scope, the mid-model pick (leaning Qwen2.5-7B-Instruct, same
+family per criterion 5), a CUDA-target load, and GGUF artifact paths.
+The provisional pick is reversible at config level (one model stanza +
+pinned hash update).
+
 Closure evidence required: supervisor scope notes (P1-001); successful load
 on Mac MLX (Slice 2G) and one CUDA target; recorded weight artifact
 paths/revisions; KV-size table row computed for the chosen models.
@@ -1452,3 +1469,62 @@ Revisit when: bundle schema v0.2 lands (composite summaries need their
 own strict semantics), or a reducer version bump makes historical
 summaries legitimately differ from fresh reductions (then strict needs
 a provenance-aware comparison, see D-028's revisit note).
+
+---
+
+## D-031: Multi-model council review, PR convention, and drift controls
+
+- Date: 2026-07-07
+- Status: accepted
+- Phase: all (process)
+
+Context: the user directed a standing multi-model workflow: Codex
+(gpt-5.5) implements and reviews as a near-peer, Claude leads and
+verifies on hardware, Opus subagents run fast parallel sweeps, and the
+models review each other bidirectionally with discussion of important
+findings. The first two councils (see `docs/council_log.md` C-001/C-002)
+caught a real blocker in green-tested code and six files of bookkeeping
+drift respectively.
+
+Options considered:
+
+1. Single-model implement-and-self-review. Con: C-001 proved a fully
+   green suite hid a blocker only adversarial review found.
+2. Review without discussion (findings applied verbatim). Con: C-001's
+   best fix came from the implementer arguing design back; C-002's
+   run_id finding was refined in discussion.
+3. Bidirectional council with bounded discussion (adopted): implementer
+   ↔ reviewer roles swap per session; confirmed findings get one or two
+   discussion rounds; the lead decides and records dissents in the
+   council log.
+
+Decision, in three parts:
+
+- **Council process**: as above; sessions recorded in
+  `docs/council_log.md` (positions, votes, resolutions — not
+  transcripts). The lead (Claude) is the only member that runs real
+  hardware; sub-agent "tests green" is never sufficient for
+  hardware-adjacent slices.
+- **PR convention**: multi-commit sessions land on a feature branch with
+  a PR to `main` (one reviewable GitHub diff + CI before merge; the user
+  merges). Single-commit bookkeeping may still go straight to main.
+- **Drift controls**: D-023 is extended — prose status summaries must
+  carry an as-of date and defer to checklist matrix rows (no duplicated
+  live gate lists) — and every session ends with a delegated
+  docs-consistency sweep before the final bookkeeping commit
+  (RUN_STATE end-of-work step 7). Higher-level docs (README,
+  PROJECT_STATUS, playbook) are in the sweep's scope explicitly.
+
+Revisit when: council overhead exceeds its catch rate (track via council
+log outcomes), or the model roster changes.
+
+Execution topology addendum (2026-07-07, user direction): when a session
+has multiple independent workstreams, each stream runs in its own git
+worktree on its own branch, owned by a dedicated orchestrator subagent
+(Fable) that drives its own Codex thread — the bridge resolves the repo
+root per-worktree, so parallel Codex sessions keep separate
+`.codex-bridge/` state and `resume --last` pointers. The lead session
+stays the integrator: it reviews each stream's diff, runs the council
+loop per stream, and lands each as its own PR. Worktrees are skipped for
+single-stream sessions (pure overhead). First planned use: the
+2M / P2-008 / kv-size batch after the vertical-slice PR merges.
