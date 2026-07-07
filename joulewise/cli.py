@@ -22,6 +22,14 @@ from joulewise.bundle import BundleError
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.clock import Clock, FakeClock, SystemClock
 from joulewise.controller import run_benchmark, run_experiment
+from joulewise.kv_size import (
+    KVSizeError,
+    KVSizeParams,
+    bytes_per_token,
+    extract_kv_params,
+    format_bytes,
+    prompt_totals,
+)
 from joulewise.reduce import reduce_bundle
 from joulewise.report import ReportError, generate_report
 from joulewise.schemas import (
@@ -68,6 +76,59 @@ def _cmd_print_config_schema(args: argparse.Namespace) -> int:
 
 def _cmd_print_output_schema(args: argparse.Namespace) -> int:
     return _write_or_print_schema(SummaryMetrics.json_schema(), args.output, "output schema")
+
+
+# ---------------------------------------------------------------------------
+# kv-size verb (Stage 3.0.0)
+
+
+def _parse_prompt_tokens(text: str) -> list[int]:
+    try:
+        tokens = [int(part.strip()) for part in text.split(",") if part.strip()]
+    except ValueError as exc:
+        raise KVSizeError("--prompt-tokens must be a comma-separated list of integers") from exc
+    if not tokens:
+        raise KVSizeError("--prompt-tokens must include at least one value")
+    if any(token <= 0 for token in tokens):
+        raise KVSizeError("--prompt-tokens values must be positive")
+    return tokens
+
+
+def _cmd_kv_size(args: argparse.Namespace) -> int:
+    explicit = [args.layers, args.kv_heads, args.head_dim]
+    if any(value is not None for value in explicit):
+        if any(value is None for value in explicit):
+            raise KVSizeError("explicit params require --layers, --kv-heads, and --head-dim")
+        params = KVSizeParams(args.layers, args.kv_heads, args.head_dim)
+    elif args.config:
+        config = json.loads(Path(args.config).read_text())
+        if not isinstance(config, dict):
+            raise KVSizeError("config JSON must be an object")
+        params = extract_kv_params(config)
+    else:
+        raise KVSizeError("provide a config path or --layers/--kv-heads/--head-dim")
+
+    bytes_per_tok = bytes_per_token(
+        params.n_layers, params.n_kv_heads, params.head_dim, args.dtype_bytes
+    )
+    prompts = _parse_prompt_tokens(args.prompt_tokens)
+    print(
+        "kv-size: "
+        f"layers={params.n_layers} "
+        f"kv_heads={params.n_kv_heads} "
+        f"head_dim={params.head_dim} "
+        f"dtype_bytes={args.dtype_bytes} "
+        f"bytes_per_token={bytes_per_tok} "
+        f"human={format_bytes(bytes_per_tok)}"
+    )
+    for prompt_tokens, total_bytes in prompt_totals(bytes_per_tok, prompts):
+        print(
+            "kv-size-total: "
+            f"prompt_tokens={prompt_tokens} "
+            f"bytes={total_bytes} "
+            f"human={format_bytes(total_bytes)}"
+        )
+    return 0
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +343,24 @@ def build_parser() -> argparse.ArgumentParser:
     output_schema.add_argument("--output", help="optional path to write schema JSON")
     output_schema.set_defaults(func=_cmd_print_output_schema)
 
+    kv_size = subparsers.add_parser("kv-size", help="compute KV-cache size from model config")
+    kv_size.add_argument("config", nargs="?", help="path to a HF config.json")
+    kv_size.add_argument("--layers", type=int, help="number of hidden layers")
+    kv_size.add_argument("--kv-heads", type=int, help="number of KV heads")
+    kv_size.add_argument("--head-dim", type=int, help="attention head dimension")
+    kv_size.add_argument(
+        "--dtype-bytes",
+        type=int,
+        default=2,
+        help="bytes per cache scalar (default: 2 for fp16)",
+    )
+    kv_size.add_argument(
+        "--prompt-tokens",
+        default="512,2048,8192",
+        help="comma-separated prompt lengths (default: 512,2048,8192)",
+    )
+    kv_size.set_defaults(func=_cmd_kv_size)
+
     run = subparsers.add_parser("run", help="run one benchmark and write a complete bundle")
     run.add_argument("config", help="path to a JSON benchmark config")
     run.add_argument(
@@ -332,7 +411,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except (OSError, json.JSONDecodeError, SchemaError, BundleError, ReportError) as exc:
+    except (
+        OSError,
+        json.JSONDecodeError,
+        KVSizeError,
+        SchemaError,
+        BundleError,
+        ReportError,
+    ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
