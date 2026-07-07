@@ -1,6 +1,6 @@
 # JouleWise Run State
 
-Last updated: 2026-07-06
+Last updated: 2026-07-07 (parallel-streams session)
 
 ## Start Here For Every Big Run
 
@@ -44,19 +44,36 @@ At the end of substantial work:
 
 ## Current Project Status
 
-**The Mac vertical slice is COMPLETE (2026-07-06): the project has real
-energy numbers.** Slices 2G (MLX runtime), 2H (powermetrics telemetry),
-and 2I (flagship integration) all landed in one day on the M3 Max:
-3/3 strict-valid repetition bundles at ~47 J gross / 512 output tokens
-(~77-88 mJ/token, TTFT ~94 ms, 257 tok/s, 8.8-8.9 Hz observed sampling).
-2A-2F, 2J, 2N complete. Now unblocked: 2M homogeneous baselines
-(Mac-only floor) and Phase 3 Stage 3.0 spikes. Still gated: 2K/2L
-(P1-006 device access). D-016 provisional small-model pick stands (full
-closure needs P1-001, user-deferred). P1-002 fully complete (sample +
-sudoers). Backup protocol active with an interim same-disk destination
-(P0-003 meta). Related-work draft (P3-001) done. Suite: 254 tests.
+**The instrument is CAMPAIGN-READY (2026-07-07).** Five parallel
+streams landed in one session (PRs #2-#6 + two integration fixes):
+D-014 cross-repetition uncertainty (per-metric Student-t CIs,
+byte-identically re-derivable from bundles), rich DVFS/GPU telemetry +
+idle-contamination gate (first live true positive) + environment
+capture, mock-telemetry SystemClock hardening (live-verified at 1 Hz),
+the 2M campaign tooling (deterministic matrix generator + resumable
+sequential runner), and the kv-size helper. C-005 research agenda
+(31 tiered questions + jw_mixed_v1 workload suite) appended to the
+question bank. Still gated: 2K/2L (P1-006). D-016 provisional pick
+stands. Suite: 369 tests. Stream F (repo-wide Codex test audit) in
+flight — its PR + a final integration review are the only open threads.
 
-## What The Latest Run Did (2026-07-07, FLAGSHIP MODEL BENCHMARKED)
+## What The Latest Run Did (2026-07-07, FIVE-STREAM PARALLEL SESSION)
+
+Six worktree streams (Fable orchestrators driving Codex 5.5-high per the
+new operation-loop skill), two councils, ~6-7M Codex tokens of
+implementation/review offloaded. Merged: PRs #2 (kv-size), #3 (2M
+campaign tooling), #4 (P2-009 rich telemetry), #5 (P2-008 mock
+hardening), #6 (P2-011/D-014 uncertainty) + INT-001/INT-002 integration
+fixes. Lead-verified on real hardware: n=3 experiment aggregate
+99.19 ± 1.36 mJ/output-token re-derived byte-identically; idle gate
+caught real contamination; 1 Hz mock regression proof. Councils: C-005
+(hardware-tiered research agenda, jw_mixed_v1 suite → P2-012), C-006
+(orchestration trace v2, process meta-review; global skills
+deduplicated; operation-loop installed). Suite 254 → 369. Full detail:
+`docs/run_reports/2026-07-07-parallel-streams-session.md`; process
+trace: council log C-006.
+
+## Previous Run (2026-07-07, FLAGSHIP MODEL BENCHMARKED)
 
 Qwen3.5-122B-A10B-4bit (65 GB mirror, rev `e9c67b0`) selected by
 web-verified research, mirrored, and benchmarked through the unmodified
@@ -212,37 +229,25 @@ Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 
 ## Current Verification
 
-```bash
-python3 -m unittest discover -s tests           # 254 tests, OK (skipped=10)
-.venv/bin/python -m unittest discover -s tests  # 254 tests, OK (skipped=10)
-```
-
-Result (2026-07-06, after Slices 2G + 2H): green under BOTH the system
-python3 (CI-equivalent, no mlx) and the `[mac]` venv. Also verified
-live: the 2G bundle (`example-mac-mlx-mock-telemetry`) succeeded with
-`validate-bundle --strict` + `reduce` green; the 2H permission_denied
-path fails at idle_baseline before warmup with no fabricated baseline;
-backup restore test green.
+- `python3 -m unittest discover -s tests` → `Ran 369 tests, OK
+  (skipped=10)` (as of 2026-07-07, after PRs #2-#6 + integration fixes
+  INT-001/INT-002).
+- CI: mock e2e + suite on both matrix legs.
+- Latest live evidence: real n=3 MLX experiment with populated
+  `aggregate` block, byte-identically re-derivable (run report
+  2026-07-07-parallel-streams-session.md).
 
 ## Known Workspace State
 
-- **New machine (2026-07-06):** MacBook Pro M3 Max / 128 GB. Canonical
-  path here: `~/code/JouleWise` (fresh clone; the previous machine's
-  `~/code/CapstoneRivoire/Capstone` notes are historical).
-- Remote: `https://github.com/mpmdw/JouleWise`; branch `main`. NINE
-  local commits NOT pushed (awaiting user): `10a570d` Codex bridge,
-  `5b12332` backup script, `c31ffac` related-work draft, `3eb0acd`
-  Slice 2G, `c5cf3ac` build-out bookkeeping, `26dca41` Slice 2H, `243a4f1` 2H bookkeeping, `b4d4173` Slice 2I,
-  plus the 2I bookkeeping commit.
-- Git author auto-selected as `Ed R <edr@Eds-MacBook-Pro.local>` on this
-  machine (previous machine used `Edr <edr@Edrs-MacBook-Air.local>`).
-- Machine-local, intentionally uncommitted (`.gitignore`): `.venv/`
-  (mlx_lm 0.31.3 / mlx 0.31.2 / transformers 5.12.1), `.claude/`
-  (Codex agent/command/skill files), `.codex-bridge/` logs.
-- Model mirror (R-014): `~/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit`
-  (839 MB, rev `8b40312`). Interim backup destination: `~/JouleWise-backup`.
-- Codex CLI 0.142.5 at `/Applications/Codex.app/Contents/Resources/codex`,
-  symlinked to `~/.local/bin/codex`.
+- `main` is pushed and current: PRs #2-#6 merged + INT-001/INT-002 +
+  bookkeeping commits; no unpushed local state.
+- SIX worktrees exist (`../jw-uncertainty`, `../jw-campaign`,
+  `../jw-mock-hardening`, `../jw-rich-telemetry`, `../jw-kv-size`,
+  `../jw-test-audit`) — five have merged branches awaiting
+  `git worktree remove` (archive `.codex-bridge/` logs to the R-016
+  backup area first, per C-006); `jw-test-audit` (stream F) is STILL IN
+  FLIGHT — do not remove it.
+- `/tmp/jw-lead-verify/` holds disposable lead-verification artifacts.
 
 ## What Is Next
 
@@ -250,19 +255,29 @@ Follow `TASK_QUEUE.md`; execute via the mission guides in
 `docs/agent_playbook.md` (start every session with its Mission M0). In
 order:
 
-1. 2M homogeneous baselines on the Mac target (queue rank 1; Mac-only
-   floor allowed) — playbook M9.
-2. Phase 3 Stage 3.0.0 (kv-size helper) + 3.0.1 (mlx-lm prompt-cache
-   spike) — queue rank 2, inputs satisfied.
-3. P2-008 mock-telemetry × SystemClock hardening — queue rank 3; must
-   land before 2K/2L bring-up (they pair real runtimes with mock
-   telemetry again in loopback tests).
-4. Deferred at user direction (meta rows in the queue): P1-001
-   supervisor scope (gates full D-016), P0-003 real backup destination.
-   P1-008 calendar dates remain open when convenient.
+1. **Land Stream F** (repo-wide Codex test audit, worktree
+   `jw-test-audit`, branch `stream/test-audit`) — findings re-check
+   against merged main was in flight at session close; then the final
+   post-merge integration review over the complete composite.
+2. **P2-006: the 2M two-model baseline campaign** (queue rank 1, fully
+   tooled). REQUIRES A QUIET MACHINE — no agent fleet, no Codex load
+   (the idle gate will flag contamination). Command sequence in PR #3;
+   run under `.venv` (`.venv/bin/python3 scripts/run_campaign.py ...`).
+   Then `docs/phase_2/baseline_results.md` consuming the D-014
+   aggregates.
+3. **P2-010 scored workload suite** (`affine_mod_ladder_v1`), then
+   **P2-012 `jw_mixed_v1`** per the C-005 spec in the question bank.
+4. Phase 3 Stage 3.0.1 (mlx-lm prompt-cache spike) — 3.0.0 (kv-size)
+   done, PR #2.
+5. Small follow-ups queued from stream reports: `aggregate` CLI verb,
+   methodology-doc amendment (manifest-level aggregate + t-table floor
+   policy), idle-gate threshold corpus, `dvfm_states` slimming option.
+6. Worktree cleanup after F lands (`git worktree remove` × 6; archive
+   `.codex-bridge` logs to the R-016 backup area first, per the C-006
+   preservation rule).
 
-Done 2026-07-06 (this session): P0-002 interim, P3-001, D-016
-provisional, Slice 2G with live real-generation evidence, Codex bridge.
+Hardware-gated (unchanged): 2K/2L (P1-006), wall meter (P1-003),
+topology (P1-004), calendar mapping (P1-008).
 
 ## Open Decisions And Blockers
 

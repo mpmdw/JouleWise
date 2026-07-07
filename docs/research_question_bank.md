@@ -112,9 +112,8 @@ inherited by everything here: no per-token joule claims (~9 Hz sampler vs
 ~4 ms token cadence — chunked windows only), no unqualified absolute-joule
 claims from modeled rails, no general intelligence-per-joule, claim
 wording "on this M3 Max / MLX / powermetrics" until a second unit or lab
-exists, and present-tense capability claims only for landed code (D-014
-uncertainty aggregation, P2-009 telemetry, P2-010 scored suite are QUEUED,
-not landed).
+exists, and present-tense capability claims only for landed code (P2-010 scored suite is QUEUED,
+not landed (D-014/P2-011 aggregation and P2-009 telemetry LANDED 2026-07-07)).
 
 ## Why this instrument matters (steelman preamble, examiner-scoped)
 
@@ -174,8 +173,9 @@ referee is the contribution.
 
 ## TIER 1 — answerable with current hardware (M3 Max alone)
 
-Queued software (P2-009 rich telemetry, P2-010 scored suite, P2-011
-uncertainty aggregation, 2M matrix) is assumed where noted; no new
+Landed software (P2-009 rich telemetry, P2-011 uncertainty
+aggregation, 2M campaign tooling — all 2026-07-07) is available;
+queued software (P2-010 scored suite) is assumed where noted; no new
 hardware. Throughput reality: ~30-75 bundles/hour makes n=10-20 designs
 cheap.
 
@@ -201,7 +201,7 @@ cheap.
   directional bias for long-context (examiner #11); flag pending Q6
   calibration. Who cares: long-context model teams, serving researchers.
 
-- **C5-1.3 Phase-resolved compute-vs-memory signatures (needs P2-009).**
+- **C5-1.3 Phase-resolved compute-vs-memory signatures (uses landed P2-009 telemetry).**
   Does the rail mix and DVFS residency shift between compute-bound
   prefill and memory-bound decode, and how does the shift move with model
   size/quant? Measure: per-phase CPU:GPU energy division, GPU
@@ -211,7 +211,7 @@ cheap.
   are about STRUCTURE (ratios, shifts), not absolute rail watts. Who
   cares: Apple/Metal/MLX performance engineers, systems-paper authors.
 
-- **C5-1.4 DVFS residency as a throttling early-warning (needs P2-009).**
+- **C5-1.4 DVFS residency as a throttling early-warning (uses landed P2-009 telemetry).**
   Do residency histograms and idle_ratio drift predict throttling before
   energy/throughput visibly degrade under sustained inference? Measure:
   20-60 min sustained blocks; per-rep energy, residency, cap-hit rates,
@@ -517,7 +517,7 @@ the internal-first ladder from the examiner round.
    (C5-3.5); public version is KILLED until then.
 6. **OS/driver/runtime update forensics** — before/after bundles detect
    power-behavior regressions from macOS/MLX updates (DVFS residency
-   makes it mechanistic); ~5-15 days; stronger after P2-009.
+   makes it mechanistic); ~5-15 days; stronger with landed P2-009 rich telemetry.
 7. **Teaching instrument** — a measurement-methodology lab course (idle
    subtraction, boundaries, uncertainty, negative results) with bundles
    as graded artifacts; ~5-12 days.

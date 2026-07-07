@@ -5,12 +5,34 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-07
-- Project phase: Phase 1 closing; Phase 2 in progress - Mac vertical
-  slice COMPLETE with real energy measurements; baselines next
+- Last updated: 2026-07-07 (fifth update)
+- Project phase: Phase 1 closing; Phase 2 in progress - instrument
+  CAMPAIGN-READY; two-model baseline matrix is the next run
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 
-## This Update (2026-07-07, fourth update) — 30-second read
+## This Update (2026-07-07, fifth update) — 30-second read
+
+**The instrument grew four capabilities in one session and is now
+campaign-ready.** Five parallel work streams landed (PRs #2-#6):
+(1) **statistical uncertainty** — every multi-repetition experiment now
+carries per-metric 95% confidence intervals with outlier detection and
+explicit below-protocol flags, re-derivable byte-identically from the
+raw evidence bundles (verified on a live 3-repetition run:
+99.19 ± 1.36 mJ/output-token); (2) **contamination detection** — an
+idle-window quality gate that mechanically flags runs taken on a
+non-quiet machine (it caught its first real contamination during
+verification); (3) **deep telemetry** — per-sample GPU/CPU-cluster
+frequency and residency forensics plus a machine-state snapshot in
+every bundle; (4) **campaign automation** — a deterministic
+config-matrix generator and a resumable sequential runner, so the
+planned two-model baseline matrix (4 workload shapes × 2 models × 5
+repetitions) runs unattended. A review council also produced a
+hardware-tiered research agenda: 16 questions answerable on current
+hardware alone, 10 more behind planned gates
+(`docs/research_question_bank.md`). Next run: the baseline matrix on a
+quiet machine.
+
+## Previous Update (2026-07-07, fourth update) — 30-second read
 
 **A flagship-class model is now benchmarked.** Qwen3.5-122B (Feb 2026
 generation, 122B-parameter mixture-of-experts with 10B active, a
@@ -139,7 +161,7 @@ Complete so far (all verifiable in the repository):
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (254 tests, run in CI on every push,
+  a CLI, plus a passing test suite (369 tests, run in CI on every push,
   including a mock end-to-end run + bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
   are pinned by test.
@@ -406,7 +428,7 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (254 tests, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (369 tests, CI-enforced) |
 
 ## Maintenance Of This Document
 
