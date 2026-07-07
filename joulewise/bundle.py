@@ -40,6 +40,13 @@ from joulewise.schemas import BenchmarkConfig, SummaryMetrics
 
 _ID_ALLOWED = set("abcdefghijklmnopqrstuvwxyz0123456789_-")
 _POWER_TRACE_HEADER = ["timestamp_s", "power_w", "source", "rail"]
+_RESERVED_TOP_LEVEL_ARTIFACTS = {
+    "config.json",
+    "metadata.json",
+    "events.jsonl",
+    "power_trace.csv",
+    "summary_metrics.json",
+}
 
 
 class BundleError(Exception):
@@ -137,6 +144,29 @@ def write_raw_artifact(context: RunContext, name: str, data: bytes | str) -> Pat
     while the run is open), so no open-check is needed here.
     """
     return _write_raw_file(context.raw_dir, name, data)
+
+
+def write_derived_artifact(context: RunContext, name: str, data: bytes | str) -> Path:
+    """Adapter-side write for additive top-level derived artifacts.
+
+    This mirrors :func:`write_raw_artifact` for artifacts derived from native
+    evidence but not themselves raw evidence. The name must be a plain file
+    name, core bundle artifacts are reserved, and overwriting is an error.
+    Adapters still receive only :class:`RunContext` paths, not writer authority
+    (D-024).
+    """
+    if name in _RESERVED_TOP_LEVEL_ARTIFACTS:
+        raise BundleError(f"derived artifact name is reserved: {name!r}")
+    path = _validated_raw_path(context.bundle_path, name)
+    if path.exists():
+        raise BundleError(
+            f"derived artifact already exists: {path} (bundle evidence is immutable)"
+        )
+    if isinstance(data, bytes):
+        path.write_bytes(data)
+    else:
+        path.write_text(data)
+    return path
 
 
 def _git_commit() -> str:

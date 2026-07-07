@@ -16,6 +16,7 @@ from joulewise.bundle import (
     generate_run_id,
     sanitize_id_component,
     write_experiment_manifest,
+    write_derived_artifact,
     write_raw_artifact,
 )
 from joulewise.clock import FakeClock
@@ -428,6 +429,32 @@ class RawEvidenceTests(unittest.TestCase):
             logs_dir=self.writer.path / "logs",
             outputs_dir=self.writer.path / "outputs",
         )
+
+    def test_write_derived_artifact_lands_at_bundle_top_level(self) -> None:
+        path = write_derived_artifact(self._context(), "rich_telemetry.jsonl", "{}\n")
+        self.assertEqual(path, self.writer.path / "rich_telemetry.jsonl")
+        self.assertEqual(path.read_text(), "{}\n")
+
+    def test_write_derived_artifact_rejects_reserved_names_and_collisions(self) -> None:
+        context = self._context()
+        for reserved in (
+            "config.json",
+            "metadata.json",
+            "events.jsonl",
+            "power_trace.csv",
+            "summary_metrics.json",
+        ):
+            with self.assertRaises(BundleError, msg=reserved):
+                write_derived_artifact(context, reserved, "{}\n")
+        write_derived_artifact(context, "rich_telemetry.jsonl", "{}\n")
+        with self.assertRaises(BundleError):
+            write_derived_artifact(context, "rich_telemetry.jsonl", "{}\n")
+
+    def test_write_derived_artifact_name_must_be_plain_file_name(self) -> None:
+        context = self._context()
+        for bad in ("", ".", "..", "a/b.json", "..\\evil", "/abs.json"):
+            with self.assertRaises(BundleError, msg=bad):
+                write_derived_artifact(context, bad, "{}\n")
 
     def test_adapter_helper_writes_validates_and_refuses_overwrite(self) -> None:
         # 2026-07-06 status review P3: adapters get the same validation and
