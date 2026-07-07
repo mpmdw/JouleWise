@@ -567,3 +567,47 @@ integration review over merged main.
   entry lands. (This session's logs archived before cleanup.)
 - operation-loop skill (single conductor-score loop over all meta
   processes,every step with skip conditions) drafted; pending lead gate.
+
+### C-006 addendum (post-entry landings, same session)
+
+- **Streams A and C landed** (PRs #6, #5) after the entry above was written;
+  all five implementation streams + both integration fixes are now merged.
+  New catch rows: **K-11** (A, stats lens): OverflowError crash on huge JSON
+  ints in aggregate math — real bug, fixed with structured
+  `non_finite_overflow` status. **K-12** (A, same lens): non-finite
+  `Infinity` leakage into manifest JSON from extreme spreads/subnormal MAD —
+  fixed (nulled + status; outlier kept with `modified_z: null`). **K-13**
+  (C, orchestrator): review-lens over-strong assertion (all samples strictly
+  interior) cut to the reducer's actual contract — the one genuinely flaky
+  assertion removed before it could poison CI.
+- **Deliberation blocks now on record** in the stream reports (quoted in
+  full there; key adjudications): A's load-bearing disagreement — Codex
+  refuted populating per-member `SummaryMetrics.uncertainty` ("structurally
+  wrong: one interval with one mean, while D-014 needs intervals for many
+  metrics"); orchestrator accepted but required each aggregate entry to BE a
+  serialized `UncertaintyInterval` — hybrid resolution, both prevailed in
+  part. A's orchestrator also overrode 2 test-review BLOCKERs (downgraded
+  with rationale; the lens's mutation concern adopted via a
+  poisoned-aggregate test) and accepted Codex's stricter
+  no-auto-without-outliers reading of D-014. C's three-way design
+  adjudication: (a) unconditional interior stamping won because (b)
+  clock-type detection "makes mock telemetry a different adapter under
+  FakeClock than under SystemClock… would preserve the blind spot that let
+  this composition bug escape."
+- **Intervention tallies:** I-3 (lens wedge) recurred ×5 in stream C (incl.
+  amplification + test-review rounds; orchestrator substituted a
+  revert-mutation check: adapter reverted to HEAD → 13/18 new tests fail —
+  the strongest writer≠reviewer evidence in the session) and once in C-005 —
+  all before the `< /dev/null` fix propagated; zero recurrences after. I-4
+  (accidental user stop) recurred ×2 (C-006 meta-agent mid-dedup; session
+  restart killing A/F mid-flight) — both recovered loss-free from on-disk
+  state (worktree + bridge outputs + scratchpad lens files), confirming the
+  relaunch-is-cheap property as a designed-for invariant, not luck.
+- **Integration findings closed:** INT-001 (stale-config refusal,
+  `a05e54d`) and INT-002 (per-experiment shared env snapshot with provenance
+  fields + deterministic FakeClock skip, `8856c04`), both Codex-implemented,
+  lead-gated, live-verified.
+- **D-014 acceptance evidence (lead, real hardware):** n=3 real MLX
+  experiment → 10 metrics aggregated, energy/output-token 99.19 ± 1.36 mJ
+  (Student-t 95%, CV 0.55%), `below_headline_protocol: true` correctly
+  flagged, aggregate re-derived BYTE-IDENTICALLY from bundles alone.
