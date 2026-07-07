@@ -62,7 +62,10 @@ bytes_per_token = 2 (K and V) × n_layers × n_kv_heads × head_dim × 2 (bytes,
 ```
 
 Reference table (verify n_layers/n_kv_heads/head_dim against each chosen
-model's config.json when D-016 closes; correct this table if they differ):
+model's config.json when D-016 closes; correct this table if they differ).
+Verified 2026-07-06 for the provisional D-016 pick Qwen2.5-1.5B against the
+mirrored `config.json` (rev `8b40312`): 28 layers, 2 kv_heads, head_dim 128
+→ 28,672 B/token fp16, matching the row below:
 
 | Model | layers | kv_heads | head_dim | KiB/token | MiB @2048 tok | MiB @8192 tok |
 |---|---|---|---|---|---|---|

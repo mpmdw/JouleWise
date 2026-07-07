@@ -34,17 +34,41 @@ At the end of substantial work:
 
 ## Current Project Status
 
-Phase 1 is in its final stretch (remaining gates need external/hardware
-input; per-item status in `docs/phase_1/phase_1_exit_checklist.md`).
-Phase 2's hardware-independent work is now ALL complete and runnable:
-the core (2A-2F, 2J, 2026-06-12) and Slice 2N pre-hardware hardening
-(2026-07-06, D-024..D-029). Every remaining Phase 2 slice is
-hardware/decision-gated; real adapters can be written against the
-post-2N seams without touching controller/bundle internals. Work paused
-2026-06-13 through 2026-07-04 (planned break, recorded in
-`docs/milestones.md`).
+Phase 1 is in its final stretch (remaining gates need external/user
+input; per-item status in `docs/phase_1/phase_1_exit_checklist.md` —
+the MLX-runtime row closed 2026-07-06). Phase 2 now has its **first real
+adapter**: Slice 2G (MLX runtime) is complete with a succeeded
+real-generation bundle on the M3 Max (real MLX + mock telemetry
+pairing; TTFT 81.5 ms, 265.8 tok/s). 2A-2F, 2J, 2N remain complete.
+Still gated: 2H (privileged powermetrics sample, P1-002), 2I (2H),
+2K/2L (P1-006), 2M (2I). D-016 has a provisional small-model pick
+(Qwen2.5-1.5B-Instruct-4bit, local mirror) that opens 2G only; full
+closure needs P1-001. P0-002 backup protocol closed with an INTERIM
+same-disk destination (follow-up P0-003). The Stage 4.6 related-work
+draft (P3-001) is done. Suite: 230 tests.
 
-## What The Latest Run Did (2026-07-06, status-review intake + fixes)
+## What The Latest Run Did (2026-07-06, autonomous build-out)
+
+Full detail: `docs/run_reports/2026-07-06-autonomous-buildout.md`.
+User-directed maximal build-out on a NEW machine (M3 Max, 128 GB; fresh
+clone at `~/code/JouleWise`), with implementation delegated to the local
+Codex CLI through the new repo bridge (`scripts/codex-bridge`, commit
+`10a570d`) and reviewed/live-verified by Claude. Landed, in order:
+**P0-002** (`5b12332`) backup script + real restore test, interim
+destination `~/JouleWise-backup`, R-016 updated; **P3-001** (`c31ffac`)
+related-work draft — 11 sources, verified citations, positioning claims
+honestly narrowed (claims 1-2) with claim 3 standing; **D-016
+provisional** (decision log) Qwen2.5-1.5B-Instruct-4bit @ `8b40312`
+mirrored to `~/jw_models/`, KV row verified (28,672 B/token);
+**Slice 2G** (`3eb0acd`) MLX runtime adapter per the pinned guide, suite
+226→230 green under both system python3 and the `[mac]` venv
+(`transformers<5.13` pin — 5.13 breaks mlx_lm import), live smoke
+succeeded + `--strict` + `reduce` green. The first live smoke failed
+usefully and exposed a mock-telemetry × SystemClock composition edge
+(samples stamped outside the D-026 window) — worked around at 20 Hz in
+the bring-up config, hardening queued as **P2-008**.
+
+## Previous Run (2026-07-06, status-review intake + fixes)
 
 Full detail: `docs/run_reports/2026-07-06-status-review-fixes.md`. An
 independent project status review
@@ -125,32 +149,34 @@ Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 ## Current Verification
 
 ```bash
-python3 -m unittest discover -s tests
+python3 -m unittest discover -s tests           # 230 tests, OK (skipped=10)
+.venv/bin/python -m unittest discover -s tests  # 230 tests, OK (skipped=10)
 ```
 
-Result (2026-07-06, after Slice 2N + the status-review fixes):
-`Ran 226 tests, OK (skipped=10)` — 8 `[analysis]`-extra chart skips,
-one matplotlib-gated report-alignment test, one optional-jsonschema
-round-trip test. Also verified end-to-end: mock `run` ->
-`validate-bundle` green -> `reduce` re-derives an identical summary;
-`raw/mock_samples.json` present (D-002 via the new context seam).
+Result (2026-07-06, after Slice 2G): green under BOTH the system
+python3 (CI-equivalent, no mlx) and the `[mac]` venv. Also verified:
+mock e2e; the 2G live bundle (`example-mac-mlx-mock-telemetry`)
+succeeded with `validate-bundle --strict` green and `reduce`
+re-derivation green; backup restore test green.
 
 ## Known Workspace State
 
-- Canonical path: `~/code/CapstoneRivoire/Capstone` (off iCloud, R-017).
-  The stale `~/Desktop/CapstoneRivoire` remnant was verified (only a
-  harness-recreated settings file) and deleted 2026-07-06;
-  `~/jw_pending_edits/` is gone. No stale-path cleanup remains.
-- Remote: `git@github.com:mpmdw/JouleWise.git`; branch `main`.
-- Slice 2N commits (groups A/B/C) pushed 2026-07-06 at the user's
-  request; CI run #11 on `5cb1dfc` completed green (mock e2e included,
-  now exercising the marker events and raw evidence).
-- Status-review fix commits (`0803d1f` P1+P3, `80c3d49` P2/D-030, plus
-  bookkeeping) pushed 2026-07-06; CI green (run numbers in the fixes
-  run report's Verification section refer to `RUN_STATE`; latest run
-  status checked after push).
-- Git author identity remains the auto-selected
-  `Edr <edr@Edrs-MacBook-Air.local>`.
+- **New machine (2026-07-06):** MacBook Pro M3 Max / 128 GB. Canonical
+  path here: `~/code/JouleWise` (fresh clone; the previous machine's
+  `~/code/CapstoneRivoire/Capstone` notes are historical).
+- Remote: `https://github.com/mpmdw/JouleWise`; branch `main`. FIVE
+  local commits NOT pushed (awaiting user): `10a570d` Codex bridge,
+  `5b12332` backup script, `c31ffac` related-work draft, `3eb0acd`
+  Slice 2G, plus the bookkeeping commit for this session.
+- Git author auto-selected as `Ed R <edr@Eds-MacBook-Pro.local>` on this
+  machine (previous machine used `Edr <edr@Edrs-MacBook-Air.local>`).
+- Machine-local, intentionally uncommitted (`.gitignore`): `.venv/`
+  (mlx_lm 0.31.3 / mlx 0.31.2 / transformers 5.12.1), `.claude/`
+  (Codex agent/command/skill files), `.codex-bridge/` logs.
+- Model mirror (R-014): `~/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit`
+  (839 MB, rev `8b40312`). Interim backup destination: `~/JouleWise-backup`.
+- Codex CLI 0.142.5 at `/Applications/Codex.app/Contents/Resources/codex`,
+  symlinked to `~/.local/bin/codex`.
 
 ## What Is Next
 
@@ -158,31 +184,33 @@ Follow `TASK_QUEUE.md`; execute via the mission guides in
 `docs/agent_playbook.md` (start every session with its Mission M0). In
 order:
 
-1. P0-002: corpus backup protocol (R-016) — must close before 2I data
-   (playbook M2; needs the user to name a destination).
-2. P3-001: related-work draft (Stage 4.6) — top implementable work
-   needing no user input (playbook M3).
-3. The external gates when the user can: P1-001 (scope), P1-002 (auth
-   session, rescheduled), P1-008 (calendar), P1-003/P1-004/P1-006 —
-   these open playbook missions M4-M8. Once D-016 + the Mac gates open,
-   2G/2H build directly on the post-2N seams (playbook M5/M6).
+1. P1-002 (user): privileged powermetrics sample + D-004 sudoers — the
+   ONLY blocker for 2H (playbook M6), then 2I (playbook M7) = first
+   real energy numbers. The MLX half of P1-002 closed 2026-07-06.
+2. P1-001 (user): supervisor scope → full D-016 closure (playbook M4
+   remainder: mid model, CUDA load evidence, GGUF paths).
+3. P0-003 (user): real external/cloud backup destination.
+4. Implementable now without user input: P2-008 (mock telemetry ×
+   SystemClock hardening), Phase 3 Stage 3.0.0 (kv-size helper), and
+   Stage 3.0.1 (mlx-lm prompt-cache spike — its inputs, 2G + chosen
+   small model, are satisfied).
 
-Done 2026-07-06: Slice 2N complete (P2-007; all nine items, three
-commits pushed, CI run #11 green, D-024..D-029, 216 tests green,
-exit-checklist row closed).
+Done 2026-07-06 (this session): P0-002 interim, P3-001, D-016
+provisional, Slice 2G with live real-generation evidence, Codex bridge.
 
 ## Open Decisions And Blockers
 
 - Supervisor approval and scope pending (P1-001, R-001 — trigger fired
-  2026-06-12, mitigation holding); also gates D-016.
+  2026-06-12, mitigation holding); gates FULL D-016 closure (a
+  provisional small-model pick opened 2G on 2026-07-06).
+- Mac privileged powermetrics sample pending (P1-002, R-002; the sole
+  gate for 2H; auth session to be rescheduled).
+- Real backup destination pending (P0-003; interim same-disk location
+  active, R-016 mitigated-interim).
 - Calendar dates pending (P1-008, R-012).
 - Wall-meter decision pending (P1-003, R-007).
 - Physical network topology pending (P1-004, R-011).
 - NVIDIA/Orin access evidence pending (P1-006; gates 2K/2L).
-- Mac privileged powermetrics sample pending (P1-002, R-002; gates 2H;
-  auth session to be rescheduled).
-- D-016 model selection open (criteria fixed; needs P1-001 + install
-  evidence).
-- Git author identity was auto-selected as
-  `Edr <edr@Edrs-MacBook-Air.local>` for the first commit. Amend future
-  commits if a different identity is needed.
+- Git author identity on this machine auto-selected as
+  `Ed R <edr@Eds-MacBook-Pro.local>`. Amend future commits if a
+  different identity is needed.

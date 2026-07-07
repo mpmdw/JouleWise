@@ -37,7 +37,7 @@ be re-derived by a future agent gets an entry here.
 | D-013 | Controller-as-DUT mitigation for Mac-local runs | accepted |
 | D-014 | Statistical protocol for repeated runs | accepted |
 | D-015 | Split-mechanism priority and same-runtime rule | accepted |
-| D-016 | Benchmark model selection | open |
+| D-016 | Benchmark model selection | open (provisional small-model pick 2026-07-06; opens 2G only) |
 | D-017 | CI scope | accepted |
 | D-018 | Per-backend `power_w` definition and rail policy | accepted |
 | D-019 | Mock adapters use simulated time via an injectable clock | accepted |
@@ -754,6 +754,22 @@ target best model (incomparable - rejected outright).
 Decision pending; leaning small+mid pair from one family, final call
 recorded here with per-runtime artifact paths and exact revisions when
 closed.
+
+**Provisional pick recorded (2026-07-06, user-directed build-out session;
+gate = explicit user go-ahead, recorded in the run report):**
+Qwen2.5-1.5B-Instruct as the small model, MLX 4-bit artifact
+`mlx-community/Qwen2.5-1.5B-Instruct-4bit`, revision
+`8b403126fc14f14cfc99bb4cfa72ecbc129ea677`, mirrored locally (R-014) at
+`/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit` (839 MB).
+Evidence: HF repo verified via API 2026-07-06; loaded and generated on
+the M3 Max via Slice 2G (bundle `example-mac-mlx-mock-telemetry`,
+265.8 tok/s decode); KV row verified against the mirrored config.json
+(28,672 B/token fp16, matches the Phase 3 table). This opens the 2G gate
+("closed or provisional") ONLY. Full closure still requires: P1-001
+supervisor scope, the mid-model pick (leaning Qwen2.5-7B-Instruct, same
+family per criterion 5), a CUDA-target load, and GGUF artifact paths.
+The provisional pick is reversible at config level (one model stanza +
+pinned hash update).
 
 Closure evidence required: supervisor scope notes (P1-001); successful load
 on Mac MLX (Slice 2G) and one CUDA target; recorded weight artifact

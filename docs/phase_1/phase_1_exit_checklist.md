@@ -49,7 +49,7 @@ Complete since the last revision:
 |---|---|---|---|
 | Supervisor approval and scope | pending | Written notes from meeting/email listing approved must-haves, stretch items, and out-of-scope items | Supervisor section below; `RUN_STATE.md` if scope changes |
 | Mac telemetry permissions | partially checked | `powermetrics` binary path and privilege requirement recorded; privileged sample fields + sudoers rule pending a local auth session (to be rescheduled; the planned 2026-06-10 slot passed without one) | Instrumentation section below |
-| Mac runtime (MLX) | pending | Install path decided; install or documented procedure | Instrumentation section below |
+| Mac runtime (MLX) | complete (2026-07-06) | Install path decided; install or documented procedure | Instrumentation section below (installed in `.venv`, versions pinned, real generation verified via Slice 2G) |
 | Wall-meter availability | pending | Meter make/model, resolution, export/manual logging method, lab-or-purchased | Wall-meter section below |
 | Network plan | partially checked | Controller tool status recorded; topology, link-speed paths, isolation plan, throughput method still pending | Network section below |
 | Hailo feasibility | complete (2026-06-12, desk research) | Toolchain/version check plus one documented compile/runtime attempt or official limitation finding; verdict code | Hailo section below (`unsupported_workload`) |
@@ -281,10 +281,21 @@ id -u
   - [ ] Thermal fields available in captured samples.
   - [ ] Output parser target selected: `plist` (expected; confirm framing
     against the captured sample).
-  - [ ] MLX install path decided (dedicated venv, `[mac]` extra).
-  - [ ] MLX/MLX-LM installed or installation procedure documented.
-- Current verdict: telemetry binary present; permission-blocked until the
-  sudo workflow is in place; runtime pending install.
+  - [x] MLX install path decided (dedicated venv, `[mac]` extra) —
+    2026-07-06, on the M3 Max measurement target: repo-local `.venv`
+    (gitignored), Python 3.13.1.
+  - [x] MLX/MLX-LM installed or installation procedure documented —
+    `mlx` 0.31.2, `mlx_lm` 0.31.3, `transformers` 5.12.1. Compat
+    finding: `transformers` 5.13.0 breaks `mlx_lm` 0.31.3 at import
+    (`AutoTokenizer.register` signature change); the `[mac]` extra now
+    pins `mlx-lm>=0.31.3` + `transformers<5.13`. Real generation
+    verified: 328 tok/s CLI smoke, then the Slice 2G bundle
+    (`example-mac-mlx-mock-telemetry`, 265.8 tok/s through the full
+    harness).
+- Current verdict: runtime **supported** (MLX installed and generating
+  through the harness, 2026-07-06); telemetry binary present but
+  permission-blocked until the sudo workflow is in place (still the 2H
+  gate).
 - Next owner/action: user schedules a local auth session; then capture
   the privileged sample and record field names here, and install the
   D-004 sudoers line.
