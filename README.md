@@ -40,13 +40,17 @@ constraints live in `docs/milestones.md`; cross-model review sessions
 
 ## Current State
 
-Phase 1 is in its final stretch; **Phase 2's hardware-independent core is
-complete and runnable**. From a typed config, the harness produces a complete,
-schema-valid, auditable run bundle and reduces it to energy/latency summary
-metrics — today from deterministic mock adapters (so the controller, bundle
-contract, and reducer math are proven without hardware). Real backends (Mac
-MLX + powermetrics, NVIDIA/vLLM, Jetson Orin) plug into the same adapter
-interfaces and are the next, hardware-gated slices.
+Phase 1 is in its final stretch; **Phase 2's Mac vertical slice is complete
+and the project has its first real energy measurements** (2026-07-06). From a
+typed config, one command produces a complete, schema-valid, auditable run
+bundle and reduces it to energy/latency summary metrics — proven first on
+deterministic mock adapters, and now live on real hardware: the MLX runtime +
+`powermetrics` telemetry adapters measured Qwen2.5-1.5B-Instruct (4-bit) on an
+Apple M3 Max at ~47 J per 512-token request (~77-88 mJ per generated token,
+257 tok/s), across 3 repetitions that all pass strict validation (the bundle
+re-reduces from its raw evidence to an identical summary). Remaining backends
+(NVIDIA/vLLM, Jetson Orin) plug into the same adapter interfaces and are
+gated only on device access.
 
 The repository currently contains:
 
