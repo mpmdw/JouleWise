@@ -8,7 +8,12 @@ injected :class:`joulewise.clock.Clock`. Where real backends spawn a
 file-writing sampler subprocess (D-002), the mock simply synthesizes samples
 between ``start_sampling`` and ``stop_sampling``. The rail manifest in
 ``device_metadata`` names exactly the rails that sum to the backend's
-canonical ``power_w`` (D-018): the single rail ``mock``.
+canonical ``power_w`` (D-018): the single rail ``mock``. For any nonzero
+sampling span, synthetic measured samples are stamped strictly inside the
+``start_sampling``/``stop_sampling`` clock span, using a centered nominal
+period grid with a two-sample interior floor. This keeps controller marker
+latency outside the reducer window without making behavior depend on the
+clock implementation.
 
 Fault-injection conventions (internal convention per the Phase 2 plan, Slice
 2B; revisit if configs need first-class fault injection):
@@ -107,17 +112,21 @@ class MockTelemetryAdapter:
         self._sampling_start_s = None
         end = self._clock.now()
 
-        samples: list[PowerSample] = []
-        k = 0
-        while True:
-            timestamp_s = start + k / config.sampling.power_hz
-            if timestamp_s >= end:
-                break
-            samples.append(self._sample(timestamp_s))
-            k += 1
-        # A final sample at exactly t = end guarantees >= 2 samples for any
-        # nonzero window, keeping trapezoidal integration well-defined.
-        samples.append(self._sample(end))
+        duration_s = end - start
+        if duration_s <= 0.0:
+            samples = [self._sample(end)]
+        else:
+            timestamp_s = start + 0.5 / config.sampling.power_hz
+            timestamps: list[float] = []
+            while timestamp_s < end:
+                timestamps.append(timestamp_s)
+                timestamp_s += 1.0 / config.sampling.power_hz
+            if len(timestamps) < 2:
+                timestamps = [
+                    start + duration_s / 3.0,
+                    start + 2.0 * duration_s / 3.0,
+                ]
+            samples = [self._sample(timestamp_s) for timestamp_s in timestamps]
         # D-002 via D-024: preserve the sampler's native output verbatim under
         # raw/, through the validated no-overwrite helper (adapters must not
         # write raw/ paths directly). Out-of-run invocations (context None,

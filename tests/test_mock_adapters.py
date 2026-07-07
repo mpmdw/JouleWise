@@ -21,7 +21,7 @@ from joulewise.adapters.mock_telemetry import (
     MEASURED_POWER_W,
     WARMUP_POWER_W,
 )
-from joulewise.clock import FakeClock
+from joulewise.clock import FakeClock, SystemClock
 from joulewise.interfaces import (
     PowerSample,
     RuntimeAdapter,
@@ -222,28 +222,151 @@ class MockTelemetryTests(unittest.TestCase):
         self.assertEqual(baseline.sample_count, 2)
 
     def test_stop_sampling_closed_form_short_window(self) -> None:
-        # 0.112 s at 2.0 Hz: only k=0 lands inside the window, plus the final
-        # boundary sample => exactly [start, end], both at MEASURED_POWER_W.
+        # 0.112 s at 2.0 Hz: the nominal centered grid has fewer than two
+        # samples, so the mock emits two evenly spaced interior samples.
         self.assertTrue(self.telemetry.start_sampling(self.config).ok)
         self.clock.sleep(0.112)
         samples = self.telemetry.stop_sampling(self.config)
         self.assertEqual(len(samples), 2)
-        self.assertEqual(samples[0].timestamp_s, 1000.0)
-        self.assertEqual(samples[1].timestamp_s, self.clock.now())
+        self.assertAlmostEqual(samples[0].timestamp_s, 1000.0 + 0.112 / 3.0)
+        self.assertAlmostEqual(samples[1].timestamp_s, 1000.0 + 2.0 * 0.112 / 3.0)
         for sample in samples:
             self.assertEqual(sample.power_w, 7.5)
             self.assertEqual(sample.source, "mock")
             self.assertEqual(sample.rail, "mock")
 
-    def test_stop_sampling_grid_plus_boundary_sample(self) -> None:
-        # 1.0 s at 2.0 Hz: grid samples at start, start+0.5, plus end.
+    def test_stop_sampling_centered_grid_samples(self) -> None:
+        # 1.0 s at 2.0 Hz: centered nominal-period samples, no boundaries.
         self.telemetry.start_sampling(self.config)
         self.clock.sleep(1.0)
         samples = self.telemetry.stop_sampling(self.config)
         self.assertEqual(
-            [sample.timestamp_s for sample in samples], [1000.0, 1000.5, 1001.0]
+            [sample.timestamp_s for sample in samples], [1000.25, 1000.75]
         )
         self.assertEqual({sample.power_w for sample in samples}, {7.5})
+
+    def test_system_clock_short_window_samples_land_inside_marker_window(self) -> None:
+        clock = SystemClock()
+        telemetry = MockTelemetryAdapter(clock)
+        config = make_config()
+
+        self.assertTrue(telemetry.start_sampling(config).ok)
+        marker_start_s = clock.now()
+        clock.sleep(0.075)
+        marker_stop_s = clock.now()
+        samples = telemetry.stop_sampling(config)
+
+        # The reducer's contract (joulewise/reduce.py _in_window_sample_count)
+        # is >= 2 samples inclusively inside the marker window. Deliberately do
+        # NOT assert that every sample is inside the markers: under sleep
+        # overshoot the centered-grid path can legitimately stamp a sample in
+        # the microsecond stop-latency gap between the marker read and the
+        # adapter's own end read, which the reducer simply ignores.
+        in_marker_window = [
+            sample
+            for sample in samples
+            if marker_start_s <= sample.timestamp_s <= marker_stop_s
+        ]
+        self.assertGreaterEqual(len(in_marker_window), 2)
+
+    def test_stop_sampling_one_grid_candidate_falls_back_to_thirds(self) -> None:
+        # 0.5 s at 2.0 Hz: the centered grid has exactly one candidate
+        # (1000.25; the next, 1000.75, is not < end), so the two-sample
+        # thirds fallback applies. Same float expressions as the adapter.
+        self.telemetry.start_sampling(self.config)
+        self.clock.sleep(0.5)
+        samples = self.telemetry.stop_sampling(self.config)
+        self.assertEqual(
+            [sample.timestamp_s for sample in samples],
+            [1000.0 + 0.5 / 3.0, 1000.0 + 2.0 * 0.5 / 3.0],
+        )
+        self.assertEqual({sample.power_w for sample in samples}, {7.5})
+
+    def test_stop_sampling_grid_end_boundary_excluded(self) -> None:
+        # 0.75 s at 2.0 Hz: grid candidates are 1000.25 and 1000.75, but the
+        # loop condition is strictly < end, so 1000.75 (== end) is excluded,
+        # leaving one candidate and forcing the thirds fallback. 0.75/3 and
+        # 2*0.75/3 are exact in binary floats: [1000.25, 1000.5].
+        self.telemetry.start_sampling(self.config)
+        self.clock.sleep(0.75)
+        samples = self.telemetry.stop_sampling(self.config)
+        self.assertEqual(
+            [sample.timestamp_s for sample in samples], [1000.25, 1000.5]
+        )
+
+    def test_stop_sampling_two_grid_samples_no_fallback(self) -> None:
+        # 0.8 s at 2.0 Hz: grid candidates 1000.25 and 1000.75 are both
+        # strictly < end, so the grid path (not the fallback) is used. This
+        # pins the fallback/grid boundary just above 1.5/power_hz.
+        self.telemetry.start_sampling(self.config)
+        self.clock.sleep(0.8)
+        samples = self.telemetry.stop_sampling(self.config)
+        self.assertEqual(
+            [sample.timestamp_s for sample in samples], [1000.25, 1000.75]
+        )
+
+    def test_stop_sampling_zero_length_span_single_sample_degenerate(self) -> None:
+        # start == end (no clock advance): degenerate single sample at end.
+        # The reducer's zero-length-window path never reaches the >= 2 guard.
+        self.telemetry.start_sampling(self.config)
+        samples = self.telemetry.stop_sampling(self.config)
+        self.assertEqual([sample.timestamp_s for sample in samples], [1000.0])
+        self.assertEqual(samples[0].power_w, 7.5)
+
+    def test_stop_sampling_interior_invariants_across_durations_and_hz(self) -> None:
+        # The P2-008 guarantee, pinned as an invariant: for ANY nonzero span,
+        # >= 2 samples, all strictly inside (start, end), strictly increasing,
+        # constant 7.5 W, and no consecutive gap reaching the reducer's
+        # dropped-sample threshold of 2x the nominal period (reduce.py
+        # _dropped_samples).
+        cases = [
+            (0.1, 0.5),  # fallback: window far below one nominal period
+            (0.3, 2.0),  # fallback: the original 2G live-smoke shape
+            (1.4, 2.0),  # grid: three samples (offsets 0.25, 0.75, 1.25)
+            (100.0, 2.0),  # grid: long window, many samples
+            (0.5, 1000.0),  # grid: high rate, 500 samples
+        ]
+        for duration_s, power_hz in cases:
+            with self.subTest(duration_s=duration_s, power_hz=power_hz):
+                clock = FakeClock(start=1000.0)
+                telemetry = MockTelemetryAdapter(clock)
+                config = make_config(sampling={"power_hz": power_hz})
+                telemetry.start_sampling(config)
+                clock.sleep(duration_s)
+                end = clock.now()
+                samples = telemetry.stop_sampling(config)
+                timestamps = [sample.timestamp_s for sample in samples]
+                self.assertGreaterEqual(len(timestamps), 2)
+                self.assertTrue(all(1000.0 < t < end for t in timestamps))
+                self.assertEqual(timestamps, sorted(set(timestamps)))
+                self.assertEqual({sample.power_w for sample in samples}, {7.5})
+                nominal_period_s = 1.0 / power_hz
+                for left, right in zip(timestamps, timestamps[1:]):
+                    self.assertLess(right - left, 2.0 * nominal_period_s)
+
+    def test_stop_sampling_without_start_returns_empty(self) -> None:
+        self.assertEqual(self.telemetry.stop_sampling(self.config), [])
+
+    def test_stop_sampling_twice_second_call_returns_empty(self) -> None:
+        self.telemetry.start_sampling(self.config)
+        self.clock.sleep(1.0)
+        self.assertEqual(len(self.telemetry.stop_sampling(self.config)), 2)
+        self.assertEqual(self.telemetry.stop_sampling(self.config), [])
+
+    def test_restarted_sampling_stamps_from_new_span(self) -> None:
+        # A second start/stop cycle stamps relative to its own span, and a
+        # preceding measure_idle (which advances the clock) shifts the span.
+        self.telemetry.start_sampling(self.config)
+        self.clock.sleep(1.0)
+        self.telemetry.stop_sampling(self.config)
+
+        self.telemetry.measure_idle(self.config)  # advances clock by 1.0 s
+        self.telemetry.start_sampling(self.config)
+        self.clock.sleep(1.0)
+        samples = self.telemetry.stop_sampling(self.config)
+        self.assertEqual(
+            [sample.timestamp_s for sample in samples], [1002.25, 1002.75]
+        )
 
     def test_start_sampling_telemetry_denied(self) -> None:
         config = make_config(hardware_target={"notes": "telemetry-denied"})

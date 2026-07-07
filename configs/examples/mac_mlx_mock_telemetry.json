@@ -19,7 +19,7 @@
     "runtime_backend": "mlx",
     "telemetry_backend": "mock",
     "device_kind": "apple_silicon_unified_memory",
-    "notes": "Slice 2G bring-up: real MLX runtime with mock telemetry. Mock telemetry under SystemClock emits samples at k/power_hz offsets, so this config uses 20 Hz to keep at least two interior samples in a sub-second generation window."
+    "notes": "Slice 2G bring-up: real MLX runtime with mock telemetry. Since P2-008, mock telemetry stamps samples strictly inside the sampling span with a two-sample interior floor, so any power_hz works; 20 Hz kept for sampling-density realism."
   },
   "workload_profile": {
     "name": "smoke_short_prompt_short_decode",

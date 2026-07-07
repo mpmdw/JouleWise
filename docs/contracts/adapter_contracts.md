@@ -115,6 +115,16 @@ hardware samples rails at genuinely different instants must
 resample/align to shared timestamps before emitting rows - alignment
 policy belongs to the adapter that knows its hardware.
 
+Mock telemetry sampling convention (D-019): for any nonzero
+`start_sampling`/`stop_sampling` span, `MockTelemetryAdapter` stamps
+synthetic measured samples strictly inside that adapter span, never at
+the boundary clock reads. It uses a centered nominal-period grid at the
+configured `sampling.power_hz`; if that would produce fewer than two
+samples, it emits two evenly spaced interior samples instead. This
+preserves deterministic constant-power math while ensuring the
+controller's post-start/pre-stop measured markers contain enough samples
+for reducer integration under both fake and real clocks.
+
 Initial telemetry backends:
 
 - `mock`
