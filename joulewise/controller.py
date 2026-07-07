@@ -59,6 +59,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 import joulewise.adapters
+from joulewise.aggregate import aggregate_experiment
 from joulewise import reduce as reduce_module
 from joulewise.bundle import (
     RunBundleWriter,
@@ -832,6 +833,7 @@ def run_experiment(
         results.append((bundle_path, summary))
         manifest["members"].append(bundle_path.name)
         manifest["condition_order"].append(condition_name)
+        manifest["aggregate"] = aggregate_experiment(runs_root, manifest)
         # Incremental write: a kill before the next rep leaves a valid manifest
         # listing exactly the members that completed (D-005 acceptance).
         manifest_path = write_experiment_manifest(runs_root, manifest)
