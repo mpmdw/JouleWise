@@ -310,6 +310,26 @@ class RegistryTests(unittest.TestCase):
         self.assertIsInstance(adapter, TelemetryAdapter)
         self.assertEqual(adapter.name, "mock")
 
+    def test_resolves_powermetrics_telemetry_adapter(self) -> None:
+        config = make_config(hardware_target={"telemetry_backend": "powermetrics"})
+        adapter, failure = resolve_telemetry(config, self.clock)
+        self.assert_exactly_one((adapter, failure))
+        self.assertIsInstance(adapter, TelemetryAdapter)
+        self.assertEqual(adapter.name, "powermetrics")
+
+    def test_powermetrics_import_failure_is_telemetry_unavailable(self) -> None:
+        config = make_config(hardware_target={"telemetry_backend": "powermetrics"})
+        with patch(
+            "joulewise.adapters.importlib.import_module",
+            side_effect=ImportError("injected missing adapter"),
+        ):
+            adapter, failure = resolve_telemetry(config, self.clock)
+        self.assert_exactly_one((adapter, failure))
+        self.assertIsNone(adapter)
+        self.assertFalse(failure.ok)
+        self.assertEqual(failure.failure_reason, FailureReason.TELEMETRY_UNAVAILABLE)
+        self.assertIn("powermetrics", failure.message)
+
     def test_resolves_local_transport(self) -> None:
         adapter, failure = resolve_transport(make_config())
         self.assert_exactly_one((adapter, failure))
@@ -349,7 +369,7 @@ class RegistryTests(unittest.TestCase):
                 self.assertIn(backend, failure.message)
 
     def test_unimplemented_telemetry_fails_structurally(self) -> None:
-        for backend in ("powermetrics", "nvidia_smi", "jetson_rails", "wall_meter"):
+        for backend in ("nvidia_smi", "jetson_rails", "wall_meter"):
             with self.subTest(backend=backend):
                 config = make_config(hardware_target={"telemetry_backend": backend})
                 adapter, failure = resolve_telemetry(config, self.clock)

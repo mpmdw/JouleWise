@@ -10,8 +10,8 @@ so the controller's status mapping (D-012) applies uniformly. Real backends
 land here in later slices (2G, 2H, 2K, 2L) behind lazy imports per the
 stdlib-core/extras policy (D-009).
 
-Implemented backends in this slice: runtime ``mock`` and ``mlx``, telemetry ``mock``,
-transport ``local``. Clock-driven adapters receive the injected
+Implemented backends in this slice: runtime ``mock`` and ``mlx``, telemetry
+``mock`` and ``powermetrics``, transport ``local``. Clock-driven adapters receive the injected
 :class:`joulewise.clock.Clock` (D-019).
 """
 
@@ -42,6 +42,7 @@ __all__ = [
     "MlxRuntimeAdapter",
     "MockRuntimeAdapter",
     "MockTelemetryAdapter",
+    "PowermetricsTelemetryAdapter",
     "resolve_runtime",
     "resolve_telemetry",
     "resolve_transport",
@@ -52,6 +53,9 @@ def __getattr__(name: str) -> object:
     if name == "MlxRuntimeAdapter":
         module = importlib.import_module("joulewise.adapters.mlx_runtime")
         return module.MlxRuntimeAdapter
+    if name == "PowermetricsTelemetryAdapter":
+        module = importlib.import_module("joulewise.adapters.powermetrics")
+        return module.PowermetricsTelemetryAdapter
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -94,6 +98,16 @@ def resolve_telemetry(
     backend = config.hardware_target.telemetry_backend
     if backend == TelemetryBackend.MOCK:
         return MockTelemetryAdapter(clock), None
+    if backend == TelemetryBackend.POWERMETRICS:
+        try:
+            module = importlib.import_module("joulewise.adapters.powermetrics")
+        except ImportError as exc:
+            return _failure(
+                FailureReason.TELEMETRY_UNAVAILABLE,
+                "telemetry backend 'powermetrics' could not import its adapter: "
+                f"{exc}",
+            )
+        return module.PowermetricsTelemetryAdapter(clock), None
     return _failure(
         FailureReason.TELEMETRY_UNAVAILABLE,
         f"telemetry backend '{_backend_name(backend)}' has no registered adapter",
