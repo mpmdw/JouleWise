@@ -78,10 +78,14 @@ attempt's lens outputs were lost with its session.
 **Stream F state (resume here):** pushed checkpoints `6ad22e0` (six raw
 audit-lens outputs, `docs/phase_2/test_audit_2026-07-07_lenses/`) and
 `fc4211a` (triaged findings doc `docs/phase_2/test_audit_2026-07-07.md`
-— dispositions + stage-3 scope). In flight at network loss: the Codex
-test-writing round per that doc's scope section (fix A1/A3/A7/F1/F2/F3;
-new tests D8-D13/E10; expectedFailure contract pins for product bugs
-D2/E1, D3/E4). Remaining after: fresh-instance Codex test review →
+— dispositions + stage-3 scope) and `3ffef9a` (WIP: the stage-3 Codex
+test-writing round was DELIBERATELY STOPPED mid-write for travel; suite
+RED at that commit — 375 tests, 2 failures, both interrupted edits in
+test_experiment/test_mock_adapters, not regressions; do not build on it
+without finishing or redoing stage 3 per the findings doc's scope
+section: fix A1/A3/A7/F1/F2/F3; new tests D8-D13/E10; expectedFailure
+contract pins for product bugs D2/E1, D3/E4). Remaining after stage 3:
+fresh-instance Codex test review →
 lead diff gate + suite both legs → PR; then the final post-merge
 integration review over the complete composite; then full bookkeeping
 (council-log entry, run report, PROJECT_STATUS refresh, consistency
