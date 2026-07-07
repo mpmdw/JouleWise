@@ -67,6 +67,7 @@ from joulewise.bundle import (
     write_experiment_manifest,
 )
 from joulewise.clock import Clock
+from joulewise.environment import collect_environment_snapshot
 from joulewise.interfaces import (
     AdapterFailure,
     AdapterResult,
@@ -245,6 +246,7 @@ class _Execution:
         self._runtime: RuntimeAdapter | None = None
         self._telemetry: TelemetryAdapter | None = None
         self._connection_metadata: dict[str, Any] | None = None
+        self._environment: dict[str, Any] | None = None
         self._device_metadata: dict[str, Any] | None = None
         self._prepare_metadata: dict[str, Any] | None = None
         self._baseline: IdleBaseline | None = None
@@ -296,6 +298,7 @@ class _Execution:
             {"run_id": self._writer.run_id},
         )
         self._log(self._controller_log, f"run {self._writer.run_id} started")
+        self._environment = collect_environment_snapshot()
         self._stage_validate()
         self._stage_prepare()
         self._stage_idle_baseline()
@@ -573,6 +576,8 @@ class _Execution:
             extra["device"] = _jsonable(self._device_metadata)
         if self._connection_metadata is not None:
             extra["connection"] = _jsonable(self._connection_metadata)
+        if self._environment is not None:
+            extra["environment"] = _jsonable(self._environment)
         adapters: dict[str, Any] = {}
         if self._runtime is not None:
             adapters["runtime"] = {
@@ -612,6 +617,9 @@ class _Execution:
                 self._baseline.power_w_stddev if self._baseline is not None else None
             ),
             telemetry_source=self._telemetry.name if self._telemetry is not None else None,
+            idle_window_suspect=(
+                self._baseline.idle_window_suspect if self._baseline is not None else None
+            ),
         )
 
     # ------------------------------------------------------------------
