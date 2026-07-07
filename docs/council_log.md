@@ -32,6 +32,8 @@ standing instructions.
 |---|---|---|---|
 | C-001 | 2026-07-06 | Adopt review/counterreview between Claude and Codex (2H precedent) | adopted; all 10 findings accepted, Codex improved the blocker fix design |
 | C-002 | 2026-07-07 | Reverse review of the 9-commit vertical-slice series; push vs PR | PR convention adopted; run_id renamed; P2-008 promoted; D-023 extended; sweep step added |
+| C-003 | 2026-07-07 | Research agenda: what else can the instrument answer; robustness; scale-up | Q4-Q6 promoted; detection floor = methodology centerpiece; D-014 uncertainty found unimplemented; nodes/<node_id> flagged as pre-multi-node breaking fix |
+| C-004 | 2026-07-07 | Difficulty-graded scored workload suites; collect-more-per-run | affine_mod_ladder_v1 adopted as ONE quarantined profile; rich-telemetry parsing (P2-009) prioritized ahead of it; examiner reframe adopted |
 
 ---
 
@@ -100,3 +102,54 @@ standing instructions.
   (2M / P2-008 / kv-size) runs as parallel worktree streams, each owned
   by a Fable orchestrator subagent driving its own Codex thread, landing
   as separate PRs (D-031 execution-topology addendum).
+
+## C-003: Research agenda expansion (ideation council)
+
+- Date: 2026-07-07. Participants: Claude (lead), Codex gpt-5.5 (ideation +
+  critique), 3 Opus subagents (RQ-from-instrument; collection feasibility;
+  robustness + scale-up).
+- Key outputs: Codex's fixed-vs-marginal energy model (adopted as Q4;
+  subsumes prefill exponent) and compositional split prediction (folded
+  into Q1's method); ranking stability (Q5); boundary sensitivity (Q6).
+  Opus ground truth: detection floor (idle stddev 5.4 W > mean 3.5 W),
+  ~30-75 bundles/hour throughput with automation (not schema) as the
+  campaign blocker, `SummaryMetrics.uncertainty` is a documented-but-DEAD
+  field (D-014 never implemented), and the composite bundle layout
+  hardcodes `nodes/prefill|decode` — a breaking generalization
+  (`nodes/<node_id>`) required BEFORE any multi-node data.
+- Dissent adjudicated: Codex voted to cut "variance" as an RQ
+  (methodology, not science); lead partially conceded — it became the
+  methodology centerpiece (detection floor) rather than a numbered RQ.
+- Resolutions: promote Q4-Q6; queue D-014 implementation as the highest
+  credibility-per-hour item; question bank doc created.
+
+## C-004: Scored difficulty suites + per-run collection expansion
+
+- Date: 2026-07-07. Participants: Claude (lead), Codex gpt-5.5 (3 parallel
+  read-only ideation threads: suite design / collect-more / examiner,
+  plus a synthesis-review round), 1 Opus subagent (plist ground-truth
+  audit).
+- The examiner thread argued the naive difficulty-vs-energy claim
+  collapses into token count for dense models and correctness scoring
+  drifts into Intelligence per Watt's lane; the design thread's
+  `affine_mod_ladder_v1` (difficulty = iteration count, prompt shape and
+  answer length FIXED) survives the attack by construction — the claim
+  becomes energy-per-CORRECT-answer under a controlled energy envelope.
+  Synthesis-review round added the final caveat: record per-item token
+  count/stop reason/malformed status and verify wrong answers are not
+  systematically cheaper (early-EOS bias would understate the curve).
+- Ground truth (Opus): the richest telemetry is ALREADY captured and
+  discarded (cluster/GPU DVFS residency, idle ratios, requested-vs-
+  achieved P-states); the observed idle-baseline contamination is
+  mechanically visible in `gpu.idle_ratio`; per-item windows need only a
+  ~20-line generalization of the existing phase-window machinery.
+- Resolutions (Codex concurred on all): adopt the ladder as ONE
+  quarantined scored profile (P2-010), never a universal per-run tax;
+  land rich-telemetry parsing + environment snapshots (P2-009) FIRST
+  (zero capture cost, improves every bundle); neither displaces
+  2M / P2-008 / Phase 3 / D-014.
+- Process refinement (user direction): the "devil's advocate" role is
+  reframed as a thesis-committee EXAMINER (test whether claims survive a
+  hostile expert; obligated to name the version that passes), and plan
+  syntheses get a FINAL fresh-context Fable examiner before being
+  presented as settled. Recorded in the global council skill.

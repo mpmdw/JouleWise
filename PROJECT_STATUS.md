@@ -82,6 +82,20 @@ Research questions:
   bandwidth (1GbE vs 2.5GbE vs optional 10GbE) - where is the crossover?
 - **Q3**: When splitting saves energy, what latency does it cost, and vice
   versa (energy-latency Pareto frontier)?
+- **Q4** (added 2026-07-07, council C-003): What fixed-vs-marginal energy
+  model `E = fixed + prefill(prompt_tokens) + decode(output_tokens)` does
+  each target/model/quantization follow — and can split-run energy be
+  predicted compositionally from monolithic coefficients plus transfer
+  measurements?
+- **Q5** (C-003): Do device efficiency rankings survive workload changes,
+  or under what prompt/output/quantization regimes do they flip?
+- **Q6** (C-003; gated on the wall meter): Does the measurement boundary
+  (platform rails vs AC wall power) change the conclusions?
+
+A curated bank of further candidate questions (and deliberately killed
+ones) lives in `docs/research_question_bank.md`; the measurement noise
+floor / detection limit is treated as the methodology centerpiece rather
+than a numbered question.
 
 ## Status At A Glance
 

@@ -1528,3 +1528,15 @@ stays the integrator: it reviews each stream's diff, runs the council
 loop per stream, and lands each as its own PR. Worktrees are skipped for
 single-stream sessions (pure overhead). First planned use: the
 2M / P2-008 / kv-size batch after the vertical-slice PR merges.
+
+Flagship-model addendum (2026-07-07, user-directed): the user directed the
+benchmark be run on "the top of the line model that can run on this
+128 GB machine." Research council (web-verified) selected
+`mlx-community/Qwen3.5-122B-A10B-4bit` (rev `e9c67b0`, 69.6 GB download,
+~72-76 GB inference footprint, 122B MoE / 10B active, Feb 2026
+generation; fits without wired-limit changes; expected ~40-45 tok/s on
+M3 Max; runners-up gpt-oss-120b-MXFP4 and GLM-4.5-Air recorded in the
+run report). This is a SECOND provisional model alongside the small
+Qwen2.5-1.5B pick — it does not close D-016 (mid-model/CUDA/GGUF
+criteria still open) but extends the provisional set at user direction;
+mirrored per R-014.
