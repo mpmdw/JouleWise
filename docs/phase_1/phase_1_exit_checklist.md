@@ -48,7 +48,7 @@ Complete since the last revision:
 | Item | Status | Required Evidence | Recorded In |
 |---|---|---|---|
 | Supervisor approval and scope | pending | Written notes from meeting/email listing approved must-haves, stretch items, and out-of-scope items | Supervisor section below; `RUN_STATE.md` if scope changes |
-| Mac telemetry permissions | partially checked | `powermetrics` binary path and privilege requirement recorded; privileged sample fields + sudoers rule pending a local auth session (to be rescheduled; the planned 2026-06-10 slot passed without one) | Instrumentation section below |
+| Mac telemetry permissions | sample captured (2026-07-06); sudoers rule still pending | Privileged 5-sample plist captured by the user on the M3 Max (`tests/fixtures/powermetrics_sample.plist`); framing + field names recorded below and pin the 2H parser. Remaining: D-004 sudoers line (needed for unattended runs / `sudo -n` probe) | Instrumentation section below |
 | Mac runtime (MLX) | complete (2026-07-06) | Install path decided; install or documented procedure | Instrumentation section below (installed in `.venv`, versions pinned, real generation verified via Slice 2G) |
 | Wall-meter availability | pending | Meter make/model, resolution, export/manual logging method, lab-or-purchased | Wall-meter section below |
 | Network plan | partially checked | Controller tool status recorded; topology, link-speed paths, isolation plan, throughput method still pending | Network section below |
@@ -275,12 +275,26 @@ id -u
 - Checks:
   - [x] `powermetrics` binary present.
   - [x] Superuser requirement identified.
-  - [ ] D-004 scoped sudoers rule installed and verified via `sudo -n`.
-  - [ ] Privileged sample captured; power/thermal field names recorded
-    (these pin the Slice 2H parser).
-  - [ ] Thermal fields available in captured samples.
-  - [ ] Output parser target selected: `plist` (expected; confirm framing
-    against the captured sample).
+  - [ ] D-004 scoped sudoers rule installed and verified via `sudo -n`
+    (needed before unattended 2H/2I runs; not needed for the capture).
+  - [x] Privileged sample captured (2026-07-06, user session, M3 Max):
+    `sudo /usr/bin/powermetrics -i 1000 -n 5 --samplers
+    cpu_power,gpu_power,ane_power,thermal --format plist -o
+    tests/fixtures/powermetrics_sample.plist` → 269,059 bytes, 5
+    documents. Field names (pin the 2H parser): power rails live under
+    the top-level `processor` dict as `cpu_power` / `gpu_power` /
+    `ane_power` (floats, **milliwatts**), with `combined_power` equal to
+    their exact sum (verified: 484.971+52.906=537.877) — confirming the
+    D-018 `rail_manifest` sum; companion `cpu_energy`/`gpu_energy`/
+    `ane_energy` ints (mJ) cross-check (1492 mJ / 1.011 s ≈ 1476 mW).
+    Per-doc `timestamp` is a UTC datetime with **1-second resolution**;
+    `elapsed_ns` carries the precise interval — the parser must derive
+    sample times from the first timestamp + cumulative `elapsed_ns`.
+  - [x] Thermal fields available in captured samples: top-level
+    `thermal_pressure` string (`"Nominal"` observed).
+  - [x] Output parser target selected: `plist` — framing CONFIRMED
+    against the capture: NUL-separated XML plist documents (4 NUL
+    bytes / 5 docs), each parses with stdlib `plistlib.loads`.
   - [x] MLX install path decided (dedicated venv, `[mac]` extra) —
     2026-07-06, on the M3 Max measurement target: repo-local `.venv`
     (gitignored), Python 3.13.1.
@@ -293,12 +307,13 @@ id -u
     (`example-mac-mlx-mock-telemetry`, 265.8 tok/s through the full
     harness).
 - Current verdict: runtime **supported** (MLX installed and generating
-  through the harness, 2026-07-06); telemetry binary present but
-  permission-blocked until the sudo workflow is in place (still the 2H
-  gate).
-- Next owner/action: user schedules a local auth session; then capture
-  the privileged sample and record field names here, and install the
-  D-004 sudoers line.
+  through the harness, 2026-07-06); telemetry sample captured and field
+  names pinned (2026-07-06) — the 2H parser gate is OPEN. The D-004
+  sudoers line remains the one operational item (gates the `sudo -n`
+  capability probe and unattended 2H/2I live runs).
+- Next owner/action: implement 2H against the fixture; user installs the
+  D-004 sudoers line (`edr ALL=(root) NOPASSWD: /usr/bin/powermetrics`)
+  before the first live 2H smoke.
 
 ### NVIDIA 3050
 

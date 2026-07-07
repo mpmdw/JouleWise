@@ -47,7 +47,23 @@ closure needs P1-001. P0-002 backup protocol closed with an INTERIM
 same-disk destination (follow-up P0-003). The Stage 4.6 related-work
 draft (P3-001) is done. Suite: 230 tests.
 
-## What The Latest Run Did (2026-07-06, autonomous build-out)
+## What The Latest Run Did (2026-07-06 evening, P1-002 + Slice 2H)
+
+Full detail: `docs/run_reports/2026-07-06-slice-2h-powermetrics.md`. The
+user captured the privileged powermetrics sample (P1-002 → framing +
+field names pinned in the Phase 1 checklist; fixture committed). Slice
+2H then landed (`26dca41`) through a review/counterreview loop: Codex
+implemented; a 22-agent adversarial review confirmed 10 findings (1
+blocker: measure_idle fabricated a 0.0 W baseline and delayed failure
+past warmup); Codex counterreviewed, accepted all 10, and contributed
+the AdapterFailure design (structured exception → controller maps the
+true FailureReason). Suite 251 green both interpreters. Live-verified:
+mlx+powermetrics fails at idle_baseline with permission_denied, no
+warmup, no fabricated baseline. User re-prioritized: P1-001 and P0-003
+→ meta/deferred. Remaining before first real energy numbers: the D-004
+sudoers line, then one `mac_mlx_local.json` run (= 2H smoke + 2I).
+
+## Previous Run (2026-07-06, autonomous build-out)
 
 Full detail: `docs/run_reports/2026-07-06-autonomous-buildout.md`.
 User-directed maximal build-out on a NEW machine (M3 Max, 128 GB; fresh
@@ -149,25 +165,27 @@ Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 ## Current Verification
 
 ```bash
-python3 -m unittest discover -s tests           # 230 tests, OK (skipped=10)
-.venv/bin/python -m unittest discover -s tests  # 230 tests, OK (skipped=10)
+python3 -m unittest discover -s tests           # 251 tests, OK (skipped=10)
+.venv/bin/python -m unittest discover -s tests  # 251 tests, OK (skipped=10)
 ```
 
-Result (2026-07-06, after Slice 2G): green under BOTH the system
-python3 (CI-equivalent, no mlx) and the `[mac]` venv. Also verified:
-mock e2e; the 2G live bundle (`example-mac-mlx-mock-telemetry`)
-succeeded with `validate-bundle --strict` green and `reduce`
-re-derivation green; backup restore test green.
+Result (2026-07-06, after Slices 2G + 2H): green under BOTH the system
+python3 (CI-equivalent, no mlx) and the `[mac]` venv. Also verified
+live: the 2G bundle (`example-mac-mlx-mock-telemetry`) succeeded with
+`validate-bundle --strict` + `reduce` green; the 2H permission_denied
+path fails at idle_baseline before warmup with no fabricated baseline;
+backup restore test green.
 
 ## Known Workspace State
 
 - **New machine (2026-07-06):** MacBook Pro M3 Max / 128 GB. Canonical
   path here: `~/code/JouleWise` (fresh clone; the previous machine's
   `~/code/CapstoneRivoire/Capstone` notes are historical).
-- Remote: `https://github.com/mpmdw/JouleWise`; branch `main`. FIVE
+- Remote: `https://github.com/mpmdw/JouleWise`; branch `main`. SEVEN
   local commits NOT pushed (awaiting user): `10a570d` Codex bridge,
   `5b12332` backup script, `c31ffac` related-work draft, `3eb0acd`
-  Slice 2G, plus the bookkeeping commit for this session.
+  Slice 2G, `c5cf3ac` build-out bookkeeping, `26dca41` Slice 2H, plus
+  the 2H bookkeeping commit.
 - Git author auto-selected as `Ed R <edr@Eds-MacBook-Pro.local>` on this
   machine (previous machine used `Edr <edr@Edrs-MacBook-Air.local>`).
 - Machine-local, intentionally uncommitted (`.gitignore`): `.venv/`
@@ -184,16 +202,18 @@ Follow `TASK_QUEUE.md`; execute via the mission guides in
 `docs/agent_playbook.md` (start every session with its Mission M0). In
 order:
 
-1. P1-002 (user): privileged powermetrics sample + D-004 sudoers — the
-   ONLY blocker for 2H (playbook M6), then 2I (playbook M7) = first
-   real energy numbers. The MLX half of P1-002 closed 2026-07-06.
-2. P1-001 (user): supervisor scope → full D-016 closure (playbook M4
-   remainder: mid model, CUDA load evidence, GGUF paths).
-3. P0-003 (user): real external/cloud backup destination.
-4. Implementable now without user input: P2-008 (mock telemetry ×
+1. D-004 sudoers line (user, one minute):
+   `sudo visudo -f /etc/sudoers.d/joulewise-powermetrics` with
+   `edr ALL=(root) NOPASSWD: /usr/bin/powermetrics`, then one
+   `mac_mlx_local.json` run = the 2H live smoke AND Slice 2I (first
+   real energy numbers).
+2. Implementable now without user input: P2-008 (mock telemetry ×
    SystemClock hardening), Phase 3 Stage 3.0.0 (kv-size helper), and
    Stage 3.0.1 (mlx-lm prompt-cache spike — its inputs, 2G + chosen
    small model, are satisfied).
+3. Deferred at user direction (meta rows in the queue): P1-001
+   supervisor scope (gates full D-016), P0-003 real backup destination.
+4. P1-008 calendar dates remain open when convenient.
 
 Done 2026-07-06 (this session): P0-002 interim, P3-001, D-016
 provisional, Slice 2G with live real-generation evidence, Codex bridge.
