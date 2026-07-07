@@ -50,7 +50,7 @@ needs M7 (+M9 for its pairings): M10 (Phase 3 Stage 3.0 spikes)
    run's outcome, dirty-tree warnings, and the next task.
 2. Read `TASK_QUEUE.md`'s Current Queue and Do-Not-Do-Yet list.
 3. `git log --oneline -3` and `git status --short --branch`.
-4. `python3 -m unittest discover -s tests` — expect `Ran 226 tests, OK
+4. `python3 -m unittest discover -s tests` — expect `Ran 254 tests, OK
    (skipped=10)` (count grows as slices land; the skips are the
    `[analysis]`-extra chart tests plus one optional-jsonschema test). A
    red suite is itself the mission: stop and fix or report.

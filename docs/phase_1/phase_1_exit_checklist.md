@@ -27,8 +27,8 @@ Already complete:
 
 Still required:
 
-- Supervisor approval and scope confirmation (Step 1).
-- Mac telemetry/runtime evidence completion (Step 2).
+- Supervisor approval and scope confirmation (Step 1; user-deferred
+  2026-07-06, tracked as queue meta row P1-001).
 - Wall-meter decision (Step 3).
 - Network/interconnect plan with physical topology (Step 4).
 - NVIDIA/Orin access evidence (Step 6).
@@ -36,6 +36,10 @@ Still required:
 
 Complete since the last revision:
 
+- Mac telemetry/runtime evidence (Step 2) — complete 2026-07-06:
+  privileged sample captured and pinned, D-004 sudoers installed and
+  `sudo -n` verified, MLX installed and generating (see instrumentation
+  section; exercised live by Slices 2H/2I).
 - Hailo feasibility verdict (Step 5) - `unsupported_workload`, recorded
   2026-06-12 in the Hailo section below from official-source desk
   research (optional local reproduction noted there).
@@ -48,7 +52,7 @@ Complete since the last revision:
 | Item | Status | Required Evidence | Recorded In |
 |---|---|---|---|
 | Supervisor approval and scope | pending | Written notes from meeting/email listing approved must-haves, stretch items, and out-of-scope items | Supervisor section below; `RUN_STATE.md` if scope changes |
-| Mac telemetry permissions | sample captured (2026-07-06); sudoers rule still pending | Privileged 5-sample plist captured by the user on the M3 Max (`tests/fixtures/powermetrics_sample.plist`); framing + field names recorded below and pin the 2H parser. Remaining: D-004 sudoers line (needed for unattended runs / `sudo -n` probe) | Instrumentation section below |
+| Mac telemetry permissions | complete (2026-07-06) | Privileged 5-sample plist captured by the user on the M3 Max (`tests/fixtures/powermetrics_sample.plist`); framing + field names recorded below and pin the 2H parser; D-004 sudoers line installed and verified via `sudo -n`; exercised live by the 2I flagship run | Instrumentation section below |
 | Mac runtime (MLX) | complete (2026-07-06) | Install path decided; install or documented procedure | Instrumentation section below (installed in `.venv`, versions pinned, real generation verified via Slice 2G) |
 | Wall-meter availability | pending | Meter make/model, resolution, export/manual logging method, lab-or-purchased | Wall-meter section below |
 | Network plan | partially checked | Controller tool status recorded; topology, link-speed paths, isolation plan, throughput method still pending | Network section below |
@@ -275,8 +279,10 @@ id -u
 - Checks:
   - [x] `powermetrics` binary present.
   - [x] Superuser requirement identified.
-  - [ ] D-004 scoped sudoers rule installed and verified via `sudo -n`
-    (needed before unattended 2H/2I runs; not needed for the capture).
+  - [x] D-004 scoped sudoers rule installed and verified via `sudo -n`
+    (2026-07-06: `/etc/sudoers.d/joulewise-powermetrics`, scoped to
+    `/usr/bin/powermetrics` only; verified by a passwordless `sudo -n`
+    probe and by the live 2I runs).
   - [x] Privileged sample captured (2026-07-06, user session, M3 Max):
     `sudo /usr/bin/powermetrics -i 1000 -n 5 --samplers
     cpu_power,gpu_power,ane_power,thermal --format plist -o
@@ -306,14 +312,13 @@ id -u
     verified: 328 tok/s CLI smoke, then the Slice 2G bundle
     (`example-mac-mlx-mock-telemetry`, 265.8 tok/s through the full
     harness).
-- Current verdict: runtime **supported** (MLX installed and generating
-  through the harness, 2026-07-06); telemetry sample captured and field
-  names pinned (2026-07-06) — the 2H parser gate is OPEN. The D-004
-  sudoers line remains the one operational item (gates the `sudo -n`
-  capability probe and unattended 2H/2I live runs).
-- Next owner/action: implement 2H against the fixture; user installs the
-  D-004 sudoers line (`edr ALL=(root) NOPASSWD: /usr/bin/powermetrics`)
-  before the first live 2H smoke.
+- Current verdict: **supported, end to end** (2026-07-06) — runtime and
+  telemetry both exercised live by the Slice 2I flagship (3 strict-valid
+  real energy bundles; see run report
+  `2026-07-06-slice-2i-first-real-energy.md`). Nothing remains open in
+  this section.
+- Next owner/action: none — closed. Future Mac-target work (2M
+  baselines, Phase 3 spikes) builds on it.
 
 ### NVIDIA 3050
 

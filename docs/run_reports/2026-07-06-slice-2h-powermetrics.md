@@ -64,7 +64,7 @@ AND metadata, warmup never starts (stage events end at
 Implementation complete and fixture-verified. The real-machine smoke
 (idle baseline + measured window from a live privileged run) — 2H's
 final acceptance evidence — needs the D-004 sudoers line:
-`edr ALL=(root) NOPASSWD: /usr/bin/powermetrics` (e.g. via
+`<local_user> ALL=(root) NOPASSWD: /usr/bin/powermetrics` (installed locally with the real username) (e.g. via
 `sudo visudo -f /etc/sudoers.d/joulewise-powermetrics`). Once installed,
 run `configs/examples/mac_mlx_local.json` → that is also Slice 2I's
 one-command flagship (3 reps, real cooldown gate) — first real energy

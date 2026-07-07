@@ -2,7 +2,7 @@
 
 Continuation of `2026-07-06-slice-2h-powermetrics.md`, same session. The
 user installed the D-004 sudoers line
-(`edr ALL=(root) NOPASSWD: /usr/bin/powermetrics`, via
+(`<local_user> ALL=(root) NOPASSWD: /usr/bin/powermetrics` (installed locally with the real username), via
 `sudo tee /etc/sudoers.d/joulewise-powermetrics` + `visudo -c`); parent
 verified `sudo -n` works.
 

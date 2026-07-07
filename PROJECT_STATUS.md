@@ -137,13 +137,12 @@ Currently blocked on external input:
    than must-succeed backend; stretch items. One meeting closes this.
 2. Calendar anchors: colloquium date, report deadline, and the 3080 Ti
    borrow window, to derive phase target dates.
-3. A local authorization session to capture the first privileged
-   `powermetrics` sample (gates the powermetrics adapter, slice 2H). The
-   originally planned 2026-06-10 slot passed without one; needs
-   rescheduling.
+3. NVIDIA / Jetson Orin device access evidence (gates the remote-target
+   slices 2K/2L).
 
-Closed since the last revision (2026-06-12): the Hailo feasibility verdict
-(`unsupported_workload`) and the Phase 2 readiness review.
+Closed since the last revision: the Mac privileged-telemetry gate — the
+`powermetrics` sample was captured and the scoped sudo rule installed
+(2026-07-06), which is what enabled the vertical slice above.
 
 ## Architecture
 
@@ -337,9 +336,10 @@ then, the dependency structure is the schedule: Phase 4 is deskwork and
 serves as the buffer; hardware-gated steps are scheduled around access
 windows with desk work filling gaps.
 
-Known: a local Mac authorization session needs rescheduling (unblocks the
-first privileged power sample). Work paused 2026-06-13 to 2026-07-04
-(planned break, recorded in `docs/milestones.md`).
+Known: the Mac authorization gate closed 2026-07-06 (privileged sample
+captured, scoped sudo rule installed); remote-device access (NVIDIA,
+Orin) is the remaining hardware gate. Work paused 2026-06-13 to
+2026-07-04 (planned break, recorded in `docs/milestones.md`).
 
 ## Deliverables At Completion
 

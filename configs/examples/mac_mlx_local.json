@@ -1,6 +1,6 @@
 {
   "schema_version": "0.1",
-  "run_id": "example-mac-mlx-local",
+  "run_id": "example-mac-mlx-local-512t",
   "model": {
     "name": "Qwen2.5-1.5B-Instruct-4bit",
     "family": "qwen2.5",

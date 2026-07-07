@@ -29,7 +29,13 @@ At the end of substantial work:
 4. Record tests, commands, blockers, and the next best task.
 5. Record new decision-log entries and any risk-register status changes.
 6. Refresh `PROJECT_STATUS.md` if advisor-visible state changed.
-7. Call out any dirty working-tree state that should not be accidentally
+7. Run a docs-consistency sweep before the final bookkeeping commit
+   (delegate to a fast subagent): stale test counts, gate-state
+   contradictions between prose summaries and checklist matrix rows,
+   numbers cited in multiple places. Adopted 2026-07-07 (council log
+   C-002) after a sweep caught drift in 6 files; prose status summaries
+   must carry an as-of date and defer to matrix rows (D-023 extension).
+8. Call out any dirty working-tree state that should not be accidentally
    committed.
 
 ## Current Project Status
@@ -218,18 +224,16 @@ Follow `TASK_QUEUE.md`; execute via the mission guides in
 `docs/agent_playbook.md` (start every session with its Mission M0). In
 order:
 
-1. D-004 sudoers line (user, one minute):
-   `sudo visudo -f /etc/sudoers.d/joulewise-powermetrics` with
-   `edr ALL=(root) NOPASSWD: /usr/bin/powermetrics`, then one
-   `mac_mlx_local.json` run = the 2H live smoke AND Slice 2I (first
-   real energy numbers).
-2. Implementable now without user input: P2-008 (mock telemetry ×
-   SystemClock hardening), Phase 3 Stage 3.0.0 (kv-size helper), and
-   Stage 3.0.1 (mlx-lm prompt-cache spike — its inputs, 2G + chosen
-   small model, are satisfied).
-3. Deferred at user direction (meta rows in the queue): P1-001
+1. 2M homogeneous baselines on the Mac target (queue rank 1; Mac-only
+   floor allowed) — playbook M9.
+2. Phase 3 Stage 3.0.0 (kv-size helper) + 3.0.1 (mlx-lm prompt-cache
+   spike) — queue rank 2, inputs satisfied.
+3. P2-008 mock-telemetry × SystemClock hardening — queue rank 3; must
+   land before 2K/2L bring-up (they pair real runtimes with mock
+   telemetry again in loopback tests).
+4. Deferred at user direction (meta rows in the queue): P1-001
    supervisor scope (gates full D-016), P0-003 real backup destination.
-4. P1-008 calendar dates remain open when convenient.
+   P1-008 calendar dates remain open when convenient.
 
 Done 2026-07-06 (this session): P0-002 interim, P3-001, D-016
 provisional, Slice 2G with live real-generation evidence, Codex bridge.
@@ -239,8 +243,6 @@ provisional, Slice 2G with live real-generation evidence, Codex bridge.
 - Supervisor approval and scope pending (P1-001, R-001 — trigger fired
   2026-06-12, mitigation holding); gates FULL D-016 closure (a
   provisional small-model pick opened 2G on 2026-07-06).
-- Mac privileged powermetrics sample pending (P1-002, R-002; the sole
-  gate for 2H; auth session to be rescheduled).
 - Real backup destination pending (P0-003; interim same-disk location
   active, R-016 mitigated-interim).
 - Calendar dates pending (P1-008, R-012).

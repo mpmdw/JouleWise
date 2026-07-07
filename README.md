@@ -34,7 +34,9 @@ Use `TASK_QUEUE.md` to triage new tasks against the current repo state, recent
 handoffs, recent commits, and active phase gates. Design decisions (with the
 options and considerations behind them) live in `docs/decision_log.md`; risks,
 triggers, and the descope ladder live in `docs/risk_register.md`; calendar
-constraints live in `docs/milestones.md`.
+constraints live in `docs/milestones.md`; cross-model review sessions
+(implementer/reviewer positions, votes, resolutions - see D-031) live in
+`docs/council_log.md`.
 
 ## Current State
 
@@ -56,7 +58,7 @@ The repository currently contains:
   (`run`, `validate-bundle`, `reduce`, `report`).
 - Example Mac-local and mock-local configs.
 - Phase 1 methodology, feasibility, and measurement-design docs.
-- A test suite (226 tests) run in CI on every push, including a mock
+- A test suite (254 tests) run in CI on every push, including a mock
   end-to-end run + bundle validation.
 
 ## Verify
