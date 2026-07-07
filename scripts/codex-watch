@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""codex-watch: observe live and recent Codex CLI sessions.
+
+The Codex CLI (`codex exec`, including everything scripts/codex-bridge runs)
+writes a rollout JSONL per session under ~/.codex/sessions/YYYY/MM/DD/.
+Neither Claude Code nor the Codex desktop app surfaces these, so this tool
+renders them.
+
+Usage:
+  scripts/codex-watch                 list recent sessions + live processes
+  scripts/codex-watch -f              follow the most recent session, live
+  scripts/codex-watch -f 3            follow session #3 from the list
+  scripts/codex-watch --dump 3        render session #3 in full, once
+  scripts/codex-watch --hours 24      widen the listing window (default 8)
+
+Stdlib only.
+"""
+
+import argparse
+import datetime
+import json
+import os
+import subprocess
+import sys
+import time
+
+SESSIONS_ROOT = os.path.expanduser("~/.codex/sessions")
+
+
+def recent_rollouts(hours):
+    cutoff = time.time() - hours * 3600
+    found = []
+    for root, _dirs, files in os.walk(SESSIONS_ROOT):
+        for name in files:
+            if not name.endswith(".jsonl"):
+                continue
+            path = os.path.join(root, name)
+            try:
+                mtime = os.path.getmtime(path)
+            except OSError:
+                continue
+            if mtime >= cutoff:
+                found.append((mtime, path))
+    found.sort(reverse=True)
+    return [p for _m, p in found]
+
+
+def parse_events(path):
+    events = []
+    try:
+        with open(path, encoding="utf-8") as handle:
+            for line in handle:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    events.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+    except OSError:
+        pass
+    return events
+
+
+def payload(event):
+    inner = event.get("payload")
+    return inner if isinstance(inner, dict) else event
+
+
+def summarize(path):
+    info = {
+        "path": path,
+        "label": "",
+        "cwd": "",
+        "calls": 0,
+        "messages": 0,
+        "tokens": None,
+        "done": False,
+        "mtime": os.path.getmtime(path),
+    }
+    for event in parse_events(path):
+        item = payload(event)
+        kind = item.get("type")
+        if kind == "session_meta" or event.get("type") == "session_meta":
+            info["cwd"] = item.get("cwd", "") or item.get("payload", {}).get("cwd", "")
+        elif kind == "user_message" and not info["label"]:
+            info["label"] = " ".join(item.get("message", "").split())[:100]
+        elif kind == "function_call":
+            info["calls"] += 1
+        elif kind == "agent_message":
+            info["messages"] += 1
+        elif kind == "token_count":
+            usage = (item.get("info") or {}).get("total_token_usage") or {}
+            if usage.get("total_tokens"):
+                info["tokens"] = usage["total_tokens"]
+        elif kind == "task_complete":
+            info["done"] = True
+    return info
+
+
+def live_codex_processes():
+    try:
+        out = subprocess.run(
+            ["ps", "-axo", "pid,etime,command"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    rows = []
+    for line in out.splitlines():
+        if "codex exec" in line and "grep" not in line and "/bin/zsh -c" not in line:
+            parts = line.split(None, 2)
+            if len(parts) == 3:
+                rows.append(parts)
+    return rows
+
+
+def age_str(mtime):
+    seconds = max(0, int(time.time() - mtime))
+    if seconds < 90:
+        return f"{seconds}s"
+    if seconds < 5400:
+        return f"{seconds // 60}m"
+    return f"{seconds // 3600}h{(seconds % 3600) // 60:02d}m"
+
+
+def cmd_list(hours):
+    rollouts = recent_rollouts(hours)
+    if not rollouts:
+        print(f"No Codex sessions in the last {hours}h under {SESSIONS_ROOT}")
+    else:
+        print(f"Codex sessions, last {hours}h (newest first):")
+        for idx, path in enumerate(rollouts, 1):
+            info = summarize(path)
+            status = "DONE" if info["done"] else ("live" if time.time() - info["mtime"] < 120 else "stale?")
+            tokens = f"{info['tokens'] // 1000}k tok" if info["tokens"] else "-"
+            print(f"  #{idx:<2} [{status:>6}] {age_str(info['mtime']):>6} ago  "
+                  f"{info['calls']:>3} cmds  {tokens:>8}  {info['label'] or '(no prompt seen)'}")
+    procs = live_codex_processes()
+    print()
+    if procs:
+        print("Live codex exec processes:")
+        for pid, etime, cmd in procs:
+            print(f"  pid {pid}  up {etime}  {cmd[:140]}")
+    else:
+        print("No codex exec processes currently running.")
+    if rollouts:
+        print("\nFollow one live:  scripts/codex-watch -f <#>")
+
+
+def render(event, show_output):
+    item = payload(event)
+    kind = item.get("type")
+    if kind == "user_message":
+        text = " ".join(item.get("message", "").split())
+        return [f"\n=== PROMPT: {text[:300]}{'…' if len(text) > 300 else ''}\n"]
+    if kind == "agent_message":
+        return [f"◆ codex: {item.get('message', '').strip()}\n"]
+    if kind == "function_call":
+        try:
+            args = json.loads(item.get("arguments") or "{}")
+        except json.JSONDecodeError:
+            args = {}
+        cmd = args.get("cmd") or args.get("command") or item.get("arguments", "")
+        if isinstance(cmd, list):
+            cmd = " ".join(str(c) for c in cmd)
+        cmd = " ".join(str(cmd).split())
+        return [f"  $ {item.get('name', '?')}: {cmd[:160]}"]
+    if kind == "function_call_output" and show_output:
+        text = " ".join(str(item.get("output", "")).split())
+        return [f"    -> {text[:120]}"]
+    if kind == "task_complete":
+        final = (item.get("last_agent_message") or "").strip()
+        header = "\n=== TASK COMPLETE ==="
+        return [header, final, "=" * 21] if final else [header]
+    return []
+
+
+def follow(path, dump_only, show_output):
+    print(f"Watching {path}\n(ctrl-c to stop)\n" if not dump_only else f"Session {path}\n")
+    offset = 0
+    try:
+        while True:
+            with open(path, encoding="utf-8") as handle:
+                handle.seek(offset)
+                chunk = handle.read()
+                offset = handle.tell()
+            for line in chunk.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                for rendered in render(event, show_output):
+                    print(rendered)
+                if payload(event).get("type") == "task_complete" and not dump_only:
+                    return
+            if dump_only:
+                return
+            sys.stdout.flush()
+            time.sleep(1.5)
+    except KeyboardInterrupt:
+        print("\n(stopped)")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("-f", "--follow", nargs="?", const="1", metavar="N",
+                        help="follow session #N from the list (default: newest)")
+    parser.add_argument("--dump", metavar="N", help="render session #N once, in full")
+    parser.add_argument("--hours", type=float, default=8, help="listing window (default 8h)")
+    parser.add_argument("--outputs", action="store_true", help="also show command outputs")
+    args = parser.parse_args()
+
+    selector = args.follow or args.dump
+    if selector:
+        rollouts = recent_rollouts(args.hours)
+        if os.path.exists(selector):
+            path = selector
+        else:
+            try:
+                path = rollouts[int(selector) - 1]
+            except (ValueError, IndexError):
+                sys.exit(f"No session #{selector} in the last {args.hours}h; run codex-watch to list.")
+        follow(path, dump_only=bool(args.dump), show_output=args.outputs)
+    else:
+        cmd_list(args.hours)
+
+
+if __name__ == "__main__":
+    main()
