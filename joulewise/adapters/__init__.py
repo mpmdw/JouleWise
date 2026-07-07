@@ -10,12 +10,14 @@ so the controller's status mapping (D-012) applies uniformly. Real backends
 land here in later slices (2G, 2H, 2K, 2L) behind lazy imports per the
 stdlib-core/extras policy (D-009).
 
-Implemented backends in this slice: runtime ``mock``, telemetry ``mock``,
-transport ``local`` (Slice 2B). Clock-driven adapters receive the injected
+Implemented backends in this slice: runtime ``mock`` and ``mlx``, telemetry ``mock``,
+transport ``local``. Clock-driven adapters receive the injected
 :class:`joulewise.clock.Clock` (D-019).
 """
 
 from __future__ import annotations
+
+import importlib
 
 from joulewise.adapters.local_transport import LocalTransport
 from joulewise.adapters.mock_runtime import MockRuntimeAdapter
@@ -37,12 +39,20 @@ from joulewise.schemas import (
 
 __all__ = [
     "LocalTransport",
+    "MlxRuntimeAdapter",
     "MockRuntimeAdapter",
     "MockTelemetryAdapter",
     "resolve_runtime",
     "resolve_telemetry",
     "resolve_transport",
 ]
+
+
+def __getattr__(name: str) -> object:
+    if name == "MlxRuntimeAdapter":
+        module = importlib.import_module("joulewise.adapters.mlx_runtime")
+        return module.MlxRuntimeAdapter
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _backend_name(backend: object) -> str:
@@ -61,12 +71,16 @@ def resolve_runtime(
     if backend == RuntimeBackend.MOCK:
         return MockRuntimeAdapter(clock), None
     if backend == RuntimeBackend.MLX:
-        return _failure(
-            FailureReason.RUNTIME_UNAVAILABLE,
-            "runtime backend 'mlx' has no registered adapter yet; the MLX "
-            "runtime requires the [mac] extra "
-            "(pip install 'joulewise[mac]'; D-009)",
-        )
+        try:
+            module = importlib.import_module("joulewise.adapters.mlx_runtime")
+        except ImportError as exc:
+            return _failure(
+                FailureReason.RUNTIME_UNAVAILABLE,
+                "runtime backend 'mlx' could not import its adapter; the MLX "
+                "runtime requires the [mac] extra "
+                f"(pip install 'joulewise[mac]'; D-009): {exc}",
+            )
+        return module.MlxRuntimeAdapter(clock), None
     return _failure(
         FailureReason.RUNTIME_UNAVAILABLE,
         f"runtime backend '{_backend_name(backend)}' has no registered adapter",

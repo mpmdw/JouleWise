@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 import sys
 import tempfile
 import unittest
@@ -317,13 +318,23 @@ class RegistryTests(unittest.TestCase):
 
     def test_mlx_runtime_failure_names_backend_and_mac_extra(self) -> None:
         config = make_config(hardware_target={"runtime_backend": "mlx"})
-        adapter, failure = resolve_runtime(config, self.clock)
+        with patch(
+            "joulewise.adapters.importlib.import_module",
+            side_effect=ImportError("injected missing adapter"),
+        ):
+            adapter, failure = resolve_runtime(config, self.clock)
         self.assert_exactly_one((adapter, failure))
         self.assertIsNone(adapter)
         self.assertFalse(failure.ok)
         self.assertEqual(failure.failure_reason, FailureReason.RUNTIME_UNAVAILABLE)
         self.assertIn("mlx", failure.message)
         self.assertIn("[mac]", failure.message)
+
+    def test_resolves_mlx_runtime_adapter_without_importing_mlx_lm(self) -> None:
+        config = make_config(hardware_target={"runtime_backend": "mlx"})
+        adapter, failure = resolve_runtime(config, self.clock)
+        self.assert_exactly_one((adapter, failure))
+        self.assertEqual(adapter.name, "mlx")
 
     def test_unimplemented_runtimes_fail_structurally(self) -> None:
         for backend in ("vllm", "llama_cpp", "hailo"):

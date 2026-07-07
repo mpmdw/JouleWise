@@ -28,7 +28,8 @@ HAS_JSONSCHEMA = importlib.util.find_spec("jsonschema") is not None
 #: change fail loudly so it can be decided deliberately (2N.5 / D-029).
 PINNED_CONFIG_SHA256 = {
     "mock_local.json": "15a556a8ea5853f6aef1d5d6a814d97264f6bc0b9dd11274755c98a7ec686355",
-    "mac_mlx_local.json": "c4028c8a3937b5b3acb1080914966ac0db6a2dc4174a2c52a0ac7a57ce0a35d8",
+    "mac_mlx_local.json": "8fb169815e31b19b35588d677eca9616d08e32043c8ecfaa1cd0d32dd59a106e",
+    "mac_mlx_mock_telemetry.json": "1680f53d78746c7d93195b02a5be1ecca18e04b90de6b7ba046e0689d01e2af3",
 }
 
 

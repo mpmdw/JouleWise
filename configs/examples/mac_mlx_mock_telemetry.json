@@ -1,6 +1,6 @@
 {
   "schema_version": "0.1",
-  "run_id": "example-mac-mlx-local",
+  "run_id": "example-mac-mlx-mock-telemetry",
   "model": {
     "name": "Qwen2.5-1.5B-Instruct-4bit",
     "family": "qwen2.5",
@@ -17,28 +17,28 @@
     "id": "macbook_m3_max",
     "transport": "local",
     "runtime_backend": "mlx",
-    "telemetry_backend": "powermetrics",
+    "telemetry_backend": "mock",
     "device_kind": "apple_silicon_unified_memory",
-    "notes": "Phase 2 first real vertical slice."
+    "notes": "Slice 2G bring-up: real MLX runtime with mock telemetry. Mock telemetry under SystemClock emits samples at k/power_hz offsets, so this config uses 20 Hz to keep at least two interior samples in a sub-second generation window."
   },
   "workload_profile": {
     "name": "smoke_short_prompt_short_decode",
     "prompt_text": "Summarize why idle-subtracted energy matters for LLM inference benchmarking.",
     "output_tokens": 64,
-    "repetitions": 3,
+    "repetitions": 1,
     "warmup_runs": 1
   },
   "interconnect": {
     "name": "local"
   },
   "sampling": {
-    "power_hz": 1.0,
-    "idle_seconds": 30.0,
-    "warmup_seconds": 5.0
+    "power_hz": 20.0,
+    "idle_seconds": 1.0,
+    "warmup_seconds": 0.0
   },
   "run_metadata": {
     "project": "capstone-joulewise",
     "operator": "jon",
-    "tags": ["phase1", "mac", "smoke"]
+    "tags": ["phase2", "mac", "mlx", "mock-telemetry"]
   }
 }

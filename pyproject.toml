@@ -10,7 +10,7 @@ dependencies = []
 # every command that needs one degrades to a structured failure without it.
 [project.optional-dependencies]
 analysis = ["matplotlib"]
-mac = ["mlx-lm"]
+mac = ["mlx-lm>=0.31.3", "transformers<5.13"]
 
 [tool.setuptools.packages.find]
 include = ["joulewise*"]
