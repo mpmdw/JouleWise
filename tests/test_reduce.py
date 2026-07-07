@@ -237,6 +237,31 @@ class GappedTraceTests(ReduceTestCase):
         self.assertAlmostEqual(quality.observed_sampling_hz, 1.0, places=9)
         self.assertEqual(quality.requested_sampling_hz, 2.0)
 
+    def test_idle_window_suspect_is_copied_from_idle_baseline_metadata(self) -> None:
+        builder = self.builder()
+        idle = {
+            **DEFAULT_IDLE,
+            "gpu_idle_ratio_mean": 0.4,
+            "gpu_idle_ratio_min": 0.0,
+            "gpu_freq_hz_mean": 1363.0,
+            "idle_window_suspect": True,
+        }
+        builder.measured_window(0.0, 2.0)
+        builder.write_trace(constant_samples(0.0, 2.0, hz=1.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"], idle=idle)
+        summary = reduce_module.reduce_bundle(builder.path)
+        self.assertIs(summary.idle_baseline.idle_window_suspect, True)
+        self.assertIs(summary.measurement_quality.idle_window_suspect, True)
+
+    def test_old_idle_baseline_metadata_lacks_idle_window_suspect(self) -> None:
+        builder = self.builder()
+        builder.measured_window(0.0, 2.0)
+        builder.write_trace(constant_samples(0.0, 2.0, hz=1.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"], idle=DEFAULT_IDLE)
+        summary = reduce_module.reduce_bundle(builder.path)
+        self.assertIsNone(summary.idle_baseline.idle_window_suspect)
+        self.assertIsNone(summary.measurement_quality.idle_window_suspect)
+
 
 class RailSplitTests(ReduceTestCase):
     def test_two_manifest_rails_sum_and_third_ignored(self) -> None:

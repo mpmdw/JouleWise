@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import joulewise.adapters as adapters
 from joulewise.clock import Clock, FakeClock
@@ -160,6 +162,51 @@ class PoisonRegistry:
         return adapters.resolve_transport(config)
 
 
+class SuspectIdleTelemetry:
+    """Wraps mock telemetry and marks the idle baseline suspect."""
+
+    name = "suspect-idle"
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+
+    def device_metadata(self, config: BenchmarkConfig, context=None) -> dict:
+        return self._inner.device_metadata(config, context)
+
+    def measure_idle(self, config: BenchmarkConfig, context=None):
+        baseline = self._inner.measure_idle(config, context)
+        return replace(
+            baseline,
+            gpu_idle_ratio_mean=0.4,
+            gpu_idle_ratio_min=0.0,
+            gpu_freq_hz_mean=338.0,
+            idle_window_suspect=True,
+        )
+
+    def thermal_state(self, config: BenchmarkConfig, context=None):
+        return self._inner.thermal_state(config, context)
+
+    def start_sampling(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        return self._inner.start_sampling(config, context)
+
+    def stop_sampling(self, config: BenchmarkConfig, context=None):
+        return self._inner.stop_sampling(config, context)
+
+
+class SuspectIdleRegistry:
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            telemetry = SuspectIdleTelemetry(telemetry)
+        return telemetry, failure
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
 class ControllerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         tmp = tempfile.TemporaryDirectory()
@@ -299,6 +346,37 @@ class HappyPathTests(ControllerTestCase):
             metadata["workload_observed"],
             {"token_count": 40, "output_token_count": 8},
         )
+
+    def test_metadata_carries_environment_snapshot(self) -> None:
+        environment = {
+            "power_source": "AC Power",
+            "memory_free_percent": 42.0,
+            "errors": {},
+        }
+        with patch(
+            "joulewise.controller.collect_environment_snapshot",
+            return_value=environment,
+        ):
+            bundle_path, _ = self.run_happy()
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertEqual(metadata["environment"], environment)
+
+    def test_suspect_idle_flag_does_not_fail_successful_run(self) -> None:
+        config = make_config("controller-suspect-idle")
+        bundle_path, summary = run_benchmark(
+            config,
+            self.runs_root,
+            self.clock,
+            registry=SuspectIdleRegistry(),
+        )
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIs(summary.measurement_quality.idle_window_suspect, True)
+        self.assert_complete_bundle(bundle_path)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertIs(metadata["idle_baseline"]["idle_window_suspect"], True)
+        written = json.loads((bundle_path / "summary_metrics.json").read_text())
+        self.assertEqual(written["status"], "succeeded")
+        self.assertIs(written["measurement_quality"]["idle_window_suspect"], True)
 
     def test_injected_reducer_summary_is_written(self) -> None:
         # The 2D seam: swapping the reducer changes the written summary.

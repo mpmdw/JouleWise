@@ -450,6 +450,10 @@ class IdleBaseline:
     duration_s: float
     sample_count: int
     telemetry_backend: TelemetryBackend
+    gpu_idle_ratio_mean: float | None = None
+    gpu_idle_ratio_min: float | None = None
+    gpu_freq_hz_mean: float | None = None
+    idle_window_suspect: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -485,6 +489,10 @@ class MeasurementQuality:
     #: ``metadata.json`` (``workload_observed.token_count``), ``None`` when
     #: neither was available (``energy_token_j`` is then ``None`` too).
     token_count_source: str | None = None
+    #: True when the pre-run idle powermetrics window shows GPU activity high
+    #: enough to make the baseline suspect. ``None`` means the telemetry did
+    #: not expose GPU idle/frequency evidence.
+    idle_window_suspect: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -528,6 +536,7 @@ class SummaryMetrics:
     @staticmethod
     def json_schema() -> dict[str, Any]:
         nullable_number = {"type": ["number", "null"]}
+        nullable_bool = {"type": ["boolean", "null"]}
         return {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "title": "JouleWise SummaryMetrics",
@@ -543,14 +552,56 @@ class SummaryMetrics:
                 "ttft_s": nullable_number,
                 "decode_latency_s": nullable_number,
                 "throughput_tokens_s": nullable_number,
-                "idle_baseline": {"type": ["object", "null"]},
+                "idle_baseline": {
+                    "anyOf": [{"$ref": "#/$defs/idle_baseline"}, {"type": "null"}]
+                },
                 "uncertainty": {"type": ["object", "null"]},
-                "measurement_quality": {"type": ["object", "null"]},
+                "measurement_quality": {
+                    "anyOf": [{"$ref": "#/$defs/measurement_quality"}, {"type": "null"}]
+                },
                 "phase_energy_j": {"type": ["object", "null"]},
                 "failure_reason": {
                     "anyOf": [_string_enum_schema(FailureReason), {"type": "null"}]
                 },
                 "failure_message": {"type": ["string", "null"]},
+            },
+            "$defs": {
+                "idle_baseline": {
+                    "type": "object",
+                    "required": [
+                        "power_w_mean",
+                        "power_w_stddev",
+                        "duration_s",
+                        "sample_count",
+                        "telemetry_backend",
+                    ],
+                    "properties": {
+                        "power_w_mean": {"type": "number"},
+                        "power_w_stddev": {"type": "number"},
+                        "duration_s": {"type": "number"},
+                        "sample_count": {"type": "integer"},
+                        "telemetry_backend": _string_enum_schema(TelemetryBackend),
+                        "gpu_idle_ratio_mean": nullable_number,
+                        "gpu_idle_ratio_min": nullable_number,
+                        "gpu_freq_hz_mean": nullable_number,
+                        "idle_window_suspect": nullable_bool,
+                    },
+                },
+                "measurement_quality": {
+                    "type": "object",
+                    "required": ["requested_sampling_hz"],
+                    "properties": {
+                        "requested_sampling_hz": {"type": "number"},
+                        "observed_sampling_hz": nullable_number,
+                        "dropped_samples": {"type": "integer", "minimum": 0},
+                        "idle_power_w_stddev": nullable_number,
+                        "thermal_drift_c": nullable_number,
+                        "telemetry_source": {"type": ["string", "null"]},
+                        "cooldown_cap_hit": nullable_bool,
+                        "token_count_source": {"type": ["string", "null"]},
+                        "idle_window_suspect": nullable_bool,
+                    },
+                },
             },
         }
 
