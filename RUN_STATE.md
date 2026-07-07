@@ -1,8 +1,8 @@
 # JouleWise Run State
 
-Last updated: 2026-07-07 (Stream F restart session — MID-SESSION SAFETY
-CHECKPOINT; the machine was about to go offline, full bookkeeping follows
-when Stream F lands)
+Last updated: 2026-07-07 (whole-project design council C-007; Stream F
+had already landed as PR #7 — this update clears the stale in-flight
+narrative below)
 
 ## Start Here For Every Big Run
 
@@ -56,12 +56,34 @@ the 2M campaign tooling (deterministic matrix generator + resumable
 sequential runner), and the kv-size helper. C-005 research agenda
 (31 tiered questions + jw_mixed_v1 workload suite) appended to the
 question bank. Still gated: 2K/2L (P1-006). D-016 provisional pick
-stands. Suite: 369 tests. Stream F (repo-wide Codex test audit) was
-RESTARTED 2026-07-07 PM (the prior attempt's in-flight state died with
-its session, uncommitted); its PR + the final integration review are the
-only open threads. See the next section for the exact resume point.
+stands. Suite: 415 tests (369 + the Stream F audit tests; 31 `expectedFailure`
+pins await the P2-013 fixes). Stream F LANDED as PR #7 (merged; queue
+item P2-013 created from its findings). A whole-project design council
+(C-007) then settled the P2-013 fix design, re-ranked the queue
+(P2-013 → P2-014 → 2M), and adopted machine-state lanes + the
+two-claim-track framing — see the latest-run section below.
 
-## What The Latest Run Did (2026-07-07 PM, STREAM F RESTART — IN FLIGHT)
+## What The Latest Run Did (2026-07-07, WHOLE-PROJECT DESIGN COUNCIL C-007)
+
+User-directed council over the entire project (design, architecture,
+high-level docs, planning): Fable lead/final judge, 7 parallel read-only
+Codex lenses + 1 round-2 attack session, two full cross-model rounds, no
+implementation. Full record: council log C-007. Headlines: (1) P2-013
+re-ranked ABOVE the 2M campaign, its scope grown by the council's
+biggest catch — strict validation never re-derives `power_trace.csv`
+from the raw plist (D-030 wording overclaims); a raw-to-trace strict
+sub-check joins the stream. (2) New small task P2-014 (pre-2M contract
+amendments: summary provenance, `phase_energy_j` pinned gross-only,
+event node-identity doc note, composite-reader design note). (3)
+Machine-state lanes [QUIET-MAC]/[AGENT]/[ED-EXTERNAL] added to the
+queue. (4) Two-claim-track thesis framing adopted (guaranteed capstone =
+auditable local measurement; split study validates/upgrades). (5)
+Detection floor confirmed UNOWNED → becomes a Phase 4 acceptance gate
+(queued in DOC-007 with the docs package). Bookkeeping this session:
+C-007 entry (+ index drift fix: C-005/C-006 rows were missing), queue
+restructure, this file's stale Stream F narrative cleared.
+
+## Previous Run (2026-07-07 PM, STREAM F — LANDED AS PR #7)
 
 Closeout + restart session. Done: (1) the five merged-stream worktrees
 closed out — .codex-bridge logs archived to
@@ -75,7 +97,9 @@ worktree (branch `stream/test-audit`, PUSHED) with a new
 commit-and-push-at-every-stage-boundary checkpoint rule, after the prior
 attempt's lens outputs were lost with its session.
 
-**Stream F state (resume here):** pushed checkpoints `6ad22e0` (six raw
+**Stream F state (HISTORICAL — the stream landed as PR #7, merged
+`7be9d17`; final audit artifact `docs/test_audit_2026-07-07.md`, 27
+defects / 31 pins → queue P2-013):** pushed checkpoints `6ad22e0` (six raw
 audit-lens outputs, `docs/phase_2/test_audit_2026-07-07_lenses/`) and
 `fc4211a` (triaged findings doc `docs/phase_2/test_audit_2026-07-07.md`
 — dispositions + stage-3 scope) and `3ffef9a` (WIP: the stage-3 Codex
@@ -267,9 +291,10 @@ Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 
 ## Current Verification
 
-- `python3 -m unittest discover -s tests` → `Ran 369 tests, OK
-  (skipped=10)` (as of 2026-07-07, after PRs #2-#6 + integration fixes
-  INT-001/INT-002).
+- `python3 -m unittest discover -s tests` → `Ran 415 tests, OK
+  (skipped=10, expected failures=31)` (as of 2026-07-07, after PRs
+  #2-#7; the 31 expected failures are Stream F audit pins that flip to
+  passing as P2-013 lands).
 - CI: mock e2e + suite on both matrix legs.
 - Latest live evidence: real n=3 MLX experiment with populated
   `aggregate` block, byte-identically re-derivable (run report
@@ -280,40 +305,41 @@ Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 - `main` is pushed and current: PRs #2-#6 merged + INT-001/INT-002 +
   bookkeeping commits + `scripts/codex-watch` (38ee666); no unpushed
   local state.
-- ONE worktree exists: `../jw-test-audit` (branch `stream/test-audit`,
-  pushed to origin) — Stream F restart, IN FLIGHT; do not remove. The
-  five merged-stream worktrees were closed out 2026-07-07 PM
-  (bridge logs archived per C-006, branches deleted).
+- NO extra worktrees remain (verified `git worktree list` 2026-07-07):
+  `../jw-test-audit` was removed when Stream F landed as PR #7; the five
+  merged-stream worktrees were closed out 2026-07-07 PM (bridge logs
+  archived per C-006, branches deleted).
 - `/tmp/jw-lead-verify/` holds disposable lead-verification artifacts.
 
 ## What Is Next
 
-Follow `TASK_QUEUE.md`; execute via the mission guides in
-`docs/agent_playbook.md` (start every session with its Mission M0). In
-order:
+Follow `TASK_QUEUE.md` (now lane-annotated per C-007); execute via the
+mission guides in `docs/agent_playbook.md` (start every session with its
+Mission M0). In order:
 
-1. **Resume + land Stream F** (restarted 2026-07-07 PM; worktree
-   `jw-test-audit`, branch `stream/test-audit`, pushed). Resume from the
-   checkpoints listed in the latest-run section above — the findings doc
-   `docs/phase_2/test_audit_2026-07-07.md` carries the remaining-stage
-   scope. Then the final post-merge integration review over the complete
-   composite, then full session bookkeeping.
-2. **P2-006: the 2M two-model baseline campaign** (queue rank 1, fully
-   tooled). REQUIRES A QUIET MACHINE — no agent fleet, no Codex load
-   (the idle gate will flag contamination). Command sequence in PR #3;
-   run under `.venv` (`.venv/bin/python3 scripts/run_campaign.py ...`).
-   Then `docs/phase_2/baseline_results.md` consuming the D-014
-   aggregates.
-3. **P2-010 scored workload suite** (`affine_mod_ladder_v1`), then
-   **P2-012 `jw_mixed_v1`** per the C-005 spec in the question bank.
-4. Phase 3 Stage 3.0.1 (mlx-lm prompt-cache spike) — 3.0.0 (kv-size)
-   done, PR #2.
-5. Small follow-ups queued from stream reports: `aggregate` CLI verb,
-   methodology-doc amendment (manifest-level aggregate + t-table floor
-   policy), idle-gate threshold corpus, `dvfm_states` slimming option.
-6. (done 2026-07-07 PM) Worktree cleanup — five merged-stream worktrees
-   removed after archiving `.codex-bridge` logs per C-006; only
-   `../jw-test-audit` remains (remove after F lands).
+1. **P2-013: the audit-fix stream** [AGENT] — Codex-led, one worktree,
+   the 7 invariant-shaped commit groups + the raw-to-trace strict gate;
+   design consensus pinned in council log C-007 (resolutions 1–9).
+   P2-014 (pre-2M contract amendments) may ride the same stream.
+   Post-landing: 415 tests / 0 expected failures; `--strict` green over
+   all 6 real corpus bundles.
+2. **P2-006: the 2M two-model baseline campaign** [QUIET-MAC] — after
+   P2-013/P2-014. No agent fleet, no Codex load (the idle gate will flag
+   contamination). Command sequence in PR #3; run under `.venv`. Then
+   `docs/phase_2/baseline_results.md` consuming the D-014 aggregates.
+3. **Phase 3 Stage 3.0.1** (mlx-lm prompt-cache spike) [AGENT] — ahead
+   of workload buildout per C-007; 3.0.0 (kv-size) done, PR #2.
+4. **P2-010 scored workload suite**, then **P2-012 `jw_mixed_v1`**
+   [AGENT], per C-004/C-005 specs.
+5. **DOC-007 docs + framing package** [AGENT] — two-claim-track framing,
+   detection-floor gate spec into phase-4 acceptance, PROJECT_STATUS
+   ledger, README banner, drift fixes, M0 slimming.
+6. **Ed's external one-pass** [ED-EXTERNAL], flagged as a real
+   coordination load: calendar (P1-008), device access (P1-006), borrow
+   window, wall meter (P1-003), backup destination (P0-003).
+7. Small follow-ups queued from stream reports: `aggregate` CLI verb,
+   methodology-doc amendment, idle-gate threshold corpus, `dvfm_states`
+   slimming option.
 
 Hardware-gated (unchanged): 2K/2L (P1-006), wall meter (P1-003),
 topology (P1-004), calendar mapping (P1-008).

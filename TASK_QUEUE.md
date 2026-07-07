@@ -54,23 +54,37 @@ Rank lower when a task:
 - Adds polish before a runnable vertical slice exists.
 - Produces code without a clear run-bundle or test artifact.
 
+## Machine-State Lanes (adopted C-007, 2026-07-07)
+
+Every task carries a lane; a session picks the top task COMPATIBLE with
+its machine state, not the top task absolutely:
+
+- **[QUIET-MAC]** — measurement campaigns only: no agent fleet, no Codex
+  load, idle gate will flag contamination.
+- **[AGENT]** — code, docs, feasibility spikes; safe during agent-heavy
+  sessions.
+- **[ED-EXTERNAL]** — needs the user: advisor, calendar, device access,
+  purchases, destinations.
+
 ## Current Queue
 
 | Rank | ID | Priority | Status | Task | Evidence / Acceptance |
 |---:|---|---|---|---|---|
-| 1 | P2-006 | P2 Next Slice | UNBLOCKED + fully tooled (2026-07-07: generator + resumable campaign runner landed, PR #3 + INT-001 fix; uncertainty aggregation PR #6 ready to consume the results) | Homogeneous baselines (slice 2M) on the Mac target — NEXT ACTION: run the two-model campaign on a QUIET machine (command sequence in PR #3), then `docs/phase_2/baseline_results.md` with variance + prefill/decode comparison |
-| 2 | P2-013 | P2 Next Slice | open (from the F test audit, PR #7, 2026-07-07) | Fix the confirmed integrity/validation defects the audit pinned | 27 confirmed defects pinned as 31 `expectedFailure` tests; fix removes the pins (flip to passing). Priority = the 3 blockers first, the provenance-hash one being thesis-critical (a post-run edit to a bundle's `config.json` currently still validates — directly weakens the auditability claim). Fix-shape one-liners + full triage in `docs/test_audit_2026-07-07.md` "Suggested Fix Queue". Run as a Codex-led stream (security-shaped vocabulary → keep Fable at orchestration altitude per the codex-delegation skill) |
-| 3 | P3-000 | P3 Research Expansion | Stage 3.0.0 + 3.0.1 UNBLOCKED (2G/2I done, small model chosen) | KV persistence feasibility spikes (Phase 3 Stage 3.0) | Verdicts in `docs/phase_3/kv_feasibility.md`; must complete before any borrow-window scheduling |
-| 4 | P2-010 | P2 Next Slice | open (C-004; quarantine rules apply) | Scored workload suite v1 (`affine_mod_ladder_v1`) + item/level windows | `joulewise/workloads.py` generator/scorer (stdlib); item/level marker events; `BundleReader.item_windows()`; level-window energy primary, per-item identifiability flags; per-item token count/stop reason recorded (EOS-bias audit); design in `docs/research_question_bank.md` + C-004 |
-| 5 | P2-012 | P2 Next Slice | open (Ed 2026-07-07; C-005 synthesis landed — starter suite specified) | Implement `jw_mixed_v1` workload expansion (C-005) | Per the C-005 spec in `docs/research_question_bank.md`: 6 categories × 8 items, n=5, greedy `fixed_budget_exact` policy, synthetic shape-matched controls paired with hash-manifested realistic exemplars; additive config fields (`workload_profile.category`, `source_manifest`, per-item `output_policy`); category as campaign-matrix axis; per-item stop reason/token/response hash in outputs; reuses P2-010 item windows; consumes the landed P2-011 aggregate engine; natural-EOS 2-item pilot second. Unlocks C5-W.1..W.4 |
-| 6 | P1-008 | P1 Phase Gate | waiting-user | Map phases to academic calendar | Colloquium/report dates + borrow window entered in `docs/milestones.md`; phase target dates derived |
+| 1 | P2-013 | P2 Next Slice | open; **execution-order: before P2-006** (C-007: the capture-touching subset — A1/A5 parser, B8 + rank 1 writer, R2–R5 finalization, B1 resume semantics, B2 provenance — gates hardware time; the rest rides along since the pins are bounded). [AGENT] | Fix the confirmed integrity/validation defects the audit pinned + the C-007 raw-to-trace strict gate | 27 defects pinned as 31 `expectedFailure` tests across 7 `test_audit_*` files; all flip to passing, decorator removed in the same commit as each fix. PLUS (C-007 resolution 7): powermetrics-only `--strict` sub-check re-deriving `power_trace.csv` from `raw/powermetrics.plist` + D-030 wording fix. Design consensus = C-007 resolutions 1–9 (commit grouping: the 7 invariant-shaped groups). Done = 415 tests / 0 expected failures, `--strict` green over all 6 real corpus bundles WITHOUT rewriting them, D-011/D-027/D-030 amendments + `adapter_contracts.md` + `run_bundle_layout.md` updated. Codex-led stream (security-shaped vocabulary → Fable stays at orchestration altitude). Fallback if a rare quiet window appears first: pre-named subset P2-013a = the capture-touching set above |
+| 2 | P2-014 | P2 Next Slice | open (C-007 resolution 11; pre-2M gate) [AGENT] | Pre-2M contract amendments | (a) summary provenance — reducer/schema version recorded in summaries before the 2M corpus exists; (b) decision-log entry pinning `phase_energy_j` = GROSS-ONLY in v0.1 (idle-subtracted phase attribution is Phase 4 analysis policy — decided C-007); (c) doc note: composite event node identity lives in event `metadata` (2N.9 flag); (d) design note: `BundleReader` stays single-node, future `CompositeBundleReader` owns split bundles. Small; may ride the P2-013 stream as its own commit(s) |
+| 3 | P2-006 | P2 Next Slice | UNBLOCKED + fully tooled (PR #3 + INT-001; PR #6 aggregation ready); waits on P2-013/P2-014 per C-007. [QUIET-MAC] | Homogeneous baselines (slice 2M) on the Mac target — run the two-model campaign on a QUIET machine (command sequence in PR #3), then `docs/phase_2/baseline_results.md` with variance + prefill/decode comparison | Campaign bundles must be born under the FIXED validator (post-P2-013) and pass `--strict` incl. the raw-to-trace gate; corpus backed up per R-016 |
+| 4 | P3-000 | P3 Research Expansion | Stage 3.0.0 + 3.0.1 UNBLOCKED (2G/2I done, small model chosen) [AGENT] | KV persistence feasibility spikes (Phase 3 Stage 3.0) — 3.0.1 (mlx-lm prompt-cache) runs ahead of P2-010/P2-012 per C-007 (feasibility verdicts before feature buildout) | Verdicts in `docs/phase_3/kv_feasibility.md`; must complete before any borrow-window scheduling |
+| 5 | P2-010 | P2 Next Slice | open (C-004; quarantine rules apply) [AGENT] | Scored workload suite v1 (`affine_mod_ladder_v1`) + item/level windows | `joulewise/workloads.py` generator/scorer (stdlib); item/level marker events; `BundleReader.item_windows()`; level-window energy primary, per-item identifiability flags; per-item token count/stop reason recorded (EOS-bias audit); design in `docs/research_question_bank.md` + C-004 |
+| 6 | P2-012 | P2 Next Slice | open (Ed 2026-07-07; C-005 synthesis landed — starter suite specified; runs after P2-010) [AGENT] | Implement `jw_mixed_v1` workload expansion (C-005) | Per the C-005 spec in `docs/research_question_bank.md`: 6 categories × 8 items, n=5, greedy `fixed_budget_exact` policy, synthetic shape-matched controls paired with hash-manifested realistic exemplars; additive config fields (`workload_profile.category`, `source_manifest`, per-item `output_policy`); category as campaign-matrix axis; per-item stop reason/token/response hash in outputs; reuses P2-010 item windows; consumes the landed P2-011 aggregate engine; natural-EOS 2-item pilot second. Unlocks C5-W.1..W.4 |
+| 7 | P1-008 | P1 Phase Gate | waiting-user [ED-EXTERNAL] | Map phases to academic calendar | Colloquium/report dates + borrow window entered in `docs/milestones.md`; phase target dates derived |
 | meta | P1-001 | P1 Phase Gate (user-deferred 2026-07-06 — "ignore for the moment"; R-001 mitigation continues to hold: all work stays harness-shaped) | waiting-user, deprioritized | Capture supervisor approval and scope notes | Dated notes in `docs/phase_1/phase_1_exit_checklist.md`; unblocks full D-016 closure (P2-004) when it lands |
 | meta | P0-003 | P0 Safety (user-deferred 2026-07-06 — interim same-disk backup accepted for now) | waiting-user, deprioritized | Replace interim backup destination (R-016) with external/cloud location | User names the destination; one fresh restore test; R-016 → fully mitigated |
-| 7 | P1-003 | P1 Phase Gate | open (elevated value: gates Q6 boundary-sensitivity, C-003) | Record wall-meter decision | Meter make/model or "unavailable" verdict plus measurement/export method (exit-checklist wall-meter section; informs D-018 boundary calibration) |
-| 8 | P1-004 | P1 Phase Gate | partial | Fill network/interconnect topology plan | Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section |
-| 9 | P1-006 | P1 Phase Gate | open | Confirm NVIDIA/Orin telemetry access paths | SSH/runtime/telemetry command evidence in the exit-checklist instrumentation section, or marked pending with blocker (gates slices 2K/2L) |
-| 10 | P2-004 | P2 Next Slice | partial (provisional small-model pick 2026-07-06 opens 2G; full closure gated P1-001) | Close model selection (D-016) | Decision-log entry: models, revisions, artifact paths, local mirror, fallback candidate. Mid-model pick, CUDA load, GGUF paths outstanding. |
-| 11 | P2-005 | P2 Next Slice | gated (P1-006) | Remote targets (slices 2K NVIDIA/vLLM/ssh, 2L Orin) | Remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide. |
+| 8 | P1-003 | P1 Phase Gate | open (elevated value: gates Q6 boundary-sensitivity, C-003) [ED-EXTERNAL] | Record wall-meter decision | Meter make/model or "unavailable" verdict plus measurement/export method (exit-checklist wall-meter section; informs D-018 boundary calibration) |
+| 9 | P1-004 | P1 Phase Gate | partial [ED-EXTERNAL] | Fill network/interconnect topology plan | Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section |
+| 10 | P1-006 | P1 Phase Gate | open [ED-EXTERNAL] | Confirm NVIDIA/Orin telemetry access paths | SSH/runtime/telemetry command evidence in the exit-checklist instrumentation section, or marked pending with blocker (gates slices 2K/2L) |
+| 11 | P2-004 | P2 Next Slice | partial (provisional small-model pick 2026-07-06 opens 2G; full closure gated P1-001) | Close model selection (D-016) | Decision-log entry: models, revisions, artifact paths, local mirror, fallback candidate. Mid-model pick, CUDA load, GGUF paths outstanding. |
+| 12 | P2-005 | P2 Next Slice | gated (P1-006) | Remote targets (slices 2K NVIDIA/vLLM/ssh, 2L Orin) | Remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide. |
+| 13 | DOC-007 | P2 Next Slice | open (C-007 resolutions 14-16) [AGENT] | C-007 docs + framing package | (1) two-claim-track framing into PROJECT_STATUS (guaranteed capstone = auditable local measurement + Apple-Silicon characterization; split = validating study, NOT optional); Q4 worded fixed-vs-marginal (not a scaling law), Q5 narrowed to workload/model/quant ranking stability; (2) detection-floor gate spec into `docs/phase_4/phase_4_plan.md` acceptance (per-target/metric floor, min-sample phase-attribution rule, effect-size-vs-floor table, below-floor = "not resolvable"); (3) PROJECT_STATUS update-ledger scheme (<=2 prose update blocks); (4) README prototype banner + mock-path-first; (5) drift fixes: AGENT_PLAN 2G/2H/2I checkboxes, playbook gate summary; (6) M0 preflight slimming; RUN_STATE history trim |
 
 ## Completed Queue Items
 
@@ -116,8 +130,11 @@ Rank lower when a task:
   an applicability finding.
 - Do not implement schema v0.2 before Phase 3 Stage 3.1 (design is fixed in
   D-008; implementation waits).
-- Do not start Phase 3 work before its readiness gate — the Mac vertical
-  slice (2I) and baselines (2M) must exist first (both hardware-gated).
+- Phase 3 DESK feasibility spikes (Stage 3.0.x) may run now — their gate
+  (2G/2I + model) is open. Do not start Phase 3 DATA collection, hardware
+  pairings, or borrow-window scheduling before 2M baselines and the Stage
+  3.0 verdicts exist (C-007 wording fix; was previously stated as a
+  blanket Phase 3 hold that contradicted the queue).
 - Do not schedule the 3080 Ti borrow window before Stage 3.0 verdicts and the
   rehearsed runbook exist (R-006).
 - Do not start Phase 3 live-split work (3.3) before offline replay (3.2) has

@@ -161,7 +161,7 @@ Complete so far (all verifiable in the repository):
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (369 tests, run in CI on every push,
+  a CLI, plus a passing test suite (415 tests, run in CI on every push,
   including a mock end-to-end run + bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
   are pinned by test.
@@ -428,7 +428,7 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (369 tests, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (415 tests, CI-enforced) |
 
 ## If You Want To Read More: How This Project Is Actually Built
 

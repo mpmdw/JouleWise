@@ -34,6 +34,9 @@ standing instructions.
 | C-002 | 2026-07-07 | Reverse review of the 9-commit vertical-slice series; push vs PR | PR convention adopted; run_id renamed; P2-008 promoted; D-023 extended; sweep step added |
 | C-003 | 2026-07-07 | Research agenda: what else can the instrument answer; robustness; scale-up | Q4-Q6 promoted; detection floor = methodology centerpiece; D-014 uncertainty found unimplemented; nodes/<node_id> flagged as pre-multi-node breaking fix |
 | C-004 | 2026-07-07 | Difficulty-graded scored workload suites; collect-more-per-run | affine_mod_ladder_v1 adopted as ONE quarantined profile; rich-telemetry parsing (P2-009) prioritized ahead of it; examiner reframe adopted |
+| C-005 | 2026-07-07 | Steelmanned research agenda + workload expansion | 31 tiered questions + kill list; jw_mixed_v1 starter suite specified (→ P2-012) |
+| C-006 | 2026-07-07 | Session trace + orchestration meta-review of the six-stream parallel day | 13 attributed catches; integration-review step vindicated; skills deduplicated; operation-loop installed |
+| C-007 | 2026-07-07 | Whole-project design/planning council (user-directed) + P2-013 fix design | P2-013 re-ranked above 2M with raw-to-trace gate added in-stream; two-claim-track framing adopted; detection floor gets an owning Phase 4 gate; machine-state queue lanes; pre-2M contract amendments (P2-014) |
 
 ---
 
@@ -611,3 +614,162 @@ integration review over merged main.
   experiment → 10 metrics aggregated, energy/output-token 99.19 ± 1.36 mJ
   (Student-t 95%, CV 0.55%), `below_headline_protocol: true` correctly
   flagged, aggregate re-derived BYTE-IDENTICALLY from bundles alone.
+
+---
+
+## C-007: Whole-project design/planning council + P2-013 fix design (user-directed)
+
+- Date: 2026-07-07. Participants: Fable (lead, final judge), Codex gpt-5.5
+  (7 parallel read-only lenses + 1 round-2 attack session). Shape: ideation
+  council (skill shape B) — lead wrote position briefs FIRST (9 P2-013
+  positions, 7 project positions), lenses argued against them, lead
+  adjudicated a synthesis, a fresh Codex session attacked the synthesis,
+  lead ratified with the attack's changes. Two genuine rounds of
+  cross-model back-and-forth; no implementation.
+- Subject: Ed asked for a project-wide council — design, architecture,
+  high-level docs, planning — with Fable as final judge.
+
+### Resolutions (what the consensus settled)
+
+P2-013 fix design (implementation stream to follow, Codex-led):
+
+1. B2/S5 provenance check lands in DEFAULT validation
+   (`BundleReader.problems()`), not `--strict` — structural-vs-analytic is
+   the D-030 boundary and byte-provenance is structural. Metadata
+   object-shape (B3) checks first. All 6 corpus bundles already carry the
+   field (lead-verified).
+2. B1 completeness: ONE shared summary validator used by both
+   `_check_summary()` and `is_complete()`; required keys per status;
+   succeeded ⇒ headline energy fields present AND finite; token-derived /
+   idle-subtracted metrics stay nullable. D-011 amendment note.
+3. Shared finite-number primitive in a new dependency-free
+   `joulewise/validation.py` (unanimous); powermetrics RICH telemetry stays
+   diagnostic-only, never gates a bundle.
+4. B5 duplicate rail rows: reject via one shared trace-validation path
+   consumed by both `summed_curve()` and default validation; covers
+   single-rail manifests. D-027 amendment.
+5. B8: temp-file + same-dir rename inside the low-level write helper;
+   helper cleans only its own temps; adapters never own cleanup.
+6. A1 leniency: last-frame-only, ≥1 complete frame required, dropped tail
+   recorded DURABLY in bundle evidence (adapter diagnostic), midstream
+   failures still fail. Truncation-vs-corruption is not provable without
+   framing checksums; the durable diagnostic is the honest compensation.
+7. **Raw-to-trace gate (the council's biggest new catch, examiner lens):**
+   strict mode today proves summary ↔ `power_trace.csv` but never that the
+   CSV derives from `raw/powermetrics.plist` — D-030's "re-reduces from raw
+   artifacts" wording overclaims. Adopted: powermetrics-only strict
+   sub-check re-deriving the trace from the raw plist (+ anchor offset),
+   IN-STREAM with P2-013 before any 2M data; D-030 wording corrected.
+8. Sequencing: P2-013 (now including the raw-to-trace gate) lands BEFORE
+   the P2-006 campaign. Honest rationale recorded: the capture-touching
+   subset (A1/A5, B8, rank 1, R2–R5, B1 resume semantics, B2 provenance)
+   gates hardware time; the rest rides along because pins are written and
+   bounded. Pre-named fallback P2-013a = that subset, if a rare quiet
+   window appears first.
+9. Commit grouping: planning lens's 7 invariant-shaped groups adopted OVER
+   the lead's priority-shaped 7. expectedFailure pins flip in the same
+   commit as each fix. Post-landing target: 415 tests / 0 expected
+   failures + `--strict` green over all 6 real bundles without rewriting
+   them.
+
+Project level:
+
+10. Critical path has flipped from code to data. Instrument FEATURE work
+    stops after P2-013 until 2M data exists; carveouts: evidence-integrity
+    fixes never stop; cheap contract-preserving amendments that protect
+    future data interpretation are in scope pre-2M.
+11. Pre-2M contract amendments (new task P2-014, trimmed by the attack
+    round to true blockers): (a) summary provenance (reducer/schema
+    version recorded in summaries) before the corpus exists;
+    (b) `phase_energy_j` pinned GROSS-ONLY in v0.1 (idle-subtracted phase
+    attribution is Phase 4 analysis policy) — decided in-council, needs a
+    decision-log entry when implemented; (c) composite event node identity
+    = `metadata` field (per the 2N.9 flag) as a DOC alignment note only;
+    (d) design note pinning BundleReader = single-node bundles, future
+    CompositeBundleReader = split bundles.
+12. Architect verdict accepted: BundleReader / controller lifecycle /
+    strict validation / runtime-adapter capabilities / event key-set all
+    BREAK for Phase 3 composites — as designed, this is Stage 3.1 work,
+    not now; item 11 is the cheap protection.
+13. Machine-state queue lanes adopted: QUIET-MAC / AGENT-COMPATIBLE /
+    ED-EXTERNAL; sessions pick the top task compatible with their lane.
+14. Two-claim-track framing adopted: auditable local measurement (harness
+    + Apple-Silicon characterization) is the guaranteed capstone; split
+    inference remains the validating study that upgrades it — NOT demoted
+    to optional. Q4 phrased as fixed-vs-marginal workload structure (not a
+    scaling law — two confounded points); Q5 narrowed on one machine to
+    workload/model/quant ranking stability.
+15. Detection floor confirmed UNOWNED (echoes C-003's "methodology
+    centerpiece") → becomes an implementation-backed Phase 4 acceptance
+    gate tied to aggregation/claims: per-target/metric floor,
+    minimum-sample rule for phase attribution (~9 Hz sampler cannot
+    resolve 94 ms prefill standalone), effect-size-vs-floor table,
+    below-floor claims read "not resolvable" never "no difference".
+16. Docs: no new authority docs. Queued maintenance: PROJECT_STATUS
+    update-ledger scheme (≤2 prose update blocks), README
+    prototype-status banner + mock-path-first, three named drift fixes
+    (AGENT_PLAN 2G/2H/2I checkboxes; Do-Not-Do-Yet desk-spike vs
+    data-collection wording; playbook gate summary), slimmer M0 intake,
+    RUN_STATE history trimming.
+17. Execution order (next 5): P2-013 [AGENT] → P2-014 [AGENT] → P2-006 2M
+    [QUIET-MAC] → Stage 3.0.1 spike [AGENT] → P2-010 → P2-012 [AGENT].
+    Ed's parallel track [ED-EXTERNAL], explicitly flagged as a real
+    coordination load: calendar, device access, borrow window, wall
+    meter, P0-003 backup destination — ideally one pass.
+
+### Deliberation trace (design-bearing disagreements)
+
+- **Lead conceded PP6 (architecture) to the architect lens.** Lead's brief
+  said "no new architecture work now"; architect showed five seams break
+  for Phase 3 and named three cheap amendments whose cost explodes once
+  the 2M corpus exists ("data outlives code"). Lead's counter — full
+  composite work still waits — survived; the amendments did too. Both
+  positions are in the consensus as item 11/12.
+- **Lead's commit grouping lost to the planning lens.** Lead grouped by
+  priority (blockers first); planning lens re-grouped by INVARIANT
+  (finite-number policy as one cross-module commit) and showed the lead's
+  group G was a grab-bag. Adopted wholesale.
+- **The attack round caught the synthesis's own contradiction:** section B
+  declared "evidence-integrity fixes never stop" while section A left the
+  raw-to-trace gate's timing open — "those cannot both stand." Lead
+  ratified in-stream placement. This is the second time (after C-002) the
+  reverse/attack direction caught what all forward lenses missed.
+- **Q4/Q5 promotion (PP3): strategist and project-examiner converged
+  independently** on the same refinement from opposite starts — strategist
+  from committee-risk economics, examiner from "would read as pre-emptive
+  retreat unless framed as a floor." The convergent two-track wording was
+  adopted verbatim-ish. Dissent recorded: strategist warned against any
+  language making split sound optional; examiner conditioned the framing
+  on 2M + detection floor landing first. Both conditions kept.
+- **Overridden:** examiner lens (P2-013 round) wanted CLI/report/clock
+  fixes deferred out of the stream as "polish in the defense queue"; lead
+  kept them in-stream (pins already written, groups isolate risk, and the
+  queue item's acceptance is "all 31 pins flip"). Recorded as dissent, not
+  consensus.
+
+### Per-layer catches (instrumentation)
+
+| layer | unique catches | notes |
+|---|---|---|
+| design lens (P2-013) | shared-summary-validator + shared-trace-path designs; B1 "present ≠ non-null" trap; cleanup ownership | shaped 3 consensus items |
+| examiner lens (P2-013) | **raw-to-trace gap** (biggest catch); durable-evidence condition on A1; historical-corpus non-rewriting policy | major-revision verdict drove real scope change |
+| planning lens | invariant-shaped commit groups; run_bundle_layout/checklist/council-log bookkeeping omissions; 7-not-6 audit test files; RUN_STATE staleness | beat the lead's grouping |
+| architect lens | five seams break for Phase 3; three pre-2M contract amendments; composite-reader split note | overturned lead's PP6 |
+| strategist lens | machine-state lanes ratified; 3.0.1-before-workload-buildout; "feature work stops" carveout; Ed one-pass external push | |
+| project-examiner lens | detection floor confirmed unowned + concrete gate spec; phase-attribution-below-resolution objection; two-point scaling confound | supplied the "one change" (item 15) |
+| docs lens | update-ledger scheme; index drift (C-005/C-006 missing — fixed this entry); three named drift items; slimmer M0 | |
+| attack round (Codex, fresh) | A/B contradiction in lead's synthesis; B2 scope trim; Ed-burden flag; D-030 wording overclaim; 6 code spot-checks all confirmed | ratify-with-changes; all changes accepted |
+
+Spend: 8 Codex read-only sessions (~free per economics doctrine); lead
+context spent on briefs, adjudication, and this record. Zero-unique-catch
+layers: none — every lens landed at least one consensus-shaping catch.
+
+### Follow-ups
+
+- Queue: P2-013 re-ranked to 1 (scope grows by raw-to-trace gate +
+  bookkeeping superset), P2-014 created, lanes annotated, Do-Not-Do-Yet
+  wording fix — this session.
+- Decision-log entries land WITH the P2-013/P2-014 implementation (D-011,
+  D-027, D-030 amendments; phase_energy_j; provenance; lanes convention).
+- Docs maintenance queued as its own task (item 16), not done inline.
+- PROJECT_STATUS refresh + two-track framing: with the docs task.
