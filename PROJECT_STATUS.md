@@ -10,7 +10,25 @@ are provided for anyone who wants the full evidence trail.
   slice COMPLETE with real energy measurements; baselines next
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 
-## This Update (2026-07-06, third update) — 30-second read
+## This Update (2026-07-07, fourth update) — 30-second read
+
+**A flagship-class model is now benchmarked.** Qwen3.5-122B (Feb 2026
+generation, 122B-parameter mixture-of-experts with 10B active, a
+reasoning model) ran through the identical harness and workload on the
+M3 Max: **~304 J per 512-token request (~583 mJ/token) at 46 tokens/s,
+repeatable to 0.3% across repetitions** — alongside the earlier 1.5B
+model's ~47 J (~87 mJ/token at 257 tok/s). First cross-model finding:
+energy per token scaled almost exactly with ACTIVE parameter count
+(6.7× → 6.7×) while decode power barely moved (~23.5 → ~27.5 W) — the
+energy cost of the bigger model is time, not watts, exactly the
+structure research question Q4 (below) models. Also this update: the
+research agenda grew to six named questions (Q4-Q6) after a
+multi-model review council, with a curated question bank
+(`docs/research_question_bank.md`) and an instrument roadmap (richer
+telemetry parsing, a difficulty-graded scored workload suite, and
+implementing the statistical-uncertainty protocol) queued.
+
+## Previous Update (2026-07-06, third update) — 30-second read
 
 **Progress: the flagship works — the project has its first real energy
 measurements.** The complete Mac vertical slice (MLX runtime +

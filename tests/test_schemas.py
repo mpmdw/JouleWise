@@ -30,6 +30,7 @@ PINNED_CONFIG_SHA256 = {
     "mock_local.json": "15a556a8ea5853f6aef1d5d6a814d97264f6bc0b9dd11274755c98a7ec686355",
     "mac_mlx_local.json": "e9878c0ed7735eb48293581b0944c1f5e1d08e67c9b77f0fafd8c4c265020f3e",
     "mac_mlx_mock_telemetry.json": "1680f53d78746c7d93195b02a5be1ecca18e04b90de6b7ba046e0689d01e2af3",
+    "mac_mlx_qwen35_122b.json": "100d76977dffab1ae841124c4708727ac45ab793bbe0061dd87a6d9f54dbb97a",
 }
 
 

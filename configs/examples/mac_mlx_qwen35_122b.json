@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1",
+  "run_id": "example-mac-mlx-qwen35-122b-512t",
+  "model": {
+    "name": "Qwen3.5-122B-A10B-4bit",
+    "family": "qwen3.5",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen3.5-122B-A10B-4bit",
+    "revision": "e9c67b08899964be5fdd069bb1b4bc8907fe68f5",
+    "weight_format": "mlx",
+    "context_window": 262144
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4,
+    "group_size": 64
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "Flagship-class model (122B MoE, 10B active, reasoning). Same workload shape as the small-model flagship config for direct energy comparison."
+  },
+  "workload_profile": {
+    "name": "smoke_short_prompt_medium_decode",
+    "prompt_text": "Summarize why idle-subtracted energy matters for LLM inference benchmarking.",
+    "output_tokens": 512,
+    "repetitions": 3,
+    "warmup_runs": 1
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 0.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "jon",
+    "tags": ["phase2", "mac", "flagship", "qwen3.5-122b"]
+  }
+}

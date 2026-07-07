@@ -56,7 +56,17 @@ closure needs P1-001, user-deferred). P1-002 fully complete (sample +
 sudoers). Backup protocol active with an interim same-disk destination
 (P0-003 meta). Related-work draft (P3-001) done. Suite: 254 tests.
 
-## What The Latest Run Did (2026-07-07, merge + research councils + flagship model)
+## What The Latest Run Did (2026-07-07, FLAGSHIP MODEL BENCHMARKED)
+
+Qwen3.5-122B-A10B-4bit (65 GB mirror, rev `e9c67b0`) selected by
+web-verified research, mirrored, and benchmarked through the unmodified
+harness: 3/3 strict-valid reps, ~304 J / 512 tokens (583 mJ/token,
+46 tok/s, TTFT ~270 ms, CV 0.3%). First Q4 data point: mJ/token scales
+~linearly with ACTIVE params (6.7×) while decode power is nearly flat.
+Full detail: `docs/run_reports/2026-07-07-flagship-qwen35-122b.md`.
+Config `mac_mlx_qwen35_122b.json` (hash-pinned). Corpus backed up.
+
+## Previous Run (2026-07-07, merge + research councils + flagship model)
 
 PR #1 (the 11-commit vertical-slice series) merged to main after C-002
 review; CI green on both matrix legs. Research councils C-003/C-004 ran

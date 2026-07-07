@@ -77,6 +77,7 @@ Rank lower when a task:
 
 | ID | Priority | Completed | Task | Evidence |
 |---|---|---|---|---|
+| FLAGSHIP-001 | P2 Next Slice | 2026-07-07 | User-directed flagship benchmark: Qwen3.5-122B-A10B-4bit on the M3 Max | 3/3 strict-valid bundles: ~304 J / 512 tok, 583 mJ/token, 46 tok/s, CV 0.3%; run report `2026-07-07-flagship-qwen35-122b.md`; first Q4 data point |
 | P1-002 | P1 Phase Gate | 2026-07-06 | Mac-local Phase 1 telemetry/runtime evidence — sample captured, fields pinned, D-004 sudoers installed + `sudo -n` verified, MLX installed | Phase 1 exit checklist instrumentation section; fixture committed; live 2I run |
 | P2-003 | P2 Next Slice | 2026-07-06 | Mac MLX + powermetrics vertical slice (2G, 2H, 2I) — **first real energy numbers** | Commits `3eb0acd`/`26dca41`/`b4d4173`; 3/3 strict-valid bundles: ~47 J gross / 512 tokens, 77-88 mJ/token, 257 tok/s, TTFT ~94 ms; run reports 2026-07-06 (buildout, 2H, 2I) |
 | P0-002 | P0 Safety | 2026-07-06 | Measurement-corpus backup protocol (R-016) — interim destination per user direction | `scripts/backup_runs.sh`; restore test green (`validate-bundle` on restored copy); protocol in R-016; follow-up P0-003 tracks the real destination |
