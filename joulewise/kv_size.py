@@ -33,12 +33,17 @@ def extract_kv_params(config: Mapping[str, Any]) -> KVSizeParams:
     text_config = config.get("text_config")
     if text_config is not None and not isinstance(text_config, Mapping):
         raise KVSizeError("text_config must be an object when present")
-    fallback = text_config if isinstance(text_config, Mapping) else None
+    if isinstance(text_config, Mapping):
+        # For VLM-style wrapper configs the text tower is authoritative for
+        # KV-cache sizing; top-level fields are only a fallback.
+        primary, fallback = text_config, config
+    else:
+        primary, fallback = config, None
 
-    n_layers = _resolved_int(config, fallback, "num_hidden_layers")
-    attention_heads = _resolved_int(config, fallback, "num_attention_heads", required=False)
+    n_layers = _resolved_int(primary, fallback, "num_hidden_layers")
+    attention_heads = _resolved_int(primary, fallback, "num_attention_heads", required=False)
     n_kv_heads = _resolved_int(
-        config, fallback, "num_key_value_heads", required=False
+        primary, fallback, "num_key_value_heads", required=False
     )
     if n_kv_heads is None:
         if attention_heads is None:
@@ -47,12 +52,16 @@ def extract_kv_params(config: Mapping[str, Any]) -> KVSizeParams:
             )
         n_kv_heads = attention_heads
 
-    head_dim = _resolved_int(config, fallback, "head_dim", required=False)
+    head_dim = _resolved_int(primary, fallback, "head_dim", required=False)
     if head_dim is None:
-        hidden_size = _resolved_int(config, fallback, "hidden_size")
+        hidden_size = _resolved_int(primary, fallback, "hidden_size")
         if attention_heads is None:
             raise KVSizeError(
                 "could not derive head_dim: missing num_attention_heads"
+            )
+        if hidden_size % attention_heads != 0:
+            raise KVSizeError(
+                "cannot derive head_dim: hidden_size is not divisible by num_attention_heads"
             )
         head_dim = hidden_size // attention_heads
 

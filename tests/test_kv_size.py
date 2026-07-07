@@ -33,6 +33,41 @@ class KVSizeTests(unittest.TestCase):
         )
         self.assertEqual(bytes_per_token(params.n_layers, params.n_kv_heads, params.head_dim), 98_304)
 
+    def test_text_config_takes_precedence_over_top_level(self) -> None:
+        params = extract_kv_params(
+            {
+                "num_hidden_layers": 12,
+                "num_key_value_heads": 16,
+                "head_dim": 64,
+                "text_config": {
+                    "num_hidden_layers": 48,
+                    "num_key_value_heads": 2,
+                    "head_dim": 256,
+                },
+            }
+        )
+        self.assertEqual((params.n_layers, params.n_kv_heads, params.head_dim), (48, 2, 256))
+
+    def test_text_config_falls_back_to_top_level_for_missing_keys(self) -> None:
+        params = extract_kv_params(
+            {
+                "head_dim": 128,
+                "text_config": {"num_hidden_layers": 28, "num_key_value_heads": 2},
+            }
+        )
+        self.assertEqual((params.n_layers, params.n_kv_heads, params.head_dim), (28, 2, 128))
+
+    def test_non_divisible_hidden_size_raises(self) -> None:
+        with self.assertRaises(ValueError):
+            extract_kv_params(
+                {
+                    "num_hidden_layers": 28,
+                    "num_key_value_heads": 2,
+                    "num_attention_heads": 32,
+                    "hidden_size": 4097,
+                }
+            )
+
     def test_derives_head_dim_when_absent_or_null(self) -> None:
         params = extract_kv_params(
             {
@@ -90,6 +125,23 @@ class KVSizeTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertIn("bytes_per_token=131072 human=128 KiB", stdout.getvalue())
+
+    def test_cli_partial_explicit_params_exit_2(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            exit_code = main(["kv-size", "--layers", "32", "--kv-heads", "8"])
+        self.assertEqual(exit_code, 2)
+        self.assertIn("error:", stderr.getvalue())
+
+    def test_cli_bad_prompt_tokens_exit_2(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            exit_code = main(
+                ["kv-size", "--layers", "32", "--kv-heads", "8", "--head-dim", "128",
+                 "--prompt-tokens", "a,b"]
+            )
+        self.assertEqual(exit_code, 2)
+        self.assertIn("--prompt-tokens", stderr.getvalue())
 
     def test_bad_config_exits_2(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
