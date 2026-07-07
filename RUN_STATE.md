@@ -1,6 +1,8 @@
 # JouleWise Run State
 
-Last updated: 2026-07-07 (parallel-streams session)
+Last updated: 2026-07-07 (Stream F restart session — MID-SESSION SAFETY
+CHECKPOINT; the machine was about to go offline, full bookkeeping follows
+when Stream F lands)
 
 ## Start Here For Every Big Run
 
@@ -54,10 +56,42 @@ the 2M campaign tooling (deterministic matrix generator + resumable
 sequential runner), and the kv-size helper. C-005 research agenda
 (31 tiered questions + jw_mixed_v1 workload suite) appended to the
 question bank. Still gated: 2K/2L (P1-006). D-016 provisional pick
-stands. Suite: 369 tests. Stream F (repo-wide Codex test audit) in
-flight — its PR + a final integration review are the only open threads.
+stands. Suite: 369 tests. Stream F (repo-wide Codex test audit) was
+RESTARTED 2026-07-07 PM (the prior attempt's in-flight state died with
+its session, uncommitted); its PR + the final integration review are the
+only open threads. See the next section for the exact resume point.
 
-## What The Latest Run Did (2026-07-07, FIVE-STREAM PARALLEL SESSION)
+## What The Latest Run Did (2026-07-07 PM, STREAM F RESTART — IN FLIGHT)
+
+Closeout + restart session. Done: (1) the five merged-stream worktrees
+closed out — .codex-bridge logs archived to
+`~/JouleWise-backup/codex-bridge-logs/2026-07-07-parallel-streams/` per
+the C-006 preservation rule, six worktrees removed, merged branches
+deleted; (2) `scripts/codex-watch` landed on main (38ee666) — renders
+live/recent Codex CLI sessions from `~/.codex/sessions` rollouts (list /
+follow / dump), since neither Claude Code nor the Codex app surfaces
+them; (3) Stream F RESTARTED from scratch in a fresh `../jw-test-audit`
+worktree (branch `stream/test-audit`, PUSHED) with a new
+commit-and-push-at-every-stage-boundary checkpoint rule, after the prior
+attempt's lens outputs were lost with its session.
+
+**Stream F state (resume here):** pushed checkpoints `6ad22e0` (six raw
+audit-lens outputs, `docs/phase_2/test_audit_2026-07-07_lenses/`) and
+`fc4211a` (triaged findings doc `docs/phase_2/test_audit_2026-07-07.md`
+— dispositions + stage-3 scope). In flight at network loss: the Codex
+test-writing round per that doc's scope section (fix A1/A3/A7/F1/F2/F3;
+new tests D8-D13/E10; expectedFailure contract pins for product bugs
+D2/E1, D3/E4). Remaining after: fresh-instance Codex test review →
+lead diff gate + suite both legs → PR; then the final post-merge
+integration review over the complete composite; then full bookkeeping
+(council-log entry, run report, PROJECT_STATUS refresh, consistency
+sweep). Headline audit outcome so far: 4 confirmed product-bug clusters
+reported (non-finite values pass validation into succeeded summaries;
+duplicate rail rows double-count power; out-of-order token events yield
+negative latency metrics; validate-bundle does not check config_sha256)
+— queue triage pending at wrap-up.
+
+## Previous Run (2026-07-07, FIVE-STREAM PARALLEL SESSION)
 
 Six worktree streams (Fable orchestrators driving Codex 5.5-high per the
 new operation-loop skill), two councils, ~6-7M Codex tokens of
@@ -240,13 +274,12 @@ Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 ## Known Workspace State
 
 - `main` is pushed and current: PRs #2-#6 merged + INT-001/INT-002 +
-  bookkeeping commits; no unpushed local state.
-- SIX worktrees exist (`../jw-uncertainty`, `../jw-campaign`,
-  `../jw-mock-hardening`, `../jw-rich-telemetry`, `../jw-kv-size`,
-  `../jw-test-audit`) — five have merged branches awaiting
-  `git worktree remove` (archive `.codex-bridge/` logs to the R-016
-  backup area first, per C-006); `jw-test-audit` (stream F) is STILL IN
-  FLIGHT — do not remove it.
+  bookkeeping commits + `scripts/codex-watch` (38ee666); no unpushed
+  local state.
+- ONE worktree exists: `../jw-test-audit` (branch `stream/test-audit`,
+  pushed to origin) — Stream F restart, IN FLIGHT; do not remove. The
+  five merged-stream worktrees were closed out 2026-07-07 PM
+  (bridge logs archived per C-006, branches deleted).
 - `/tmp/jw-lead-verify/` holds disposable lead-verification artifacts.
 
 ## What Is Next
@@ -255,10 +288,12 @@ Follow `TASK_QUEUE.md`; execute via the mission guides in
 `docs/agent_playbook.md` (start every session with its Mission M0). In
 order:
 
-1. **Land Stream F** (repo-wide Codex test audit, worktree
-   `jw-test-audit`, branch `stream/test-audit`) — findings re-check
-   against merged main was in flight at session close; then the final
-   post-merge integration review over the complete composite.
+1. **Resume + land Stream F** (restarted 2026-07-07 PM; worktree
+   `jw-test-audit`, branch `stream/test-audit`, pushed). Resume from the
+   checkpoints listed in the latest-run section above — the findings doc
+   `docs/phase_2/test_audit_2026-07-07.md` carries the remaining-stage
+   scope. Then the final post-merge integration review over the complete
+   composite, then full session bookkeeping.
 2. **P2-006: the 2M two-model baseline campaign** (queue rank 1, fully
    tooled). REQUIRES A QUIET MACHINE — no agent fleet, no Codex load
    (the idle gate will flag contamination). Command sequence in PR #3;
