@@ -307,9 +307,9 @@ order:
 5. Small follow-ups queued from stream reports: `aggregate` CLI verb,
    methodology-doc amendment (manifest-level aggregate + t-table floor
    policy), idle-gate threshold corpus, `dvfm_states` slimming option.
-6. Worktree cleanup after F lands (`git worktree remove` × 6; archive
-   `.codex-bridge` logs to the R-016 backup area first, per the C-006
-   preservation rule).
+6. (done 2026-07-07 PM) Worktree cleanup — five merged-stream worktrees
+   removed after archiving `.codex-bridge` logs per C-006; only
+   `../jw-test-audit` remains (remove after F lands).
 
 Hardware-gated (unchanged): 2K/2L (P1-006), wall meter (P1-003),
 topology (P1-004), calendar mapping (P1-008).
