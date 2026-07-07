@@ -9,4 +9,5 @@ runs/
 ci-runs/
 report/
 .claude/
+.codex-bridge/
 .DS_Store
