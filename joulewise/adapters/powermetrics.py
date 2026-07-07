@@ -14,6 +14,7 @@ import plistlib
 import statistics
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,11 +37,15 @@ RAW_SAMPLES_NAME = "powermetrics.plist"
 RAW_IDLE_NAME = "powermetrics_idle.plist"
 RAIL_MANIFEST = ["cpu_power", "gpu_power", "ane_power"]
 SAMPLERS = "cpu_power,gpu_power,ane_power,thermal"
+READINESS_TIMEOUT_S = 15.0
+READINESS_POLL_S = 0.05
 TIMESTAMP_DERIVATION = (
-    "timestamp_s = start_sampling clock.now() UTC epoch seconds + cumulative "
-    "elapsed_ns through the current plist document; each sample lands at the "
-    "end of its interval. The plist timestamp is 1-second resolution and is "
-    "recorded only as plist_anchor_offset_s evidence."
+    "timestamp_s = start_sampling readiness clock.now() UTC epoch seconds + "
+    "cumulative elapsed_ns through the current plist document; start_sampling "
+    "waits until the first plist document is parseable before returning, so "
+    "the reducer's sampling_started marker is emitted only after the sampler "
+    "is producing. The plist timestamp is 1-second resolution and is recorded "
+    "only as plist_anchor_offset_s evidence."
 )
 
 
@@ -137,6 +142,13 @@ class PowermetricsTelemetryAdapter:
                 failure_reason=FailureReason.TELEMETRY_UNAVAILABLE,
                 message=f"powermetrics launcher unavailable: {exc}",
             )
+        ready = self._wait_until_ready(self._process, self._capture_path)
+        if not ready.ok:
+            self._stop_process(self._process)
+            self._process = None
+            self._capture_path.unlink(missing_ok=True)
+            self._capture_path = None
+            return ready
         self._clock_start_s = self._clock.now()
         return AdapterResult(
             ok=True,
@@ -144,6 +156,7 @@ class PowermetricsTelemetryAdapter:
                 "command": command,
                 "raw_artifact": RAW_SAMPLES_NAME,
                 "timestamp_derivation": TIMESTAMP_DERIVATION,
+                "readiness": ready.metadata,
             },
         )
 
@@ -157,13 +170,7 @@ class PowermetricsTelemetryAdapter:
         clock_start_s = self._clock_start_s
         self._clock_start_s = None
         if process is not None:
-            if process.poll() is None:
-                process.terminate()
-            try:
-                process.communicate(timeout=10.0)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.communicate()
+            self._stop_process(process)
         if capture_path is None or not capture_path.exists():
             return []
 
@@ -327,6 +334,8 @@ class PowermetricsTelemetryAdapter:
             command.extend(["-n", str(count)])
         command.extend(
             [
+                "-b",
+                "0",
                 "-i",
                 str(interval_ms if interval_ms is not None else self._interval_ms(config)),
                 "--samplers",
@@ -347,6 +356,8 @@ class PowermetricsTelemetryAdapter:
             POWER_METRICS,
             "-n",
             "1",
+            "-b",
+            "0",
             "-i",
             "100",
             "--samplers",
@@ -366,6 +377,64 @@ class PowermetricsTelemetryAdapter:
         handle.close()
         path.unlink(missing_ok=True)
         return path
+
+    @staticmethod
+    def _wait_until_ready(
+        process: subprocess.Popen[bytes],
+        capture_path: Path,
+    ) -> AdapterResult:
+        deadline = time.monotonic() + READINESS_TIMEOUT_S
+        last_parse_error: str | None = None
+        while time.monotonic() < deadline:
+            if capture_path.exists() and capture_path.stat().st_size > 0:
+                data = capture_path.read_bytes()
+                first_document = data.split(b"\0", 1)[0]
+                if first_document.strip():
+                    try:
+                        parse_powermetrics_records(first_document)
+                    except ValueError as exc:
+                        last_parse_error = str(exc)
+                    else:
+                        return AdapterResult(
+                            ok=True,
+                            metadata={
+                                "ready_bytes": len(data),
+                                "ready_check": "first_parseable_plist_document",
+                            },
+                        )
+            if process.poll() is not None:
+                return AdapterResult(
+                    ok=False,
+                    failure_reason=FailureReason.UNKNOWN_ERROR,
+                    message=(
+                        "powermetrics exited before producing a parseable plist "
+                        f"document (returncode {process.returncode})"
+                    ),
+                    metadata={"last_parse_error": last_parse_error},
+                )
+            # Operational wait for an external process, deliberately outside the
+            # benchmark clock discipline: this delay is excluded from the
+            # measured window by D-026 because start_sampling has not returned.
+            time.sleep(READINESS_POLL_S)
+        return AdapterResult(
+            ok=False,
+            failure_reason=FailureReason.UNKNOWN_ERROR,
+            message=(
+                "powermetrics did not produce a parseable plist document within "
+                f"{READINESS_TIMEOUT_S} s of launch"
+            ),
+            metadata={"last_parse_error": last_parse_error},
+        )
+
+    @staticmethod
+    def _stop_process(process: subprocess.Popen[bytes]) -> None:
+        if process.poll() is None:
+            process.terminate()
+        try:
+            process.communicate(timeout=10.0)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
 
 
 def parse_powermetrics_records(

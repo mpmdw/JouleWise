@@ -289,7 +289,8 @@ class PowermetricsAdapterTests(unittest.TestCase):
 
         class CorruptPopen:
             def __init__(self, command, **kwargs):
-                Path(command[command.index("-o") + 1]).write_bytes(CORRUPT_PLIST)
+                self.path = Path(command[command.index("-o") + 1])
+                self.path.write_bytes(FIXTURE.read_bytes())
                 self.returncode = None
 
             def poll(self):
@@ -299,6 +300,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 self.returncode = 0
 
             def communicate(self, timeout=None):
+                self.path.write_bytes(CORRUPT_PLIST)
                 self.returncode = 0
                 return b"", b""
 
@@ -395,6 +397,114 @@ class PowermetricsAdapterTests(unittest.TestCase):
             self.assertTrue(adapter.start_sampling(config).ok)
             samples = adapter.stop_sampling(config, context=None)
         self.assertEqual(len(samples), 15)
+
+    def test_start_sampling_waits_until_first_document_is_parseable(self) -> None:
+        fixture = FIXTURE.read_bytes()
+        sleep_calls = []
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        class DelayedPopen:
+            path: Path | None = None
+
+            def __init__(self, command, **kwargs):
+                type(self).path = Path(command[command.index("-o") + 1])
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        def fake_sleep(seconds):
+            sleep_calls.append(seconds)
+            if len(sleep_calls) == 2:
+                DelayedPopen.path.write_bytes(fixture)
+
+        adapter = PowermetricsTelemetryAdapter(FakeClock(start=200.0))
+        with (
+            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+            patch("joulewise.adapters.powermetrics.subprocess.Popen", DelayedPopen),
+            patch("joulewise.adapters.powermetrics.time.sleep", side_effect=fake_sleep),
+        ):
+            result = adapter.start_sampling(make_config())
+
+        self.assertTrue(result.ok)
+        self.assertGreaterEqual(len(sleep_calls), 2)
+        self.assertEqual(result.metadata["readiness"]["ready_check"], "first_parseable_plist_document")
+
+    def test_start_sampling_readiness_timeout_is_structured_and_terminates(self) -> None:
+        instances = []
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
+            return completed(command)
+
+        class NeverReadyPopen:
+            def __init__(self, command, **kwargs):
+                instances.append(self)
+                self.returncode = None
+                self.terminated = False
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.terminated = True
+                self.returncode = 0
+
+            def kill(self):
+                self.returncode = -9
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        adapter = PowermetricsTelemetryAdapter(FakeClock())
+        with (
+            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+            patch("joulewise.adapters.powermetrics.subprocess.Popen", NeverReadyPopen),
+            patch("joulewise.adapters.powermetrics.READINESS_TIMEOUT_S", 0.0),
+        ):
+            result = adapter.start_sampling(make_config())
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertIn("parseable plist", result.message)
+        self.assertTrue(instances[0].terminated)
+
+    def test_start_sampling_readiness_fast_path_does_not_sleep(self) -> None:
+        fixture = FIXTURE.read_bytes()
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        class ImmediatePopen:
+            def __init__(self, command, **kwargs):
+                Path(command[command.index("-o") + 1]).write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+        adapter = PowermetricsTelemetryAdapter(FakeClock())
+        with (
+            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+            patch("joulewise.adapters.powermetrics.subprocess.Popen", ImmediatePopen),
+            patch("joulewise.adapters.powermetrics.time.sleep") as sleep,
+        ):
+            result = adapter.start_sampling(make_config())
+
+        self.assertTrue(result.ok)
+        sleep.assert_not_called()
 
     def test_idle_count_and_timeout_use_rounded_interval(self) -> None:
         fixture = FIXTURE.read_bytes()
