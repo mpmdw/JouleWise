@@ -6,25 +6,28 @@ it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
 - Last updated: 2026-07-06
-- Project phase: Phase 1 closing; Phase 2 in progress - harness core
-  complete; first real adapter (MLX runtime) running on the M3 Max
+- Project phase: Phase 1 closing; Phase 2 in progress - Mac vertical
+  slice COMPLETE with real energy measurements; baselines next
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 
-## This Update (2026-07-06, second update) — 30-second read
+## This Update (2026-07-06, third update) — 30-second read
 
-**Progress: the benchmark ran on real hardware for the first time.** The
-MLX runtime adapter (Slice 2G) is implemented, tested, and produced a
-complete, schema-valid measurement bundle from a real model
-(Qwen2.5-1.5B-Instruct, 4-bit, provisionally selected) generating on an
-Apple M3 Max: time-to-first-token 81.5 ms, 265.8 tokens/s decode, full
-per-token timeline — paired with the synthetic power source, exactly the
-incremental bring-up the adapter architecture was designed for (real
-power sampling is the next slice, blocked only on a 5-minute sudo
-session). Also landed today: the report's related-work survey draft (11
-sources, independently verified citations, honest positioning audit), a
-measurement-data backup protocol with a passed restore test, and the
-suite grew 226 → 230 checks, green with and without the Mac ML stack
-installed.
+**Progress: the flagship works — the project has its first real energy
+measurements.** The complete Mac vertical slice (MLX runtime +
+`powermetrics` power sampling + integration, slices 2G/2H/2I) landed in
+one day and produced three repetition bundles, all passing strict
+validation: **~47 J per 512-token request (~77-88 mJ per generated
+token) on the M3 Max**, gross energy repeatable to 1.4% across reps,
+prefill/decode energy split resolved (0.03 J vs ~47 J), time-to-first-
+token ~94 ms at 257 tokens/s, real idle baselines and a real
+idle-recovery cooldown gate between repetitions. Two hardware realities
+were caught by the harness's own evidence trail and fixed same-day
+(powermetrics' ~1 s startup latency; idle-baseline contamination right
+after model load — now a protocol note for the statistics phase).
+Also landed today: the related-work survey draft (11 sources, verified
+citations), a backup protocol with a passed restore test, and the suite
+grew 226 → 254 checks. Homogeneous baselines (2M) and the Phase 3
+feasibility spikes are now unblocked and need no further inputs.
 
 **Earlier today:** the pre-hardware hardening slice (2N) from last
 week's external reviews was completed (raw evidence preserved verbatim,
@@ -79,7 +82,7 @@ Research questions:
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - all hardware-independent work complete (2A-2F/2J/2N); first real adapter DONE (2G MLX runtime, real generation bundle on the M3 Max, 2026-07-06); 2H powermetrics gated on one sudo session, then 2I; 2K-2M gated on device access |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2G/2H/2I, 2026-07-06: 3-rep real energy bundles, ~47 J / 512 tokens on the M3 Max); 2M baselines unblocked (Mac-only floor); 2K/2L gated on device access |
 | 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
@@ -97,7 +100,7 @@ Complete so far (all verifiable in the repository):
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (230 tests, run in CI on every push,
+  a CLI, plus a passing test suite (254 tests, run in CI on every push,
   including a mock end-to-end run + bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
   are pinned by test.
@@ -109,21 +112,19 @@ Complete so far (all verifiable in the repository):
   decisions, each with the alternatives considered), a risk register with
   an explicit descope ladder, and example configs for the Mac and mock
   targets.
-- First hardware evidence: the MLX runtime adapter (Slice 2G) is
-  implemented and produced a real generation bundle on the M3 Max
-  (81.5 ms TTFT, 265.8 tokens/s, full per-token timeline; provisional
-  model Qwen2.5-1.5B-Instruct-4bit mirrored locally). On the telemetry
-  side: `powermetrics` located and its superuser requirement confirmed;
-  useful samplers identified (CPU/GPU/ANE power, thermal).
+- The complete Mac vertical slice: the MLX runtime adapter (2G), the
+  `powermetrics` telemetry adapter (2H, parser pinned to a captured
+  privileged sample, raw plists preserved verbatim in every bundle), and
+  the flagship integration (2I) — three strict-valid repetition bundles
+  of real energy measurements on the M3 Max (~47 J gross per 512-token
+  request, ~77-88 mJ/generated token, TTFT ~94 ms at 257 tokens/s,
+  provisional model Qwen2.5-1.5B-Instruct-4bit mirrored locally).
 - The report's related-work survey draft (11 sources with verified
   citations and an honest positioning audit) and a measurement-data
   backup protocol with a passed restore test.
 
-Not yet started: the remaining real-hardware adapters — powermetrics
-(slice 2H, gated on one privileged sample session; with 2G done, 2H is
-all that separates the project from its first real energy numbers via
-2I), and NVIDIA/vLLM + Jetson Orin (2K/2L, gated on device access).
-Code-level specs are in
+Not yet started: the remote real-hardware adapters — NVIDIA/vLLM +
+Jetson Orin (2K/2L, gated on device access). Code-level specs are in
 `docs/phase_2/hardware_slice_implementation_guide.md`. The mock-first core
 landed first by design, so measurement code is never debugging the harness
 and the instrument at the same time.
@@ -364,7 +365,7 @@ first privileged power sample). Work paused 2026-06-13 to 2026-07-04
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (230 tests, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (254 tests, CI-enforced) |
 
 ## Maintenance Of This Document
 

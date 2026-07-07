@@ -34,20 +34,36 @@ At the end of substantial work:
 
 ## Current Project Status
 
-Phase 1 is in its final stretch (remaining gates need external/user
-input; per-item status in `docs/phase_1/phase_1_exit_checklist.md` —
-the MLX-runtime row closed 2026-07-06). Phase 2 now has its **first real
-adapter**: Slice 2G (MLX runtime) is complete with a succeeded
-real-generation bundle on the M3 Max (real MLX + mock telemetry
-pairing; TTFT 81.5 ms, 265.8 tok/s). 2A-2F, 2J, 2N remain complete.
-Still gated: 2H (privileged powermetrics sample, P1-002), 2I (2H),
-2K/2L (P1-006), 2M (2I). D-016 has a provisional small-model pick
-(Qwen2.5-1.5B-Instruct-4bit, local mirror) that opens 2G only; full
-closure needs P1-001. P0-002 backup protocol closed with an INTERIM
-same-disk destination (follow-up P0-003). The Stage 4.6 related-work
-draft (P3-001) is done. Suite: 230 tests.
+**The Mac vertical slice is COMPLETE (2026-07-06): the project has real
+energy numbers.** Slices 2G (MLX runtime), 2H (powermetrics telemetry),
+and 2I (flagship integration) all landed in one day on the M3 Max:
+3/3 strict-valid repetition bundles at ~47 J gross / 512 output tokens
+(~77-88 mJ/token, TTFT ~94 ms, 257 tok/s, 8.8-8.9 Hz observed sampling).
+2A-2F, 2J, 2N complete. Now unblocked: 2M homogeneous baselines
+(Mac-only floor) and Phase 3 Stage 3.0 spikes. Still gated: 2K/2L
+(P1-006 device access). D-016 provisional small-model pick stands (full
+closure needs P1-001, user-deferred). P1-002 fully complete (sample +
+sudoers). Backup protocol active with an interim same-disk destination
+(P0-003 meta). Related-work draft (P3-001) done. Suite: 254 tests.
 
-## What The Latest Run Did (2026-07-06 evening, P1-002 + Slice 2H)
+## What The Latest Run Did (2026-07-06 night, Slice 2I — FIRST REAL ENERGY NUMBERS)
+
+Full detail: `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md`.
+The user installed the D-004 sudoers line (P1-002 now fully complete).
+First flagship attempt failed instructively (powermetrics ~1 s startup
+latency vs a 0.32 s measured window → 0-byte capture); fix (`b4d4173`,
+Codex from parent diagnosis): start_sampling readiness wait (first
+parseable plist doc, 15 s bound), `-b 0` unbuffered, flagship workload
+64→512 tokens at 10 Hz. Then **3/3 reps succeeded, all --strict valid**:
+gross 46.6-48.0 J (CV 1.4%), 77-88 mJ/output-token, prefill 0.03 J vs
+decode ~47 J, TTFT 92.8-94.9 ms, 257 tok/s, 8.8-8.9 Hz observed (in
+band). Methodological finding: rep 1's idle baseline (3.5 W vs 0.2-0.3 W)
+shows post-model-load settling contamination → Stage 4.0 protocol note.
+Corpus backed up per R-016. **Slices 2H and 2I are COMPLETE; the Mac
+vertical slice (P2-003) is done; 2M and Phase 3 Stage 3.0 are unblocked.**
+Suite: 254.
+
+## Previous Run (2026-07-06 evening, P1-002 + Slice 2H)
 
 Full detail: `docs/run_reports/2026-07-06-slice-2h-powermetrics.md`. The
 user captured the privileged powermetrics sample (P1-002 → framing +
@@ -165,8 +181,8 @@ Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 ## Current Verification
 
 ```bash
-python3 -m unittest discover -s tests           # 251 tests, OK (skipped=10)
-.venv/bin/python -m unittest discover -s tests  # 251 tests, OK (skipped=10)
+python3 -m unittest discover -s tests           # 254 tests, OK (skipped=10)
+.venv/bin/python -m unittest discover -s tests  # 254 tests, OK (skipped=10)
 ```
 
 Result (2026-07-06, after Slices 2G + 2H): green under BOTH the system
@@ -181,11 +197,11 @@ backup restore test green.
 - **New machine (2026-07-06):** MacBook Pro M3 Max / 128 GB. Canonical
   path here: `~/code/JouleWise` (fresh clone; the previous machine's
   `~/code/CapstoneRivoire/Capstone` notes are historical).
-- Remote: `https://github.com/mpmdw/JouleWise`; branch `main`. SEVEN
+- Remote: `https://github.com/mpmdw/JouleWise`; branch `main`. NINE
   local commits NOT pushed (awaiting user): `10a570d` Codex bridge,
   `5b12332` backup script, `c31ffac` related-work draft, `3eb0acd`
-  Slice 2G, `c5cf3ac` build-out bookkeeping, `26dca41` Slice 2H, plus
-  the 2H bookkeeping commit.
+  Slice 2G, `c5cf3ac` build-out bookkeeping, `26dca41` Slice 2H, `243a4f1` 2H bookkeeping, `b4d4173` Slice 2I,
+  plus the 2I bookkeeping commit.
 - Git author auto-selected as `Ed R <edr@Eds-MacBook-Pro.local>` on this
   machine (previous machine used `Edr <edr@Edrs-MacBook-Air.local>`).
 - Machine-local, intentionally uncommitted (`.gitignore`): `.venv/`
