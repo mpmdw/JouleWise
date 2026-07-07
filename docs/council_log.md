@@ -411,3 +411,159 @@ feasibility-first Phase 3 ladder is already the mitigation.
   Codex rounds were spent.
 - Spend: 5 Codex lens invocations + orchestrator grounding/synthesis;
   no repo mutations (session shape B honored).
+
+
+
+## C-006 (session trace + meta-review, 2026-07-07): six-stream parallel batch, integration review, process meta-review
+
+Streams: A uncertainty/D-014 (in flight) · B campaign automation (merged,
+PR #3) · C mock-hardening/P2-008 (in flight) · D rich-telemetry/P2-009
+(merged, PR #4) · E kv-size helper (merged, PR #2) · F repo test-audit
+(in flight). Plus: ideation council (DL-1) and a post-merge Codex
+integration review over merged main.
+
+### Shape (orchestration decisions)
+
+- **Decomposition — 5 implementation streams + 1 audit stream, parallel:**
+  the queue held independent, file-disjoint tasks; worktree-per-stream
+  isolation makes collision structurally impossible (checked against
+  expected `git diff --stat` footprints before fan-out). Sequential would
+  have serialized ~15-min Codex rounds behind each other for no safety gain.
+- **Model assignment:** Fable for stream orchestrators — each stream needs a
+  judgment GATE (final-diff review, finding triage, commit decision), not
+  volume analysis. Codex 5.5-high for all implementation/review/test volume —
+  near-limitless quota makes redundant fresh-eyes passes free, and fresh
+  Codex instances carry no thread state, so a fresh instance is a genuinely
+  independent reviewer even of Codex's own code. (Gen-1 launch violated
+  this by accident — see I-2.)
+- **Review tier per stream (scaled by cost-of-being-wrong):**
+  - A, C, D — measurement semantics; a defect poisons the scientific
+    validity of every future number → FULL: Codex design round, 3-lens
+    counterreview, test amplification, writer≠reviewer test review, lead
+    live-verify.
+  - B — operator-facing campaign script; failure wastes a session, not the
+    dataset → standard: counterreview + amplification + fresh test review +
+    orchestrator live-verify against the real CLI (which is what caught K-4).
+  - E — pure calculator, no runtime surface → lighter: counterreview lenses
+    + orchestrator diff gate (which caught K-1..K-3 — the light tier still
+    carried its weight).
+  - F — audit-only; findings reported, never fixed in-stream (other streams
+    own the code).
+- **Ideation council: 4 lenses + devil's advocate** — breadth beats depth
+  for agenda-setting; divergence is the point (council skill, shape B).
+- **Post-merge integration review added** because per-stream review
+  structurally cannot see cross-stream interactions. Vindicated same
+  session: it found 2 real interaction defects (K-9, K-10).
+
+### Catches (differential attribution)
+
+| id | what | sev | caught by | missed by | enabler | counterfactual |
+|---|---|---|---|---|---|---|
+| K-1 | silent head_dim floor in KV-size calc | med | fresh-eyes Codex counterreview lens (E) | Codex implementer AND Fable orchestrator review | writer≠reviewer: fresh instance, no thread state | wrong KV payload numbers feed Phase-3 transfer planning |
+| K-2 | text_config precedence ignored (nested config) | med | same lens (E) | same both | same | wrong KV numbers for exactly the model class we benchmark (MoE/nested) |
+| K-3 | bare-ValueError catch-tuple, over-broad blast radius | should-fix | Fable orchestrator diff gate (E) | Codex implementer | Fable-final-gate doctrine (thin ≠ rubber stamp) | unrelated errors silently swallowed as parse failures |
+| K-4 | campaign resume checks a path the real CLI never creates | blocker | orchestrator LIVE-verify vs real CLI (B) | implementer + its GREEN tests (the stub encoded the same wrong contract) | live-verify doctrine: tests green never sufficient | first real overnight campaign silently fails to resume |
+| K-5 | campaign robustness ×5: lock, torn log, sanitization, half-written summary, config-error abort | should-fix ×5 | Codex counterreview lenses (B) | implementer | mandatory counterreview after every implementation | operator-facing failures mid-campaign, partial evidence on disk |
+| K-6 | rich-write failure aborted stop_sampling AFTER raw preservation | blocker | Codex counterreview (D) | implementer | mandatory counterreview | a parser bug destroys the very run it instruments — violates D-002's re-reduce promise |
+| K-7 | runtime-clock anchoring broke regenerability-from-raw | blocker-class | test-AMPLIFICATION round (D) | implementer AND counterreview | amplification WRITES adversarial tests, doesn't just read | bundles not re-derivable from raw/ — core auditability promise broken |
+| K-8 | lead's own verification run contaminated (agent-fleet display compositing held GPU ~75% busy) | measurement-validity | the idle-quality gate ITSELF (D) — its first true positive | the LEAD's prediction | building quality gates into the instrument | contaminated idle baseline blessed into the corpus; instrument outperformed operator |
+| K-9 | stale-config glob landmine across streams | should-fix | post-merge Codex integration review | every per-stream review (structurally blind to it) | integration-review step exists precisely for this class | first mixed-stream run trips on stale configs |
+| K-10 | unconditional per-rep env capture (cross-stream interaction) | should-fix | same | same | same | per-rep overhead inside measured runs |
+
+### Deliberations (design-bearing disagreements only)
+
+- **DL-1 (ideation council):** recorded in full in the C-005 entry above
+  (12 adjudications, each position -> attack -> reasoning -> outcome ->
+  dissent; per-lens unique contributions; killed/deferred list). Pointer,
+  not copy, per one-fact-one-home.
+- **DL-2 (stream D, idle-gate shape):** counterreview lens attacked the
+  implemented min-based suspect rule as too twitchy — fixture margin to
+  false-positive was 0.047 on `gpu_idle_ratio_min`; a single scheduler blip
+  would flag a clean idle window. Orchestrator position: min is the honest
+  detector (one busy sample = contamination). Resolution after 1 round:
+  persistence rule adopted (suspect iff >=40% of idle samples below 0.80
+  GPU idle_ratio OR mean GPU freq > 800 MHz) — contamination that matters
+  is sustained, blips are noise; boundary tests pin both sides. Lens
+  prevailed; no dissent recorded. Binds: the 0.40 threshold has no
+  empirical contaminated-window corpus behind it yet (revisit flagged in
+  PR #4).
+- **DL-2b (stream D, artifact placement):** Codex argued rich derived
+  JSONL must NOT live under `raw/` — "derived data under raw/ weakens
+  raw-as-source-of-truth (D-002)"; a top-level artifact via a
+  `write_derived_artifact` seam needs zero controller plumbing and keeps
+  D-024. Orchestrator accepted, added the idle-window variant Codex had
+  not proposed. Both prevailed in part; outcome is the committed layout.
+- **DL-2c (stream A):** design amendments (plain JSON aggregate dicts with
+  UncertaintyInterval internal to n>=1 paths; structured problems instead
+  of exceptions) — stream still in flight; its final report carries the
+  full block per the standing trace requirement.
+- Streams B/E: no qualifying deliberation blocks — findings accepted on
+  argument without design-bearing dissent. Zero blocks is a valid outcome.
+- Merged streams B/E: no qualifying deliberation blocks known to this
+  reviewer — findings were accepted on argument without design-bearing
+  dissent. Zero blocks is a valid outcome.
+
+### Interventions (lead acted from outside the agents' self-reports)
+
+| id | failure mode | detected via | fix | folded into |
+|---|---|---|---|---|
+| I-1 | 2/5 gen-1 orchestrators stalled, ending turns to "await" a poll-only bridge | lead observed ended turns with idle Codex processes | prompts now MANDATE poll-in-turn or background-Bash + watcher | codex-delegation + multi-stream skills, same session |
+| I-2 | all 5 gen-1 streams silently inherited Opus (session accidentally started on Opus) | lead inspected spawn config, not agent self-reports | explicit `model: "fable"` mandatory; relaunch was CHEAP — worktree diffs, bridge state, and Codex `resume --last` all survive agent death | multi-stream skill |
+| I-3 | one Codex lens wedged silently ~50 min (stdin hang: `codex exec` in background Bash without `< /dev/null`) | OUTSIDE evidence only: `ps` etimes + output-file mtimes vs finished siblings (agent reported nothing) | external kill; `< /dev/null` mandatory on every `codex exec`; fleet-health-check practice born (classify long-runners from ps/mtimes, never self-reports) | codex-delegation + multi-stream skills |
+| I-4 | stream A accidentally stopped by the user | SendMessage returned "no active task" while siblings returned "queued" — a reusable stopped-stream detector | relaunch on surviving worktree state | this log (diagnostic recorded) |
+
+### Layer yield + spend (rough; spend capture starts next session)
+
+- Fresh-eyes Codex counterreview lenses: 2 unique (K-1, K-2) + 6 robustness
+  (K-5, K-6). ~free (Codex quota).
+- Fable orchestrator diff gates: 1 unique (K-3). Orchestrator context.
+- Orchestrator live-verify vs real CLI: 1 unique blocker (K-4).
+- Lead live-verify: 0 unique catches this session — but was itself CAUGHT
+  by K-8; the layer's value this session was running the instrument that
+  outperformed it.
+- Test amplification: 1 unique real bug (K-7) + 14 edge tests (B).
+- Fresh-instance test review: 6 vacuous/tautological tests fixed (B) + 2
+  mutation gaps (D). No unique code bugs — on watch as a BUG-catch layer;
+  clearly earning as a TEST-quality layer.
+- Integration review: 2 unique (K-9, K-10) on its first outing.
+- Opus refuter tier: not used this session; 0 unique catches for 2+
+  sessions → drop from default roster per the council's own rule (C-006).
+
+### Doctrine changes (adopted this session, each folded same-session)
+
+1. Liberal Codex — near-limitless quota → counterreview after EVERY
+   implementation is the default (council + codex-delegation).
+2. Test doctrine: amplification round + writer≠reviewer fresh-instance test
+   review (codex-delegation).
+3. Apex/volume split: Codex = volume (reading, lenses, tests, computer
+   use); Fable = orchestration + final gates (codex-delegation + council).
+4. Failed-test triage: Codex first, Fable after 2 Codex failures
+   (codex-delegation).
+5. Poll-or-watcher mandatory in orchestrator prompts (I-1) (codex-delegation
+   + multi-stream).
+6. Explicit `model:` on every orchestrator spawn (I-2) (multi-stream).
+7. Fleet health checks from outside evidence, on landing or ~hourly (I-3)
+   (multi-stream).
+8. Post-merge integration review is a standing step (K-9/K-10)
+   (codex-delegation).
+
+### Meta-review C-006 verdicts adopted (same session)
+
+- Council log was HALF-INSTRUMENTED (catch attribution prose-only, zero
+  spend records => drop-a-layer unenforceable). Fix: this entry is the
+  first in trace format v2 (Shape / differential Catches / Deliberations /
+  Interventions / Layer-yield); v2 + threshold adopted into the council
+  skill. Spend capture starts next session.
+- Opus refuter/verifier tier DROPPED from the default roster: zero unique
+  catches since C-001; function absorbed by fresh-instance Codex
+  counterreview + Fable gates. (The council's own evidence rule, applied
+  to itself.)
+- Skills stack violated one-fact-one-home (doctrine restated up to 4x,
+  memory file a shadow copy; adversarial-review doctrinally stale,
+  pre-apex/volume) — dedup + adversarial-review update ordered same
+  session; consistency-sweep scope extended to the skills themselves.
+- Raw .codex-bridge logs: distill + quote into traces; archive to the
+  R-016 backup area on worktree removal; never commit; prune after the
+  entry lands. (This session's logs archived before cleanup.)
+- operation-loop skill (single conductor-score loop over all meta
+  processes,every step with skip conditions) drafted; pending lead gate.
