@@ -852,7 +852,13 @@ def _adapter_metadata(adapter: Any) -> dict[str, Any]:
 def _merge_adapter_metadata(target: dict[str, Any], metadata: dict[str, Any]) -> None:
     for key, value in _jsonable(metadata).items():
         if key in target:
-            target.setdefault("metadata", {})[key] = value
+            collision_metadata = target.get("metadata")
+            if not isinstance(collision_metadata, dict):
+                collision_metadata = {}
+                if "metadata" in target:
+                    collision_metadata["metadata"] = target["metadata"]
+                target["metadata"] = collision_metadata
+            collision_metadata[key] = value
         else:
             target[key] = value
 

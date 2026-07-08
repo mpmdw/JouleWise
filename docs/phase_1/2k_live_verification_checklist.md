@@ -93,12 +93,12 @@ Protocol pins checked: B-24, B-25 amended by B-39, B-26, B-27, B-28.
 10. Verify timezone/offset evidence:
     ```sh
     latest="$(ls -td runs/live-2k-vllm/* | head -1)"
-    python3 - <<'PY'
+    python3 - "$latest" <<'PY'
 import json, pathlib, sys
 p = pathlib.Path(sys.argv[1])
 m = json.loads((p / "metadata.json").read_text())
 print(json.dumps(m["adapters"]["telemetry"], indent=2)[:4000])
-PY "$latest"
+PY
     ```
     Expected evidence: worker metadata or pidfile payload contains
     `node_utc_offset_s` and optionally `node_tzname`; parser diagnostics do
@@ -139,7 +139,7 @@ Protocol pins checked: B-6, B-21 amended by B-36.
 14. Re-derive one nvidia-smi timestamp:
     ```sh
     latest="$(ls -td runs/live-2k-vllm/* | head -1)"
-    python3 - <<'PY'
+    python3 - "$latest" <<'PY'
 import csv, json, pathlib, sys
 from joulewise.adapters.nvidia_smi import parse_nvidia_smi_csv
 p = pathlib.Path(sys.argv[1])
@@ -151,7 +151,7 @@ with (p / "power_trace.csv").open(newline="") as h:
     first = next(csv.DictReader(h))
 print(rows[0].node_timestamp_s - alignment["offset_estimate_s"])
 print(first["timestamp_s"])
-PY "$latest"
+PY
     ```
     Expected evidence: the two printed timestamps match within floating-point
     formatting tolerance. If timezone metadata is nested only in worker
