@@ -14,7 +14,9 @@ The benchmark is designed around three stable ideas:
   for later audit and analysis.
 
 **Status:** research prototype. The measurement harness is campaign-ready on
-Mac (Apple M3 Max); the verified end-user quickstart is a Phase 5 deliverable.
+Mac (Apple M3 Max); as of 2026-07-07, P2-013/P2-014 integrity and
+provenance fixes are complete; the verified end-user quickstart is a Phase
+5 deliverable.
 
 ## Current State
 
@@ -25,11 +27,16 @@ bundle and reduces it to energy/latency summary metrics — proven first on
 deterministic mock adapters, and now live on real hardware: the MLX runtime +
 `powermetrics` telemetry adapters measured Qwen2.5-1.5B-Instruct (4-bit) on an
 Apple M3 Max at ~47 J per 512-token request (~77-88 mJ per generated token,
-257 tok/s), across 3 repetitions that all pass strict validation (the summary
-re-derives identically from the bundle's power trace and event log; the
-raw-plist-to-trace check lands with P2-013). Remaining backends
-(NVIDIA/vLLM, Jetson Orin) plug into the same adapter interfaces and are
-gated on device access.
+257 tok/s). The six real corpus bundles pass `validate-bundle --strict`
+read-only and unrewritten: strict re-derives the recorded powermetrics power
+trace from raw plist evidence, re-derives summary metrics from the recorded
+trace and event log, checks the legacy additive summary comparison, and
+requires shape-valid provenance for new-era bundles. This validates the
+recorded evidence path; it does not independently rerun the hardware session.
+Remaining backends (NVIDIA/vLLM, Jetson Orin) plug into the same adapter
+interfaces and remain gated on live device access. A fixture-first 2K NVIDIA
+branch exists for later merge, but it is not claimed here as merged or
+live-validated.
 
 The repository currently contains:
 
@@ -41,9 +48,8 @@ The repository currently contains:
   (`run`, `validate-bundle`, `reduce`, `report`).
 - Example Mac-local and mock-local configs.
 - Phase 1 methodology, feasibility, and measurement-design docs.
-- A test suite (415 tests, 10 skipped, 31 expected failures pending P2-013)
-  run in CI on every push, including a mock end-to-end run + bundle
-  validation.
+- A test suite (455 tests, 10 skipped, zero expected failures) run in CI on
+  every push, including a mock end-to-end run + bundle validation.
 
 ## Verify
 
@@ -53,8 +59,8 @@ python3 -m unittest discover -s tests
 
 (9 tests skip unless the `[analysis]` extra is installed — the
 report-generator chart tests; 1 more skips unless `jsonschema` happens to
-be installed. The suite currently carries 31 expected failures for Stream F
-audit pins that flip to passing as P2-013 lands.)
+be installed. As of 2026-07-07 after P2-013, all 31 audit pins are fixed and
+the suite carries zero expected failures.)
 
 ## Run The Harness (mock target — no hardware or extras needed)
 
@@ -65,7 +71,7 @@ python3 -m joulewise run configs/examples/mock_local.json --runs-dir runs
 # Structurally verify any bundle:
 python3 -m joulewise validate-bundle runs/example-mock-local
 
-# Re-derive summary metrics from a bundle's raw evidence (post-hoc):
+# Re-derive summary metrics from a bundle's recorded trace/events (post-hoc):
 python3 -m joulewise reduce runs/example-mock-local
 
 # Render a static HTML run browser (needs: pip install 'joulewise[analysis]'):

@@ -5,13 +5,30 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-07 (fifth update)
+- Last updated: 2026-07-07 (merge-time reconciliation)
 - Project phase: Phase 1 closing; Phase 2 in progress - instrument
-  CAMPAIGN-READY; the P2-013 evidence-integrity fixes land next, then the
-  two-model baseline matrix
+  CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
+  are complete; the two-model baseline matrix is the next Mac corpus step
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 
-## This Update (2026-07-07, fifth update) — 30-second read
+## This Update (as of 2026-07-07, merge-time) — 30-second read
+
+**Merge-time reconciliation:** the reader-facing status below defers to
+the phase checklist matrix rows for per-item authority. Since this stream's
+first draft, the integrity stream closed P2-013 and P2-014: all 31 audit
+pins are fixed, the suite is 455 tests with 10 skips and zero expected
+failures, bundle provenance now records prompt/workload identities, and
+`validate-bundle --strict` includes the powermetrics raw-plist-to-trace
+gate plus the legacy additive-summary comparison. The six existing real
+corpus bundles pass strict read-only and unrewritten; strict proves
+re-derivation of the recorded evidence, not independent rerunning of the
+hardware session. New-era bundles must carry shape-valid provenance to pass.
+The post-docs KV spike has a lead-reverified Stage 3.0.1 verdict of
+`replay_supported` (tokens identical; cache size +0.018% vs prediction),
+and the post-docs 2K branch has a fixture-first NVIDIA implementation, but
+neither is claimed here as merged into this stream or live hardware-validated.
+
+## Previous Update (2026-07-07, fifth update) — 30-second read
 
 **The instrument grew four capabilities in one session and is now
 campaign-ready.** Five parallel work streams landed (PRs #2-#6):
@@ -30,8 +47,9 @@ planned two-model baseline matrix (4 workload shapes × 2 models × 5
 repetitions) runs unattended. A review council also produced a
 hardware-tiered research agenda: 16 questions answerable on current
 hardware alone, 10 more behind planned gates
-(`docs/research_question_bank.md`). Next: the P2-013 evidence-integrity
-fixes, then the baseline matrix on a quiet machine.
+(`docs/research_question_bank.md`). The P2-013 evidence-integrity and
+P2-014 provenance fixes are now complete; next Mac corpus step is the
+baseline matrix on a quiet machine.
 
 ## Previous Update (2026-07-07, fourth update) — 30-second read
 
@@ -114,7 +132,7 @@ than a numbered question.
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation) — 2M baselines are fully tooled and follow the P2-013 evidence-integrity fixes; 2K/2L gated on device access |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation) — 2M baselines are fully tooled; 2K fixture-first implementation is complete on a later branch but remains unmerged here and not live hardware-validated; 2L gated on device access |
 | 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
@@ -125,8 +143,8 @@ than a numbered question.
 |---|---|---|---|
 | Background / related work | Phase 4 Stage 4.6, `docs/phase_4/related_work_draft.md` | drafted (11 verified sources) | background-chapter assembly and the Phase 4 exit pass |
 | Measurement methodology | `docs/contracts/measurement_methodology.md` | complete | Phase 4 ratification may amend statistical details against observed variance |
-| Harness / instrument | `joulewise/` | complete and campaign-ready | P2-013 evidence-integrity fixes must land before the 2M corpus |
-| Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | unblocked; runs after P2-013 | needs the 2M baseline corpus |
+| Harness / instrument | `joulewise/` | complete and campaign-ready | new-era bundles must carry shape-valid provenance to pass strict |
+| Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | unblocked after P2-013/P2-014 | needs the 2M baseline corpus |
 | Split-inference study | Phase 3 | planned | needs KV-feasibility spikes plus a real pairing, or the synthetic-transfer + analytical-composition floor |
 | Results / limitations + claims audit | Phase 4 Stages 4.3-4.5 | planned | needs the analysis dataset and detection-floor gate |
 
@@ -140,19 +158,23 @@ Complete so far (all verifiable in the repository):
   live on the Mac target. Bundle writer, controller
   lifecycle, reducer, static-HTML report generator, and CLI verbs `run` /
   `validate-bundle` / `reduce` (post-hoc re-derivation of summary metrics
-  from raw evidence) / `report`. All bundle consumers read through one
+  from the recorded power trace and events) / `report`. Strict validation
+  now also re-derives powermetrics traces from raw plist evidence, checks
+  legacy additive-summary compatibility, and requires shape-valid
+  provenance on new-era bundles. All bundle consumers read through one
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (415 tests, run in CI on every push,
-  including a mock end-to-end run + bundle validation); emitted configs
+  a CLI, plus a passing test suite (455 tests, 10 skipped, zero expected
+  failures, run in CI on every push, including a mock end-to-end run +
+  bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
   are pinned by test.
 - Adapter interface contracts (runtime / telemetry / transport), the run
   bundle artifact contract, and the measurement methodology (idle
   subtraction, measurement boundaries, clock synchronization, statistical
   protocol - highlights below).
-- Evidence-shaped plans for every phase, a design-decision log (31
+- Evidence-shaped plans for every phase, a design-decision log (34
   decisions, each with the alternatives considered), a risk register with
   an explicit descope ladder, and example configs for the Mac and mock
   targets.
@@ -168,10 +190,14 @@ Complete so far (all verifiable in the repository):
   backup protocol with a passed restore test.
 
 Not yet started: the remote real-hardware adapters — NVIDIA/vLLM +
-Jetson Orin (2K/2L, gated on device access). Code-level specs are in
-`docs/phase_2/hardware_slice_implementation_guide.md`. The mock-first core
-landed first by design, so measurement code is never debugging the harness
-and the instrument at the same time.
+Jetson Orin live validation (2K/2L, gated on device access). The 2K
+fixture-first implementation is complete on the later NVIDIA branch
+(protocol v1, SSH transport, `nvidia-smi` + vLLM adapters, registry wiring,
+491 CI-safe tests), but all protocol pins remain PROVISIONAL until live
+hardware contact; a P1-006 evidence checklist exists there. Code-level
+specs are in `docs/phase_2/hardware_slice_implementation_guide.md`. The
+mock-first core landed first by design, so measurement code is never
+debugging the harness and the instrument at the same time.
 
 Waiting on external input (none of it blocks the current work):
 
@@ -412,7 +438,7 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (415 tests, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (455 tests, 10 skipped, zero expected failures, CI-enforced) |
 
 ## Process Note
 
@@ -497,7 +523,7 @@ capability first, claims only when the instrument can defend them.
 **Where to look.** `docs/council_log.md` (C-001…C-006) is the
 deliberation record — C-006 is a full orchestration trace of the
 five-stream day, including what each review layer uniquely caught and
-what it cost. `docs/decision_log.md` holds the 31 binding design
+what it cost. `docs/decision_log.md` holds the 34 binding design
 decisions with alternatives considered. `docs/run_reports/` narrates
 each working session. The orchestration playbooks themselves live
 outside this repository as reusable skills (council, delegation,

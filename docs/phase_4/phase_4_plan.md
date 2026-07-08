@@ -75,9 +75,15 @@ Design notes:
   schema_version), dimensions (target, model, quantization, workload
   profile, run_kind, link label, prompt/output tokens), all summary
   metrics (incl. per-phase energy), quality fields, bundle path.
-- Inclusion rule: bundles must pass `validate-bundle --strict` (D-030:
-  succeeded bundles must be reducer-consumable and their summary must
-  match a fresh re-reduction); failures are listed, not skipped silently.
+- Inclusion rule: bundles must pass `validate-bundle --strict` (D-030,
+  updated by the 2026-07-07 P2-013/P2-014 integrity pass): succeeded
+  bundles must be reducer-consumable; powermetrics bundles must re-derive
+  the recorded power trace from raw plist evidence; summaries must match a
+  fresh re-reduction from the recorded trace and event log, including the
+  legacy additive summary comparison; and new-era bundles must carry
+  shape-valid summary/workload provenance. This proves re-derivation of the
+  recorded evidence path, not independent repetition of the hardware
+  session. Failures are listed, not skipped silently.
 - Exclusion log: `analysis/exclusions.md` - every excluded bundle with
   reason (incomplete, superseded by re-run, quality-flagged with cause per
   D-014). The aggregate command writes candidates; a human/agent confirms
