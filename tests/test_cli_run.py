@@ -12,16 +12,25 @@ from __future__ import annotations
 import io
 import json
 import re
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
+from joulewise.adapters.powermetrics import RAW_SAMPLES_NAME
+from joulewise.clock import FakeClock
 from joulewise.cli import main, validate_bundle
+from joulewise.controller import run_benchmark
+from joulewise.schemas import BenchmarkConfig, RunStatus
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
+POWERMETRICS_FIXTURE = (
+    REPO_ROOT / "tests" / "fixtures" / "powermetrics_sample.plist"
+)
 
 #: The single machine-greppable success line shape the contract pins.
 SUCCEEDED_LINE = re.compile(r"^bundle: (\S+) status=succeeded$")
@@ -34,6 +43,10 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
     with redirect_stdout(out), redirect_stderr(err):
         exit_code = main(argv)
     return exit_code, out.getvalue(), err.getvalue()
+
+
+def _completed(command: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
 
 
 class CliRunTestCase(unittest.TestCase):
@@ -418,6 +431,103 @@ class StrictValidateTests(CliRunTestCase):
         self.assertEqual(exit_code, 3)
         bundle = self.bundle_path_from_line(out.splitlines()[0])
         self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def _make_powermetrics_bundle(self, run_id: str) -> Path:
+        fixture = POWERMETRICS_FIXTURE.read_bytes()
+        config_data = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+        config_data["run_id"] = run_id
+        config_data["hardware_target"]["telemetry_backend"] = "powermetrics"
+        config_data["workload_profile"]["output_tokens"] = 300
+        config_data["sampling"] = {"power_hz": 2.0, "idle_seconds": 5.0}
+        config = BenchmarkConfig.from_mapping(config_data)
+
+        def fake_run(command, **kwargs):
+            if "-o" in command:
+                Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return _completed(command)
+
+        class FakePopen:
+            def __init__(self, command, **kwargs):
+                self.path = Path(command[command.index("-o") + 1])
+                self.path.write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def kill(self):
+                self.returncode = -9
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        with (
+            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+            patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+        ):
+            bundle, summary = run_benchmark(
+                config,
+                self.runs_dir,
+                FakeClock(start=1_783_394_100.0),
+            )
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertTrue((bundle / "raw" / RAW_SAMPLES_NAME).is_file())
+        return bundle
+
+    def _trace_rows(self, bundle: Path) -> list[list[str]]:
+        return [
+            line.split(",")
+            for line in (bundle / "power_trace.csv").read_text().splitlines()
+        ]
+
+    def test_powermetrics_raw_to_trace_matching_bundle_passes_strict(self) -> None:
+        bundle = self._make_powermetrics_bundle("strict-pm-clean")
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+        code, out, err = _run(["validate-bundle", "--strict", str(bundle)])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out.strip(), f"valid bundle: {bundle}")
+
+    def test_powermetrics_raw_to_trace_value_tamper_fails_with_row_and_rail(self) -> None:
+        bundle = self._make_powermetrics_bundle("strict-pm-tamper")
+        rows = self._trace_rows(bundle)
+        self.assertEqual(rows[2][3], "gpu_power")
+        rows[2][1] = str(float(rows[2][1]) + 1.0)
+        (bundle / "power_trace.csv").write_text(
+            "".join(",".join(row) + "\n" for row in rows)
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(any("strict: raw-to-trace:" in p for p in problems), problems)
+        problem = next(p for p in problems if "strict: raw-to-trace:" in p)
+        self.assertIn("row 3", problem)
+        self.assertIn("gpu_power", problem)
+        self.assertIn("power_w", problem)
+
+    def test_powermetrics_raw_to_trace_formatting_only_variant_passes_strict(self) -> None:
+        bundle = self._make_powermetrics_bundle("strict-pm-format")
+        rows = self._trace_rows(bundle)
+        for row in rows[1:]:
+            row[0] = row[0] + "0"
+            row[1] = row[1] + "0"
+        (bundle / "power_trace.csv").write_text(
+            "".join(",".join(row) + "\n" for row in rows)
+        )
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_raw_to_trace_subcheck_skips_non_powermetrics_bundle(self) -> None:
+        bundle = self.make_bundle("strict-non-pm-skip")
+        self.assertFalse((bundle / "raw" / RAW_SAMPLES_NAME).exists())
+        rows = self._trace_rows(bundle)
+        rows[1][1] = str(float(rows[1][1]) + 1.0)
+        (bundle / "power_trace.csv").write_text(
+            "".join(",".join(row) + "\n" for row in rows)
+        )
+        problems = validate_bundle(bundle, strict=True)
+        self.assertFalse(any("raw-to-trace" in p for p in problems), problems)
 
 
 class ReduceVerbTests(CliRunTestCase):

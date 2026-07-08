@@ -19,6 +19,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from joulewise.adapters.powermetrics import (
+    RAW_SAMPLES_NAME,
+    samples_from_raw_powermetrics,
+)
 from joulewise.bundle import BundleError
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.clock import Clock, FakeClock, SystemClock
@@ -41,6 +45,7 @@ from joulewise.schemas import (
     SummaryMetrics,
     TelemetryBackend,
 )
+from joulewise.validation import finite_float
 
 
 def _load_config(path: Path) -> dict[str, Any]:
@@ -257,6 +262,7 @@ def _strict_problems(reader: BundleReader) -> list[str]:
                 "measured window; a succeeded summary needs a "
                 "reducer-consumable curve"
             )
+    problems.extend(_strict_raw_to_trace_problems(reader))
     fresh = reduce_bundle(reader.path).to_dict()
     if fresh != summary:
         differing = sorted(
@@ -269,6 +275,86 @@ def _strict_problems(reader: BundleReader) -> list[str]:
             f"of the raw artifacts (differing keys: {', '.join(differing)})"
         )
     return problems
+
+
+def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
+    metadata = reader.raw_metadata()
+    if not isinstance(metadata, dict):
+        return []
+    adapters = metadata.get("adapters")
+    telemetry = adapters.get("telemetry") if isinstance(adapters, dict) else None
+    telemetry_name = telemetry.get("name") if isinstance(telemetry, dict) else None
+    if telemetry_name != TelemetryBackend.POWERMETRICS.value:
+        return []
+    raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
+    if not raw_path.is_file():
+        return [f"strict: raw-to-trace: missing raw/{RAW_SAMPLES_NAME}"]
+    device = metadata.get("device")
+    if not isinstance(device, dict):
+        return ["strict: raw-to-trace: metadata.device is missing or not an object"]
+    try:
+        anchor_offset_s = finite_float(
+            device.get("plist_anchor_offset_s"),
+            "metadata.device.plist_anchor_offset_s",
+        )
+    except ValueError as exc:
+        return [f"strict: raw-to-trace: {exc}"]
+    try:
+        expected = samples_from_raw_powermetrics(
+            raw_path.read_bytes(),
+            plist_anchor_offset_s=anchor_offset_s,
+        )
+    except (OSError, ValueError) as exc:
+        return [f"strict: raw-to-trace: cannot derive raw/{RAW_SAMPLES_NAME}: {exc}"]
+    try:
+        rows = reader.trace_rows()
+    except BundleReadError as exc:
+        return [f"strict: raw-to-trace: {exc}"]
+    if len(rows) != len(expected):
+        return [
+            "strict: raw-to-trace: power_trace.csv row count "
+            f"{len(rows)} does not match raw-derived {len(expected)}"
+        ]
+    for index, (row, sample) in enumerate(zip(rows, expected), start=2):
+        rail = row.get("rail") or ""
+        try:
+            timestamp_s = finite_float(
+                row.get("timestamp_s"),
+                f"power_trace.csv row {index} timestamp_s",
+            )
+            power_w = finite_float(
+                row.get("power_w"),
+                f"power_trace.csv row {index} power_w",
+            )
+        except ValueError as exc:
+            return [f"strict: raw-to-trace: {exc}"]
+        source = row.get("source") or ""
+        expected_rail = sample.rail or ""
+        if timestamp_s != sample.timestamp_s:
+            return [
+                "strict: raw-to-trace: power_trace.csv row "
+                f"{index} rail {rail!r} timestamp_s {timestamp_s!r} "
+                f"does not match raw-derived {sample.timestamp_s!r}"
+            ]
+        if power_w != sample.power_w:
+            return [
+                "strict: raw-to-trace: power_trace.csv row "
+                f"{index} rail {rail!r} power_w {power_w!r} "
+                f"does not match raw-derived {sample.power_w!r}"
+            ]
+        if source != sample.source:
+            return [
+                "strict: raw-to-trace: power_trace.csv row "
+                f"{index} rail {rail!r} source {source!r} "
+                f"does not match raw-derived {sample.source!r}"
+            ]
+        if rail != expected_rail:
+            return [
+                "strict: raw-to-trace: power_trace.csv row "
+                f"{index} rail {rail!r} does not match raw-derived "
+                f"{expected_rail!r}"
+            ]
+    return []
 
 
 def _cmd_validate_bundle(args: argparse.Namespace) -> int:

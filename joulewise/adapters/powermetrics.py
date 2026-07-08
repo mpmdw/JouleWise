@@ -540,6 +540,27 @@ def parse_powermetrics_records(
     return records
 
 
+def samples_from_raw_powermetrics(
+    data: bytes, *, plist_anchor_offset_s: float
+) -> list[PowerSample]:
+    """Re-derive ``power_trace.csv`` samples from raw powermetrics evidence.
+
+    ``plist_anchor_offset_s`` is the recorded evidence
+    ``plist_first_timestamp_s - timestamp_anchor_s``. The artifact under test
+    is never used to infer the anchor.
+    """
+    offset_s = finite_float(
+        plist_anchor_offset_s,
+        "metadata.device.plist_anchor_offset_s",
+    )
+    raw_anchor_records = parse_powermetrics_records(data)
+    first_timestamp_s = raw_anchor_records[0].metadata["plist_first_timestamp_s"]
+    timestamp_anchor_s = first_timestamp_s - offset_s
+    return samples_from_records(
+        parse_powermetrics_records(data, timestamp_anchor_s=timestamp_anchor_s)
+    )
+
+
 def _parse_powermetrics_records(
     data: bytes, *, timestamp_anchor_s: float | None = None
 ) -> tuple[list[PowermetricsRecord], _DroppedFrameDiagnostic | None]:
