@@ -48,13 +48,13 @@ def main() -> None:
     parser.add_argument("--master-seed", default="jw-mixed-v1")
     parser.add_argument("--tokenizer-path", required=True)
     parser.add_argument("--out", required=True)
-    parser.add_argument("--sidecar", default=None)
+    parser.add_argument("--sidecar", required=True)
     parser.add_argument("--items-per-category", type=int, default=6)
     args = parser.parse_args()
 
     tokenizer_path = Path(args.tokenizer_path).expanduser().resolve()
     out = Path(args.out)
-    sidecar = Path(args.sidecar) if args.sidecar else out.with_suffix(".annotations.json")
+    sidecar = Path(args.sidecar)
     tokenizer = load_tokenizer(tokenizer_path)
     manifest_files = tokenizer_manifest(tokenizer_path)
     if args.suite == "mixed":

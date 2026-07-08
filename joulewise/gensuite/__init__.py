@@ -1436,9 +1436,9 @@ def _manifest_shell(
     return manifest
 
 
-def _write_sidecar(path: str | Path | None, annotations: dict[str, Any]) -> None:
+def _write_sidecar(path: str | Path, annotations: dict[str, Any]) -> None:
     if path is None:
-        return
+        raise ValueError("sidecar_path is required for manifest builds")
     sidecar = Path(path)
     sidecar.write_text(json.dumps(annotations, indent=2, sort_keys=True) + "\n")
 
@@ -1514,9 +1514,10 @@ def build_jw_mixed_suite(
         "tokenizer_id": tok_id,
         "bank_hash": BANK_HASH,
     }
+    suite_profile = f"jw_mixed_v1_common_{prompt_budget}_{output_budget}"
     manifest = _manifest_shell(
         suite_id="jw_mixed_v1",
-        suite_profile="jw_mixed_v1_common_512_256",
+        suite_profile=suite_profile,
         master_seed=master_seed,
         tokenizer_id=tok_id,
         tokenizer_manifest_hash=tokenizer_files_hash,
@@ -1536,7 +1537,7 @@ def build_jw_mixed_manifest(
     master_seed: str,
     tokenizer: TokenizerProtocol,
     *,
-    sidecar_path: str | Path | None = None,
+    sidecar_path: str | Path,
     **kwargs: Any,
 ) -> dict[str, Any]:
     build = build_jw_mixed_suite(master_seed, tokenizer, **kwargs)
@@ -1601,9 +1602,10 @@ def build_sentinel_suite(
         "tokenizer_id": tok_id,
         "bank_hash": BANK_HASH,
     }
+    suite_profile = f"jw_mixed_v1_sentinel_{prompt_budget}_{output_budget}"
     manifest = _manifest_shell(
         suite_id="jw_mixed_v1_sentinel",
-        suite_profile="jw_mixed_v1_sentinel_512_256",
+        suite_profile=suite_profile,
         master_seed=master_seed,
         tokenizer_id=tok_id,
         tokenizer_manifest_hash=tokenizer_files_hash,
@@ -1623,7 +1625,7 @@ def build_sentinel_manifest(
     master_seed: str,
     tokenizer: TokenizerProtocol,
     *,
-    sidecar_path: str | Path | None = None,
+    sidecar_path: str | Path,
     **kwargs: Any,
 ) -> dict[str, Any]:
     build = build_sentinel_suite(master_seed, tokenizer, **kwargs)

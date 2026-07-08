@@ -420,6 +420,69 @@ class GenSuiteTests(unittest.TestCase):
             self.assertNotIn("annotations", sent_manifest)
             SuiteManifest.from_mapping(sent_manifest)
 
+    def test_manifest_builders_require_sidecar_path(self) -> None:
+        tokenizer = QuirkyFakeTokenizer()
+        with self.assertRaises(TypeError):
+            build_jw_mixed_manifest(
+                "sidecar-required",
+                tokenizer,
+                tokenizer_manifest=FAKE_TOKENIZER_MANIFEST,
+                items_per_category=1,
+            )
+        with self.assertRaises(TypeError):
+            build_sentinel_manifest(
+                "sidecar-required",
+                tokenizer,
+                tokenizer_manifest=FAKE_TOKENIZER_MANIFEST,
+            )
+        with self.assertRaises(ValueError):
+            build_jw_mixed_manifest(
+                "sidecar-required",
+                tokenizer,
+                tokenizer_manifest=FAKE_TOKENIZER_MANIFEST,
+                sidecar_path=None,
+                items_per_category=1,
+            )
+        with self.assertRaises(ValueError):
+            build_sentinel_manifest(
+                "sidecar-required",
+                tokenizer,
+                tokenizer_manifest=FAKE_TOKENIZER_MANIFEST,
+                sidecar_path=None,
+            )
+
+    def test_manifest_profile_ids_derive_from_actual_budgets(self) -> None:
+        tokenizer = QuirkyFakeTokenizer()
+        with tempfile.TemporaryDirectory() as tmp:
+            mixed = build_jw_mixed_manifest(
+                "profile-budget",
+                tokenizer,
+                tokenizer_manifest=FAKE_TOKENIZER_MANIFEST,
+                sidecar_path=Path(tmp) / "mixed.annotations.json",
+                items_per_category=1,
+                prompt_budget=640,
+                output_budget=128,
+            )
+            self.assertEqual(mixed["suite_profile"], "jw_mixed_v1_common_640_128")
+            self.assertEqual(
+                mixed["source_manifest"]["subset_id"],
+                "jw_mixed_v1_common_640_128",
+            )
+
+            sentinel = build_sentinel_manifest(
+                "profile-budget",
+                tokenizer,
+                tokenizer_manifest=FAKE_TOKENIZER_MANIFEST,
+                sidecar_path=Path(tmp) / "sentinel.annotations.json",
+                prompt_budget=640,
+                output_budget=128,
+            )
+            self.assertEqual(sentinel["suite_profile"], "jw_mixed_v1_sentinel_640_128")
+            self.assertEqual(
+                sentinel["source_manifest"]["subset_id"],
+                "jw_mixed_v1_sentinel_640_128",
+            )
+
     def test_missing_tokenizer_manifest_fails_closed(self) -> None:
         with self.assertRaises(ValueError):
             build_jw_mixed_suite("missing-manifest", QuirkyFakeTokenizer(), items_per_category=1)
