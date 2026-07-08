@@ -9,6 +9,7 @@ in milliwatts; JouleWise emits watts.
 from __future__ import annotations
 
 import getpass
+import hashlib
 import json
 import math
 import plistlib
@@ -67,6 +68,26 @@ class PowermetricsRecord:
     metadata: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class _DroppedFrameDiagnostic:
+    frame_index: int
+    byte_count: int
+    sha256: str
+    error: str
+
+    def to_metadata(self, *, artifact: str, capture: str) -> dict[str, Any]:
+        return {
+            "adapter": "powermetrics",
+            "artifact": artifact,
+            "capture": capture,
+            "action": "dropped_final_unparseable_frame",
+            "frame_index": self.frame_index,
+            "byte_count": self.byte_count,
+            "sha256": self.sha256,
+            "error": self.error,
+        }
+
+
 class PowermetricsTelemetryAdapter:
     """Telemetry adapter backed by macOS ``powermetrics`` plist output."""
 
@@ -103,7 +124,14 @@ class PowermetricsTelemetryAdapter:
         data = self._run_bounded_capture(config, count=count)
         if context is not None:
             write_raw_artifact(context, RAW_IDLE_NAME, data)
-        records = parse_powermetrics_records(data, timestamp_anchor_s=capture_start_s)
+        records, diagnostic = _parse_powermetrics_records(
+            data, timestamp_anchor_s=capture_start_s
+        )
+        self._record_parse_diagnostic(
+            diagnostic,
+            artifact=f"raw/{RAW_IDLE_NAME}",
+            capture="idle_baseline",
+        )
         rich_records = decode_rich_telemetry(data)
         if context is not None:
             self._write_rich_artifact(
@@ -198,7 +226,14 @@ class PowermetricsTelemetryAdapter:
         capture_path.unlink(missing_ok=True)
         if context is not None:
             write_raw_artifact(context, RAW_SAMPLES_NAME, data)
-        records = parse_powermetrics_records(data, timestamp_anchor_s=clock_start_s)
+        records, diagnostic = _parse_powermetrics_records(
+            data, timestamp_anchor_s=clock_start_s
+        )
+        self._record_parse_diagnostic(
+            diagnostic,
+            artifact=f"raw/{RAW_SAMPLES_NAME}",
+            capture="measured_run",
+        )
         if context is not None:
             try:
                 rich_data = rich_telemetry_jsonl(data)
@@ -226,6 +261,19 @@ class PowermetricsTelemetryAdapter:
             write_derived_artifact(context, name, data)
         except (BundleError, OSError, ValueError) as exc:
             self._device_metadata[error_key] = _terse_error(exc)
+
+    def _record_parse_diagnostic(
+        self,
+        diagnostic: _DroppedFrameDiagnostic | None,
+        *,
+        artifact: str,
+        capture: str,
+    ) -> None:
+        if diagnostic is None:
+            return
+        entries = self._device_metadata.setdefault("parse_diagnostics", [])
+        if isinstance(entries, list):
+            entries.append(diagnostic.to_metadata(artifact=artifact, capture=capture))
 
     def thermal_state(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -486,9 +534,19 @@ def parse_powermetrics_records(
     data: bytes, *, timestamp_anchor_s: float | None = None
 ) -> list[PowermetricsRecord]:
     """Parse a NUL-framed powermetrics plist stream into interval records."""
-    documents = _powermetrics_documents(data)
+    records, _diagnostic = _parse_powermetrics_records(
+        data, timestamp_anchor_s=timestamp_anchor_s
+    )
+    return records
+
+
+def _parse_powermetrics_records(
+    data: bytes, *, timestamp_anchor_s: float | None = None
+) -> tuple[list[PowermetricsRecord], _DroppedFrameDiagnostic | None]:
+    """Parse records and return any final-frame drop diagnostic."""
+    documents, diagnostic = _powermetrics_documents(data)
     if not documents:
-        return []
+        raise ValueError("powermetrics stream contains no complete plist documents")
 
     plist_first_timestamp = _timestamp_epoch_utc(
         _required(documents[0], "timestamp", 0)
@@ -539,14 +597,14 @@ def parse_powermetrics_records(
                 | {"plist_first_timestamp_s": plist_first_timestamp},
             )
         )
-    return records
+    return records, diagnostic
 
 
 def decode_rich_telemetry(
     data: bytes, *, timestamp_anchor_s: float | None = None
 ) -> list[dict[str, Any]]:
     """Decode additive per-sample powermetrics fields from a plist stream."""
-    documents = _powermetrics_documents(data)
+    documents, _diagnostic = _powermetrics_documents(data)
     if not documents:
         return []
 
@@ -679,19 +737,39 @@ def samples_from_records(records: list[PowermetricsRecord]) -> list[PowerSample]
     return samples
 
 
-def _powermetrics_documents(data: bytes) -> list[dict[str, Any]]:
-    documents = []
-    for index, part in enumerate(part for part in data.split(b"\0") if part.strip()):
+def _powermetrics_documents(
+    data: bytes,
+) -> tuple[list[dict[str, Any]], _DroppedFrameDiagnostic | None]:
+    documents: list[dict[str, Any]] = []
+    parts = [part for part in data.split(b"\0") if part.strip()]
+    diagnostic: _DroppedFrameDiagnostic | None = None
+    for index, part in enumerate(parts):
         try:
             document = plistlib.loads(part)
         except (ExpatError, plistlib.InvalidFileException, ValueError, TypeError) as exc:
-            raise ValueError(
-                f"powermetrics document {index} is not a valid plist: {exc}"
-            ) from exc
+            message = f"powermetrics document {index} is not a valid plist: {exc}"
+            if index == len(parts) - 1 and documents:
+                diagnostic = _DroppedFrameDiagnostic(
+                    frame_index=index,
+                    byte_count=len(part),
+                    sha256=hashlib.sha256(part).hexdigest(),
+                    error=message,
+                )
+                break
+            raise ValueError(message) from exc
         if not isinstance(document, dict):
-            raise ValueError(f"powermetrics document {index} is not a dictionary")
+            message = f"powermetrics document {index} is not a dictionary"
+            if index == len(parts) - 1 and documents:
+                diagnostic = _DroppedFrameDiagnostic(
+                    frame_index=index,
+                    byte_count=len(part),
+                    sha256=hashlib.sha256(part).hexdigest(),
+                    error=message,
+                )
+                break
+            raise ValueError(message)
         documents.append(document)
-    return documents
+    return documents, diagnostic
 
 
 def _rich_gpu(value: object) -> dict[str, Any] | None:

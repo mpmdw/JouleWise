@@ -29,13 +29,23 @@ def plist_document(**processor_overrides) -> bytes:
 
 class PowermetricsParserBugPins(unittest.TestCase):
     # A1: a trailing truncated plist tail rejects the whole capture instead of salvaging complete frames.
-    @unittest.expectedFailure
     def test_parser_ignores_trailing_truncated_document_after_valid_frames(self) -> None:
         try:
             records = parse_powermetrics_records(plist_document() + b"\0<plist")
         except ValueError as exc:
             self.fail(f"A1: trailing truncated plist tail rejected the complete frame: {exc}")
         self.assertEqual(len(records), 1)
+
+    def test_parser_rejects_midstream_corruption(self) -> None:
+        stream = plist_document() + b"\0<plist" + b"\0" + plist_document()
+        with self.assertRaisesRegex(ValueError, "document 1"):
+            parse_powermetrics_records(stream)
+
+    def test_parser_rejects_truncated_stream_with_zero_complete_frames(self) -> None:
+        with self.assertRaisesRegex(ValueError, "document 0"):
+            parse_powermetrics_records(b"<plist")
+        with self.assertRaisesRegex(ValueError, "no complete plist documents"):
+            parse_powermetrics_records(b"\0\0")
 
     # A5: rail power values can parse to NaN and contaminate downstream power samples.
     def test_parser_rejects_non_finite_power_values(self) -> None:

@@ -115,6 +115,14 @@ hardware samples rails at genuinely different instants must
 resample/align to shared timestamps before emitting rows - alignment
 policy belongs to the adapter that knows its hardware.
 
+Powermetrics NUL-framed plist parsing is lenient only for the final
+unparseable frame, and only after at least one complete frame parsed
+successfully. The adapter preserves the raw plist verbatim, drops that final
+frame only from derived parsing (`power_trace.csv` and rich telemetry), and
+records a non-gating `metadata.device.parse_diagnostics[]` entry describing
+the dropped tail. A midstream unparseable frame, or a capture with no complete
+frames, is still a hard parse failure.
+
 Mock telemetry sampling convention (D-019): for any nonzero
 `start_sampling`/`stop_sampling` span, `MockTelemetryAdapter` stamps
 synthetic measured samples strictly inside that adapter span, never at

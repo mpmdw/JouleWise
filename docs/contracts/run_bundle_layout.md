@@ -58,6 +58,14 @@ the source of truth for the derived `power_trace.csv`; a parser bug can be
 fixed and the bundle re-reduced without re-running hardware (decision
 D-002).
 
+Powermetrics captures preserve `raw/powermetrics.plist` verbatim, including
+any trailing unparseable final NUL frame. The parser may drop only that final
+frame when at least one complete frame was parsed; the drop is recorded as a
+non-gating diagnostic in `metadata.device.parse_diagnostics[]` with the raw
+artifact path, capture stage, dropped frame index, byte count, SHA-256, and
+parse error. Midstream corrupt frames and zero-complete-frame captures remain
+parse failures.
+
 `rich_telemetry.jsonl` and `rich_telemetry_idle.jsonl` are optional,
 additive, derived powermetrics artifacts: one JSON object per plist document
 from the measured capture and idle-baseline capture, respectively. They are

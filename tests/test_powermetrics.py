@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import plistlib
 import statistics
@@ -250,9 +251,9 @@ class PowermetricsParserTests(unittest.TestCase):
         self.assertIsNone(records[2]["clusters"][0]["cpus"][0]["freq_hz"])
         self.assertEqual(records[2]["clusters"][0]["cpus"][1]["freq_hz"], 456.0)
 
-    def test_decode_rich_telemetry_rejects_garbage_trailing_document(self) -> None:
-        with self.assertRaisesRegex(ValueError, "document 5"):
-            decode_rich_telemetry(FIXTURE.read_bytes() + b"\0garbage")
+    def test_decode_rich_telemetry_drops_garbage_trailing_document(self) -> None:
+        records = decode_rich_telemetry(FIXTURE.read_bytes() + b"\0garbage")
+        self.assertEqual(len(records), 5)
 
     def test_rich_helpers_handle_zero_document_streams(self) -> None:
         self.assertEqual(decode_rich_telemetry(b"\0\0"), [])
@@ -725,7 +726,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 adapter.device_metadata(config)["rich_telemetry_error"],
             )
 
-    def test_stop_sampling_preserves_raw_before_trailing_garbage_parse_failure(self) -> None:
+    def test_stop_sampling_drops_trailing_garbage_and_records_diagnostic(self) -> None:
         config = make_config()
         adapter = PowermetricsTelemetryAdapter(FakeClock(start=10.0))
         garbage_stream = FIXTURE.read_bytes() + b"\0garbage"
@@ -768,11 +769,74 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 patch("joulewise.adapters.powermetrics.subprocess.Popen", GarbagePopen),
             ):
                 self.assertTrue(adapter.start_sampling(config, context).ok)
-                with self.assertRaisesRegex(ValueError, "document 5"):
-                    adapter.stop_sampling(config, context)
+                samples = adapter.stop_sampling(config, context)
 
             self.assertEqual((root / "raw" / RAW_SAMPLES_NAME).read_bytes(), garbage_stream)
-            self.assertFalse((root / RICH_TELEMETRY_NAME).exists())
+            self.assertEqual(len(samples), 15)
+            diagnostics = adapter.device_metadata(config)["parse_diagnostics"]
+            self.assertEqual(len(diagnostics), 1)
+            self.assertEqual(diagnostics[0]["artifact"], f"raw/{RAW_SAMPLES_NAME}")
+            self.assertEqual(diagnostics[0]["capture"], "measured_run")
+            self.assertEqual(diagnostics[0]["action"], "dropped_final_unparseable_frame")
+            self.assertEqual(diagnostics[0]["frame_index"], 5)
+            self.assertEqual(diagnostics[0]["byte_count"], len(b"garbage"))
+            self.assertEqual(diagnostics[0]["sha256"], hashlib.sha256(b"garbage").hexdigest())
+            self.assertTrue((root / RICH_TELEMETRY_NAME).exists())
+
+    def test_run_bundle_metadata_records_dropped_powermetrics_tail_diagnostic(self) -> None:
+        fixture = FIXTURE.read_bytes()
+        tail = b"<plist"
+        truncated_stream = fixture + b"\0" + tail
+        config = make_config(
+            workload_profile={"output_tokens": 300},
+            sampling={"power_hz": 2.0, "idle_seconds": 5.0},
+        )
+
+        def fake_run(command, **kwargs):
+            if "-o" in command:
+                Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        class TruncatedTailPopen:
+            def __init__(self, command, **kwargs):
+                self.path = Path(command[command.index("-o") + 1])
+                self.path.write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.path.write_bytes(truncated_stream)
+                self.returncode = 0
+                return b"", b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with (
+                patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+                patch("joulewise.adapters.powermetrics.subprocess.Popen", TruncatedTailPopen),
+            ):
+                bundle_path, summary = run_benchmark(config, Path(tmp), FakeClock(start=10.0))
+
+            self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+            self.assertEqual((bundle_path / "raw" / RAW_SAMPLES_NAME).read_bytes(), truncated_stream)
+            self.assertEqual(len((bundle_path / "power_trace.csv").read_text().splitlines()), 16)
+            metadata = json.loads((bundle_path / "metadata.json").read_text())
+            diagnostics = metadata["device"]["parse_diagnostics"]
+            measured = [
+                diagnostic
+                for diagnostic in diagnostics
+                if diagnostic["artifact"] == f"raw/{RAW_SAMPLES_NAME}"
+            ]
+            self.assertEqual(len(measured), 1)
+            self.assertEqual(measured[0]["capture"], "measured_run")
+            self.assertEqual(measured[0]["action"], "dropped_final_unparseable_frame")
+            self.assertEqual(measured[0]["frame_index"], 5)
+            self.assertEqual(measured[0]["byte_count"], len(tail))
+            self.assertEqual(measured[0]["sha256"], hashlib.sha256(tail).hexdigest())
 
     def test_rich_telemetry_file_is_regenerable_from_preserved_raw_plist(self) -> None:
         fixture = FIXTURE.read_bytes()
