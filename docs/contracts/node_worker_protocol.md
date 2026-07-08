@@ -157,7 +157,7 @@ merged into the run's runtime result.
 | `monotonic_started_s` | number | Node `time.monotonic()` at worker start. |
 | `monotonic_ended_s` | number | Node `time.monotonic()` at worker end. |
 | `artifacts` | object | Map from logical artifact name to relative filename actually written. |
-| `metadata` | object | Open metadata dictionary. For remote stages, adapter metadata also persists the corresponding controller-side `clock_alignment` records under bundle `metadata.json` as `metadata.adapters.<runtime|telemetry>.clock_alignments[]`. |
+| `metadata` | object | Open metadata dictionary. For remote stages, adapter metadata persists worker metadata from `status.json.metadata` under bundle `metadata.json` as `metadata.adapters.<runtime|telemetry>.worker_metadata`, and also persists the corresponding controller-side `clock_alignment` records under `metadata.adapters.<runtime|telemetry>.clock_alignments[]`. |
 
 Worker exit code is secondary crash evidence: `0` iff `status == "succeeded"`,
 `1` otherwise, and `2` only when the worker cannot even create or write the
@@ -225,6 +225,10 @@ offset_bound =
 
 Adapter metadata records `clock_alignment` with the stage name, method name,
 pre/post marker records, `offset_estimate_s`, and `offset_bound_s`.
+Worker `status.json.metadata` records such as `node_utc_offset_s` are persisted
+under the corresponding adapter's `worker_metadata` block so raw node-local
+wall-clock artifacts can be re-parsed without relying on the reducer process's
+local timezone.
 `metadata.json` persists every remote runtime stage alignment
 (`prepare`, `warmup`, `run_workload`, `cleanup`) and every remote telemetry
 stage alignment (`measure_idle`, `start_sampling`, `stop_sampling`) under

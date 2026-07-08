@@ -262,6 +262,7 @@ class _Execution:
         self._environment: dict[str, Any] | None = None
         self._device_metadata: dict[str, Any] | None = None
         self._prepare_metadata: dict[str, Any] | None = None
+        self._telemetry_metadata: dict[str, Any] | None = None
         self._runtime_alignments: list[dict[str, Any]] = []
         self._telemetry_alignments: list[dict[str, Any]] = []
         self._baseline: IdleBaseline | None = None
@@ -372,6 +373,7 @@ class _Execution:
         assert self._telemetry is not None
         self._baseline = self._telemetry.measure_idle(self._config, self._context)
         self._capture_adapter_alignments()
+        self._capture_adapter_metadata()
         self._log(
             self._telemetry_log,
             f"idle baseline: mean {self._baseline.power_w_mean} W over "
@@ -401,8 +403,10 @@ class _Execution:
         assert self._runtime is not None and self._telemetry is not None
         self._thermal_pre = self._telemetry.thermal_state(self._config, self._context)
         start_result = self._telemetry.start_sampling(self._config, self._context)
+        self._telemetry_metadata = dict(start_result.metadata)
         self._check(start_result, "measured_run", "telemetry start_sampling failed")
         self._capture_adapter_alignments()
+        self._capture_adapter_metadata()
         self._sampling_active = True
         # D-026: the measured window the reducer integrates is bounded by the
         # sampling_started/sampling_stopped marker events, not the stage
@@ -425,6 +429,7 @@ class _Execution:
         sampling_stopped_s = self._clock.now()
         self._samples = self._telemetry.stop_sampling(self._config, self._context)
         self._capture_adapter_alignments()
+        self._capture_adapter_metadata()
         self._sampling_active = False
         self._runtime_result = runtime_result
         self._thermal_post = self._telemetry.thermal_state(self._config, self._context)
@@ -610,10 +615,16 @@ class _Execution:
                 "name": self._runtime.name,
                 "prepare_metadata": self._prepare_metadata or {},
             }
+            if self._runtime_result is not None and self._runtime_result.metadata:
+                _merge_adapter_metadata(
+                    adapters["runtime"], self._runtime_result.metadata
+                )
             if self._runtime_alignments:
                 adapters["runtime"]["clock_alignments"] = _jsonable(self._runtime_alignments)
         if self._telemetry is not None:
             adapters["telemetry"] = {"name": self._telemetry.name}
+            if self._telemetry_metadata:
+                _merge_adapter_metadata(adapters["telemetry"], self._telemetry_metadata)
             if self._telemetry_alignments:
                 adapters["telemetry"]["clock_alignments"] = _jsonable(self._telemetry_alignments)
         extra["adapters"] = adapters
@@ -644,6 +655,11 @@ class _Execution:
     def _capture_adapter_alignments(self) -> None:
         self._runtime_alignments = _adapter_clock_alignments(self._runtime)
         self._telemetry_alignments = _adapter_clock_alignments(self._telemetry)
+
+    def _capture_adapter_metadata(self) -> None:
+        telemetry_metadata = _adapter_metadata(self._telemetry)
+        if telemetry_metadata:
+            self._telemetry_metadata = telemetry_metadata
 
     # ------------------------------------------------------------------
     # Summaries
@@ -816,6 +832,29 @@ def _adapter_clock_alignments(adapter: Any) -> list[dict[str, Any]]:
     if not isinstance(alignments, list):
         return []
     return [dict(item) for item in alignments if isinstance(item, dict)]
+
+
+def _adapter_metadata(adapter: Any) -> dict[str, Any]:
+    if adapter is None:
+        return {}
+    getter = getattr(adapter, "metadata", None)
+    if not callable(getter):
+        return {}
+    try:
+        metadata = getter()
+    except Exception:  # noqa: BLE001 - metadata capture must not disturb lifecycle.
+        return {}
+    if not isinstance(metadata, dict):
+        return {}
+    return dict(metadata)
+
+
+def _merge_adapter_metadata(target: dict[str, Any], metadata: dict[str, Any]) -> None:
+    for key, value in _jsonable(metadata).items():
+        if key in target:
+            target.setdefault("metadata", {})[key] = value
+        else:
+            target[key] = value
 
 
 # ---------------------------------------------------------------------------

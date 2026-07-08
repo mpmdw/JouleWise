@@ -3,10 +3,12 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
 import shutil
 import tempfile
+import time
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -22,6 +24,7 @@ from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "configs" / "examples" / "nvidia_vllm_ssh.json"
 PROMPT_TOKEN_DOMAIN = "joulewise.prompt_token_ids.v1"
+NODE_UTC_OFFSET_S = -28800
 
 
 class AutoClock:
@@ -58,7 +61,8 @@ def load_generated_config(*, host: str = "fake-nvidia-node") -> BenchmarkConfig:
 
 
 def _csv_timestamp(epoch_s: float) -> str:
-    return datetime.fromtimestamp(epoch_s).strftime("%Y/%m/%d %H:%M:%S.%f")[:-3]
+    tz = timezone(timedelta(seconds=NODE_UTC_OFFSET_S))
+    return datetime.fromtimestamp(epoch_s, tz=tz).strftime("%Y/%m/%d %H:%M:%S.%f")[:-3]
 
 
 def expected_prompt_token_hash(token_ids: list[int]) -> str:
@@ -234,7 +238,15 @@ class StubNode:
             self.stop_csv_text = self._nvidia_csv(node_times, [12.0, 13.0, 14.0])
             (local_dir / "nvidia_smi.csv").write_text(self.stop_csv_text, encoding="utf-8")
             artifacts["nvidia_smi_csv"] = "nvidia_smi.csv"
-        self._write_status(local_dir, task, "succeeded", None, "ok", artifacts)
+        self._write_status(
+            local_dir,
+            task,
+            "succeeded",
+            None,
+            "ok",
+            artifacts,
+            metadata={"node_utc_offset_s": NODE_UTC_OFFSET_S, "node_tzname": "PST"},
+        )
         return 0
 
     def _nvidia_csv(self, timestamps: list[float], powers: list[float]) -> str:
@@ -394,13 +406,10 @@ class NvidiaNodeIntegrationTests(unittest.TestCase):
         self.assertLess(output_tokens[0]["timestamp_s"], raw_tokens[0]["timestamp_s"])
         self.assertGreater(raw_tokens[0]["timestamp_s"] - output_tokens[0]["timestamp_s"], 9.0)
 
-        raw_rows = parse_nvidia_smi_csv(node.stop_csv_text)
         with (bundle_path / "power_trace.csv").open(newline="") as handle:
             trace_rows = list(csv.DictReader(handle))
         self.assertEqual(len(trace_rows), 3)
         self.assertEqual(trace_rows[0]["source"], "nvidia_smi")
-        self.assertLess(float(trace_rows[0]["timestamp_s"]), raw_rows[0].node_timestamp_s)
-        self.assertGreater(raw_rows[0].node_timestamp_s - float(trace_rows[0]["timestamp_s"]), 9.0)
 
         events = [
             json.loads(line)
@@ -421,18 +430,59 @@ class NvidiaNodeIntegrationTests(unittest.TestCase):
         self.assertEqual(metadata["connection"], {"transport": "ssh", "host": "fake-nvidia-node"})
         self.assertEqual(metadata["adapters"]["runtime"]["name"], "vllm")
         self.assertEqual(metadata["adapters"]["telemetry"]["name"], "nvidia_smi")
+        self.assertEqual(
+            metadata["adapters"]["telemetry"]["worker_metadata"]["node_utc_offset_s"],
+            NODE_UTC_OFFSET_S,
+        )
+        self.assertEqual(
+            metadata["adapters"]["runtime"]["worker_metadata"]["prompt_token_ids"],
+            [701, 702, 703, 704, 705, 706, 707, 708, 709],
+        )
         runtime_alignments = metadata["adapters"]["runtime"]["clock_alignments"]
         telemetry_alignments = metadata["adapters"]["telemetry"]["clock_alignments"]
         self.assertEqual(
             [alignment["stage"] for alignment in runtime_alignments],
-            ["runtime.prepare", "runtime.warmup", "runtime.run_workload", "runtime.cleanup"],
+            [
+                "runtime.prepare",
+                "runtime.warmup",
+                "runtime.run_workload",
+                "runtime.cleanup",
+            ],
         )
         self.assertEqual(
             [alignment["stage"] for alignment in telemetry_alignments],
             ["telemetry.measure_idle", "telemetry.start_sampling", "telemetry.stop_sampling"],
         )
         stop_alignment = next(
-            alignment for alignment in telemetry_alignments if alignment["stage"] == "telemetry.stop_sampling"
+            alignment
+            for alignment in telemetry_alignments
+            if alignment["stage"] == "telemetry.stop_sampling"
+        )
+        previous_tz = os.environ.get("TZ")
+        os.environ["TZ"] = "UTC"
+        if hasattr(time, "tzset"):
+            time.tzset()
+        try:
+            raw_rows = parse_nvidia_smi_csv(
+                (bundle_path / "raw" / "nvidia_smi.csv").read_text(encoding="utf-8"),
+                node_utc_offset_s=metadata["adapters"]["telemetry"]["worker_metadata"][
+                    "node_utc_offset_s"
+                ],
+            )
+        finally:
+            if previous_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = previous_tz
+            if hasattr(time, "tzset"):
+                time.tzset()
+        self.assertLess(
+            float(trace_rows[0]["timestamp_s"]),
+            raw_rows[0].node_timestamp_s,
+        )
+        self.assertGreater(
+            raw_rows[0].node_timestamp_s - float(trace_rows[0]["timestamp_s"]),
+            9.0,
         )
         rederived = raw_rows[0].node_timestamp_s - stop_alignment["offset_estimate_s"]
         self.assertAlmostEqual(rederived, float(trace_rows[0]["timestamp_s"]))

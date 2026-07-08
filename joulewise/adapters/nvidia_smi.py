@@ -71,9 +71,13 @@ class NvidiaSmiTelemetryAdapter:
         self._last_temperature_c: float | None = None
         self._clock_alignments: list[dict[str, Any]] = []
         self._last_parse_diagnostics: dict[str, Any] = {}
+        self._last_metadata: dict[str, Any] = {}
 
     def clock_alignments(self) -> list[dict[str, Any]]:
         return [dict(alignment) for alignment in self._clock_alignments]
+
+    def metadata(self) -> dict[str, Any]:
+        return dict(self._last_metadata)
 
     def device_metadata(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -123,6 +127,7 @@ class NvidiaSmiTelemetryAdapter:
         )
         self._last_parse_diagnostics = parse_diagnostics
         self._remember_rows(rows, result)
+        self._last_metadata = self._result_metadata(result)
         powers = [row.power_w for row in rows]
         converted_timestamps = [
             convert_node_timestamp(row.node_timestamp_s, self._offset(result)) for row in rows
@@ -151,6 +156,7 @@ class NvidiaSmiTelemetryAdapter:
         )
         self._preserve_worker_log(result, context, "start_sampling")
         metadata = self._result_metadata(result)
+        self._last_metadata = metadata
         return AdapterResult(
             ok=result.ok,
             failure_reason=result.failure_reason if not result.ok else None,
@@ -182,6 +188,7 @@ class NvidiaSmiTelemetryAdapter:
         )
         self._last_parse_diagnostics = parse_diagnostics
         self._remember_rows(rows, result)
+        self._last_metadata = self._result_metadata(result)
         return self._samples_from_rows(rows, result)
 
     def thermal_state(

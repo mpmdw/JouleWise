@@ -208,6 +208,46 @@ class SuspectIdleRegistry:
         return adapters.resolve_transport(config)
 
 
+class MetadataRuntime:
+    name = "metadata-runtime"
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+
+    def prepare(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        return self._inner.prepare(config, context)
+
+    def warmup(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        return self._inner.warmup(config, context)
+
+    def run_workload(self, config: BenchmarkConfig, context=None) -> Any:
+        result = self._inner.run_workload(config, context)
+        return replace(
+            result,
+            metadata={
+                "sentinel_runtime_metadata": "round-trip",
+                "worker_metadata": {"node_utc_offset_s": -28800},
+            },
+        )
+
+    def cleanup(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        return self._inner.cleanup(config, context)
+
+
+class MetadataRuntimeRegistry:
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        runtime, failure = adapters.resolve_runtime(config, clock)
+        if runtime is not None:
+            runtime = MetadataRuntime(runtime)
+        return runtime, failure
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_telemetry(config, clock)
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
 class DeterministicClock:
     """Non-Fake test clock that advances instantly without host time."""
 
@@ -396,6 +436,20 @@ class HappyPathTests(ControllerTestCase):
             metadata["workload_observed"],
             {"token_count": 40, "output_token_count": 8},
         )
+
+    def test_runtime_result_metadata_round_trips_under_adapter_namespace(self) -> None:
+        config = make_config("controller-runtime-metadata")
+        bundle_path, summary = run_benchmark(
+            config,
+            self.runs_root,
+            self.clock,
+            registry=MetadataRuntimeRegistry(),
+        )
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        runtime = metadata["adapters"]["runtime"]
+        self.assertEqual(runtime["sentinel_runtime_metadata"], "round-trip")
+        self.assertEqual(runtime["worker_metadata"]["node_utc_offset_s"], -28800)
 
     def test_single_run_captures_environment_snapshot(self) -> None:
         config = make_config("controller-environment")

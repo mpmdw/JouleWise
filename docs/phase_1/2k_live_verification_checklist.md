@@ -30,7 +30,7 @@ Protocol pins checked: B-4, B-7, B-14 superseded by B-33.
 
 3. Run one generated-id smoke config with no `run_id` field:
    ```sh
-   python3 -m joulewise.cli run configs/examples/nvidia_vllm_ssh.json --runs-root runs/live-2k
+   python3 -m joulewise.cli run configs/examples/nvidia_vllm_ssh.json --runs-dir runs/live-2k
    ```
    If the example still pins `run_id`, copy it to a scratch config and remove
    only that field before running.
@@ -55,7 +55,7 @@ Protocol pins checked: B-2, B-3, B-6, B-8, B-15 superseded by B-34.
 
 6. Verify `vllm serve` readiness through JouleWise prepare:
    ```sh
-   python3 -m joulewise.cli run <scratch-nvidia-config.json> --runs-root runs/live-2k-vllm
+   python3 -m joulewise.cli run <scratch-nvidia-config.json> --runs-dir runs/live-2k-vllm
    ```
    Expected evidence: runtime prepare metadata includes vLLM command, port,
    readiness status, and a task timeout consistent with the config path.
