@@ -137,6 +137,11 @@ ones) lives in `docs/research_question_bank.md`; the measurement noise
 floor / detection limit is treated as the methodology centerpiece rather
 than a numbered question.
 
+The capability map by claim ceiling lives in
+`docs/research_question_bank.md` (C-015), alongside the suite architecture
+v2 and benchmark interop direction; the guaranteed-capstone stop-line is
+recorded in the Phase 2 plan.
+
 ## Status At A Glance
 
 | Phase | Scope | Status |

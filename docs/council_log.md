@@ -44,6 +44,7 @@ standing instructions.
 | C-012 | 2026-07-08 | Site observatory stream (pointer entry; full record in run report `2026-07-08-site-observatory.md`) — dual-prior design round, 2 image-critique rounds, visual sign-off, counterreview, final-head gate | Data-driven status frontend merged as PR #13; fail-closed parser honesty enforced (2 counterreview blockers fixed); P2-017 per-source stamps closed; image-heavy analysis routed to Codex as standing doctrine (Ed) |
 | C-013 | 2026-07-08 | Lakebed deployment stream (pointer entry; full record in run report `2026-07-08-lakebed-deploy.md`) — 5.5 impl + 6 platform-constraint fix rounds + fresh counterreview | Site live as a shareable capsule with a live GitHub freshness layer (fails soft); lead owns deploy/claim (no sandbox network); site regen+redeploy folded into the RUN_STATE end-of-work loop |
 | C-014 | 2026-07-08 | Workload-suite science hardening (full entry below) — lead audit + scout + 3 design lenses + invited peer counterreview | Q4-at-L3 gap closed via `q4_l3_shape_grid_v1` (4x3 + holdouts); P2-015 expanded to comparative MDE floors; jw_mixed common-shape stratum (C-W.1 was unfalsifiable); P2-010 split substrate/smoke, scored ladder deferred; two-quiet-window plan; analysis-plans contract (D-038); program restructure (D-039); two lead designs overturned by invited peer |
+| C-015 | 2026-07-08 | Benchmark expansion council (full entry below) — reach lenses R1/R2 + design lenses E1/E2 + peer counterreview | Suite architecture v2 (D-040: B×k bundles, one generic mechanism, per-item status model); interop direction (D-041: HumanEval-first imports, marker-shim energy layer, kill list); capability map landed in bank; R2 collect-now set spawned the window-a-capture stream; capstone stop-line + D-034 gate restated |
 
 ---
 
@@ -1003,3 +1004,53 @@ lead designs overturned with strictly better ones (grid, window
 packing), consistent with the 2026-07-07 calibration signal that
 design-freedom delegation to 5.5 runs hotter than doctrine assumed.
 Every layer produced unique catches this session; no drop candidates.
+
+## C-015: Benchmark expansion council — suite architecture v2 + interop (2026-07-08)
+
+FULL ENTRY (genuine deliberation; same-day second convening after
+C-014). Convened on Ed's directives: (1) an extensive review of what
+scientific questions the benchmark can answer and what measurements are
+being left on the table; (2) expansion toward multi-prompt suite runs of
+varying difficulty/type and benchmark interop in both directions;
+worktrees + liberal Codex agents authorized. Shape: two reach lenses
+(R1 affirmative capability map; R2 missing measurements), two design
+lenses (E1 suite architecture/statistics; E2 interop), lead synthesis,
+peer counterreview with design judgment invited, lead adjudication.
+
+Reach outcomes: R1 mapped every answerable question by claim ceiling
+(today / Window A / Window B / hardware-gated) with ladder-compliant
+claim templates — landed as the bank's capability-map section; its
+verdict named three unscheduled cheap campaigns (C5-1.6/1.12/1.8),
+queued as ONE select-after-floors row (P2-024). R2's
+collect-now-or-lose-comparability set (per-bundle env snapshots,
+cooldown-trace preservation, inter-run gaps, tokenize/setup phase
+markers, MLX memory snapshots, sampler-availability metadata) spawned
+the window-a-capture worktree stream the same hour — the class of
+finding that had to precede the 2M corpus' birth.
+
+Design outcomes (consensus; peer narrowed, did not overturn): suite
+architecture v2 (D-040 — B x k with r_within=1, bundle-level n,
+one-mechanism architectural line, k=24, difficulty as quarantined
+metadata); interop direction (D-041 — thin import manifests, HumanEval
+smoke first, marker-shim energy layer with a verdict-shaped spike,
+export prioritized for adoption-per-build-day, kill list). Peer's
+unique catch: PER-ITEM FAILURE ECONOMICS — without a per-item
+validity/status model + aggregation rules, suite breadth creates
+ambiguous partial evidence; adopted into the P2-010a substrate
+definition. Peer also drew the capstone stop-line (guaranteed capstone
+= instrument + Mac characterization; expansion drops first under
+pressure) and restated the D-034 gate — both landed in the 2O plan.
+
+Layer yield note: all four lenses + peer produced unique catches;
+the invited-peer pattern again narrowed designs materially (minimal-
+substrate cap, energy-layer-only pin, gate amendment). Zero dissent
+recorded; the round's three open design questions (substrate scope,
+import-vs-export priority, capability-map home) resolved in one
+counterreview pass without a second discussion round. A post-landing
+verification workflow (3 lenses + refuters) then caught one blocker
+(the 2O section retaining the superseded C-014 substrate enumeration)
+and six should-fixes (level-marker omission vs AP-5, D-039-allowlist
+drift worded as restatement, lossy D-041 kill-list record, an inflated
+HumanEval floor claim, unlanded R2 dispositions, P2-010 gate omission)
+— all fixed pre-commit; the verification layer earned its keep on its
+first C-015 outing.

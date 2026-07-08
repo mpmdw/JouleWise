@@ -107,6 +107,384 @@ fit. Killed ideas stay recorded with their cause of death.
   P2-010 splits into P2-010a suite substrate and P2-010b smoke ladder;
   the full scored ladder remains deferred as above.
 
+# Suite architecture v2, benchmark interop, and capability map (Council C-015, 2026-07-08)
+
+## Suite mechanism
+
+C-015 adopts one suite mechanism for benchmark breadth: a suite CAMPAIGN is
+`B` whole-suite bundles x `k` distinct items; each suite bundle executes
+its `k` items once (`r_within = 1`).
+Replication is the count of whole-suite bundles (`B >= 5`, top-up to
+`B = 10` near the floor). Item windows inside one bundle are breadth and
+attribution evidence, not independent `n` (D-038/AP rules).
+
+Within-bundle repeats are reserved for sentinel items. They estimate
+order/cache/thermal effects and same-session repeatability; they never
+inflate `n` (C-015). There are no per-item micro-cooldowns by default:
+back-to-back execution is a named session ecology, not a flaw. Order
+rotates round-robin or Latin-square across bundles, with `item_index`,
+`block_index`, `position`, `prev_item`, `prefix_group`, and `order_seed`
+recorded (C-015).
+
+Split a suite into balanced blocks when measured wall time exceeds roughly
+10-15 minutes or when drift sentinels / floor identifiability degrade.
+The first default is `k = 24`; mature panels may use `k = 48` only after
+Window A floors and drift checks are clean (C-015). Throughput arithmetic:
+`suite_items_per_hour = 3600 * k / (load + idle + cooldown + k * item_runtime)`,
+which buys roughly 3-15x item coverage versus one-item bundles, while
+`B` remains the `n` and items remain breadth (C-015).
+
+Architectural line: after P2-010a, no workload expansion gets bespoke
+marker/window plumbing. New benchmarks are manifests plus generators.
+`affine_mod_ladder_v1`, `jw_mixed_v1`, `q4_l3_shape_grid_v1`, the content
+sentinel, and benchmark imports are all profiles of the same suite
+manifest, marker, and window mechanism (C-015).
+
+## Minimal substrate scope
+
+P2-010a is capped to the minimal generic substrate (C-015): suite/item/block/level
+markers, `BundleReader.item_windows()`, source/category/output-policy
+fields, per-item token/stop/response hashes, order/cache metadata, manifest
+validation, and the per-item validity/status model below. Future
+`docs/contracts/run_bundle_layout.md` fields for suite/item/block/level
+markers and per-item outputs land with implementation, not in this docs batch
+(C-015).
+
+P2-010a status enum:
+
+- `succeeded`
+- `malformed`
+- `capped`
+- `runtime_failed`
+- `below_floor`
+- `excluded_from_claim`
+
+Aggregation rules (C-015): a block or suite remains claim-usable when the
+predeclared aggregation level has enough `succeeded` item windows, paired
+markers validate, strict bundle validation passes, and failed/excluded
+items are reported rather than silently dropped. `below_floor` items may
+contribute only to block/suite-level windows, not item-level joule claims.
+`malformed`, `capped`, and `runtime_failed` items remain provenance and
+failure-frontier evidence but do not enter numeric claim denominators
+unless an AP row predeclares that status as part of the endpoint.
+`excluded_from_claim` is an explicit analysis decision with a reason and
+does not make the surrounding strict-valid bundle unusable by itself.
+
+Deferred from P2-010a (C-015): scorers, import-specific fields, and rich
+difficulty machinery until suite profiles need them.
+
+## `suite_manifest` field sketch
+
+Trimmed P2-010a substrate scope (C-015):
+
+```yaml
+schema_version
+suite_id
+suite_profile
+suite_revision
+suite_seed
+generator:
+  name
+  version
+  parameters_hash
+analysis_contract:
+  independent_unit
+  primary_window_class
+  allowed_aggregation_levels
+execution_policy:
+  order_policy
+  within_bundle_repeats
+  cooldown_policy
+  cache_policy
+  warmup_policy
+  default_output_policy
+source_manifest:
+  source_id
+  source_kind
+  revision
+  subset_id
+  subset_sha256
+  license
+  contamination_note
+items:
+  - item_id
+    item_type
+    category
+    difficulty:
+      axis
+      value
+      scale
+      label
+      source
+      quarantine_note
+    shape:
+      planned_prompt_tokens
+      planned_output_tokens
+      prompt_level
+      decode_level
+    source:
+      source_item_id
+      source_sha256
+      prompt_template_id
+      license
+      contamination_note
+    grouping:
+      condition_id
+      block_id
+      level_id
+      prefix_group_id
+    output_policy
+    status_policy
+    tags
+markers:
+  suite_start_event
+  suite_end_event
+  block_start_event
+  block_end_event
+  level_start_event
+  level_end_event
+  item_start_event
+  item_end_event
+outputs:
+  per_item_response_hash
+  per_item_token_count
+  per_item_stop_reason
+  per_item_status
+```
+
+Deferred fields (C-015): `scoring.scorer_id`,
+`scoring.expected_answer_hash`, `scoring.correctness_quarantine`, import-
+specific source fields, and richer grouping/difficulty structures such as
+`pair_id` and `holdout_role` until a profile and AP row need them.
+AP-5's smoke-ladder acceptance already requires level-window energy, so
+the deferral condition is met at birth (verification catch, C-015).
+
+## Difficulty metadata rule
+
+Difficulty is first-class quarantined item metadata (C-015):
+`{axis, value, scale, label, source}`. Shape is not difficulty:
+`q4_l3_shape_grid_v1` prompt/decode cells stay under `shape`, not
+`difficulty`. Difficulty metadata enables stratified analysis and envelope
+checks; it never licenses "difficulty causes energy" or
+intelligence-per-joule wording, and the C-004 quarantine composes.
+
+## Benchmark import
+
+`benchmark_import` is a thin source-to-suite manifest that composes with
+the C-005 frozen-subset discipline: hash-manifested subsets, never
+"latest split" (C-015). Field sketch:
+
+```text
+schema_version
+manifest_id
+suite_profile
+source_benchmark:
+  source_id
+  name
+  upstream_url
+  citation
+  license_id
+  license_text_sha256
+  redistribution_policy
+  revision_or_commit
+  retrieval_date
+  source_archive_sha256
+  source_split
+contamination:
+  note
+  known_public_benchmark
+  intended_use
+  prohibited_claims
+subset:
+  selection_rule
+  selection_rule_sha256
+  selector_version
+  selected_item_ids
+  selected_item_ids_sha256
+  canonical_subset_json_sha256
+prompt_mapping:
+  prompt_template_id
+  prompt_template_sha256
+  source_fields_used
+  render_policy
+  rendered_prompt_sha256_policy
+  output_policy
+expected_answer:
+  source_field
+  stored_as
+  expected_answer_sha256
+  quarantine: true
+  scorer_allowed: false
+items:
+  suite_item_id
+  source_item_id
+  source_row_sha256
+  source_position
+  type_label
+  difficulty_label
+  difficulty_source
+  category
+  level
+  prompt_template_id
+  expected_answer_sha256
+  license_override
+  contamination_override
+  shape_hints
+  tags
+```
+
+First target: HumanEval as a plumbing smoke import, not a difficulty or
+accuracy paper (C-015). Rationale: MIT license, small recognizable corpus,
+contamination is explicit and quarantined, 256/512-token code completions
+clear the observed ~9 Hz item-window floor more plausibly than one-letter
+answers, and `difficulty_label = none/source_not_provided` is acceptable
+for a plumbing smoke. MMLU and tinyBenchmarks are rejected as first import
+targets because they drag the project toward short-answer score estimation
+or benchmark-score estimation. FLORES is the second import target for
+tokenizer/multilingual science (C5-W.4/C5-I.3), not the first plumbing
+target (C-015).
+
+Claims unlocked by imports (C-015): L0 "JouleWise can freeze and execute an
+external benchmark subset as suite items with auditable provenance"; L1
+"on a named stack/boundary/output policy, external-shaped items produced
+observed item/subset energy and token/stop distributions"; L2 only after an
+AP row and repeated strict-valid bundles. Never claim accuracy, pass@k,
+capability, benchmark-score standing, or intelligence per joule from this
+layer (C-015/C-004).
+
+## Export / energy layer
+
+C-015 adopts a marker-emitting shim for export. The external harness owns
+prompts, generation semantics, accuracy artifacts, and metric artifacts.
+JouleWise owns power capture, bundle assembly, marker validation, and
+energy reduction. The full contract lives in
+`docs/contracts/adapter_contracts.md`.
+
+P2-022 is a verdict-shaped feasibility spike (C-015) with verdicts:
+
+- `external_markers_supported`
+- `partial(<limitation>)`
+- `external_markers_unsupported`
+
+(contract home: docs/contracts/adapter_contracts.md)
+
+P2-022 inherits D-035 subprocess isolation and D-036 computed-verdict
+discipline. Its scope is pinned to energy-layer feasibility only (C-015):
+3+ marked items, external result artifact hashed, strict bundle valid, no
+accuracy interpretation, no leaderboard join, no pass@k-energy ratio, and
+no general adapter framework. Any L2 energy comparison from the shim needs
+strict bundles, repeated runs, same or calibrated boundary, and an AP row
+(C-015).
+
+## Kill / defer
+
+Kill or defer:
+
+- leaderboard integration.
+- live dataset fetching.
+- "latest split" support.
+- JouleWise accuracy scoring beyond quarantined annotation.
+- external judge calls, retries, pass@k, or benchmark-score normalization.
+- full adapter per harness as the first export path.
+- generation-callable wrapper as the first export path.
+- MMLU/tinyBenchmarks as first import.
+- public energy model-card leaderboard before cross-lab replication.
+- per-item uncertainty treated as independent replication.
+- any intelligence-per-joule ratio.
+
+## New questions
+
+Interop questions adopted by C-015:
+
+- **C5-I.1 External benchmark energy signatures:** Do imported benchmark
+  families have distinguishable energy profiles after matching token shape
+  and output policy? Ceiling L2, no capability claim.
+- **C5-I.2 Published-difficulty strata vs energy:** Do source-provided
+  difficulty or published accuracy strata correlate with energy/stop
+  behavior? Ceiling L1 association unless preplanned repeated-bundle L2;
+  never "difficulty causes energy."
+- **C5-I.3 FLORES tokenizer fertility tax:** For semantic-matched vs
+  token-matched FLORES items, how much energy follows tokenizer fertility
+  by script/language? Ceiling L2.
+- **C5-I.4 Harness overhead floor:** For external harnesses, when does
+  harness/process overhead dominate item energy? Ceiling L1/L2
+  measurement-method result.
+- **C5-I.5 Prompt-template energy sensitivity:** For the same external
+  item, how much does canonical vs JouleWise-rendered prompt format change
+  energy? Ceiling L2.
+
+Architecture-unlocked candidates, recorded post-2O/post-floor and not
+promised campaign work (C-015):
+
+- **Session-shape energy:** does a realistic mixed session cost what
+  fixed+prompt+decode coefficients predict, or is there a session overhead
+  term?
+- **Order-position effects:** how much does energy drift by item position
+  after controlling for shape and category?
+- **Cache/prefix economics:** what is the joule benefit of prefix reuse,
+  resident model state, or prompt-cache warmth versus cold independent
+  requests?
+- **Reload-vs-resident scheduling:** at what item/session length does
+  suite-style batching dominate one-request bundles in total energy and
+  wall time?
+
+## Capability map by claim ceiling
+
+### Today
+
+| Question | Ceiling | Ladder-compliant claim template | Campaign | Weakest assumption |
+|---|---:|---|---|---|
+| Can JouleWise produce auditable local-LLM energy evidence? | L0/L1 | "The harness can execute `<target/runtime/telemetry>` and preserve config, metadata, events, raw power trace, raw telemetry, outputs, and reducer summary in a strict-valid run bundle." | Existing Mac/MLX/powermetrics bundles; strict bundle layout. | Strict validation proves re-derivation of recorded evidence, not independent hardware rerun. |
+| What did Qwen2.5-1.5B consume on the M3 Max for the 512-output-token smoke workload? | L1 | "On `M3 Max / MLX / powermetrics SoC rails`, under `<workload/output policy>`, Qwen2.5-1.5B-4bit observed `<mean gross J>` request energy, `<TTFT>`, and `<throughput>` across 3 strict-valid bundles." | 2026-07-06 2I: about 47 J gross, about 94 ms TTFT, about 257 tok/s, gross CV 1.4%. | Idle-subtracted result is contaminated in rep 1; use gross for the cleanest current instrument result. |
+| What did Qwen3.5-122B-A10B consume on the same workload? | L1 | "On `M3 Max / MLX / powermetrics SoC rails`, under the same 512-output-token workload, Qwen3.5-122B-A10B-4bit observed `<mean gross J>` request energy, `<TTFT>`, and `<throughput>` across 3 strict-valid bundles." | 2026-07-07: about 304 J gross, about 270 ms TTFT, about 46 tok/s, gross CV 0.3%. | L1 only; n=3 is below comparative protocol. |
+| Did the two observed models demonstrate active-parameter scaling? | No; L1 hypothesis only | "The two observed Mac/MLX/powermetrics points are consistent with a fixed/marginal decode-time hypothesis, but they do not support an active-parameter scaling claim." | 122B addendum and claims-ladder downgrade. | Model size, architecture, quantization, and runtime details are confounded. |
+| Are short prefill phase joules resolvable at current powermetrics cadence? | L1 "not resolvable" | "On `M3 Max / MLX / powermetrics`, short-prefill phase energy for `<~94 ms window>` is not resolvable at the observed sampling cadence and must not be reported as a standalone joule result." | Observed about 8.8-8.9 Hz; Phase 4 says about 94 ms prefill has fewer than one sample. | Sampler cadence remains near current observed rate. |
+| Can same-machine MLX KV replay preserve token identity and size prediction? | L1 feasibility result | "On this M3 Max / mlx-lm stack, prompt-cache replay was supported for `<prompt length>`: resumed greedy decode matched monolithic tokens and measured cache size was within `<delta>` of the KV-size prediction." | Stage 3.0.1: 1024/2048 prompt cache, 64/64 tokens identical, +0.018%/+0.009% size delta. | Same machine/same venv only; not cross-machine portability. |
+
+### After Window A
+
+| Question | Ceiling | Ladder-compliant claim template | Campaign | Weakest assumption |
+|---|---:|---|---|---|
+| What is the detection floor per metric/window? | L1 methodology result | "For `<target/backend/metric/window class>`, differences below `<floor>` J are not resolvable; supported comparisons use `max(floor_abs_j, floor_cmp_j)`." | P2-015 calibration. | Calibration machine state is representative of later quiet campaigns. |
+| What are per-profile Mac baselines? | L1 per condition | "On `M3 Max / MLX / powermetrics`, `<model>` under `<profile>` observed `<energy_request_j>`, `<gross J>`, `<mJ/output-token>`, `<TTFT>`, and `<throughput>` with 95% t-intervals over n=5." | 2M: `short_short`, `long_short`, `short_long`, `mid_mid`. | Output-token denominator and output policy must be runtime-observed/pinned. |
+| Does workload shape change request energy on one stack? | L2 | "Within `M3 Max / MLX / powermetrics`, `<profile A>` differed from `<profile B>` for `<model>` by `<effect>` on `<metric/window>`, with n=5 per condition, CIs, manifest order, and effect above floor." | 2M + AP-2. | Drift sentinels and block position metadata must land before campaign. |
+| Is prefill/decode power asymmetry visible at long context? | L2 | "Within `M3 Max / MLX / powermetrics`, `long_short` and `short_long` differed in gross phase-window power/energy structure by `<effect>`, above the Window A floor; short-prefill windows remain not resolvable." | 2M/AP-2. | Phase claims are gross-only until phase-idle modeling exists. |
+| Do same-boundary efficiency rankings flip across 2M profiles? | L2 | "Within `M3 Max / MLX / powermetrics`, `<condition A>` ranked above `<condition B>` for `<metric>` on `<shape>` only where rank gap exceeded comparison MDE; otherwise the result is an unresolved tie." | 2M + AP-3. | Two-model/four-shape grid may produce unresolved ties rather than rank claims. |
+| Do rail/DVFS signatures differ by phase? | L2 structural, not absolute rail truth | "Within `M3 Max / MLX / powermetrics`, rich telemetry showed `<GPU/CPU/ANE/DVFS>` structure differed between `<phase/profile>` and `<phase/profile>`; the claim is about modeled-rail structure, not full-system watts." | 2M with P2-009 rich telemetry. | Powermetrics rails are modeled SoC subsystems, not wall power. |
+
+### After Window B + substrate
+
+| Question | Ceiling | Ladder-compliant claim template | Campaign | Weakest assumption |
+|---|---:|---|---|---|
+| Can Q4 fit fixed + prompt + decode energy terms? | L3 | "For `<target/model/quant/policy>`, the categorical model `E = fixed + prompt_level + decode_level` predicted held-out cells `(512,256)` and `(4096,512)` within `<error>` after floor and residual checks." | P2-019 `q4_l3_shape_grid_v1`, AP-1. | Holdouts may fail or effects may be below floor, forcing L1/L2 downgrade. |
+| Do rankings stay stable on the full shape grid? | L2 | "Within the same boundary, `<model/quant/runtime A>` ranked above `<B>` on `<shape/metric>` only where rank gap exceeded comparison MDE; otherwise unresolved tie." | Window B grid + AP-3. | Rank gaps may be smaller than MDE. |
+| Does synthetic prompt content matter at fixed shape? | L2 | "At equal shape, `<content condition>` differed from repeated-seed control by `<delta>` on request energy, with n sized from Window A and above floor." | P2-020 content sentinel, AP-6. | Realized shape/stop policy must stay matched. |
+| Does category explain energy beyond token counts? | L2 | "On the common `512/256 fixed_budget_exact` stratum, category residual after controlling for shape was `<delta>`; equivalence/null only if residual <2% of request energy and the MDE/floor gate permits that conclusion." | `jw_mixed_v1` identification core after P2-010a; AP-4. | Small category deltas may be below floor. |
+| Does natural-EOS "thinking" inflate reasoning-model energy? | L2 | "For `<reasoning model>`, natural-EOS reasoning requests consumed `<delta>` more request energy than fixed-budget controls, attributable to observed emitted-token/stop-reason distributions, not hidden correctness filtering." | `jw_mixed_v1` natural-EOS pilot. | Output-length inflation must be observed cleanly; no accuracy/judge claim. |
+| Is multilingual tokenizer fertility an energy tax? | L2 | "For `<script/language>`, semantic-matched energy differed from token-matched controls by `<delta>`; token-matched null/effect reported separately." | `jw_mixed_v1` multilingual legs; FLORES after HumanEval smoke. | Source licensing and tokenizer-shape matching must be exact. |
+| Energy per correct answer under controlled envelope? | L2, only after P2-010b/full scored run | "On the controlled affine ladder, `<model class>` observed `<energy_per_correct>` at `<level band>` only where level-window energy cleared floor and the correctness denominator guard passed; no intelligence-per-joule claim." | P2-010a substrate + P2-010b smoke + later scored campaign; AP-5. | Envelope validation and binomial guard can force `not estimable`. |
+| External marked-runner energy layer? | L1/L2 with AP row | "External harness `<X>` version `<Y>` reported metric artifact `<Z>`; JouleWise measured energy for the same marked item/subset windows." | P2-022 shim spike, then AP-covered repetitions only. | Harness markers must pair, stay inside measured windows, and preserve hashed result artifacts. |
+| HumanEval import smoke? | L0/L1 | "JouleWise froze and executed a HumanEval subset as suite items with auditable provenance and observed item/subset energy under a named output policy." | P2-023 after P2-022. | Plumbing smoke only; no pass@k, accuracy, or coding-capability interpretation. |
+
+P2-022 shim and P2-023 HumanEval rows are post-2M + substrate (Window B not required).
+
+### Hardware-gated
+
+| Question | Ceiling | Ladder-compliant claim template | Campaign | Weakest assumption |
+|---|---:|---|---|---|
+| Does split inference reduce energy? | L2 boundary-labeled; stronger with wall calibration | "For `<device pair/link/model/shape>`, split total energy `<prefill + serialize + transfer + deserialize + decode>` was `<less/greater>` than the better monolithic reference by `<delta>`, with boundaries named and calibration status stated." | Phase 3 split; Q1/F4/F5. | Cross-boundary sums are descriptive unless calibrated. |
+| How sensitive is split energy to link speed? | L2 | "For `<payload/model/pair>`, changing `<1GbE/2.5GbE/10GbE>` changed transfer energy/time by `<delta>` and moved/did not move the crossover within the measured range." | P1-004 links + transfer bench. | Link throughput must be measured, not assumed. |
+| What is the split energy-latency Pareto frontier? | L2 | "Within `<comparison set>`, `<configuration>` is Pareto-frontier because no measured alternative had both lower energy/token and lower `<latency metric>`." | Phase 3 + F6. | Latency metric choice must be fixed per figure. |
+| Does measurement boundary change conclusions? | L2; L4 only with replication | "For `<condition pair>`, the conclusion under platform rails `<matched/flipped>` under `wall_meter AC` by `<delta>`." | P1-003 wall meter; Q6/F11. | Wall-meter synchronization/export quality. |
+| Do KV-size predictions match measured transfer economics? | L2 | "For `<runtime/model/link>`, analytic KV size predicted serialized payload within `<error>` and transfer energy/GiB within `<interval>`." | P1-004 + P1-006; C5-2.3. | Runtime cache format must be portable or explicitly scoped. |
+| Do device rankings generalize beyond one machine? | L2 within boundary; L4 with second unit/calibration | "Across named `<units/stacks>`, `<finding>` replicated under stated workloads and boundaries; cross-boundary quantitative ranking uses named calibration bundles." | P1-006 devices, second unit, wall/USB-C, cross-lab. | Unit-to-unit variance may dominate current floors. |
+| Local-vs-datacenter full-system crossover? | Scenario result, not measured-equivalent cloud claim | "Under documented external datacenter-energy assumptions and local `wall_meter AC` measurement, local request energy was `<less/greater>` than the modeled remote alternative for `<workload>`." | Wall meter + network leg; C5-2.9. | Cloud-side energy remains assumption-based, not measured by JouleWise. |
+
+C-015 records three unscheduled cheap campaigns as a select-after-floors
+shortlist, not stealth scope: C5-1.6 sampler ABBA, C5-1.12 quantization
+benefit decomposition, and C5-1.8 runtime energy attribution. Queue row
+P2-024 owns the post-Window-A selection.
+
 
 # Hardware-gated research agenda — steelmanned potential (Council C-005)
 
@@ -259,8 +637,10 @@ cheap.
   model/quant. Measure: load-window sampling (extension: measure outside
   current window), idle-resident deltas, n≥5. Hardware: now. Threat:
   idle-resident delta may be near the detection floor for small models;
-  report identifiability. Who cares: desktop-assistant and agent-
-  framework teams, serverless-inference researchers.
+  report identifiability. Model-load/warmup trace capture was reviewed and
+  DEFERRED by C-015 (R2 items 14-15); it must land before any C5-1.7
+  corpus. Who cares: desktop-assistant and agent-framework teams,
+  serverless-inference researchers.
 
 - **C5-1.8 Runtime energy attribution.** How much of measured inference
   energy belongs to the runtime, not the model? Same model artifact

@@ -701,6 +701,20 @@ recorded (C-007 execution order). This is post-baseline feature work: it
 must not move ahead of 2M, and it is NOT Phase 2 exit-critical (additive
 enrichment, not gate).
 
+C-015 sequencing and stop-line (2026-07-08): GATE AMENDMENT - amends the
+D-039 allowlist (which named only P2-021) to also allow the Window-A
+capture hardening stream; everything else unchanged. Only P2-021 and
+Window-A capture hardening (`window-a-capture` stream) may precede
+P2-015/2M. ALL 2O substrate implementation, shim spike, imports, q4-grid
+execution, and `jw_mixed` execution remain post-2M unless D-034 is
+reopened. STOP-LINE - until Window A + 2M are strict-valid and reduced:
+no suite/import/export work consumes quiet-machine time, no new benchmark
+campaign is scheduled, and P2-010a stays within minimal substrate. Under
+schedule pressure, drop P2-022/P2-023, imports, FLORES, q4 grid, and
+`jw_mixed` full panels BEFORE touching P2-015/2M/Mac characterization.
+The C-015 suite architecture v2, interop direction, and capability map
+live in `docs/research_question_bank.md`.
+
 Pre-2M obligation owned elsewhere (P2-014, decided at this council):
 2M corpus interpretability requires prompt-content PROVENANCE pinned before
 the campaign — the generated synthetic token stream (seed, tokenizer
@@ -733,10 +747,10 @@ A results plus the content-sensitivity sentinel. `q4_l3_shape_grid_v1`
 uses [QUIET-MAC] Window B, two models, the AP-1 4x3 grid, holdouts
 `(512,256)` and `(4096,512)`, and the AP-1 top-up rule.
 
-P2-010 split (2026-07-08, C-014): P2-010a is the suite substrate
-(item/level markers, `BundleReader.item_windows()`,
-category/source_manifest/output_policy fields, per-item stop/token/response
-hashes, and window aggregation rules). P2-010b is the smoke ladder with
+P2-010 split (2026-07-08, C-014): P2-010a scope: the C-015 minimal generic
+substrate (see `docs/research_question_bank.md` C-015 section, which
+supersedes the C-014 enumeration and adds the per-item status model).
+P2-010b is the smoke ladder with
 envelope-validation acceptance: emitted-token and stop-reason distributions
 must be level-invariant before any scored ladder campaign. The full scored
 ladder is deferred until C5-1.9 has a claims-index/figure consumer.

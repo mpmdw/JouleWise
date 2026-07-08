@@ -1911,3 +1911,106 @@ data has named consumers before it is collected.
 
 Revisit when: Window A results contradict the sizing assumptions, or a
 consumer for the full scored ladder appears.
+
+---
+
+## D-040: Suite architecture v2 — one generic suite mechanism, bundle-level replication
+
+- Date: 2026-07-08
+- Status: accepted
+- Phase: 2+
+
+Context: Ed directed the benchmark toward multi-prompt runs of varying
+difficulty and type. Council C-015 (two design lenses + peer
+counterreview) designed the architecture; the statistical shape had to
+compose with D-038's pseudo-replication rule.
+
+Decision (spec in the question bank's C-015 section):
+
+1. A suite bundle executes k distinct items once each (r_within = 1);
+   replication comes from B whole-suite bundles (B >= 5, top-up 10).
+   Within-bundle repeats are reserved for sentinel items — they estimate
+   order/cache/thermal effects, never independent n. Uncertainty lives
+   at bundle/block level (D-038).
+2. No per-item micro-cooldowns: back-to-back execution is the named
+   session ecology. Order is rotated/Latin-squared across bundles;
+   item/block/position/prefix-group/order-seed metadata recorded.
+   Suites split into balanced blocks when wall time exceeds ~10-15 min
+   OR drift sentinels/floor identifiability degrade. k=24 first default.
+3. ONE mechanism: affine ladder, jw_mixed, q4 grid, content sentinel,
+   and benchmark imports are all PROFILES over one suite manifest +
+   marker/window path. After P2-010a, no workload expansion gets bespoke
+   plumbing — new benchmarks are manifests plus generators.
+4. P2-010a is capped to the MINIMAL substrate (markers, item_windows(),
+   source/category/output-policy fields, per-item token/stop/response
+   hashes, order/cache metadata, manifest validation) PLUS the per-item
+   validity/status model (succeeded | malformed | capped | runtime_failed
+   | below_floor | excluded_from_claim) with aggregation rules for when
+   partial suites remain claim-usable. Scorers, import-specific fields,
+   and rich difficulty machinery are deferred until profiles need them.
+5. Difficulty is first-class quarantined item metadata {axis, value,
+   scale, label, source}; shape is not difficulty; the C-004 quarantine
+   composes unchanged.
+
+Consequences: P2-010 queue row redefined; suite throughput rises 3-15x
+in item coverage while n stays honest at the bundle level; every later
+workload (including imports) inherits provenance, windows, and the
+status model for free.
+
+Revisit when: P2-010a implementation finds the minimal substrate
+insufficient, or a profile genuinely cannot ride the generic mechanism.
+
+---
+
+## D-041: Benchmark interop — frozen-subset imports + marker-shim energy layer
+
+- Date: 2026-07-08
+- Status: accepted
+- Phase: 2+ (all implementation post-2M per D-034; see stop-line)
+
+Context: Ed directed easy integration of external benchmarks into the
+suite and extension of external benchmarks with JouleWise's energy
+measurement. C-015 designed both directions.
+
+Decision (specs in the bank C-015 section + adapter_contracts.md):
+
+1. IMPORT: a thin `benchmark_import` manifest freezes identity,
+   licensing, contamination, rendering, and quarantine metadata for a
+   hash-manifested external-benchmark subset; execution rides P2-010a.
+   First target: HumanEval as a plumbing smoke (MIT; 256/512-token
+   completions clear the ~9 Hz item-window floor more plausibly than
+   short-answer benchmarks); FLORES second (tokenizer/multilingual
+   science); MMLU/tinyBenchmarks rejected as first targets.
+2. EXPORT: a marker-emitting shim contract — the external harness owns
+   prompts, generation semantics, and accuracy artifacts; JouleWise owns
+   power capture, bundle assembly, marker validation, and energy
+   reduction. P2-022 is a verdict-shaped feasibility spike
+   (external_markers_supported | partial | unsupported; D-035/D-036
+   inherited) pinned to energy-layer feasibility ONLY.
+3. Joined accuracy(theirs)+energy(ours) data may state observed energy
+   for marked item/subset windows alongside the external metric
+   ARTIFACT; it may never produce JouleWise accuracy claims,
+   pass@k-per-joule, leaderboard standing, or intelligence-per-joule.
+4. Kill/defer list (C-015; the bank's C-015 section holds the verbatim
+   11-entry list, which is authoritative): leaderboard integration, live
+   dataset fetching, latest-split support, accuracy scoring beyond
+   quarantined annotation, judges/retries/pass@k/benchmark-score
+   normalization, full per-harness adapters AND generation-callable
+   wrappers as the FIRST export path (the shim comes first; they are
+   sequencing kills, not categorical), per-item uncertainty treated as
+   independent replication, public energy leaderboards before cross-lab
+   replication, any intelligence-per-joule ratio.
+5. Sequencing gate AMENDED (D-039 named only P2-021 as the pre-Window-A
+   item; this adds the Window-A capture hardening stream, and nothing
+   else): only P2-021 and Window-A capture hardening precede P2-015/2M. Substrate, shim spike, imports, q4-grid and
+   jw_mixed execution are post-2M unless D-034 is reopened. Stop-line:
+   under schedule pressure, interop and suite expansion drop before
+   P2-015/2M/Mac characterization — the guaranteed capstone is the
+   instrument plus Mac characterization, never the expansion.
+
+Consequences: queue gains P2-022/P2-023/P2-024; adapter_contracts.md
+gains the shim contract; the bank gains C5-I.1..I.5 and the capability
+map; export direction prioritized over import for adoption-per-build-day.
+
+Revisit when: the P2-022 spike returns unsupported/partial, or D-034 is
+reopened.
