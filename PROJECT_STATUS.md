@@ -16,7 +16,7 @@ are provided for anyone who wants the full evidence trail.
 
 **Everything landed.** The multi-stream session merged as four PRs:
 P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
-564 tests with 10 skips and zero expected failures (564 as of 2026-07-08 incl. the C-011 rigor mechanics), bundle provenance
+576 tests with 10 skips and zero expected failures (576 as of 2026-07-08 incl. the C-011 rigor mechanics and the PR #13 site parser tests), bundle provenance
 now records prompt/workload identities, and `validate-bundle --strict`
 includes the powermetrics raw-plist-to-trace gate plus the legacy
 additive-summary comparison. The six existing real corpus bundles pass
