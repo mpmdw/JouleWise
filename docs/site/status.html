@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Status - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+<header class="site">
+  <nav class="nav">
+    <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
+    <div class="links">
+      <a href="index.html">Story</a>
+      <a href="status.html" class="active">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
+      <a href="results.html">Results</a>
+      <a href="process.html">Process</a>
+      <a href="research.html">Research</a>
+      <a href="library.html">Sources</a>
+    </div>
+  </nav>
+</header>
+<main>
+<section class="observatory-hero">
+  <div class="kicker">Status observatory</div>
+  <h1>The project state, read from the instruments.</h1>
+</section>
+<section class="console-strip">
+  <div class="status-summary">
+    <div><span class="card-label">Current phase</span><strong>Phase 2 in progress</strong></div>
+    <div><span class="card-label">Next</span><strong class="mono">P2-015</strong></div>
+    <div><span class="card-label">Verification</span><strong class="mono">576 tests</strong></div>
+    <div><span class="card-label">Corpus</span><strong class="mono">6 bundles</strong></div>
+  </div>
+  <div class="console-detail">
+    <div class="phase-rail"><div class="phase-step">
+          <span class="lamp lamp-amber" aria-hidden="true"></span>
+          <span class="mono">P1</span>
+          <strong>in progress</strong>
+          <small title="1. Approval, feasibility, measurement design">Approval</small>
+        </div><div class="phase-step">
+          <span class="lamp lamp-amber" aria-hidden="true"></span>
+          <span class="mono">P2</span>
+          <strong>in progress</strong>
+          <small title="2. Harness, Mac vertical slice, homogeneous baselines">Harness</small>
+        </div><div class="phase-step">
+          <span class="lamp lamp-blue" aria-hidden="true"></span>
+          <span class="mono">P3</span>
+          <strong>planned</strong>
+          <small title="3. Disaggregation, KV replay, interconnect sweep">Disaggregation</small>
+        </div><div class="phase-step">
+          <span class="lamp lamp-blue" aria-hidden="true"></span>
+          <span class="mono">P4</span>
+          <strong>planned</strong>
+          <small title="4. Characterization and analysis">Characterization</small>
+        </div><div class="phase-step">
+          <span class="lamp lamp-blue" aria-hidden="true"></span>
+          <span class="mono">P5</span>
+          <strong>planned</strong>
+          <small title="5. Presentation and submission">Presentation</small>
+        </div></div>
+    <div class="annunciator">
+      <div class="card-label">Next quiet-machine window <span class="status-chip amber">NO-AGENT-LOCK</span></div>
+      <div><span class="mono">P2-015</span> Detection-floor calibration campaign — idle-only repeats, no-op/tiny workloads, measured-window duration ladder (50ms→30s); runs FIRST in the same quiet window as 2M</div>
+<div><span class="mono">P2-006</span> Homogeneous baselines (slice 2M) on the Mac target — two-model campaign on a QUIET machine, then <code>docs/phase_2/baseline_results.md</code> with variance + prefill/decode comparison (phase columns honor identifiability flags)</div>
+      <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+    </div>
+  </div>
+</section>
+<section class="flight-recorder">
+  <article class="station reveal-stagger" style="--delay:0ms">
+    <div class="station-num">01</div><div><h2>What is true now</h2>
+    <p>Phase 1 closing; Phase 2 in progress - instrument CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes are complete; the two-model baseline matrix is the next Mac corpus step</p><p><strong>P2-013 and P2-014 are COMPLETE and MERGED (2026-07-08).</strong> <a href="run_state.html">RUN_STATE.md</a></p><span class="source-chip" title="PROJECT_STATUS.md · commit 4af29a9"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 4af29a9</span></span> <span class="source-chip" title="RUN_STATE.md · commit 4af29a9"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 4af29a9</span></span></div>
+  </article>
+  <article class="station reveal-stagger" style="--delay:90ms">
+    <div class="station-num">02</div><div><h2>What changed</h2>
+    <p><span class="mono">2026-07-08</span> site observatory (PR #13; status/roadmap/record frontend, fail-closed parsers, P2-017 stamps)</p>
+    <p><a href="latest_run_report.html">docs/run_reports/2026-07-08-site-observatory.md</a></p><span class="source-chip" title="RUN_STATE.md · commit 4af29a9"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 4af29a9</span></span></div>
+  </article>
+  <article class="station reveal-stagger" style="--delay:180ms">
+    <div class="station-num">03</div><div><h2>What happens next</h2>
+    <ol class="queue-mini"><li><span class="mono">#1 P2-015</span>
+        <span class="lane-chip lane-quiet-mac">QUIET-MAC</span>
+        <span>Detection-floor calibration campaign — idle-only repeats, no-op/tiny workloads, measured-window duration ladder (50ms→30s); runs FIRST in the same quiet window as 2M</span></li>
+<li><span class="mono">#2 P2-006</span>
+        <span class="lane-chip lane-quiet-mac">QUIET-MAC</span>
+        <span>Homogeneous baselines (slice 2M) on the Mac target — two-model campaign on a QUIET machine, then <code>docs/phase_2/baseline_results.md</code> with variance + prefill/decode comparison (phase columns honor identifiability flags)</span></li>
+<li><span class="mono">#3 P3-000</span>
+        <span class="lane-chip lane-agent">AGENT</span>
+        <span>KV persistence feasibility spikes (Phase 3 Stage 3.0)</span></li></ol><span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span></div>
+  </article>
+  <article class="station reveal-stagger" style="--delay:270ms">
+    <div class="station-num">04</div><div><h2>What could invalidate it</h2>
+    <p><span class="mono">10</span> open risks · <span class="mono">2</span> closed-residual risks. High-impact open risks:</p>
+    <ul><li><span class="mono">R-001</span> Supervisor approval delayed or scope shifts <span class="status-chip danger">open</span></li>
+<li><span class="mono">R-004</span> KV persist/resume unsupported in a target runtime <span class="status-chip danger">open</span></li>
+<li><span class="mono">R-005</span> llama.cpp cache files not portable across machines/backends <span class="status-chip danger">open</span></li>
+<li><span class="mono">R-012</span> Schedule: five phases vs fixed academic deadlines <span class="status-chip danger">open</span></li></ul><p>The 2K NVIDIA protocol pins remain <strong>PROVISIONAL</strong> until live hardware contact.</p><span class="source-chip" title="docs/risk_register.md · commit 1581cd2"><span class="source-file">docs/<wbr>risk_register.md</span><span class="source-commit">commit 1581cd2</span></span> <span class="source-chip" title="PROJECT_STATUS.md · commit 4af29a9"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 4af29a9</span></span></div>
+  </article>
+  <article class="station reveal-stagger" style="--delay:360ms">
+    <div class="station-num">05</div><div><h2>Where the evidence lives</h2>
+    <p><span class="mono">6</span> real corpus bundles pass strict validation. Start from <a href="library.html">Sources</a>, <a href="risk_register.html">Risk Register</a>, and <a href="../project_critique_review.html">Independent critique · second-passed</a>.</p><span class="source-chip" title="RUN_STATE.md · commit 4af29a9"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 4af29a9</span></span></div>
+  </article>
+</section>
+</main>
+<footer class="site">
+  <div class="inner">
+    <span>JouleWise · github.com/mpmdw/JouleWise</span>
+    <span>PROJECT_STATUS.md · commit 4af29a9 · RUN_STATE.md · commit 4af29a9 · TASK_QUEUE.md · commit 4af29a9 · docs/risk_register.md · commit 1581cd2 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+  </div>
+</footer>
+</body>
+</html>

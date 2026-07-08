@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Milestones — JouleWise</title>
+<title>Milestones - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -13,23 +14,31 @@
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
       <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
       <a href="results.html">Results</a>
       <a href="process.html">Process</a>
       <a href="research.html">Research</a>
-      <a href="library.html" class="active">Library</a>
+      <a href="library.html" class="active">Sources</a>
     </div>
   </nav>
 </header>
 <main>
-<div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>docs/milestones.md</code> · as of commit 443a31f (2026-07-08)</p>
-<h1>Milestones And Calendar Map</h1>
+<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#known-date-constraints">Known Date Constraints</a>
+<a href="#phase-targets">Phase Targets</a>
+<a href="#scheduling-rules">Scheduling Rules</a></aside>
+  <div class="doc-wrap doc-source-docs-milestones-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/milestones.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/milestones.md · commit ae48abe"><span class="source-file">docs/<wbr>milestones.md</span><span class="source-commit">commit ae48abe</span></span></div>
+    <h1>Milestones And Calendar Map</h1>
 <p>Status: skeleton - real dates pending user input (task P1-008). Capstones
 fail by calendar, not by code (R-012); this file exists so schedule risk is
 visible in one place. Update dates the moment they are known; review at
 every phase start.</p>
-<h2>Known Date Constraints</h2>
-<table>
+<h2 id="known-date-constraints">Known Date Constraints</h2>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Constraint</th>
@@ -67,11 +76,11 @@ every phase start.</p>
 <td>TBD</td>
 <td>user/program</td>
 </tr>
-</tbody></table>
-<h2>Phase Targets</h2>
+</tbody></table></div>
+<h2 id="phase-targets">Phase Targets</h2>
 <p>Fill &quot;Target end&quot; from the real deadlines backwards once known. Until
 then, the dependency structure is the schedule.</p>
-<table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Phase</th>
@@ -110,8 +119,8 @@ then, the dependency structure is the schedule.</p>
 <td>rehearsals, supervisor review</td>
 <td>TBD</td>
 </tr>
-</tbody></table>
-<h2>Scheduling Rules</h2>
+</tbody></table></div>
+<h2 id="scheduling-rules">Scheduling Rules</h2>
 <ul>
 <li>Hardware-gated work is scheduled around access windows; desk work
 (hardware-independent floors listed in each phase plan) fills the gaps -
@@ -135,12 +144,13 @@ trip this rule.</li>
 </ul>
 
 
+  </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 443a31f (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/milestones.md · commit ae48abe · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

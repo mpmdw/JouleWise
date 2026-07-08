@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Latest Run Report — JouleWise</title>
+<title>Latest Run Report - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -13,333 +14,101 @@
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
       <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
       <a href="results.html">Results</a>
       <a href="process.html">Process</a>
       <a href="research.html">Research</a>
-      <a href="library.html" class="active">Library</a>
+      <a href="library.html" class="active">Sources</a>
     </div>
   </nav>
 </header>
 <main>
-<div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>docs/run_reports/2026-07-07-resume-merge-session.md</code> · as of commit 443a31f (2026-07-08)</p>
-<h1>Run Report — 2026-07-07/08: Resume + Merge Session (C-009 topology, first full run)</h1>
-<p>Resumed the four checkpointed streams under the C-009 consensus topology
-(lead-driven codex-run pipelines, NO subagent orchestrators), completed
-every stream&#39;s implementation + review pipeline, and landed the merge
-series: <strong>PRs #8 (P2-013+P2-014), #10 (DOC-007), #9 (Stage 3.0.1) are
-MERGED</strong> (in that order, each after a 3-reviewer pre-merge oversight
-pass, lead triage, and 5.5 fixes per Ed&#39;s directive); <strong>PR #11 (2K
-NVIDIA) is open and integration-reviewed, awaiting Ed&#39;s merge.</strong></p>
-<h2>Product outcomes</h2>
+<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#honesty-mechanics-the-load-bearing-part">Honesty mechanics (the load-bearing part)</a>
+<a href="#process-trace-layers-and-unique-catches">Process trace (layers and unique catches)</a>
+<a href="#verification">Verification</a>
+<a href="#next">Next</a></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-08-site-observatory-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-08-site-observatory.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-08-site-observatory.md · commit 4af29a9"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-08-site-observatory.md</span><span class="source-commit">commit 4af29a9</span></span></div>
+    <h1>Run Report — Site Observatory: Data-Driven Status Frontend (2026-07-08)</h1>
+<p><strong>Outcome:</strong> the generated half of <code>docs/site/</code> is no longer rendered
+markdown in a skin. <code>scripts/build_site.py</code> was rewritten around
+fail-closed parsers over the live process docs, and three new pages
+present project state as a designed observation experience: <code>status.html</code>
+(console strip + five-station &quot;flight recorder&quot; spine: what is true now /
+what changed / what happens next / what could invalidate it / where the
+evidence lives), <code>roadmap.html</code> (queue lane cards, next-two flight plan,
+do-not-do interlock), <code>record.html</code> (sessions timeline, binding
+decisions, council timeline). The library became a grouped Sources layer;
+doc pages gained TOC sidebars and scrolling table wrappers. Merged as
+PR #13 under the standing merge-with-review authority.</p>
+<h2 id="honesty-mechanics-the-load-bearing-part">Honesty mechanics (the load-bearing part)</h2>
 <ul>
-<li><strong>P2-013 COMPLETE (PR #8):</strong> all 31 audit pins fixed and flipped
-(27 defects, 8 invariant-shaped commit groups); <code>--strict</code> gains the
-powermetrics raw-to-trace gate (A-10: adapter-owned semantic
-re-derivation from raw plist evidence) and a legacy-additive summary
-compare; all 6 real corpus bundles strict-valid read-only, unrewritten.</li>
-<li><strong>P2-014 COMPLETE (PR #8):</strong> <code>summary_provenance</code> +
-<code>workload_provenance</code> (D-033 realized prompt token-id hash, domain
-<code>joulewise.prompt_token_ids.v1</code>; MLX provably hashes the exact
-generation input); strict enforces full provenance shape on new-era
-bundles. Decision log: D-032 (phase_energy_j GROSS-ONLY), D-033
-(prompt provenance), D-034 (2O ownership), and post-merge D-035
-(fresh-process replay isolation) + D-036 (measured verdicts) — the two
-ratified 3.0.1 promotions.</li>
-<li><strong>DOC-007 MERGED (PR #10)</strong> with a merge-time reconciliation pass
-(fresh pass under the checkpoint&#39;s adjudicated dispositions; the
-original 26-item list was ephemeral — see Process learnings 4).</li>
-<li><strong>Stage 3.0.1 MERGED (PR #9), verdict <code>replay_supported</code></strong> —
-lead-re-verified live this session (tokens_identical true, cache
-+0.0182% vs prediction; evidence line + exit-checklist row committed).
-Phase 3&#39;s central technical risk is retired on current hardware.</li>
-<li><strong>2K NVIDIA stack COMPLETE, fixture-first (PR #11 open):</strong> protocol
-v1, SSH transport, node worker, nvidia-smi + vLLM adapters, registry
-wiring, live-verification checklist (P1-006 evidence script). ALL
-protocol pins PROVISIONAL pending live hardware. 545 CI-safe tests on
-the branch (rebased onto post-integrity main).</li>
-<li><strong>codex-run T4 patch landed</strong> (~/.local/bin/codex-run): out-dir
-mkdir -p + absolute paths; <code>--resume</code> forwards cwd (via cd, also
-scoping <code>--last</code>) and sandbox (<code>-c sandbox_mode=</code>); thin-output
-warning in <code>.status</code>.</li>
+<li>Every number and state on a generated page derives from parsing the md
+sources at build time; parsers exit nonzero naming component, source,
+and expected pattern. No hand-typed data survives review (two hardcoded
+narrative strings were caught and derived; an invented <code>meta</code> lane
+state and a council-index fallback were caught by counterreview and
+removed — absence of a lane tag now renders as absence).</li>
+<li>P2-017 closed: per-source provenance stamps (<code>git log -1 -- &lt;source&gt;</code>
+plus a <code>+ uncommitted</code> dirty marker) on every generated page/component.</li>
+<li>The fail-closed parser found real source drift while being built: the
+council-log index table was missing its C-011 row (fixed at source).</li>
+<li>The final-head gate HELD the merge because the site truthfully rendered
+a stale RUN_STATE test count (564 vs the grown 576) — the site cannot
+be more honest than its sources; the source was fixed and re-stamped.</li>
 </ul>
-<h2>Verification evidence (all lead-side, live)</h2>
+<h2 id="process-trace-layers-and-unique-catches">Process trace (layers and unique catches)</h2>
 <ul>
-<li>Merged main @ <code>76f0a4b</code>: suite <strong>462 OK (skipped=10, 0 expected
-failures)</strong>; <code>validate-bundle --strict</code> green over the 6 real bundles.</li>
-<li>Fresh mock e2e (run twice at different gates): strict-valid bundle
-with full provenance blocks, hash domain verified field-for-field
-against A-11.</li>
-<li>3.0.1 headline command re-run fresh: <code>tokens_identical: true</code>,
-<code>replay_supported</code>.</li>
-<li>PR #11 branch @ <code>c487f6b</code>: suite 545 OK; synthetic 2K bundle passes
-strict; raw-CSV timestamp re-derivation from bundle evidence alone
-verified under forced TZ (integration-review probe, now a regression
-test).</li>
-<li>CI green on every PR head (both matrix legs).</li>
+<li>Dual-prior 5.5 design round (instrument-maximalist vs editorial): both
+converged on extend-don&#39;t-replace, status hub, fail-closed parsing;
+lead synthesized console-strip + flight-recorder and cut invented-
+metric components (gauges, radar).</li>
+<li>5.5 implementation (branch <code>stream/site-observatory</code>), then two Codex
+IMAGE critique rounds (7 then 8 screenshots; 16 findings r1, per-item
+verification r2) — Ed directed image-heavy analysis to Codex
+(higher-res, cheap tokens); encoded in the codex-delegation skill,
+with a <code>codex-run -i</code> passthrough added (variadic <code>--image</code> trap
+documented).</li>
+<li>Lead root-caused the persistent mobile overflow after tool-fighting
+(stale-CSS caching ×3, corrupted preview emulation, headless Chrome&#39;s
+~500px minimum window): a grid item with <code>margin: 0 auto</code> disables
+stretch alignment, so max-content sizing won — one-line fix; every
+page now fits 390px (iframe-measured).</li>
+<li>14-image Codex visual sign-off: SHIP; hand-page regression check
+clean.</li>
+<li>Fresh 5.5 counterreview: 2 blockers (both fail-closed honesty), 3
+should-fixes (derived latest-report, attribute escaping, escaped
+excerpt) — all fixed; 12 parser tests.</li>
+<li>Final-head 5.5 pass: HOLD on the stale-source test count (above) —
+the gate&#39;s unique catch; fixed in this bookkeeping.</li>
 </ul>
-<h2>Review-pipeline yield (what each layer uniquely caught)</h2>
-<table>
-<thead>
-<tr>
-<th>Layer</th>
-<th>Unique catches</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Codex STOP-and-report (impl)</td>
-<td>K5 pin unsatisfiable as authored (lead corrected it: shlex round-trip)</td>
-</tr>
-<tr>
-<td>Lead live gates</td>
-<td>corpus strict failure invisible in-worktree (legacy-additive key-set drift, pre-existing on main); worktree-lacks-runs/ env trap</td>
-</tr>
-<tr>
-<td>3-lens counterreview A</td>
-<td>MLX provenance hash ≠ realized generation input (BLOCKER); raw-to-trace gate metadata-key bypass (BLOCKER, 2 lenses convergent); 6 should-fixes</td>
-</tr>
-<tr>
-<td>3-lens counterreview B</td>
-<td>ssh argv <code>--</code> placement wrong in a PINNED contract (B-33 supersedes B-14); pending-run-id remote collisions (B-34 supersedes B-15); B-5 alignment evidence discarded; 5 more</td>
-</tr>
-<tr>
-<td>Writer≠reviewer test audits</td>
-<td>D-033 shape under-enforcement; tz fix not pinned end-to-end; PID same-argv reuse gap; 1 tautology</td>
-</tr>
-<tr>
-<td>Pre-merge oversight (3 reviewers)</td>
-<td>full D-033 key shape gap (2 convergent); 3.0.1 checklist row stale vs authority rule; unevidenced &quot;lead-reverified&quot; claim; 2K count stale</td>
-</tr>
-<tr>
-<td>Lead diff gate (post-rebase)</td>
-<td>5.5&#39;s volunteered vLLM provenance hashed FABRICATED token IDs under the v1 domain (model-defect; B-44 fix: node-realized IDs via /tokenize or structured absence)</td>
-</tr>
-<tr>
-<td>Integration review</td>
-<td>telemetry worker metadata (node_utc_offset_s) not persisted → raw re-derivation impossible (-28800s probe); RuntimeResult.metadata dropped by controller; checklist flag typo — all invisible to single-stream review</td>
-</tr>
-<tr>
-<td>Rebase gate</td>
-<td>S3 mutually-exclusive prompt sources broke 16 2K tests + example config (cross-stream contract interaction)</td>
-</tr>
-</tbody></table>
-<h2>How to restart / what is next</h2>
-<ol>
-<li><strong>Ed merges <a href="https://github.com/mpmdw/JouleWise/pull/11">PR #11</a></strong>
-(2K; merges clean — branch is rebased onto current main).</li>
-<li>Remove worktrees <code>../jw-p2013</code>, <code>../jw-doc007</code>, <code>../jw-spike301</code>
-(done this session if you are reading this on main) and <code>../jw-2k</code>
-after #11 lands.</li>
-<li><strong>P2-006: the 2M two-model baseline campaign</strong> [QUIET-MAC] — now
-fully unblocked (P2-013/P2-014 done, corpus born under the fixed
-validator with prompt provenance). Requires the no-agent quiet lock
-(C-009 T5): stop all fleets/cadence/Codex load first.</li>
-<li>Then P2-010 → P2-012 (Slice 2O, D-034), 3.0.2 llama.cpp spike
-(needs installs → R-003 user approval), and the hardware-gated items
-when devices arrive (2K live checklist is ready).</li>
-</ol>
-<h2>Process Trace Appendix</h2>
-<h3>Shape</h3>
+<h2 id="verification">Verification</h2>
 <ul>
-<li>Resumed 4 checkpointed streams under C-009 T1: ALL pipeline-shaped
-(designs pinned in ledgers) → lead-driven codex-run, no Opus
-orchestrators. Result: ZERO wake-gap stalls, zero heartbeats needed,
-the entire session ran on codex-run&#39;s exit-reinvokes-lead guarantee.
-This is the topology&#39;s first full-session validation.</li>
-<li>A: 4 codex sessions (D groups 5-7, E g7-ruling, F g8, G P2-014) +
-fix/amp/test-review rounds. B: U3/U4/U5 + fix/amp/test-review +
-post-rebase rounds. C: lead-only verification. D: one reconciliation
-round. Merge order A→D→C→B held.</li>
-<li>Ed&#39;s directives mid-session: PRs are Ed-merged (classifier upheld the
-standing rule when the lead attempted a self-merge from the checkpoint
-plan&#39;s &quot;merge A&quot; shorthand — correct outcome); then explicit &quot;merge
-all 3 after thorough codex review, lead triages, 5.5 fixes&quot; — done.</li>
+<li>Suite: <code>Ran 576 tests, OK (skipped=10)</code> (564 + 12 parser tests),
+lead-run.</li>
+<li>Real build (<code>npx marked</code>) green; <code>--no-marked</code> sandbox path green.</li>
+<li>Mobile: all pages scrollWidth ≤ 390 at 390px (iframe-measured);
+desktop layouts visually verified.</li>
+<li>Degree framing corrected reader-facing (undergraduate CS capstone, not
+master&#39;s) in the site hero and PROJECT_STATUS.</li>
 </ul>
-<h3>Catches (beyond the yield table)</h3>
-<ul>
-<li>codex-run status sentinel is <code>&lt;stem&gt;.status</code> not <code>&lt;out&gt;.md.status</code>
-(lead misprobe, once).</li>
-<li>Codex sandbox cannot git-commit in WORKTREES (.git outside sandbox
-root) → lead commits by pathspec; two split techniques validated
-(ledger truncate-restore; .split diff + apply --cached). → folded.</li>
-<li>Worktrees share tracked files only: real corpus/venvs live in the
-main tree; stream acceptance steps referencing them must use absolute
-main-tree paths. → folded.</li>
-<li>Stale-worktree top-level docs are a standing lens-finding REJECT
-class (branch predates queue edits). → folded.</li>
-</ul>
-<h3>Deliberations</h3>
-<ul>
-<li>K5 adjudication: pin demanded <code>line.split()[1]</code> equal a space-bearing
-path — unsatisfiable; audit intent (quoted/path-safe) preserved via
-shlex round-trip at identical assertion strength.</li>
-<li>B-14/B-15 overturns: two pinned wire contracts refuted by lenses
-before hardware contact; unit tests had PINNED the broken argv shape —
-fixture-first&#39;s blind spot made real. Both superseded with ledger
-entries. → folded (fixture-first streams always get full lens tier).</li>
-<li>vLLM provenance rejection (lead gate): volunteered addition hashed
-fabricated IDs as realized evidence — model-defect, distinct from the
-MLX variant (which was in-spec drift). Ruling: node-realized IDs via
-/tokenize or structured absence; strict pressure on absence is
-intended.</li>
-<li>r3&#39;s &quot;PRs don&#39;t reconcile RUN_STATE/queue&quot; finding REJECTED as
-PR-blocker: bookkeeping is lead-owned post-merge by design
-(single-writer); landed this commit.</li>
-</ul>
-<h3>Interventions</h3>
-<ul>
-<li>None. No wedged runs, no fleet stalls, no manual wakes. (Contrast:
-the orchestrator-topology session logged I-1 fleet-wide stalls twice.)</li>
-</ul>
-<h3>Delegation calibration ledger (final, lead-assigned)</h3>
-<table>
-<thead>
-<tr>
-<th>id</th>
-<th>to</th>
-<th>unit</th>
-<th>altitude</th>
-<th>outcome</th>
-<th>catches</th>
-<th>lead-rework</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>DL2-A5</td>
-<td>codex</td>
-<td>P2-013 g5+6</td>
-<td>pinned-spec</td>
-<td>clean-accept</td>
-<td>K5 STOP (correct behavior)</td>
-<td>~10 min</td>
-</tr>
-<tr>
-<td>DL2-A7</td>
-<td>codex</td>
-<td>g7 + K5 ruling</td>
-<td>pinned-spec + 1 adjudicated pin edit</td>
-<td>clean-accept</td>
-<td>—</td>
-<td>0</td>
-</tr>
-<tr>
-<td>DL2-A8</td>
-<td>codex</td>
-<td>g8 strict gate</td>
-<td>pinned-spec (A-10)</td>
-<td>clean-accept</td>
-<td>corpus-check env blocker was prompt-defect (lead assumed runs/ in worktree)</td>
-<td>~15 min (that WAS the live gate working)</td>
-</tr>
-<tr>
-<td>DL2-A9</td>
-<td>codex</td>
-<td>strict-legacy + P2-014 + 3 D-entries</td>
-<td>pinned + lead-designed rule, challenge invited</td>
-<td>clean-accept</td>
-<td>A-19 reconciliation (found the invited hole)</td>
-<td>~10 min</td>
-</tr>
-<tr>
-<td>DL2-B3/B4/B5</td>
-<td>codex</td>
-<td>2K U3/U4/U5</td>
-<td>pinned-spec + bounded design freedom</td>
-<td>clean-accept ×3</td>
-<td>—</td>
-<td>~5 min</td>
-</tr>
-<tr>
-<td>fix rounds A+B</td>
-<td>codex ×5</td>
-<td>triaged findings</td>
-<td>pinned dispositions</td>
-<td>clean-accept ×5</td>
-<td>B-44 predecessor REJECTED at gate (fabricated IDs — model-defect)</td>
-<td>~10 min</td>
-</tr>
-<tr>
-<td>lenses/audits/reviewers</td>
-<td>codex ×12</td>
-<td>review</td>
-<td>design-freedom</td>
-<td>high yield (see yield table); zero lead-rejected-as-noise beyond 2 stale-worktree items</td>
-<td>triage only</td>
-<td></td>
-</tr>
-<tr>
-<td>D recon</td>
-<td>codex</td>
-<td>docs reconciliation</td>
-<td>pinned dispositions</td>
-<td>clean-accept (1 count stale = lead prompt-defect: 491 vs 495)</td>
-<td>~5 min</td>
-<td></td>
-</tr>
-</tbody></table>
-<ul>
-<li>Aggregate: pinned-spec delegation ran essentially defect-free; the two
-serious 5.5 defects were both in VOLUNTEERED additions (vLLM
-provenance) or design-freedom wire pins (B-14/B-15) — i.e. freedom
-needs the lens tier, pins don&#39;t need re-litigating. Lens yield stayed
-high through the LAST round (integration review found 2 uniques after
-~20 prior review passes).</li>
-</ul>
-<h3>Spend</h3>
-<ul>
-<li>Codex: ~26 sessions (9 impl/fix, 12 review lenses/audits/reviewers,
-1 amplification ×2, 1 integration, 1 docs recon). Opus: 0. Fable:
-orchestration + all gates + merges + bookkeeping (this loop).</li>
-<li>Wall-clock: single evening; fleets of 2-3 codex sessions ran
-continuously with zero idle stalls.</li>
-</ul>
-<h2>Workspace state</h2>
-<ul>
-<li>main @ this commit (bookkeeping); PRs #8/#9/#10 merged, #11 open.</li>
-<li>Worktrees: <code>../jw-2k</code> kept until #11 lands. <code>../jw-p2013</code>,
-<code>../jw-doc007</code>, <code>../jw-spike301</code> removed post-report (branches merged;
-ledgers + all evidence live on main via the PRs).</li>
-<li><code>/tmp/jw-lead-verify/*</code>, <code>/tmp/jw-shapefix</code> disposable.</li>
-<li>Git author remains <code>Ed R &lt;edr@Eds-MacBook-Pro.local&gt;</code>.</li>
-</ul>
-<h2>Retired-artifact pointers (C-009 gap rule)</h2>
-<ul>
-<li>Stream ledgers (now on main via PRs): p2013 A-1..A-30 →
-<code>docs/stream_logs/2026-07-07-p2013-integrity.md</code> @ PR #8 (4f0d7bc);
-2k B-1..B-45 → <code>docs/stream_logs/2026-07-07-2k-nvidia.md</code> @ PR #11
-head (c487f6b); kv-spike C-1..C-8 + doc007 D-1..D-9 → their files @
-PRs #9/#10. PROMOTED: D-032..D-036. NOT promoted (intentional): all
-code-shape entries (bind via the merged code + contracts docs).</li>
-<li>The pre-checkpoint session&#39;s 26-item staleness list: never committed
-(Opus orchestrator context, discarded at checkpoint); its adjudicated
-DISPOSITIONS survive in the checkpoint report §Stream D and were
-re-applied fresh (ledger D-9 on the doc007 branch).</li>
-</ul>
-<h2>Addendum (same session): PR #11 merged — all four streams landed</h2>
-<p>Ed granted standing self-merge authority (condition: thorough lead + 5.5
-review of the final head; recorded in the lead&#39;s memory and global rule
-4, gate shape in operation-loop §5). Applied immediately to PR #11: a
-final fresh-eyes 5.5 review of the full diff — focused on the one
-commit that post-dated all prior review rounds — found 2 SHOULD-FIX + 1
-NIT (a probe-reproduced crash path in <code>_merge_adapter_metadata</code> on
-open-shaped adapter metadata; two checklist heredocs with invalid
-terminators despite the earlier argparse-only &quot;parseability&quot; check; the
-missing B-45 ledger entry). All fixed (B-45/B-46), lead-verified
-including the collision-shape probe, CI green, merged as <code>5669aa9</code>.
-<strong>Final state: PRs #8/#9/#10/#11 all merged; main suite 546 OK
-(skipped=10, zero expected failures); no worktrees remain.</strong> The
-final-head rule (no commit merges unreviewed, however small the tail)
-is folded into operation-loop §5; the validated lead-driven topology
-stamps are folded into operation-loop §2/§3 and multi-stream-worktrees
-§Topology.</p>
+<h2 id="next">Next</h2>
+<p>Unchanged: P2-015 then P2-006 in one quiet window [QUIET-MAC]. The site
+regenerates via <code>python3 scripts/build_site.py</code> (commit sources first;
+stamps are per-source and dirty-aware).</p>
 
 
+  </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 443a31f (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-08-site-observatory.md · commit 4af29a9 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

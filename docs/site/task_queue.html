@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Task Queue — JouleWise</title>
+<title>Task Queue - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -13,20 +14,33 @@
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
       <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
       <a href="results.html">Results</a>
       <a href="process.html">Process</a>
       <a href="research.html">Research</a>
-      <a href="library.html" class="active">Library</a>
+      <a href="library.html" class="active">Sources</a>
     </div>
   </nav>
 </header>
 <main>
-<div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>TASK_QUEUE.md</code> · as of commit 443a31f (2026-07-08)</p>
-<h1>JouleWise Task Queue</h1>
+<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#intake-rule-for-new-tasks">Intake Rule For New Tasks</a>
+<a href="#priority-scale">Priority Scale</a>
+<a href="#ranking-factors">Ranking Factors</a>
+<a href="#machine-state-lanes-adopted-c-007-2026-07-07">Machine-State Lanes (adopted C-007, 2026-07-07)</a>
+<a href="#current-queue">Current Queue</a>
+<a href="#completed-queue-items">Completed Queue Items</a>
+<a href="#current-do-not-do-yet-list">Current Do-Not-Do-Yet List</a>
+<a href="#queue-maintenance">Queue Maintenance</a></aside>
+  <div class="doc-wrap doc-source-task-queue-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span></div>
+    <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
-<h2>Intake Rule For New Tasks</h2>
+<h2 id="intake-rule-for-new-tasks">Intake Rule For New Tasks</h2>
 <p>For every new user task:</p>
 <ol>
 <li>Read <code>RUN_STATE.md</code>.</li>
@@ -47,7 +61,7 @@ triage it here instead of assuming it should happen immediately.</p>
 and blockers.</li>
 <li>If executing it now, say why it outranks the current top task.</li>
 </ol>
-<h2>Priority Scale</h2>
+<h2 id="priority-scale">Priority Scale</h2>
 <ul>
 <li><strong>P0 Safety</strong>: prevents accidental data loss, bad commits, broken handoffs, or
 corrupted repo state.</li>
@@ -60,7 +74,7 @@ current gate.</li>
 <li><strong>P4 Polish</strong>: quality-of-life, dashboard polish, formatting, cleanup, or
 presentation work.</li>
 </ul>
-<h2>Ranking Factors</h2>
+<h2 id="ranking-factors">Ranking Factors</h2>
 <p>Rank higher when a task:</p>
 <ul>
 <li>Prevents accidental loss or bad Git history.</li>
@@ -77,7 +91,7 @@ presentation work.</li>
 <li>Adds polish before a runnable vertical slice exists.</li>
 <li>Produces code without a clear run-bundle or test artifact.</li>
 </ul>
-<h2>Machine-State Lanes (adopted C-007, 2026-07-07)</h2>
+<h2 id="machine-state-lanes-adopted-c-007-2026-07-07">Machine-State Lanes (adopted C-007, 2026-07-07)</h2>
 <p>Every task carries a lane; a session picks the top task COMPATIBLE with
 its machine state, not the top task absolutely:</p>
 <ul>
@@ -88,8 +102,8 @@ sessions.</li>
 <li><strong>[ED-EXTERNAL]</strong> — needs the user: advisor, calendar, device access,
 purchases, destinations.</li>
 </ul>
-<h2>Current Queue</h2>
-<table>
+<h2 id="current-queue">Current Queue</h2>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th align="right">Rank</th>
@@ -212,17 +226,9 @@ purchases, destinations.</li>
 <td>Critique-adjudicated queue batch: (a) post-2M controller split (experiment loop/cooldown/env capture out of controller.py); (b) node-worker protocol parity tests + table-driven validation (with 2K live); (c) NVIDIA [N/A]-row skip counts surfaced into measurement quality (with 2K live); (d) per-backend raw-to-trace strict generalization (with 2K live); (e) claims-to-evidence index seeded once 2M corpus exists; (f) schema v0.2 loader/export parity acceptance rule; (g) boundary labels propagated into report index/chart titles before any cross-boundary claims</td>
 <td>Each item lands with its named gate; dispositions + rejected items (RemoteNodeSession per B-1, run-ID randomization per D-010/D-022, console script pre-2M) recorded in C-011</td>
 </tr>
-<tr>
-<td align="right">13</td>
-<td>P2-017</td>
-<td>P2 Next Slice</td>
-<td>NEW (2026-07-08 final-gate 5.5 review of the critique-record session) [AGENT]</td>
-<td>Make <code>scripts/build_site.py</code> provenance stamps honest: pages are stamped <code>git log -1</code> at build time, so a dirty-tree regen labels uncommitted content with the previous commit&#39;s hash. Fix: stamp the source file&#39;s own last-commit hash and append a <code>+ uncommitted</code> marker when the source is dirty at build time</td>
-<td>Regen on a dirty tree marks affected pages as such; regen on a clean tree stamps the commit that actually contains the rendered source; interim convention until fixed: commit sources first, regen, commit site second (adopted this session)</td>
-</tr>
-</tbody></table>
-<h2>Completed Queue Items</h2>
-<table>
+</tbody></table></div>
+<h2 id="completed-queue-items">Completed Queue Items</h2>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>ID</th>
@@ -233,6 +239,13 @@ purchases, destinations.</li>
 </tr>
 </thead>
 <tbody><tr>
+<td>P2-017</td>
+<td>P2 Next Slice</td>
+<td>2026-07-08</td>
+<td>Honest per-source site provenance stamps</td>
+<td>PR #13 site-observatory rewrite: <code>git log -1 -- &lt;source&gt;</code> per page + <code>+ uncommitted</code> dirty marker; parser-tested; run report <code>2026-07-08-site-observatory.md</code></td>
+</tr>
+<tr>
 <td>P2-011</td>
 <td>P2 Next Slice</td>
 <td>2026-07-07</td>
@@ -421,8 +434,8 @@ purchases, destinations.</li>
 <td>Add advisor-facing status/plan/architecture doc + audit original sketch (user-directed)</td>
 <td>Root <code>PROJECT_STATUS.md</code>; run report <code>docs/run_reports/2026-06-09-advisor-status-doc.md</code></td>
 </tr>
-</tbody></table>
-<h2>Current Do-Not-Do-Yet List</h2>
+</tbody></table></div>
+<h2 id="current-do-not-do-yet-list">Current Do-Not-Do-Yet List</h2>
 <ul>
 <li>(satisfied 2026-06-12) The mock bundle/reducer path and report generator
 now exist; dashboard/report work is no longer blocked.</li>
@@ -450,7 +463,7 @@ gates (D-016 + <code>[mac]</code> install; privileged sample + D-004 sudoers) op
 build on the post-2N seams (RunContext raw evidence, D-026 markers,
 D-027 rail rows, 2N.3 observed-token fallback).</li>
 </ul>
-<h2>Queue Maintenance</h2>
+<h2 id="queue-maintenance">Queue Maintenance</h2>
 <p>At the end of substantial work:</p>
 <ul>
 <li>Update statuses in this file.</li>
@@ -460,12 +473,13 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 </ul>
 
 
+  </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 443a31f (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit 4af29a9 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

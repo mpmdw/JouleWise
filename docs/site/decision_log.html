@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Decision Log — JouleWise</title>
+<title>Decision Log - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -13,21 +14,65 @@
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
       <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
       <a href="results.html">Results</a>
       <a href="process.html">Process</a>
       <a href="research.html">Research</a>
-      <a href="library.html" class="active">Library</a>
+      <a href="library.html" class="active">Sources</a>
     </div>
   </nav>
 </header>
 <main>
-<div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>docs/decision_log.md</code> · as of commit 443a31f (2026-07-08)</p>
-<h1>Decision Log</h1>
+<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#how-to-use-this-log">How To Use This Log</a>
+<a href="#index">Index</a>
+<a href="#d-001-run-bundles-store-normalized-config-json-not-yaml">D-001: Run bundles store normalized config.json, not YAML</a>
+<a href="#d-002-telemetry-sampling-via-subprocess-file-no-controller-threading">D-002: Telemetry sampling via subprocess + file, no controller threading</a>
+<a href="#d-003-timestamp-and-clock-alignment-policy">D-003: Timestamp and clock-alignment policy</a>
+<a href="#d-004-powermetrics-privilege-workflow">D-004: powermetrics privilege workflow</a>
+<a href="#d-005-one-bundle-per-repetition-grouped-by-experiment-manifest">D-005: One bundle per repetition, grouped by experiment manifest</a>
+<a href="#d-006-dashboard-v1-is-a-static-html-report-generator">D-006: Dashboard v1 is a static HTML report generator</a>
+<a href="#d-007-yaml-config-input-is-deferred">D-007: YAML config input is deferred</a>
+<a href="#d-008-split-runs-arrive-via-schema-v0-2-run-kind-split-plan">D-008: Split runs arrive via schema v0.2 (run_kind + split_plan)</a>
+<a href="#d-009-dependency-policy-stdlib-core-optional-extras">D-009: Dependency policy: stdlib core, optional extras</a>
+<a href="#d-010-run-id-scheme">D-010: Run ID scheme</a>
+<a href="#d-011-summary-metrics-json-is-the-bundle-completion-marker">D-011: summary_metrics.json is the bundle completion marker</a>
+<a href="#d-012-failure-reason-to-run-status-mapping">D-012: Failure-reason to run-status mapping</a>
+<a href="#d-013-controller-as-dut-mitigation-for-mac-local-runs">D-013: Controller-as-DUT mitigation for Mac-local runs</a>
+<a href="#d-014-statistical-protocol-for-repeated-runs">D-014: Statistical protocol for repeated runs</a>
+<a href="#d-015-split-mechanism-priority-and-same-runtime-rule">D-015: Split-mechanism priority and same-runtime rule</a>
+<a href="#d-016-benchmark-model-selection">D-016: Benchmark model selection</a>
+<a href="#d-017-ci-scope">D-017: CI scope</a>
+<a href="#d-018-per-backend-power-w-definition-and-rail-policy">D-018: Per-backend power_w definition and rail policy</a>
+<a href="#d-019-mock-adapters-use-simulated-time-via-an-injectable-clock">D-019: Mock adapters use simulated time via an injectable clock</a>
+<a href="#d-020-cli-binds-fakeclock-for-all-mock-runs-systemclock-otherwise">D-020: CLI binds FakeClock for all-mock runs, SystemClock otherwise</a>
+<a href="#d-021-controller-flushes-events-jsonl-before-the-reduce-stage">D-021: Controller flushes events.jsonl before the reduce stage</a>
+<a href="#d-022-auto-generated-run-id-suffix-is-config-hash-derived-not-random">D-022: Auto-generated run-ID suffix is config-hash-derived, not random</a>
+<a href="#d-023-per-item-phase-status-lives-solely-in-the-exit-checklists">D-023: Per-item phase status lives solely in the exit checklists</a>
+<a href="#d-024-adapters-receive-a-runcontext-not-piecemeal-parameters">D-024: Adapters receive a RunContext, not piecemeal parameters</a>
+<a href="#d-025-one-shared-bundle-read-layer-for-all-bundle-consumers">D-025: One shared bundle read layer for all bundle consumers</a>
+<a href="#d-026-measured-window-is-bounded-by-sampling-active-marker-events">D-026: Measured window is bounded by sampling-active marker events</a>
+<a href="#d-027-per-rail-rows-must-share-per-sample-timestamps-misalignment-is-a-structured-failure">D-027: Per-rail rows must share per-sample timestamps; misalignment is a structured failure</a>
+<a href="#d-028-reduce-verb-rewrites-summary-metrics-json-in-place">D-028: reduce verb rewrites summary_metrics.json in place</a>
+<a href="#d-029-config-schema-declares-nullable-optionals-serialization-unchanged">D-029: Config schema declares nullable optionals; serialization unchanged</a>
+<a href="#d-030-validate-bundle-stays-structural-by-default-strict-adds-raw-evidence-checks">D-030: validate-bundle stays structural by default; --strict adds raw-evidence checks</a>
+<a href="#d-031-multi-model-council-review-pr-convention-and-drift-controls">D-031: Multi-model council review, PR convention, and drift controls</a>
+<a href="#d-032-phase-energy-j-is-gross-only-in-summary-v0-1">D-032: phase_energy_j is gross-only in summary v0.1</a>
+<a href="#d-033-prompt-content-provenance-is-recorded-per-run-bundle">D-033: Prompt-content provenance is recorded per run bundle</a>
+<a href="#d-034-slice-2o-owns-the-workload-program-after-2m-and-3-0-1">D-034: Slice 2O owns the workload program after 2M and 3.0.1</a>
+<a href="#d-035-replay-claims-require-fresh-process-subprocess-per-stage-isolation">D-035: Replay claims require fresh-process (subprocess-per-stage) isolation</a>
+<a href="#d-036-spike-verdict-codes-derive-from-measured-data-never-hardcoded">D-036: Spike verdict codes derive from measured data, never hardcoded</a>
+<a href="#d-037-claims-ladder-l0-l4-binds-reader-facing-claim-language-from-2m-onward">D-037: Claims ladder (L0-L4) binds reader-facing claim language from 2M onward</a></aside>
+  <div class="doc-wrap doc-source-docs-decision-log-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/decision_log.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 1672f60"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 1672f60</span></span></div>
+    <h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
 be re-derived by a future agent gets an entry here.</p>
-<h2>How To Use This Log</h2>
+<h2 id="how-to-use-this-log">How To Use This Log</h2>
 <ul>
 <li>Before implementing anything non-trivial, check whether a decision here
 already covers it. Do not silently re-decide settled questions.</li>
@@ -41,8 +86,8 @@ without recorded alternatives is not auditable.</li>
 <li>Revisit triggers are part of the contract: when a trigger fires, the decision
 must be re-examined, not quietly worked around.</li>
 </ul>
-<h2>Index</h2>
-<table>
+<h2 id="index">Index</h2>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>ID</th>
@@ -235,7 +280,7 @@ must be re-examined, not quietly worked around.</li>
 <td>Claims ladder (L0-L4) binds reader-facing claim language from 2M onward</td>
 <td>accepted</td>
 </tr>
-</tbody></table>
+</tbody></table></div>
 <hr>
 <h2>D-001: Run bundles store normalized <code>config.json</code>, not YAML</h2>
 <ul>
@@ -271,7 +316,7 @@ writes JSON; config hashing is defined as SHA-256 over the sorted-key,
 <p>Revisit when: D-007 introduces YAML input, or a downstream consumer needs the
 originally-authored file preserved.</p>
 <hr>
-<h2>D-002: Telemetry sampling via subprocess + file, no controller threading</h2>
+<h2 id="d-002-telemetry-sampling-via-subprocess-file-no-controller-threading">D-002: Telemetry sampling via subprocess + file, no controller threading</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -312,7 +357,7 @@ scope for v1.</p>
 <p>Revisit when: a backend appears that cannot run as a file-writing subprocess,
 or sub-second live feedback becomes a requirement.</p>
 <hr>
-<h2>D-003: Timestamp and clock-alignment policy</h2>
+<h2 id="d-003-timestamp-and-clock-alignment-policy">D-003: Timestamp and clock-alignment policy</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -392,7 +437,7 @@ add.</p>
 measurement machine is shared and the owner declines the sudoers rule (then
 runs become operator-attended, option 2).</p>
 <hr>
-<h2>D-005: One bundle per repetition, grouped by experiment manifest</h2>
+<h2 id="d-005-one-bundle-per-repetition-grouped-by-experiment-manifest">D-005: One bundle per repetition, grouped by experiment manifest</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -426,7 +471,7 @@ between reps live at the experiment level; <code>run_bundle_layout.md</code> doc
 the manifest.</p>
 <p>Revisit when: never expected; this is structural.</p>
 <hr>
-<h2>D-006: Dashboard v1 is a static HTML report generator</h2>
+<h2 id="d-006-dashboard-v1-is-a-static-html-report-generator">D-006: Dashboard v1 is a static HTML report generator</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -462,7 +507,7 @@ never the source of report figures (see Phase 4 plan).</p>
 sweeps in Phase 3) - and then prefer extending the generator before adopting
 a server.</p>
 <hr>
-<h2>D-007: YAML config input is deferred</h2>
+<h2 id="d-007-yaml-config-input-is-deferred">D-007: YAML config input is deferred</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -528,7 +573,7 @@ mid-phase surprise.</p>
 decomposition. All documented in the Phase 3 plan.</p>
 <p>Revisit when: an N&gt;2 pipeline experiment is actually proposed.</p>
 <hr>
-<h2>D-009: Dependency policy: stdlib core, optional extras</h2>
+<h2 id="d-009-dependency-policy-stdlib-core-optional-extras">D-009: Dependency policy: stdlib core, optional extras</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -562,7 +607,7 @@ already requires, which doubles as a test of the failure paths.</p>
 <p>Revisit when: a stdlib-only requirement becomes the bottleneck for core
 correctness (not convenience).</p>
 <hr>
-<h2>D-010: Run ID scheme</h2>
+<h2 id="d-010-run-id-scheme">D-010: Run ID scheme</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -635,7 +680,7 @@ that satisfies the per-status contract&quot;, not merely &quot;parseable JSON
 object&quot;. Historical bundles are unaffected: real corpus summaries
 already carry the full field set.</p>
 <hr>
-<h2>D-012: Failure-reason to run-status mapping</h2>
+<h2 id="d-012-failure-reason-to-run-status-mapping">D-012: Failure-reason to run-status mapping</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -678,7 +723,7 @@ flagged in run reports when it occurs.</p>
 <p>Revisit when: a reason code appears that the table misclassifies in practice;
 amend the table and this entry rather than special-casing in adapters.</p>
 <hr>
-<h2>D-013: Controller-as-DUT mitigation for Mac-local runs</h2>
+<h2 id="d-013-controller-as-dut-mitigation-for-mac-local-runs">D-013: Controller-as-DUT mitigation for Mac-local runs</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -717,7 +762,7 @@ comparison run is queued as a Phase 3-era validation task.</p>
 <p>Revisit when: the SSH-based comparison shows a measurable delta, in which
 case Mac headline numbers move to remote-controlled runs.</p>
 <hr>
-<h2>D-014: Statistical protocol for repeated runs</h2>
+<h2 id="d-014-statistical-protocol-for-repeated-runs">D-014: Statistical protocol for repeated runs</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted (draft to be ratified against real variance data at Phase 4
@@ -766,7 +811,7 @@ controller implements the cooldown gate (Slice 2F); Phase 4 Stage 4.0
 ratifies or amends with observed variance, updating this entry&#39;s status.</p>
 <p>Revisit when: Phase 4 Stage 4.0, mandatorily.</p>
 <hr>
-<h2>D-015: Split-mechanism priority and same-runtime rule</h2>
+<h2 id="d-015-split-mechanism-priority-and-same-runtime-rule">D-015: Split-mechanism priority and same-runtime rule</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -822,7 +867,7 @@ payload sizes for (a); verdict codes per runtime are recorded in
 <p>Revisit when: a spike contradicts an assumption (then the ladder re-ranks,
 documented), or vLLM&#39;s disaggregation API stabilizes early enough to matter.</p>
 <hr>
-<h2>D-016: Benchmark model selection</h2>
+<h2 id="d-016-benchmark-model-selection">D-016: Benchmark model selection</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: open (criteria fixed now; closure requires Phase 1 supervisor scope
@@ -876,7 +921,7 @@ paths/revisions; KV-size table row computed for the chosen models.</p>
 <p>Revisit when: a chosen model&#39;s weights become unavailable or a target cannot
 load it (then the recorded fallback candidate is promoted).</p>
 <hr>
-<h2>D-017: CI scope</h2>
+<h2 id="d-017-ci-scope">D-017: CI scope</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -946,7 +991,7 @@ inherits the boundary table.</p>
 <p>Revisit when: a backend exposes a strictly better boundary (e.g., macOS adds
 package-level wall-equivalent reporting).</p>
 <hr>
-<h2>D-019: Mock adapters use simulated time via an injectable clock</h2>
+<h2 id="d-019-mock-adapters-use-simulated-time-via-an-injectable-clock">D-019: Mock adapters use simulated time via an injectable clock</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -1064,7 +1109,7 @@ still flush their buffered events exactly once in <code>_finish()</code>.</p>
 <p>Revisit when: events grow large enough that buffering the whole run in
 memory is a problem (then stream to a temp file and swap on finalize).</p>
 <hr>
-<h2>D-022: Auto-generated run-ID suffix is config-hash-derived, not random</h2>
+<h2 id="d-022-auto-generated-run-id-suffix-is-config-hash-derived-not-random">D-022: Auto-generated run-ID suffix is config-hash-derived, not random</h2>
 <ul>
 <li>Date: 2026-06-12</li>
 <li>Status: accepted (refines D-010)</li>
@@ -1108,7 +1153,7 @@ bundles in one directory without the experiment runner (then reintroduce
 a disambiguator, e.g. a monotonic counter rather than randomness, to keep
 determinism).</p>
 <hr>
-<h2>D-023: Per-item phase status lives solely in the exit checklists</h2>
+<h2 id="d-023-per-item-phase-status-lives-solely-in-the-exit-checklists">D-023: Per-item phase status lives solely in the exit checklists</h2>
 <ul>
 <li>Date: 2026-07-05</li>
 <li>Status: accepted</li>
@@ -1215,7 +1260,7 @@ no raw output when the context is absent. The writer-side counterpart is
 collision-checked, closed by <code>finalize()</code>); adapters never receive the
 writer - they write into <code>context.raw_dir</code> directly.</p>
 <hr>
-<h2>D-025: One shared bundle read layer for all bundle consumers</h2>
+<h2 id="d-025-one-shared-bundle-read-layer-for-all-bundle-consumers">D-025: One shared bundle read layer for all bundle consumers</h2>
 <ul>
 <li>Date: 2026-07-06</li>
 <li>Status: accepted; implemented in Slice 2N.8 (2026-07-06, <code>joulewise/bundle_read.py</code>)</li>
@@ -1260,7 +1305,7 @@ the Phase 4 plan).</p>
 bundle reading concentrates), or a consumer needs streaming reads that
 the whole-bundle reader cannot serve.</p>
 <hr>
-<h2>D-026: Measured window is bounded by sampling-active marker events</h2>
+<h2 id="d-026-measured-window-is-bounded-by-sampling-active-marker-events">D-026: Measured window is bounded by sampling-active marker events</h2>
 <ul>
 <li>Date: 2026-07-06</li>
 <li>Status: accepted (Slice 2N.2)</li>
@@ -1289,12 +1334,13 @@ back to stage boundaries for pre-2N bundles.</li>
 <p>Decision: option 2. <code>sampling_started</code> is stamped only after
 <code>start_sampling</code> returns ok (sampling confirmed active);
 <code>sampling_stopped</code> is stamped before <code>sto
+  </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 443a31f (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/decision_log.md · commit 1672f60 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

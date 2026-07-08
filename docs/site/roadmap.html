@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roadmap - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+<header class="site">
+  <nav class="nav">
+    <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
+    <div class="links">
+      <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html" class="active">Roadmap</a>
+      <a href="record.html">Record</a>
+      <a href="results.html">Results</a>
+      <a href="process.html">Process</a>
+      <a href="research.html">Research</a>
+      <a href="library.html">Sources</a>
+    </div>
+  </nav>
+</header>
+<main>
+<section class="observatory-hero">
+  <div class="kicker">Roadmap</div>
+  <h1>Queue rank is the flight plan.</h1>
+  <p class="lede">The current queue is parsed from the exact live table headers in <code>TASK_QUEUE.md</code>. Lane filters are progressive enhancement.</p>
+  <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+</section>
+<section class="flight-plan">
+  <div class="next-two"><span class="card-label">Next two</span><strong class="mono">P2-015 -> P2-006</strong><p>P2-015 runs first, then P2-006 in the same quiet-machine window.</p></div>
+  <div class="lane-filters" aria-label="Filter queue by lane">
+    <button type="button" data-lane-filter="all" aria-pressed="true" class="active">All</button>
+    <button type="button" data-lane-filter="QUIET-MAC" aria-pressed="false">Quiet Mac</button>
+    <button type="button" data-lane-filter="AGENT" aria-pressed="false">Agent</button>
+    <button type="button" data-lane-filter="ED-EXTERNAL" aria-pressed="false">Ed</button>
+  </div>
+</section>
+<section class="queue-stack"><article class="lane-card" data-lane="QUIET-MAC">
+  <div class="priority-band p2"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#1</span><span class="mono task-code">P2-015</span><span class="status-chip">NEW</span><span class="lane-chip lane-quiet-mac">QUIET-MAC</span></div>
+    <p class="status-note">NEW (C-011: critique counter-review)</p>
+    <h2>Detection-floor calibration campaign — idle-only repeats, no-op/tiny workloads, measured-window duration ladder (50ms→30s); runs FIRST in the same quiet window as 2M</h2>
+    <details><summary>Acceptance</summary><p>Versioned calibration bundle set (strict-valid); <code>detection_floor_j</code> + <code>minimum_identifiable_window_s</code> per target/backend recorded in <code>docs/phase_2/detection_floor.md</code>; calibration manifest hash cited by later reports; phase-identifiability flags already mechanical (C-011 reducer change)</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="QUIET-MAC">
+  <div class="priority-band p2"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#2</span><span class="mono task-code">P2-006</span><span class="status-chip">UNBLOCKED</span><span class="lane-chip lane-quiet-mac">QUIET-MAC</span></div>
+    <p class="status-note">UNBLOCKED; acceptance extended by C-011</p>
+    <h2>Homogeneous baselines (slice 2M) on the Mac target — two-model campaign on a QUIET machine, then <code>docs/phase_2/baseline_results.md</code> with variance + prefill/decode comparison (phase columns honor identifiability flags)</h2>
+    <details><summary>Acceptance</summary><p>Campaign bundles born under the FIXED validator; pass <code>--strict</code>; run via the FAIL-CLOSED runner (per-member strict validation, idle-suspect waiver rule, campaign verdict = publishable) using the counterbalanced order manifest (C-011/D-014); claim wording per <code>docs/contracts/claims_ladder.md</code> (D-037); no-agent quiet lock (C-009 T5); corpus backed up per R-016; runs AFTER P2-015 in the same window</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="AGENT">
+  <div class="priority-band p3"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#3</span><span class="mono task-code">P3-000</span><span class="status-chip">MERGED</span><span class="lane-chip lane-agent">AGENT</span></div>
+    <p class="status-note">3.0.1 COMPLETE + MERGED (PR #9, verdict replay_supported, lead-re-verified; D-035/D-036 promoted); 3.0.2+ open — 3.0.2 needs installs (R-003 user approval) and inherits the 3.0.1 harness shape + its 2 deferred hardening fixes (ledger C-8)</p>
+    <h2>KV persistence feasibility spikes (Phase 3 Stage 3.0)</h2>
+    <details><summary>Acceptance</summary><p>Verdicts in <code>docs/phase_3/kv_feasibility.md</code>; checklist rows are the status authority; must complete before any borrow-window scheduling</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="AGENT">
+  <div class="priority-band p2"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#4</span><span class="mono task-code">P2-010</span><span class="status-chip">OPEN</span><span class="lane-chip lane-agent">AGENT</span></div>
+    <p class="status-note">open (C-004; quarantine rules apply)</p>
+    <h2>Scored workload suite v1 (<code>affine_mod_ladder_v1</code>) + item/level windows — owner: phase-2 Slice 2O (gates: 2M data + 3.0.1 verdict; see plan)</h2>
+    <details><summary>Acceptance</summary><p><code>joulewise/workloads.py</code> generator/scorer (stdlib); item/level marker events; <code>BundleReader.item_windows()</code>; level-window energy primary, per-item identifiability flags; per-item token count/stop reason recorded (EOS-bias audit); design in <code>docs/research_question_bank.md</code> + C-004</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="AGENT">
+  <div class="priority-band p2"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#5</span><span class="mono task-code">P2-012</span><span class="status-chip">OPEN</span><span class="lane-chip lane-agent">AGENT</span></div>
+    <p class="status-note">open (Ed 2026-07-07; C-005 synthesis landed — starter suite specified; runs after P2-010)</p>
+    <h2>Implement <code>jw_mixed_v1</code> workload expansion (C-005) — owner: phase-2 Slice 2O; depends on P2-010 item windows</h2>
+    <details><summary>Acceptance</summary><p>Per the C-005 spec in <code>docs/research_question_bank.md</code>: 6 categories × 8 items, n=5, greedy <code>fixed_budget_exact</code> policy, synthetic shape-matched controls paired with hash-manifested realistic exemplars; additive config fields (<code>workload_profile.category</code>, <code>source_manifest</code>, per-item <code>output_policy</code>); category as campaign-matrix axis; per-item stop reason/token/response hash in outputs; reuses P2-010 item windows; consumes the landed P2-011 aggregate engine; natural-EOS 2-item pilot second. Unlocks C5-W.1..W.4</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="ED-EXTERNAL">
+  <div class="priority-band p1"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#6</span><span class="mono task-code">P1-008</span><span class="status-chip">WAITING</span><span class="lane-chip lane-ed-external">ED-EXTERNAL</span></div>
+    <p class="status-note">waiting-user</p>
+    <h2>Map phases to academic calendar</h2>
+    <details><summary>Acceptance</summary><p>Colloquium/report dates + borrow window entered in <code>docs/milestones.md</code>; phase target dates derived</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="">
+  <div class="priority-band p1"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#meta</span><span class="mono task-code">P1-001</span><span class="status-chip">WAITING</span></div>
+    <p class="status-note">waiting-user, deprioritized</p>
+    <h2>Capture supervisor approval and scope notes</h2>
+    <details><summary>Acceptance</summary><p>Dated notes in <code>docs/phase_1/phase_1_exit_checklist.md</code>; unblocks full D-016 closure (P2-004) when it lands</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="">
+  <div class="priority-band p0"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#meta</span><span class="mono task-code">P0-003</span><span class="status-chip">WAITING</span></div>
+    <p class="status-note">waiting-user, deprioritized</p>
+    <h2>Replace interim backup destination (R-016) with external/cloud location</h2>
+    <details><summary>Acceptance</summary><p>User names the destination; one fresh restore test; R-016 → fully mitigated</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="ED-EXTERNAL">
+  <div class="priority-band p1"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#7</span><span class="mono task-code">P1-003</span><span class="status-chip">OPEN</span><span class="lane-chip lane-ed-external">ED-EXTERNAL</span></div>
+    <p class="status-note">open (elevated value: gates Q6 boundary-sensitivity, C-003)</p>
+    <h2>Record wall-meter decision</h2>
+    <details><summary>Acceptance</summary><p>Meter make/model or &quot;unavailable&quot; verdict plus measurement/export method (exit-checklist wall-meter section; informs D-018 boundary calibration)</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="ED-EXTERNAL">
+  <div class="priority-band p1"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#8</span><span class="mono task-code">P1-004</span><span class="status-chip">PARTIAL</span><span class="lane-chip lane-ed-external">ED-EXTERNAL</span></div>
+    <p class="status-note">partial</p>
+    <h2>Fill network/interconnect topology plan</h2>
+    <details><summary>Acceptance</summary><p>Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="ED-EXTERNAL">
+  <div class="priority-band p1"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#9</span><span class="mono task-code">P1-006</span><span class="status-chip">OPEN</span><span class="lane-chip lane-ed-external">ED-EXTERNAL</span></div>
+    <p class="status-note">open</p>
+    <h2>Confirm NVIDIA/Orin telemetry access paths</h2>
+    <details><summary>Acceptance</summary><p>SSH/runtime/telemetry command evidence in the exit-checklist instrumentation section, or marked pending with blocker (gates slices 2K/2L)</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="">
+  <div class="priority-band p2"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#10</span><span class="mono task-code">P2-004</span><span class="status-chip">PARTIAL</span></div>
+    <p class="status-note">partial (provisional small-model pick 2026-07-06 opens 2G; full closure gated P1-001)</p>
+    <h2>Close model selection (D-016)</h2>
+    <details><summary>Acceptance</summary><p>Decision-log entry: models, revisions, artifact paths, local mirror, fallback candidate. Mid-model pick, CUDA load, GGUF paths outstanding.</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="">
+  <div class="priority-band p2"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#11</span><span class="mono task-code">P2-005</span><span class="status-chip">MERGED</span></div>
+    <p class="status-note">2K fixture-first MERGED (PR #11, 2026-07-08); ALL protocol pins PROVISIONAL; live validation gated (P1-006, evidence script ready: docs/phase_1/2k_live_verification_checklist.md); 2L Orin open</p>
+    <h2>Remote targets (slices 2K NVIDIA/vLLM/ssh, 2L Orin)</h2>
+    <details><summary>Acceptance</summary><p>Remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide.</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article><article class="lane-card" data-lane="AGENT">
+  <div class="priority-band p2"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#12</span><span class="mono task-code">P2-016</span><span class="status-chip">NEW</span><span class="lane-chip lane-agent">AGENT</span></div>
+    <p class="status-note">NEW (C-011 deferred batch; post-2M / with-2K-live)</p>
+    <h2>Critique-adjudicated queue batch: (a) post-2M controller split (experiment loop/cooldown/env capture out of controller.py); (b) node-worker protocol parity tests + table-driven validation (with 2K live); (c) NVIDIA [N/A]-row skip counts surfaced into measurement quality (with 2K live); (d) per-backend raw-to-trace strict generalization (with 2K live); (e) claims-to-evidence index seeded once 2M corpus exists; (f) schema v0.2 loader/export parity acceptance rule; (g) boundary labels propagated into report index/chart titles before any cross-boundary claims</h2>
+    <details><summary>Acceptance</summary><p>Each item lands with its named gate; dispositions + rejected items (RemoteNodeSession per B-1, run-ID randomization per D-010/D-022, console script pre-2M) recorded in C-011</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span>
+  </div>
+</article></section>
+<section class="interlock"><h2>Do not do yet</h2><ul><li>(satisfied 2026-06-12) The mock bundle/reducer path and report generator now exist; dashboard/report work is no longer blocked.</li>
+<li>(satisfied 2026-06-12) The mock lifecycle is runnable, so live MLX/powermetrics implementation may proceed once its hardware gates open (P1-002 + D-016); follow <code>docs/phase_2/hardware_slice_implementation_guide.md</code>.</li>
+<li>(resolved 2026-06-12) Hailo feasibility has a verdict (<code>unsupported_workload</code>); do not implement a Hailo backend — report it as an applicability finding.</li>
+<li>Do not implement schema v0.2 before Phase 3 Stage 3.1 (design is fixed in D-008; implementation waits).</li>
+<li>Phase 3 DESK feasibility spikes (Stage 3.0.x) may run now — their gate (2G/2I + model) is open. Do not start Phase 3 DATA collection, hardware pairings, or borrow-window scheduling before 2M baselines and the Stage 3.0 verdicts exist (C-007 wording fix; was previously stated as a blanket Phase 3 hold that contradicted the queue).</li>
+<li>Do not schedule the 3080 Ti borrow window before Stage 3.0 verdicts and the rehearsed runbook exist (R-006).</li>
+<li>Do not start Phase 3 live-split work (3.3) before offline replay (3.2) has produced data.</li>
+<li>Do not close D-016 (model selection) without P1-001 supervisor scope or an explicit user go-ahead.</li>
+<li>(satisfied 2026-07-06) Slice 2N landed; 2G/2H may start once their own gates (D-016 + <code>[mac]</code> install; privileged sample + D-004 sudoers) open — build on the post-2N seams (RunContext raw evidence, D-026 markers, D-027 rail rows, 2N.3 observed-token fallback).</li></ul><span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span></section>
+<section class="timeline-rail"><h2>Completed reel</h2><div class="timeline-node"><span class="mono">2026-07-08</span><strong>P2-017</strong><p>Honest per-source site provenance stamps</p></div>
+<div class="timeline-node"><span class="mono">2026-07-07</span><strong>P2-011</strong><p>D-014 cross-repetition uncertainty (aggregate engine + manifest enrichment)</p></div>
+<div class="timeline-node"><span class="mono">2026-07-07</span><strong>P2-008</strong><p>Mock telemetry × SystemClock strictly-interior stamping</p></div>
+<div class="timeline-node"><span class="mono">2026-07-07</span><strong>P2-009</strong><p>Rich telemetry + idle-quality gate + environment capture</p></div>
+<div class="timeline-node"><span class="mono">2026-07-07</span><strong>2M-TOOLING</strong><p>Campaign matrix generator + resumable sequential runner</p></div>
+<div class="timeline-node"><span class="mono">2026-07-07</span><strong>KV-SIZE</strong><p>Stage 3.0.0 kv-size helper (module + CLI verb)</p></div>
+<div class="timeline-node"><span class="mono">2026-07-07</span><strong>FLAGSHIP-001</strong><p>User-directed flagship benchmark: Qwen3.5-122B-A10B-4bit on the M3 Max</p></div>
+<div class="timeline-node"><span class="mono">2026-07-06</span><strong>P1-002</strong><p>Mac-local Phase 1 telemetry/runtime evidence — sample captured, fields pinned, D-004 sudoers installed + <code>sudo -n</code> verified, MLX installed</p></div>
+<div class="timeline-node"><span class="mono">2026-07-06</span><strong>P2-003</strong><p>Mac MLX + powermetrics vertical slice (2G, 2H, 2I) — <strong>first real energy numbers</strong></p></div>
+<div class="timeline-node"><span class="mono">2026-07-06</span><strong>P0-002</strong><p>Measurement-corpus backup protocol (R-016) — interim destination per user direction</p></div>
+<div class="timeline-node"><span class="mono">2026-07-06</span><strong>P3-001</strong><p>Background/related-work draft (Phase 4 Stage 4.6)</p></div>
+<div class="timeline-node"><span class="mono">2026-07-06</span><strong>2G (P2-003 part)</strong><p>MLX runtime adapter — first real generation traces on the M3 Max</p></div><span class="source-chip" title="TASK_QUEUE.md · commit 4af29a9"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4af29a9</span></span></section>
+<script>
+(function () {
+  var buttons = document.querySelectorAll('[data-lane-filter]');
+  var cards = document.querySelectorAll('.lane-card');
+  buttons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      var lane = button.getAttribute('data-lane-filter');
+      buttons.forEach(function (candidate) {
+        var selected = candidate === button;
+        candidate.classList.toggle('active', selected);
+        candidate.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      });
+      cards.forEach(function (card) {
+        card.hidden = lane !== 'all' && card.getAttribute('data-lane') !== lane;
+      });
+    });
+  });
+}());
+</script>
+</main>
+<footer class="site">
+  <div class="inner">
+    <span>JouleWise · github.com/mpmdw/JouleWise</span>
+    <span>TASK_QUEUE.md · commit 4af29a9 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+  </div>
+</footer>
+</body>
+</html>

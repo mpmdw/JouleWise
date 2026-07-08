@@ -1,7 +1,7 @@
 # JouleWise Run State
 
-Last updated: 2026-07-08 (critique second-pass record: reassessment +
-lead fact-check + counterreview fix pass, commit 292e074)
+Last updated: 2026-07-08 (site observatory: data-driven status frontend
+merged as PR #13; suite 576 after the new parser tests)
 
 ## Start Here For Every Big Run
 
@@ -82,6 +82,9 @@ preservation wording was fixed pre-commit. Details: addendum in
 Per the C-009 meta-review consensus, RUN_STATE no longer stacks
 previous-run narratives. Recent sessions, newest first:
 
+- 2026-07-08 site observatory (PR #13; status/roadmap/record frontend,
+  fail-closed parsers, P2-017 stamps):
+  `docs/run_reports/2026-07-08-site-observatory.md`
 - 2026-07-08 critique second-pass record (reassessment + fact-check +
   counterreview; addendum in the councils-critique report):
   `docs/run_reports/2026-07-08-councils-critique-session.md`
@@ -102,9 +105,9 @@ previous-run narratives. Recent sessions, newest first:
 
 ## Current Verification
 
-- Merged main: `python3 -m unittest discover -s tests` → `Ran 564
+- Merged main: `python3 -m unittest discover -s tests` → `Ran 576
   tests, OK (skipped=10)` — ZERO expected failures (as of 2026-07-08,
-  after PRs #8/#9/#10/#11/#12).
+  after PRs #8/#9/#10/#11/#12/#13; 564 + 12 build_site parser tests).
 - `validate-bundle --strict` green over all 6 real corpus bundles,
   read-only, unrewritten (incl. the new raw-to-trace gate).
 - CI: mock e2e + suite on both matrix legs, green on every PR head.

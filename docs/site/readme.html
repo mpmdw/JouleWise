@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>README — JouleWise</title>
+<title>README - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -13,17 +14,27 @@
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
       <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
       <a href="results.html">Results</a>
       <a href="process.html">Process</a>
       <a href="research.html">Research</a>
-      <a href="library.html" class="active">Library</a>
+      <a href="library.html" class="active">Sources</a>
     </div>
   </nav>
 </header>
 <main>
-<div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>README.md</code> · as of commit 443a31f (2026-07-08)</p>
-<h1>JouleWise</h1>
+<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#current-state">Current State</a>
+<a href="#verify">Verify</a>
+<a href="#run-the-harness-mock-target-no-hardware-or-extras-needed">Run The Harness (mock target — no hardware or extras needed)</a>
+<a href="#config-and-schema-verbs">Config And Schema Verbs</a>
+<a href="#documentation-map">Documentation Map</a></aside>
+  <div class="doc-wrap doc-source-readme-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>README.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="README.md · commit 07332e6"><span class="source-file">README.md</span><span class="source-commit">commit 07332e6</span></span></div>
+    <h1>JouleWise</h1>
 <p>JouleWise is an extensible benchmark for energy-wise LLM inference across
 heterogeneous local hardware. The name is a deliberate nod to JouleSort and
 Splitwise: energy measurement as the spine, split inference as the first major
@@ -40,7 +51,7 @@ for later audit and analysis.</li>
 Mac (Apple M3 Max); as of 2026-07-07, P2-013/P2-014 integrity and
 provenance fixes are complete; the verified end-user quickstart is a Phase
 5 deliverable.</p>
-<h2>Current State</h2>
+<h2 id="current-state">Current State</h2>
 <p>Phase 1 is in its final stretch; <strong>Phase 2&#39;s Mac vertical slice is complete
 and the project has its first real energy measurements</strong> (2026-07-06). From a
 typed config, one command produces a complete, schema-valid, auditable run
@@ -72,14 +83,14 @@ shared bundle read layer, static HTML report generator, and a CLI
 <li>A test suite (564 tests, 10 skipped, zero expected failures) run in CI on
 every push, including a mock end-to-end run + bundle validation.</li>
 </ul>
-<h2>Verify</h2>
+<h2 id="verify">Verify</h2>
 <pre><code class="language-bash">python3 -m unittest discover -s tests
 </code></pre>
 <p>(9 tests skip unless the <code>[analysis]</code> extra is installed — the
 report-generator chart tests; 1 more skips unless <code>jsonschema</code> happens to
 be installed. As of 2026-07-07 after P2-013, all 31 audit pins are fixed and
 the suite carries zero expected failures.)</p>
-<h2>Run The Harness (mock target — no hardware or extras needed)</h2>
+<h2 id="run-the-harness-mock-target-no-hardware-or-extras-needed">Run The Harness (mock target — no hardware or extras needed)</h2>
 <pre><code class="language-bash"># Produce a complete run bundle from the mock target (deterministic):
 python3 -m joulewise run configs/examples/mock_local.json --runs-dir runs
 
@@ -100,12 +111,12 @@ python3 -m joulewise report runs --output report
 <code>--runs-dir</code> fails by design with a run-ID collision (D-010/D-022). To rerun
 a member, move the old bundle aside, change <code>run_id</code>, or use a fresh runs
 dir; collisions are refusals, not bugs.</p>
-<h2>Config And Schema Verbs</h2>
+<h2 id="config-and-schema-verbs">Config And Schema Verbs</h2>
 <pre><code class="language-bash">python3 -m joulewise validate-config configs/examples/mock_local.json
 python3 -m joulewise print-config-schema
 python3 -m joulewise print-output-schema
 </code></pre>
-<h2>Documentation Map</h2>
+<h2 id="documentation-map">Documentation Map</h2>
 <p><strong>Advisor / high-level view:</strong> <code>PROJECT_STATUS.md</code> is the standalone status,
 plan, and architecture document - start there for a monitoring view of the
 project.</p>
@@ -129,12 +140,13 @@ constraints live in <code>docs/milestones.md</code>; cross-model review sessions
 <code>docs/council_log.md</code>.</p>
 
 
+  </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 443a31f (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>README.md · commit 07332e6 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
