@@ -35,10 +35,11 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 302d1df"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 302d1df</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 699cc01"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 699cc01</span></span></div>
     <h1>JouleWise Run State</h1>
-<p>Last updated: 2026-07-08 (site observatory: data-driven status frontend
-merged as PR #13; suite 576 after the new parser tests)</p>
+<p>Last updated: 2026-07-08 (site deployed as a Lakebed capsule with a live
+GitHub freshness layer — <a href="https://quiet-signal-6af8833395.lakebed.app">https://quiet-signal-6af8833395.lakebed.app</a>;
+suite 596 after the pack_capsule parser tests; nav scroll-jank fix)</p>
 <h2 id="start-here-for-every-big-run">Start Here For Every Big Run</h2>
 <p>Before starting substantial work:</p>
 <ol>
@@ -74,7 +75,12 @@ accumulate unpushed local state — the remote and the high-level docs
 contradictions between prose summaries and checklist matrix rows,
 numbers cited in multiple places. Adopted 2026-07-07 (council log
 C-002) after a sweep caught drift in 6 files; prose status summaries
-must carry an as-of date and defer to matrix rows (D-023 extension).</li>
+must carry an as-of date and defer to matrix rows (D-023 extension).
+After any session that changed front-facing docs, REGENERATE and
+REDEPLOY the site so the public snapshot tracks the repo (C-012):
+<code>python3 scripts/build_site.py &amp;&amp; python3 scripts/pack_capsule.py &amp;&amp; (cd site_capsule &amp;&amp; npx lakebed deploy)</code>. The live site&#39;s freshness
+layer will flag drift until this runs, but keeping the snapshot current
+is part of closing a docs-touching session.</li>
 <li>Call out any dirty working-tree state that should not be accidentally
 committed.</li>
 </ol>
@@ -88,8 +94,8 @@ PR #10 (DOC-007 docs/framing + merge-time reconciliation), PR #9
 Phase 3&#39;s central technical risk retired on current hardware), plus
 D-035/D-036 (the ratified spike promotions). <strong>PR #11 (2K NVIDIA fixture-first
 stack, all pins PROVISIONAL) MERGED 2026-07-08 under Ed&#39;s standing
-merge-with-review authorization — ALL FOUR STREAMS LANDED.</strong> Suite on
-main: 576 OK (skipped=10, ZERO expected failures — as of 2026-07-08 after PR #12/C-011); all 6 real corpus
+merge-with-review authorization — ALL FOUR STREAMS LANDED.</strong> Suite: see
+Current Verification below (single authority); all 6 real corpus
 bundles pass <code>--strict</code> read-only. The 2M campaign (P2-006) is fully unblocked and
 is the next machine-state-compatible task.</p>
 <p><strong>Since then (same day): PR #12 MERGED (C-011)</strong> — the independent-
@@ -113,6 +119,8 @@ preservation wording was fixed pre-commit. Details: addendum in
 <p>Per the C-009 meta-review consensus, RUN_STATE no longer stacks
 previous-run narratives. Recent sessions, newest first:</p>
 <ul>
+<li>2026-07-08 Lakebed deploy (live capsule + GitHub freshness; C-013):
+<code>docs/run_reports/2026-07-08-lakebed-deploy.md</code></li>
 <li>2026-07-08 site observatory (PR #13; status/roadmap/record frontend,
 fail-closed parsers, P2-017 stamps):
 <code>docs/run_reports/2026-07-08-site-observatory.md</code></li>
@@ -136,8 +144,11 @@ counterreview; addendum in the councils-critique report):
 </ul>
 <h2 id="current-verification">Current Verification</h2>
 <ul>
-<li>Merged main: <code>python3 -m unittest discover -s tests</code> → <code>Ran 576 tests, OK (skipped=10)</code> — ZERO expected failures (as of 2026-07-08,
-after PRs #8/#9/#10/#11/#12/#13; 564 + 12 build_site parser tests).</li>
+<li>Merged main: <code>python3 -m unittest discover -s tests</code> → <code>Ran 596 tests, OK (skipped=10)</code> — ZERO expected failures (as of 2026-07-08,
+after PRs #8..#13 + the Lakebed capsule stream; 564 + 12 build_site<ul>
+<li>20 pack_capsule parser tests).</li>
+</ul>
+</li>
 <li><code>validate-bundle --strict</code> green over all 6 real corpus bundles,
 read-only, unrewritten (incl. the new raw-to-trace gate).</li>
 <li>CI: mock e2e + suite on both matrix legs, green on every PR head.</li>
@@ -190,7 +201,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit 302d1df · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit 699cc01 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

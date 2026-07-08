@@ -26,80 +26,82 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#honesty-mechanics-the-load-bearing-part">Honesty mechanics (the load-bearing part)</a>
-<a href="#process-trace-layers-and-unique-catches">Process trace (layers and unique catches)</a>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#architecture">Architecture</a>
+<a href="#the-platform-fight-why-this-took-many-rounds-recorded-so-it-isn-t-relearned">The platform fight (why this took many rounds — recorded so it isn&#x27;t relearned)</a>
+<a href="#process-trace">Process trace</a>
 <a href="#verification">Verification</a>
-<a href="#next">Next</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-08-site-observatory-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-08-site-observatory.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-08-site-observatory.md · commit 4af29a9"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-08-site-observatory.md</span><span class="source-commit">commit 4af29a9</span></span></div>
-    <h1>Run Report — Site Observatory: Data-Driven Status Frontend (2026-07-08)</h1>
-<p><strong>Outcome:</strong> the generated half of <code>docs/site/</code> is no longer rendered
-markdown in a skin. <code>scripts/build_site.py</code> was rewritten around
-fail-closed parsers over the live process docs, and three new pages
-present project state as a designed observation experience: <code>status.html</code>
-(console strip + five-station &quot;flight recorder&quot; spine: what is true now /
-what changed / what happens next / what could invalidate it / where the
-evidence lives), <code>roadmap.html</code> (queue lane cards, next-two flight plan,
-do-not-do interlock), <code>record.html</code> (sessions timeline, binding
-decisions, council timeline). The library became a grouped Sources layer;
-doc pages gained TOC sidebars and scrolling table wrappers. Merged as
-PR #13 under the standing merge-with-review authority.</p>
-<h2 id="honesty-mechanics-the-load-bearing-part">Honesty mechanics (the load-bearing part)</h2>
+<a href="#maintenance-folded-into-the-loop">Maintenance (folded into the loop)</a>
+<a href="#known-limitation">Known limitation</a></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-08-lakebed-deploy-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-08-lakebed-deploy.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-08-lakebed-deploy.md · commit 699cc01"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-08-lakebed-deploy.md</span><span class="source-commit">commit 699cc01</span></span></div>
+    <h1>Run Report — Site Deployed as a Lakebed Capsule with Live Freshness (2026-07-08)</h1>
+<p><strong>Outcome:</strong> the whole JouleWise site is live as one shareable link —
+<strong><a href="https://quiet-signal-6af8833395.lakebed.app">https://quiet-signal-6af8833395.lakebed.app</a></strong> — served from a Lakebed
+capsule, with a <strong>live GitHub freshness layer</strong> that ties the snapshot to
+the actual repo state. Every page checks (server-side, DB-cached 5 min)
+whether its source docs have moved past the baked commits on <code>main</code> and
+shows a drift banner if so; verified working from production (14 sources,
+all baked==live at deploy time, <code>unavailable: false</code>).</p>
+<h2 id="architecture">Architecture</h2>
 <ul>
-<li>Every number and state on a generated page derives from parsing the md
-sources at build time; parsers exit nonzero naming component, source,
-and expected pattern. No hand-typed data survives review (two hardcoded
-narrative strings were caught and derived; an invented <code>meta</code> lane
-state and a council-index fallback were caught by counterreview and
-removed — absence of a lane tag now renders as absence).</li>
-<li>P2-017 closed: per-source provenance stamps (<code>git log -1 -- &lt;source&gt;</code>
-plus a <code>+ uncommitted</code> dirty marker) on every generated page/component.</li>
-<li>The fail-closed parser found real source drift while being built: the
-council-log index table was missing its C-011 row (fixed at source).</li>
-<li>The final-head gate HELD the merge because the site truthfully rendered
-a stale RUN_STATE test count (564 vs the grown 576) — the site cannot
-be more honest than its sources; the source was fixed and re-stamped.</li>
+<li><code>scripts/pack_capsule.py</code> (stdlib): packs <code>docs/site/</code> into gitignored
+TypeScript content modules — gzip+base64 page bodies as chunked string
+literals, one shared stylesheet, per-source provenance stamps parsed out
+of the pages, internal-link rewrites, font dedup. Fail-closed throughout;
+18 parser tests. Fonts OFF by default (artifact-limit driven; <code>--fonts</code>
+for other hosts).</li>
+<li><code>site_capsule/server/index.ts</code>: one HTTP endpoint per page (canonical +
+aliases), <code>/style.css</code>, <code>/api/freshness</code> (live GitHub compare, fails
+soft — cached-or-<code>unavailable</code>, never a 5xx, never claims not-moved when
+it couldn&#39;t check), <code>/api/health</code>. Freshness cached in a Lakebed DB table.</li>
+<li><code>client/index.tsx</code>: minimal Preact shell redirecting <code>/</code> → <code>/index</code>.</li>
 </ul>
-<h2 id="process-trace-layers-and-unique-catches">Process trace (layers and unique catches)</h2>
+<h2>The platform fight (why this took many rounds — recorded so it isn&#39;t relearned)</h2>
+<p>Lakebed&#39;s deploy validator textually scans server source (comments included)
+and the production runtime is stricter than local dev. Each was a distinct
+deploy failure, fixed in turn:</p>
 <ul>
-<li>Dual-prior 5.5 design round (instrument-maximalist vs editorial): both
-converged on extend-don&#39;t-replace, status hub, fail-closed parsing;
-lead synthesized console-strip + flight-recorder and cut invented-
-metric components (gauges, radar).</li>
-<li>5.5 implementation (branch <code>stream/site-observatory</code>), then two Codex
-IMAGE critique rounds (7 then 8 screenshots; 16 findings r1, per-item
-verification r2) — Ed directed image-heavy analysis to Codex
-(higher-res, cheap tokens); encoded in the codex-delegation skill,
-with a <code>codex-run -i</code> passthrough added (variadic <code>--image</code> trap
-documented).</li>
-<li>Lead root-caused the persistent mobile overflow after tool-fighting
-(stale-CSS caching ×3, corrupted preview emulation, headless Chrome&#39;s
-~500px minimum window): a grid item with <code>margin: 0 auto</code> disables
-stretch alignment, so max-content sizing won — one-line fix; every
-page now fits 390px (iframe-measured).</li>
-<li>14-image Codex visual sign-off: SHIP; hand-page regression check
-clean.</li>
-<li>Fresh 5.5 counterreview: 2 blockers (both fail-closed honesty), 3
-should-fixes (derived latest-report, attribute escaping, escaped
-excerpt) — all fixed; 12 parser tests.</li>
-<li>Final-head 5.5 pass: HOLD on the stale-source test count (above) —
-the gate&#39;s unique catch; fixed in this bookkeeping.</li>
+<li><code>process</code>/<code>fetch</code> tokens rejected even inside string literals → packer
+escapes them as <code>\u00XX</code> in keys and bodies.</li>
+<li>Reserved endpoint paths <code>/</code> and <code>/index.html</code> → skipped server-side; the
+Preact client redirects <code>/</code>.</li>
+<li>2 MiB request-body cap, then 1 MiB artifact cap → gzip+base64 bodies,
+alias dedup (bundler inlines module source per reference site), font
+dedup (two woff2 pairs were byte-identical), fonts off by default.</li>
+<li>Production <code>Response</code> constructor broken (<code>Buffer.alloc</code> on undefined) →
+manual <code>DecompressionStream</code> + <code>TextDecoder</code> decode.</li>
+<li>No <code>globalThis</code>/<code>self</code> global, <code>fetch</code> token banned → Unicode-escaped
+<code>fetch</code> identifier (<code>fetch</code>) resolves the granted outbound function.</li>
+<li>Unbounded <code>for(;;)</code> rejected → bounded read loop.
+All are documented in <code>site_capsule/README.md</code> so future edits keep them.</li>
 </ul>
+<h2 id="process-trace">Process trace</h2>
+<p>Scaffold + repo-visibility check (public, unauthenticated GitHub API works)
+→ 5.5 implementation of packer+server+client → six 5.5 fix rounds driven by
+lead-side deploy failures (the lead owns deploy/claim: no sandbox network) →
+<code>auth login</code> (Ed approved in browser) + claim to enable outbound fetch →
+lead live verification of every page + the freshness API from production.
+A fresh 5.5 counterreview gates the commit.</p>
 <h2 id="verification">Verification</h2>
 <ul>
-<li>Suite: <code>Ran 576 tests, OK (skipped=10)</code> (564 + 12 parser tests),
-lead-run.</li>
-<li>Real build (<code>npx marked</code>) green; <code>--no-marked</code> sandbox path green.</li>
-<li>Mobile: all pages scrollWidth ≤ 390 at 390px (iframe-measured);
-desktop layouts visually verified.</li>
-<li>Degree framing corrected reader-facing (undergraduate CS capstone, not
-master&#39;s) in the site hero and PROJECT_STATUS.</li>
+<li>All 24 pages + <code>/style.css</code> + <code>/api/freshness</code> + <code>/api/health</code> return 200
+in production; live status page screenshot captured and reviewed.</li>
+<li>Freshness verified live: 14 sources checked from Lakebed&#39;s infra against
+the GitHub API, correct baked-vs-live comparison, fail-soft paths hold.</li>
+<li>Suite: <code>Ran 594 tests, OK (skipped=10)</code> lead-run (adds pack_capsule
+parser tests).</li>
 </ul>
-<h2 id="next">Next</h2>
-<p>Unchanged: P2-015 then P2-006 in one quiet window [QUIET-MAC]. The site
-regenerates via <code>python3 scripts/build_site.py</code> (commit sources first;
-stamps are per-source and dirty-aware).</p>
+<h2 id="maintenance-folded-into-the-loop">Maintenance (folded into the loop)</h2>
+<p>RUN_STATE&#39;s end-of-work checklist now includes regenerate+redeploy after any
+front-facing doc change: <code>build_site.py &amp;&amp; pack_capsule.py &amp;&amp; lakebed deploy</code>. The freshness layer makes staleness self-evident (drift banner) but
+the snapshot should be refreshed when docs move. <code>lakebed.json</code> pins the
+deployId so redeploys keep the same URL.</p>
+<h2 id="known-limitation">Known limitation</h2>
+<p>Production uses CSS fallback fonts (Iowan/Georgia serif, SF Mono/Menlo,
+system sans) because embedded woff2 exceeds the 1 MiB artifact cap. Editorial
+character holds; pixel-parity with the local Fraunces/Plex build would need a
+font-subsetting step (deferred — not worth a new pipeline for this).</p>
 
 
   </div>
@@ -108,7 +110,7 @@ stamps are per-source and dirty-aware).</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-08-site-observatory.md · commit 4af29a9 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-08-lakebed-deploy.md · commit 699cc01 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
