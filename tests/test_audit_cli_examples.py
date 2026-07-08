@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+import shlex
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -120,7 +121,6 @@ class CliCoverageGapTests(unittest.TestCase):
 
 class CliAndKVSizeBugPins(unittest.TestCase):
     # K1: invalid UTF-8 config bytes raise UnicodeDecodeError instead of clean exit 2.
-    @unittest.expectedFailure
     def test_invalid_utf8_config_exits_2_without_traceback(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "bad.json"
@@ -138,7 +138,6 @@ class CliAndKVSizeBugPins(unittest.TestCase):
         self.assertNotIn("Traceback", stderr.getvalue())
 
     # K2: Falcon-style num_kv_heads is ignored in favor of num_attention_heads.
-    @unittest.expectedFailure
     def test_extracts_num_kv_heads_alias(self) -> None:
         params = extract_kv_params(
             {
@@ -151,7 +150,6 @@ class CliAndKVSizeBugPins(unittest.TestCase):
         self.assertEqual(params.n_kv_heads, 2)
 
     # K3: multi_query=true without an explicit KV-head count should mean one KV head.
-    @unittest.expectedFailure
     def test_multi_query_true_uses_one_kv_head(self) -> None:
         params = extract_kv_params(
             {
@@ -164,7 +162,6 @@ class CliAndKVSizeBugPins(unittest.TestCase):
         self.assertEqual(params.n_kv_heads, 1)
 
     # K4: non-divisible attention-head/KV-head grouping is accepted.
-    @unittest.expectedFailure
     def test_attention_heads_must_be_divisible_by_kv_heads(self) -> None:
         with self.assertRaisesRegex(KVSizeError, "divisible"):
             extract_kv_params(
@@ -177,7 +174,6 @@ class CliAndKVSizeBugPins(unittest.TestCase):
             )
 
     # K5: bundle result lines with spaces in the path are not whitespace-token round-trip safe.
-    @unittest.expectedFailure
     def test_bundle_line_with_space_path_is_parseable(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             data = json.loads(EXAMPLE_CONFIG.read_text())
@@ -190,7 +186,7 @@ class CliAndKVSizeBugPins(unittest.TestCase):
                 exit_code = main(["run", str(config_path), "--runs-dir", str(runs_dir)])
         self.assertEqual(exit_code, 0)
         line = stdout.getvalue().strip()
-        tokens = line.split()
+        tokens = shlex.split(line)
         self.assertGreaterEqual(len(tokens), 3, line)
         self.assertEqual(tokens[0], "bundle:")
         self.assertEqual(tokens[-1], "status=succeeded")

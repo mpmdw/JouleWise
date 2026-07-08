@@ -22,7 +22,6 @@ class ReportCoverageGapTests(unittest.TestCase):
 
 class ReportBugPins(unittest.TestCase):
     # Rank 14: _flatten() doc says sorted but preserves insertion order.
-    @unittest.expectedFailure
     def test_flatten_returns_sorted_key_rows(self) -> None:
         pairs = report._flatten({"z": 1, "a": {"b": 2}})
         self.assertEqual([key for key, _value in pairs], ["a.b", "z"])

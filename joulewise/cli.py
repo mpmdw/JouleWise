@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 from pathlib import Path
 from typing import Any
@@ -45,7 +46,10 @@ from joulewise.schemas import (
 def _load_config(path: Path) -> dict[str, Any]:
     if path.suffix.lower() != ".json":
         raise SchemaError("Phase 1 CLI supports JSON configs; YAML parsing is planned for Phase 2")
-    return json.loads(path.read_text())
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        raise SchemaError(f"config is not valid UTF-8: {path}") from exc
 
 
 def _cmd_validate_config(args: argparse.Namespace) -> int:
@@ -156,7 +160,7 @@ def _select_clock(config: BenchmarkConfig) -> Clock:
 
 def _bundle_line(bundle_path: Path, summary: SummaryMetrics) -> str:
     """The single machine-greppable per-bundle result line (D-011 status map)."""
-    line = f"bundle: {bundle_path} status={summary.status.value}"
+    line = f"bundle: {shlex.quote(str(bundle_path))} status={summary.status.value}"
     if summary.failure_reason is not None:
         line += f" reason={summary.failure_reason.value}"
     return line
