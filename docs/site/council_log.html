@@ -46,7 +46,7 @@
 <a href="#c-015-benchmark-expansion-council-suite-architecture-v2-interop-2026-07-08">C-015: Benchmark expansion council — suite architecture v2 + interop (2026-07-08)</a></aside>
   <div class="doc-wrap doc-source-docs-council-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/council_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/council_log.md · commit e97fdfa"><span class="source-file">docs/<wbr>council_log.md</span><span class="source-commit">commit e97fdfa</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/council_log.md · commit ef37128"><span class="source-file">docs/<wbr>council_log.md</span><span class="source-commit">commit ef37128</span></span></div>
     <h1>Council Log</h1>
 <p>Chronicle of multi-model review councils: sessions where more than one
 model reviews, counterreviews, or votes on JouleWise work before it
@@ -68,6 +68,10 @@ judgment explicitly (&quot;argue the tradeoffs before you code&quot;).</li>
 (commit hygiene, docs consistency, fixture audits) whose findings feed
 the discussion; cheap enough to run every session.</li>
 </ul>
+<p>(Amended 2026-07-08: the Opus fast-reviewer tier was dropped at C-006
+after zero unique catches; lead-driven pipelines are the default per
+C-010; Ed granted standing self-merge-with-review authority in the C-010
+addendum.)</p>
 <p>Disagreements are discussed in at most one or two rounds; unresolved
 disagreements are decided by the lead and recorded here with the
 dissent. Anything user-facing (push/merge/publish) follows the user&#39;s
@@ -190,7 +194,10 @@ exception; controller maps the true <code>FailureReason</code>).</li>
 <li>Resolution: all fixes applied; suite 251 green; live re-verified
 (fail-fast at idle_baseline, <code>permission_denied</code>, no fabricated
 baseline). Precedent: green tests are necessary, never sufficient —
-the blocker was invisible to a fully green suite.</li>
+the blocker was invisible to a fully green suite.
+(Amended 2026-07-08: the Opus-refuter tier was dropped at C-006 after
+zero unique catches; refutation-as-protocol lives on with fresh Codex
+refuters, as recorded in the adversarial-review evolution.)</li>
 </ul>
 <h2 id="c-002-reverse-review-of-the-vertical-slice-series-push-vs-pr">C-002: Reverse review of the vertical-slice series; push vs PR</h2>
 <ul>
@@ -1181,20 +1188,14 @@ randomization rejected per D-010/D-022); the docs cluster partly stale
 (main pages already reconciled) but caught the flagship report&#39;s
 surviving active-parameter overclaim and two stale-open Mac risks.</p>
 <p>Contested-point outcomes: (C1) historical records stay immutable — the
-flagship overclaim is superseded by a dated ADDENDUM, not amended;
-(C2) the PROJECT_STATUS process section stays per Ed&#39;s explicit
-showcase instruction but drops its self-congratulatory register (the
-critique&#39;s compression recommendation was DECLINED in part — recorded
-here as the one place the council knowingly deviated from the critique,
-on the owner&#39;s standing instruction; residual tension flagged to Ed);
-(C3) the claims
+flagship ov
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/council_log.md · commit e97fdfa · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/council_log.md · commit ef37128 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

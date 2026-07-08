@@ -69,10 +69,11 @@
 <a href="#d-039-workload-program-v2-substrate-first-identification-before-scale">D-039: Workload program v2 — substrate first, identification before scale</a>
 <a href="#d-040-suite-architecture-v2-one-generic-suite-mechanism-bundle-level-replication">D-040: Suite architecture v2 — one generic suite mechanism, bundle-level replication</a>
 <a href="#d-041-benchmark-interop-frozen-subset-imports-marker-shim-energy-layer">D-041: Benchmark interop — frozen-subset imports + marker-shim energy layer</a>
-<a href="#d-042-d-034-implementation-lane-reopened-suite-build-proceeds-pre-2m-owner-directive">D-042: D-034 implementation lane reopened — suite build proceeds pre-2M (owner directive)</a></aside>
+<a href="#d-042-d-034-implementation-lane-reopened-suite-build-proceeds-pre-2m-owner-directive">D-042: D-034 implementation lane reopened — suite build proceeds pre-2M (owner directive)</a>
+<a href="#d-043-supersession-closure-discipline">D-043: Supersession-closure discipline</a></aside>
   <div class="doc-wrap doc-source-docs-decision-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/decision_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 384e717"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 384e717</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit ef37128"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit ef37128</span></span></div>
     <h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
@@ -252,7 +253,7 @@ must be re-examined, not quietly worked around.</li>
 </tr>
 <tr>
 <td>D-031</td>
-<td>Multi-model council review; PR convention for multi-commit sessions; D-023 extension + end-of-session consistency sweep</td>
+<td>Multi-model council review; PR convention for multi-commit sessions (merge authority amended by C-010); D-023 extension + end-of-session consistency sweep</td>
 <td>accepted</td>
 </tr>
 <tr>
@@ -267,7 +268,7 @@ must be re-examined, not quietly worked around.</li>
 </tr>
 <tr>
 <td>D-034</td>
-<td>Slice 2O owns the workload program after 2M and 3.0.1</td>
+<td>Slice 2O owns the workload program after 2M and 3.0.1; implementation lane reopened by D-042</td>
 <td>accepted</td>
 </tr>
 <tr>
@@ -283,6 +284,36 @@ must be re-examined, not quietly worked around.</li>
 <tr>
 <td>D-037</td>
 <td>Claims ladder (L0-L4) binds reader-facing claim language from 2M onward</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-038</td>
+<td>Analysis plans bind L2/L3 claims to pre-registered comparison rows</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-039</td>
+<td>Workload program v2: substrate first, identification before scale; pre-Window-A allowlist superseded by D-041/D-042</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-040</td>
+<td>Suite architecture v2: generic suite mechanism, bundle-level replication</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-041</td>
+<td>Benchmark interop via frozen-subset imports and marker-shim energy layer; interop lane remains post-2M + post-P2-010a</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-042</td>
+<td>D-034 implementation lane reopened; suite build may proceed pre-2M</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-043</td>
+<td>Supersession-closure discipline</td>
 <td>accepted</td>
 </tr>
 </tbody></table></div>
@@ -1324,28 +1355,14 @@ before <code>thermal_state</code> and <code>start_sampling</code>, and <code>sta
 first sample) and wind-down cost (process stop, plist parsing) land
 inside the integrated window, inflating gross energy, the
 idle-subtraction duration, and TTFT. <code>FakeClock</code> collapses these
-intervals to zero, so the mock suite could never catch it.</p>
-<p>Options considered:</p>
-<ol>
-<li>Reorder the stage boundary: stamp <code>stage_started(measured_run)</code> only
-after <code>start_sampling</code> confirms. Con: a <code>start_sampling</code> failure would
-then be attributed to a stage that never started, breaking the event
-invariant that a failing stage has a <code>stage_started</code>; and the stage
-end would still include post-window artifact writes.</li>
-<li>Explicit <code>sampling_started</code>/<code>sampling_stopped</code> marker events on the
-<code>measured_run</code> phase; the reducer integrates between markers, falling
-back to stage boundaries for pre-2N bundles.</li>
-</ol>
-<p>Decision: option 2. <code>sampling_started</code> is stamped only after
-<code>start_sampling</code> returns ok (sampling confirmed active);
-<code>sampling_stopped</code> is stamped before <code>sto
+intervals to zero, so the mock suite could n
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/decision_log.md · commit 384e717 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/decision_log.md · commit ef37128 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

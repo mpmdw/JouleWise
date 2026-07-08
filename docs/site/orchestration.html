@@ -31,10 +31,11 @@
 <a href="#the-artifact-system-where-rigor-becomes-auditable">The artifact system (where rigor becomes auditable)</a>
 <a href="#topology-how-it-evolved-an-example-of-the-loop-improving-itself">Topology: how it evolved (an example of the loop improving itself)</a>
 <a href="#what-one-session-looks-like-2026-07-07-08-the-merge-session">What one session looks like (2026-07-07/08, the merge session)</a>
+<a href="#reconstructing-the-loop-on-a-clean-machine">Reconstructing the loop on a clean machine</a>
 <a href="#where-to-read-the-evidence">Where to read the evidence</a></aside>
   <div class="doc-wrap doc-source-docs-orchestration-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/orchestration.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/orchestration.md · commit 6418084"><span class="source-file">docs/<wbr>orchestration.md</span><span class="source-commit">commit 6418084</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/orchestration.md · commit ef37128"><span class="source-file">docs/<wbr>orchestration.md</span><span class="source-commit">commit ef37128</span></span></div>
     <h1>The Orchestration Process</h1>
 <p>How this project is actually built: a human researcher directing a
 multi-model AI system whose workflow is itself a deliberate, versioned,
@@ -70,6 +71,11 @@ models consistently catching different classes of defect.</li>
 (e.g. the docs-consistency sweep) and, when a stream genuinely needs
 mid-stream judgment, as a stream director — a role that is now the
 exception rather than the default (see Topology).</li>
+<li><strong>Image-heavy analysis routes to Codex</strong> as standing doctrine from
+C-012, after the site-observatory stream&#39;s image-critique rounds.</li>
+<li><strong>Invited-peer validation is allowed to overturn lead designs</strong>; C-014
+recorded two lead designs overturned by an invited peer before
+implementation.</li>
 </ul>
 <h2 id="the-loop-end-to-end">The loop, end to end</h2>
 <p>Every substantial session runs one conductor procedure:</p>
@@ -113,16 +119,26 @@ Its catches are definitionally unique (first outing: two).</li>
 verbatim process-trace appendix; the intake pointer and queue
 refreshed; a delegated docs-consistency sweep before the final
 commit (its latest pass found 15 real drift items; earlier passes
-found 5–6).</li>
+found 5–6). Large documentation batches add the pre-commit
+docs-verify mode; the <code>consistency-sweep</code> skill owns that shape,
+including the D-043 supersession check.</li>
 <li><strong>Same-session distillation</strong> — lessons fold into the process
 playbooks the same session they are learned. Measured effect: one
 failure mode recurred five times before its fix was distilled, zero
-times after.</li>
-<li><strong>Meta-review</strong> — event-driven, not calendar-driven: when a review
-layer stops earning its keep, when an intervention repeats despite a
-folded fix, or when the user asks, the loop is reviewed with its own
-evidence discipline (see Topology for the consensus one such review
-produced).</li>
+times after. The current operation-loop also runs its §0
+primary-deliverable check and §8 shipped-check before the session is
+considered done.</li>
+<li><strong>Post-landing verification and close-out</strong> — landed work gets the
+matching verification workflow with severity-tiered refuters; site
+changes add the regen+redeploy close-out step pointed to by
+<code>RUN_STATE.md</code> end-of-work step 8.</li>
+<li><strong>Meta-review (the final step)</strong> — event-driven, not calendar-driven:
+when a review layer stops earning its keep, when an intervention
+repeats despite a folded fix, or when the user asks, the loop is
+reviewed with its own evidence discipline (see Topology for the
+consensus one such review produced). After large workloads the
+post-large-workload meta-reassessment (owned by operation-loop §10)
+always fires, and it runs LAST.</li>
 </ol>
 <h2 id="the-artifact-system-where-rigor-becomes-auditable">The artifact system (where rigor becomes auditable)</h2>
 <p>Each fact has exactly one home; everything else points at it:</p>
@@ -135,11 +151,15 @@ produced).</li>
 </thead>
 <tbody><tr>
 <td><code>docs/decision_log.md</code></td>
-<td>37 binding design decisions (D-001..D-037), each with alternatives considered, consequences, and revisit conditions. Nothing re-decides these silently.</td>
+<td>Binding design decisions, each with alternatives considered, consequences, and revisit conditions. The log is the count authority; nothing re-decides these silently.</td>
 </tr>
 <tr>
 <td><code>docs/council_log.md</code></td>
-<td>The deliberation record (C-001..C-011): review-council positions, reasoning exchanged, who prevailed, overridden dissents — so a future reader can reconstruct <em>why</em>, not just <em>what</em>.</td>
+<td>The deliberation record: review-council positions, reasoning exchanged, who prevailed, overridden dissents — so a future reader can reconstruct <em>why</em>, not just <em>what</em>. The log is the range/count authority.</td>
+</tr>
+<tr>
+<td><code>docs/contracts/</code></td>
+<td>Claim/evidence contracts: <code>claims_ladder.md</code> (D-037) plus <code>analysis_plans.md</code> (D-038) form the claim gate; strict validation is the evidence ticket.</td>
 </tr>
 <tr>
 <td><code>docs/stream_logs/</code></td>
@@ -220,6 +240,30 @@ caught only by the final-head rule on the last commit of the night.
 Suite: 415 → 546 tests, zero expected failures. Roughly two dozen
 delegated Codex sessions; the lead never wrote implementation code and
 never skipped a gate.</p>
+<h2 id="reconstructing-the-loop-on-a-clean-machine">Reconstructing the loop on a clean machine</h2>
+<p>Pointer map only; mechanics stay in their owning files.</p>
+<ul>
+<li>Committed invocation wrapper: <code>scripts/codex-run</code>.
+Usage: <code>codex-run &lt;out.md&gt; [--timeout SEC] [-C DIR] [-s SANDBOX] [--resume] &#39;&lt;prompt&gt;&#39;</code>.
+It writes <code>&lt;out&gt;.status</code>.</li>
+<li>Project bridge: <code>scripts/codex-bridge</code>.</li>
+<li>Skill-only mechanics on the operator&#39;s machine live under
+<code>~/.claude/skills</code>: <code>operation-loop</code> is the conductor,
+<code>codex-delegation</code> is the invocation/consumption contract,
+<code>adversarial-review</code> defines refutation tiers,
+<code>multi-stream-worktrees</code> defines parallel stream mechanics,
+<code>consistency-sweep</code> owns drift control, and <code>council</code> owns
+triggers/roles.</li>
+<li>Repo-derivable on a clean clone: this file gives the loop shape;
+council log C-009/C-010 give topology and gates; the claims and
+analysis-plans contracts give claim gating; <code>docs/stream_logs/</code> and
+<code>docs/run_reports/</code> provide live templates for ledgers and trace
+appendices; <code>scripts/codex-run</code> and <code>scripts/codex-bridge</code> provide
+execution entry points.</li>
+<li>Skill-only: exact conductor sequencing, Codex prompt/consumption
+contract, severity-tiered refuter recipes, multi-worktree stream
+operations, and consistency-sweep checklists.</li>
+</ul>
 <h2 id="where-to-read-the-evidence">Where to read the evidence</h2>
 <ul>
 <li>Yield tables and calibration aggregates: the latest run reports
@@ -238,7 +282,7 @@ design council; C-009 topology consensus; C-010 validation).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/orchestration.md · commit 6418084 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/orchestration.md · commit ef37128 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
