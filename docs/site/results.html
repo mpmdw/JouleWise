@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Results — JouleWise</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+<header class="site">
+  <nav class="nav">
+    <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
+    <div class="links">
+      <a href="index.html">Story</a>
+      <a href="results.html" class="active">Results</a>
+      <a href="process.html">Process</a>
+      <a href="research.html">Research</a>
+      <a href="library.html">Library</a>
+    </div>
+  </nav>
+</header>
+
+<main>
+<div class="hero" style="padding-bottom:10px">
+  <div class="kicker">Measured evidence · Apple M3 Max · MLX runtime · powermetrics telemetry</div>
+  <h1 style="font-size:clamp(36px,5vw,56px)">What the instrument<br>has actually measured.</h1>
+  <p class="lede">Everything on this page comes from strict-validated run
+  bundles, committed spike reports, or the repository's verification
+  records (test suite, CI, run reports). Approximate values are marked
+  <span class="mono">~</span>; every figure names its source.</p>
+</div>
+
+<section class="band tight reveal">
+  <div class="kicker">Cross-model comparison</div>
+  <h2>Two models, one machine, identical harness.</h2>
+  <div class="rule"></div>
+  <div class="legend">
+    <span><span class="sw" style="background:var(--amber-data)"></span>Qwen2.5-1.5B (4-bit)</span>
+    <span><span class="sw" style="background:var(--cyan-data)"></span>Qwen3.5-122B MoE (10B active)</span>
+  </div>
+  <div class="cols c3">
+    <figure class="chart panel">
+      <div class="card-label">Energy per generated token</div>
+      <svg viewBox="0 0 300 210" role="img" aria-label="Bar chart: energy per token, 87 millijoules for the 1.5B model versus 583 for the 122B model">
+        <line class="gridline" x1="40" y1="170" x2="290" y2="170"/>
+        <rect class="bar-a" x="70"  y="146.7" width="64" height="23.3" rx="4"><title>Qwen2.5-1.5B: ~87 mJ/token</title></rect>
+        <rect class="bar-b" x="176" y="14"    width="64" height="156" rx="4"><title>Qwen3.5-122B: ~583 mJ/token</title></rect>
+        <text x="102" y="138" text-anchor="middle" class="dlabel">~87</text>
+        <text x="208" y="8"   text-anchor="middle" class="dlabel">~583</text>
+        <text x="102" y="188" text-anchor="middle" class="axis">1.5B</text>
+        <text x="208" y="188" text-anchor="middle" class="axis">122B</text>
+        <text x="36"  y="174" text-anchor="end" class="axis">0</text>
+        <text x="150" y="207" text-anchor="middle" class="dsub">mJ / output token</text>
+      </svg>
+      <figcaption>~6.7× per-token energy · run reports 2026-07-06 (2I) &amp; 2026-07-07 (flagship)</figcaption>
+    </figure>
+    <figure class="chart panel">
+      <div class="card-label">Decode power — nearly flat</div>
+      <svg viewBox="0 0 300 210" role="img" aria-label="Bar chart: decode power, 23.5 watts versus 27.5 watts">
+        <line class="gridline" x1="40" y1="170" x2="290" y2="170"/>
+        <rect class="bar-a" x="70"  y="36.6" width="64" height="133.4" rx="4"><title>Qwen2.5-1.5B: ~23.5 W decode</title></rect>
+        <rect class="bar-b" x="176" y="14"   width="64" height="156" rx="4"><title>Qwen3.5-122B: ~27.5 W decode</title></rect>
+        <text x="102" y="29" text-anchor="middle" class="dlabel">~23.5</text>
+        <text x="208" y="8"  text-anchor="middle" class="dlabel">~27.5</text>
+        <text x="102" y="188" text-anchor="middle" class="axis">1.5B</text>
+        <text x="208" y="188" text-anchor="middle" class="axis">122B</text>
+        <text x="36"  y="174" text-anchor="end" class="axis">0</text>
+        <text x="150" y="207" text-anchor="middle" class="dsub">watts during decode (axis from 0)</text>
+      </svg>
+      <figcaption>80× the parameters, ≈17% more power — the cost went to time</figcaption>
+    </figure>
+    <figure class="chart panel">
+      <div class="card-label">Throughput</div>
+      <svg viewBox="0 0 300 210" role="img" aria-label="Bar chart: throughput, 257 tokens per second versus 46">
+        <line class="gridline" x1="40" y1="170" x2="290" y2="170"/>
+        <rect class="bar-a" x="70"  y="14"    width="64" height="156" rx="4"><title>Qwen2.5-1.5B: 257 tok/s</title></rect>
+        <rect class="bar-b" x="176" y="142.1" width="64" height="27.9" rx="4"><title>Qwen3.5-122B: 46 tok/s</title></rect>
+        <text x="102" y="8"   text-anchor="middle" class="dlabel">257</text>
+        <text x="208" y="134" text-anchor="middle" class="dlabel">46</text>
+        <text x="102" y="188" text-anchor="middle" class="axis">1.5B</text>
+        <text x="208" y="188" text-anchor="middle" class="axis">122B</text>
+        <text x="36"  y="174" text-anchor="end" class="axis">0</text>
+        <text x="150" y="207" text-anchor="middle" class="dsub">tokens / second</text>
+      </svg>
+      <figcaption>512-token requests: ~47 J vs ~304 J gross per request</figcaption>
+    </figure>
+  </div>
+  <p style="margin-top:22px; font-size:14.5px"><span class="mono" style="color:var(--ink-3)">
+  Honest caveat, straight from the docs: these two points differ in size,
+  architecture, AND quantization — consistent with the fixed-vs-marginal
+  model, not proof of it.</span></p>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">Precision</div>
+  <h2>The instrument repeats itself.</h2>
+  <div class="rule"></div>
+  <div class="readout-row">
+    <div class="readout"><div class="val">99.19 ± 1.36<span class="unit">mJ/token</span></div><div class="sub">n=3 verification workload (distinct from the ~87 mJ headline run) · Student-t 95% CI · CV 0.55% · n=3 is below the n=5 headline protocol and recorded as such in-bundle · re-derivable byte-identically</div></div>
+    <div class="readout plain"><div class="val">0.3<span class="unit">%</span></div><div class="sub">flagship request-energy spread across repetitions</div></div>
+    <div class="readout plain"><div class="val">94<span class="unit">ms</span></div><div class="sub">time to first token · 1.5B · prefill energy ~0.03 J</div></div>
+    <div class="readout plain"><div class="val">~8.8<span class="unit">Hz</span></div><div class="sub">observed powermetrics cadence (requested 10 — recorded, not hidden)</div></div>
+  </div>
+  <p style="margin-top:22px">Every multi-repetition experiment carries
+  per-metric confidence intervals with outlier detection, and an
+  <strong>idle-contamination gate</strong> that mechanically flags runs taken on a busy
+  machine. Its first live catch was the development system's own
+  verification run — the instrument audits its operators.</p>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">Feasibility verdict · Phase 3</div>
+  <h2>A saved thought resumes exactly.</h2>
+  <div class="rule"></div>
+  <div class="cols c2">
+    <div>
+      <p>Split inference needs the model's working memory — the
+      <strong>KV cache</strong> — to survive a save, a process boundary, and a reload.
+      The Stage 3.0.1 spike proved it on this hardware: prefill in one OS
+      process, save to disk, resume decoding in a <strong>fresh process</strong>, and
+      compare against an unbroken run.</p>
+      <p>Verdict: <strong>64 of 64 decode tokens identical</strong> at both tested
+      prompt lengths, zero divergence — and the analytic cache-size model
+      predicted the on-disk size to within a constant 5.3 KiB header.</p>
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:6px">
+        <span class="badge good">verdict: replay_supported</span>
+        <span class="badge amber">lead re-verified at merge time — fresh process, same command</span>
+      </div>
+    </div>
+    <figure class="chart panel">
+      <div class="card-label">Cache size: predicted vs measured</div>
+      <table class="ledger">
+        <tr><th>prompt</th><th>predicted</th><th>measured</th><th>delta</th></tr>
+        <tr><td>1024 tok</td><td>28.00 MiB</td><td>28.01 MiB</td><td class="mono" style="color:var(--good)">+0.018%</td></tr>
+        <tr><td>2048 tok</td><td>56.00 MiB</td><td>56.01 MiB</td><td class="mono" style="color:var(--good)">+0.009%</td></tr>
+      </table>
+      <figcaption>constant ~5.3 KiB file header; no multiplicative error · kv_feasibility.md §3.0.1</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">Instrument integrity</div>
+  <h2>The numbers defend themselves.</h2>
+  <div class="rule"></div>
+  <div class="cols c3">
+    <div class="readout plain"><div class="val">546</div><div class="sub">tests, zero expected failures, CI-enforced on 2 Python versions</div></div>
+    <div class="readout plain"><div class="val">6 / 6</div><div class="sub">real corpus bundles pass strict — unmodified, re-derived from raw</div></div>
+    <div class="readout plain"><div class="val">27</div><div class="sub">defects found by a repo-wide audit — pinned as 31 failing tests, all fixed</div></div>
+  </div>
+  <div class="panel" style="margin-top:28px">
+    <div class="card-label">What "strict" re-derives, in order</div>
+    <table class="ledger">
+      <tr><td>1</td><td>raw powermetrics plist → <strong>power trace</strong> — every timestamp, rail, and watt must match the stored CSV exactly</td></tr>
+      <tr><td>2</td><td>trace + event log → <strong>summary metrics</strong> — fresh reduction must equal the stored summary</td></tr>
+      <tr><td>3</td><td><strong>provenance shape</strong> — new bundles must carry reducer/schema versions and the hash of the exact prompt token IDs fed to the model</td></tr>
+    </table>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="inner">
+    <span>JouleWise · github.com/mpmdw/JouleWise</span>
+    <span>sources: run reports 2026-06-12 → 2026-07-08 · <a href="library.html">library</a></span>
+  </div>
+</footer>
+
+<script>
+const io = new IntersectionObserver(es => es.forEach(e => e.isIntersecting && e.target.classList.add('in')), {threshold:.12});
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
+</html>

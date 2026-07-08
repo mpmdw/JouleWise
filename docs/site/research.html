@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research — JouleWise</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+<header class="site">
+  <nav class="nav">
+    <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
+    <div class="links">
+      <a href="index.html">Story</a>
+      <a href="results.html">Results</a>
+      <a href="process.html">Process</a>
+      <a href="research.html" class="active">Research</a>
+      <a href="library.html">Library</a>
+    </div>
+  </nav>
+</header>
+
+<main>
+<div class="hero" style="padding-bottom:10px">
+  <div class="kicker">The questions · steelmanned, devil's-advocated, hardware-tiered</div>
+  <h1 style="font-size:clamp(36px,5vw,56px)">Six named questions,<br>and a bank of thirty-one.</h1>
+  <p class="lede">The research agenda was built by review council: each
+  question steelmanned, attacked, and tiered by what hardware it needs —
+  16 of the 31 banked questions are answerable on the current machine alone
+  (<span class="mono">docs/research_question_bank.md</span>).</p>
+</div>
+
+<section class="band tight reveal">
+  <div class="kicker">Named questions</div>
+  <h2>The split-inference core (Q1–Q3)…</h2>
+  <div class="rule"></div>
+  <div class="cols c3">
+    <div class="panel corner">
+      <div class="card-label">Q1 · the crossover</div>
+      <p style="margin:0;font-size:15.5px">Under what conditions — model size,
+      prompt length, link speed, device pair — does <strong>splitting inference
+      reduce total energy</strong> versus running whole on either device?</p>
+    </div>
+    <div class="panel">
+      <div class="card-label">Q2 · the interconnect</div>
+      <p style="margin:0;font-size:15.5px">How sensitive is the split's energy
+      cost to <strong>bandwidth</strong> (1 GbE → 2.5 GbE, with 10 GbE optional)? Where exactly is
+      the crossover?</p>
+    </div>
+    <div class="panel">
+      <div class="card-label">Q3 · the trade</div>
+      <p style="margin:0;font-size:15.5px">When splitting saves energy, what does
+      it cost in <strong>latency</strong> — and vice versa? The energy–latency Pareto
+      frontier.</p>
+    </div>
+  </div>
+  <h2 style="margin-top:56px">…and the characterization spine (Q4–Q6).</h2>
+  <div class="rule"></div>
+  <div class="cols c3">
+    <div class="panel">
+      <div class="card-label">Q4 · the energy model</div>
+      <p style="margin:0;font-size:15.5px">What <strong>fixed-plus-marginal</strong> model
+      <span class="mono" style="font-size:.85em">E = fixed + prefill(p) + decode(d)</span>
+      does each target/model/quantization follow — and can split energy be
+      <strong>predicted compositionally</strong> from monolithic coefficients plus
+      transfer measurements?</p>
+    </div>
+    <div class="panel">
+      <div class="card-label">Q5 · ranking stability</div>
+      <p style="margin:0;font-size:15.5px">Do efficiency rankings across
+      workloads, models, and quantizations <strong>stay stable</strong> on one machine
+      — or where do they flip? (Cross-device ranking is a hardware-gated
+      extension.)</p>
+    </div>
+    <div class="panel">
+      <div class="card-label">Q6 · the boundary</div>
+      <p style="margin:0;font-size:15.5px">How sensitive are conclusions to the
+      <strong>measurement boundary</strong> — package power vs wall power? (Gates on
+      the wall-meter decision.)</p>
+    </div>
+  </div>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">Method discipline</div>
+  <h2>Claims are gated, not asserted.</h2>
+  <div class="rule"></div>
+  <div class="cols c2">
+    <div class="panel">
+      <div class="card-label">The detection floor</div>
+      <p style="margin:0;font-size:15.5px">Before any effect is claimed, the
+      instrument's own noise floor is measured per target and metric. Effects
+      below the floor are reported as <strong>"not resolvable"</strong> — a
+      distinct verdict from "no difference." Null results above the floor are
+      real findings; silence below it is honesty.</p>
+    </div>
+    <div class="panel">
+      <div class="card-label">Correctness quarantine</div>
+      <p style="margin:0;font-size:15.5px">Scored workloads record per-item
+      correctness as <strong>annotation only</strong> — the project measures energy per
+      token under controlled shape, and refuses the tempting
+      "intelligence-per-joule" claim its own data cannot defend.</p>
+    </div>
+  </div>
+  <div class="claim">Capability first, claims only when the instrument can
+  defend them — every <em>measured</em> number on this site re-derives from
+  committed raw evidence, and every process count traces to a committed
+  record.</div>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">Roadmap</div>
+  <h2>What happens next.</h2>
+  <div class="rule"></div>
+  <div class="timeline">
+    <div class="tl-item"><div class="when">next · quiet machine</div><div><h3>2M — the two-model baseline campaign</h3><p>4 workload shapes × 2 models × 5 repetitions, run unattended on a quiet machine with the contamination gate armed. The corpus is born under the fixed validator with full prompt provenance.</p></div></div>
+    <div class="tl-item"><div class="when">then</div><div><h3>2O — the scored workload program</h3><p>A difficulty-graded workload suite (P2-010) and a six-category mixed suite (P2-012): per-item energy windows, EOS-bias audits, shape-matched synthetic controls.</p></div></div>
+    <div class="tl-item"><div class="when">gated · hardware</div><div><h3>2K live + 3.0.2</h3><p>First live contact with the NVIDIA node runs a pre-written verification checklist (every provisional protocol pin has a named refutation step). The llama.cpp replay spike reuses the proven 3.0.1 harness.</p></div></div>
+    <div class="tl-item"><div class="when">gated · external</div><div><h3>The researcher's one-pass</h3><p>Academic calendar mapping, device access evidence, the wall-meter decision, a real backup destination — the [ED-EXTERNAL] lane, honestly labeled as waiting on the human.</p></div></div>
+  </div>
+  <div class="cols c3" style="margin-top:10px">
+    <div class="readout plain"><div class="val">16<span class="unit">/ 31</span></div><div class="sub">banked questions answerable on current hardware alone</div></div>
+    <div class="readout plain"><div class="val">10</div><div class="sub">more behind planned hardware gates</div></div>
+    <div class="readout plain"><div class="val">5</div><div class="sub">requiring new hardware acquisitions or coordination</div></div>
+  </div>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">Honest ledger</div>
+  <h2>What could still go wrong.</h2>
+  <div class="rule"></div>
+  <div class="panel">
+    <table class="ledger">
+      <tr><th>risk</th><th>state</th></tr>
+      <tr><td>supervisor scope</td><td>approval pending; all work stays harness-shaped so nothing is wasted under any scope ruling</td></tr>
+      <tr><td>device access</td><td>NVIDIA/Orin evidence pending — the 2K stack is built and tested against fixtures so hardware time is not spent on plumbing</td></tr>
+      <tr><td>measurement boundary</td><td>package-power vs wall-power question open until the wall-meter decision (Q6 exists precisely to quantify it)</td></tr>
+      <tr><td>backup</td><td>interim same-disk location — a real destination is on the external one-pass</td></tr>
+      <tr><td>minimum viable outcome</td><td>if every gate stays shut: the floor is still a complete, defensible thesis: the harness + Mac characterization + a synthetic interconnect sweep + an analytical split model</td></tr>
+    </table>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="inner">
+    <span>JouleWise · github.com/mpmdw/JouleWise</span>
+    <span>sources: research_question_bank.md · phase plans · risk_register.md · <a href="library.html">library</a></span>
+  </div>
+</footer>
+
+<script>
+const io = new IntersectionObserver(es => es.forEach(e => e.isIntersecting && e.target.classList.add('in')), {threshold:.12});
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
+</html>

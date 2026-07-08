@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Library — JouleWise</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+<header class="site">
+  <nav class="nav">
+    <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
+    <div class="links">
+      <a href="index.html">Story</a>
+      <a href="results.html">Results</a>
+      <a href="process.html">Process</a>
+      <a href="research.html">Research</a>
+      <a href="library.html" class="active">Library</a>
+    </div>
+  </nav>
+</header>
+<main>
+<div class="hero" style="padding-bottom:6px">
+  <div class="kicker">Primary sources</div>
+  <h1 style="font-size:clamp(36px,5vw,56px)">The library.</h1>
+  <p class="lede">Every claim on this site traces back to these documents —
+  rendered here for reading, canonical as Markdown in the repository.</p>
+</div>
+<section class="band tight">
+  <div class="lib-grid">
+    <a class="lib-card" href="readme.html"><div class="t">README</div><div class="d">What the repo is and how to run the mock path end to end.</div></a>
+    <a class="lib-card" href="project_status.html"><div class="t">Project Status</div><div class="d">The advisor-facing monitoring document — thesis, status, plan, process.</div></a>
+    <a class="lib-card" href="orchestration.html"><div class="t">The Orchestration Process</div><div class="d">The multi-model loop, the artifact system, and how the topology evolved.</div></a>
+    <a class="lib-card" href="agent_plan.html"><div class="t">Agent Plan</div><div class="d">Phase index and per-phase implementation plans.</div></a>
+    <a class="lib-card" href="run_state.html"><div class="t">Run State</div><div class="d">The live intake pointer: current state, next action.</div></a>
+    <a class="lib-card" href="task_queue.html"><div class="t">Task Queue</div><div class="d">Ranked live queue with machine-state lanes.</div></a>
+    <a class="lib-card" href="decision_log.html"><div class="t">Decision Log</div><div class="d">36 binding design decisions with alternatives and revisit conditions.</div></a>
+    <a class="lib-card" href="council_log.html"><div class="t">Council Log</div><div class="d">Deliberation record C-001…C-010: positions, dissents, adjudications.</div></a>
+    <a class="lib-card" href="milestones.html"><div class="t">Milestones</div><div class="d">Dates, heartbeats, and the academic calendar mapping.</div></a>
+    <a class="lib-card" href="risk_register.html"><div class="t">Risk Register</div><div class="d">Live risks with triggers and mitigation states.</div></a>
+    <a class="lib-card" href="latest_run_report.html"><div class="t">Latest Run Report</div><div class="d">The resume+merge session: outcomes, catch record, calibration ledger.</div></a>
+  </div>
+</section>
+</main>
+<footer class="site">
+  <div class="inner">
+    <span>JouleWise · github.com/mpmdw/JouleWise</span>
+    <span>as of commit 64a04dc (2026-07-07) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+  </div>
+</footer>
+</body>
+</html>

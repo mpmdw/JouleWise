@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Process — JouleWise</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+<header class="site">
+  <nav class="nav">
+    <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
+    <div class="links">
+      <a href="index.html">Story</a>
+      <a href="results.html">Results</a>
+      <a href="process.html" class="active">Process</a>
+      <a href="research.html">Research</a>
+      <a href="library.html">Library</a>
+    </div>
+  </nav>
+</header>
+
+<main>
+<div class="hero" style="padding-bottom:10px">
+  <div class="kicker">The orchestration · one researcher, several models, everything written down</div>
+  <h1 style="font-size:clamp(36px,5vw,56px)">The process is a second<br>instrument — and it's audited too.</h1>
+  <p class="lede">JouleWise is built by a human researcher directing a
+  multi-model AI system whose workflow is itself deliberate, versioned, and
+  self-instrumenting. Every review layer's catches are counted; layers that
+  stop earning their keep are dropped by their own evidence rule. The point
+  of the machinery is narrow: protect measurement claims from unchecked
+  summaries, stale assumptions, and review-induced drift. This page
+  is the tour — <a href="orchestration.html">the full document</a> and the
+  <a href="library.html">primary sources</a> carry the detail.</p>
+</div>
+
+<section class="band tight reveal">
+  <div class="kicker">The cast</div>
+  <h2>Three tiers, different eyes.</h2>
+  <div class="rule"></div>
+  <div class="cols c3">
+    <div class="panel corner">
+      <div class="card-label">The researcher</div>
+      <h3>Ed — direction &amp; policy</h3>
+      <p style="margin-top:10px;font-size:15px">Research direction, the methodology
+      non-negotiables (raw evidence, idle subtraction, named boundaries, no
+      unauditable claims), hardware decisions — and every process rule below,
+      each issued as a standing instruction after an observed failure or
+      opportunity.</p>
+    </div>
+    <div class="panel">
+      <div class="card-label">The lead · Claude</div>
+      <h3>Orchestration &amp; final say</h3>
+      <p style="margin-top:10px;font-size:15px">Decomposes work, adjudicates design,
+      triages every review finding, runs every live-hardware gate, decides
+      merges, keeps the books. Never writes the implementation — and never
+      skips a gate. All escalation paths terminate here.</p>
+    </div>
+    <div class="panel">
+      <div class="card-label">The volume · OpenAI Codex</div>
+      <h3>Implementation &amp; adversarial review</h3>
+      <p style="margin-top:10px;font-size:15px">An independent second model does the
+      heavy writing: implementation against pinned specs, fresh-instance
+      review lenses, test writing, test auditing (never its own), and review
+      of the lead's own consequential decisions. Different models catch
+      different classes of defect — the attributed record shows it.</p>
+    </div>
+  </div>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">The loop</div>
+  <h2>Nine steps, every session.</h2>
+  <div class="rule"></div>
+  <div class="pipeline">
+    <div class="step"><div class="num"></div><div><h3>Intake</h3><p>Read the run state, the ranked queue, the last session's report. Never re-decide what the decision log settled.</p></div></div>
+    <div class="step"><div class="num"></div><div><h3>Decompose</h3><p>Split into genuinely independent streams — one git worktree each — and assign each a review tier by <strong>cost of being wrong</strong>. Hardware claims need a confirmed device list; unverified contracts are stamped PROVISIONAL; measurement needs a quiet machine.</p></div></div>
+    <div class="step"><div class="num"></div><div><h3>Design argument</h3><p>The implementer must argue the trade-offs <em>before</em> coding — invited design judgment has repeatedly beaten the lead's own first proposals.</p></div></div>
+    <div class="step"><div class="num"></div><div><h3>Implement + counterreview</h3><p>Fresh-instance review lenses over every diff (they share no state with the writer), findings triaged by the lead with recorded dispositions, fixes applied and re-verified.</p></div></div>
+    <div class="step"><div class="num"></div><div><h3>Test the tests</h3><p>A dedicated amplification round writes the edge cases the implementer missed; then a <strong>writer≠reviewer audit</strong> hunts tautological, vacuous, and wrong-expectation tests.</p></div></div>
+    <div class="step"><div class="num"></div><div><h3>Live gates — never delegated</h3><p>The lead runs the real flow: real corpus, real CLI, real hardware. This layer keeps catching blockers whose own tests were green — because the tests encoded the same wrong assumption as the code.</p></div></div>
+    <div class="step"><div class="num"></div><div><h3>Merge gate</h3><p>Fresh oversight reviewers with distinct angles, then the <strong>final-head rule</strong>: any commit landing after the last review round gets one more fresh review. Its first application caught a crash path in a "trivial" late fix.</p></div></div>
+    <div class="step"><div class="num"></div><div><h3>Integration review</h3><p>After parallel streams merge, one review hunts the <em>interaction</em> defects no single-stream review can see. Its catches are definitionally unique.</p></div></div>
+    <div class="step"><div class="num"></div><div><h3>Book, distill, meta-review</h3><p>One session record with a verbatim process trace; a delegated consistency sweep before the final commit; lessons folded into the playbooks the <em>same session</em>; and when the evidence says a layer or a topology is wrong, the loop reviews itself.</p></div></div>
+  </div>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">One night, attributed</div>
+  <h2>The catch record — who saw what.</h2>
+  <div class="rule"></div>
+  <p class="lede" style="margin-bottom:24px">The resume-and-merge session
+  (2026-07-07/08): four streams, ~26 delegated sessions, four PRs merged,
+  the suite grown 415 → 546. Every layer of the pipeline caught something
+  <strong>no other layer saw</strong> — the attributed record:</p>
+  <table class="ledger panel" style="border-radius:12px">
+    <tr><th>layer</th><th>its unique catch</th></tr>
+    <tr><td>implementer STOP rule</td><td>a pinned regression test that was mathematically unsatisfiable as written — it stopped and reported instead of "fixing" the test</td></tr>
+    <tr><td>lead live gate</td><td>the real measurement corpus failing a validation the entire test suite could not see (the corpus only exists on the real machine)</td></tr>
+    <tr><td>review lenses (stream A)</td><td>the provenance hash didn't provably match what the model was actually fed — a blocker in exactly the field designed to prevent it</td></tr>
+    <tr><td>review lenses (stream B)</td><td>two confidently-pinned wire contracts that would have failed on first hardware contact (an <code>ssh</code> argv shape the unit tests had faithfully pinned <em>wrong</em>)</td></tr>
+    <tr><td>test audits</td><td>green tests that would stay green if the guarded behavior regressed — timezone handling pinned end-to-end after the audit, not before</td></tr>
+    <tr><td>pre-merge oversight</td><td>an enforcement gap: the provenance rule checked presence, not substance</td></tr>
+    <tr><td>lead diff gate</td><td>a volunteered "improvement" that hashed <strong>fabricated</strong> token IDs as if they were real evidence — the only fabricated-evidence event to date, caught and rejected</td></tr>
+    <tr><td>rebase gate</td><td>a cross-stream contract interaction — one stream's new mutually-exclusive-inputs rule broke 16 of another stream's tests and its example config, invisible until the branches met</td></tr>
+    <tr><td>integration review</td><td>metadata needed to re-derive raw telemetry was silently dropped between two streams' code — a −28,800 s timestamp drift in the probe</td></tr>
+    <tr><td>final-head rule</td><td>a crash path and two broken shell snippets in the one commit that landed after all other reviews</td></tr>
+  </table>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">Self-correction</div>
+  <h2>The loop redesigned itself — with evidence.</h2>
+  <div class="rule"></div>
+  <div class="timeline">
+    <div class="tl-item"><div class="when">v1 · Jul 7 AM</div><div><h3>Per-stream lead-model orchestrators</h3><p>Five parallel streams, five orchestrating subagents. Worked — expensively.</p></div></div>
+    <div class="tl-item"><div class="when">v2 · Jul 7 PM</div><div><h3>Mid-tier directors</h3><p>Cheaper directors drive the volume model; the lead goes apex-only. The session's own trace caught the flaw: directors stall at every round boundary (the "wake gap") — two fleet-wide stalls, logged with root cause.</p></div></div>
+    <div class="tl-item"><div class="when">C-009 · Jul 7</div><div><h3>Signed cross-model consensus</h3><p>Two blind analyses by the second model vs. the lead's blind position, one conferral round, a signed consensus: the lead drives pipeline streams directly; directors only where genuine mid-stream judgment is needed. The same review overturned two of the lead's own record-keeping schemas.</p></div></div>
+    <div class="tl-item"><div class="when">C-010 · Jul 8</div><div><h3>Validated</h3><p>First full session under the new topology: four streams, resume through merge, <strong>zero coordination stalls, zero manual interventions</strong>. The consensus is now the stamped default.</p></div></div>
+  </div>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">The paper trail</div>
+  <h2>Rigor you can grep.</h2>
+  <div class="rule"></div>
+  <div class="cols c3">
+    <div class="readout plain"><div class="val">36</div><div class="sub">binding decisions (D-001…D-036), each with alternatives &amp; revisit conditions</div></div>
+    <div class="readout plain"><div class="val">10</div><div class="sub">council deliberations (C-001…C-010) — positions, dissents, who prevailed</div></div>
+    <div class="readout plain"><div class="val">76+</div><div class="sub">in-stream ledger decisions committed with the code they justify</div></div>
+  </div>
+  <div class="cols c2" style="margin-top:28px">
+    <div class="panel">
+      <div class="card-label">Two ledgers watch the process itself</div>
+      <p style="font-size:15px"><strong>Per-layer yield:</strong> every review layer's unique
+      catches, attributed and tallied per session. Zero unique catches for two
+      sessions → the layer is dropped. One already has been.</p>
+      <p style="font-size:15px;margin-bottom:0"><strong>Delegation calibration:</strong> every
+      delegated unit gets a row — task altitude, outcome (assigned by the
+      lead after the gate, never self-reported), and rework minutes, with
+      prompt-defects separated from model-defects. Delegation boundaries move
+      on this evidence, not intuition.</p>
+    </div>
+    <div class="panel">
+      <div class="card-label">Rules that make history trustworthy</div>
+      <p style="font-size:15px"><strong>History is immutable:</strong> ledger entries and dated
+      records are never rewritten — wrong decisions get SUPERSEDED entries on
+      top, so the mistake and its correction are both permanent record.</p>
+      <p style="font-size:15px;margin-bottom:0"><strong>Single-writer-per-fact:</strong> every
+      number lives in exactly one home; prose summaries carry as-of dates and
+      defer to the checklist matrices. A delegated consistency sweep hunts
+      drift before every bookkeeping commit.</p>
+    </div>
+  </div>
+  <p style="margin-top:26px"><a href="orchestration.html">Read the full orchestration document →</a></p>
+</section>
+</main>
+
+<footer class="site">
+  <div class="inner">
+    <span>JouleWise · github.com/mpmdw/JouleWise</span>
+    <span>sources: docs/orchestration.md · council log C-001…C-010 · run reports · <a href="library.html">library</a></span>
+  </div>
+</footer>
+
+<script>
+const io = new IntersectionObserver(es => es.forEach(e => e.isIntersecting && e.target.classList.add('in')), {threshold:.12});
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
+</body>
+</html>

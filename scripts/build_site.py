@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
-"""Build docs/site/ — static HTML versions of the front-facing docs.
+"""Build the library half of docs/site/ — styled HTML renderings of the
+front-facing Markdown docs, matching the hand-designed site pages.
 
-Renders Markdown via `npx --yes marked --gfm` (Node), wraps each page in a
-shared template with light/dark styling and a nav sidebar. Docs-only
-tooling; deliberately independent of the measurement venv.
+The designed pages (index/results/process/research.html + style.css +
+fonts/) are hand-authored and NOT touched by this script; it generates
+library.html and one page per source doc, all wrapped in the shared
+"instrument" design system (style.css).
+
+Renders Markdown via `npx --yes marked --gfm` (Node). Docs-only tooling;
+deliberately independent of the measurement venv.
 
 Usage: python3 scripts/build_site.py
 """
@@ -17,111 +22,102 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "site"
 
-# (source path, output name, nav title)
+# (source path, output name, card title, one-line description)
 PAGES = [
-    ("README.md", "readme.html", "README"),
-    ("PROJECT_STATUS.md", "project_status.html", "Project Status (advisor)"),
-    ("docs/orchestration.md", "orchestration.html", "Orchestration Process"),
-    ("AGENT_PLAN.md", "agent_plan.html", "Agent Plan"),
-    ("RUN_STATE.md", "run_state.html", "Run State"),
-    ("TASK_QUEUE.md", "task_queue.html", "Task Queue"),
-    ("docs/decision_log.md", "decision_log.html", "Decision Log"),
-    ("docs/council_log.md", "council_log.html", "Council Log"),
-    ("docs/milestones.md", "milestones.html", "Milestones"),
-    ("docs/risk_register.md", "risk_register.html", "Risk Register"),
-    (
-        "docs/run_reports/2026-07-07-resume-merge-session.md",
-        "latest_run_report.html",
-        "Latest Run Report",
-    ),
+    ("README.md", "readme.html", "README",
+     "What the repo is and how to run the mock path end to end."),
+    ("PROJECT_STATUS.md", "project_status.html", "Project Status",
+     "The advisor-facing monitoring document — thesis, status, plan, process."),
+    ("docs/orchestration.md", "orchestration.html", "The Orchestration Process",
+     "The multi-model loop, the artifact system, and how the topology evolved."),
+    ("AGENT_PLAN.md", "agent_plan.html", "Agent Plan",
+     "Phase index and per-phase implementation plans."),
+    ("RUN_STATE.md", "run_state.html", "Run State",
+     "The live intake pointer: current state, next action."),
+    ("TASK_QUEUE.md", "task_queue.html", "Task Queue",
+     "Ranked live queue with machine-state lanes."),
+    ("docs/decision_log.md", "decision_log.html", "Decision Log",
+     "36 binding design decisions with alternatives and revisit conditions."),
+    ("docs/council_log.md", "council_log.html", "Council Log",
+     "Deliberation record C-001…C-010: positions, dissents, adjudications."),
+    ("docs/milestones.md", "milestones.html", "Milestones",
+     "Dates, heartbeats, and the academic calendar mapping."),
+    ("docs/risk_register.md", "risk_register.html", "Risk Register",
+     "Live risks with triggers and mitigation states."),
+    ("docs/run_reports/2026-07-07-resume-merge-session.md",
+     "latest_run_report.html", "Latest Run Report",
+     "The resume+merge session: outcomes, catch record, calibration ledger."),
 ]
 
-CSS = """
-:root {
-  --bg: #fdfdfc; --fg: #1a1d21; --muted: #5b6470; --accent: #7050c8;
-  --border: #e3e2de; --code-bg: #f3f2ef; --nav-bg: #f8f7f5;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16181d; --fg: #dfe2e8; --muted: #98a1ad; --accent: #a795e8;
-    --border: #2c3038; --code-bg: #20242b; --nav-bg: #1b1e24;
-  }
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0; background: var(--bg); color: var(--fg);
-  font: 16px/1.65 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-}
-.layout { display: flex; min-height: 100vh; }
-nav {
-  width: 250px; flex-shrink: 0; background: var(--nav-bg);
-  border-right: 1px solid var(--border); padding: 1.4rem 1rem;
-  position: sticky; top: 0; height: 100vh; overflow-y: auto;
-}
-nav h2 { font-size: 1rem; margin: 0 0 .8rem; color: var(--accent); }
-nav a {
-  display: block; padding: .35rem .6rem; border-radius: 6px;
-  color: var(--fg); text-decoration: none; font-size: .92rem;
-}
-nav a:hover { background: var(--code-bg); }
-nav a.active { background: var(--accent); color: #fff; }
-main { flex: 1; min-width: 0; padding: 2.2rem 3rem 4rem; }
-article { max-width: 52rem; margin: 0 auto; }
-h1, h2, h3 { line-height: 1.25; }
-h1 { font-size: 1.75rem; border-bottom: 2px solid var(--border); padding-bottom: .4rem; }
-h2 { font-size: 1.3rem; margin-top: 2.2rem; border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
-h3 { font-size: 1.08rem; margin-top: 1.6rem; }
-a { color: var(--accent); }
-code {
-  background: var(--code-bg); padding: .12em .35em; border-radius: 4px;
-  font: .88em ui-monospace, "SF Mono", Menlo, monospace;
-}
-pre { background: var(--code-bg); padding: .9rem 1rem; border-radius: 8px; overflow-x: auto; }
-pre code { background: none; padding: 0; }
-blockquote { margin: 1rem 0; padding: .1rem 1rem; border-left: 3px solid var(--accent); color: var(--muted); }
-table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; display: block; overflow-x: auto; }
-th, td { border: 1px solid var(--border); padding: .45rem .6rem; text-align: left; vertical-align: top; }
-th { background: var(--code-bg); }
-tr:nth-child(even) td { background: color-mix(in srgb, var(--code-bg) 45%, transparent); }
-hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
-.pagemeta { color: var(--muted); font-size: .85rem; margin-bottom: 1.5rem; }
-@media (max-width: 800px) {
-  .layout { flex-direction: column; }
-  nav { width: 100%; height: auto; position: static; display: flex; flex-wrap: wrap; gap: .2rem; }
-  nav h2 { width: 100%; }
-  main { padding: 1.2rem; }
-}
-"""
+NAV = """<header class="site">
+  <nav class="nav">
+    <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
+    <div class="links">
+      <a href="index.html">Story</a>
+      <a href="results.html">Results</a>
+      <a href="process.html">Process</a>
+      <a href="research.html">Research</a>
+      <a href="library.html"{lib_active}>Library</a>
+    </div>
+  </nav>
+</header>"""
 
-TEMPLATE = """<!DOCTYPE html>
+FOOTER = """<footer class="site">
+  <div class="inner">
+    <span>JouleWise · github.com/mpmdw/JouleWise</span>
+    <span>{stamp} · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+  </div>
+</footer>"""
+
+PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title} — JouleWise</title>
-<style>{css}</style>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
 <body>
-<div class="layout">
-<nav>
-<h2>JouleWise</h2>
 {nav}
-</nav>
-<main><article>
-<p class="pagemeta">Rendered from <code>{source}</code> · {stamp}</p>
+<main>
+<div class="doc-wrap">
+<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>{source}</code> · {stamp}</p>
 {body}
-</article></main>
 </div>
+</main>
+{footer}
 </body>
 </html>
 """
 
-INDEX_INTRO = """<h1>JouleWise — Project Documents</h1>
-<p>Static HTML renderings of the front-facing project documents.
-Regenerate with <code>python3 scripts/build_site.py</code> after any doc
-change. The Markdown files in the repository remain the source of
-truth.</p>
-<ul>
+LIBRARY_TEMPLATE = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Library — JouleWise</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+{nav}
+<main>
+<div class="hero" style="padding-bottom:6px">
+  <div class="kicker">Primary sources</div>
+  <h1 style="font-size:clamp(36px,5vw,56px)">The library.</h1>
+  <p class="lede">Every claim on this site traces back to these documents —
+  rendered here for reading, canonical as Markdown in the repository.</p>
+</div>
+<section class="band tight">
+  <div class="lib-grid">
+{cards}
+  </div>
+</section>
+</main>
+{footer}
+</body>
+</html>
 """
 
 
@@ -137,45 +133,37 @@ def render_markdown(path: Path) -> str:
     return result.stdout
 
 
-def nav_html(active: str) -> str:
-    items = ['<a href="index.html"{}>Index</a>'.format(
-        ' class="active"' if active == "index.html" else "")]
-    for _, out_name, title in PAGES:
-        cls = ' class="active"' if out_name == active else ""
-        items.append(f'<a href="{out_name}"{cls}>{html.escape(title)}</a>')
-    return "\n".join(items)
-
-
 def main() -> None:
     stamp = subprocess.run(
         ["git", "log", "-1", "--format=as of commit %h (%ad)", "--date=short"],
         capture_output=True, text=True, cwd=ROOT, check=True,
     ).stdout.strip()
     OUT.mkdir(parents=True, exist_ok=True)
+    footer = FOOTER.format(stamp=html.escape(stamp))
 
-    index_items = []
-    for src, out_name, title in PAGES:
-        src_path = ROOT / src
-        body = render_markdown(src_path)
-        page = TEMPLATE.format(
-            title=html.escape(title), css=CSS, nav=nav_html(out_name),
-            source=html.escape(src), stamp=html.escape(stamp), body=body,
+    cards = []
+    for src, out_name, title, desc in PAGES:
+        body = render_markdown(ROOT / src)
+        page = PAGE_TEMPLATE.format(
+            title=html.escape(title),
+            nav=NAV.format(lib_active=' class="active"'),
+            source=html.escape(src), stamp=html.escape(stamp),
+            body=body, footer=footer,
         )
         (OUT / out_name).write_text(page, encoding="utf-8")
-        index_items.append(
-            f'<li><a href="{out_name}">{html.escape(title)}</a> '
-            f"<small><code>{html.escape(src)}</code></small></li>"
+        cards.append(
+            f'    <a class="lib-card" href="{out_name}">'
+            f'<div class="t">{html.escape(title)}</div>'
+            f'<div class="d">{html.escape(desc)}</div></a>'
         )
         print(f"built {out_name}")
 
-    index_body = INDEX_INTRO + "\n".join(index_items) + "</ul>"
-    index = TEMPLATE.format(
-        title="Index", css=CSS, nav=nav_html("index.html"),
-        source="scripts/build_site.py", stamp=html.escape(stamp),
-        body=index_body,
+    library = LIBRARY_TEMPLATE.format(
+        nav=NAV.format(lib_active=' class="active"'),
+        cards="\n".join(cards), footer=footer,
     )
-    (OUT / "index.html").write_text(index, encoding="utf-8")
-    print(f"built index.html -> {OUT}")
+    (OUT / "library.html").write_text(library, encoding="utf-8")
+    print(f"built library.html -> {OUT}")
 
 
 if __name__ == "__main__":

@@ -3,101 +3,216 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Index — JouleWise</title>
-<style>
-:root {
-  --bg: #fdfdfc; --fg: #1a1d21; --muted: #5b6470; --accent: #7050c8;
-  --border: #e3e2de; --code-bg: #f3f2ef; --nav-bg: #f8f7f5;
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #16181d; --fg: #dfe2e8; --muted: #98a1ad; --accent: #a795e8;
-    --border: #2c3038; --code-bg: #20242b; --nav-bg: #1b1e24;
-  }
-}
-* { box-sizing: border-box; }
-body {
-  margin: 0; background: var(--bg); color: var(--fg);
-  font: 16px/1.65 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
-}
-.layout { display: flex; min-height: 100vh; }
-nav {
-  width: 250px; flex-shrink: 0; background: var(--nav-bg);
-  border-right: 1px solid var(--border); padding: 1.4rem 1rem;
-  position: sticky; top: 0; height: 100vh; overflow-y: auto;
-}
-nav h2 { font-size: 1rem; margin: 0 0 .8rem; color: var(--accent); }
-nav a {
-  display: block; padding: .35rem .6rem; border-radius: 6px;
-  color: var(--fg); text-decoration: none; font-size: .92rem;
-}
-nav a:hover { background: var(--code-bg); }
-nav a.active { background: var(--accent); color: #fff; }
-main { flex: 1; min-width: 0; padding: 2.2rem 3rem 4rem; }
-article { max-width: 52rem; margin: 0 auto; }
-h1, h2, h3 { line-height: 1.25; }
-h1 { font-size: 1.75rem; border-bottom: 2px solid var(--border); padding-bottom: .4rem; }
-h2 { font-size: 1.3rem; margin-top: 2.2rem; border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
-h3 { font-size: 1.08rem; margin-top: 1.6rem; }
-a { color: var(--accent); }
-code {
-  background: var(--code-bg); padding: .12em .35em; border-radius: 4px;
-  font: .88em ui-monospace, "SF Mono", Menlo, monospace;
-}
-pre { background: var(--code-bg); padding: .9rem 1rem; border-radius: 8px; overflow-x: auto; }
-pre code { background: none; padding: 0; }
-blockquote { margin: 1rem 0; padding: .1rem 1rem; border-left: 3px solid var(--accent); color: var(--muted); }
-table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; display: block; overflow-x: auto; }
-th, td { border: 1px solid var(--border); padding: .45rem .6rem; text-align: left; vertical-align: top; }
-th { background: var(--code-bg); }
-tr:nth-child(even) td { background: color-mix(in srgb, var(--code-bg) 45%, transparent); }
-hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
-.pagemeta { color: var(--muted); font-size: .85rem; margin-bottom: 1.5rem; }
-@media (max-width: 800px) {
-  .layout { flex-direction: column; }
-  nav { width: 100%; height: auto; position: static; display: flex; flex-wrap: wrap; gap: .2rem; }
-  nav h2 { width: 100%; }
-  main { padding: 1.2rem; }
-}
-</style>
+<title>JouleWise — measuring the energy of machine thought</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
 <body>
-<div class="layout">
-<nav>
-<h2>JouleWise</h2>
-<a href="index.html" class="active">Index</a>
-<a href="readme.html">README</a>
-<a href="project_status.html">Project Status (advisor)</a>
-<a href="orchestration.html">Orchestration Process</a>
-<a href="agent_plan.html">Agent Plan</a>
-<a href="run_state.html">Run State</a>
-<a href="task_queue.html">Task Queue</a>
-<a href="decision_log.html">Decision Log</a>
-<a href="council_log.html">Council Log</a>
-<a href="milestones.html">Milestones</a>
-<a href="risk_register.html">Risk Register</a>
-<a href="latest_run_report.html">Latest Run Report</a>
-</nav>
-<main><article>
-<p class="pagemeta">Rendered from <code>scripts/build_site.py</code> · as of commit 7cc8efe (2026-07-07)</p>
-<h1>JouleWise — Project Documents</h1>
-<p>Static HTML renderings of the front-facing project documents.
-Regenerate with <code>python3 scripts/build_site.py</code> after any doc
-change. The Markdown files in the repository remain the source of
-truth.</p>
-<ul>
-<li><a href="readme.html">README</a> <small><code>README.md</code></small></li>
-<li><a href="project_status.html">Project Status (advisor)</a> <small><code>PROJECT_STATUS.md</code></small></li>
-<li><a href="orchestration.html">Orchestration Process</a> <small><code>docs/orchestration.md</code></small></li>
-<li><a href="agent_plan.html">Agent Plan</a> <small><code>AGENT_PLAN.md</code></small></li>
-<li><a href="run_state.html">Run State</a> <small><code>RUN_STATE.md</code></small></li>
-<li><a href="task_queue.html">Task Queue</a> <small><code>TASK_QUEUE.md</code></small></li>
-<li><a href="decision_log.html">Decision Log</a> <small><code>docs/decision_log.md</code></small></li>
-<li><a href="council_log.html">Council Log</a> <small><code>docs/council_log.md</code></small></li>
-<li><a href="milestones.html">Milestones</a> <small><code>docs/milestones.md</code></small></li>
-<li><a href="risk_register.html">Risk Register</a> <small><code>docs/risk_register.md</code></small></li>
-<li><a href="latest_run_report.html">Latest Run Report</a> <small><code>docs/run_reports/2026-07-07-resume-merge-session.md</code></small></li></ul>
-</article></main>
+<header class="site">
+  <nav class="nav">
+    <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
+    <div class="links">
+      <a href="index.html" class="active">Story</a>
+      <a href="results.html">Results</a>
+      <a href="process.html">Process</a>
+      <a href="research.html">Research</a>
+      <a href="library.html">Library</a>
+    </div>
+  </nav>
+</header>
+
+<main>
+<div class="hero">
+  <div class="kicker">A master's research instrument · 2026</div>
+  <h1>How much energy does<br>a machine spend on a thought?</h1>
+  <p class="lede">JouleWise is a benchmark harness that measures the energy of
+  large-language-model inference on real, local hardware — joule by joule,
+  token by token — and packages every measurement as a self-contained evidence
+  bundle that anyone can re-derive from raw telemetry. You don't have to trust the
+  summaries: the validator recomputes them from the evidence.</p>
+
+  <svg class="hero-trace" viewBox="0 0 1040 190" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Decorative power trace: idle baseline, prefill spike, decode plateau, return to idle">
+    <defs>
+      <linearGradient id="traceGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#f2a33c" stop-opacity=".22"/>
+        <stop offset="100%" stop-color="#f2a33c" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    <line class="gridline" x1="0" y1="150" x2="1040" y2="150" stroke="#2a251c"/>
+    <line class="gridline" x1="0" y1="100" x2="1040" y2="100" stroke="#2a251c"/>
+    <line class="gridline" x1="0" y1="50"  x2="1040" y2="50"  stroke="#2a251c"/>
+    <rect class="trace-window" x="285" y="26" width="530" height="138" rx="4"/>
+    <path class="trace-fill" d="M0,150 L60,148 120,151 180,149 250,150 285,146 300,58 316,42 330,66 350,74 380,70 420,76 470,72 530,78 590,73 650,79 710,74 770,80 815,86 830,140 870,149 920,148 980,151 1040,149 L1040,190 0,190 Z"/>
+    <path class="trace-line" d="M0,150 L60,148 120,151 180,149 250,150 285,146 300,58 316,42 330,66 350,74 380,70 420,76 470,72 530,78 590,73 650,79 710,74 770,80 815,86 830,140 870,149 920,148 980,151 1040,149"/>
+    <text x="120" y="140" class="axis" fill="#7d745f" font-size="11">idle baseline</text>
+    <text x="290" y="18" class="axis" fill="#7d745f" font-size="11">prefill</text>
+    <text x="520" y="62" class="axis" fill="#7d745f" font-size="11">decode — the measured window</text>
+    <text x="900" y="140" class="axis" fill="#7d745f" font-size="11">idle again</text>
+  </svg>
+
+  <div class="readout-row" style="margin-top:26px">
+    <div class="readout">
+      <div class="val">87<span class="unit">mJ / token</span></div>
+      <div class="sub">Qwen2.5-1.5B · Apple M3 Max · measured</div>
+    </div>
+    <div class="readout cyan">
+      <div class="val">583<span class="unit">mJ / token</span></div>
+      <div class="sub">Qwen3.5-122B MoE · same harness, same machine</div>
+    </div>
+    <div class="readout plain">
+      <div class="val">0.3<span class="unit">% spread</span></div>
+      <div class="sub">flagship repeatability across repetitions</div>
+    </div>
+  </div>
 </div>
+
+<section class="band reveal">
+  <div class="kicker">The idea</div>
+  <h2>Energy is the spine. Everything else must be auditable.</h2>
+  <div class="rule"></div>
+  <div class="cols c2">
+    <div>
+      <p>Every benchmark run produces a <strong>run bundle</strong>: the typed
+      config that requested it, the raw power telemetry exactly as the meter
+      emitted it, the token-level event log, and the derived summary — all in
+      one directory. The core rule of the project is that <strong>summaries are
+      never trusted, they are re-derived</strong>: a strict validator recomputes the
+      power trace from the raw meter output, recomputes the summary from the
+      trace and events, and refuses any bundle where stored numbers disagree
+      with recorded evidence.</p>
+      <p>Measurements subtract each machine's <strong>idle baseline</strong>, name their
+      <strong>measurement boundary</strong> (what the meter can and cannot see), and
+      record <strong>provenance</strong> down to a hash of the exact token IDs the model
+      was fed — so "same workload" is a checkable claim, not a promise.</p>
+    </div>
+    <div class="panel corner">
+      <div class="card-label">What a bundle proves</div>
+      <table class="ledger">
+        <tr><td>config.json</td><td>the exact request, schema-validated, hashed</td></tr>
+        <tr><td>raw/</td><td>meter output, byte-for-byte as captured</td></tr>
+        <tr><td>events.jsonl</td><td>token timing + the measured-window markers</td></tr>
+        <tr><td>power_trace.csv</td><td>re-derivable from raw/ — and checked</td></tr>
+        <tr><td>summary_metrics.json</td><td>re-derivable from all of the above — and checked</td></tr>
+        <tr><td>metadata.json</td><td>device, tokenizer, model &amp; prompt-hash provenance</td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">The thesis</div>
+  <h2>Two claim tracks, one instrument.</h2>
+  <div class="rule"></div>
+  <div class="cols c2">
+    <div class="panel">
+      <div class="card-label">Guaranteed capstone</div>
+      <h3>Auditable local LLM energy measurement</h3>
+      <p style="margin-top:10px">The harness itself plus the Apple-Silicon
+      characterization it already executes: per-model, per-workload energy
+      with confidence intervals, contamination detection, and full
+      re-derivability. This exists today and grows with every campaign.</p>
+      <span class="badge good">measuring now</span>
+    </div>
+    <div class="panel">
+      <div class="card-label">Differentiating study</div>
+      <h3>Split inference: does dividing the thought save energy?</h3>
+      <p style="margin-top:10px">Run <em>prefill</em> on one machine and <em>decode</em> on
+      another, shipping the model's working memory (the KV cache) between
+      them. Under what conditions does the split beat either machine running
+      alone — and what does the crossover cost in latency? The feasibility
+      rung is already proven: a saved cache resumes <strong>token-identically</strong>
+      in a fresh process.</p>
+      <span class="badge prov">feasibility proven · hardware pending</span>
+    </div>
+  </div>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">First findings</div>
+  <h2>The big model costs time, not watts.</h2>
+  <div class="rule"></div>
+  <p class="lede" style="margin-bottom:26px">Two confounded points are not a
+  law — the project's own docs say so loudly. But the first cross-model
+  comparison is already interesting: a model <strong>80× larger</strong> drew nearly
+  the same decode power. It just held the machine longer per token.</p>
+  <div class="readout-row">
+    <div class="readout"><div class="val">23.5<span class="unit">W</span></div><div class="sub">decode power · 1.5B model</div></div>
+    <div class="readout cyan"><div class="val">27.5<span class="unit">W</span></div><div class="sub">decode power · 122B MoE — nearly flat</div></div>
+    <div class="readout plain"><div class="val">257 → 46<span class="unit">tok/s</span></div><div class="sub">where the cost actually went: speed</div></div>
+  </div>
+  <div class="claim">Energy per token rose <em>≈6.7×</em> while decode power rose
+  ≈17% — on these two points, inference energy behaves like a
+  <em>fixed-plus-marginal</em> cost, not a power problem.</div>
+  <p style="font-size:14px"><span class="mono" style="color:var(--ink-3)">Consistency
+  with the Q4 model on two confounded points, not a demonstrated scaling law;
+  the two-model baseline campaign (next step) begins the controlled version.
+  Full numbers on the <a href="results.html">results page</a>.</span></p>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">Where it stands</div>
+  <h2>Instrument complete for its first campaign.</h2>
+  <div class="rule"></div>
+  <div class="cols c3">
+    <div class="readout plain"><div class="val">546</div><div class="sub">tests · zero expected failures</div></div>
+    <div class="readout plain"><div class="val">6 / 6</div><div class="sub">real bundles pass strict re-derivation</div></div>
+    <div class="readout plain"><div class="val">31 / 31</div><div class="sub">audit pins fixed — 27 distinct defects, all verified</div></div>
+  </div>
+  <div style="margin-top:30px" class="panel">
+    <div class="card-label">The ladder</div>
+    <table class="ledger">
+      <tr><td>Phase 1</td><td>Contracts, methodology, feasibility evidence — <strong>design complete</strong>; supervisor/calendar/device gates open</td></tr>
+      <tr><td>Phase 2</td><td>Harness + Mac measurements — <strong>vertical slice, flagship benchmark, integrity &amp; provenance overhaul all landed</strong>; the two-model baseline campaign is next</td></tr>
+      <tr><td>Phase 3</td><td>Split inference — KV-cache replay <strong>proven byte-exact</strong> on this hardware; NVIDIA node stack built fixture-first, awaiting first live contact</td></tr>
+      <tr><td>Phase 4–5</td><td>Characterization, claims audit, packaging — designed, gated behind data</td></tr>
+    </table>
+  </div>
+</section>
+
+<section class="band reveal">
+  <div class="kicker">How it's built</div>
+  <h2>The process is the second instrument.</h2>
+  <div class="rule"></div>
+  <div class="cols c2">
+    <div>
+      <p>This project is developed by one researcher directing a
+      <strong>multi-model AI system</strong> — an orchestrating lead model, an
+      independent second model doing implementation and adversarial review,
+      and a review pipeline in which <strong>every claim, decision, and dissent is
+      written down</strong>: 36 binding design decisions, a ten-entry council
+      deliberation log, per-stream decision ledgers committed with the code
+      they justify, and per-review-layer catch records that decide — by
+      evidence — which review layers live and die.</p>
+      <p>In one recent overnight session the system resumed four parallel work
+      streams, ran ~26 delegated implementation and review sessions, caught
+      ~30 attributed catches across nine distinct review layers — including
+      two wire-protocol contracts that were confidently wrong — and merged all
+      four pull requests with the test suite growing 415 → 546.</p>
+    </div>
+    <div class="panel corner">
+      <div class="card-label">The paper trail</div>
+      <table class="ledger">
+        <tr><td>D-001…D-036</td><td>binding decisions, with alternatives &amp; revisit conditions</td></tr>
+        <tr><td>C-001…C-010</td><td>council deliberations — positions, dissents, who prevailed</td></tr>
+        <tr><td>A-1…A-30<br>B-1…B-46</td><td>in-stream decision ledgers; wrong pins superseded, never erased</td></tr>
+        <tr><td>yield tables</td><td>what each review layer uniquely caught, per session</td></tr>
+      </table>
+      <p style="margin:16px 0 0"><a href="process.html">Read the full process →</a></p>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="site">
+  <div class="inner">
+    <span>JouleWise · github.com/mpmdw/JouleWise</span>
+    <span><a href="library.html">primary sources</a> · numbers as of 2026-07-08 · every figure traceable to a run report</span>
+  </div>
+</footer>
+
+<script>
+const io = new IntersectionObserver(es => es.forEach(e => e.isIntersecting && e.target.classList.add('in')), {threshold:.12});
+document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+</script>
 </body>
 </html>
