@@ -842,3 +842,28 @@ and adjudications in the trace appendix.
   merged into run report, RUN_STATE slimmed to pointer shape, queue
   cells slimmed, C-008 converted to pointer style, codex-run patch task
   queued.
+
+---
+
+## C-010: Resume + merge session — C-009 topology first full run (2026-07-07/08)
+
+Pointer entry: all product state, the per-layer catch/yield table, the
+delegation-calibration aggregate, and restart instructions live in
+`docs/run_reports/2026-07-07-resume-merge-session.md` (Process Trace
+Appendix included). PRs #8/#9/#10 merged (Ed-directed, after a
+3-reviewer pre-merge oversight pass with lead triage + 5.5 fixes);
+PR #11 open. Deliberation-class facts for this log: (1) the lead-driven
+codex-run topology ran a full session with ZERO wake stalls and zero
+heartbeats — the C-009 T1 hybrid is validated on its pipeline half;
+(2) two PINNED wire contracts (B-14 ssh argv, B-15 remote-root
+derivation) were overturned by the lens round after unit tests had
+faithfully pinned the broken shapes — fixture-first streams now always
+carry the full lens tier (folded into multi-stream-worktrees);
+(3) a volunteered 5.5 addition (vLLM provenance) was rejected at the
+lead diff gate for hashing fabricated token IDs as realized evidence —
+first clear model-defect row in the calibration ledger; the correction
+(node-realized IDs via /tokenize or structured absence) is ledgered
+B-44 with D-033 pressure intact; (4) K5's audit pin was adjudicated
+unsatisfiable-as-authored and corrected at equal assertion strength —
+the pin-correction protocol (STOP-and-report → lead ruling → sanctioned
+edit) worked as designed.

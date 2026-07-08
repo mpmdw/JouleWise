@@ -48,7 +48,7 @@ The repository currently contains:
   (`run`, `validate-bundle`, `reduce`, `report`).
 - Example Mac-local and mock-local configs.
 - Phase 1 methodology, feasibility, and measurement-design docs.
-- A test suite (455 tests, 10 skipped, zero expected failures) run in CI on
+- A test suite (462 tests, 10 skipped, zero expected failures) run in CI on
   every push, including a mock end-to-end run + bundle validation.
 
 ## Verify

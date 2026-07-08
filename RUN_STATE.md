@@ -1,8 +1,7 @@
 # JouleWise Run State
 
-Last updated: 2026-07-07 PM (multi-stream checkpoint + C-009
-meta-review consensus; RUN_STATE slimmed to intake-pointer shape per
-that consensus)
+Last updated: 2026-07-08 (resume+merge session: checkpointed streams
+completed and landed under the C-009 topology)
 
 ## Start Here For Every Big Run
 
@@ -46,51 +45,34 @@ At the end of substantial work:
 
 ## Current Project Status
 
-**The instrument is CAMPAIGN-READY (2026-07-07).** Five parallel
-streams landed in one session (PRs #2-#6 + two integration fixes):
-D-014 cross-repetition uncertainty (per-metric Student-t CIs,
-byte-identically re-derivable from bundles), rich DVFS/GPU telemetry +
-idle-contamination gate (first live true positive) + environment
-capture, mock-telemetry SystemClock hardening (live-verified at 1 Hz),
-the 2M campaign tooling (deterministic matrix generator + resumable
-sequential runner), and the kv-size helper. C-005 research agenda
-(31 tiered questions + jw_mixed_v1 workload suite) appended to the
-question bank. Still gated: 2K/2L (P1-006). D-016 provisional pick
-stands. Suite: 415 tests (369 + the Stream F audit tests; 31 `expectedFailure`
-pins await the P2-013 fixes). Stream F LANDED as PR #7 (merged; queue
-item P2-013 created from its findings). A whole-project design council
-(C-007) then settled the P2-013 fix design, re-ranked the queue
-(P2-013 → P2-014 → 2M), and adopted machine-state lanes + the
-two-claim-track framing — see the latest-run section below.
-
-## What The Latest Run Did (2026-07-07 PM, MULTI-STREAM SESSION — CHECKPOINTED MID-FLIGHT)
-
-User-directed checkpoint stop. Four worktree streams ran (Opus
-orchestrators directing Codex 5.5, Fable apex): **A** P2-013/P2-014
-integrity fixes — groups 1–4 committed, 19/31 pins flipped, suite
-423/10/12 in-worktree, corpus validates clean under the tightened
-validator; **B** 2K NVIDIA fixture-first — wire protocol v1 +
-worker/transport/client landed (438 tests, zero shared-file edits, all
-pins PROVISIONAL pending live hardware); **C** Stage 3.0.1 mlx-lm
-prompt-cache spike — **DONE, verdict `replay_supported`** (fresh-process
-token-identical resume; cache size matches kv-size prediction to
-+0.018%) pending one lead re-verification command; **D** DOC-007
-docs/framing — DONE + lead-reviewed, merges after A with one
-reconciliation pass. Slice 2O (workload program) landed on main
-(`aa665e1`). ALL FOUR STREAM BRANCHES PUSHED; every stream ledger ends
-with a `*-CHECKPOINT` entry naming its exact resume action.
+**P2-013 and P2-014 are COMPLETE and MERGED (2026-07-08).** The
+checkpointed multi-stream session resumed under the C-009 topology and
+landed: PR #8 (all 31 audit pins fixed; strict raw-to-trace gate +
+legacy-additive compare; summary/workload provenance; D-032..D-034),
+PR #10 (DOC-007 docs/framing + merge-time reconciliation), PR #9
+(Stage 3.0.1 verdict **`replay_supported`**, lead-re-verified live —
+Phase 3's central technical risk retired on current hardware), plus
+D-035/D-036 (the ratified spike promotions). **PR #11 (2K NVIDIA
+fixture-first stack, 545 tests, integration-reviewed, all pins
+PROVISIONAL) is OPEN awaiting Ed's merge.** Suite on main: 462 OK
+(skipped=10, ZERO expected failures); all 6 real corpus bundles pass
+`--strict` read-only. The 2M campaign (P2-006) is fully unblocked and
+is the next machine-state-compatible task.
 
 **RESTART HERE:** read
-`docs/run_reports/2026-07-07-checkpoint-multistream-session.md` (stream
-table, merge order A→D→C→B, process learnings — esp. the SUBAGENT WAKE
-GAP), then resume streams from their ledgers. After all merges +
-integration review: the quiet-machine 2M campaign (P2-006).
+`docs/run_reports/2026-07-07-resume-merge-session.md` (product
+outcomes, review-pipeline yield table, restart steps). Short version:
+Ed merges PR #11 → remove `../jw-2k` → quiet-machine 2M campaign
+(P2-006) under the C-009 T5 no-agent lock.
 
 ## Session History (pointers only — run reports own the narrative)
 
 Per the C-009 meta-review consensus, RUN_STATE no longer stacks
 previous-run narratives. Recent sessions, newest first:
 
+- 2026-07-07/08 resume+merge (C-009 topology first full run; PRs
+  #8/#9/#10 merged, #11 open):
+  `docs/run_reports/2026-07-07-resume-merge-session.md`
 - 2026-07-07 PM checkpoint (multi-stream, C-008/C-009 + consensus):
   `docs/run_reports/2026-07-07-checkpoint-multistream-session.md`
 - 2026-07-07 whole-project design council (C-007):
@@ -103,43 +85,39 @@ previous-run narratives. Recent sessions, newest first:
 
 ## Current Verification
 
-- `python3 -m unittest discover -s tests` → `Ran 415 tests, OK
-  (skipped=10, expected failures=31)` (as of 2026-07-07, after PRs
-  #2-#7; the 31 expected failures are Stream F audit pins that flip to
-  passing as P2-013 lands).
-- CI: mock e2e + suite on both matrix legs.
-- Latest live evidence: real n=3 MLX experiment with populated
-  `aggregate` block, byte-identically re-derivable (run report
-  2026-07-07-parallel-streams-session.md).
+- Merged main: `python3 -m unittest discover -s tests` → `Ran 462
+  tests, OK (skipped=10)` — ZERO expected failures (as of 2026-07-08,
+  after PRs #8/#9/#10).
+- `validate-bundle --strict` green over all 6 real corpus bundles,
+  read-only, unrewritten (incl. the new raw-to-trace gate).
+- CI: mock e2e + suite on both matrix legs, green on every PR head.
+- PR #11 branch: 545 OK incl. fake-e2e strict validation of a
+  provenance-carrying synthetic 2K bundle.
 
 ## Known Workspace State
 
-- `main` is pushed and current (through the C-009 consensus commit).
-- FOUR worktrees exist deliberately (checkpointed streams; branches all
-  pushed): `../jw-p2013`, `../jw-2k`, `../jw-spike301`, `../jw-doc007`.
-  Remove each only after its PR lands.
+- `main` is pushed and current (through this session's bookkeeping).
+- ONE worktree remains deliberately: `../jw-2k` (PR #11 open). Remove
+  after it lands. (`../jw-p2013`, `../jw-doc007`, `../jw-spike301`
+  removed this session — branches merged.)
 - `/tmp/jw-lead-verify/` holds disposable lead-verification artifacts.
 
 ## What Is Next
 
-Follow `TASK_QUEUE.md` (lane-annotated); the checkpoint run report's
-"How to restart" section is the authoritative sequence. In order:
+Follow `TASK_QUEUE.md` (lane-annotated). In order:
 
-1. **Resume + land the four checkpointed streams** [AGENT]: A P2-013
-   groups 5–8 + P2-014 → merge; D reconciliation pass → merge; C verdict
-   re-verify → merge; B U3–U5 + review pipeline → rebase → merge; then
-   the cross-stream integration review. Per-stream resume points live in
-   the stream ledgers (`docs/stream_logs/` on each branch). Topology per
-   the C-009 consensus (lead-driven pipelines / foreground-wait
-   orchestrators; heartbeat as backstop).
-2. **P2-006: the 2M two-model baseline campaign** [QUIET-MAC] — after
-   the merges; no-agent quiet lock per C-009 T5; corpus born under the
-   fixed validator with prompt provenance (P2-014e).
-3. **P2-010 → P2-012 workload program** [AGENT] per Slice 2O gates.
+1. **Ed merges PR #11** [ED-EXTERNAL] (2K fixture-first; rebased,
+   integration-reviewed, merges clean). Then remove `../jw-2k`.
+2. **P2-006: the 2M two-model baseline campaign** [QUIET-MAC] — fully
+   unblocked; no-agent quiet lock per C-009 T5 (stop all fleets/Codex
+   load first); corpus born under the fixed validator with prompt
+   provenance.
+3. **P2-010 → P2-012 workload program** [AGENT] per Slice 2O gates
+   (D-034).
 4. **Ed's external one-pass** [ED-EXTERNAL]: calendar, device access,
    borrow window, wall meter, backup destination (P0-003).
-5. **Small task queued by C-009**: patch `~/.local/bin/codex-run`
-   (mkdir -p out-dir; forward -C/-s on --resume; thin-output warning).
+5. **3.0.2 llama.cpp spike** [AGENT after R-003 approval]: reuses the
+   3.0.1 harness shape (D-035/D-036) + its two deferred hardening fixes.
 
 Hardware-gated (unchanged): 2K/2L (P1-006), wall meter (P1-003),
 topology (P1-004), calendar mapping (P1-008).

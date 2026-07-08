@@ -58,7 +58,7 @@ needs 2M baselines:     M10 later pairing-feasibility matrix + split runs
    intake step.
 4. Check workspace state with `git status --short --branch`; inspect
    recent commits only when the handoff or mission needs them.
-5. `python3 -m unittest discover -s tests` — expect `Ran 455 tests, OK
+5. `python3 -m unittest discover -s tests` — expect `Ran 462 tests, OK
    (skipped=10)` with zero expected failures as of 2026-07-07 after
    P2-013/P2-014. The skips are the `[analysis]`-extra chart tests plus one
    optional-jsonschema test. A red suite is itself the mission: stop and fix
@@ -410,7 +410,7 @@ Wrapper notes:
 
 - Merge-order note as of 2026-07-07: the 2K NVIDIA fixture-first
   implementation is complete on a later branch (protocol v1, SSH transport,
-  `nvidia-smi` + vLLM adapters, registry wiring, 495 CI-safe tests), but it
+  `nvidia-smi` + vLLM adapters, registry wiring, 545 CI-safe tests), but it
   merges after this docs stream. Do not mark protocol pins non-provisional
   until the P1-006 live evidence script has contacted real hardware.
 - P1-006 evidence-gathering (SSH reachability, `nvidia-smi` power query,

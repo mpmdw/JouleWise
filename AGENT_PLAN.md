@@ -118,7 +118,7 @@ Acceptance criteria:
 Status as of 2026-07-07: in progress — all hardware-independent work
 (2A-2F, 2J, and 2N pre-hardware hardening, landed 2026-07-06) is complete
 and runnable, the Mac vertical slice (2G/2H/2I) is complete, and P2-013 /
-P2-014 closed the integrity and provenance pins (455 tests, 10 skipped,
+P2-014 closed the integrity and provenance pins (462 tests, 10 skipped,
 zero expected failures). Remaining gated work is the 2M baseline corpus plus
 remote-target live validation. The 2K fixture-first NVIDIA implementation is
 complete on a later branch, but this stream does not claim it as merged or
@@ -231,7 +231,7 @@ Acceptance criteria:
 python3 -m unittest discover -s tests
 ```
 
-Expected result as of 2026-07-07 after P2-013/P2-014: `Ran 455 tests, OK
+Expected result as of 2026-07-07 after P2-013/P2-014: `Ran 462 tests, OK
 (skipped=10)` with zero expected failures.
 
 Useful commands:

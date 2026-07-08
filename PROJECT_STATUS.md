@@ -16,7 +16,7 @@ are provided for anyone who wants the full evidence trail.
 **Merge-time reconciliation:** the reader-facing status below defers to
 the phase checklist matrix rows for per-item authority. Since this stream's
 first draft, the integrity stream closed P2-013 and P2-014: all 31 audit
-pins are fixed, the suite is 455 tests with 10 skips and zero expected
+pins are fixed, the suite is 462 tests with 10 skips and zero expected
 failures, bundle provenance now records prompt/workload identities, and
 `validate-bundle --strict` includes the powermetrics raw-plist-to-trace
 gate plus the legacy additive-summary comparison. The six existing real
@@ -165,7 +165,7 @@ Complete so far (all verifiable in the repository):
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (455 tests, 10 skipped, zero expected
+  a CLI, plus a passing test suite (462 tests, 10 skipped, zero expected
   failures, run in CI on every push, including a mock end-to-end run +
   bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
@@ -174,7 +174,7 @@ Complete so far (all verifiable in the repository):
   bundle artifact contract, and the measurement methodology (idle
   subtraction, measurement boundaries, clock synchronization, statistical
   protocol - highlights below).
-- Evidence-shaped plans for every phase, a design-decision log (34
+- Evidence-shaped plans for every phase, a design-decision log (36
   decisions, each with the alternatives considered), a risk register with
   an explicit descope ladder, and example configs for the Mac and mock
   targets.
@@ -193,7 +193,7 @@ Not yet started: the remote real-hardware adapters — NVIDIA/vLLM +
 Jetson Orin live validation (2K/2L, gated on device access). The 2K
 fixture-first implementation is complete on the later NVIDIA branch
 (protocol v1, SSH transport, `nvidia-smi` + vLLM adapters, registry wiring,
-495 CI-safe tests), but all protocol pins remain PROVISIONAL until live
+545 CI-safe tests), but all protocol pins remain PROVISIONAL until live
 hardware contact; a P1-006 evidence checklist exists there. Code-level
 specs are in `docs/phase_2/hardware_slice_implementation_guide.md`. The
 mock-first core landed first by design, so measurement code is never
@@ -438,7 +438,7 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (455 tests, 10 skipped, zero expected failures, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (462 tests, 10 skipped, zero expected failures, CI-enforced) |
 
 ## Process Note
 
@@ -523,7 +523,7 @@ capability first, claims only when the instrument can defend them.
 **Where to look.** `docs/council_log.md` (C-001…C-006) is the
 deliberation record — C-006 is a full orchestration trace of the
 five-stream day, including what each review layer uniquely caught and
-what it cost. `docs/decision_log.md` holds the 34 binding design
+what it cost. `docs/decision_log.md` holds the 36 binding design
 decisions with alternatives considered. `docs/run_reports/` narrates
 each working session. The orchestration playbooks themselves live
 outside this repository as reusable skills (council, delegation,
