@@ -96,6 +96,8 @@ class AffineWorkloadTests(unittest.TestCase):
             ("42.", 42, "malformed", None, False, True),
             ("The answer is 42", 42, "malformed", None, False, True),
             ("\n\t42  \r", 42, "parsed", 42, True, True),
+            ("\u200342\u2003", 42, "malformed", None, False, True),
+            ("\u300042\u3000", 42, "malformed", None, False, True),
             ("", 42, "malformed", None, False, False),
             ("42 42 42 42 42 42 42 42 42 42 42 42 42 42 42 42", 42, "malformed", None, False, True),
             ("٤٢", 42, "malformed", None, False, False),

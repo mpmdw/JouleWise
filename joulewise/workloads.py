@@ -107,7 +107,7 @@ def score_response(text: str, expected: int) -> ScoreResult:
         raise TypeError("text must be a string")
     if isinstance(expected, bool) or not isinstance(expected, int):
         raise TypeError("expected must be an integer")
-    stripped = text.strip()
+    stripped = text.strip(" \t\n\r\x0b\x0c")
     if not re.fullmatch(r"[+-]?[0-9]+", stripped):
         return ScoreResult(parse_status="malformed", parsed_value=None, correct=False)
     parsed = int(stripped)
