@@ -1063,3 +1063,12 @@ drift worded as restatement, lossy D-041 kill-list record, an inflated
 HumanEval floor claim, unlanded R2 dispositions, P2-010 gate omission)
 — all fixed pre-commit; the verification layer earned its keep on its
 first C-015 outing.
+
+AMENDED 2026-07-08 (suite-build adjudication, D-044..D-047): the C-015
+minimal-sketch is amended in three adjudicated ways — per-item response
+TEXT ratified into `outputs/suite_items.jsonl` (D-045.8), the
+`markers:`/`outputs:` blocks pinned as optional-defaulted-validated
+constants inside the hashed effective manifest (D-044/D-045.3), and an
+additive per-item `prompt_token_ids` source added for ids-native
+sentinels (D-045.5/D-046). Dispositions for all 37 research-report
+amendments: suite_implementation_research.md §Adjudication.

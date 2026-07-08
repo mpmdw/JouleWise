@@ -65,6 +65,10 @@ be re-derived by a future agent gets an entry here.
 | D-041 | Benchmark interop via frozen-subset imports and marker-shim energy layer; interop lane remains post-2M + post-P2-010a | accepted |
 | D-042 | D-034 implementation lane reopened; suite build may proceed pre-2M | accepted |
 | D-043 | Supersession-closure discipline | accepted |
+| D-044 | Suite config identity: omission-serialized ref + effective-manifest hash | accepted |
+| D-045 | Suite substrate execution semantics (run_suite, statuses, per-item outputs) | accepted |
+| D-046 | AP-6 sentinel delivery is ids-native BOS-less at literal equal shape | accepted |
+| D-047 | Affine ladder pins: level set, smoke sizing, gate denominators | accepted |
 
 ---
 
@@ -1453,6 +1457,12 @@ Revisit when: schema v0.2 (D-008) - the v0.2 exporter must keep the
 nullable-optionals rule; or if a downstream consumer requires
 omit-None artifacts (then revisit WITH a hash-migration plan).
 
+AMENDED 2026-07-08 (D-044): the nullable-emission rule gains one scoped
+exception — NEW additive suite-only optionals (`suite_manifest_ref`,
+`suite_manifest_sha256`) are serialized by OMISSION when None, so every
+pre-suite config stays byte-identical and no hash migration occurs. All
+pre-existing optionals keep null emission. See D-044.
+
 ---
 
 ## D-030: `validate-bundle` stays structural by default; `--strict` adds raw-evidence checks
@@ -2119,3 +2129,212 @@ the sweep prompt gains check five.
 
 Revisit when: if two consecutive sweeps find zero supersession drift, the
 sweep-time check may relax to spot-checks.
+
+---
+
+## D-044: Suite config identity — omission-serialized ref + effective-manifest hash
+
+- Date: 2026-07-08
+- Status: accepted (suite-build adjudication; A1/A3 dispositions)
+- Phase: 2
+
+Context: P2-010a adds `workload_profile.suite_manifest_ref` as a fourth
+mutually exclusive prompt source. Under D-029's nullable emission it
+would emit `null` into EVERY normalized config, breaking all five pinned
+config hashes and therefore run identity (D-001/D-022/D-005) for
+logically unchanged configs. Separately, a path-only ref leaves manifest
+BYTES outside run identity: two runs with different manifest content at
+the same path would share config hash and D-022 suffix.
+
+Options considered:
+
+1. Accept the hash break and repin (uniform dataclass serialization).
+   Con: global identity churn for the 6 real corpus bundles' config
+   lineage, against D-029's protect-hashes rationale.
+2. Serialize the new suite fields by omission when None; keep every
+   pre-existing optional null-emitted. Con: one scoped carve-out in
+   `to_dict()`; the emitted-keys round-trip test must learn about
+   declared omitted optionals.
+3. For manifest identity: ref-only config with sameness via
+   `metadata.suite.manifest_sha256` (dataset_ref precedent). Con: config
+   hash misses manifest bytes — D-022 collision across different
+   manifests at the same ref.
+4. Config also carries a required manifest hash. Sub-choice: raw file
+   bytes vs the canonical EFFECTIVE manifest (defaults materialized) —
+   raw bytes would let a future change to code-level defaults alter
+   effective semantics without changing identity (counterreview catch).
+
+Decision: options 2 + 4 (effective-hash form). `suite_manifest_ref` and
+`suite_manifest_sha256` are BOTH omitted from `to_dict()` when None
+(scoped D-029 exception, back-annotated there) and both required
+together. `suite_manifest_sha256` is the SHA-256 of the canonical
+effective manifest: parsed, schema-validated, pinned defaults
+materialized, sorted-key 2-space JSON + newline (D-001 convention).
+`_stage_validate` recomputes it from the ref'd file and fails closed on
+mismatch (structured failure, in-bundle). The bundle writes the
+canonical effective manifest as `suite_manifest.json`; `metadata.suite`
+records the same effective hash plus the source file's raw byte hash as
+audit evidence. A suite example config gets its own pinned hash in
+`tests/test_schemas.py`.
+
+Considerations: manifest bytes now enter run identity through the config
+hash; campaign sameness remains hash equality, never membership (D-033
+rule). Changing a pinned marker/output default (D-045) changes effective
+manifests, hence hashes, hence identity — deliberate.
+
+Revisit when: schema v0.2 export (D-008) restates the serialization
+rules; or a third omission-serialized field is proposed (then decide a
+general rule instead of accreting exceptions).
+
+---
+
+## D-045: Suite substrate execution semantics
+
+- Date: 2026-07-08
+- Status: accepted (suite-build adjudication; A4/A5/A6/A8/C6 + attack-round guards)
+- Phase: 2
+
+Context: P2-010a implements the C-015 generic suite substrate; the
+execution-architecture report (suite_implementation_research.md §A) is
+sound-with-amendments and its adjudicated form needs its contract
+choices pinned.
+
+Decision (bundle of pins; alternatives recorded in the research doc's
+adjudication section):
+
+1. Item loop lives runtime-side: new `SuiteRuntimeAdapter` protocol with
+   `run_suite(config, manifest, context)`; `run_workload` untouched;
+   controller dispatches when a suite manifest is present and fails fast
+   pre-window (`UNSUPPORTED_WORKLOAD` when the runtime lacks the
+   protocol; structured FAILED on unreadable/invalid manifest).
+2. Manifest is a bundle-root artifact (`suite_manifest.json`, canonical
+   effective form per D-044), never embedded in config.
+3. Marker events ride the five-key event shape with `phase: "suite"`;
+   vocabulary (suite/block/level/item start+end event types and required
+   metadata keys) is pinned in `joulewise/suite.py` constants. The
+   manifest's `markers:`/`outputs:` blocks are OPTIONAL: absent →
+   pinned defaults materialized into the effective manifest; present →
+   values must equal the pinned constants; divergent → validation
+   error. Changing a default is a suite schema revision, never a silent
+   code edit (identity via D-044).
+4. Status ownership: runtime assigns `succeeded|malformed|capped|
+   runtime_failed` in `item_end`; reducer alone may downgrade to
+   `below_floor` (floor seam ships with `floor_source =
+   "none_pending_P2-015"`); `excluded_from_claim` is analysis-only and
+   is a validation error if seen in events or summaries. FIXED-BUDGET
+   UNDERRUN (emitted < planned under `fixed_budget_exact`) is
+   `malformed` with `status_reason="fixed_budget_underrun"`; bundle
+   validation rejects `succeeded` where `fixed_budget_exact` and
+   `emitted_tokens != planned_output_tokens`.
+5. Per-item prompt sources are mutually exclusive per item:
+   `prompt_text` (materialized at generation time, text path, BOS inside
+   budget) | `prompt_token_ids` (ids-native additive path, required by
+   D-046 sentinels) | synthetic shape (`shape.planned_prompt_tokens`).
+   Per-item prompt identity uses the existing domain-separated token-ID
+   hash (`joulewise.prompt_token_ids.v1`, D-033); any `prompt_sha256`
+   field name means the token-ID hash.
+6. `order_seed` derives deterministically:
+   `sha256(suite_seed + "\0" + order_policy + "\0" + str(rep_index))`
+   truncation per implementation; recorded in `suite_start` metadata and
+   `metadata.suite`; never runtime-chosen.
+7. Per-item/block/level energies are GROSS-only (C-014 phase rule); no
+   per-item idle subtraction or token-normalized claim metrics.
+8. Per-item outputs: single `outputs/suite_items.jsonl`; each line
+   carries `item_id`, `item_index`, `status` (+ `status_reason` when
+   applicable), `prompt.token_ids_sha256`, `response_text`,
+   `response_sha256`, `stop_reason`, `prompt_tokens`, `emitted_tokens`,
+   token timestamps. Response TEXT is hereby RATIFIED as a P2-010a scope
+   addition to the C-015 minimal sketch (needed for re-reducible
+   scoring, D-036/C-004); the bank sketch gets a dated amendment.
+9. Reducer summary gains additive `suite_metrics` (not in
+   `_SUMMARY_WRITER_KEYS_V0_1`, `summary_provenance` precedent);
+   `SUMMARY_REDUCER_VERSION` bumps to `0.2.0`.
+
+Revisit when: composite/split bundles (schema v0.2) touch suite
+manifests; or the first real suite campaign contradicts a pin.
+
+---
+
+## D-046: AP-6 sentinel delivery — ids-native, BOS-less, literal equal shape
+
+- Date: 2026-07-08
+- Status: accepted (suite-build adjudication; B5 disposition, counterreview-amended)
+- Phase: 2
+
+Context: AP-6 requires five equal-shape content conditions. Text-path
+prompts realize BOS + 511 content tokens (`add_special_tokens=True`)
+while the incumbent repeated-seed stream and the random-token sentinel
+are ids-native with no BOS — "equal shape" was not literally true, and
+BOS-normalizing the control would change the very incumbent stream
+(`_synthetic_prompt_tokens`) whose generalization AP-6 tests.
+
+Options considered:
+
+1. Prepend BOS to ids-native conditions (511 content tokens). Con: the
+   control stops being byte-for-byte the incumbent stream.
+2. Record BOS presence as covariate, conditions heterogeneous. Con:
+   "five equal-shape conditions" would be false as written.
+3. Deliver ALL five conditions ids-native without BOS: text-derived
+   conditions (natural prose, code-like, multilingual) are generated
+   with `add_special_tokens=False` accounting and delivered as token
+   ids.
+
+Decision: option 3. Literal equal shape across all five; the control is
+exactly the incumbent recipe; `bos_present=false` and
+`prompt_source="token_ids"` recorded per condition. BINDING CAVEAT
+(counterreview): AP-6 results describe the ids-native no-BOS regime and
+do NOT automatically generalize to the AP-4 text path (BOS present,
+different delivery); the AP-6 row carries this limit, and a small
+text-path bridge (AP-6b) is the named option if Window-B analysis needs
+the generalization. jw_mixed category items (AP-4) are unaffected.
+
+Revisit when: AP-6b is proposed, or a model/tokenizer without a stable
+ids-native path enters the sentinel set.
+
+---
+
+## D-047: Affine ladder pins — level set, smoke sizing, gate denominators
+
+- Date: 2026-07-08
+- Status: accepted (suite-build adjudication; C0/C2/C3/C5/C8/C9 dispositions)
+- Phase: 2
+
+Context: the affine-ladder report (suite_implementation_research.md §C)
+needed lead ratification of its level-set reading and statistical
+corrections from its cross-check.
+
+Decision:
+
+1. Level set is the powers of two `{1, 2, 4, 8, 16, 32, 64}` — the
+   bank's "levels 1..64" line is edited to say so (docs fix). Item
+   identity keys on the difficulty VALUE (`n_iter`), so smoke items are
+   a strict subset of full-ladder items.
+2. Smoke ladder (P2-010b): levels `{1, 8, 64}` × 8 items/level + 2
+   repeated-seed sentinel executions (suite start/end); k = 24 distinct
+   items (C-015 first default holds; the earlier "k=26 / 2-over" claim
+   was an accounting error — sentinel executions are within-bundle
+   repeats, not distinct items). B = 5 bundles, top-up 10.
+3. Gate statistics: under deterministic (greedy) decoding, repeated
+   bundles replicate ENERGY only; all token/stop-reason/correctness
+   denominators are the 8 DISTINCT items per level. E1's 5% threshold at
+   n=8 means ZERO tolerated non-EOS items per level — stated, not
+   implied. The report's pooled "40-80 items/level" power framing is
+   rejected as pseudo-replication.
+4. E5 (early-EOS bias) is advisory and recorded
+   `expected_not_evaluable` at smoke sizing (needs ≥10 distinct parsed
+   items per class); smoke stays 8 items/level.
+5. Sampler pinning (B9, applies suite-wide): the MLX adapter records
+   sampler provenance (greedy/temp-0 default made explicit) so "greedy"
+   in manifests rests on recorded fact, not an unpinned library default.
+6. AP-5 row edit rides this decision: the scored campaign predeclares
+   malformed-as-incorrect in the accuracy denominator (reported
+   alongside); full-ladder k=112 + sentinels still needs its own
+   ratification at campaign time.
+7. Threshold defensibility (C7): the ~4%-of-window arithmetic is
+   re-anchored on the first smoke bundle's measured level-window energy;
+   smoke bundles double as level-window floor-calibration evidence for
+   P2-015.
+
+Revisit when: the first smoke bundle's measured item time falls outside
+0.11–0.20 s/item (resize per the report's table); or the scored
+campaign is scheduled (k-policy ratification).
