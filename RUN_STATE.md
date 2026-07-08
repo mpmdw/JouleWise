@@ -1,8 +1,7 @@
 # JouleWise Run State
 
-Last updated: 2026-07-08 (site deployed as a Lakebed capsule with a live
-GitHub freshness layer — https://quiet-signal-6af8833395.lakebed.app;
-suite 596 after the pack_capsule parser tests; nav scroll-jank fix)
+Last updated: 2026-07-08 (suite-science + expansion session close; PRs
+#14/#15/#16 merged; suite 617; site redeployed against this checkpoint)
 
 ## Start Here For Every Big Run
 
@@ -22,6 +21,8 @@ Before starting substantial work:
 9. Do not commit local deletions or unrelated changes unless the user asks.
 10. Heartbeat rule (`docs/milestones.md`): if >14 days passed with no run
     report and no recorded break, start with a milestones + risk review.
+11. Live MLX gates use the repo venv: `.venv/bin/python -m joulewise ...`
+    (system python3 lacks mlx → `runtime_unavailable`).
 
 At the end of substantial work:
 
@@ -38,125 +39,100 @@ At the end of substantial work:
 8. Run a docs-consistency sweep before the final bookkeeping commit
    (delegate to a fast subagent): stale test counts, gate-state
    contradictions between prose summaries and checklist matrix rows,
-   numbers cited in multiple places. Adopted 2026-07-07 (council log
-   C-002) after a sweep caught drift in 6 files; prose status summaries
-   must carry an as-of date and defer to matrix rows (D-023 extension).
+   numbers cited in multiple places (C-002; D-023 extension).
    After any session that changed front-facing docs, REGENERATE and
    REDEPLOY the site so the public snapshot tracks the repo (C-012):
    `python3 scripts/build_site.py && python3 scripts/pack_capsule.py &&
-   (cd site_capsule && npx lakebed deploy)`. The live site's freshness
-   layer will flag drift until this runs, but keeping the snapshot current
-   is part of closing a docs-touching session.
+   (cd site_capsule && npx lakebed deploy)`.
 9. Call out any dirty working-tree state that should not be accidentally
    committed.
 
 ## Current Project Status
 
-**P2-013 and P2-014 are COMPLETE and MERGED (2026-07-08).** The
-checkpointed multi-stream session resumed under the C-009 topology and
-landed: PR #8 (all 31 audit pins fixed; strict raw-to-trace gate +
-legacy-additive compare; summary/workload provenance; D-032..D-034),
-PR #10 (DOC-007 docs/framing + merge-time reconciliation), PR #9
-(Stage 3.0.1 verdict **`replay_supported`**, lead-re-verified live —
-Phase 3's central technical risk retired on current hardware), plus
-D-035/D-036 (the ratified spike promotions). **PR #11 (2K NVIDIA fixture-first
-stack, all pins PROVISIONAL) MERGED 2026-07-08 under Ed's standing
-merge-with-review authorization — ALL FOUR STREAMS LANDED.** Suite: see
-Current Verification below (single authority); all 6 real corpus
-bundles pass `--strict` read-only. The 2M campaign (P2-006) is fully unblocked and
-is the next machine-state-compatible task.
+**Suite-science + expansion session COMPLETE and MERGED (2026-07-08;
+C-014/C-015; D-038..D-042).** Three PRs landed: #14 (analysis-plans
+contract; program v2 with the Q4 L3 grid + comparative-MDE floors; suite
+architecture v2 + benchmark interop + capability map; the suite
+implementation research handoff), #15 (P2-021 drift sentinels — DONE),
+#16 (Window-A capture set — the 2M corpus will carry its covariates:
+per-run env snapshots, cooldown traces, inter-run gaps, tokenize/setup
+phases, memory snapshots, sampler metadata). A sacred-window blocker
+(in-window run_end memory snapshot) was caught by the review stack and
+fixed pre-merge; the AP-4 equivalence gate was corrected pre-merge
+(margin-clears-floor). Post-merge integration review: zero cross-stream
+defects; live two-model matrix + sentinel campaign subset verified.
 
-**Since then (same day): PR #12 MERGED (C-011)** — the independent-
-critique counter-review landed fail-closed campaigns, counterbalanced
-order manifests, reducer honesty flags, the claims ladder (D-037), and
-queue item P2-015; the docs/site is now a designed reading experience
-(consensus-gated). **RESTART HERE:** read
-`docs/run_reports/2026-07-08-lakebed-deploy.md` (latest), then the
-site-observatory and councils-critique reports. Short
-version: quiet-machine window running P2-015 (detection-floor
-calibration) FIRST, then P2-006 (2M) with the fail-closed runner, order
-manifest, and claims-ladder wording — under the C-009 T5 no-agent lock
-(no worktrees remain).
-
-**Also landed (2026-07-08, commit 292e074):** the independent critique's
-second-pass reassessment is now committed with provenance layering; the
-lead fact-checked 16/17 of its claims against file evidence (one stale
-risk-register row, annotated) and a counterreview blocker on
-preservation wording was fixed pre-commit. Details: addendum in
-`docs/run_reports/2026-07-08-councils-critique-session.md`.
+**RESTART HERE (next agent):**
+1. Read `docs/run_reports/2026-07-08-suite-science-expansion.md` (the
+   session record incl. restart detail), then
+   `docs/phase_2/suite_implementation_research.md`.
+2. **Suite build [AGENT], UNBLOCKED (D-042):** adjudicate the research
+   doc's cross-check amendments (recorded dispositions), then implement
+   P2-010a generic substrate → P2-010b smoke ladder → P2-012 phase-1
+   generators + P2-020 sentinel content. Full review tier
+   (measurement-semantics). This is the top agent-lane task.
+3. **Quiet Window A [QUIET-MAC], next machine-quiet opportunity:**
+   P2-015 expanded floors FIRST (incl. lead-run tasks-sampler + settle
+   smoke), then P2-006 2M with drift sentinels; fail-closed runner +
+   order manifest; claims per `docs/contracts/claims_ladder.md` +
+   `docs/contracts/analysis_plans.md`; no-agent quiet lock (C-009 T5);
+   corpus backed up per R-016.
+4. Window B (P2-019 q4 grid + P2-020 campaign) with n sized from A.
 
 ## Session History (pointers only — run reports own the narrative)
 
-Per the C-009 meta-review consensus, RUN_STATE no longer stacks
-previous-run narratives. Recent sessions, newest first:
-
-- 2026-07-08 Lakebed deploy (live capsule + GitHub freshness; C-013):
+- 2026-07-08 suite-science + expansion (C-014/C-015; PRs #14/#15/#16;
+  D-038..D-042): `docs/run_reports/2026-07-08-suite-science-expansion.md`
+- 2026-07-08 Lakebed deploy (C-013):
   `docs/run_reports/2026-07-08-lakebed-deploy.md`
-- 2026-07-08 site observatory (PR #13; status/roadmap/record frontend,
-  fail-closed parsers, P2-017 stamps):
+- 2026-07-08 site observatory (PR #13):
   `docs/run_reports/2026-07-08-site-observatory.md`
-- 2026-07-08 critique second-pass record (reassessment + fact-check +
-  counterreview; addendum in the councils-critique report):
+- 2026-07-08 critique second-pass + councils+critique (C-011 → PR #12):
   `docs/run_reports/2026-07-08-councils-critique-session.md`
-- 2026-07-08 councils+critique (site redesign; C-011 → PR #12):
-  `docs/run_reports/2026-07-08-councils-critique-session.md`
-- 2026-07-07/08 resume+merge (C-009 topology first full run; PRs
-  #8/#9/#10/#11 all merged):
+- 2026-07-07/08 resume+merge (C-009 first full run; PRs #8..#11):
   `docs/run_reports/2026-07-07-resume-merge-session.md`
-- 2026-07-07 PM checkpoint (multi-stream, C-008/C-009 + consensus):
-  `docs/run_reports/2026-07-07-checkpoint-multistream-session.md`
-- 2026-07-07 whole-project design council (C-007):
-  `docs/run_reports/2026-07-07-whole-project-design-council.md`
-- 2026-07-07 five-stream parallel session (C-005/C-006):
-  `docs/run_reports/2026-07-07-parallel-streams-session.md`
-- 2026-07-07 flagship benchmark:
-  `docs/run_reports/2026-07-07-flagship-qwen35-122b.md`
 - Older: see `docs/run_reports/` (dated files).
 
 ## Current Verification
 
-- Merged main: `python3 -m unittest discover -s tests` → `Ran 596
-  tests, OK (skipped=10)` — ZERO expected failures (as of 2026-07-08,
-  after PRs #8..#13 + the Lakebed capsule stream; 564 + 12 build_site
-  + 20 pack_capsule parser tests).
-- `validate-bundle --strict` green over all 6 real corpus bundles,
-  read-only, unrewritten (incl. the new raw-to-trace gate).
-- CI: mock e2e + suite on both matrix legs, green on every PR head.
-- The merged 2K stack includes fake-e2e strict validation of a
-  provenance-carrying synthetic 2K bundle.
+- Merged main (fcd111a): `python3 -m unittest discover -s tests` →
+  `Ran 617 tests, OK (skipped=10)` (as of 2026-07-08, post PRs #14..#16).
+- `validate-bundle --strict` green over all 6 real corpus bundles under
+  the merged capture code, read-only, unrewritten.
+- Live lead gate on the capture head: real MLX (1.5B, mock telemetry)
+  strict-valid bundle with the new evidence fields populated and honest
+  (display 1/0 with pipes separated; clock probe correct; phases
+  identifiability-flagged; no in-window snapshots).
+- CI green on both matrix legs on every merged PR head.
+- Post-merge integration review: no cross-stream defects; 2-model matrix
+  gen + sentinel validate-config + mock campaign subset verified.
 
 ## Known Workspace State
 
 - `main` is pushed and current (through this session's bookkeeping).
-- No worktrees remain (all four removed after their PRs merged).
+- No worktrees remain (both removed after their PRs merged).
 - `/tmp/jw-lead-verify/` holds disposable lead-verification artifacts.
 
 ## What Is Next
 
 Follow `TASK_QUEUE.md` (lane-annotated). In order:
 
-1. **P2-015 then P2-006 in ONE quiet window** [QUIET-MAC]:
-   detection-floor calibration first, then the 2M two-model baseline
-   campaign via the fail-closed runner + counterbalanced order manifest
-   (C-011), claim wording per the claims ladder (D-037); no-agent quiet
-   lock per C-009 T5; corpus backed up per R-016.
-2. **P2-010 → P2-012 workload program** [AGENT] per Slice 2O gates
-   (D-034).
+1. **Suite implementation** [AGENT] — P2-010a/b, P2-012 phase 1, P2-020
+   generators, per D-042 + the research handoff (rank 3 row P2-010; the
+   queue's quiet-lane rows 1-2 stay top for the next quiet window).
+2. **P2-015 then P2-006 in quiet Window A** [QUIET-MAC].
 3. **Ed's external one-pass** [ED-EXTERNAL]: calendar, device access,
    borrow window, wall meter, backup destination (P0-003).
-4. **3.0.2 llama.cpp spike** [AGENT after R-003 approval]: reuses the
-   3.0.1 harness shape (D-035/D-036) + its two deferred hardening fixes.
+4. **3.0.2 llama.cpp spike** [AGENT after R-003 approval].
 
 Hardware-gated (unchanged): 2K/2L (P1-006), wall meter (P1-003),
 topology (P1-004), calendar mapping (P1-008).
 
 ## Open Decisions And Blockers
 
-- Supervisor approval and scope pending (P1-001, R-001 — trigger fired
-  2026-06-12, mitigation holding); gates FULL D-016 closure (a
-  provisional small-model pick opened 2G on 2026-07-06).
-- Real backup destination pending (P0-003; interim same-disk location
-  active, R-016 mitigated-interim).
+- Supervisor approval and scope pending (P1-001, R-001 — mitigation
+  holding); gates FULL D-016 closure.
+- Real backup destination pending (P0-003; interim same-disk active).
 - Calendar dates pending (P1-008, R-012).
 - Wall-meter decision pending (P1-003, R-007).
 - Physical network topology pending (P1-004, R-011).

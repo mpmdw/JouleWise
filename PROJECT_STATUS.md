@@ -18,7 +18,7 @@ are provided for anyone who wants the full evidence trail.
 
 **Everything landed.** The multi-stream session merged as four PRs:
 P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
-596 tests with 10 skips and zero expected failures (as of 2026-07-08; current-count authority is RUN_STATE.md Current Verification), bundle provenance
+617 tests with 10 skips and zero expected failures (as of 2026-07-08; current-count authority is RUN_STATE.md Current Verification), bundle provenance
 now records prompt/workload identities, and `validate-bundle --strict`
 includes the powermetrics raw-plist-to-trace gate plus the legacy
 additive-summary comparison. The six existing real corpus bundles pass
@@ -147,7 +147,7 @@ recorded in the Phase 2 plan.
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation) — 2M baselines are fully tooled; 2K fixture-first implementation is MERGED (2026-07-08) with ALL protocol pins PROVISIONAL pending live hardware validation; 2L gated on device access |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation); suite-science hardening + expansion MERGED 2026-07-08 (analysis-plans contract D-038, Q4 L3 grid design, drift sentinels, Window-A capture covariates, suite architecture v2 + benchmark-interop direction, capability map — see the research-questions pointer above) — 2M baselines are fully tooled and covariate-complete; 2K fixture-first implementation is MERGED (2026-07-08) with ALL protocol pins PROVISIONAL pending live hardware validation; 2L gated on device access |
 | 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
@@ -180,7 +180,7 @@ Complete so far (all verifiable in the repository):
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (596 tests, 10 skipped, zero expected
+  a CLI, plus a passing test suite (617 tests, 10 skipped, zero expected
   failures, run in CI on every push, including a mock end-to-end run +
   bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
@@ -362,7 +362,7 @@ recorded evidence or a documented blocker.
   per-stage energy decomposition (prefill / transfer / deserialize /
   decode) -> interconnect sweep -> crossover dataset.
 - **Phase 4** - `docs/phase_4/`: statistics ratification, aggregation,
-  figures F1-F8 (baselines, traces, phase asymmetry, split decomposition,
+  figures F1-F12 (baselines, traces, phase asymmetry, split decomposition,
   crossover curves, Pareto frontier, interconnect costs, measurement
   quality), claims index, results + limitations draft, background /
   related-work draft (new stage 4.6 — the report's background chapter now
@@ -453,7 +453,7 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (596 tests, 10 skipped, zero expected failures, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (617 tests, 10 skipped, zero expected failures, CI-enforced) |
 
 ## Process Note
 
@@ -513,9 +513,9 @@ who prevailed and why, and overridden dissents, so a future reader (or
 model) can reconstruct why any decision was made.
 
 **The paper trail (every claim auditable).** Each fact has one home:
-`docs/decision_log.md` — 37 binding design decisions, each with
+`docs/decision_log.md` — 42 binding design decisions, each with
 alternatives considered and revisit conditions; `docs/council_log.md`
-(C-001…C-011) — the deliberation record; `docs/stream_logs/` —
+(C-001…C-015) — the deliberation record; `docs/stream_logs/` —
 per-stream decision ledgers committed *with* the code they justify
 (wrong decisions are superseded in place, never erased);
 `docs/run_reports/` — one record per session with verification
@@ -574,7 +574,7 @@ suite went 415 → 546 tests with zero expected failures, and the lead
 never wrote implementation code and never skipped a gate.
 
 **Where to look.** `docs/orchestration.md` is the process description.
-`docs/council_log.md` (C-001…C-011) is the deliberation record — C-006
+`docs/council_log.md` (C-001…C-015) is the deliberation record — C-006
 is a full orchestration trace of the five-stream day; C-009/C-010 are
 the topology meta-review and its validation; C-011 is the critique
 counter-review. `docs/decision_log.md` holds the 37 binding design

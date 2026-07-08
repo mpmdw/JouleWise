@@ -658,8 +658,9 @@ Protocol: D-014 in full (n=5, interleaved conditions where reload cost
 permits, cooldown gates, raw points kept); idle characterization per target
 (5-minute idle trace) collected once per session. C-014 adds repeated
 `short_short` drift sentinels at the start and end of each model block, with
-block position recorded as a drift covariate; generator support is P2-021
-and must land before the campaign.
+block position recorded as a drift covariate; generator support LANDED
+2026-07-08 (P2-021, PR #15 — self-identifying sentinel tags, fail-loud
+manifest, covariate echo).
 
 Actions: generate the config matrix (script in `scripts/`), run per target,
 validate all bundles, generate the report, write the baseline summary doc
@@ -704,9 +705,9 @@ NOT Phase 2 exit-critical (additive enrichment, not gate).
 
 C-015 sequencing and stop-line (2026-07-08): GATE AMENDMENT - amends the
 D-039 allowlist (which named only P2-021) to also allow the Window-A
-capture hardening stream; everything else unchanged. Only P2-021 and
-Window-A capture hardening (`window-a-capture` stream) may precede
-P2-015/2M. ALL 2O substrate implementation, shim spike, imports, q4-grid
+capture hardening stream; everything else unchanged. The two allowed
+pre-Window-A items BOTH LANDED 2026-07-08 (P2-021 via PR #15; Window-A
+capture hardening via PR #16). ALL 2O substrate implementation, shim spike, imports, q4-grid
 execution, and `jw_mixed` execution remain post-2M unless D-034 is
 reopened. (Amendment 2026-07-08, D-042 — owner directive: the
 IMPLEMENTATION lane is reopened; P2-010a/b, P2-012 phase-1, and P2-020
