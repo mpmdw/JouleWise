@@ -675,6 +675,60 @@ Acceptance criteria:
 Fallback: matrix shrinks to available targets; floor is Mac-only baselines
 (R-012 ladder).
 
+## Slice 2O: Workload Program v1 (post-baseline enrichment)
+
+Added 2026-07-07 (C-007 follow-on placement council; two-lens review).
+Objective: the first controlled prompt/workload enrichment layer AFTER the
+homogeneous baseline corpus exists, so workload-dependent metrics can be
+exercised without delaying or contaminating the 2M milestone. This slice
+owns queue tasks P2-010 (`affine_mod_ladder_v1`) and P2-012 (`jw_mixed_v1`);
+their full specs stay in `docs/research_question_bank.md` (C-004/C-005).
+
+Gates: the 2M baseline data milestone (whatever target set 2M ran on —
+Mac-only degraded floor included) exists and passes
+`validate-bundle --strict`; P2-013 + P2-014 complete; Stage 3.0.1 verdict
+recorded (C-007 execution order). This is post-baseline feature work: it
+must not move ahead of 2M, and it is NOT Phase 2 exit-critical (additive
+enrichment, not gate).
+
+Pre-2M obligation owned elsewhere (P2-014, decided at this council):
+2M corpus interpretability requires prompt-content PROVENANCE pinned before
+the campaign — the generated synthetic token stream (seed, tokenizer
+revision, generated-token hash per profile) and the `fixed_budget_exact`
+output policy recorded per run. Shape alone ("same token counts") is not
+sufficient provenance for a publishable corpus.
+
+Prompt-type → metric → research-question map (why each workload exists):
+
+| Workload type | Primary metric exercised | Unlocks | Detection-floor note |
+|---|---|---|---|
+| 2M prefill-heavy (`long_short`) | prefill marginal energy, TTFT/context scaling | Q4, C5-1.2/1.3 | resolvable at long context only; short prefill is below the sampler floor |
+| 2M decode-heavy (`short_long`) | decode energy/token, sustained power | Q4, C5-1.1 | strong (512-tok windows: CV 0.3–1.4%) |
+| 2M balanced | additive-model validation (fixed+prefill+decode) | Q4 fit, Q5 | validation, not discovery |
+| `affine_mod_ladder_v1` ladder | energy per correct answer at fixed envelope; difficulty scaling; EOS-bias audit | C5-1.9 | level windows identifiable; per-item often not — flags required |
+| `jw_mixed_v1` categories × synthetic controls | category effect beyond token shape; category ranking stability | C5-W.1/W.3, Q5 ext. | fixed-budget category deltas may be small → effect-size-vs-floor table required |
+| natural-EOS vs fixed-budget (pilot first) | stopping-policy cost; reasoning-token inflation | C5-W.2 | usually large when output length moves |
+| multilingual semantic- vs token-matched | tokenizer fertility energy tax | C5-W.4 | semantic leg large; token-matched may null (both informative) |
+
+Candidate extensions (recorded, not committed — post-2O, each needs a
+queue entry + council check before build): long-context prefill ladder
+beyond 4096; adversarial content-sensitivity diagnostic (repeated-seed vs
+natural prose vs code-like vs multilingual at equal token count — the 2M
+generator's repeated-seed stream is a control, not content-neutral);
+prefix-reuse/session workloads (cache economics).
+
+Acceptance: deterministic items + exact scoring from manifests alone;
+level-window energy primary with per-item identifiability flags; per-item
+token counts/stop reasons/response hashes recorded (EOS-bias auditable);
+category/source-manifest/output-policy fields additive; fixed-budget lands
+before any natural-EOS expansion; Phase 4 aggregation can group by
+profile/category/shape/policy without ad-hoc parsing. Correctness stays a
+QUARANTINED annotation — no intelligence-per-joule claims (C-004 rule).
+
+Fallback: below-floor item windows → report level/suite windows only;
+exemplar licensing uncertainty → synthetic controls only, source recorded
+unavailable; cost pressure → 2-item/category pilot, full expansion queued.
+
 ---
 
 ## Phase 2 Exit
