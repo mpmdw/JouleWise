@@ -138,3 +138,18 @@ built — recorded as a process lesson (skill-usage log).
 - **Skill-usage:** full entry + staged folds in
   `~/.claude/skills/skill-usage-log.md` (folds applied at session close
   per Ed's full-evidence hold).
+
+
+## Addendum — post-large-workload meta-reassessment (same day, C-016)
+
+Run after all merges as the session's final step (now standing per
+operation-loop §10 / Ed's directive). Shape: 4 parallel analysts over the
+full council log, decision log, and skill stack + a cold-start
+derivability audit + a completeness critic; then a pre-commit docs-verify
+pass over its own batch (5 should-fixes caught, two by D-043's self-test).
+Landed: D-043 supersession-closure discipline + back-annotations
+(ef37128), scripts/codex-run committed, orchestration.md refreshed with
+the clean-machine reconstruction pointer map, playbook/CLAUDE.md routing
+fixes, 5 skill-stack divergences fixed, codex-delegation structurally
+rewritten (procedure-first), §10 standing trigger encoded. Full analyst
+outputs: session scratchpad + `~/.claude/skills/skill-usage-log.md` entry.
