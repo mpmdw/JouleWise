@@ -14,6 +14,8 @@ from typing import Any
 
 from joulewise.validation import finite_float
 
+CONFIG_SCHEMA_VERSION = "0.1"
+
 
 class SchemaError(ValueError):
     """Raised when a benchmark schema cannot be validated."""
@@ -220,9 +222,23 @@ class WorkloadProfile:
         )
 
     def validate(self) -> None:
-        if self.prompt_text is None and self.prompt_tokens is None and self.dataset_ref is None:
+        prompt_sources = [
+            name
+            for name, value in (
+                ("prompt_text", self.prompt_text),
+                ("prompt_tokens", self.prompt_tokens),
+                ("dataset_ref", self.dataset_ref),
+            )
+            if value is not None
+        ]
+        if not prompt_sources:
             raise SchemaError(
                 "workload_profile must define prompt_text, prompt_tokens, or dataset_ref"
+            )
+        if len(prompt_sources) > 1:
+            raise SchemaError(
+                "workload_profile prompt sources are mutually exclusive: "
+                + ", ".join(prompt_sources)
             )
 
 
@@ -317,8 +333,13 @@ class BenchmarkConfig:
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "BenchmarkConfig":
         data = _require_mapping(data, "benchmark config")
+        schema_version = _require_string(data.get("schema_version"), "schema_version")
+        if schema_version != CONFIG_SCHEMA_VERSION:
+            raise SchemaError(
+                f"schema_version must be {CONFIG_SCHEMA_VERSION!r}; got {schema_version!r}"
+            )
         config = cls(
-            schema_version=_require_string(data.get("schema_version"), "schema_version"),
+            schema_version=schema_version,
             run_id=_optional_string(data.get("run_id"), "run_id"),
             model=ModelConfig.from_mapping(data.get("model")),
             quantization=QuantizationConfig.from_mapping(data.get("quantization")),
@@ -345,7 +366,8 @@ class BenchmarkConfig:
         # ``to_dict()`` emits ``null`` for absent optionals (dataclass
         # ``asdict``), and a bundle's normalized ``config.json`` must validate
         # against this exported schema (round-trip pinned by tests).
-        nullable_string = {"type": ["string", "null"]}
+        non_empty_string = {"type": "string", "minLength": 1}
+        nullable_string = {"type": ["string", "null"], "minLength": 1}
         nullable_positive_int = {"type": ["integer", "null"], "minimum": 1}
         return {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -359,7 +381,11 @@ class BenchmarkConfig:
                 "workload_profile",
             ],
             "properties": {
-                "schema_version": {"type": "string"},
+                "schema_version": {
+                    "type": "string",
+                    "const": CONFIG_SCHEMA_VERSION,
+                    "minLength": 1,
+                },
                 "run_id": nullable_string,
                 "model": {"$ref": "#/$defs/model"},
                 "quantization": {"$ref": "#/$defs/quantization"},
@@ -374,7 +400,7 @@ class BenchmarkConfig:
                     "type": "object",
                     "required": ["name"],
                     "properties": {
-                        "name": {"type": "string"},
+                        "name": non_empty_string,
                         "family": nullable_string,
                         "source": nullable_string,
                         "revision": nullable_string,
@@ -386,7 +412,7 @@ class BenchmarkConfig:
                     "type": "object",
                     "required": ["name"],
                     "properties": {
-                        "name": {"type": "string"},
+                        "name": non_empty_string,
                         "bits": nullable_positive_int,
                         "group_size": nullable_positive_int,
                     },
@@ -395,7 +421,7 @@ class BenchmarkConfig:
                     "type": "object",
                     "required": ["id", "transport", "runtime_backend", "telemetry_backend"],
                     "properties": {
-                        "id": {"type": "string"},
+                        "id": non_empty_string,
                         "transport": _string_enum_schema(TransportKind),
                         "runtime_backend": _string_enum_schema(RuntimeBackend),
                         "telemetry_backend": _string_enum_schema(TelemetryBackend),
@@ -408,7 +434,7 @@ class BenchmarkConfig:
                     "type": "object",
                     "required": ["name"],
                     "properties": {
-                        "name": {"type": "string"},
+                        "name": non_empty_string,
                         "prompt_tokens": nullable_positive_int,
                         "output_tokens": nullable_positive_int,
                         "prompt_text": nullable_string,
@@ -420,7 +446,7 @@ class BenchmarkConfig:
                 "interconnect": {
                     "type": "object",
                     "properties": {
-                        "name": {"type": "string"},
+                        "name": non_empty_string,
                         "link_speed_mbps": {"type": ["number", "null"], "minimum": 0},
                         "notes": nullable_string,
                     },
@@ -428,7 +454,7 @@ class BenchmarkConfig:
                 "sampling": {
                     "type": "object",
                     "properties": {
-                        "power_hz": {"type": "number", "exclusiveMinimum": 0},
+                        "power_hz": {"type": "number", "minimum": 0.001},
                         "idle_seconds": {"type": "number", "minimum": 0},
                         "warmup_seconds": {"type": "number", "minimum": 0},
                     },
@@ -437,7 +463,7 @@ class BenchmarkConfig:
                     "type": "object",
                     "required": ["project"],
                     "properties": {
-                        "project": {"type": "string"},
+                        "project": non_empty_string,
                         "operator": nullable_string,
                         "ambient_temp_c": {"type": ["number", "null"]},
                         "notes": nullable_string,

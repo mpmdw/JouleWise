@@ -64,7 +64,6 @@ class SchemaCoverageGapTests(unittest.TestCase):
 
 class SchemaBugPins(unittest.TestCase):
     # S1: unsupported schema_version values are accepted by the v0.1 parser.
-    @unittest.expectedFailure
     def test_rejects_unsupported_schema_version(self) -> None:
         data = example_data()
         data["schema_version"] = "0.2"
@@ -72,7 +71,6 @@ class SchemaBugPins(unittest.TestCase):
             BenchmarkConfig.from_mapping(data)
 
     # S3: multiple prompt sources are accepted, making runtime/reducer token counts ambiguous.
-    @unittest.expectedFailure
     def test_workload_rejects_multiple_prompt_sources(self) -> None:
         data = example_data()
         data["workload_profile"]["prompt_text"] = "hello"
@@ -87,13 +85,11 @@ class SchemaBugPins(unittest.TestCase):
             BenchmarkConfig.from_mapping(data)
 
     # S6: exported JSON Schema minimum is weaker than the loader's 0.001 Hz minimum.
-    @unittest.expectedFailure
     def test_config_schema_power_hz_minimum_matches_loader(self) -> None:
         power_hz = BenchmarkConfig.json_schema()["$defs"]["sampling"]["properties"]["power_hz"]
         self.assertEqual(power_hz.get("minimum"), 0.001)
 
     # S7: exported JSON Schema allows empty strings that the loader rejects.
-    @unittest.expectedFailure
     def test_config_schema_required_strings_are_non_empty(self) -> None:
         schema = BenchmarkConfig.json_schema()
         for section, field in (
