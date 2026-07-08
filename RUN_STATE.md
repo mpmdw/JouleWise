@@ -52,18 +52,18 @@ legacy-additive compare; summary/workload provenance; D-032..D-034),
 PR #10 (DOC-007 docs/framing + merge-time reconciliation), PR #9
 (Stage 3.0.1 verdict **`replay_supported`**, lead-re-verified live —
 Phase 3's central technical risk retired on current hardware), plus
-D-035/D-036 (the ratified spike promotions). **PR #11 (2K NVIDIA
-fixture-first stack, 545 tests, integration-reviewed, all pins
-PROVISIONAL) is OPEN awaiting Ed's merge.** Suite on main: 462 OK
-(skipped=10, ZERO expected failures); all 6 real corpus bundles pass
-`--strict` read-only. The 2M campaign (P2-006) is fully unblocked and
+D-035/D-036 (the ratified spike promotions). **PR #11 (2K NVIDIA fixture-first
+stack, all pins PROVISIONAL) MERGED 2026-07-08 under Ed's standing
+merge-with-review authorization — ALL FOUR STREAMS LANDED.** Suite on
+main: 546 OK (skipped=10, ZERO expected failures); all 6 real corpus
+bundles pass `--strict` read-only. The 2M campaign (P2-006) is fully unblocked and
 is the next machine-state-compatible task.
 
 **RESTART HERE:** read
 `docs/run_reports/2026-07-07-resume-merge-session.md` (product
 outcomes, review-pipeline yield table, restart steps). Short version:
-Ed merges PR #11 → remove `../jw-2k` → quiet-machine 2M campaign
-(P2-006) under the C-009 T5 no-agent lock.
+quiet-machine 2M campaign (P2-006) under the C-009 T5 no-agent lock
+(all merges done; no worktrees remain).
 
 ## Session History (pointers only — run reports own the narrative)
 
@@ -71,7 +71,7 @@ Per the C-009 meta-review consensus, RUN_STATE no longer stacks
 previous-run narratives. Recent sessions, newest first:
 
 - 2026-07-07/08 resume+merge (C-009 topology first full run; PRs
-  #8/#9/#10 merged, #11 open):
+  #8/#9/#10/#11 all merged):
   `docs/run_reports/2026-07-07-resume-merge-session.md`
 - 2026-07-07 PM checkpoint (multi-stream, C-008/C-009 + consensus):
   `docs/run_reports/2026-07-07-checkpoint-multistream-session.md`
@@ -85,38 +85,34 @@ previous-run narratives. Recent sessions, newest first:
 
 ## Current Verification
 
-- Merged main: `python3 -m unittest discover -s tests` → `Ran 462
+- Merged main: `python3 -m unittest discover -s tests` → `Ran 546
   tests, OK (skipped=10)` — ZERO expected failures (as of 2026-07-08,
-  after PRs #8/#9/#10).
+  after PRs #8/#9/#10/#11).
 - `validate-bundle --strict` green over all 6 real corpus bundles,
   read-only, unrewritten (incl. the new raw-to-trace gate).
 - CI: mock e2e + suite on both matrix legs, green on every PR head.
-- PR #11 branch: 545 OK incl. fake-e2e strict validation of a
+- The merged 2K stack includes fake-e2e strict validation of a
   provenance-carrying synthetic 2K bundle.
 
 ## Known Workspace State
 
 - `main` is pushed and current (through this session's bookkeeping).
-- ONE worktree remains deliberately: `../jw-2k` (PR #11 open). Remove
-  after it lands. (`../jw-p2013`, `../jw-doc007`, `../jw-spike301`
-  removed this session — branches merged.)
+- No worktrees remain (all four removed after their PRs merged).
 - `/tmp/jw-lead-verify/` holds disposable lead-verification artifacts.
 
 ## What Is Next
 
 Follow `TASK_QUEUE.md` (lane-annotated). In order:
 
-1. **Ed merges PR #11** [ED-EXTERNAL] (2K fixture-first; rebased,
-   integration-reviewed, merges clean). Then remove `../jw-2k`.
-2. **P2-006: the 2M two-model baseline campaign** [QUIET-MAC] — fully
+1. **P2-006: the 2M two-model baseline campaign** [QUIET-MAC] — fully
    unblocked; no-agent quiet lock per C-009 T5 (stop all fleets/Codex
    load first); corpus born under the fixed validator with prompt
    provenance.
-3. **P2-010 → P2-012 workload program** [AGENT] per Slice 2O gates
+2. **P2-010 → P2-012 workload program** [AGENT] per Slice 2O gates
    (D-034).
-4. **Ed's external one-pass** [ED-EXTERNAL]: calendar, device access,
+3. **Ed's external one-pass** [ED-EXTERNAL]: calendar, device access,
    borrow window, wall meter, backup destination (P0-003).
-5. **3.0.2 llama.cpp spike** [AGENT after R-003 approval]: reuses the
+4. **3.0.2 llama.cpp spike** [AGENT after R-003 approval]: reuses the
    3.0.1 harness shape (D-035/D-036) + its two deferred hardening fixes.
 
 Hardware-gated (unchanged): 2K/2L (P1-006), wall meter (P1-003),

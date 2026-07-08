@@ -35,7 +35,7 @@ authority per D-023 — this paragraph is a dated narrative, not a second
 status source): the Mac vertical slice is COMPLETE — 2G, 2H, and 2I all
 landed 2026-07-06 against the post-2N seams with no controller/bundle
 contract changes beyond the reviewed `AdapterFailure` channel, ending in
-three strict-valid real energy bundles on the M3 Max. Suite is 462 tests (as of 2026-07-08; the 31 audit pins were fixed and flipped by P2-013, PR #8 — zero expected failures)
+three strict-valid real energy bundles on the M3 Max. Suite is 546 tests (as of 2026-07-08; the 31 audit pins were fixed and flipped by P2-013 PR #8, and the fixture-first 2K stack merged as PR #11 — zero expected failures)
 (9 `[analysis]`-extra chart skips + 1 optional-jsonschema skip). See the
 matrix rows for what remains and its gates; code-level specs live in
 `docs/phase_2/hardware_slice_implementation_guide.md`.

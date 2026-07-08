@@ -180,3 +180,22 @@ NVIDIA) is open and integration-reviewed, awaiting Ed's merge.**
   (Opus orchestrator context, discarded at checkpoint); its adjudicated
   DISPOSITIONS survive in the checkpoint report §Stream D and were
   re-applied fresh (ledger D-9 on the doc007 branch).
+
+## Addendum (same session): PR #11 merged — all four streams landed
+
+Ed granted standing self-merge authority (condition: thorough lead + 5.5
+review of the final head; recorded in the lead's memory and global rule
+4, gate shape in operation-loop §5). Applied immediately to PR #11: a
+final fresh-eyes 5.5 review of the full diff — focused on the one
+commit that post-dated all prior review rounds — found 2 SHOULD-FIX + 1
+NIT (a probe-reproduced crash path in `_merge_adapter_metadata` on
+open-shaped adapter metadata; two checklist heredocs with invalid
+terminators despite the earlier argparse-only "parseability" check; the
+missing B-45 ledger entry). All fixed (B-45/B-46), lead-verified
+including the collision-shape probe, CI green, merged as `5669aa9`.
+**Final state: PRs #8/#9/#10/#11 all merged; main suite 546 OK
+(skipped=10, zero expected failures); no worktrees remain.** The
+final-head rule (no commit merges unreviewed, however small the tail)
+is folded into operation-loop §5; the validated lead-driven topology
+stamps are folded into operation-loop §2/§3 and multi-stream-worktrees
+§Topology.

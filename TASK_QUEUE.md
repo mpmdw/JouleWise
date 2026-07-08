@@ -81,7 +81,7 @@ its machine state, not the top task absolutely:
 | 7 | P1-004 | P1 Phase Gate | partial [ED-EXTERNAL] | Fill network/interconnect topology plan | Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section |
 | 8 | P1-006 | P1 Phase Gate | open [ED-EXTERNAL] | Confirm NVIDIA/Orin telemetry access paths | SSH/runtime/telemetry command evidence in the exit-checklist instrumentation section, or marked pending with blocker (gates slices 2K/2L) |
 | 9 | P2-004 | P2 Next Slice | partial (provisional small-model pick 2026-07-06 opens 2G; full closure gated P1-001) | Close model selection (D-016) | Decision-log entry: models, revisions, artifact paths, local mirror, fallback candidate. Mid-model pick, CUDA load, GGUF paths outstanding. |
-| 10 | P2-005 | P2 Next Slice | 2K fixture-first COMPLETE incl. review pipeline + integration review — PR #11 OPEN (awaits Ed); ALL protocol pins PROVISIONAL; live validation gated (P1-006, evidence script ready: `docs/phase_1/2k_live_verification_checklist.md`); 2L Orin open | Remote targets (slices 2K NVIDIA/vLLM/ssh, 2L Orin) | Remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide. |
+| 10 | P2-005 | P2 Next Slice | 2K fixture-first MERGED (PR #11, 2026-07-08); ALL protocol pins PROVISIONAL; live validation gated (P1-006, evidence script ready: `docs/phase_1/2k_live_verification_checklist.md`); 2L Orin open | Remote targets (slices 2K NVIDIA/vLLM/ssh, 2L Orin) | Remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide. |
 
 ## Completed Queue Items
 

@@ -867,3 +867,10 @@ B-44 with D-033 pressure intact; (4) K5's audit pin was adjudicated
 unsatisfiable-as-authored and corrected at equal assertion strength —
 the pin-correction protocol (STOP-and-report → lead ruling → sanctioned
 edit) worked as designed.
+
+Addendum (same session): PR #11 subsequently MERGED under Ed's new
+standing self-merge-with-review authorization; the final fresh-eyes
+pass over its post-review commit caught a real crash path + broken
+checklist snippets first (fixed as B-45/B-46) — validating the
+final-head rule now in operation-loop §5. All four streams landed;
+main suite 546 OK.
