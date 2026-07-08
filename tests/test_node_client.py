@@ -43,7 +43,7 @@ def valid_telemetry_task(task_id: str = "task-telemetry-idle-001") -> dict[str, 
         "task_id": task_id,
         "run_id": "run-loopback-001",
         "task_type": "telemetry",
-        "operation": "measure_idle",
+        "operation": "bogus_operation",
         "node_role": None,
         "paths": {"state_dir": ""},
         "telemetry": {
