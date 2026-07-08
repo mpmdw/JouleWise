@@ -508,6 +508,19 @@ incomplete bundles.
 
 Revisit when: never expected.
 
+Amendment (2026-07-07, P2-013 group 4, C-007 resolution 2): "schema-valid
+`summary_metrics.json`" is now enforced by ONE shared summary validator
+used by both `BundleReader.is_complete()` and default validation
+(`_check_summary`), with required keys per status: a `succeeded` summary
+must carry the headline energy fields present AND finite (audit finding
+B1 showed a status-only succeeded summary previously counted as complete
+and valid, hiding truncated metrics); token-derived and idle-subtracted
+metrics stay nullable; failed/unsupported summaries keep their looser
+per-status requirements. "Complete" therefore means "contains a summary
+that satisfies the per-status contract", not merely "parseable JSON
+object". Historical bundles are unaffected: real corpus summaries
+already carry the full field set.
+
 ---
 
 ## D-012: Failure-reason to run-status mapping
@@ -1322,6 +1335,15 @@ sides.
 Revisit when: a real telemetry backend cannot share one timestamp
 across rails at source (then the adapter grows an explicit, tested
 alignment step - still adapter-side, not reader-side).
+
+Amendment (2026-07-07, P2-013 group 4, C-007 resolution 4): the rail-set
+rule is extended to DUPLICATES — at any timestamp on the summed curve,
+each manifest rail must appear exactly once; a duplicate rail row at one
+timestamp (including the single-rail case) is rejected rather than
+summed, since silent double-counting is the same wrong-number failure
+mode as undersumming (audit finding B5). Enforcement stays in the one
+shared trace-validation path consumed by both `summed_curve()` and
+default validation, so all consumers inherit it identically (D-025).
 
 ---
 

@@ -96,7 +96,8 @@ Required behavior:
 
 - Report device metadata, including the rail manifest: the exact rail
   names whose per-timestamp sum defines the backend's canonical
-  `power_w` (D-018).
+  `power_w` (D-018). Rail manifest entries are strings; non-string entries
+  are rejected by the bundle reader rather than coerced.
 - Measure idle baseline.
 - Start power sampling.
 - Stop power sampling.
@@ -106,14 +107,17 @@ Required behavior:
 
 Rail-row timestamp contract (D-027, Slice 2N.4): one sample instant is
 one clock read, fanned out to one row per manifest rail, all carrying
-that instant's single `timestamp_s`. With a multi-rail manifest, a
+that instant's single `timestamp_s`. A manifest rail may appear at most
+once for a given timestamp; duplicate `(timestamp_s, rail)` rows are
+invalid, including single-rail manifests. With a multi-rail manifest, a
 timestamp carrying only a subset of the manifest rails is a
 misalignment: the shared bundle reader raises a structured failure (the
-reducer reports FAILED; the report omits the chart) rather than
-silently producing an interleaved, undersummed curve. An adapter whose
-hardware samples rails at genuinely different instants must
-resample/align to shared timestamps before emitting rows - alignment
-policy belongs to the adapter that knows its hardware.
+reducer reports FAILED; the report omits the chart) and default bundle
+validation reports the same trace-policy problem rather than silently
+producing an interleaved, undersummed, or double-counted curve. An
+adapter whose hardware samples rails at genuinely different instants
+must resample/align to shared timestamps before emitting rows -
+alignment policy belongs to the adapter that knows its hardware.
 
 Powermetrics NUL-framed plist parsing is lenient only for the final
 unparseable frame, and only after at least one complete frame parsed

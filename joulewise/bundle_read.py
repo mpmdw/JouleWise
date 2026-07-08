@@ -31,6 +31,7 @@ empty curve: consumers must not invent a fallback summation policy (2N.7).
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -59,6 +60,32 @@ EVENT_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
 
 _REQUIRED_ARTIFACTS = ("config.json", "metadata.json", "events.jsonl", "summary_metrics.json")
 _JSON_ARTIFACTS = ("config.json", "metadata.json", "summary_metrics.json")
+_SUMMARY_WRITER_KEYS_V0_1 = {
+    "status",
+    "energy_request_j",
+    "energy_token_j",
+    "energy_output_token_j",
+    "gross_energy_j",
+    "idle_subtracted_energy_j",
+    "ttft_s",
+    "decode_latency_s",
+    "throughput_tokens_s",
+    "idle_baseline",
+    "uncertainty",
+    "measurement_quality",
+    "phase_energy_j",
+    "failure_reason",
+    "failure_message",
+}
+_SUCCEEDED_FINITE_FIELDS = {"energy_request_j", "gross_energy_j"}
+_SUCCEEDED_NULLABLE_NUMBER_FIELDS = {
+    "energy_token_j",
+    "energy_output_token_j",
+    "idle_subtracted_energy_j",
+    "ttft_s",
+    "decode_latency_s",
+    "throughput_tokens_s",
+}
 
 
 class BundleReadError(Exception):
@@ -155,6 +182,11 @@ class BundleReader:
                     raise BundleReadError(
                         f"events.jsonl line {index + 1} is not a JSON object"
                     )
+                if set(record) != EVENT_KEYS:
+                    raise BundleReadError(
+                        f"events.jsonl line {index + 1} keys are "
+                        f"{sorted(record)}, expected {sorted(EVENT_KEYS)}"
+                    )
                 if not is_finite_number(record.get("timestamp_s")):
                     raise BundleReadError(
                         f"events.jsonl line {index + 1} timestamp_s is not a "
@@ -191,47 +223,11 @@ class BundleReader:
         """
         if "summed_curve" in self._cache:
             return self._cache["summed_curve"]
-        manifest = set(self.rail_manifest())
-        totals: dict[float, float] = {}
-        rails_at: dict[float, set[str]] = {}
-        for index, row in enumerate(self.trace_rows()):
-            rail = row.get("rail") or ""
-            if rail not in manifest:
-                continue
-            try:
-                timestamp_s = finite_float(
-                    row["timestamp_s"],
-                    f"power_trace.csv row {index + 2} timestamp_s",
-                )
-                power_w = finite_float(
-                    row["power_w"],
-                    f"power_trace.csv row {index + 2} power_w",
-                )
-            except (KeyError, TypeError, ValueError) as exc:
-                raise BundleReadError(
-                    f"power_trace.csv row {index + 2} is not finite numeric "
-                    f"(timestamp_s={row.get('timestamp_s')!r}, "
-                    f"power_w={row.get('power_w')!r})"
-                ) from exc
-            totals[timestamp_s] = totals.get(timestamp_s, 0.0) + power_w
-            rails_at.setdefault(timestamp_s, set()).add(rail)
-        if len(manifest) > 1:
-            misaligned = sorted(
-                t for t, rails in rails_at.items() if rails != manifest
-            )
-            if misaligned:
-                first = misaligned[0]
-                missing = sorted(manifest - rails_at[first])
-                raise BundleReadError(
-                    "power_trace.csv rail rows are misaligned (D-027): at "
-                    f"timestamp {first} rails {sorted(rails_at[first])} do not "
-                    f"match the manifest {sorted(manifest)} (missing "
-                    f"{missing}); per-rail rows for one sample instant must "
-                    f"share one timestamp ({len(misaligned)} misaligned "
-                    "timestamp(s) total)"
-                )
+        trace = _validate_trace_rows(self.trace_rows(), self.rail_manifest())
+        if trace.problems:
+            raise BundleReadError(trace.problems[0])
         self._cache["summed_curve"] = [
-            TracePoint(t=t, power_w=totals[t]) for t in sorted(totals)
+            TracePoint(t=t, power_w=trace.totals[t]) for t in sorted(trace.totals)
         ]
         return self._cache["summed_curve"]
 
@@ -248,8 +244,9 @@ class BundleReader:
         return self._tolerant_json("summary_metrics.json")
 
     def is_complete(self) -> bool:
-        """D-011: complete iff ``summary_metrics.json`` parses to an object."""
-        return self.raw_summary() is not None
+        """D-011: complete iff ``summary_metrics.json`` validates by status."""
+        summary = self.raw_summary()
+        return summary is not None and not _check_summary(summary)
 
     # ------------------------------------------------------------------
     # Interpretation policy
@@ -258,11 +255,10 @@ class BundleReader:
         """The telemetry adapter's rail manifest (D-018); ``[]`` when absent."""
         metadata = self.raw_metadata()
         if isinstance(metadata, dict):
-            device = metadata.get("device")
-            if isinstance(device, dict):
-                manifest = device.get("rail_manifest")
-                if isinstance(manifest, list):
-                    return [str(rail) for rail in manifest]
+            try:
+                return _rail_manifest_from_metadata(metadata)
+            except ValueError as exc:
+                raise BundleReadError(str(exc)) from exc
         return []
 
     def measured_window(self) -> Window | None:
@@ -365,6 +361,12 @@ class BundleReader:
             except SchemaError as exc:
                 problems.append(f"config.json does not re-validate: {exc}")
 
+        metadata = parsed.get("metadata.json")
+        if "metadata.json" in parsed and not isinstance(metadata, dict):
+            problems.append("metadata.json is not a JSON object")
+        if isinstance(metadata, dict):
+            problems.extend(_check_config_sha256(path, metadata))
+
         summary = parsed.get("summary_metrics.json")
         if summary is not None:
             problems.extend(_check_summary(summary))
@@ -372,7 +374,7 @@ class BundleReader:
         if "events.jsonl" not in missing:
             problems.extend(_check_events(path / "events.jsonl"))
 
-        problems.extend(_check_power_trace(path, summary))
+        problems.extend(_check_power_trace(path, summary, metadata))
 
         return problems
 
@@ -405,8 +407,52 @@ class BundleReader:
 # Structural check helpers (validate-bundle policy details)
 
 
+@dataclass(frozen=True)
+class _TraceValidation:
+    totals: dict[float, float]
+    problems: list[str]
+
+
+def _check_config_sha256(path: Path, metadata: dict[str, Any]) -> list[str]:
+    expected = metadata.get("config_sha256")
+    if expected is None:
+        return ["metadata.config_sha256 is missing"]
+    if not isinstance(expected, str):
+        return [f"metadata.config_sha256 is not a string: {expected!r}"]
+    try:
+        actual = hashlib.sha256((path / "config.json").read_bytes()).hexdigest()
+    except FileNotFoundError:
+        return []
+    except OSError as exc:
+        return [f"config.json cannot be read for config_sha256 validation: {exc}"]
+    if actual != expected:
+        return [
+            "metadata.config_sha256 mismatch: "
+            f"metadata has {expected!r}, config.json bytes hash to {actual!r}"
+        ]
+    return []
+
+
+def _rail_manifest_from_metadata(metadata: dict[str, Any]) -> list[str]:
+    device = metadata.get("device")
+    if not isinstance(device, dict):
+        return []
+    manifest = device.get("rail_manifest")
+    if manifest is None:
+        return []
+    if not isinstance(manifest, list):
+        raise ValueError("metadata.device.rail_manifest is not a list")
+    for index, rail in enumerate(manifest):
+        if not isinstance(rail, str):
+            raise ValueError(
+                "metadata.device.rail_manifest entry "
+                f"{index} is not a string: {rail!r}"
+            )
+    return manifest
+
+
 def _check_summary(summary: Any) -> list[str]:
-    """Status is a valid RunStatus; failure_reason consistency (D-012 shape)."""
+    """Shared summary validity policy used by validation and completion."""
     if not isinstance(summary, dict):
         return ["summary_metrics.json is not a JSON object"]
     problems: list[str] = []
@@ -430,7 +476,73 @@ def _check_summary(summary: Any) -> list[str]:
         problems.append(
             f"summary status is succeeded but carries failure_reason {raw_reason!r}"
         )
+    if status == RunStatus.SUCCEEDED:
+        missing = sorted(_SUMMARY_WRITER_KEYS_V0_1 - set(summary))
+        for key in missing:
+            problems.append(f"summary status is succeeded but {key} is missing")
+        for key in sorted(_SUCCEEDED_FINITE_FIELDS):
+            value = summary.get(key)
+            if not is_finite_number(value):
+                problems.append(
+                    f"summary status is succeeded but {key} is not a finite "
+                    f"number: {value!r}"
+                )
+        for key in sorted(_SUCCEEDED_NULLABLE_NUMBER_FIELDS):
+            value = summary.get(key)
+            if value is not None and not is_finite_number(value):
+                problems.append(
+                    f"summary status is succeeded but nullable numeric field "
+                    f"{key} is not null or finite: {value!r}"
+                )
     return problems
+
+
+def _validate_trace_rows(rows: list[dict[str, str]], manifest: list[str]) -> _TraceValidation:
+    manifest_set = set(manifest)
+    totals: dict[float, float] = {}
+    rails_at: dict[float, set[str]] = {}
+    seen: set[tuple[float, str]] = set()
+    problems: list[str] = []
+    for index, row in enumerate(rows, start=2):
+        rail = row.get("rail") or ""
+        if rail not in manifest_set:
+            continue
+        try:
+            timestamp_s = finite_float(
+                row.get("timestamp_s"),
+                f"power_trace.csv row {index} timestamp_s",
+            )
+            power_w = finite_float(
+                row.get("power_w"),
+                f"power_trace.csv row {index} power_w",
+            )
+        except ValueError as exc:
+            problems.append(str(exc))
+            continue
+        key = (timestamp_s, rail)
+        if key in seen:
+            problems.append(
+                "power_trace.csv has duplicate rail row at timestamp "
+                f"{timestamp_s}: rail {rail!r} appears more than once"
+            )
+            continue
+        seen.add(key)
+        totals[timestamp_s] = totals.get(timestamp_s, 0.0) + power_w
+        rails_at.setdefault(timestamp_s, set()).add(rail)
+    if len(manifest_set) > 1:
+        misaligned = sorted(t for t, rails in rails_at.items() if rails != manifest_set)
+        if misaligned:
+            first = misaligned[0]
+            missing = sorted(manifest_set - rails_at[first])
+            problems.append(
+                "power_trace.csv rail rows are misaligned (D-027): at "
+                f"timestamp {first} rails {sorted(rails_at[first])} do not "
+                f"match the manifest {sorted(manifest_set)} (missing "
+                f"{missing}); per-rail rows for one sample instant must "
+                f"share one timestamp ({len(misaligned)} misaligned "
+                "timestamp(s) total)"
+            )
+    return _TraceValidation(totals=totals, problems=problems)
 
 
 def _check_events(events_path: Path) -> list[str]:
@@ -483,7 +595,7 @@ def _check_events(events_path: Path) -> list[str]:
     return problems
 
 
-def _check_power_trace(path: Path, summary: Any) -> list[str]:
+def _check_power_trace(path: Path, summary: Any, metadata: Any) -> list[str]:
     """power_trace.csv is required for succeeded runs, optional otherwise;
     whenever present, its header must be exactly the D-018 header."""
     trace_path = path / "power_trace.csv"
@@ -506,15 +618,25 @@ def _check_power_trace(path: Path, summary: Any) -> list[str]:
             f"{','.join(header)!r}, expected {POWER_TRACE_HEADER!r}"
         ]
     problems: list[str] = []
+    manifest: list[str] = []
+    if isinstance(metadata, dict):
+        try:
+            manifest = _rail_manifest_from_metadata(metadata)
+        except ValueError as exc:
+            problems.append(str(exc))
     try:
         with trace_path.open(newline="") as handle:
             reader = csv.DictReader(handle)
-            for index, row in enumerate(reader, start=2):
-                for field in ("timestamp_s", "power_w"):
-                    try:
-                        finite_float(row.get(field), f"power_trace.csv row {index} {field}")
-                    except ValueError as exc:
-                        problems.append(str(exc))
+            rows = list(reader)
     except OSError as exc:
         return [f"power_trace.csv cannot be read: {exc}"]
+    if manifest:
+        problems.extend(_validate_trace_rows(rows, manifest).problems)
+    else:
+        for index, row in enumerate(rows, start=2):
+            for field in ("timestamp_s", "power_w"):
+                try:
+                    finite_float(row.get(field), f"power_trace.csv row {index} {field}")
+                except ValueError as exc:
+                    problems.append(str(exc))
     return problems

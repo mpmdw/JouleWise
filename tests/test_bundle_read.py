@@ -94,7 +94,8 @@ class StrictAccessorTests(ReaderTestCase):
     def test_malformed_event_line_is_structured_read_error(self) -> None:
         writer = self.make_bundle("bad-events")
         (writer.path / "events.jsonl").write_text(
-            '{"timestamp_s": 1.0}\nnot json\n'
+            '{"timestamp_s": 1.0, "event_type": "token", "phase": '
+            '"measured_run", "message": "", "metadata": {}}\nnot json\n'
         )
         with self.assertRaises(BundleReadError) as ctx:
             BundleReader(writer.path).events()
@@ -105,11 +106,26 @@ class StrictAccessorTests(ReaderTestCase):
         # non-finite timestamps must become BundleReadError, never a raw
         # ValueError/TypeError from a float() cast downstream.
         cases = [
-            ("nonnumeric", '{"timestamp_s": "not-a-number"}\n'),
-            ("missing", '{"event_type": "token"}\n'),
-            ("bool", '{"timestamp_s": true}\n'),
-            ("nonfinite", '{"timestamp_s": Infinity}\n'),
-            ("nan", '{"timestamp_s": NaN}\n'),
+            (
+                "nonnumeric",
+                '{"timestamp_s": "not-a-number", "event_type": "token", '
+                '"phase": "measured_run", "message": "", "metadata": {}}\n',
+            ),
+            (
+                "bool",
+                '{"timestamp_s": true, "event_type": "token", '
+                '"phase": "measured_run", "message": "", "metadata": {}}\n',
+            ),
+            (
+                "nonfinite",
+                '{"timestamp_s": Infinity, "event_type": "token", '
+                '"phase": "measured_run", "message": "", "metadata": {}}\n',
+            ),
+            (
+                "nan",
+                '{"timestamp_s": NaN, "event_type": "token", '
+                '"phase": "measured_run", "message": "", "metadata": {}}\n',
+            ),
         ]
         for label, line in cases:
             writer = self.make_bundle(f"bad-ts-{label}")
@@ -132,10 +148,10 @@ class CompletionStateTests(ReaderTestCase):
         writer = self.make_bundle("incomplete")
         self.assertFalse(BundleReader(writer.path).is_complete())
 
-    def test_bundle_with_summary_is_complete(self) -> None:
+    def test_status_only_succeeded_summary_is_incomplete(self) -> None:
         writer = self.make_bundle("complete")
         (writer.path / "summary_metrics.json").write_text('{"status": "succeeded"}')
-        self.assertTrue(BundleReader(writer.path).is_complete())
+        self.assertFalse(BundleReader(writer.path).is_complete())
 
     def test_corrupt_summary_is_incomplete_and_tolerant_none(self) -> None:
         writer = self.make_bundle("corrupt-summary")
