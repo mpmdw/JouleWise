@@ -713,7 +713,10 @@ reopened. (Amendment 2026-07-08, D-042 — owner directive: the
 IMPLEMENTATION lane is reopened; P2-010a/b, P2-012 phase-1, and P2-020
 content build may proceed [AGENT] pre-2M. Campaign EXECUTION ordering,
 the quiet-machine clause, the minimal-substrate cap, and the drop-order
-below are unchanged.) STOP-LINE - until Window A + 2M are strict-valid and reduced:
+below are unchanged.) (Amendment 2026-07-08: that build LANDED same day —
+substrate + affine core + generator engine merged as PRs #17-#20 under
+D-044..D-047; remaining suite work is the envelope-gate script,
+real-tokenizer manifests, and the campaigns, per TASK_QUEUE.) STOP-LINE - until Window A + 2M are strict-valid and reduced:
 no suite/import/export work consumes quiet-machine time, no new benchmark
 campaign is scheduled, and P2-010a stays within minimal substrate. Under
 schedule pressure, drop P2-022/P2-023, imports, FLORES, q4 grid, and

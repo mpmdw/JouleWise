@@ -5,8 +5,10 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-08 (site observatory frontend merged as PR #13;
-  critique second-pass reassessment recorded with lead fact-check)
+- Last updated: 2026-07-08 (workload suite BUILT and merged: generic
+  suite substrate + affine smoke ladder + jw_mixed/sentinel generator
+  engine, PRs #17-#20, suite 732 tests; adjudicated decisions
+  D-044..D-047; live-verified on real MLX)
 - Project phase: Phase 1 closing; Phase 2 in progress - instrument
   CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
   are complete; the two-model baseline matrix is the next Mac corpus step
@@ -18,7 +20,7 @@ are provided for anyone who wants the full evidence trail.
 
 **Everything landed.** The multi-stream session merged as four PRs:
 P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
-617 tests with 10 skips and zero expected failures (as of 2026-07-08; current-count authority is RUN_STATE.md Current Verification), bundle provenance
+732 tests with 10 skips and zero expected failures (as of 2026-07-08; current-count authority is RUN_STATE.md Current Verification), bundle provenance
 now records prompt/workload identities, and `validate-bundle --strict`
 includes the powermetrics raw-plist-to-trace gate plus the legacy
 additive-summary comparison. The six existing real corpus bundles pass
@@ -147,7 +149,7 @@ recorded in the Phase 2 plan.
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation); suite-science hardening + expansion MERGED 2026-07-08 (analysis-plans contract D-038, Q4 L3 grid design, drift sentinels, Window-A capture covariates, suite architecture v2 + benchmark-interop direction, capability map — see the research-questions pointer above) — 2M baselines are fully tooled and covariate-complete; 2K fixture-first implementation is MERGED (2026-07-08) with ALL protocol pins PROVISIONAL pending live hardware validation; 2L gated on device access |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation); suite-science hardening + expansion MERGED 2026-07-08 (analysis-plans contract D-038, Q4 L3 grid design, drift sentinels, Window-A capture covariates, suite architecture v2 + benchmark-interop direction, capability map — see the research-questions pointer above); the WORKLOAD SUITE ITSELF is now BUILT and MERGED (2026-07-08, PRs #17-#20: generic suite substrate with one-manifest/marker/window mechanism, mock+MLX suite execution, affine_mod_ladder_v1 core + smoke manifest, six jw_mixed_v1 category generators + five content-sentinel conditions; adjudicated pins D-044..D-047; live-verified on real Apple-Silicon MLX) — 2M baselines are fully tooled and covariate-complete; 2K fixture-first implementation is MERGED (2026-07-08) with ALL protocol pins PROVISIONAL pending live hardware validation; 2L gated on device access |
 | 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
@@ -180,7 +182,7 @@ Complete so far (all verifiable in the repository):
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (617 tests, 10 skipped, zero expected
+  a CLI, plus a passing test suite (732 tests, 10 skipped, zero expected
   failures, run in CI on every push, including a mock end-to-end run +
   bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
@@ -453,7 +455,7 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (617 tests, 10 skipped, zero expected failures, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (732 tests, 10 skipped, zero expected failures, CI-enforced) |
 
 ## Process Note
 

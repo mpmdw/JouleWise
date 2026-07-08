@@ -772,7 +772,7 @@ Lead-call outcomes:
 | C2 | accept | E1's 5% gate at 8 distinct items means zero tolerated failures per level. | D-047.3 |
 | C3 | accept-amended | E5 is advisory and expected `not_evaluable` at smoke sizing. | D-047.4 |
 | C4 | accept | E2/E3 are empirical guards, not by-construction invariants. | D-047 |
-| C5 | accept | Smoke is k=24 distinct items; full ladder k=112 plus sentinels needs campaign ratification. | D-047.2 |
+| C5 | accept | Smoke is k=24 distinct items; full ladder k=112 plus sentinels needs campaign ratification. (Amended same day: dedicated sentinel item makes it k=25 distinct/26 executions — D-047.2 amendment, ledger AFF-1.) | D-047.2 |
 | C6 | accept-amended | Response text is ratified in `outputs/suite_items.jsonl`; no raw-file spray. | D-045.8 |
 | C7 | accept | Threshold defense re-anchors on the first smoke bundle's measured level-window energy. | D-047.7 |
 | C8 | accept | AP-5 predeclares malformed-as-incorrect in scored-campaign accuracy. | D-047.6 |

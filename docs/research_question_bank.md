@@ -515,6 +515,9 @@ claims from modeled rails, no general intelligence-per-joule, claim
 wording "on this M3 Max / MLX / powermetrics" until a second unit or lab
 exists, and present-tense capability claims only for landed code (P2-010 scored suite is QUEUED,
 not landed (D-014/P2-011 aggregation and P2-009 telemetry LANDED 2026-07-07)).
+(Amendment 2026-07-08: the P2-010 substrate + affine core + generator
+engine are now LANDED (PRs #17-#20, D-044..D-047); still not landed:
+envelope-gate script, real-tokenizer manifests, all suite campaigns.)
 
 ## Why this instrument matters (steelman preamble, examiner-scoped)
 
@@ -577,7 +580,8 @@ referee is the contribution.
 Landed software (P2-009 rich telemetry, P2-011 uncertainty
 aggregation, 2M campaign tooling — all 2026-07-07) is available;
 queued software (P2-010 scored suite) is assumed where noted; no new
-hardware. Throughput reality: ~30-75 bundles/hour makes n=10-20 designs
+hardware. (Amendment 2026-07-08: the suite substrate/ladder-core/
+generators are landed, PRs #17-#20; campaign execution still pending.) Throughput reality: ~30-75 bundles/hour makes n=10-20 designs
 cheap.
 
 - **C5-1.1 Active-parameter energy scaling (the honest version of the

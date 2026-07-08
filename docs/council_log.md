@@ -51,6 +51,7 @@ standing instructions.
 | C-014 | 2026-07-08 | Workload-suite science hardening (full entry below) — lead audit + scout + 3 design lenses + invited peer counterreview | Q4-at-L3 gap closed via `q4_l3_shape_grid_v1` (4x3 + holdouts); P2-015 expanded to comparative MDE floors; jw_mixed common-shape stratum (C-W.1 was unfalsifiable); P2-010 split substrate/smoke, scored ladder deferred; two-quiet-window plan; analysis-plans contract (D-038); program restructure (D-039); two lead designs overturned by invited peer |
 | C-015 | 2026-07-08 | Benchmark expansion council (full entry below) — reach lenses R1/R2 + design lenses E1/E2 + peer counterreview | Suite architecture v2 (D-040: B×k bundles, one generic mechanism, per-item status model); interop direction (D-041: HumanEval-first imports, marker-shim energy layer, kill list); capability map landed in bank; R2 collect-now set spawned the window-a-capture stream; capstone stop-line + D-034 gate restated |
 | C-016 | 2026-07-08 | Post-large-workload meta-reassessment (pointer entry; records: D-043, `~/.claude/skills/skill-usage-log.md`, run report addendum) — 4 analysts (council/decision/skill mining + cold-start derivability) + completeness critic, Workflow-orchestrated | Supersession drift named as THE recurring unfolded failure mode (~70% of doc defects) → D-043 write-time + sweep-time discipline; operative merge-authority contradiction fixed; 5 skill divergences fixed; codex-delegation rewritten procedure-first; clean-machine derivability closed (scripts/codex-run committed + orchestration.md pointer map); §10 post-large-workload trigger now standing |
+| C-017 | 2026-07-08 | Suite-build adjudication + implementation gates (full entry below) — Codex disposition draft + fresh adversarial round + lead calls; 11 unit lenses + 1 Opus outage substitute + 7-reviewer oversight + 3 final-head + integration | 37 amendments dispositioned → D-044..D-047; substrate/ladder/generators BUILT and merged (PRs #17/#18/#20/#19, suite 732); 3 lead live-only catches (refs, strict rollup, sampler namespace); oversight caught 2 validation holes pre-merge; PR #18 base-retarget slip recovered via #20 |
 
 ---
 
@@ -1072,3 +1073,37 @@ constants inside the hashed effective manifest (D-044/D-045.3), and an
 additive per-item `prompt_token_ids` source added for ids-native
 sentinels (D-045.5/D-046). Dispositions for all 37 research-report
 amendments: suite_implementation_research.md §Adjudication.
+
+## C-017: Suite-build adjudication + implementation gates (2026-07-08)
+
+Shape: Codex disposition draft over the 37 unresolved research-doc
+amendments (invited design judgment, 8 argued lead calls) → lead
+decisions → fresh Codex adversarial round on the decision batch →
+implementation in 3 streams (substrate 3 units; affine; generators) each
+with 2-3 fresh lenses + fix rounds → 1 Opus fresh-eyes substitute during
+a Codex quota outage → 7-reviewer pre-merge oversight → 3 final-head
+passes → post-merge integration review. Full narrative + per-layer catch
+rows: `docs/run_reports/2026-07-08-suite-build.md` (process trace
+appendix).
+
+Genuine deliberations (positions moved): A3 manifest identity — lead
+proposed raw-file-bytes hash, counterreview AMENDED to the canonical
+EFFECTIVE-manifest hash (defaults inside identity; accepted, D-044); B5
+BOS parity — lead DEVIATED from the draft's BOS-normalize
+recommendation to ids-native-all-five (control must remain the incumbent
+stream byte-for-byte); attack sustained with a binding
+non-generalization caveat (D-046). Affine sentinel redesign: lens caught
+that tag-forced duplication corrupted level denominators; lead chose the
+dedicated-sentinel-item shape over relaxing SUB-1 (D-047.2 amendment,
+k=25/26).
+
+Layer yield (unique catches): lead live gates 3 (all
+integration-reality class: cwd refs, strict rollup provenance, sampler
+API namespace — invisible to 680+ unit tests and 9 lenses); oversight
+10+ (incl. two validation holes: tamperable rollup digest,
+vanishing group markers); unit lenses ~20; Opus substitute 1 major
+(tokenize-window bracketing, FakeClock-blind); adversarial adjudication
+round 4 (effective-hash identity gap the standout); integration 0
+(clean). Process slip recorded: PR #18 merged into its stacked base
+(retarget missed); recovered same session via promotion PR #20; lesson
+folded into multi-stream-worktrees skill.
