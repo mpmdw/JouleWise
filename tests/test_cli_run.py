@@ -629,6 +629,52 @@ class StrictValidateTests(CliRunTestCase):
             problems,
         )
 
+    def test_new_summary_wrong_prompt_hash_domain_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-wrong-prompt-domain")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["prompt"]["token_hash_domain"] = (
+            "joulewise.prompt_token_ids.v2"
+        )
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("prompt.token_hash_domain" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_missing_generator_block_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-missing-generator")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"].pop("generator")
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("workload_provenance.generator" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_malformed_prompt_hash_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-malformed-prompt-hash")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["prompt"]["token_ids_sha256"] = "A" * 64
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("prompt.token_ids_sha256" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_null_present_model_source_passes_strict(self) -> None:
+        bundle = self.make_bundle("strict-null-model-source")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["model"]["source"] = None
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
 
 class ReduceVerbTests(CliRunTestCase):
     """Slice 2N.6 (D-028): post-hoc re-reduction of an existing bundle."""

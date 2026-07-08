@@ -21,7 +21,6 @@ from joulewise.clock import FakeClock
 from joulewise.cli import validate_bundle
 from joulewise.controller import run_benchmark
 from joulewise.provenance import (
-    PROMPT_TOKEN_IDS_HASH_DOMAIN,
     prompt_provenance,
     prompt_token_ids_sha256,
 )
@@ -184,7 +183,7 @@ class ProvenanceHashAmplification(unittest.TestCase):
         token_ids = [0, 2**63, 17, 2**31 + 123]
         canonical = json.dumps(token_ids, separators=(",", ":"), sort_keys=True)
         expected = hashlib.sha256(
-            (PROMPT_TOKEN_IDS_HASH_DOMAIN + "\0" + canonical).encode("utf-8")
+            ("joulewise.prompt_token_ids.v1" + "\0" + canonical).encode("utf-8")
         ).hexdigest()
 
         self.assertEqual(prompt_token_ids_sha256(token_ids), expected)

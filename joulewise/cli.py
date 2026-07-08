@@ -47,6 +47,8 @@ from joulewise.schemas import (
 )
 from joulewise.validation import finite_float
 
+_PROMPT_TOKEN_IDS_HASH_DOMAIN = "joulewise.prompt_token_ids.v1"
+
 
 def _load_config(path: Path) -> dict[str, Any]:
     if path.suffix.lower() != ".json":
@@ -322,23 +324,58 @@ def _strict_workload_provenance_problems(
         if not _is_sha256_hex(token_hash):
             problems.append(
                 "strict: metadata.workload_provenance.prompt.token_ids_sha256 "
-                "is missing or not a SHA-256 hex string"
+                "is missing or not a lowercase SHA-256 hex string"
             )
         domain = prompt.get("token_hash_domain")
-        if not isinstance(domain, str) or not domain:
+        if domain != _PROMPT_TOKEN_IDS_HASH_DOMAIN:
             problems.append(
                 "strict: metadata.workload_provenance.prompt.token_hash_domain "
-                "is missing or not a string"
+                f"is not {_PROMPT_TOKEN_IDS_HASH_DOMAIN!r}"
             )
-    if not isinstance(workload.get("tokenizer"), dict):
-        problems.append(
-            "strict: metadata.workload_provenance.tokenizer is missing or not an object"
+    problems.extend(
+        _strict_required_object_keys(
+            workload,
+            "generator",
+            ("name", "version"),
         )
-    if not isinstance(workload.get("output_policy"), dict):
-        problems.append(
-            "strict: metadata.workload_provenance.output_policy is missing or not an object"
+    )
+    problems.extend(
+        _strict_required_object_keys(
+            workload,
+            "tokenizer",
+            ("backend", "identifier", "class"),
         )
+    )
+    problems.extend(
+        _strict_required_object_keys(
+            workload,
+            "model",
+            ("source", "revision"),
+        )
+    )
+    problems.extend(
+        _strict_required_object_keys(
+            workload,
+            "output_policy",
+            ("name", "requested_tokens", "emitted_tokens", "stop_condition"),
+        )
+    )
     return problems
+
+
+def _strict_required_object_keys(
+    workload: dict[str, Any], block_name: str, required_keys: tuple[str, ...]
+) -> list[str]:
+    block = workload.get(block_name)
+    path = f"metadata.workload_provenance.{block_name}"
+    if not isinstance(block, dict):
+        return [f"strict: {path} is missing or not an object"]
+    missing = [key for key in required_keys if key not in block]
+    if not missing:
+        return []
+    return [
+        f"strict: {path} is missing required key(s): {', '.join(missing)}"
+    ]
 
 
 def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
@@ -429,7 +466,7 @@ def _validated_config_telemetry_backend(reader: BundleReader) -> TelemetryBacken
 def _is_sha256_hex(value: Any) -> bool:
     if not isinstance(value, str) or len(value) != 64:
         return False
-    return all(char in "0123456789abcdefABCDEF" for char in value)
+    return all(char in "0123456789abcdef" for char in value)
 
 
 def _cmd_validate_bundle(args: argparse.Namespace) -> int:

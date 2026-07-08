@@ -110,30 +110,40 @@ class StrictAccessorTests(ReaderTestCase):
                 "nonnumeric",
                 '{"timestamp_s": "not-a-number", "event_type": "token", '
                 '"phase": "measured_run", "message": "", "metadata": {}}\n',
+                "timestamp_s is not a finite number",
+            ),
+            (
+                "missing-timestamp_s",
+                '{"event_type": "token", "phase": "measured_run", '
+                '"message": "", "metadata": {}}\n',
+                "keys are",
             ),
             (
                 "bool",
                 '{"timestamp_s": true, "event_type": "token", '
                 '"phase": "measured_run", "message": "", "metadata": {}}\n',
+                "timestamp_s is not a finite number",
             ),
             (
                 "nonfinite",
                 '{"timestamp_s": Infinity, "event_type": "token", '
                 '"phase": "measured_run", "message": "", "metadata": {}}\n',
+                "timestamp_s is not a finite number",
             ),
             (
                 "nan",
                 '{"timestamp_s": NaN, "event_type": "token", '
                 '"phase": "measured_run", "message": "", "metadata": {}}\n',
+                "timestamp_s is not a finite number",
             ),
         ]
-        for label, line in cases:
+        for label, line, expected in cases:
             writer = self.make_bundle(f"bad-ts-{label}")
             (writer.path / "events.jsonl").write_text(line)
             with self.subTest(label=label):
                 with self.assertRaises(BundleReadError) as ctx:
                     BundleReader(writer.path).events()
-                self.assertIn("timestamp_s is not a finite number", str(ctx.exception))
+                self.assertIn(expected, str(ctx.exception))
 
     def test_valid_bundle_parses_config_and_metadata(self) -> None:
         writer = self.make_bundle("valid")
