@@ -262,6 +262,9 @@ class _Execution:
         self._environment: dict[str, Any] | None = None
         self._device_metadata: dict[str, Any] | None = None
         self._prepare_metadata: dict[str, Any] | None = None
+        self._telemetry_metadata: dict[str, Any] | None = None
+        self._runtime_alignments: list[dict[str, Any]] = []
+        self._telemetry_alignments: list[dict[str, Any]] = []
         self._baseline: IdleBaseline | None = None
         self._thermal_pre: ThermalState | None = None
         self._thermal_post: ThermalState | None = None
@@ -361,6 +364,7 @@ class _Execution:
         result = self._runtime.prepare(self._config, self._context)
         self._check(result, "prepare", "runtime prepare failed")
         self._prepare_metadata = dict(result.metadata)
+        self._capture_adapter_alignments()
         self._log(self._runtime_log, "runtime prepare succeeded")
         self._complete_stage("prepare")
 
@@ -368,6 +372,8 @@ class _Execution:
         self._begin_stage("idle_baseline")
         assert self._telemetry is not None
         self._baseline = self._telemetry.measure_idle(self._config, self._context)
+        self._capture_adapter_alignments()
+        self._capture_adapter_metadata()
         self._log(
             self._telemetry_log,
             f"idle baseline: mean {self._baseline.power_w_mean} W over "
@@ -388,6 +394,7 @@ class _Execution:
         for index in range(warmup_runs):
             result = self._runtime.warmup(self._config, self._context)
             self._check(result, "warmup", f"runtime warmup run {index} failed")
+            self._capture_adapter_alignments()
         self._log(self._runtime_log, f"completed {warmup_runs} warmup run(s)")
         self._complete_stage("warmup", {"warmup_runs": warmup_runs})
 
@@ -396,7 +403,10 @@ class _Execution:
         assert self._runtime is not None and self._telemetry is not None
         self._thermal_pre = self._telemetry.thermal_state(self._config, self._context)
         start_result = self._telemetry.start_sampling(self._config, self._context)
+        self._telemetry_metadata = dict(start_result.metadata)
         self._check(start_result, "measured_run", "telemetry start_sampling failed")
+        self._capture_adapter_alignments()
+        self._capture_adapter_metadata()
         self._sampling_active = True
         # D-026: the measured window the reducer integrates is bounded by the
         # sampling_started/sampling_stopped marker events, not the stage
@@ -411,12 +421,15 @@ class _Execution:
         # controller only blocks on the runtime - no file writes, no disk event
         # appends, no logging (buffers flush after the window).
         runtime_result = self._runtime.run_workload(self._config, self._context)
+        self._capture_adapter_alignments()
         # The stop marker's timestamp is captured before stop_sampling so the
         # sampler's wind-down (process stop, plist parsing) stays outside the
         # window; the event itself is appended after the runtime events so the
         # stable flush-sort keeps it bracketing them.
         sampling_stopped_s = self._clock.now()
         self._samples = self._telemetry.stop_sampling(self._config, self._context)
+        self._capture_adapter_alignments()
+        self._capture_adapter_metadata()
         self._sampling_active = False
         self._runtime_result = runtime_result
         self._thermal_post = self._telemetry.thermal_state(self._config, self._context)
@@ -453,6 +466,7 @@ class _Execution:
         metadata: dict[str, Any] = {"cleanup_ok": True}
         try:
             result = self._runtime.cleanup(self._config, self._context)
+            self._capture_adapter_alignments()
         except Exception as exc:  # noqa: BLE001 - best-effort cleanup
             metadata = {
                 "cleanup_ok": False,
@@ -538,6 +552,7 @@ class _Execution:
         )
         try:
             self._samples = self._telemetry.stop_sampling(self._config, self._context)
+            self._capture_adapter_alignments()
         except Exception:  # noqa: BLE001 - evidence salvage must not mask the failure
             self._log(
                 self._controller_log,
@@ -550,6 +565,7 @@ class _Execution:
             return
         try:
             result = self._runtime.cleanup(self._config, self._context)
+            self._capture_adapter_alignments()
         except Exception:  # noqa: BLE001 - best-effort cleanup must not mask the failure
             self._log(
                 self._controller_log,
@@ -599,8 +615,18 @@ class _Execution:
                 "name": self._runtime.name,
                 "prepare_metadata": self._prepare_metadata or {},
             }
+            if self._runtime_result is not None and self._runtime_result.metadata:
+                _merge_adapter_metadata(
+                    adapters["runtime"], self._runtime_result.metadata
+                )
+            if self._runtime_alignments:
+                adapters["runtime"]["clock_alignments"] = _jsonable(self._runtime_alignments)
         if self._telemetry is not None:
             adapters["telemetry"] = {"name": self._telemetry.name}
+            if self._telemetry_metadata:
+                _merge_adapter_metadata(adapters["telemetry"], self._telemetry_metadata)
+            if self._telemetry_alignments:
+                adapters["telemetry"]["clock_alignments"] = _jsonable(self._telemetry_alignments)
         extra["adapters"] = adapters
         if self._baseline is not None:
             extra["idle_baseline"] = _jsonable(asdict(self._baseline))
@@ -625,6 +651,15 @@ class _Execution:
             extra["extra"] = _jsonable(self._extra_metadata)
         self._writer.write_metadata(extra)
         self._metadata_written = True
+
+    def _capture_adapter_alignments(self) -> None:
+        self._runtime_alignments = _adapter_clock_alignments(self._runtime)
+        self._telemetry_alignments = _adapter_clock_alignments(self._telemetry)
+
+    def _capture_adapter_metadata(self) -> None:
+        telemetry_metadata = _adapter_metadata(self._telemetry)
+        if telemetry_metadata:
+            self._telemetry_metadata = telemetry_metadata
 
     # ------------------------------------------------------------------
     # Summaries
@@ -782,6 +817,50 @@ def _within_tolerance(value: float, reference: float, tolerance: float) -> bool:
     match (a degenerate baseline that cannot meaningfully define a 10% band).
     """
     return abs(value - reference) <= tolerance * abs(reference)
+
+
+def _adapter_clock_alignments(adapter: Any) -> list[dict[str, Any]]:
+    if adapter is None:
+        return []
+    getter = getattr(adapter, "clock_alignments", None)
+    if not callable(getter):
+        return []
+    try:
+        alignments = getter()
+    except Exception:  # noqa: BLE001 - metadata capture must not disturb lifecycle.
+        return []
+    if not isinstance(alignments, list):
+        return []
+    return [dict(item) for item in alignments if isinstance(item, dict)]
+
+
+def _adapter_metadata(adapter: Any) -> dict[str, Any]:
+    if adapter is None:
+        return {}
+    getter = getattr(adapter, "metadata", None)
+    if not callable(getter):
+        return {}
+    try:
+        metadata = getter()
+    except Exception:  # noqa: BLE001 - metadata capture must not disturb lifecycle.
+        return {}
+    if not isinstance(metadata, dict):
+        return {}
+    return dict(metadata)
+
+
+def _merge_adapter_metadata(target: dict[str, Any], metadata: dict[str, Any]) -> None:
+    for key, value in _jsonable(metadata).items():
+        if key in target:
+            collision_metadata = target.get("metadata")
+            if not isinstance(collision_metadata, dict):
+                collision_metadata = {}
+                if "metadata" in target:
+                    collision_metadata["metadata"] = target["metadata"]
+                target["metadata"] = collision_metadata
+            collision_metadata[key] = value
+        else:
+            target[key] = value
 
 
 # ---------------------------------------------------------------------------

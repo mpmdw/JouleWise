@@ -479,8 +479,20 @@ class RegistryTests(unittest.TestCase):
         self.assert_exactly_one((adapter, failure))
         self.assertEqual(adapter.name, "mlx")
 
+    def test_resolves_vllm_runtime_adapter(self) -> None:
+        config = make_config(
+            hardware_target={
+                "transport": "ssh",
+                "host": "node.example",
+                "runtime_backend": "vllm",
+            }
+        )
+        adapter, failure = resolve_runtime(config, self.clock)
+        self.assert_exactly_one((adapter, failure))
+        self.assertEqual(adapter.name, "vllm")
+
     def test_unimplemented_runtimes_fail_structurally(self) -> None:
-        for backend in ("vllm", "llama_cpp", "hailo"):
+        for backend in ("llama_cpp", "hailo"):
             with self.subTest(backend=backend):
                 config = make_config(hardware_target={"runtime_backend": backend})
                 adapter, failure = resolve_runtime(config, self.clock)
@@ -491,8 +503,20 @@ class RegistryTests(unittest.TestCase):
                 )
                 self.assertIn(backend, failure.message)
 
+    def test_resolves_nvidia_smi_telemetry_adapter(self) -> None:
+        config = make_config(
+            hardware_target={
+                "transport": "ssh",
+                "host": "node.example",
+                "telemetry_backend": "nvidia_smi",
+            }
+        )
+        adapter, failure = resolve_telemetry(config, self.clock)
+        self.assert_exactly_one((adapter, failure))
+        self.assertEqual(adapter.name, "nvidia_smi")
+
     def test_unimplemented_telemetry_fails_structurally(self) -> None:
-        for backend in ("nvidia_smi", "jetson_rails", "wall_meter"):
+        for backend in ("jetson_rails", "wall_meter"):
             with self.subTest(backend=backend):
                 config = make_config(hardware_target={"telemetry_backend": backend})
                 adapter, failure = resolve_telemetry(config, self.clock)
@@ -503,15 +527,13 @@ class RegistryTests(unittest.TestCase):
                 )
                 self.assertIn(backend, failure.message)
 
-    def test_ssh_transport_fails_structurally(self) -> None:
+    def test_resolves_ssh_transport(self) -> None:
         config = make_config(
             hardware_target={"transport": "ssh", "host": "node.example"}
         )
         adapter, failure = resolve_transport(config)
         self.assert_exactly_one((adapter, failure))
-        self.assertIsNone(adapter)
-        self.assertEqual(failure.failure_reason, FailureReason.TRANSPORT_UNAVAILABLE)
-        self.assertIn("ssh", failure.message)
+        self.assertEqual(adapter.name, "ssh")
 
 
 class LocalTransportTests(unittest.TestCase):
