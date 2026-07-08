@@ -59,7 +59,7 @@ class SuiteManifestTests(unittest.TestCase):
     def test_suite_config_hash_matches_referenced_effective_manifest(self) -> None:
         config = json.loads(SUITE_CONFIG_PATH.read_text())
         ref = config["workload_profile"]["suite_manifest_ref"]
-        manifest_path = (SUITE_CONFIG_PATH.parent / ref).resolve()
+        manifest_path = (ROOT / ref).resolve()  # refs resolve from repo root (process cwd), matching the controller
         manifest = json.loads(manifest_path.read_text())
         digest = suite_manifest_sha256(manifest)
         self.assertEqual(config["workload_profile"]["suite_manifest_sha256"], digest)

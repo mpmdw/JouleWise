@@ -35,6 +35,10 @@ from joulewise.kv_size import (
     format_bytes,
     prompt_totals,
 )
+from joulewise.provenance import (
+    PROMPT_TOKEN_IDS_HASH_DOMAIN,
+    SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN,
+)
 from joulewise.reduce import reduce_bundle
 from joulewise.report import ReportError, generate_report
 from joulewise.schemas import (
@@ -47,7 +51,8 @@ from joulewise.schemas import (
 )
 from joulewise.validation import finite_float
 
-_PROMPT_TOKEN_IDS_HASH_DOMAIN = "joulewise.prompt_token_ids.v1"
+_PROMPT_TOKEN_IDS_HASH_DOMAIN = PROMPT_TOKEN_IDS_HASH_DOMAIN
+_SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN = SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN
 
 
 def _load_config(path: Path) -> dict[str, Any]:
@@ -389,10 +394,15 @@ def _strict_workload_provenance_problems(
                 "is missing or not a lowercase SHA-256 hex string"
             )
         domain = prompt.get("token_hash_domain")
-        if domain != _PROMPT_TOKEN_IDS_HASH_DOMAIN:
+        expected_domain = (
+            _SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN
+            if isinstance(metadata.get("suite"), dict)
+            else _PROMPT_TOKEN_IDS_HASH_DOMAIN
+        )
+        if domain != expected_domain:
             problems.append(
                 "strict: metadata.workload_provenance.prompt.token_hash_domain "
-                f"is not {_PROMPT_TOKEN_IDS_HASH_DOMAIN!r}"
+                f"is not {expected_domain!r}"
             )
         text_hash = prompt.get("text_sha256")
         if text_hash is not None and not _is_sha256_hex(text_hash):

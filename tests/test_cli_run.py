@@ -28,6 +28,9 @@ from joulewise.schemas import BenchmarkConfig, RunStatus
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
+EXAMPLE_SUITE_CONFIG_PATH = (
+    REPO_ROOT / "configs" / "examples" / "mock_suite_local.json"
+)
 POWERMETRICS_FIXTURE = (
     REPO_ROOT / "tests" / "fixtures" / "powermetrics_sample.plist"
 )
@@ -66,6 +69,16 @@ class CliRunTestCase(unittest.TestCase):
         data["run_id"] = run_id
         for key, value in overrides.items():
             data[key] = value
+        path = self.tmp / f"{run_id}.json"
+        path.write_text(json.dumps(data))
+        return path
+
+    def write_suite_config(self, run_id: str) -> Path:
+        data = json.loads(EXAMPLE_SUITE_CONFIG_PATH.read_text())
+        data["run_id"] = run_id
+        data["workload_profile"]["suite_manifest_ref"] = str(
+            REPO_ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json"
+        )
         path = self.tmp / f"{run_id}.json"
         path.write_text(json.dumps(data))
         return path
@@ -388,6 +401,40 @@ class StrictValidateTests(CliRunTestCase):
         exit_code, out, _ = _run(["validate-bundle", "--strict", str(bundle)])
         self.assertEqual(exit_code, 0)
         self.assertIn("valid bundle:", out)
+
+    def test_mock_suite_bundle_passes_strict(self) -> None:
+        exit_code, stdout, stderr = self.run_verb(
+            self.write_suite_config("strict-suite-clean")
+        )
+        self.assertEqual(exit_code, 0, stderr)
+        bundle = self.bundle_path_from_line(stdout)
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+        exit_code, out, err = _run(["validate-bundle", "--strict", str(bundle)])
+        self.assertEqual(exit_code, 0, err)
+        self.assertEqual(out.strip(), f"valid bundle: {bundle}")
+
+    def test_suite_bundle_wrong_prompt_hash_domain_fails_strict(self) -> None:
+        # A tampered SUITE bundle domain must fail strict (the suite branch of
+        # the domain check must not silently accept arbitrary strings).
+        exit_code, stdout, stderr = self.run_verb(
+            self.write_suite_config("strict-suite-tampered")
+        )
+        self.assertEqual(exit_code, 0, stderr)
+        bundle = self.bundle_path_from_line(stdout)
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["prompt"]["token_hash_domain"] = (
+            "joulewise.prompt_token_ids.v1"  # single-prompt domain: wrong here
+        )
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any(
+                "token_hash_domain" in p and "suite_prompt_token_ids" in p
+                for p in problems
+            ),
+            problems,
+        )
 
     def test_emptied_rail_manifest_fails_strict_only(self) -> None:
         # Review repro (a): default validation blesses it; strict must not.

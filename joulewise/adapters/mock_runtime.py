@@ -36,6 +36,7 @@ from joulewise.provenance import (
     output_policy,
     prompt_provenance,
     sha256_hex,
+    suite_prompt_rollup,
 )
 from joulewise.schemas import BenchmarkConfig, FailureReason
 from joulewise.suite import (
@@ -207,7 +208,9 @@ class MockRuntimeAdapter:
         output_lines: list[str] = []
         status_counts: dict[str, int] = {}
         total_prompt_tokens = 0
+        total_planned_output_tokens = 0
         total_output_tokens = 0
+        prompt_hashes: list[str] = []
         previous_item_id: str | None = None
         current_block: str | None = None
         current_level: str | None = None
@@ -289,7 +292,9 @@ class MockRuntimeAdapter:
             status = item_result["status"]
             status_counts[status] = status_counts.get(status, 0) + 1
             total_prompt_tokens += item_result["prompt_tokens"]
+            total_planned_output_tokens += item_result["planned_output_tokens"]
             total_output_tokens += item_result["emitted_tokens"]
+            prompt_hashes.append(item_result["prompt_hash"])
 
         if current_level is not None:
             events.append(
@@ -330,6 +335,7 @@ class MockRuntimeAdapter:
             token_count=total_prompt_tokens + total_output_tokens,
             output_token_count=total_output_tokens,
             workload_provenance={
+                "prompt": suite_prompt_rollup(prompt_hashes, total_prompt_tokens),
                 "suite": {
                     "suite_id": manifest.suite_id,
                     "manifest_sha256": manifest_sha256,
@@ -351,6 +357,12 @@ class MockRuntimeAdapter:
                     "source": config.model.source,
                     "revision": config.model.revision,
                 },
+                "output_policy": output_policy(
+                    manifest.execution_policy.default_output_policy,
+                    requested_tokens=total_planned_output_tokens,
+                    emitted_tokens=total_output_tokens,
+                    stop_condition="suite_completed",
+                ),
             },
         )
 
@@ -509,7 +521,9 @@ class MockRuntimeAdapter:
         return {
             "status": status,
             "prompt_tokens": len(prompt_token_ids),
+            "planned_output_tokens": item.shape.planned_output_tokens,
             "emitted_tokens": emitted_tokens,
+            "prompt_hash": prompt["token_ids_sha256"],
             "output": output,
         }
 

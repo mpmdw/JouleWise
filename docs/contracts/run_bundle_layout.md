@@ -8,6 +8,7 @@ durable artifact for every benchmark execution.
 ```text
 runs/<run_id>/
   config.json
+  suite_manifest.json        (suite runs only)
   metadata.json
   events.jsonl
   power_trace.csv
@@ -23,6 +24,7 @@ runs/<run_id>/
   outputs/
     response.txt
     tokens.jsonl
+    suite_items.jsonl        (suite runs only)
 ```
 
 The bundle stores the normalized config as sorted-key JSON (`config.json`);
@@ -36,6 +38,10 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
 
 - `config.json`: normalized benchmark config (sorted keys; hash in
   metadata).
+- `suite_manifest.json`: for suite runs, the canonical effective suite
+  manifest with pinned defaults materialized. The SHA-256 is computed over
+  sorted-key, 2-space JSON plus trailing newline, matching D-001's config
+  hash convention and D-044's suite hash chain.
 - `metadata.json`: a JSON object containing device, runtime, telemetry,
   model, environment, clock, `config_sha256`, rail-manifest metadata, and
   optional workload provenance. Valid JSON with any non-object top-level
@@ -147,6 +153,65 @@ Runtime phase windows are discovered generically from paired
 `phase_start`/`phase_end` records. MLX runs may emit non-overlapping
 `tokenize`, `generation_setup`, `prefill`, and `decode` phases; reducers and
 readers must not assume only prefill/decode exist.
+
+## Suite Bundle Additions (D-044/D-045/D-046/D-047.5)
+
+Suite bundles preserve the same five-key event shape. Suite markers use
+`phase: "suite"` and the pinned vocabulary from `joulewise/suite.py`:
+`suite_start`, `suite_end`, `block_start`, `block_end`, `level_start`,
+`level_end`, `item_start`, and `item_end`.
+
+Required marker metadata keys are:
+
+- `suite_start`: `suite_id`, `suite_profile`, `suite_revision`,
+  `suite_manifest_sha256`, `item_count`, `order_seed`.
+- `suite_end`: `suite_id`, `items_executed`, `status_counts`.
+- `block_start`/`block_end`: `block_id`, `block_index`.
+- `level_start`/`level_end`: `level_id`, `level_index`.
+- `item_start`: `item_id`, `item_index`, `position`, `block_id`,
+  `level_id`, `condition_id`, `prefix_group_id`, `prev_item`, `category`,
+  `item_type`, `output_policy`, `prompt_sha256`,
+  `planned_prompt_tokens`, `planned_output_tokens`. `prompt_sha256` is the
+  domain-separated prompt token-ID hash, not a text hash (D-045/D-046).
+- `item_end`: `item_id`, `item_index`, `status`, `prompt_tokens`,
+  `emitted_tokens`, `stop_reason`, `response_sha256`; `status_reason` is
+  additive when applicable.
+
+`outputs/suite_items.jsonl` is the single per-item output artifact. Each
+line is one JSON object with `item_id`, `item_index`, `status`,
+optional `status_reason`, `prompt.token_hash_domain`,
+`prompt.token_ids_sha256`, `response_text`, `response_sha256`,
+`stop_reason`, `prompt_tokens`, `emitted_tokens`, and `tokens`
+(`[{index, timestamp_s}, ...]`). Suites do not write `response.txt`.
+
+`metadata.suite` is a top-level metadata block, not `metadata.extra`.
+Required fields are `suite_id`, `suite_profile`, `suite_revision`,
+`manifest_sha256`, `source_file_sha256`, `item_count`, and `order_seed`.
+`manifest_sha256` matches the canonical effective `suite_manifest.json`;
+`source_file_sha256` records the raw source manifest bytes as audit evidence
+(D-044). Runtime workload provenance may additionally record the same suite
+identity plus generator, tokenizer, model, and sampler provenance. For MLX
+suite runs, sampler provenance records greedy/temp-0 intent and whether the
+installed `mlx_lm` sampler API was pinned or unavailable (D-047.5).
+
+For strict-valid suite bundles, `metadata.workload_provenance.prompt` is a
+bundle-level rollup, not a single prompt. Per D-033/D-045 it records the sum
+of realized prompt tokens across executed items, `token_hash_domain:
+"joulewise.suite_prompt_token_ids.v1"`, and `token_ids_sha256` as the
+domain-separated SHA-256 of the canonical JSON list of per-item
+`prompt.token_ids_sha256` values in execution order; `text_sha256` is null.
+`metadata.workload_provenance.output_policy` records the manifest
+`execution_policy.default_output_policy`, the sum of executed items'
+`planned_output_tokens`, total emitted tokens, and `stop_condition:
+"suite_completed"`.
+
+`summary_metrics.json` may include additive `suite_metrics`. It is optional
+for validation so historical bundles remain valid. When present it contains
+`suite_id`, `manifest_sha256`, `planned_item_count`, `executed_item_count`,
+`status_counts`, `items`, `blocks`, `levels`, `floor_abs_j`, `floor_cmp_j`,
+and `floor_source`. Item/block/level energy fields are gross-only at this
+contract layer; the floor fields are the P2-015 both-floor seam and do not
+change runtime item status by themselves (D-045/C-014).
 
 ## Power Trace Minimum Fields
 

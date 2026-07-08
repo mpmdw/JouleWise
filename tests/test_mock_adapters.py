@@ -29,7 +29,11 @@ from joulewise.interfaces import (
     TelemetryAdapter,
     TransportAdapter,
 )
-from joulewise.provenance import prompt_token_ids_sha256, sha256_hex
+from joulewise.provenance import (
+    prompt_token_ids_sha256,
+    sha256_hex,
+    suite_prompt_rollup,
+)
 from joulewise.schemas import BenchmarkConfig, FailureReason, TelemetryBackend
 from joulewise.suite import (
     BLOCK_END,
@@ -328,6 +332,22 @@ class MockRuntimeTests(unittest.TestCase):
         self.assertEqual(records[1]["status_reason"], "mock-malformed")
         self.assertEqual(records[2]["status_reason"], "mock-runtime-failed")
         self.assertEqual(result.workload_provenance["suite"]["item_count"], 3)
+        self.assertEqual(
+            result.workload_provenance["prompt"],
+            suite_prompt_rollup(
+                [record["prompt"]["token_ids_sha256"] for record in records],
+                9,
+            ),
+        )
+        self.assertEqual(
+            result.workload_provenance["output_policy"],
+            {
+                "name": "fixed_budget_exact",
+                "requested_tokens": 5,
+                "emitted_tokens": 2,
+                "stop_condition": "suite_completed",
+            },
+        )
 
     def test_run_suite_marker_sequence_and_metadata_contract(self) -> None:
         result = self.runtime.run_suite(self.config, make_suite_manifest())

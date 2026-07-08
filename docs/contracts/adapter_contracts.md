@@ -176,6 +176,63 @@ Candidate runtimes:
 - `llama_cpp`
 - `hailo`
 
+## Suite Runtime Adapter (D-045/D-046/D-047.5)
+
+A runtime that can execute a materialized suite manifest implements
+`SuiteRuntimeAdapter.run_suite(config, manifest, context)`. The controller
+dispatches to this method only when `workload_profile.suite_manifest_ref` is
+set and validation has loaded the manifest. `run_workload` remains the
+single-prompt contract.
+
+`run_suite` obligations:
+
+- Iterate `manifest.items` in manifest order and emit suite, block, level,
+  and item markers with the vocabulary and required metadata keys pinned in
+  `joulewise/suite.py`.
+- Contain per-item generation exceptions: the item receives `item_end` with
+  `status: "runtime_failed"` and a diagnostic `status_reason`, then the loop
+  continues. Suite-level machinery failures may still raise out of
+  `run_suite`.
+- Write exactly one per-item output artifact, `outputs/suite_items.jsonl`.
+  Each line carries the item id/index, status and optional status reason,
+  prompt token-ID hash block, response text/hash, stop reason, prompt/output
+  token counts, and token timestamps (D-045.8). Suites do not emit
+  `response.txt`.
+- Preserve workload provenance for suite identity, generator, tokenizer,
+  model, and sampler. MLX adapters must attempt to pin greedy/temp-0 by
+  constructing the installed `mlx_lm` sampler and passing it to
+  `stream_generate` when the API supports it; otherwise they record
+  `pinned: false` with an unavailable-API reason and proceed with the
+  library default (D-047.5).
+
+Runtime status assignment:
+
+```text
+condition                                           item_end.status
+generation completed fixed_budget_exact and emitted == planned_output_tokens
+                                                    succeeded
+generation completed fixed_budget_exact and emitted < planned_output_tokens
+                                                    malformed
+                                                    status_reason=fixed_budget_underrun
+generation completed natural_eos and emitted == planned_output_tokens
+                                                    capped
+generation completed natural_eos and emitted < planned_output_tokens
+                                                    succeeded
+per-item generation exception                       runtime_failed
+```
+
+Only the reducer may assign `below_floor`; `excluded_from_claim` is
+analysis-only and invalid in runtime events or summaries (D-045.4).
+
+Prompt-source handling is per item and mutually exclusive. `prompt_text` is
+encoded at generation time with adapter-normal special-token behavior
+(MLX uses `add_special_tokens=True`, so BOS is inside the planned prompt
+budget). `prompt_token_ids` is ids-native and delivered exactly as listed,
+with no BOS added; this is required for D-046 sentinel conditions.
+Absent text and ids use a synthetic prompt with
+`shape.planned_prompt_tokens`. Any field named `prompt_sha256` means the
+domain-separated token-ID hash, not a text hash.
+
 ## Telemetry Adapter
 
 Telemetry answers how power and thermal state are measured.

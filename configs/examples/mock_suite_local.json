@@ -1,40 +1,44 @@
 {
-  "schema_version": "0.1",
-  "run_id": "example-mock-suite-local",
-  "model": {
-    "name": "mock-model",
-    "family": "mock",
-    "weight_format": "mock",
-    "context_window": 1024
-  },
-  "quantization": {
-    "name": "none"
-  },
   "hardware_target": {
+    "device_kind": "test",
     "id": "mock_target",
-    "transport": "local",
     "runtime_backend": "mock",
     "telemetry_backend": "mock",
-    "device_kind": "test"
-  },
-  "workload_profile": {
-    "name": "mock_suite_smoke",
-    "suite_manifest_ref": "../suite_manifests/mock_suite_manifest.json",
-    "suite_manifest_sha256": "16c2d67f8c5e84b369938ee8d633dec01c594f5f7fcbf22fcaa2301d986e1267",
-    "repetitions": 1,
-    "warmup_runs": 1
+    "transport": "local"
   },
   "interconnect": {
     "name": "local"
   },
+  "model": {
+    "context_window": 1024,
+    "family": "mock",
+    "name": "mock-model",
+    "weight_format": "mock"
+  },
+  "quantization": {
+    "name": "none"
+  },
+  "run_id": "example-mock-suite-local",
+  "run_metadata": {
+    "operator": "test",
+    "project": "capstone-joulewise",
+    "tags": [
+      "phase2",
+      "suite",
+      "mock"
+    ]
+  },
   "sampling": {
-    "power_hz": 2.0,
     "idle_seconds": 1.0,
+    "power_hz": 2.0,
     "warmup_seconds": 0.0
   },
-  "run_metadata": {
-    "project": "capstone-joulewise",
-    "operator": "test",
-    "tags": ["phase2", "suite", "mock"]
+  "schema_version": "0.1",
+  "workload_profile": {
+    "name": "mock_suite_smoke",
+    "repetitions": 1,
+    "suite_manifest_ref": "configs/suite_manifests/mock_suite_manifest.json",
+    "suite_manifest_sha256": "16c2d67f8c5e84b369938ee8d633dec01c594f5f7fcbf22fcaa2301d986e1267",
+    "warmup_runs": 1
   }
 }
