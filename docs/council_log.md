@@ -38,6 +38,7 @@ standing instructions.
 | C-006 | 2026-07-07 | Session trace + orchestration meta-review of the six-stream parallel day | 13 attributed catches; integration-review step vindicated; skills deduplicated; operation-loop installed |
 | C-007 | 2026-07-07 | Whole-project design/planning council (user-directed) + P2-013 fix design | P2-013 re-ranked above 2M with raw-to-trace gate added in-stream; two-claim-track framing adopted; detection floor gets an owning Phase 4 gate; machine-state queue lanes; pre-2M contract amendments (P2-014) |
 | C-008 | 2026-07-07 | Multi-stream hardware-prep session (4 streams, Opus directors + Codex volume), user-checkpointed mid-flight | 3.0.1 verdict replay_supported; P2-013 groups 1-4 (19/31 pins); 2K protocol v1 provisional; DOC-007 done; Slice 2O landed; ledgers v2 + calibration + wake-gap lessons folded into skills same-session |
+| C-009 | 2026-07-07 | META-REVIEW of the orchestration system itself (user-directed): 2 blind Codex analyses vs Fable's blind positions → conferral → SIGNED consensus | Hybrid topology + lead stream-state table; foreground-wait orchestrators + STALLED-handback; heartbeat demoted to backstop; Codex up-stack (design freedom, schema drafts, lead-decision packets); docs single-writer end-state (run report = session record; council log = deliberation only; RUN_STATE = pointer; ledgers retire at integration WITH branch/hash pointer); retired-artifact pointer rule; codex-run patch queued; preflight gates (device inventory, quiet lock, provisional labels) |
 
 ---
 
@@ -787,16 +788,50 @@ product state + restart instructions live in
 `docs/run_reports/2026-07-07-checkpoint-multistream-session.md`. Do not
 restate; read those.
 
-Headlines: 4 worktree streams (Opus orchestrators directing Codex 5.5,
-Fable apex-only per Ed's directive); Stage 3.0.1 verdict
-**replay_supported** (Phase 3's central risk retired on current
-hardware); P2-013 groups 1-4 landed (19/31 pins); 2K wire protocol v1
-pinned PROVISIONAL with zero shared-file edits; DOC-007 complete +
-lead-reviewed. Process: stream decision ledgers v2 + delegation
-calibration ledger + 5.5-reviews-consequential-decisions doctrine
-adopted, validated, and folded into the global skills same-session; the
-SUBAGENT WAKE GAP found (structural, twice-triggered, mitigation
-standing in multi-stream-worktrees). Killed stream: first 2K launch
-(false hardware premise — lesson: confirm the device list before
-shaping streams on a hardware claim). Per-layer catches + the
-delegation-calibration aggregate: see the trace file.
+Pointer entry (per the C-009 recording rule): all product state,
+process learnings, per-layer catches, and the calibration aggregate
+live in the run report + its Process Trace Appendix. One
+deliberation-class fact belongs here: the session's process conventions
+(ledgers v2, calibration schema, decision-review doctrine) were shaped
+by a Codex review that OVERTURNED two lead-designed schemas — dissents
+and adjudications in the trace appendix.
+
+
+---
+
+## C-009: Meta-review of the orchestration system (SIGNED consensus)
+
+- Date: 2026-07-07. Participants: Fable (lead), Codex gpt-5.5 (2 blind
+  analysis sessions + 1 conferral session). Shape: both sides analyzed
+  the process architecture and all logs BLIND to each other, then one
+  conferral round; Codex SIGNED with 2 amendments + 1 gap rule, all
+  accepted. This entry earns full-entry status under its own rule
+  (durable doctrine + a real position reversal).
+- Blind convergence (both sides independently): hybrid topology by
+  stream shape; foreground bounded waits for retained orchestrators;
+  heartbeat = backstop not scheduler; Codex up-stack; ledgers keep with
+  ride-code-commits discipline; docs consolidation to single-writer;
+  preflight gates from the session's actual failures.
+- Genuine disagreement + resolution: WHERE the durable session process
+  record lives. Codex's architecture lens said council log; Fable + 
+  Codex's own docs-audit lens said run report (trace as appendix,
+  council log reserved for deliberation). In conferral Codex CONCEDED:
+  "my earlier council-log-as-process-history position was too broad
+  given the duplication evidence." Adopted: run report = the session
+  record; council log = index rows + genuine-deliberation entries only.
+- Codex amendments (accepted): bounded waits get a STALLED-handback rule
+  (never infinite loops); retired ledgers leave a branch/hash pointer.
+  Gap rule (Codex): every retired working artifact leaves a discoverable
+  pointer in its replacement home — path, branch, hash, promoted vs
+  intentionally not promoted.
+- Evidence highlights that drove the consensus: the same checkpoint fact
+  written into SIX surfaces (docs audit, cited per-file); the wake gap's
+  two fleet-wide stalls; the calibration ledger's design-freedom signal;
+  the docs audit falsifying a claim in the lead's own run report
+  (missing D-CHECKPOINT).
+- Consensus text: run report §"Meta-review consensus"; durable homes =
+  the operation-loop + multi-stream-worktrees + codex-delegation skills
+  (rewritten same-session). Migration executed same-session: trace
+  merged into run report, RUN_STATE slimmed to pointer shape, queue
+  cells slimmed, C-008 converted to pointer style, codex-run patch task
+  queued.

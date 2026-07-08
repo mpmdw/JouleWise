@@ -1,8 +1,8 @@
 # JouleWise Run State
 
-Last updated: 2026-07-07 (whole-project design council C-007; Stream F
-had already landed as PR #7 — this update clears the stale in-flight
-narrative below)
+Last updated: 2026-07-07 PM (multi-stream checkpoint + C-009
+meta-review consensus; RUN_STATE slimmed to intake-pointer shape per
+that consensus)
 
 ## Start Here For Every Big Run
 
@@ -86,231 +86,20 @@ table, merge order A→D→C→B, process learnings — esp. the SUBAGENT WAKE
 GAP), then resume streams from their ledgers. After all merges +
 integration review: the quiet-machine 2M campaign (P2-006).
 
-## Previous Run (2026-07-07, WHOLE-PROJECT DESIGN COUNCIL C-007)
+## Session History (pointers only — run reports own the narrative)
 
-User-directed council over the entire project (design, architecture,
-high-level docs, planning): Fable lead/final judge, 7 parallel read-only
-Codex lenses + 1 round-2 attack session, two full cross-model rounds, no
-implementation. Full record: council log C-007. Headlines: (1) P2-013
-re-ranked ABOVE the 2M campaign, its scope grown by the council's
-biggest catch — strict validation never re-derives `power_trace.csv`
-from the raw plist (D-030 wording overclaims); a raw-to-trace strict
-sub-check joins the stream. (2) New small task P2-014 (pre-2M contract
-amendments: summary provenance, `phase_energy_j` pinned gross-only,
-event node-identity doc note, composite-reader design note). (3)
-Machine-state lanes [QUIET-MAC]/[AGENT]/[ED-EXTERNAL] added to the
-queue. (4) Two-claim-track thesis framing adopted (guaranteed capstone =
-auditable local measurement; split study validates/upgrades). (5)
-Detection floor confirmed UNOWNED → becomes a Phase 4 acceptance gate
-(queued in DOC-007 with the docs package). Bookkeeping this session:
-C-007 entry (+ index drift fix: C-005/C-006 rows were missing), queue
-restructure, this file's stale Stream F narrative cleared.
+Per the C-009 meta-review consensus, RUN_STATE no longer stacks
+previous-run narratives. Recent sessions, newest first:
 
-## Previous Run (2026-07-07 PM, STREAM F — LANDED AS PR #7)
-
-Closeout + restart session. Done: (1) the five merged-stream worktrees
-closed out — .codex-bridge logs archived to
-`~/JouleWise-backup/codex-bridge-logs/2026-07-07-parallel-streams/` per
-the C-006 preservation rule, six worktrees removed, merged branches
-deleted; (2) `scripts/codex-watch` landed on main (38ee666) — renders
-live/recent Codex CLI sessions from `~/.codex/sessions` rollouts (list /
-follow / dump), since neither Claude Code nor the Codex app surfaces
-them; (3) Stream F RESTARTED from scratch in a fresh `../jw-test-audit`
-worktree (branch `stream/test-audit`, PUSHED) with a new
-commit-and-push-at-every-stage-boundary checkpoint rule, after the prior
-attempt's lens outputs were lost with its session.
-
-**Stream F state (HISTORICAL — the stream landed as PR #7, merged
-`7be9d17`; final audit artifact `docs/test_audit_2026-07-07.md`, 27
-defects / 31 pins → queue P2-013):** pushed checkpoints `6ad22e0` (six raw
-audit-lens outputs, `docs/phase_2/test_audit_2026-07-07_lenses/`) and
-`fc4211a` (triaged findings doc `docs/phase_2/test_audit_2026-07-07.md`
-— dispositions + stage-3 scope) and `3ffef9a` (WIP: the stage-3 Codex
-test-writing round was DELIBERATELY STOPPED mid-write for travel; suite
-RED at that commit — 375 tests, 2 failures, both interrupted edits in
-test_experiment/test_mock_adapters, not regressions; do not build on it
-without finishing or redoing stage 3 per the findings doc's scope
-section: fix A1/A3/A7/F1/F2/F3; new tests D8-D13/E10; expectedFailure
-contract pins for product bugs D2/E1, D3/E4). Remaining after stage 3:
-fresh-instance Codex test review →
-lead diff gate + suite both legs → PR; then the final post-merge
-integration review over the complete composite; then full bookkeeping
-(council-log entry, run report, PROJECT_STATUS refresh, consistency
-sweep). Headline audit outcome so far: 4 confirmed product-bug clusters
-reported (non-finite values pass validation into succeeded summaries;
-duplicate rail rows double-count power; out-of-order token events yield
-negative latency metrics; validate-bundle does not check config_sha256)
-— queue triage pending at wrap-up.
-
-## Previous Run (2026-07-07, FIVE-STREAM PARALLEL SESSION)
-
-Six worktree streams (Fable orchestrators driving Codex 5.5-high per the
-new operation-loop skill), two councils, ~6-7M Codex tokens of
-implementation/review offloaded. Merged: PRs #2 (kv-size), #3 (2M
-campaign tooling), #4 (P2-009 rich telemetry), #5 (P2-008 mock
-hardening), #6 (P2-011/D-014 uncertainty) + INT-001/INT-002 integration
-fixes. Lead-verified on real hardware: n=3 experiment aggregate
-99.19 ± 1.36 mJ/output-token re-derived byte-identically; idle gate
-caught real contamination; 1 Hz mock regression proof. Councils: C-005
-(hardware-tiered research agenda, jw_mixed_v1 suite → P2-012), C-006
-(orchestration trace v2, process meta-review; global skills
-deduplicated; operation-loop installed). Suite 254 → 369. Full detail:
-`docs/run_reports/2026-07-07-parallel-streams-session.md`; process
-trace: council log C-006.
-
-## Previous Run (2026-07-07, FLAGSHIP MODEL BENCHMARKED)
-
-Qwen3.5-122B-A10B-4bit (65 GB mirror, rev `e9c67b0`) selected by
-web-verified research, mirrored, and benchmarked through the unmodified
-harness: 3/3 strict-valid reps, ~304 J / 512 tokens (583 mJ/token,
-46 tok/s, TTFT ~270 ms, CV 0.3%). First Q4 data point: mJ/token scales
-~linearly with ACTIVE params (6.7×) while decode power is nearly flat.
-Full detail: `docs/run_reports/2026-07-07-flagship-qwen35-122b.md`.
-Config `mac_mlx_qwen35_122b.json` (hash-pinned). Corpus backed up.
-
-## Previous Run (2026-07-07, merge + research councils + flagship model)
-
-PR #1 (the 11-commit vertical-slice series) merged to main after C-002
-review; CI green on both matrix legs. Research councils C-003/C-004 ran
-(see `docs/council_log.md`): Q4-Q6 promoted, `docs/research_question_bank.md`
-created, new queue items P2-009/P2-010/P2-011. User-directed flagship
-model selected by web-verified research: `mlx-community/Qwen3.5-122B-A10B-4bit`
-(69.6 GB, 122B MoE/10B active, rev `e9c67b0`) — mirror download in
-progress; the flagship benchmark run on it is the immediate next action.
-Standing loop addition: push green commits promptly; refresh high-level
-docs each session (steps 7-8 above).
-
-## Previous Run (2026-07-06 night, Slice 2I — FIRST REAL ENERGY NUMBERS)
-
-Full detail: `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md`.
-The user installed the D-004 sudoers line (P1-002 now fully complete).
-First flagship attempt failed instructively (powermetrics ~1 s startup
-latency vs a 0.32 s measured window → 0-byte capture); fix (`b4d4173`,
-Codex from parent diagnosis): start_sampling readiness wait (first
-parseable plist doc, 15 s bound), `-b 0` unbuffered, flagship workload
-64→512 tokens at 10 Hz. Then **3/3 reps succeeded, all --strict valid**:
-gross 46.6-48.0 J (CV 1.4%), 77-88 mJ/output-token, prefill 0.03 J vs
-decode ~47 J, TTFT 92.8-94.9 ms, 257 tok/s, 8.8-8.9 Hz observed (in
-band). Methodological finding: rep 1's idle baseline (3.5 W vs 0.2-0.3 W)
-shows post-model-load settling contamination → Stage 4.0 protocol note.
-Corpus backed up per R-016. **Slices 2H and 2I are COMPLETE; the Mac
-vertical slice (P2-003) is done; 2M and Phase 3 Stage 3.0 are unblocked.**
-Suite: 254.
-
-## Previous Run (2026-07-06 evening, P1-002 + Slice 2H)
-
-Full detail: `docs/run_reports/2026-07-06-slice-2h-powermetrics.md`. The
-user captured the privileged powermetrics sample (P1-002 → framing +
-field names pinned in the Phase 1 checklist; fixture committed). Slice
-2H then landed (`26dca41`) through a review/counterreview loop: Codex
-implemented; a 22-agent adversarial review confirmed 10 findings (1
-blocker: measure_idle fabricated a 0.0 W baseline and delayed failure
-past warmup); Codex counterreviewed, accepted all 10, and contributed
-the AdapterFailure design (structured exception → controller maps the
-true FailureReason). Suite 251 green both interpreters. Live-verified:
-mlx+powermetrics fails at idle_baseline with permission_denied, no
-warmup, no fabricated baseline. User re-prioritized: P1-001 and P0-003
-→ meta/deferred. Remaining before first real energy numbers: the D-004
-sudoers line, then one `mac_mlx_local.json` run (= 2H smoke + 2I).
-
-## Previous Run (2026-07-06, autonomous build-out)
-
-Full detail: `docs/run_reports/2026-07-06-autonomous-buildout.md`.
-User-directed maximal build-out on a NEW machine (M3 Max, 128 GB; fresh
-clone at `~/code/JouleWise`), with implementation delegated to the local
-Codex CLI through the new repo bridge (`scripts/codex-bridge`, commit
-`10a570d`) and reviewed/live-verified by Claude. Landed, in order:
-**P0-002** (`5b12332`) backup script + real restore test, interim
-destination `~/JouleWise-backup`, R-016 updated; **P3-001** (`c31ffac`)
-related-work draft — 11 sources, verified citations, positioning claims
-honestly narrowed (claims 1-2) with claim 3 standing; **D-016
-provisional** (decision log) Qwen2.5-1.5B-Instruct-4bit @ `8b40312`
-mirrored to `~/jw_models/`, KV row verified (28,672 B/token);
-**Slice 2G** (`3eb0acd`) MLX runtime adapter per the pinned guide, suite
-226→230 green under both system python3 and the `[mac]` venv
-(`transformers<5.13` pin — 5.13 breaks mlx_lm import), live smoke
-succeeded + `--strict` + `reduce` green. The first live smoke failed
-usefully and exposed a mock-telemetry × SystemClock composition edge
-(samples stamped outside the D-026 window) — worked around at 20 Hz in
-the bring-up config, hardening queued as **P2-008**.
-
-## Previous Run (2026-07-06, status-review intake + fixes)
-
-Full detail: `docs/run_reports/2026-07-06-status-review-fixes.md`. An
-independent project status review
-(`docs/run_reports/2026-07-06-project-status-review.md`) was examined at
-the user's direction; all three findings were verified by reproduction
-and fixed same-session, in the reviewer's suggested order: **P1**
-(`0803d1f`) — `BundleReader.events()` centrally validates `timestamp_s`
-as a finite number, so corrupt event timestamps become structured FAILED
-summaries / `invalid:` problems instead of raw
-`ValueError`/`TypeError`; **P3** (same commit) — new
-`joulewise.bundle.write_raw_artifact(context, name, data)` gives
-adapters the validated no-overwrite raw-evidence write (mock converted;
-contract updated); **P2** (`80c3d49`, **D-030**) — new
-`validate-bundle --strict` requires succeeded bundles to be
-reducer-consumable and their summary to equal a fresh re-reduction
-(both reviewer reproductions pinned as tests; Phase 4 inclusion rule and
-Phase 5 Stage 5.2 now specify `--strict`). Suite 216 -> 226, green.
-The review's remaining precondition for real measurement — P0-002
-backup protocol — stays open at the top of the queue.
-
-## Previous Run (2026-07-06, Slice 2N implementation)
-
-Full detail: `docs/run_reports/2026-07-06-slice-2n-pre-hardware-hardening.md`.
-Preflight per playbook M0 plus a user-requested filesystem health check
-(repo at canonical path, git synced, suite green; deleted the verified
-stale `~/Desktop/CapstoneRivoire` remnant; `~/jw_pending_edits/` was
-already gone). Then executed Mission M1 end-to-end: all nine Slice 2N
-items landed as the three planned commits — the adapter seam
-(2N.1 RunContext + raw evidence, 2N.2 sampling-window markers, D-026),
-the read layer (2N.8 shared `BundleReader` per D-025, 2N.4 rail
-alignment contract D-027, 2N.7 report/reducer alignment, 2N.6 `reduce`
-verb + D-028), and schema + metrics (2N.5 nullable-optionals schema +
-pinned config hashes D-029, 2N.3 observed-token fallback with
-`token_count_source`, 2N.9 v0.2 compatibility note — one flag for
-Stage 3.1: put the composite event node tag inside event `metadata`,
-not a sixth key). Suite grew 169 -> 216, green after every item; the
-exit-checklist 2N row is closed; queue P2-007 done. All commits pushed
-same-session at the user's request; CI green (run #11).
-
-## Previous Run (2026-07-06, architecture review intake)
-
-Full detail: `docs/run_reports/2026-07-06-architecture-review-intake.md`.
-An external architecture review (Codex) was triaged; agreed items landed
-as design decisions and plan updates: **D-024** (adapters receive an
-immutable `RunContext` — settles 2N.1's open seam question), **D-025**
-(shared `BundleReader` for reducer/report/validate/aggregate — new item
-2N.8; 2N.7 must build on it), a new cross-cutting contract
-`docs/contracts/node_worker_protocol.md` (remote execution shape, pinned
-during 2K, reused by 2L + Phase 3), item 2N.9 (design-only v0.2
-compatibility check), and a sqlite-before-DuckDB clause in Stage 4.1.
-Operational note: agent sessions should be launched from
-`~/code/CapstoneRivoire/Capstone`; the old Desktop path holds only a
-harness-recreated `.claude/settings.local.json` and can be deleted after
-relaunch. A same-day second review pass confirmed the intake and drove
-three housekeeping fixes (D-024/D-025 "pending" wording, R-017 marked
-mitigated, 2N three-commit grouping in playbook M1).
-
-## Older Run (2026-07-05, docs/meta-layer cleanup + repo move)
-
-Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
-
-- External audit (code review + planning review) on return from the
-  break; suite verified green (169) before any changes.
-- D-023: per-item status consolidated into the exit checklists; plan
-  headers now point there; `phase_2_plan.md` vs hardware-guide
-  duplication cut to a what/how split.
-- Drift fixed: phase 1 plan step statuses, stale 2026-06-10 auth-session
-  references everywhere, D-019→D-022 range, 2M gate wording (Mac-only
-  floor allowed), `PROJECT_STATUS.md` stale test count.
-- New: Slice 2N (pre-hardware hardening, from the code review's seam
-  findings); Phase 4 Stage 4.6 (background/related-work draft —
-  previously unowned); R-016 (corpus backup); R-017 (iCloud lock);
-  milestones heartbeat rule; queue tasks P0-002, P2-007, P3-001.
-- The iCloud EPERM lock recurred mid-run (R-017); the user moved the
-  repo off iCloud in response (P0-001, done — see below).
-- Advisor doc (`PROJECT_STATUS.md`) refreshed for 2026-07-05.
+- 2026-07-07 PM checkpoint (multi-stream, C-008/C-009 + consensus):
+  `docs/run_reports/2026-07-07-checkpoint-multistream-session.md`
+- 2026-07-07 whole-project design council (C-007):
+  `docs/run_reports/2026-07-07-whole-project-design-council.md`
+- 2026-07-07 five-stream parallel session (C-005/C-006):
+  `docs/run_reports/2026-07-07-parallel-streams-session.md`
+- 2026-07-07 flagship benchmark:
+  `docs/run_reports/2026-07-07-flagship-qwen35-122b.md`
+- Older: see `docs/run_reports/` (dated files).
 
 ## Current Verification
 
@@ -325,44 +114,32 @@ Full detail: `docs/run_reports/2026-07-05-docs-meta-cleanup.md`. Summary:
 
 ## Known Workspace State
 
-- `main` is pushed and current: PRs #2-#6 merged + INT-001/INT-002 +
-  bookkeeping commits + `scripts/codex-watch` (38ee666); no unpushed
-  local state.
-- NO extra worktrees remain (verified `git worktree list` 2026-07-07):
-  `../jw-test-audit` was removed when Stream F landed as PR #7; the five
-  merged-stream worktrees were closed out 2026-07-07 PM (bridge logs
-  archived per C-006, branches deleted).
+- `main` is pushed and current (through the C-009 consensus commit).
+- FOUR worktrees exist deliberately (checkpointed streams; branches all
+  pushed): `../jw-p2013`, `../jw-2k`, `../jw-spike301`, `../jw-doc007`.
+  Remove each only after its PR lands.
 - `/tmp/jw-lead-verify/` holds disposable lead-verification artifacts.
 
 ## What Is Next
 
-Follow `TASK_QUEUE.md` (now lane-annotated per C-007); execute via the
-mission guides in `docs/agent_playbook.md` (start every session with its
-Mission M0). In order:
+Follow `TASK_QUEUE.md` (lane-annotated); the checkpoint run report's
+"How to restart" section is the authoritative sequence. In order:
 
-1. **P2-013: the audit-fix stream** [AGENT] — Codex-led, one worktree,
-   the 7 invariant-shaped commit groups + the raw-to-trace strict gate;
-   design consensus pinned in council log C-007 (resolutions 1–9).
-   P2-014 (pre-2M contract amendments) may ride the same stream.
-   Post-landing: 415 tests / 0 expected failures; `--strict` green over
-   all 6 real corpus bundles.
+1. **Resume + land the four checkpointed streams** [AGENT]: A P2-013
+   groups 5–8 + P2-014 → merge; D reconciliation pass → merge; C verdict
+   re-verify → merge; B U3–U5 + review pipeline → rebase → merge; then
+   the cross-stream integration review. Per-stream resume points live in
+   the stream ledgers (`docs/stream_logs/` on each branch). Topology per
+   the C-009 consensus (lead-driven pipelines / foreground-wait
+   orchestrators; heartbeat as backstop).
 2. **P2-006: the 2M two-model baseline campaign** [QUIET-MAC] — after
-   P2-013/P2-014. No agent fleet, no Codex load (the idle gate will flag
-   contamination). Command sequence in PR #3; run under `.venv`. Then
-   `docs/phase_2/baseline_results.md` consuming the D-014 aggregates.
-3. **Phase 3 Stage 3.0.1** (mlx-lm prompt-cache spike) [AGENT] — ahead
-   of workload buildout per C-007; 3.0.0 (kv-size) done, PR #2.
-4. **P2-010 scored workload suite**, then **P2-012 `jw_mixed_v1`**
-   [AGENT], per C-004/C-005 specs.
-5. **DOC-007 docs + framing package** [AGENT] — two-claim-track framing,
-   detection-floor gate spec into phase-4 acceptance, PROJECT_STATUS
-   ledger, README banner, drift fixes, M0 slimming.
-6. **Ed's external one-pass** [ED-EXTERNAL], flagged as a real
-   coordination load: calendar (P1-008), device access (P1-006), borrow
-   window, wall meter (P1-003), backup destination (P0-003).
-7. Small follow-ups queued from stream reports: `aggregate` CLI verb,
-   methodology-doc amendment, idle-gate threshold corpus, `dvfm_states`
-   slimming option.
+   the merges; no-agent quiet lock per C-009 T5; corpus born under the
+   fixed validator with prompt provenance (P2-014e).
+3. **P2-010 → P2-012 workload program** [AGENT] per Slice 2O gates.
+4. **Ed's external one-pass** [ED-EXTERNAL]: calendar, device access,
+   borrow window, wall meter, backup destination (P0-003).
+5. **Small task queued by C-009**: patch `~/.local/bin/codex-run`
+   (mkdir -p out-dir; forward -C/-s on --resume; thin-output warning).
 
 Hardware-gated (unchanged): 2K/2L (P1-006), wall meter (P1-003),
 topology (P1-004), calendar mapping (P1-008).
