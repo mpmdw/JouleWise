@@ -667,6 +667,88 @@ class StrictValidateTests(CliRunTestCase):
             problems,
         )
 
+    def test_new_summary_missing_tokenizer_revision_key_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-missing-tokenizer-revision")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        del metadata["workload_provenance"]["tokenizer"]["revision"]
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("tokenizer" in p and "revision" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_missing_tokenizer_vocab_size_key_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-missing-tokenizer-vocab-size")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        del metadata["workload_provenance"]["tokenizer"]["vocab_size"]
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("tokenizer" in p and "vocab_size" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_null_tokenizer_vocab_size_passes_strict(self) -> None:
+        bundle = self.make_bundle("strict-null-tokenizer-vocab-size")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["tokenizer"]["vocab_size"] = None
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_new_summary_missing_prompt_realized_token_count_key_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-missing-prompt-realized-count")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        del metadata["workload_provenance"]["prompt"]["realized_token_count"]
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("prompt" in p and "realized_token_count" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_non_positive_prompt_realized_token_count_fails_strict(
+        self,
+    ) -> None:
+        bundle = self.make_bundle("strict-bad-prompt-realized-count")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["prompt"]["realized_token_count"] = 0
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("prompt.realized_token_count" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_non_positive_tokenizer_vocab_size_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-bad-tokenizer-vocab-size")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["tokenizer"]["vocab_size"] = 0
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("tokenizer.vocab_size" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_malformed_prompt_text_hash_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-malformed-prompt-text-hash")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["prompt"]["text_sha256"] = "not-a-sha"
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("prompt.text_sha256" in p for p in problems),
+            problems,
+        )
+
     def test_new_summary_null_present_model_source_passes_strict(self) -> None:
         bundle = self.make_bundle("strict-null-model-source")
         metadata = json.loads((bundle / "metadata.json").read_text())

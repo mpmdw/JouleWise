@@ -320,6 +320,29 @@ def _strict_workload_provenance_problems(
     if not isinstance(prompt, dict):
         problems.append("strict: metadata.workload_provenance.prompt is missing or not an object")
     else:
+        missing = [
+            key
+            for key in (
+                "realized_token_count",
+                "token_hash_domain",
+                "token_ids_sha256",
+                "text_sha256",
+            )
+            if key not in prompt
+        ]
+        if missing:
+            problems.append(
+                "strict: metadata.workload_provenance.prompt is missing "
+                f"required key(s): {', '.join(missing)}"
+            )
+        realized_token_count = prompt.get("realized_token_count")
+        if realized_token_count is not None and not _is_positive_int(
+            realized_token_count
+        ):
+            problems.append(
+                "strict: metadata.workload_provenance.prompt.realized_token_count "
+                "is not null or a positive integer"
+            )
         token_hash = prompt.get("token_ids_sha256")
         if not _is_sha256_hex(token_hash):
             problems.append(
@@ -332,6 +355,12 @@ def _strict_workload_provenance_problems(
                 "strict: metadata.workload_provenance.prompt.token_hash_domain "
                 f"is not {_PROMPT_TOKEN_IDS_HASH_DOMAIN!r}"
             )
+        text_hash = prompt.get("text_sha256")
+        if text_hash is not None and not _is_sha256_hex(text_hash):
+            problems.append(
+                "strict: metadata.workload_provenance.prompt.text_sha256 "
+                "is not null or a lowercase SHA-256 hex string"
+            )
     problems.extend(
         _strict_required_object_keys(
             workload,
@@ -343,9 +372,17 @@ def _strict_workload_provenance_problems(
         _strict_required_object_keys(
             workload,
             "tokenizer",
-            ("backend", "identifier", "class"),
+            ("backend", "identifier", "revision", "class", "vocab_size"),
         )
     )
+    tokenizer = workload.get("tokenizer")
+    if isinstance(tokenizer, dict):
+        vocab_size = tokenizer.get("vocab_size")
+        if vocab_size is not None and not _is_positive_int(vocab_size):
+            problems.append(
+                "strict: metadata.workload_provenance.tokenizer.vocab_size "
+                "is not null or a positive integer"
+            )
     problems.extend(
         _strict_required_object_keys(
             workload,
@@ -467,6 +504,10 @@ def _is_sha256_hex(value: Any) -> bool:
     if not isinstance(value, str) or len(value) != 64:
         return False
     return all(char in "0123456789abcdef" for char in value)
+
+
+def _is_positive_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
 def _cmd_validate_bundle(args: argparse.Namespace) -> int:
