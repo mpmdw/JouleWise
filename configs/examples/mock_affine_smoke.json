@@ -1,0 +1,45 @@
+{
+  "hardware_target": {
+    "device_kind": "test",
+    "id": "mock_target",
+    "runtime_backend": "mock",
+    "telemetry_backend": "mock",
+    "transport": "local"
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "model": {
+    "context_window": 1024,
+    "family": "mock",
+    "name": "mock-model",
+    "weight_format": "mock"
+  },
+  "quantization": {
+    "name": "none"
+  },
+  "run_id": "example-mock-affine-smoke",
+  "run_metadata": {
+    "operator": "test",
+    "project": "capstone-joulewise",
+    "tags": [
+      "phase2",
+      "suite",
+      "affine",
+      "mock"
+    ]
+  },
+  "sampling": {
+    "idle_seconds": 1.0,
+    "power_hz": 2.0,
+    "warmup_seconds": 0.0
+  },
+  "schema_version": "0.1",
+  "workload_profile": {
+    "name": "affine_smoke_v1",
+    "repetitions": 1,
+    "suite_manifest_ref": "configs/suite_manifests/affine_smoke_v1.json",
+    "suite_manifest_sha256": "24fb008b7c38484b6a7cb36a4fef1fce4c47a669e3db23131bce06088340f7a9",
+    "warmup_runs": 1
+  }
+}
