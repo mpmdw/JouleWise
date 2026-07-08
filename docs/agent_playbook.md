@@ -410,7 +410,7 @@ Wrapper notes:
 
 - Merge-order note as of 2026-07-07: the 2K NVIDIA fixture-first
   implementation is complete on a later branch (protocol v1, SSH transport,
-  `nvidia-smi` + vLLM adapters, registry wiring, 491 CI-safe tests), but it
+  `nvidia-smi` + vLLM adapters, registry wiring, 495 CI-safe tests), but it
   merges after this docs stream. Do not mark protocol pins non-provisional
   until the P1-006 live evidence script has contacted real hardware.
 - P1-006 evidence-gathering (SSH reachability, `nvidia-smi` power query,

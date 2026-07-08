@@ -193,7 +193,7 @@ Not yet started: the remote real-hardware adapters — NVIDIA/vLLM +
 Jetson Orin live validation (2K/2L, gated on device access). The 2K
 fixture-first implementation is complete on the later NVIDIA branch
 (protocol v1, SSH transport, `nvidia-smi` + vLLM adapters, registry wiring,
-491 CI-safe tests), but all protocol pins remain PROVISIONAL until live
+495 CI-safe tests), but all protocol pins remain PROVISIONAL until live
 hardware contact; a P1-006 evidence checklist exists there. Code-level
 specs are in `docs/phase_2/hardware_slice_implementation_guide.md`. The
 mock-first core landed first by design, so measurement code is never
