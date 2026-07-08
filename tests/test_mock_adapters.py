@@ -29,9 +29,26 @@ from joulewise.interfaces import (
     TelemetryAdapter,
     TransportAdapter,
 )
+from joulewise.provenance import prompt_token_ids_sha256, sha256_hex
 from joulewise.schemas import BenchmarkConfig, FailureReason, TelemetryBackend
+from joulewise.suite import (
+    BLOCK_END,
+    BLOCK_START,
+    ITEM_END,
+    ITEM_START,
+    LEVEL_END,
+    LEVEL_START,
+    MARKER_REQUIRED_METADATA_KEYS,
+    SUITE_PHASE,
+    SUITE_END,
+    SUITE_START,
+    SuiteManifest,
+    load_suite_manifest,
+)
 
 EVENT_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
+ROOT = Path(__file__).resolve().parents[1]
+MANIFEST_PATH = ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json"
 
 
 def make_config(**overrides: Any) -> BenchmarkConfig:
@@ -58,6 +75,95 @@ def make_config(**overrides: Any) -> BenchmarkConfig:
         else:
             data[key] = value
     return BenchmarkConfig.from_mapping(data)
+
+
+def make_suite_manifest() -> SuiteManifest:
+    return SuiteManifest.from_mapping(
+        {
+            "schema_version": "suite_manifest.v1",
+            "suite_id": "mock_suite",
+            "suite_profile": "mock_suite_v1",
+            "suite_revision": "test",
+            "suite_seed": "seed",
+            "generator": {
+                "name": "unit_test",
+                "version": "1",
+                "parameters_hash": "params",
+            },
+            "analysis_contract": {
+                "independent_unit": "bundle",
+                "primary_window_class": "suite",
+                "allowed_aggregation_levels": ["suite", "block", "level"],
+            },
+            "execution_policy": {
+                "order_policy": "manifest_order",
+                "within_bundle_repeats": 1,
+                "cooldown_policy": "bundle_only",
+                "cache_policy": "warm_cache",
+                "warmup_policy": "adapter_default",
+                "default_output_policy": "fixed_budget_exact",
+            },
+            "source_manifest": {
+                "source_id": "unit",
+                "source_kind": "synthetic",
+                "revision": "test",
+                "subset_id": "subset",
+                "subset_sha256": "subset-sha",
+                "license": "internal-test",
+                "contamination_note": "synthetic",
+            },
+            "items": [
+                _suite_item("item_a", "block_a", "level_1", 3, 2, []),
+                _suite_item("item_b", "block_a", "level_1", 2, 1, ["mock-malformed"]),
+                _suite_item("item_c", "block_b", "level_2", 4, 2, ["mock-runtime-failed"]),
+            ],
+        }
+    )
+
+
+def _suite_item(
+    item_id: str,
+    block_id: str,
+    level_id: str,
+    prompt_tokens: int,
+    output_tokens: int,
+    tags: list[str],
+) -> dict[str, Any]:
+    return {
+        "item_id": item_id,
+        "item_type": "synthetic_prompt",
+        "category": "unit",
+        "difficulty": {
+            "axis": "unit",
+            "value": 1.0,
+            "scale": "ordinal",
+            "label": "unit",
+            "source": "unit",
+            "quarantine_note": "not for claims",
+        },
+        "shape": {
+            "planned_prompt_tokens": prompt_tokens,
+            "planned_output_tokens": output_tokens,
+            "prompt_level": "short",
+            "decode_level": "short",
+        },
+        "source": {
+            "source_item_id": item_id,
+            "source_sha256": f"{item_id}-sha",
+            "prompt_template_id": "synthetic",
+            "license": "internal-test",
+            "contamination_note": "synthetic",
+        },
+        "grouping": {
+            "condition_id": item_id,
+            "block_id": block_id,
+            "level_id": level_id,
+            "prefix_group_id": None,
+        },
+        "output_policy": "fixed_budget_exact",
+        "status_policy": "none",
+        "tags": tags,
+    }
 
 
 def serialize_events(events: list[RuntimeEvent]) -> str:
@@ -182,6 +288,166 @@ class MockRuntimeTests(unittest.TestCase):
 
     def test_cleanup_ok(self) -> None:
         self.assertTrue(self.runtime.cleanup(self.config).ok)
+
+    def test_run_suite_timeline_markers_statuses_and_outputs(self) -> None:
+        result = self.runtime.run_suite(self.config, make_suite_manifest())
+        self.assertEqual(result.token_count, 3 + 2 + 4 + 2)
+        self.assertEqual(result.output_token_count, 2)
+        self.assertEqual(set(result.output_artifacts), {"suite_items.jsonl"})
+
+        event_types = [event.event_type for event in result.events]
+        self.assertEqual(event_types[0], SUITE_START)
+        self.assertEqual(event_types[-1], SUITE_END)
+        self.assertEqual(event_types.count(BLOCK_START), 2)
+        self.assertEqual(event_types.count(BLOCK_END), 2)
+        self.assertEqual(event_types.count(LEVEL_START), 2)
+        self.assertEqual(event_types.count(LEVEL_END), 2)
+        self.assertEqual(event_types.count(ITEM_START), 3)
+        self.assertEqual(event_types.count(ITEM_END), 3)
+        self.assertEqual(event_types.count("token"), 2)
+
+        self.assertEqual(result.events[0].metadata["item_count"], 3)
+        self.assertEqual(
+            result.events[-1].metadata["status_counts"],
+            {"succeeded": 1, "malformed": 1, "runtime_failed": 1},
+        )
+        self.assertAlmostEqual(self.clock.now(), 1000.023, places=9)
+
+        lines = result.output_artifacts["suite_items.jsonl"].splitlines()
+        self.assertEqual(len(lines), 3)
+        records = [json.loads(line) for line in lines]
+        self.assertEqual([record["item_id"] for record in records], ["item_a", "item_b", "item_c"])
+        self.assertEqual(
+            [record["status"] for record in records],
+            ["succeeded", "malformed", "runtime_failed"],
+        )
+        self.assertEqual(records[0]["prompt_tokens"], 3)
+        self.assertEqual(records[0]["emitted_tokens"], 2)
+        self.assertEqual(len(records[0]["tokens"]), 2)
+        self.assertIn("token_ids_sha256", records[0]["prompt"])
+        self.assertEqual(records[1]["status_reason"], "mock-malformed")
+        self.assertEqual(records[2]["status_reason"], "mock-runtime-failed")
+        self.assertEqual(result.workload_provenance["suite"]["item_count"], 3)
+
+    def test_run_suite_marker_sequence_and_metadata_contract(self) -> None:
+        result = self.runtime.run_suite(self.config, make_suite_manifest())
+        marker_events = [
+            event
+            for event in result.events
+            if event.event_type in MARKER_REQUIRED_METADATA_KEYS
+        ]
+        self.assertEqual(
+            [event.event_type for event in marker_events],
+            [
+                SUITE_START,
+                BLOCK_START,
+                LEVEL_START,
+                ITEM_START,
+                ITEM_END,
+                ITEM_START,
+                ITEM_END,
+                LEVEL_END,
+                BLOCK_END,
+                BLOCK_START,
+                LEVEL_START,
+                ITEM_START,
+                ITEM_END,
+                LEVEL_END,
+                BLOCK_END,
+                SUITE_END,
+            ],
+        )
+        for event in result.events:
+            self.assertEqual(set(asdict(event)), EVENT_KEYS)
+        for event in marker_events:
+            self.assertEqual(event.phase, SUITE_PHASE)
+            self.assertLessEqual(
+                MARKER_REQUIRED_METADATA_KEYS[event.event_type],
+                set(event.metadata),
+            )
+        item_phase_events = [
+            event
+            for event in result.events
+            if event.event_type in {"phase_start", "phase_end"}
+            and event.phase in {"prefill", "decode"}
+        ]
+        for event in item_phase_events:
+            self.assertLessEqual({"item_id", "item_index"}, set(event.metadata))
+
+    def test_run_suite_prompt_sources_text_ids_and_synthetic(self) -> None:
+        manifest = load_suite_manifest(MANIFEST_PATH)
+        result = self.runtime.run_suite(self.config, manifest)
+        records = [
+            json.loads(line)
+            for line in result.output_artifacts["suite_items.jsonl"].splitlines()
+        ]
+        records_by_id = {record["item_id"]: record for record in records[:3]}
+        self.assertEqual(records_by_id["mock_item_001"]["prompt_tokens"], 4)
+        self.assertEqual(records_by_id["mock_item_003"]["prompt_tokens"], 5)
+        self.assertEqual(records_by_id["mock_item_002"]["prompt_tokens"], 4)
+        self.assertEqual(
+            records_by_id["mock_item_002"]["prompt"]["token_ids_sha256"],
+            prompt_token_ids_sha256([9, 8, 7, 6]),
+        )
+        sentinel_records = [
+            record for record in records if record["item_id"] == "mock_sentinel_repeat"
+        ]
+        self.assertEqual([record["item_index"] for record in sentinel_records], [3, 4])
+
+    def test_run_suite_item_jsonl_full_contract(self) -> None:
+        result = self.runtime.run_suite(self.config, make_suite_manifest())
+        records = [
+            json.loads(line)
+            for line in result.output_artifacts["suite_items.jsonl"].splitlines()
+        ]
+        base_keys = {
+            "item_id",
+            "item_index",
+            "status",
+            "prompt",
+            "response_text",
+            "response_sha256",
+            "stop_reason",
+            "prompt_tokens",
+            "emitted_tokens",
+            "tokens",
+        }
+        for record in records:
+            expected_keys = (
+                base_keys
+                if record["status"] == "succeeded"
+                else base_keys | {"status_reason"}
+            )
+            self.assertEqual(set(record), expected_keys)
+            self.assertEqual(record["response_sha256"], sha256_hex(record["response_text"]))
+            if record["status"] == "succeeded":
+                self.assertNotIn("status_reason", record)
+            else:
+                self.assertIn("status_reason", record)
+
+        self.assertEqual(records[0]["status"], "succeeded")
+        self.assertEqual(records[1]["status"], "malformed")
+        self.assertEqual(records[2]["status"], "runtime_failed")
+        self.assertEqual(
+            records[0]["tokens"],
+            [
+                {"index": 0, "timestamp_s": 1000.013},
+                {"index": 1, "timestamp_s": 1000.023},
+            ],
+        )
+        self.assertEqual(records[1]["tokens"], [])
+        self.assertEqual(records[2]["tokens"], [])
+
+    def test_run_suite_natural_eos_assigns_capped(self) -> None:
+        data = make_suite_manifest().to_dict()
+        data["items"] = [data["items"][0]]
+        data["items"][0]["output_policy"] = "natural_eos"
+        manifest = SuiteManifest.from_mapping(data)
+        result = self.runtime.run_suite(self.config, manifest)
+        record = json.loads(result.output_artifacts["suite_items.jsonl"])
+        self.assertEqual(record["status"], "capped")
+        self.assertEqual(record["stop_reason"], "length")
+        self.assertEqual(result.events[-1].metadata["status_counts"], {"capped": 1})
 
 
 class MockTelemetryTests(unittest.TestCase):

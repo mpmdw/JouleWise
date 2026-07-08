@@ -290,6 +290,14 @@ class RunBundleWriterTests(unittest.TestCase):
         with self.assertRaises(BundleError):
             writer.write_metadata({})
 
+    def test_write_suite_manifest_sorted_json_once(self) -> None:
+        writer = self.make_writer()
+        path = writer.write_suite_manifest({"b": 1, "a": {"z": 2}})
+        self.assertEqual(path, writer.path / "suite_manifest.json")
+        self.assertEqual(path.read_text(), '{\n  "a": {\n    "z": 2\n  },\n  "b": 1\n}\n')
+        with self.assertRaises(BundleError):
+            writer.write_suite_manifest({"again": True})
+
     def test_write_summary_before_metadata_raises(self) -> None:
         writer = self.make_writer()
         with self.assertRaises(BundleError):
@@ -349,6 +357,8 @@ class RunBundleWriterTests(unittest.TestCase):
             writer.write_power_trace([])
         with self.assertRaises(BundleError):
             writer.write_metadata({})
+        with self.assertRaises(BundleError):
+            writer.write_suite_manifest({})
         with self.assertRaises(BundleError):
             writer.write_output("late.txt", "no")
         with self.assertRaises(BundleError):

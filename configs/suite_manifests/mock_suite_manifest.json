@@ -1,0 +1,215 @@
+{
+  "schema_version": "suite_manifest.v1",
+  "suite_id": "mock_suite_smoke",
+  "suite_profile": "mock_suite_v1",
+  "suite_revision": "2026-07-08",
+  "suite_seed": "mock-suite-seed",
+  "generator": {
+    "name": "mock_materialized",
+    "version": "1.0.0",
+    "parameters_hash": "mock-parameters"
+  },
+  "analysis_contract": {
+    "independent_unit": "bundle",
+    "primary_window_class": "suite",
+    "allowed_aggregation_levels": ["suite", "block", "level"]
+  },
+  "execution_policy": {
+    "order_policy": "manifest_order",
+    "within_bundle_repeats": 1,
+    "cooldown_policy": "bundle_only",
+    "cache_policy": "warm_cache",
+    "warmup_policy": "adapter_default",
+    "default_output_policy": "fixed_budget_exact"
+  },
+  "source_manifest": {
+    "source_id": "mock_suite_source",
+    "source_kind": "synthetic",
+    "revision": "2026-07-08",
+    "subset_id": "smoke",
+    "subset_sha256": "mock-subset",
+    "license": "internal-test",
+    "contamination_note": "synthetic test-only prompts"
+  },
+  "items": [
+    {
+      "item_id": "mock_item_001",
+      "item_type": "synthetic_prompt",
+      "category": "smoke",
+      "difficulty": {
+        "axis": "mock",
+        "value": 1.0,
+        "scale": "ordinal",
+        "label": "easy",
+        "source": "mock",
+        "quarantine_note": "not for claims"
+      },
+      "shape": {
+        "planned_prompt_tokens": 4,
+        "planned_output_tokens": 3,
+        "prompt_level": "short",
+        "decode_level": "short"
+      },
+      "source": {
+        "source_item_id": "mock-src-001",
+        "source_sha256": "mock-source-001",
+        "prompt_template_id": "synthetic-token-count",
+        "license": "internal-test",
+        "contamination_note": "synthetic"
+      },
+      "grouping": {
+        "condition_id": "condition_a",
+        "block_id": "block_a",
+        "level_id": "level_1",
+        "prefix_group_id": null
+      },
+      "output_policy": "fixed_budget_exact",
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "item_id": "mock_item_002",
+      "item_type": "ids_prompt",
+      "category": "smoke",
+      "difficulty": {
+        "axis": "mock",
+        "value": 2.0,
+        "scale": "ordinal",
+        "label": "medium",
+        "source": "mock",
+        "quarantine_note": "not for claims"
+      },
+      "shape": {
+        "planned_prompt_tokens": 4,
+        "planned_output_tokens": 2,
+        "prompt_level": "short",
+        "decode_level": "short"
+      },
+      "source": {
+        "source_item_id": "mock-src-002",
+        "source_sha256": "mock-source-002",
+        "prompt_template_id": "ids-native",
+        "license": "internal-test",
+        "contamination_note": "synthetic",
+        "prompt_token_ids": [9, 8, 7, 6]
+      },
+      "grouping": {
+        "condition_id": "condition_b",
+        "block_id": "block_a",
+        "level_id": "level_1",
+        "prefix_group_id": "prefix_a"
+      },
+      "output_policy": "fixed_budget_exact",
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "item_id": "mock_item_003",
+      "item_type": "text_prompt",
+      "category": "smoke",
+      "difficulty": {
+        "axis": "mock",
+        "value": 3.0,
+        "scale": "ordinal",
+        "label": "medium",
+        "source": "mock",
+        "quarantine_note": "not for claims"
+      },
+      "shape": {
+        "planned_prompt_tokens": 5,
+        "planned_output_tokens": 1,
+        "prompt_level": "short",
+        "decode_level": "short"
+      },
+      "source": {
+        "source_item_id": "mock-src-003",
+        "source_sha256": "mock-source-003",
+        "prompt_template_id": "text-native",
+        "license": "internal-test",
+        "contamination_note": "synthetic",
+        "prompt_text": "one two three four five"
+      },
+      "grouping": {
+        "condition_id": "condition_c",
+        "block_id": "block_b",
+        "level_id": "level_1",
+        "prefix_group_id": null
+      },
+      "output_policy": "fixed_budget_exact",
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "item_id": "mock_sentinel_repeat",
+      "item_type": "ids_prompt",
+      "category": "sentinel",
+      "difficulty": {
+        "axis": "mock",
+        "value": 1.0,
+        "scale": "ordinal",
+        "label": "sentinel",
+        "source": "mock",
+        "quarantine_note": "sentinel only"
+      },
+      "shape": {
+        "planned_prompt_tokens": 2,
+        "planned_output_tokens": 1,
+        "prompt_level": "short",
+        "decode_level": "short"
+      },
+      "source": {
+        "source_item_id": "mock-src-sentinel-start",
+        "source_sha256": "mock-source-sentinel-start",
+        "prompt_template_id": "ids-native-sentinel",
+        "license": "internal-test",
+        "contamination_note": "synthetic",
+        "prompt_token_ids": [1, 2]
+      },
+      "grouping": {
+        "condition_id": "sentinel_start",
+        "block_id": "block_b",
+        "level_id": "level_2",
+        "prefix_group_id": null
+      },
+      "output_policy": "fixed_budget_exact",
+      "status_policy": "none",
+      "tags": ["sentinel"]
+    },
+    {
+      "item_id": "mock_sentinel_repeat",
+      "item_type": "ids_prompt",
+      "category": "sentinel",
+      "difficulty": {
+        "axis": "mock",
+        "value": 1.0,
+        "scale": "ordinal",
+        "label": "sentinel",
+        "source": "mock",
+        "quarantine_note": "sentinel only"
+      },
+      "shape": {
+        "planned_prompt_tokens": 2,
+        "planned_output_tokens": 1,
+        "prompt_level": "short",
+        "decode_level": "short"
+      },
+      "source": {
+        "source_item_id": "mock-src-sentinel-end",
+        "source_sha256": "mock-source-sentinel-end",
+        "prompt_template_id": "ids-native-sentinel",
+        "license": "internal-test",
+        "contamination_note": "synthetic",
+        "prompt_token_ids": [1, 2]
+      },
+      "grouping": {
+        "condition_id": "sentinel_end",
+        "block_id": "block_b",
+        "level_id": "level_2",
+        "prefix_group_id": null
+      },
+      "output_policy": "fixed_budget_exact",
+      "status_policy": "none",
+      "tags": ["sentinel"]
+    }
+  ]
+}
