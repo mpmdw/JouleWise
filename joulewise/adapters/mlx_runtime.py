@@ -41,7 +41,6 @@ from joulewise.suite import (
     ItemStatus,
     SuiteItem,
     SuiteManifest,
-    order_seed,
     suite_manifest_sha256,
 )
 
@@ -239,17 +238,13 @@ class MlxRuntimeAdapter:
         config: BenchmarkConfig,
         manifest: SuiteManifest,
         context: RunContext | None = None,
+        *,
+        order_seed: str,
     ) -> RuntimeResult:
         if self._mlx_lm is None or self._model is None or self._tokenizer is None:
             raise RuntimeError("runtime backend 'mlx' run_suite called before prepare")
 
         manifest_sha256 = suite_manifest_sha256(manifest.to_dict())
-        rep_index = _suite_rep_index_from_run_id(config.run_id)
-        derived_order_seed = order_seed(
-            manifest.suite_seed,
-            manifest.execution_policy.order_policy,
-            rep_index,
-        )
         events: list[RuntimeEvent] = [
             self._event(
                 SUITE_START,
@@ -261,7 +256,7 @@ class MlxRuntimeAdapter:
                     "suite_revision": manifest.suite_revision,
                     "suite_manifest_sha256": manifest_sha256,
                     "item_count": len(manifest.items),
-                    "order_seed": derived_order_seed,
+                    "order_seed": order_seed,
                 },
             )
         ]
@@ -410,7 +405,7 @@ class MlxRuntimeAdapter:
                     "suite_id": manifest.suite_id,
                     "manifest_sha256": manifest_sha256,
                     "item_count": len(manifest.items),
-                    "order_seed": derived_order_seed,
+                    "order_seed": order_seed,
                 },
                 "generator": {
                     "name": "mlx_lm.stream_generate",
@@ -441,10 +436,18 @@ class MlxRuntimeAdapter:
         prompt_tokens_for_marker = item.shape.planned_prompt_tokens
         prompt_text: str | None = None
         prompt_token_ids: list[int] = []
+        prompt_source = item.prompt_source_kind()
+        bos_present = False
         prompt_hash = prompt_provenance(prompt_token_ids)["token_ids_sha256"]
         prompt_ready = False
         try:
-            prompt, prompt_token_ids, prompt_text = self._prompt_for_suite_item(item)
+            (
+                prompt,
+                prompt_token_ids,
+                prompt_text,
+                prompt_source,
+                bos_present,
+            ) = self._prompt_for_suite_item(item)
             prompt_hash = prompt_provenance(prompt_token_ids, text=prompt_text)[
                 "token_ids_sha256"
             ]
@@ -548,6 +551,8 @@ class MlxRuntimeAdapter:
             "item_id": item.item_id,
             "item_index": item_index,
             "status": status,
+            "prompt_source": prompt_source,
+            "bos_present": bos_present,
             "prompt": {
                 "token_hash_domain": PROMPT_TOKEN_IDS_HASH_DOMAIN,
                 "token_ids_sha256": prompt_hash,
@@ -829,18 +834,24 @@ class MlxRuntimeAdapter:
 
     def _prompt_for_suite_item(
         self, item: SuiteItem
-    ) -> tuple[list[int], list[int], str | None]:
+    ) -> tuple[list[int], list[int], str | None, str, bool]:
         if item.source.prompt_text is not None:
             token_ids = _encode(self._tokenizer, item.source.prompt_text, add_special_tokens=True)
-            return token_ids, token_ids, item.source.prompt_text
+            return (
+                token_ids,
+                token_ids,
+                item.source.prompt_text,
+                "prompt_text",
+                _bos_present(self._tokenizer, token_ids, add_special_tokens=True),
+            )
         if item.source.prompt_token_ids is not None:
             token_ids = list(item.source.prompt_token_ids)
-            return token_ids, token_ids, None
+            return token_ids, token_ids, None, "token_ids", False
         token_ids = _synthetic_prompt_tokens(
             self._tokenizer,
             item.shape.planned_prompt_tokens,
         )
-        return token_ids, token_ids, None
+        return token_ids, token_ids, None, "synthetic", False
 
     def _sampler_for_generation(self) -> tuple[Any | None, dict[str, Any]]:
         base = {
@@ -973,6 +984,20 @@ def _encode(tokenizer: Any, text: str, *, add_special_tokens: bool) -> list[int]
     except TypeError:
         encoded = tokenizer.encode(text)
     return list(encoded)
+
+
+def _bos_present(tokenizer: Any, token_ids: list[int], *, add_special_tokens: bool) -> bool:
+    if not add_special_tokens or not token_ids:
+        return False
+    try:
+        bos_token_id = getattr(tokenizer, "bos_token_id")
+    except Exception:  # noqa: BLE001 - wrappers may forward oddly
+        bos_token_id = None
+    if isinstance(bos_token_id, int) and not isinstance(bos_token_id, bool):
+        return token_ids[0] == bos_token_id
+    # Honest proxy when the tokenizer does not expose BOS identity: record the
+    # encode mode that asked the tokenizer to prepend adapter-normal specials.
+    return True
 
 
 def _synthetic_prompt_tokens(tokenizer: Any, target_tokens: int) -> list[int]:
@@ -1137,9 +1162,3 @@ def _mlx_metal_memory(errors: dict[str, str]) -> dict[str, Any]:
         errors["mlx_metal"] = "getters_unavailable"
     return result
 
-
-def _suite_rep_index_from_run_id(run_id: str | None) -> int:
-    if run_id is None or "__r" not in run_id:
-        return 0
-    suffix = run_id.rsplit("__r", 1)[1]
-    return int(suffix) if suffix.isdigit() else 0

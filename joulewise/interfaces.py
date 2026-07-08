@@ -145,6 +145,8 @@ class SuiteRuntimeAdapter(RuntimeAdapter, Protocol):
         config: BenchmarkConfig,
         manifest: "SuiteManifest",
         context: RunContext | None = None,
+        *,
+        order_seed: str,
     ) -> RuntimeResult:
         """Run every suite item inside one measured adapter call."""
 

@@ -453,8 +453,12 @@ class _Execution:
         # controller only blocks on the runtime - no file writes, no disk event
         # appends, no logging (buffers flush after the window).
         if self._suite_manifest is not None:
+            assert self._suite_order_seed is not None
             runtime_result = self._runtime.run_suite(  # type: ignore[attr-defined]
-                self._config, self._suite_manifest, self._context
+                self._config,
+                self._suite_manifest,
+                self._context,
+                order_seed=self._suite_order_seed,
             )
         else:
             runtime_result = self._runtime.run_workload(self._config, self._context)

@@ -32,6 +32,7 @@ Evidence: bug-lens finding 3; FIX-3 diff.
 Confidence: high. Binds: unit-2 `level_windows()` semantics (a level_id
 recurring across blocks yields multiple windows — reader API is
 `dict[str, list[Window]]`, already shaped for this).
+2026-07-08 correction: `level_windows()` actually returns dict[(block_id, level_id) tuple keys, list[Window]]; the dict[str,...] wording above was written before FIX-3/SUB-2 landed.
 
 ### SUB-3 [codex-lens] [contract] Pinned manifest vocabularies
 

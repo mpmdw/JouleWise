@@ -30,6 +30,7 @@ from joulewise.suite import (
     suite_manifest_sha256,
 )
 from joulewise.adapters.mock_runtime import MockRuntimeAdapter
+from joulewise.provenance import prompt_token_ids_sha256
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
@@ -375,8 +376,13 @@ class SuiteReaderTests(ReaderTestCase):
             RuntimeEvent(0.0, "sampling_started", "measured_run", "", {})
         )
         runtime = MockRuntimeAdapter(FakeClock(start=1.0))
-        for event in runtime.run_suite(config, manifest).events:
+        runtime_result = runtime.run_suite(
+            config, manifest, order_seed=derived_order_seed
+        )
+        for event in runtime_result.events:
             writer.append_event(event)
+        for name, text in runtime_result.output_artifacts.items():
+            writer.write_output(name, text)
         writer.append_event(
             RuntimeEvent(10.0, "sampling_stopped", "measured_run", "", {})
         )
@@ -604,6 +610,48 @@ class SuiteReaderTests(ReaderTestCase):
             problems,
         )
 
+    def test_summary_suite_status_counts_must_be_reducer_assignable(self) -> None:
+        writer = self.make_suite_bundle("suite-summary-counts-illegal-status")
+        summary = json.loads((writer.path / "summary_metrics.json").read_text())
+        summary["suite_metrics"] = {
+            "status_counts": {"excluded_from_claim": 1},
+            "items": [],
+        }
+        (writer.path / "summary_metrics.json").write_text(json.dumps(summary) + "\n")
+        problems = BundleReader(writer.path).problems()
+        self.assertTrue(
+            any("suite_metrics.status_counts contains non-reducer-assignable" in p for p in problems),
+            problems,
+        )
+
+    def test_summary_block_status_counts_must_be_reducer_assignable(self) -> None:
+        writer = self.make_suite_bundle("suite-summary-block-counts-illegal-status")
+        summary = json.loads((writer.path / "summary_metrics.json").read_text())
+        summary["suite_metrics"] = {
+            "blocks": [{"group_id": "block_a", "status_counts": {"excluded_from_claim": 1}}],
+            "items": [],
+        }
+        (writer.path / "summary_metrics.json").write_text(json.dumps(summary) + "\n")
+        problems = BundleReader(writer.path).problems()
+        self.assertTrue(
+            any("suite_metrics.blocks[0].status_counts contains non-reducer-assignable" in p for p in problems),
+            problems,
+        )
+
+    def test_summary_level_status_counts_must_be_reducer_assignable(self) -> None:
+        writer = self.make_suite_bundle("suite-summary-level-counts-illegal-status")
+        summary = json.loads((writer.path / "summary_metrics.json").read_text())
+        summary["suite_metrics"] = {
+            "levels": [{"group_id": "block_a/level_1", "status_counts": {"excluded_from_claim": 1}}],
+            "items": [],
+        }
+        (writer.path / "summary_metrics.json").write_text(json.dumps(summary) + "\n")
+        problems = BundleReader(writer.path).problems()
+        self.assertTrue(
+            any("suite_metrics.levels[0].status_counts contains non-reducer-assignable" in p for p in problems),
+            problems,
+        )
+
     def test_fixed_budget_succeeded_underrun_is_validation_error(self) -> None:
         writer = self.make_suite_bundle("suite-underrun")
         events_path = writer.path / "events.jsonl"
@@ -665,6 +713,72 @@ class SuiteReaderTests(ReaderTestCase):
         problems = BundleReader(writer.path).problems()
         self.assertTrue(any("suite_end.metadata.items_executed mismatch" in p for p in problems), problems)
         self.assertTrue(any("suite_end.metadata.status_counts mismatch" in p for p in problems), problems)
+
+    def test_manifest_declared_blocks_and_levels_require_paired_markers(self) -> None:
+        writer = self.make_suite_bundle("suite-missing-group-markers")
+        events_path = writer.path / "events.jsonl"
+        events = [
+            event
+            for event in read_jsonl(events_path)
+            if event["event_type"] not in {BLOCK_START, BLOCK_END, LEVEL_START, LEVEL_END}
+        ]
+        write_jsonl(events_path, events)
+
+        problems = BundleReader(writer.path).problems()
+
+        self.assertTrue(
+            any("manifest block_id 'block_a' is missing paired block markers" in p for p in problems),
+            problems,
+        )
+        self.assertTrue(
+            any("manifest level grouping ('block_a', 'level_1') is missing paired level markers" in p for p in problems),
+            problems,
+        )
+
+    def test_ids_native_suite_item_hash_mismatch_from_output_is_validation_error(self) -> None:
+        writer = self.make_suite_bundle("suite-ids-output-mismatch")
+        output_path = writer.path / "outputs" / "suite_items.jsonl"
+        records = read_jsonl(output_path)
+        for record in records:
+            if record["item_id"] == "mock_item_002":
+                record["prompt"]["token_ids_sha256"] = "0" * 64
+                break
+        write_jsonl(output_path, records)
+
+        problems = BundleReader(writer.path).problems()
+
+        self.assertTrue(
+            any("prompt.token_ids_sha256 mismatch for ids-native" in p and "actual '0000" in p for p in problems),
+            problems,
+        )
+
+    def test_ids_native_suite_item_hash_mismatch_from_manifest_is_validation_error(self) -> None:
+        writer = self.make_suite_bundle("suite-ids-manifest-mismatch")
+        manifest_path = writer.path / "suite_manifest.json"
+        raw_manifest = json.loads(manifest_path.read_text())
+        for item in raw_manifest["items"]:
+            if item["item_id"] == "mock_item_002":
+                item["source"]["prompt_token_ids"] = [6, 7, 8, 9]
+                break
+        manifest_path.write_text(json.dumps(raw_manifest, indent=2, sort_keys=True) + "\n")
+        new_hash = suite_manifest_sha256(canonical_effective_manifest(raw_manifest))
+        config = json.loads((writer.path / "config.json").read_text())
+        config["workload_profile"]["suite_manifest_sha256"] = new_hash
+        (writer.path / "config.json").write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
+        metadata = json.loads((writer.path / "metadata.json").read_text())
+        metadata["suite"]["manifest_sha256"] = new_hash
+        (writer.path / "metadata.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+
+        problems = BundleReader(writer.path).problems()
+
+        self.assertTrue(
+            any(
+                "prompt.token_ids_sha256 mismatch for ids-native" in p
+                and prompt_token_ids_sha256([6, 7, 8, 9]) in p
+                for p in problems
+            ),
+            problems,
+        )
 
     def test_suite_hash_mismatches_are_validation_errors(self) -> None:
         writer = self.make_suite_bundle("suite-hash-mismatch")

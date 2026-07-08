@@ -46,6 +46,7 @@ from joulewise.schemas import (
     RunStatus,
     SchemaError,
 )
+from joulewise.provenance import prompt_token_ids_sha256
 from joulewise.suite import (
     BLOCK_END,
     BLOCK_START,
@@ -804,6 +805,58 @@ def _suite_problems(
         if extra:
             problems.append(f"paired item marker(s) outside manifest item_index range: {extra}")
 
+    block_windows = reader.block_windows()
+    level_windows = reader.level_windows()
+    manifest_block_ids = sorted({item.grouping.block_id for item in manifest.items})
+    manifest_level_keys = sorted(
+        {(item.grouping.block_id, item.grouping.level_id) for item in manifest.items}
+    )
+    for block_id in manifest_block_ids:
+        if not block_windows.get(block_id):
+            problems.append(
+                f"manifest block_id {block_id!r} is missing paired block markers"
+            )
+    for block_id, level_id in manifest_level_keys:
+        if not level_windows.get((block_id, level_id)):
+            problems.append(
+                "manifest level grouping "
+                f"{(block_id, level_id)!r} is missing paired level markers"
+            )
+
+    suite_item_records, record_problems = _suite_item_records(reader.path)
+    problems.extend(record_problems)
+    if suite_item_records is not None:
+        records_by_index: dict[int, dict[str, Any]] = {}
+        for line_index, record in enumerate(suite_item_records, start=1):
+            item_index = record.get("item_index")
+            if isinstance(item_index, bool) or not isinstance(item_index, int):
+                problems.append(
+                    "outputs/suite_items.jsonl line "
+                    f"{line_index} item_index is not an integer: {item_index!r}"
+                )
+                continue
+            records_by_index[item_index] = record
+        for item_index, item in enumerate(manifest.items):
+            if item.source.prompt_token_ids is None:
+                continue
+            record = records_by_index.get(item_index)
+            if record is None:
+                problems.append(
+                    "outputs/suite_items.jsonl is missing item_index "
+                    f"{item_index} for ids-native prompt validation"
+                )
+                continue
+            prompt = record.get("prompt")
+            actual = prompt.get("token_ids_sha256") if isinstance(prompt, dict) else None
+            expected_hash = prompt_token_ids_sha256(item.source.prompt_token_ids)
+            if actual != expected_hash:
+                problems.append(
+                    "outputs/suite_items.jsonl item_index "
+                    f"{item_index} prompt.token_ids_sha256 mismatch for ids-native "
+                    f"manifest prompt_token_ids: expected {expected_hash!r}, "
+                    f"actual {actual!r}"
+                )
+
     if isinstance(suite_metadata, dict):
         suite_start_metadata = _first_marker_metadata(events, SUITE_START)
         if isinstance(suite_start_metadata, dict):
@@ -863,12 +916,11 @@ def _suite_problems(
                 )
 
     if suite_window is not None:
-        for block_id, windows in reader.block_windows().items():
+        for block_id, windows in block_windows.items():
             for window in windows:
                 if not _window_contains(suite_window, window):
                     problems.append(f"block {block_id!r} window is not inside the suite window")
-        block_windows = reader.block_windows()
-        for (block_id, level_id), windows in reader.level_windows().items():
+        for (block_id, level_id), windows in level_windows.items():
             containers = block_windows.get(block_id, [])
             for window in windows:
                 if not _window_contains(suite_window, window):
@@ -948,13 +1000,42 @@ def _suite_summary_metrics_problems(summary: Any) -> list[str]:
         return []
     if not isinstance(suite_metrics, dict):
         return ["summary_metrics.json suite_metrics is not an object"]
-    items = suite_metrics.get("items")
-    if items is None:
-        return []
-    if not isinstance(items, list):
-        return ["summary_metrics.json suite_metrics.items is not a list"]
     assignable = {status.value for status in REDUCER_ASSIGNABLE}
     problems: list[str] = []
+    problems.extend(
+        _status_count_key_problems(
+            suite_metrics.get("status_counts"),
+            "summary_metrics.json suite_metrics.status_counts",
+            assignable,
+        )
+    )
+    for surface in ("blocks", "levels"):
+        groups = suite_metrics.get(surface)
+        if groups is None:
+            continue
+        if not isinstance(groups, list):
+            problems.append(f"summary_metrics.json suite_metrics.{surface} is not a list")
+            continue
+        for index, group in enumerate(groups):
+            if not isinstance(group, dict):
+                problems.append(
+                    f"summary_metrics.json suite_metrics.{surface}[{index}] "
+                    "is not an object"
+                )
+                continue
+            problems.extend(
+                _status_count_key_problems(
+                    group.get("status_counts"),
+                    "summary_metrics.json suite_metrics."
+                    f"{surface}[{index}].status_counts",
+                    assignable,
+                )
+            )
+    items = suite_metrics.get("items")
+    if items is None:
+        return problems
+    if not isinstance(items, list):
+        return problems + ["summary_metrics.json suite_metrics.items is not a list"]
     for index, item in enumerate(items):
         if not isinstance(item, dict):
             problems.append(
@@ -968,6 +1049,49 @@ def _suite_summary_metrics_problems(summary: Any) -> list[str]:
                 f"[{index}].status is not reducer-assignable: {status!r}"
             )
     return problems
+
+
+def _status_count_key_problems(
+    status_counts: Any, path: str, assignable: set[str]
+) -> list[str]:
+    if status_counts is None:
+        return []
+    if not isinstance(status_counts, dict):
+        return [f"{path} is not an object"]
+    problems: list[str] = []
+    for status in sorted(status_counts):
+        if status not in assignable:
+            problems.append(f"{path} contains non-reducer-assignable status: {status!r}")
+    return problems
+
+
+def _suite_item_records(path: Path) -> tuple[list[dict[str, Any]] | None, list[str]]:
+    suite_items_path = path / "outputs" / "suite_items.jsonl"
+    if not suite_items_path.is_file():
+        return None, ["outputs/suite_items.jsonl is missing for suite bundle"]
+    try:
+        text = suite_items_path.read_text()
+    except OSError as exc:
+        return None, [f"outputs/suite_items.jsonl cannot be read: {exc}"]
+    records: list[dict[str, Any]] = []
+    problems: list[str] = []
+    for index, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            problems.append(
+                f"outputs/suite_items.jsonl line {index} is not valid JSON: {exc}"
+            )
+            continue
+        if not isinstance(record, dict):
+            problems.append(
+                f"outputs/suite_items.jsonl line {index} is not a JSON object"
+            )
+            continue
+        records.append(record)
+    return records, problems
 
 
 def _first_marker_metadata(

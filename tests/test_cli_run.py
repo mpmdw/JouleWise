@@ -436,6 +436,49 @@ class StrictValidateTests(CliRunTestCase):
             problems,
         )
 
+    def test_suite_bundle_prompt_rollup_is_recomputed_from_suite_items(self) -> None:
+        exit_code, stdout, stderr = self.run_verb(
+            self.write_suite_config("strict-suite-rollup-tampered")
+        )
+        self.assertEqual(exit_code, 0, stderr)
+        bundle = self.bundle_path_from_line(stdout)
+        suite_items_path = bundle / "outputs" / "suite_items.jsonl"
+        records = [
+            json.loads(line)
+            for line in suite_items_path.read_text().splitlines()
+            if line.strip()
+        ]
+        records[0]["prompt"]["token_ids_sha256"] = "0" * 64
+        records[0]["prompt_tokens"] += 1
+        suite_items_path.write_text(
+            "".join(json.dumps(record, sort_keys=True) + "\n" for record in records)
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        digest_problem = next(
+            (
+                p
+                for p in problems
+                if "prompt.token_ids_sha256 does not match outputs/suite_items.jsonl rollup" in p
+            ),
+            None,
+        )
+        count_problem = next(
+            (
+                p
+                for p in problems
+                if "prompt.realized_token_count does not match outputs/suite_items.jsonl rollup" in p
+            ),
+            None,
+        )
+        self.assertIsNotNone(digest_problem, problems)
+        self.assertIn("metadata has", digest_problem)
+        self.assertIn("recomputed has", digest_problem)
+        self.assertIsNotNone(count_problem, problems)
+        self.assertIn("metadata has", count_problem)
+        self.assertIn("recomputed has", count_problem)
+
     def test_emptied_rail_manifest_fails_strict_only(self) -> None:
         # Review repro (a): default validation blesses it; strict must not.
         bundle = self.make_bundle("strict-manifest")

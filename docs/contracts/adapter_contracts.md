@@ -179,10 +179,12 @@ Candidate runtimes:
 ## Suite Runtime Adapter (D-045/D-046/D-047.5)
 
 A runtime that can execute a materialized suite manifest implements
-`SuiteRuntimeAdapter.run_suite(config, manifest, context)`. The controller
+`SuiteRuntimeAdapter.run_suite(config, manifest, context, *, order_seed)`. The controller
 dispatches to this method only when `workload_profile.suite_manifest_ref` is
 set and validation has loaded the manifest. `run_workload` remains the
-single-prompt contract.
+single-prompt contract. `order_seed` is controller-derived (D-045.6), never
+runtime-chosen; adapters must use the supplied value in suite markers and
+workload provenance rather than deriving a seed from `run_id`.
 
 `run_suite` obligations:
 
@@ -195,9 +197,9 @@ single-prompt contract.
   `run_suite`.
 - Write exactly one per-item output artifact, `outputs/suite_items.jsonl`.
   Each line carries the item id/index, status and optional status reason,
-  prompt token-ID hash block, response text/hash, stop reason, prompt/output
-  token counts, and token timestamps (D-045.8). Suites do not emit
-  `response.txt`.
+  `prompt_source`, `bos_present`, prompt token-ID hash block, response
+  text/hash, stop reason, prompt/output token counts, and token timestamps
+  (D-045.8/AP-6). Suites do not emit `response.txt`.
 - Preserve workload provenance for suite identity, generator, tokenizer,
   model, and sampler. MLX adapters must attempt to pin greedy/temp-0 by
   constructing the installed `mlx_lm` sampler and passing it to
@@ -232,6 +234,15 @@ with no BOS added; this is required for D-046 sentinel conditions.
 Absent text and ids use a synthetic prompt with
 `shape.planned_prompt_tokens`. Any field named `prompt_sha256` means the
 domain-separated token-ID hash, not a text hash.
+
+`suite_items.jsonl.prompt_source` is one of `prompt_text`, `token_ids`, or
+`synthetic`. `bos_present` records whether BOS is present in the realized
+prompt. For text-path adapters, when the tokenizer exposes a BOS id this is
+`add_special_tokens=True` and first realized id equals the tokenizer BOS id;
+when the tokenizer does not expose BOS identity, `bos_present` records the
+honest encode-mode proxy (`add_special_tokens=True`). Ids-native and
+synthetic suite prompts record `false` unless a future adapter explicitly
+materializes BOS as part of those sources.
 
 ## Telemetry Adapter
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -1145,6 +1146,46 @@ class SuiteControllerTests(ControllerTestCase):
         ]
         self.assertTrue(suite_indices)
         self.assertTrue(all(sampling_started < index < sampling_stopped for index in suite_indices))
+
+    def test_suite_controller_passes_controller_derived_order_seed_to_runtime(self) -> None:
+        config = make_suite_config("suite-seed__r3")
+        bundle_path, summary = run_benchmark(config, self.runs_root, self.clock)
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        manifest = json.loads(SUITE_MANIFEST_PATH.read_text())
+        expected = order_seed(
+            manifest["suite_seed"],
+            manifest["execution_policy"]["order_policy"],
+            3,
+        )
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        events = self.read_events(bundle_path)
+        suite_start = next(event for event in events if event["event_type"] == "suite_start")
+        self.assertEqual(metadata["suite"]["order_seed"], expected)
+        self.assertEqual(suite_start["metadata"]["order_seed"], expected)
+        self.assertEqual(
+            metadata["workload_provenance"]["suite"]["order_seed"],
+            expected,
+        )
+
+    def test_suite_manifest_ref_relative_to_cwd_from_repo_root(self) -> None:
+        data = json.loads(SUITE_CONFIG_PATH.read_text())
+        manifest = json.loads(SUITE_MANIFEST_PATH.read_text())
+        data["run_id"] = "suite-relative-ref"
+        data["workload_profile"]["suite_manifest_ref"] = (
+            "configs/suite_manifests/mock_suite_manifest.json"
+        )
+        data["workload_profile"]["suite_manifest_sha256"] = suite_manifest_sha256(manifest)
+        old_cwd = Path.cwd()
+        try:
+            os.chdir(REPO_ROOT)
+            bundle_path, summary = run_benchmark(
+                BenchmarkConfig.from_mapping(data), self.runs_root, self.clock
+            )
+        finally:
+            os.chdir(old_cwd)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertTrue((bundle_path / "suite_manifest.json").is_file())
 
     def test_suite_runtime_without_run_suite_is_unsupported_complete_bundle(self) -> None:
         bundle_path, summary = run_benchmark(

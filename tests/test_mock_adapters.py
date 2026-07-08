@@ -294,7 +294,9 @@ class MockRuntimeTests(unittest.TestCase):
         self.assertTrue(self.runtime.cleanup(self.config).ok)
 
     def test_run_suite_timeline_markers_statuses_and_outputs(self) -> None:
-        result = self.runtime.run_suite(self.config, make_suite_manifest())
+        result = self.runtime.run_suite(
+            self.config, make_suite_manifest(), order_seed="controller-seed"
+        )
         self.assertEqual(result.token_count, 3 + 2 + 4 + 2)
         self.assertEqual(result.output_token_count, 2)
         self.assertEqual(set(result.output_artifacts), {"suite_items.jsonl"})
@@ -350,7 +352,9 @@ class MockRuntimeTests(unittest.TestCase):
         )
 
     def test_run_suite_marker_sequence_and_metadata_contract(self) -> None:
-        result = self.runtime.run_suite(self.config, make_suite_manifest())
+        result = self.runtime.run_suite(
+            self.config, make_suite_manifest(), order_seed="controller-seed"
+        )
         marker_events = [
             event
             for event in result.events
@@ -396,7 +400,9 @@ class MockRuntimeTests(unittest.TestCase):
 
     def test_run_suite_prompt_sources_text_ids_and_synthetic(self) -> None:
         manifest = load_suite_manifest(MANIFEST_PATH)
-        result = self.runtime.run_suite(self.config, manifest)
+        result = self.runtime.run_suite(
+            self.config, manifest, order_seed="controller-seed"
+        )
         records = [
             json.loads(line)
             for line in result.output_artifacts["suite_items.jsonl"].splitlines()
@@ -405,6 +411,12 @@ class MockRuntimeTests(unittest.TestCase):
         self.assertEqual(records_by_id["mock_item_001"]["prompt_tokens"], 4)
         self.assertEqual(records_by_id["mock_item_003"]["prompt_tokens"], 5)
         self.assertEqual(records_by_id["mock_item_002"]["prompt_tokens"], 4)
+        self.assertEqual(records_by_id["mock_item_001"]["prompt_source"], "synthetic")
+        self.assertEqual(records_by_id["mock_item_001"]["bos_present"], False)
+        self.assertEqual(records_by_id["mock_item_002"]["prompt_source"], "token_ids")
+        self.assertEqual(records_by_id["mock_item_002"]["bos_present"], False)
+        self.assertEqual(records_by_id["mock_item_003"]["prompt_source"], "prompt_text")
+        self.assertEqual(records_by_id["mock_item_003"]["bos_present"], True)
         self.assertEqual(
             records_by_id["mock_item_002"]["prompt"]["token_ids_sha256"],
             prompt_token_ids_sha256([9, 8, 7, 6]),
@@ -415,7 +427,9 @@ class MockRuntimeTests(unittest.TestCase):
         self.assertEqual([record["item_index"] for record in sentinel_records], [3, 4])
 
     def test_run_suite_item_jsonl_full_contract(self) -> None:
-        result = self.runtime.run_suite(self.config, make_suite_manifest())
+        result = self.runtime.run_suite(
+            self.config, make_suite_manifest(), order_seed="controller-seed"
+        )
         records = [
             json.loads(line)
             for line in result.output_artifacts["suite_items.jsonl"].splitlines()
@@ -424,6 +438,8 @@ class MockRuntimeTests(unittest.TestCase):
             "item_id",
             "item_index",
             "status",
+            "prompt_source",
+            "bos_present",
             "prompt",
             "response_text",
             "response_sha256",
@@ -463,7 +479,9 @@ class MockRuntimeTests(unittest.TestCase):
         data["items"] = [data["items"][0]]
         data["items"][0]["output_policy"] = "natural_eos"
         manifest = SuiteManifest.from_mapping(data)
-        result = self.runtime.run_suite(self.config, manifest)
+        result = self.runtime.run_suite(
+            self.config, manifest, order_seed="controller-seed"
+        )
         record = json.loads(result.output_artifacts["suite_items.jsonl"])
         self.assertEqual(record["status"], "capped")
         self.assertEqual(record["stop_reason"], "length")

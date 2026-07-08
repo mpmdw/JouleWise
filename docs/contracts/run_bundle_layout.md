@@ -179,10 +179,15 @@ Required marker metadata keys are:
 
 `outputs/suite_items.jsonl` is the single per-item output artifact. Each
 line is one JSON object with `item_id`, `item_index`, `status`,
+`prompt_source` (`prompt_text`, `token_ids`, or `synthetic`), `bos_present`,
 optional `status_reason`, `prompt.token_hash_domain`,
 `prompt.token_ids_sha256`, `response_text`, `response_sha256`,
 `stop_reason`, `prompt_tokens`, `emitted_tokens`, and `tokens`
 (`[{index, timestamp_s}, ...]`). Suites do not write `response.txt`.
+For ids-native manifest items (`source.prompt_token_ids`), bundle validation
+recomputes `prompt_token_ids_sha256(manifest ids)` and checks it against the
+line's realized `prompt.token_ids_sha256`; text-path expected-hash closure is
+campaign-runner checked.
 
 `metadata.suite` is a top-level metadata block, not `metadata.extra`.
 Required fields are `suite_id`, `suite_profile`, `suite_revision`,
@@ -200,6 +205,8 @@ of realized prompt tokens across executed items, `token_hash_domain:
 "joulewise.suite_prompt_token_ids.v1"`, and `token_ids_sha256` as the
 domain-separated SHA-256 of the canonical JSON list of per-item
 `prompt.token_ids_sha256` values in execution order; `text_sha256` is null.
+Strict validation recomputes this rollup from `outputs/suite_items.jsonl` and
+compares both `token_ids_sha256` and `realized_token_count`.
 `metadata.workload_provenance.output_policy` records the manifest
 `execution_policy.default_output_policy`, the sum of executed items'
 `planned_output_tokens`, total emitted tokens, and `stop_condition:

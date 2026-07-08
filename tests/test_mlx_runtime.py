@@ -31,7 +31,6 @@ from joulewise.suite import (
     SUITE_PHASE,
     SUITE_START,
     SuiteManifest,
-    order_seed,
     suite_manifest_sha256,
 )
 
@@ -75,6 +74,7 @@ def make_config(
 class FakeTokenizer:
     def __init__(self) -> None:
         self.eos_token_ids = {99}
+        self.bos_token_id = 1
         self.name_or_path = "fake-tokenizer"
         self.vocab_size = 12345
 
@@ -516,7 +516,7 @@ class MlxRuntimeTests(unittest.TestCase):
         config = make_config(run_id="suite-test__r2")
         manifest = make_suite_manifest()
 
-        result = adapter.run_suite(config, manifest)
+        result = adapter.run_suite(config, manifest, order_seed="controller-seed")
 
         self.assertEqual(set(result.output_artifacts), {"suite_items.jsonl"})
         self.assertEqual(result.events[0].event_type, SUITE_START)
@@ -528,7 +528,7 @@ class MlxRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(
             result.events[0].metadata["order_seed"],
-            order_seed("seed", "manifest_order", 2),
+            "controller-seed",
         )
         marker_events = [
             event
@@ -551,6 +551,8 @@ class MlxRuntimeTests(unittest.TestCase):
         ]
         self.assertEqual([record["item_id"] for record in records], ["ids_item", "text_item", "synthetic_item"])
         self.assertEqual([record["status"] for record in records], ["succeeded", "capped", "succeeded"])
+        self.assertEqual([record["prompt_source"] for record in records], ["token_ids", "prompt_text", "synthetic"])
+        self.assertEqual([record["bos_present"] for record in records], [False, True, False])
         self.assertEqual(records[0]["prompt"]["token_ids_sha256"], prompt_token_ids_sha256([7, 8, 9]))
         self.assertEqual(records[0]["prompt_tokens"], 3)
         self.assertEqual(records[1]["prompt_tokens"], 3)
@@ -563,7 +565,7 @@ class MlxRuntimeTests(unittest.TestCase):
         self.assertEqual(fake_mlx.calls[0]["eos_token_ids_during_call"], set())
         self.assertEqual(fake_mlx.calls[1]["eos_token_ids_during_call"], {99})
         self.assertEqual(fake_mlx.calls[2]["eos_token_ids_during_call"], set())
-        self.assertEqual(result.workload_provenance["suite"]["order_seed"], order_seed("seed", "manifest_order", 2))
+        self.assertEqual(result.workload_provenance["suite"]["order_seed"], "controller-seed")
         self.assertEqual(
             result.workload_provenance["prompt"],
             suite_prompt_rollup(
@@ -595,7 +597,7 @@ class MlxRuntimeTests(unittest.TestCase):
             ]
         )
 
-        result = adapter.run_suite(make_config(), manifest)
+        result = adapter.run_suite(make_config(), manifest, order_seed="controller-seed")
         records = [
             json.loads(line)
             for line in result.output_artifacts["suite_items.jsonl"].splitlines()
@@ -613,7 +615,7 @@ class MlxRuntimeTests(unittest.TestCase):
             [suite_item("underrun", prompt_tokens=2, output_tokens=2)]
         )
 
-        result = adapter.run_suite(make_config(), manifest)
+        result = adapter.run_suite(make_config(), manifest, order_seed="controller-seed")
         record = json.loads(result.output_artifacts["suite_items.jsonl"])
 
         self.assertEqual(record["status"], "malformed")
@@ -634,7 +636,7 @@ class MlxRuntimeTests(unittest.TestCase):
             ]
         )
 
-        result = adapter.run_suite(make_config(), manifest)
+        result = adapter.run_suite(make_config(), manifest, order_seed="controller-seed")
         record = json.loads(result.output_artifacts["suite_items.jsonl"])
 
         self.assertEqual(record["status"], "capped")
@@ -648,6 +650,7 @@ class MlxRuntimeTests(unittest.TestCase):
         suite = adapter.run_suite(
             make_config(),
             make_suite_manifest([suite_item("one", prompt_tokens=2, output_tokens=1)]),
+            order_seed="controller-seed",
         )
 
         self.assertEqual(
@@ -672,6 +675,7 @@ class MlxRuntimeTests(unittest.TestCase):
         suite = adapter.run_suite(
             make_config(),
             make_suite_manifest([suite_item("one", prompt_tokens=2, output_tokens=1)]),
+            order_seed="controller-seed",
         )
 
         self.assertEqual(workload.workload_provenance["sampler"]["pinned"], True)
@@ -747,7 +751,7 @@ class MlxRuntimeTests(unittest.TestCase):
                 )
             ]
         )
-        result = adapter.run_suite(make_config(), manifest)
+        result = adapter.run_suite(make_config(), manifest, order_seed="controller-seed")
         line = json.loads(result.output_artifacts["suite_items.jsonl"].strip())
         self.assertEqual(line["status"], "succeeded")
         self.assertNotIn("status_reason", line)
@@ -781,7 +785,7 @@ class MlxRuntimeTests(unittest.TestCase):
                 ),
             ]
         )
-        result = adapter.run_suite(make_config(), manifest)
+        result = adapter.run_suite(make_config(), manifest, order_seed="controller-seed")
         statuses = [
             json.loads(line)["status"]
             for line in result.output_artifacts["suite_items.jsonl"].strip().split("\n")

@@ -52,7 +52,6 @@ from joulewise.suite import (
     ItemStatus,
     SuiteItem,
     SuiteManifest,
-    order_seed,
     suite_manifest_sha256,
 )
 
@@ -182,14 +181,10 @@ class MockRuntimeAdapter:
         config: BenchmarkConfig,
         manifest: SuiteManifest,
         context: RunContext | None = None,
+        *,
+        order_seed: str,
     ) -> RuntimeResult:
         manifest_sha256 = suite_manifest_sha256(manifest.to_dict())
-        rep_index = _suite_rep_index_from_run_id(config.run_id)
-        derived_order_seed = order_seed(
-            manifest.suite_seed,
-            manifest.execution_policy.order_policy,
-            rep_index,
-        )
         events: list[RuntimeEvent] = [
             self._event(
                 SUITE_START,
@@ -201,7 +196,7 @@ class MockRuntimeAdapter:
                     "suite_revision": manifest.suite_revision,
                     "suite_manifest_sha256": manifest_sha256,
                     "item_count": len(manifest.items),
-                    "order_seed": derived_order_seed,
+                    "order_seed": order_seed,
                 },
             )
         ]
@@ -340,7 +335,7 @@ class MockRuntimeAdapter:
                     "suite_id": manifest.suite_id,
                     "manifest_sha256": manifest_sha256,
                     "item_count": len(manifest.items),
-                    "order_seed": derived_order_seed,
+                    "order_seed": order_seed,
                 },
                 "generator": {
                     "name": "mock_runtime",
@@ -505,6 +500,8 @@ class MockRuntimeAdapter:
             "item_id": item.item_id,
             "item_index": item_index,
             "status": status,
+            "prompt_source": _suite_item_prompt_source(item),
+            "bos_present": item.source.prompt_text is not None,
             "prompt": {
                 "token_hash_domain": PROMPT_TOKEN_IDS_HASH_DOMAIN,
                 "token_ids_sha256": prompt["token_ids_sha256"],
@@ -556,8 +553,6 @@ class MockRuntimeAdapter:
         return list(range(1, prompt_tokens + 1))
 
 
-def _suite_rep_index_from_run_id(run_id: str | None) -> int:
-    if run_id is None or "__r" not in run_id:
-        return 0
-    suffix = run_id.rsplit("__r", 1)[1]
-    return int(suffix) if suffix.isdigit() else 0
+def _suite_item_prompt_source(item: SuiteItem) -> str:
+    source = item.prompt_source_kind()
+    return "token_ids" if source == "prompt_token_ids" else source
