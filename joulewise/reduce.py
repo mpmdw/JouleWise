@@ -121,8 +121,8 @@ def _idle_baseline(metadata: dict[str, Any]) -> IdleBaseline | None:
         power_w_mean=_idle_baseline_float(raw, "power_w_mean"),
         power_w_stddev=_idle_baseline_float(raw, "power_w_stddev"),
         duration_s=_idle_baseline_float(raw, "duration_s"),
-        sample_count=int(raw["sample_count"]),
-        telemetry_backend=TelemetryBackend(raw["telemetry_backend"]),
+        sample_count=_idle_baseline_int(raw, "sample_count"),
+        telemetry_backend=_idle_baseline_telemetry_backend(raw),
         gpu_idle_ratio_mean=_optional_float(raw.get("gpu_idle_ratio_mean")),
         gpu_idle_ratio_min=_optional_float(raw.get("gpu_idle_ratio_min")),
         gpu_freq_hz_mean=_optional_float(raw.get("gpu_freq_hz_mean")),
@@ -133,8 +133,34 @@ def _idle_baseline(metadata: dict[str, Any]) -> IdleBaseline | None:
 def _idle_baseline_float(raw: dict[str, Any], key: str) -> float:
     try:
         return finite_float(raw[key], f"idle_baseline.{key}")
+    except KeyError as exc:
+        raise _ReduceError(f"idle_baseline.{key} is required") from exc
     except ValueError as exc:
         raise _ReduceError(str(exc)) from exc
+
+
+def _idle_baseline_int(raw: dict[str, Any], key: str) -> int:
+    try:
+        value = raw[key]
+    except KeyError as exc:
+        raise _ReduceError(f"idle_baseline.{key} is required") from exc
+    if isinstance(value, bool):
+        raise _ReduceError(f"idle_baseline.{key} must be an integer")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise _ReduceError(f"idle_baseline.{key} must be an integer") from exc
+
+
+def _idle_baseline_telemetry_backend(raw: dict[str, Any]) -> TelemetryBackend:
+    try:
+        value = raw["telemetry_backend"]
+    except KeyError as exc:
+        raise _ReduceError("idle_baseline.telemetry_backend is required") from exc
+    try:
+        return TelemetryBackend(value)
+    except ValueError as exc:
+        raise _ReduceError("idle_baseline.telemetry_backend is not supported") from exc
 
 
 def _optional_float(value: Any) -> float | None:
@@ -167,7 +193,20 @@ def _thermal_drift_c(metadata: dict[str, Any]) -> float | None:
     post_temp = post.get("temperature_c")
     if pre_temp is None or post_temp is None:
         return None
-    return float(post_temp) - float(pre_temp)
+    try:
+        return (
+            finite_float(post_temp, "thermal_post.temperature_c")
+            - finite_float(pre_temp, "thermal_pre.temperature_c")
+        )
+    except ValueError as exc:
+        raise _ReduceError(str(exc)) from exc
+
+
+def _failed_thermal_drift_c(metadata: dict[str, Any]) -> float | None:
+    try:
+        return _thermal_drift_c(metadata)
+    except _ReduceError:
+        return None
 
 
 def _cooldown_cap_hit(metadata: dict[str, Any]) -> bool | None:
@@ -317,7 +356,7 @@ def _failed_quality(
         idle_power_w_stddev=(
             idle_baseline.power_w_stddev if idle_baseline is not None else None
         ),
-        thermal_drift_c=_thermal_drift_c(metadata),
+        thermal_drift_c=_failed_thermal_drift_c(metadata),
         telemetry_source=_telemetry_source(metadata),
         cooldown_cap_hit=_cooldown_cap_hit(metadata),
         idle_window_suspect=_idle_window_suspect(idle_baseline),

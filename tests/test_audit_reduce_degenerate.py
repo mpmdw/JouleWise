@@ -62,7 +62,6 @@ class ReduceAuditCase(unittest.TestCase):
 
 class ReduceDegenerateBugPins(ReduceAuditCase):
     # R2: _idle_baseline(metadata) is called outside the structured-failure try.
-    @unittest.expectedFailure
     def test_malformed_idle_baseline_is_structured_failure(self) -> None:
         writer = self.make_writer()
         self.add_window(writer, 0.0, 2.0)
@@ -116,7 +115,6 @@ class ReduceDegenerateBugPins(ReduceAuditCase):
         self.assertFalse(math.isnan(summary.gross_energy_j or 0.0))
 
     # R5: nonnumeric thermal metadata raises raw ValueError while building quality.
-    @unittest.expectedFailure
     def test_bad_thermal_metadata_is_structured_failure(self) -> None:
         writer = self.make_writer()
         self.add_window(writer, 0.0, 2.0)
