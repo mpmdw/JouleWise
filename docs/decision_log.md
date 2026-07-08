@@ -1809,3 +1809,248 @@ wording against the ladder as part of the standard lens rounds.
 Revisit when: the Phase 4 claims index lands (mechanical enforcement
 may subsume the prose rule), or a claim class appears that the five
 levels cannot express.
+
+---
+
+## D-038: Analysis-plans contract binds L2/L3 claims to pre-registered plans
+
+- Date: 2026-07-08
+- Status: accepted
+- Phase: 2+
+
+Context: the suite-science hardening council (C-014) found that planned
+comparisons carried no pre-registered analysis: estimators, floor gates,
+sample sizing, and claim ceilings lived in scattered prose, and the
+Token-Shape Sufficiency Null (C5-W.1) was unfalsifiable as designed. The
+claims ladder (D-037) disciplines wording but not the analysis that
+produces the number being worded.
+
+Options considered:
+
+1. Keep discipline in the question bank per question. Con: the bank
+   records what a question is, not how its comparison will be analyzed;
+   the C-W.1 confound survived three council passes there.
+2. Full statistical analysis plan documents per campaign. Con:
+   pre-registration theater; prose ritual the loop would stop reading.
+3. A compact per-comparison plan table as a contract, with a binding
+   rule: no reader-facing L2/L3 claim without a filled plan row.
+
+Decision: option 3. `docs/contracts/analysis_plans.md` defines the plan
+schema (metric + window class, unit of analysis + dependence structure,
+estimator, inclusion/waiver rules, order/blocking, floor gate =
+max(floor_abs, floor_cmp), MDE/n sizing with predeclared top-up,
+denominator provenance, holdouts for L3, claim ceiling, disqualifiers,
+post-execution manifest links) plus standing reporting rules: phase
+metrics are gross-only until phase-idle modeling exists; short-prefill
+windows below 3 samples report `not resolvable`; capped cells are
+excluded from prompt-slope/rank claims unless realized lengths match;
+rank claims require rank gap > comparison MDE; itemized suites
+(ladder/mixed items inside one bundle) are never treated as independent
+replicates — uncertainty is computed at bundle or block level.
+
+Consequences: six plans seeded (Q4 grid fit, 2M asymmetry, Q5 rank
+stability, C5-W.1 equivalence, ladder level-energy guards, content
+sentinel); floor fields fill from the P2-015 calibration artifact;
+reviewers check L2/L3 wording against plan rows as part of standard
+lens rounds.
+
+Revisit when: the Phase 4 claims index lands (plans may merge into it),
+or a comparison class appears the schema cannot express.
+
+---
+
+## D-039: Workload program v2 — substrate first, identification before scale
+
+- Date: 2026-07-08
+- Status: accepted
+- Phase: 2+
+
+Context: C-014 (lead audit + scout + three design lenses + peer
+counterreview) found the planned suite could measure things no consumer
+cites and claim things no design could support: Q4 unreachable at L3
+from the 4-cell 2M grid; P2-015 yielding only an absolute floor while
+L2/L3 claims are gated by the comparative MDE; jw_mixed_v1 cross-
+category comparisons shape-confounded; the full 64-level scored ladder
+having no claims-index consumer; Q4-Q6 having no Phase 4 figure slots.
+
+Decision, five parts (specs live in the amended
+`docs/research_question_bank.md`, `docs/phase_2/phase_2_plan.md` 2O, and
+`docs/contracts/analysis_plans.md`):
+
+1. P2-010 splits: P2-010a reusable suite substrate (item/level markers,
+   `BundleReader.item_windows()`, category/source_manifest/output_policy
+   fields, per-item stop/token/response hashes); P2-010b smoke-scale
+   ladder whose acceptance is envelope validation. The full scored
+   64-level campaign is deferred until C5-1.9 has a named consumer.
+2. jw_mixed_v1 runs phased: common-shape identification stratum (all six
+   categories at one matched shape) → natural-EOS pilot (>=4
+   items/category on reasoning/JSON/chat/multilingual) → full panels
+   only if earlier phases show above-floor structure. Supersedes the
+   fixed-budget-full-first sequencing from C-005; quarantines intact.
+3. New suite element `q4_l3_shape_grid_v1` (AP-1): 4x3 prompt x decode
+   grid with predeclared interpolation + extrapolation holdouts,
+   categorical-additive fit first — the only planned path to an L3
+   claim on current hardware.
+4. Quiet-window execution is TWO windows: A = expanded P2-015 floors +
+   2M + drift sentinels, then reduce and compute CV/floor/MDE; B = Q4
+   grid with n sized from Window A, plus the content-sensitivity
+   sentinel. Rationale: MDE-sized n cannot honestly precede the floor
+   measurement.
+5. P2-015 expands to per-metric/window-class floors (gross request,
+   idle-subtracted request, phase, item/level) plus comparative MDE
+   tables; `docs/phase_2/detection_floor.md` becomes a per-consumer
+   table.
+
+D-034's gate is unchanged: 2O work stays post-2M; the only pre-Window-A
+item is P2-021 (drift-sentinel support in the 2M generator), which is 2M
+campaign tooling, not workload enrichment.
+
+Consequences: queue rows P2-015/P2-006/P2-010/P2-012 amended; P2-019,
+P2-020, P2-021 added; Phase 4 figure registry gains F9-F12 so Q4-Q6
+data has named consumers before it is collected.
+
+Revisit when: Window A results contradict the sizing assumptions, or a
+consumer for the full scored ladder appears.
+
+---
+
+## D-040: Suite architecture v2 — one generic suite mechanism, bundle-level replication
+
+- Date: 2026-07-08
+- Status: accepted
+- Phase: 2+
+
+Context: Ed directed the benchmark toward multi-prompt runs of varying
+difficulty and type. Council C-015 (two design lenses + peer
+counterreview) designed the architecture; the statistical shape had to
+compose with D-038's pseudo-replication rule.
+
+Decision (spec in the question bank's C-015 section):
+
+1. A suite bundle executes k distinct items once each (r_within = 1);
+   replication comes from B whole-suite bundles (B >= 5, top-up 10).
+   Within-bundle repeats are reserved for sentinel items — they estimate
+   order/cache/thermal effects, never independent n. Uncertainty lives
+   at bundle/block level (D-038).
+2. No per-item micro-cooldowns: back-to-back execution is the named
+   session ecology. Order is rotated/Latin-squared across bundles;
+   item/block/position/prefix-group/order-seed metadata recorded.
+   Suites split into balanced blocks when wall time exceeds ~10-15 min
+   OR drift sentinels/floor identifiability degrade. k=24 first default.
+3. ONE mechanism: affine ladder, jw_mixed, q4 grid, content sentinel,
+   and benchmark imports are all PROFILES over one suite manifest +
+   marker/window path. After P2-010a, no workload expansion gets bespoke
+   plumbing — new benchmarks are manifests plus generators.
+4. P2-010a is capped to the MINIMAL substrate (markers, item_windows(),
+   source/category/output-policy fields, per-item token/stop/response
+   hashes, order/cache metadata, manifest validation) PLUS the per-item
+   validity/status model (succeeded | malformed | capped | runtime_failed
+   | below_floor | excluded_from_claim) with aggregation rules for when
+   partial suites remain claim-usable. Scorers, import-specific fields,
+   and rich difficulty machinery are deferred until profiles need them.
+5. Difficulty is first-class quarantined item metadata {axis, value,
+   scale, label, source}; shape is not difficulty; the C-004 quarantine
+   composes unchanged.
+
+Consequences: P2-010 queue row redefined; suite throughput rises 3-15x
+in item coverage while n stays honest at the bundle level; every later
+workload (including imports) inherits provenance, windows, and the
+status model for free.
+
+Revisit when: P2-010a implementation finds the minimal substrate
+insufficient, or a profile genuinely cannot ride the generic mechanism.
+
+---
+
+## D-041: Benchmark interop — frozen-subset imports + marker-shim energy layer
+
+- Date: 2026-07-08
+- Status: accepted
+- Phase: 2+ (all implementation post-2M per D-034; see stop-line)
+
+Context: Ed directed easy integration of external benchmarks into the
+suite and extension of external benchmarks with JouleWise's energy
+measurement. C-015 designed both directions.
+
+Decision (specs in the bank C-015 section + adapter_contracts.md):
+
+1. IMPORT: a thin `benchmark_import` manifest freezes identity,
+   licensing, contamination, rendering, and quarantine metadata for a
+   hash-manifested external-benchmark subset; execution rides P2-010a.
+   First target: HumanEval as a plumbing smoke (MIT; 256/512-token
+   completions clear the ~9 Hz item-window floor more plausibly than
+   short-answer benchmarks); FLORES second (tokenizer/multilingual
+   science); MMLU/tinyBenchmarks rejected as first targets.
+2. EXPORT: a marker-emitting shim contract — the external harness owns
+   prompts, generation semantics, and accuracy artifacts; JouleWise owns
+   power capture, bundle assembly, marker validation, and energy
+   reduction. P2-022 is a verdict-shaped feasibility spike
+   (external_markers_supported | partial | unsupported; D-035/D-036
+   inherited) pinned to energy-layer feasibility ONLY.
+3. Joined accuracy(theirs)+energy(ours) data may state observed energy
+   for marked item/subset windows alongside the external metric
+   ARTIFACT; it may never produce JouleWise accuracy claims,
+   pass@k-per-joule, leaderboard standing, or intelligence-per-joule.
+4. Kill/defer list (C-015; the bank's C-015 section holds the verbatim
+   11-entry list, which is authoritative): leaderboard integration, live
+   dataset fetching, latest-split support, accuracy scoring beyond
+   quarantined annotation, judges/retries/pass@k/benchmark-score
+   normalization, full per-harness adapters AND generation-callable
+   wrappers as the FIRST export path (the shim comes first; they are
+   sequencing kills, not categorical), per-item uncertainty treated as
+   independent replication, public energy leaderboards before cross-lab
+   replication, any intelligence-per-joule ratio.
+5. Sequencing gate AMENDED (D-039 named only P2-021 as the pre-Window-A
+   item; this adds the Window-A capture hardening stream, and nothing
+   else): only P2-021 and Window-A capture hardening precede P2-015/2M. Substrate, shim spike, imports, q4-grid and
+   jw_mixed execution are post-2M unless D-034 is reopened. Stop-line:
+   under schedule pressure, interop and suite expansion drop before
+   P2-015/2M/Mac characterization — the guaranteed capstone is the
+   instrument plus Mac characterization, never the expansion.
+   (Amended 2026-07-08 pre-merge: the allowlist names pre-Window-A
+   work items; prep steps internal to P2-015, including the lead-run
+   tasks-sampler overhead smoke that also validates the 2s env-capture
+   settle absorbs the probe burst, are part of P2-015 itself, not
+   additional items.)
+
+Consequences: queue gains P2-022/P2-023/P2-024; adapter_contracts.md
+gains the shim contract; the bank gains C5-I.1..I.5 and the capability
+map; export direction prioritized over import for adoption-per-build-day.
+
+Revisit when: the P2-022 spike returns unsupported/partial, or D-034 is
+reopened.
+
+---
+
+## D-042: D-034 implementation lane reopened — suite build proceeds pre-2M (owner directive)
+
+- Date: 2026-07-08
+- Status: accepted
+- Phase: 2+
+
+Context: Ed directed (this session) that the test-prompt suite for
+observation/trace generation be actually built with dedicated research
+and effort, not only specified. D-034 (reaffirmed by the C-015 gate
+amendment) held ALL 2O substrate/suite implementation post-2M; its
+revisit clause names exactly this: reopening by decision rather than
+silent advancement.
+
+Decision: the IMPLEMENTATION lane of the workload program is open now:
+P2-010a substrate, P2-010b smoke ladder, P2-012 phase-1 content
+generators, and P2-020 sentinel content generation may proceed as
+[AGENT] work before 2M. UNCHANGED: campaign EXECUTION ordering (Window A
+P2-015 floors then P2-006 2M first; Window B after), the quiet-machine
+clause of the C-015 stop-line (no suite work consumes quiet-machine
+time), the minimal-substrate cap (D-040.4), and all quarantines. The
+drop-order under schedule pressure also stands: suite build drops before
+P2-015/2M/Mac characterization.
+
+Research input: `docs/phase_2/suite_implementation_research.md`
+(4 cross-checked reports; amendments are UNRESOLVED review findings the
+implementing session adjudicates first).
+
+Consequences: P2-010/P2-012/P2-020 status cells flip to build-unblocked;
+the 2O gate paragraph carries a dated amendment note pointing here.
+
+Revisit when: suite build threatens the Window A/2M schedule (drop it),
+or 2M lands (gate question dissolves).

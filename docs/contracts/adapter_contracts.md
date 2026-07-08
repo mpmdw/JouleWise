@@ -45,6 +45,94 @@ inside the measured window. Telemetry adapters therefore must:
 - Do stop-side parsing inside `stop_sampling` (after the window closes),
   not lazily during the window.
 
+## External marked-runner (energy-layer shim) contract (C-015)
+
+The C-015 export path is a marker-emitting shim, not a full benchmark
+adapter framework. The external harness owns prompts, generation semantics,
+accuracy artifacts, and metric artifacts. JouleWise owns power capture,
+bundle assembly, marker validation, and energy reduction.
+
+Contract fields:
+
+```text
+shim_schema_version
+invocation:
+  harness_name
+  harness_version
+  command_argv_sha256
+  working_dir_sha256_or_null
+  environment_allowlist
+  benchmark_name
+  benchmark_revision
+  subset_id
+  external_results_path
+  external_results_sha256
+events:
+  timestamp_s
+  event_type: item_start | item_end | harness_start | harness_end
+  phase
+  message
+  metadata:
+    run_id
+    harness_item_id
+    item_index
+    benchmark_name
+    subset_id
+    prompt_sha256_or_null
+    output_sha256_or_null
+    external_metric_record_id_or_null
+    status
+    error_type_or_null
+    token_counts_if_reported
+    timestamp_source
+validation:
+  require_paired_item_markers
+  require_monotonic_timestamps
+  require_markers_inside_measured_window
+  require_no_overlapping_items_unless_declared
+  require_external_results_hash
+```
+
+Shim events ride the existing run-bundle event shape: the only top-level
+event keys are `timestamp_s`, `event_type`, `phase`, `message`, and
+`metadata`. Harness-specific data, benchmark item IDs, prompt/output hashes,
+external metric IDs, status, errors, and any token counts reported by the
+harness stay inside `metadata` (C-015).
+
+Validation rules for C-015/P2-022: item markers must pair; timestamps must
+be monotonic; all item markers must fall inside the measured window; item
+windows must not overlap unless the shim declares an overlapping execution
+mode; the external result artifact must be preserved and hashed; and strict
+bundle validation plus reduction must succeed before any energy result is
+claim-bearing.
+
+Permitted claim shapes (C-015):
+
+- "External harness X version Y reported metric artifact Z; JouleWise
+  measured energy for the same marked item/subset windows."
+- L1 observed energy for an external harness run under a named stack,
+  measurement boundary, subset, and output policy.
+- L2 energy comparisons only with strict bundles, repeated runs, same
+  boundary or calibrated boundary, and AP coverage.
+
+Forbidden claims (C-015/C-004):
+
+- JouleWise-computed accuracy unless a future quarantined scorer explicitly
+  exists.
+- Intelligence per joule, pass@k per joule, or "more capable per watt."
+- Leaderboard standing from joined accuracy(theirs)+energy(ours).
+- Item-window statistical independence.
+- Any pass@k, retry, judge, or benchmark-score normalization claim from the
+  shim layer.
+
+The P2-022 feasibility spike launches the external runner as a subprocess
+and inherits D-035 fresh-process isolation. Its verdict is computed, not
+hand-labeled, per D-036, from marker pairing, timestamp placement,
+subprocess exit status, external result hash presence, strict bundle
+validity, and reduction success. Verdict codes are
+`external_markers_supported`, `partial(<limitation>)`, and
+`external_markers_unsupported`.
+
 ## Transport Adapter
 
 Transport answers where commands execute.

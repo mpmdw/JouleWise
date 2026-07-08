@@ -1,0 +1,158 @@
+# Analysis Plans
+
+Status: binding for reader-facing L2/L3 claims adopted on 2026-07-08
+(C-014). This contract rides `docs/contracts/claims_ladder.md` (D-037):
+from adoption, any reader-facing L2 or L3 claim must cite a filled
+analysis-plan row before the claim is drafted.
+
+The plan is a compact table, not a prose ritual (C-014). A comparison that
+cannot fill the fields below is not eligible for L2/L3 wording. It may
+remain L0/L1 capability or instrument-result language under D-037.
+
+## Required fields
+
+| Field | Requirement |
+|---|---|
+| Plan ID / RQ consumer | Stable analysis-plan ID and the question or consumer it serves. |
+| Metric + exact window class | Metric name and exact window class: gross request, idle-subtracted request, phase window, item window, level window, or session window. |
+| Unit of analysis + dependence structure | Bundle, level, item, session, or block; itemized suites require bundle- or block-level uncertainty and must never treat item windows as independent replicates unless a stronger repeated-bundle design is named. |
+| Estimator/formula | Estimator and formula, including fixed, marginal, categorical, paired, or equivalence terms. |
+| Inclusion/exclusion + quality-flag waiver rules | Strict-validation rule, exclusion causes, and any quality-flag waiver rule allowed by D-014/D-037. |
+| Order/blocking/covariates | Manifest order, blocking variables, drift terms, covariates, and any limits on covariate count. |
+| Floor gate | `max(floor_abs_j, floor_cmp_j)` from the P2-015 calibration artifact for the same metric/window class. |
+| MDE/n sizing + predeclared top-up rule | Planned n, MDE arithmetic, and the rule for adding repetitions before claims are written. |
+| Denominator provenance requirement | Runtime-observed, config fallback, scored denominator, or source-manifest denominator; config fallback cannot carry L2/L3 per-token claims under D-037. |
+| Holdout cells (L3 only) | Named holdout cells and prediction-error rule for L3 plans; write `not applicable` for L2 plans. |
+| Claim ceiling + exact forbidden upgrade | Maximum allowed claim level and the exact stronger claim that remains forbidden. |
+| Disqualifiers + not-resolvable conditions | Conditions that force downgrade, `not resolvable`, or `not estimable` wording. |
+| Linked manifests/bundle hashes | Manifest IDs and bundle hashes; filled post-execution before claims are published. |
+
+## Standing reporting rules
+
+- MDE reference arithmetic at n=5 is pinned by C-014: for two-condition
+  comparisons, `MDE95 ~= 1.46 x CV` and approximately 80%-power
+  `MDE ~= 2.0 x CV` using the t-based factor
+  `(t_.975,8 + t_.80,8) * sqrt(2/5) = (2.306+0.889)*0.632 ~= 2.02`.
+  Observed CV anchors are 0.3% in the flagship
+  Qwen3.5-122B run report, 1.4% gross in the first real-energy run
+  report, and 7.4% contaminated idle-subtracted in the same first
+  real-energy report (docs/run_reports/2026-07-07-flagship-qwen35-122b.md;
+  docs/run_reports/2026-07-06-slice-2i-first-real-energy.md).
+- Phase metrics are GROSS-only until phase-idle modeling exists (C-014).
+  They must not be mixed with idle-subtracted request headlines.
+- Short-prefill windows with fewer than 3 samples report `not resolvable`,
+  never near-zero point values (C-014).
+- Capped `long_short` cells are excluded from prompt-slope and rank claims
+  unless realized prompt lengths match across compared cells (C-014).
+- Rank claims require rank gap > comparison MDE; otherwise the wording is
+  `unresolved tie` (C-014).
+
+## Seeded plans
+
+### AP-1: Q4 fixed+marginal grid fit
+
+| Field | Value |
+|---|---|
+| Plan ID / RQ consumer | AP-1 / Q4 fixed-vs-marginal energy model; feeds Q5 rank rules and Phase 4 F9 (C-014). |
+| Metric + exact window class | `gross_energy_j` (gross request window) and `energy_request_j` (idle-subtracted request window); phase terms may be reported gross-only and only when window samples clear the standing rule (C-014). |
+| Unit of analysis + dependence structure | Bundle-level repetitions within target/model/profile cell; uncertainty is across bundles, blocked by model/session/window (C-014). |
+| Estimator/formula | Primary fit is categorical-additive: `E = fixed + prompt_level + decode_level` on the 4x3 grid prompt `{128,512,2048,4096}` x decode `{64,256,512}`. Linear/log sensitivity is secondary. |
+| Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only; D-014 quality flags excluded unless the report names and justifies a waiver; capped cells are excluded from prompt-slope/rank claims unless realized prompt lengths match. |
+| Order/blocking/covariates | Interleaved or recorded manifest order; block/session and drift sentinel terms available as covariates; no curvature term promoted unless categorical residuals and holdouts clear the floor. |
+| Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for request windows and any reported phase window. |
+| MDE/n sizing + predeclared top-up rule | n=5 provisional; top up to n=10 for near-floor cells or contrasts before L3 wording (C-014). |
+| Denominator provenance requirement | Runtime-observed output tokens for per-token companion tables; request-energy fit does not use config-token denominators. |
+| Holdout cells (L3 only) | `(512,256)` interpolation and `(4096,512)` extrapolation holdouts; prediction errors must clear the AP-1 floor gate. |
+| Claim ceiling + exact forbidden upgrade | Ceiling L3. Forbidden upgrade: no curvature, universal scaling law, or architecture-wide conclusion from this grid. |
+| Disqualifiers + not-resolvable conditions | Holdout miss, residual above floor, below-floor effects, unresolved rank gaps, or short-prefill <3 samples downgrade or report `not resolvable`. |
+| Linked manifests/bundle hashes | pending post-execution. |
+
+### AP-2: 2M prefill/decode power asymmetry
+
+| Field | Value |
+|---|---|
+| Plan ID / RQ consumer | AP-2 / Slice 2M qualitative prefill/decode asymmetry; supports Q4 substrate only (C-014). |
+| Metric + exact window class | Gross request energy, idle-subtracted request energy, gross phase-window energy, mean power, TTFT, and runtime-observed output-token companion metrics. |
+| Unit of analysis + dependence structure | Bundle-level repetitions within target/model/profile; session/block recorded for drift. |
+| Estimator/formula | Descriptive pairwise contrasts among `short_short`, `long_short`, `short_long`, and canonical `mid_mid` profiles with t-intervals from D-014. |
+| Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only; quality-flag waivers must be named; capped prompt cells handled by the standing capped-cell rule. |
+| Order/blocking/covariates | Counterbalanced order manifest; drift sentinel at start/end of each model block with block position recorded as a covariate (C-014/P2-021). |
+| Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for request and gross phase windows. |
+| MDE/n sizing + predeclared top-up rule | n=5 from D-014; no top-up required for L2 descriptive contrasts unless the observed contrast is near-floor. |
+| Denominator provenance requirement | Runtime-observed output tokens and stop reasons for per-token/per-output tables; config fallback remains QA-only. |
+| Holdout cells (L3 only) | not applicable. |
+| Claim ceiling + exact forbidden upgrade | Ceiling L2. Forbidden upgrade: no L3 fixed+prefill+decode fit from the four-cell 2M matrix. |
+| Disqualifiers + not-resolvable conditions | Below-floor differences, short-prefill <3 samples, missing sentinel/block metadata, or capped prompt mismatch force `not resolvable` or L1 wording. |
+| Linked manifests/bundle hashes | pending post-execution. |
+
+### AP-3: Q5 within-boundary rank stability
+
+| Field | Value |
+|---|---|
+| Plan ID / RQ consumer | AP-3 / Q5 within-boundary ranking stability; Phase 4 F10 (C-014). |
+| Metric + exact window class | Same-boundary request-energy, runtime-observed energy/output-token, and throughput/latency metrics on request windows. |
+| Unit of analysis + dependence structure | Bundle-level repetitions within same workload shape, boundary, model/quant, and session block. |
+| Estimator/formula | Pairwise rank gaps by matched shape; rank declared only when estimated gap > comparison MDE. |
+| Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only; exclusions and waivers follow D-014/D-037 and must be row-linked in the claims index. |
+| Order/blocking/covariates | Same manifest order where possible; block/session drift covariate from sentinels; no cross-boundary rank upgrade without D-018 calibration evidence. |
+| Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for each metric/window class. |
+| MDE/n sizing + predeclared top-up rule | n follows the source campaign; near-MDE gaps may top up before ranking language, otherwise report `unresolved tie`. |
+| Denominator provenance requirement | Runtime-observed token denominators for token-normalized ranks; request-energy ranks do not need token denominators. |
+| Holdout cells (L3 only) | not applicable. |
+| Claim ceiling + exact forbidden upgrade | Ceiling L2 within boundary. Forbidden upgrade: cross-device/device ranking unless hardware and boundary calibration gates are met. |
+| Disqualifiers + not-resolvable conditions | Rank gap <= comparison MDE, boundary mismatch without calibration, capped prompt mismatch, or quality contamination gives `unresolved tie` or descriptive L1. |
+| Linked manifests/bundle hashes | pending post-execution. |
+
+### AP-4: C5-W.1 token-shape-sufficiency equivalence test
+
+| Field | Value |
+|---|---|
+| Plan ID / RQ consumer | AP-4 / C5-W.1 Token-Shape Sufficiency Null on the common-shape stratum (C-014). |
+| Metric + exact window class | Request energy on the common `512/256 fixed_budget_exact` shape; optional gross phase-window descriptors only. |
+| Unit of analysis + dependence structure | Bundle-level or block-level uncertainty over itemized category bundles; item windows are not independent replicates. |
+| Estimator/formula | Category residual after controlling for common shape; equivalence gate is: (a) the 2% equivalence margin itself must exceed `max(floor_abs_j, floor_cmp_j)`, else the comparison is `not resolvable`; and (b) the residual confidence interval must lie entirely within +/-2% of request energy. |
+| Inclusion/exclusion + quality-flag waiver rules | Strict-valid common-shape synthetic + realistic items only; source manifest and output policy required; waivers named in text. |
+| Order/blocking/covariates | Round-robin category order; source type and item/block may be blocking factors; no category ranking from the starter suite before common-shape residuals clear the floor. |
+| Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for request windows. |
+| MDE/n sizing + predeclared top-up rule | n/items sized to the 2% equivalence margin after Window A; if Window A MDE exceeds the margin, report `not resolvable` or top up before L2 language. |
+| Denominator provenance requirement | Runtime-observed emitted tokens and stop reasons; source-manifest hashes and `fixed_budget_exact` policy recorded per item. |
+| Holdout cells (L3 only) | not applicable. |
+| Claim ceiling + exact forbidden upgrade | Ceiling L2. Forbidden upgrade: no category energy-ranking or category mechanism claim from unmatched shapes. |
+| Disqualifiers + not-resolvable conditions | MDE/floor wider than the equivalence margin, missing source hashes, or item-as-independent uncertainty forces `not resolvable`. |
+| Linked manifests/bundle hashes | pending post-execution. |
+
+### AP-5: affine ladder level-window energy + energy-per-correct
+
+| Field | Value |
+|---|---|
+| Plan ID / RQ consumer | AP-5 / C5-1.9 controlled-envelope ladder (C-014/C-004). |
+| Metric + exact window class | Level-window energy, accuracy by level, and energy-per-correct only when the correctness denominator passes the guard. |
+| Unit of analysis + dependence structure | Bundle/block-level uncertainty over level windows; per-item windows are correctness/token audit evidence, not independent energy replicates. |
+| Estimator/formula | Level means with D-014 uncertainty; energy-per-correct = level-window energy / correct count only after the binomial guard passes. |
+| Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles; envelope-validation smoke gate must pass before any scored campaign; correctness remains quarantined annotation under C-004. |
+| Order/blocking/covariates | Level/block markers and session order recorded; adjacent levels may merge when the denominator guard requires it. |
+| Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for level windows. |
+| MDE/n sizing + predeclared top-up rule | Smoke ladder first; full n deferred until C5-1.9 has claims-index/figure consumer; top-up or merge adjacent levels before energy-per-correct claims. |
+| Denominator provenance requirement | Exact scorer output plus emitted-token/stop-reason audit; binomial lower-bound must be >=3 correct per level, else merge adjacent levels or report `not estimable`. |
+| Holdout cells (L3 only) | not applicable. |
+| Claim ceiling + exact forbidden upgrade | Ceiling L2 descriptive/scored workload result. Forbidden upgrade: no intelligence-per-joule or "difficulty causes energy" claim. |
+| Disqualifiers + not-resolvable conditions | Failed envelope validation, below-floor level windows, lower-bound <3 correct with no valid merge, or EOS-bias contamination gives `not estimable`/L1. |
+| Linked manifests/bundle hashes | pending post-execution. |
+
+### AP-6: content-sensitivity sentinel
+
+| Field | Value |
+|---|---|
+| Plan ID / RQ consumer | AP-6 / content-sensitivity sentinel for synthetic-stream generalization (C-014). |
+| Metric + exact window class | Gross and idle-subtracted request energy at one equal shape; runtime-observed emitted tokens and stop reasons. |
+| Unit of analysis + dependence structure | Bundle-level repetitions across five equal-shape content conditions. |
+| Estimator/formula | One-way condition contrast against repeated-seed control; report condition deltas and MDE verdicts. |
+| Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only; conditions are repeated-seed, random-token, natural prose, code-like, and multilingual at equal shape. |
+| Order/blocking/covariates | Window-B block order recorded; randomized or balanced condition order where practical. |
+| Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for request windows. |
+| MDE/n sizing + predeclared top-up rule | n=5 per content condition provisional; Window A MDE may resize n before Window B. |
+| Denominator provenance requirement | Runtime-observed token counts, stop reasons, content-condition labels, and prompt/source hashes. |
+| Holdout cells (L3 only) | not applicable. |
+| Claim ceiling + exact forbidden upgrade | Ceiling L2 validity/sentinel result. Forbidden upgrade: no broad content-neutrality claim outside the five tested equal-shape conditions. |
+| Disqualifiers + not-resolvable conditions | Realized shape mismatch, stop-policy divergence, below-floor content deltas, or missing prompt hashes force `not resolvable` or capability wording. |
+| Linked manifests/bundle hashes | pending post-execution. |

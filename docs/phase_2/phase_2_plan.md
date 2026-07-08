@@ -649,10 +649,17 @@ Workload matrix (per target × model, from D-016):
 | mid_mid | 1024 | 256 | 5 |
 
 *capped at model context and target memory; capped value recorded.
+`mid_mid` is the canonical profile name; `balanced` is display label only
+(2026-07-08, C-014). Realized prompt length is an analysis axis, and capped
+cells follow `docs/contracts/analysis_plans.md` before any prompt-slope or
+rank claim (C-014).
 
 Protocol: D-014 in full (n=5, interleaved conditions where reload cost
 permits, cooldown gates, raw points kept); idle characterization per target
-(5-minute idle trace) collected once per session.
+(5-minute idle trace) collected once per session. C-014 adds repeated
+`short_short` drift sentinels at the start and end of each model block, with
+block position recorded as a drift covariate; generator support is P2-021
+and must land before the campaign.
 
 Actions: generate the config matrix (script in `scripts/`), run per target,
 validate all bundles, generate the report, write the baseline summary doc
@@ -682,14 +689,36 @@ Objective: the first controlled prompt/workload enrichment layer AFTER the
 homogeneous baseline corpus exists, so workload-dependent metrics can be
 exercised without delaying or contaminating the 2M milestone. This slice
 owns queue tasks P2-010 (`affine_mod_ladder_v1`) and P2-012 (`jw_mixed_v1`);
-their full specs stay in `docs/research_question_bank.md` (C-004/C-005).
+their full specs stay in `docs/research_question_bank.md` (C-004/C-005,
+amended by C-014). C-014 also adds the quiet-window
+`q4_l3_shape_grid_v1` campaign and the content-sensitivity sentinel; claim
+wording for these elements follows `docs/contracts/analysis_plans.md`.
 
 Gates: the 2M baseline data milestone (whatever target set 2M ran on —
 Mac-only degraded floor included) exists and passes
 `validate-bundle --strict`; P2-013 + P2-014 complete; Stage 3.0.1 verdict
-recorded (C-007 execution order). This is post-baseline feature work: it
-must not move ahead of 2M, and it is NOT Phase 2 exit-critical (additive
-enrichment, not gate).
+recorded (C-007 execution order). This is post-baseline feature work: its
+campaign EXECUTION must not move ahead of 2M (BUILD is separately
+governed — reopened pre-2M by D-042, see the amendment below), and it is
+NOT Phase 2 exit-critical (additive enrichment, not gate).
+
+C-015 sequencing and stop-line (2026-07-08): GATE AMENDMENT - amends the
+D-039 allowlist (which named only P2-021) to also allow the Window-A
+capture hardening stream; everything else unchanged. Only P2-021 and
+Window-A capture hardening (`window-a-capture` stream) may precede
+P2-015/2M. ALL 2O substrate implementation, shim spike, imports, q4-grid
+execution, and `jw_mixed` execution remain post-2M unless D-034 is
+reopened. (Amendment 2026-07-08, D-042 — owner directive: the
+IMPLEMENTATION lane is reopened; P2-010a/b, P2-012 phase-1, and P2-020
+content build may proceed [AGENT] pre-2M. Campaign EXECUTION ordering,
+the quiet-machine clause, the minimal-substrate cap, and the drop-order
+below are unchanged.) STOP-LINE - until Window A + 2M are strict-valid and reduced:
+no suite/import/export work consumes quiet-machine time, no new benchmark
+campaign is scheduled, and P2-010a stays within minimal substrate. Under
+schedule pressure, drop P2-022/P2-023, imports, FLORES, q4 grid, and
+`jw_mixed` full panels BEFORE touching P2-015/2M/Mac characterization.
+The C-015 suite architecture v2, interop direction, and capability map
+live in `docs/research_question_bank.md`.
 
 Pre-2M obligation owned elsewhere (P2-014, decided at this council):
 2M corpus interpretability requires prompt-content PROVENANCE pinned before
@@ -704,18 +733,40 @@ Prompt-type → metric → research-question map (why each workload exists):
 |---|---|---|---|
 | 2M prefill-heavy (`long_short`) | prefill marginal energy, TTFT/context scaling | Q4, C5-1.2/1.3 | resolvable at long context only; short prefill is below the sampler floor |
 | 2M decode-heavy (`short_long`) | decode energy/token, sustained power | Q4, C5-1.1 | strong (512-tok windows: CV 0.3–1.4%) |
-| 2M balanced | additive-model validation (fixed+prefill+decode) | Q4 fit, Q5 | validation, not discovery |
+| 2M `mid_mid` (`balanced` display label) | additive-model validation (fixed+prefill+decode) | Q4 substrate, Q5 | validation, not discovery |
+| `q4_l3_shape_grid_v1` | categorical fixed+prompt+decode grid with holdouts | Q4 L3 fit, Q5 | Window B; 2 models; prompt `{128,512,2048,4096}` x decode `{64,256,512}`; n sized from Window A |
 | `affine_mod_ladder_v1` ladder | energy per correct answer at fixed envelope; difficulty scaling; EOS-bias audit | C5-1.9 | level windows identifiable; per-item often not — flags required |
 | `jw_mixed_v1` categories × synthetic controls | category effect beyond token shape; category ranking stability | C5-W.1/W.3, Q5 ext. | fixed-budget category deltas may be small → effect-size-vs-floor table required |
 | natural-EOS vs fixed-budget (pilot first) | stopping-policy cost; reasoning-token inflation | C5-W.2 | usually large when output length moves |
 | multilingual semantic- vs token-matched | tokenizer fertility energy tax | C5-W.4 | semantic leg large; token-matched may null (both informative) |
+| content-sensitivity sentinel | equal-shape repeated-seed vs random-token vs natural prose vs code-like vs multilingual | synthetic-stream validity | Window B; five equal-shape content conditions; AP-6 |
+
+Phase-window energies in this table are gross-only until phase-idle
+modeling exists; never mix them with idle-subtracted request headlines
+(2026-07-08, C-014).
+
+Two-quiet-window plan (2026-07-08, C-014): Window A runs the expanded
+P2-015 floors, 2M, and drift sentinels, then reduces the data to compute
+CV/floor/MDE. Window B runs `q4_l3_shape_grid_v1` with n sized from Window
+A results plus the content-sensitivity sentinel. `q4_l3_shape_grid_v1`
+uses [QUIET-MAC] Window B, two models, the AP-1 4x3 grid, holdouts
+`(512,256)` and `(4096,512)`, and the AP-1 top-up rule.
+
+P2-010 split (2026-07-08, C-014): P2-010a scope: the C-015 minimal generic
+substrate (see `docs/research_question_bank.md` C-015 section, which
+supersedes the C-014 enumeration and adds the per-item status model).
+P2-010b is the smoke ladder with
+envelope-validation acceptance: emitted-token and stop-reason distributions
+must be level-invariant before any scored ladder campaign. The full scored
+ladder is deferred until C5-1.9 has a claims-index/figure consumer.
+
+`jw_mixed_v1` phasing follows `docs/research_question_bank.md` as amended
+by C-014: common-shape identification core first, natural-EOS pilot second,
+and full panels only after above-floor structure appears.
 
 Candidate extensions (recorded, not committed — post-2O, each needs a
 queue entry + council check before build): long-context prefill ladder
-beyond 4096; adversarial content-sensitivity diagnostic (repeated-seed vs
-natural prose vs code-like vs multilingual at equal token count — the 2M
-generator's repeated-seed stream is a control, not content-neutral);
-prefix-reuse/session workloads (cache economics).
+beyond 4096; prefix-reuse/session workloads (cache economics).
 
 Acceptance: deterministic items + exact scoring from manifests alone;
 level-window energy primary with per-item identifiability flags; per-item
