@@ -15,10 +15,10 @@ from joulewise.gensuite import (
     SENTINEL_CONDITIONS,
     Drbg,
     ShapeError,
+    _build_jw_mixed_suite,
+    _build_sentinel_suite,
     build_jw_mixed_manifest,
-    build_jw_mixed_suite,
     build_sentinel_manifest,
-    build_sentinel_suite,
     generate_chat,
     generate_code,
     generate_json,
@@ -297,7 +297,7 @@ class GenSuiteTests(unittest.TestCase):
 
     def test_sentinel_ids_native_shape_and_sources(self) -> None:
         tokenizer = QuirkyFakeTokenizer()
-        build = build_sentinel_suite(
+        build = _build_sentinel_suite(
             "sentinel-seed",
             tokenizer,
             tokenizer_manifest=FAKE_TOKENIZER_MANIFEST,
@@ -360,13 +360,13 @@ class GenSuiteTests(unittest.TestCase):
 
     def test_manifest_builders_validate_and_keep_blocks_contiguous(self) -> None:
         tokenizer = QuirkyFakeTokenizer()
-        mixed = build_jw_mixed_suite(
+        mixed = _build_jw_mixed_suite(
             "manifest-seed",
             tokenizer,
             tokenizer_manifest=FAKE_TOKENIZER_MANIFEST,
             items_per_category=2,
         )
-        sentinel = build_sentinel_suite(
+        sentinel = _build_sentinel_suite(
             "manifest-seed",
             tokenizer,
             tokenizer_manifest=FAKE_TOKENIZER_MANIFEST,
@@ -422,6 +422,8 @@ class GenSuiteTests(unittest.TestCase):
 
     def test_manifest_builders_require_sidecar_path(self) -> None:
         tokenizer = QuirkyFakeTokenizer()
+        self.assertFalse(hasattr(gensuite, "build_jw_mixed_suite"))
+        self.assertFalse(hasattr(gensuite, "build_sentinel_suite"))
         with self.assertRaises(TypeError):
             build_jw_mixed_manifest(
                 "sidecar-required",
@@ -485,7 +487,7 @@ class GenSuiteTests(unittest.TestCase):
 
     def test_missing_tokenizer_manifest_fails_closed(self) -> None:
         with self.assertRaises(ValueError):
-            build_jw_mixed_suite("missing-manifest", QuirkyFakeTokenizer(), items_per_category=1)
+            _build_jw_mixed_suite("missing-manifest", QuirkyFakeTokenizer(), items_per_category=1)
 
     def test_bank_hash_fails_closed_on_mutation(self) -> None:
         original = list(gensuite._BANKS["personas"])

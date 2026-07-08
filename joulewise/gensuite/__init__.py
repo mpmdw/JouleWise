@@ -1457,7 +1457,7 @@ def _tokenizer_audit(
     return derived, rows, manifest_hash
 
 
-def build_jw_mixed_suite(
+def _build_jw_mixed_suite(
     master_seed: str,
     tokenizer: TokenizerProtocol,
     *,
@@ -1540,7 +1540,7 @@ def build_jw_mixed_manifest(
     sidecar_path: str | Path,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    build = build_jw_mixed_suite(master_seed, tokenizer, **kwargs)
+    build = _build_jw_mixed_suite(master_seed, tokenizer, **kwargs)
     _write_sidecar(sidecar_path, build.annotations)
     return build.manifest
 
@@ -1554,7 +1554,7 @@ SENTINEL_CONDITIONS = [
 ]
 
 
-def build_sentinel_suite(
+def _build_sentinel_suite(
     master_seed: str,
     tokenizer: TokenizerProtocol,
     *,
@@ -1628,7 +1628,7 @@ def build_sentinel_manifest(
     sidecar_path: str | Path,
     **kwargs: Any,
 ) -> dict[str, Any]:
-    build = build_sentinel_suite(master_seed, tokenizer, **kwargs)
+    build = _build_sentinel_suite(master_seed, tokenizer, **kwargs)
     _write_sidecar(sidecar_path, build.annotations)
     return build.manifest
 
