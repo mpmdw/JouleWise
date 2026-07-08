@@ -19,6 +19,7 @@ from joulewise.adapters.powermetrics import (
     RICH_IDLE_NAME,
     RICH_TELEMETRY_NAME,
     RAW_SAMPLES_NAME,
+    SAMPLERS,
     PowermetricsTelemetryAdapter,
     decode_rich_telemetry,
     idle_window_gpu_quality,
@@ -382,6 +383,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
         self.assertEqual(metadata["telemetry"], "powermetrics")
         self.assertEqual(metadata["rail_manifest"], RAIL_MANIFEST)
         self.assertIn("elapsed_ns", metadata["timestamp_derivation"])
+        self.assertEqual(metadata["powermetrics"]["samplers_requested"], SAMPLERS)
+        self.assertEqual(
+            metadata["powermetrics"]["samplers_available"], "probe-unavailable"
+        )
 
     def test_measure_idle_computes_mean_and_stddev_from_fixture(self) -> None:
         fixture = FIXTURE.read_bytes()
@@ -399,6 +404,11 @@ class PowermetricsAdapterTests(unittest.TestCase):
         with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
             baseline = adapter.measure_idle(make_config())
 
+        metadata = adapter.device_metadata(make_config())
+        self.assertEqual(
+            metadata["powermetrics"]["samplers_available"], SAMPLERS.split(",")
+        )
+        self.assertTrue(metadata["powermetrics"]["samplers_probe"]["ok"])
         self.assertAlmostEqual(baseline.power_w_mean, statistics.mean(expected_totals), places=12)
         self.assertAlmostEqual(
             baseline.power_w_stddev,
@@ -529,6 +539,51 @@ class PowermetricsAdapterTests(unittest.TestCase):
         self.assertEqual(result.failure_reason, FailureReason.PERMISSION_DENIED)
         self.assertIn(sudoers_line(), result.message)
         self.assertIn("sudo", result.message)
+        metadata = adapter.device_metadata(make_config())
+        self.assertEqual(
+            metadata["powermetrics"]["samplers_available"], "probe-unavailable"
+        )
+        self.assertEqual(
+            metadata["powermetrics"]["samplers_probe"]["reason"], "returncode_1"
+        )
+
+    def test_sampler_probe_not_found_records_probe_failure_metadata(self) -> None:
+        def fake_run(command, **kwargs):
+            raise FileNotFoundError("powermetrics")
+
+        adapter = PowermetricsTelemetryAdapter(FakeClock())
+        with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
+            result = adapter.start_sampling(make_config())
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_reason, FailureReason.TELEMETRY_UNAVAILABLE)
+        metadata = adapter.device_metadata(make_config())
+        self.assertEqual(
+            metadata["powermetrics"]["samplers_available"], "probe-unavailable"
+        )
+        self.assertEqual(
+            metadata["powermetrics"]["samplers_probe"],
+            {"ok": False, "reason": "not_found"},
+        )
+
+    def test_sampler_probe_timeout_records_probe_failure_metadata(self) -> None:
+        def fake_run(command, **kwargs):
+            raise subprocess.TimeoutExpired(command, timeout=kwargs["timeout"])
+
+        adapter = PowermetricsTelemetryAdapter(FakeClock())
+        with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
+            result = adapter.start_sampling(make_config())
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_reason, FailureReason.UNKNOWN_ERROR)
+        metadata = adapter.device_metadata(make_config())
+        self.assertEqual(
+            metadata["powermetrics"]["samplers_available"], "probe-unavailable"
+        )
+        self.assertEqual(
+            metadata["powermetrics"]["samplers_probe"],
+            {"ok": False, "reason": "timeout"},
+        )
 
     def test_run_fails_at_idle_without_fabricated_baseline_or_warmup(self) -> None:
         def fake_run(command, **kwargs):

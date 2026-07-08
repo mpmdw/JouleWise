@@ -105,7 +105,10 @@ class PowermetricsTelemetryAdapter:
     def device_metadata(
         self, config: BenchmarkConfig, context: RunContext | None = None
     ) -> dict:
+        powermetrics = self._device_metadata.get("powermetrics")
         self._device_metadata.update(self._base_device_metadata(config))
+        if isinstance(powermetrics, dict) and powermetrics.get("samplers_probe", {}).get("reason") != "not_probed":
+            self._device_metadata["powermetrics"] = powermetrics
         return self._device_metadata
 
     def measure_idle(
@@ -306,6 +309,7 @@ class PowermetricsTelemetryAdapter:
                 check=False,
             )
         except FileNotFoundError as exc:
+            self._record_sampler_probe_unavailable("not_found")
             return AdapterResult(
                 ok=False,
                 failure_reason=FailureReason.TELEMETRY_UNAVAILABLE,
@@ -313,6 +317,7 @@ class PowermetricsTelemetryAdapter:
             )
         except subprocess.TimeoutExpired as exc:
             capture_path.unlink(missing_ok=True)
+            self._record_sampler_probe_unavailable("timeout")
             return AdapterResult(
                 ok=False,
                 failure_reason=FailureReason.UNKNOWN_ERROR,
@@ -327,6 +332,9 @@ class PowermetricsTelemetryAdapter:
                 "failure_reason": FailureReason.PERMISSION_DENIED.value,
                 "sudoers_line": sudoers_line(),
             }
+            self._record_sampler_probe_unavailable(
+                f"returncode_{completed.returncode}"
+            )
             return AdapterResult(
                 ok=False,
                 failure_reason=FailureReason.PERMISSION_DENIED,
@@ -347,6 +355,11 @@ class PowermetricsTelemetryAdapter:
             self._remember_records(records)
             capture_path.unlink(missing_ok=True)
         self._device_metadata["capability_precheck"] = {"ok": True}
+        self._device_metadata["powermetrics"]["samplers_available"] = SAMPLERS.split(",")
+        self._device_metadata["powermetrics"]["samplers_probe"] = {
+            "ok": True,
+            "method": "requested_sampler_probe",
+        }
         return AdapterResult(ok=True, metadata={"command": command})
 
     def _run_bounded_capture(self, config: BenchmarkConfig, *, count: int) -> bytes:
@@ -396,7 +409,18 @@ class PowermetricsTelemetryAdapter:
             "boundary": "Apple SoC CPU + GPU + ANE package power",
             "timestamp_derivation": TIMESTAMP_DERIVATION,
             "power_units": "powermetrics milliwatts converted to watts",
+            "powermetrics": {
+                "samplers_requested": SAMPLERS,
+                "samplers_available": "probe-unavailable",
+                "samplers_probe": {"ok": False, "reason": "not_probed"},
+            },
         }
+
+    def _record_sampler_probe_unavailable(self, reason: str) -> None:
+        powermetrics = self._device_metadata.setdefault("powermetrics", {})
+        if isinstance(powermetrics, dict):
+            powermetrics["samplers_available"] = "probe-unavailable"
+            powermetrics["samplers_probe"] = {"ok": False, "reason": reason}
 
     @staticmethod
     def _interval_ms(config: BenchmarkConfig) -> int:

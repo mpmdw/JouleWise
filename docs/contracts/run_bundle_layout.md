@@ -41,9 +41,33 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
   optional workload provenance. Valid JSON with any non-object top-level
   shape is invalid in default validation.
 - `metadata.environment` includes nullable capture provenance fields such as
-  `capture_scope`, `captured_for_rep`, and `captured_at_s`; experiment members
-  may intentionally share one snapshot, and `FakeClock` runs mark capture
-  skipped.
+  `capture_scope`, `captured_for_rep`, `captured_at_s`,
+  `env_capture_duration_s`, and `settle_s`. Normal member bundles capture this
+  at the end of the prepare stage with `capture_scope: "run"`, then wait the
+  recorded settle interval before starting the idle-baseline sample. Experiment
+  runners may also pass a `capture_scope: "experiment"` fallback so failures
+  before prepare retain environment evidence. `FakeClock` runs mark capture
+  skipped. The environment block may also include additive nested `memory`,
+  `display`, `power`, and `clock_sync` objects plus nullable
+  `uptime_s`/`boot_time_s`. Probe failures are recorded in
+  `metadata.environment.errors` and leave the affected fields null, or set
+  explicit probe statuses such as `display.status: "probe_unavailable"` and
+  `clock_sync.status: "unavailable"`.
+- `metadata.device.powermetrics`, when the powermetrics telemetry adapter is
+  used, records `samplers_requested` as the exact sampler string requested
+  from powermetrics and `samplers_available` as either the list confirmed by
+  the cheap requested-sampler preflight or `"probe-unavailable"`.
+  `samplers_probe` records `ok: true` for a successful requested-sampler
+  preflight, `ok: false, reason: "not_probed"` before any preflight, or
+  `ok: false` with a failure reason such as `not_found`, `timeout`, or
+  `returncode_N`.
+- Experiment repetitions may include `metadata.extra.preceding_member_end_s`,
+  `metadata.extra.idle_start_s`, and `metadata.extra.preceding_gap_s`, where
+  the gap is the previous member end timestamp to this member's idle-baseline
+  start after environment capture and settle. The gap is a raw signed value;
+  negative gaps are not clamped and also set
+  `metadata.extra.clock_step_suspect: true`. The first member records a null
+  gap.
 - `events.jsonl`: timestamped lifecycle, phase, token, transfer, and failure
   events.
 - `power_trace.csv`: raw power samples in watts, one row per rail per
@@ -106,6 +130,11 @@ phase. Prompt-side token provenance is recorded in `metadata.json`
 runtime evidence. When decode phase windows are present, output-token events
 used by reduction must fall inside a decode window.
 
+Runtime phase windows are discovered generically from paired
+`phase_start`/`phase_end` records. MLX runs may emit non-overlapping
+`tokenize`, `generation_setup`, `prefill`, and `decode` phases; reducers and
+readers must not assume only prefill/decode exist.
+
 ## Power Trace Minimum Fields
 
 Each power sample should include:
@@ -160,8 +189,23 @@ runs/experiments/<experiment_id>.json
 
 containing: `experiment_id`, shared config hash, member bundle IDs in
 executed order, executed condition order (for the Phase 4 drift audit),
-created timestamp, and cooldown-gate notes. Member bundle IDs are
-`<experiment_id>__r<N>` (decision D-010).
+created timestamp, per-member gap notes (`member_gaps`), and cooldown-gate
+notes. Member bundle IDs are `<experiment_id>__r<N>` (decision D-010).
+
+Cooldown gates between live repetitions are outside every measured member
+window and are excluded from member summaries and strict re-reduction. When
+sub-window readings are preserved, the cooldown note references an
+experiment-level raw JSONL artifact relative to the manifest directory, for
+example `raw/<experiment_id>__cooldown_after_<member>.jsonl`. Each line
+records the sub-window idle baseline and rolling cooldown mean.
+
+MLX runtime adapters may record additive memory snapshots at prepare end and
+cleanup start. These snapshots include process RSS when available and guarded
+MLX Metal memory stats (`active_memory_bytes`, `cache_memory_bytes`,
+`peak_memory_bytes`) when the installed MLX version exposes them. The
+`cleanup_start` snapshot occurs outside the measured window and preserves MLX
+Metal peak fidelity because `get_peak_memory` is cumulative; adapters must not
+take a `run_end` memory snapshot inside the sampled workload window.
 
 ## Composite Split Bundles (Phase 3 Preview)
 

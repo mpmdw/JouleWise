@@ -27,6 +27,7 @@ from joulewise.cli import main, validate_bundle
 from joulewise.controller import (
     COOLDOWN_CAP_S,
     COOLDOWN_SUBWINDOW_S,
+    _member_gap_note,
     cooldown_gate,
     run_experiment,
 )
@@ -88,6 +89,25 @@ def fake_environment_run(command, **kwargs):
         ("pmset", "-g"): " lowpowermode 0\n",
         ("pmset", "-g", "assertions"): "   PreventUserIdleDisplaySleep    0\n",
         ("memory_pressure", "-Q"): "System-wide memory free percentage: 42.0%\n",
+        ("vm_stat",): (
+            "Mach Virtual Memory Statistics: (page size of 4096 bytes)\n"
+            "Pages free: 1000.\n"
+            "Pageins: 2000.\n"
+            "Pageouts: 30.\n"
+            "Pages occupied by compressor: 400.\n"
+        ),
+        ("sysctl", "vm.swapusage"): "vm.swapusage: total = 1.00G used = 0.00M free = 1.00G\n",
+        ("ioreg", "-r", "-c", "IOMobileFramebuffer"): (
+            "+-o IOMobileFramebufferShim  <class IOMobileFramebufferShim, id 0x1, registered>\n"
+            '  |   "IONameMatched" = "disp0,t603x"\n'
+        ),
+        ("ioreg", "-r", "-c", "AppleSmartBattery", "-d", "1"): (
+            '"ExternalConnected" = Yes\n'
+            '"IsCharging" = No\n'
+            '"AdapterDetails" = {"Watts"=96,"Description"="USB-C"}\n'
+        ),
+        ("sysctl", "-n", "kern.boottime"): "{ sec = 1700000000, usec = 0 }\n",
+        ("pgrep", "-x", "timed"): "123\n",
         ("uptime",): "12:00 up 1 day, load averages: 1.00 2.00 3.00\n",
         ("sw_vers",): "ProductName:\t\tmacOS\nProductVersion:\t\t14.0\nBuildVersion:\t\t23A344\n",
         (
@@ -284,6 +304,14 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
             manifest["members"], ["exp-test__r1", "exp-test__r2", "exp-test__r3"]
         )
         self.assertEqual(manifest["condition_order"], ["mock_smoke"] * 3)
+        self.assertEqual(
+            manifest["member_gaps"],
+            [
+                {"member": "exp-test__r1", "preceding_gap_s": None},
+                {"member": "exp-test__r2", "preceding_gap_s": 2.0},
+                {"member": "exp-test__r3", "preceding_gap_s": 2.0},
+            ],
+        )
         self.assertIn("created_at_s", manifest)
         self.assertIsInstance(manifest["created_at_s"], (int, float))
         self.assertRegex(manifest["config_sha256"], _HEX64)
@@ -311,7 +339,12 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
             self.assertEqual(note["reason"], "mock telemetry")
             self.assertEqual(note["after_member"], f"exp-test__r{index}")
 
-    def test_experiment_members_share_one_environment_snapshot(self) -> None:
+        first_metadata = json.loads((self.runs_root / "exp-test__r1" / "metadata.json").read_text())
+        second_metadata = json.loads((self.runs_root / "exp-test__r2" / "metadata.json").read_text())
+        self.assertIsNone(first_metadata["extra"]["preceding_gap_s"])
+        self.assertEqual(second_metadata["extra"]["preceding_gap_s"], 2.0)
+
+    def test_experiment_members_capture_per_run_environment_snapshots(self) -> None:
         config = make_config("exp-env", repetitions=3)
         clock = DeterministicClock()
         with patch(
@@ -323,18 +356,24 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
         environment_calls = [
             call for call in run.call_args_list if call.args[0][0] != "git"
         ]
-        self.assertEqual(len(environment_calls), 7)
+        self.assertEqual(len(environment_calls), 13 * 4)
         environments = [
             json.loads((bundle / "metadata.json").read_text())["environment"]
             for bundle, _summary in members
         ]
-        self.assertEqual(environments[0], environments[1])
-        self.assertEqual(environments[1], environments[2])
-        self.assertFalse(environments[0]["capture_skipped"])
-        self.assertEqual(environments[0]["capture_scope"], "experiment")
-        self.assertEqual(environments[0]["captured_for_rep"], 1)
-        self.assertIsInstance(environments[0]["captured_at_s"], (int, float))
-        self.assertEqual(environments[0]["power_source"], "AC Power")
+        captured_at = [environment["captured_at_s"] for environment in environments]
+        self.assertEqual(captured_at, sorted(captured_at))
+        for environment in environments:
+            self.assertFalse(environment["capture_skipped"])
+            self.assertEqual(environment["capture_scope"], "run")
+            self.assertIsNone(environment["captured_for_rep"])
+            self.assertIsInstance(environment["captured_at_s"], (int, float))
+            self.assertIsInstance(environment["env_capture_duration_s"], (int, float))
+            self.assertEqual(environment["settle_s"], 2.0)
+            self.assertEqual(environment["power_source"], "AC Power")
+            self.assertEqual(environment["power"]["adapter_watts"], 96)
+            self.assertEqual(environment["clock_sync"]["status"], "limited_without_admin")
+            self.assertIs(environment["clock_sync"]["timed_running"], True)
 
     def test_config_hash_is_over_as_given_shared_config(self) -> None:
         # The manifest hash is the bundle writer's D-001 hash of the SHARED
@@ -519,10 +558,12 @@ class CooldownThroughExperimentTests(unittest.TestCase):
         )
         r2_metadata = json.loads((r2_bundle / "metadata.json").read_text())
         self.assertIs(r2_metadata["extra"]["cooldown_cap_hit"], True)
+        self.assertAlmostEqual(r2_metadata["extra"]["preceding_gap_s"], 302.0)
 
-        # r1's metadata carries no cooldown extra.
+        # r1's metadata carries gap provenance but no cooldown cap-hit flag.
         r1_metadata = json.loads((r1_bundle / "metadata.json").read_text())
-        self.assertNotIn("extra", r1_metadata)
+        self.assertIsNone(r1_metadata["extra"]["preceding_gap_s"])
+        self.assertNotIn("cooldown_cap_hit", r1_metadata["extra"])
 
         # The manifest records the single cap_hit gate.
         manifest = json.loads(manifest_path.read_text())
@@ -530,6 +571,51 @@ class CooldownThroughExperimentTests(unittest.TestCase):
         note = manifest["cooldown"][0]
         self.assertEqual(note["result"], "cap_hit")
         self.assertEqual(note["after_member"], "exp-caphit__r1")
+        self.assertIn("raw_artifact", note)
+        trace_path = manifest_path.parent / note["raw_artifact"]
+        self.assertTrue(trace_path.is_file())
+        trace_records = [
+            json.loads(line) for line in trace_path.read_text().splitlines() if line.strip()
+        ]
+        self.assertGreater(len(trace_records), 0)
+        self.assertEqual(trace_records[-1]["rolling_mean_power_w"], 7.5)
+
+    def test_cooldown_trace_write_error_is_manifest_metadata_not_campaign_failure(self) -> None:
+        data = _example_config_data()
+        data["run_id"] = "exp-cooldown-ioerr"
+        data["hardware_target"]["telemetry_backend"] = "powermetrics"
+        data["workload_profile"]["repetitions"] = 2
+        config = BenchmarkConfig.from_mapping(data)
+        experiments_dir = self.runs_root / "experiments"
+        experiments_dir.mkdir(parents=True)
+        (experiments_dir / "raw").write_text("not a directory")
+
+        registry = _StubRegistry(
+            lambda clk: _StubTelemetry(clk, idle_mean=5.0, cooldown_mean=7.5)
+        )
+        manifest_path, members = run_experiment(
+            config, self.runs_root, FakeClock(), registry=registry
+        )
+
+        self.assertEqual(len(members), 2)
+        manifest = json.loads(manifest_path.read_text())
+        note = manifest["cooldown"][0]
+        self.assertEqual(note["result"], "cap_hit")
+        self.assertNotIn("raw_artifact", note)
+        self.assertIn("FileExistsError", note["raw_artifact_error"])
+
+    def test_member_gap_note_is_fail_soft_when_metadata_missing(self) -> None:
+        missing_metadata_bundle = self.runs_root / "missing-metadata"
+        missing_metadata_bundle.mkdir(parents=True)
+
+        self.assertEqual(
+            _member_gap_note(missing_metadata_bundle),
+            {
+                "member": "missing-metadata",
+                "preceding_gap_s": None,
+                "error": "metadata_unavailable",
+            },
+        )
 
 
 # ---------------------------------------------------------------------------

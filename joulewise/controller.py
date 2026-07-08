@@ -110,6 +110,7 @@ COOLDOWN_SUBWINDOW_S = 5.0
 COOLDOWN_ROLLING_WINDOW_S = 30.0
 COOLDOWN_TOLERANCE = 0.10
 COOLDOWN_CAP_S = 300.0
+PRE_IDLE_SETTLE_S = 2.0
 
 #: FailureReason -> RunStatus mapping owned by the controller (D-012).
 #: ``unsupported`` is a finding (structural incompatibility of the
@@ -259,7 +260,12 @@ class _Execution:
         self._runtime: RuntimeAdapter | None = None
         self._telemetry: TelemetryAdapter | None = None
         self._connection_metadata: dict[str, Any] | None = None
-        self._environment: dict[str, Any] | None = None
+        if environment_snapshot is not _ENVIRONMENT_UNSET:
+            self._environment = (
+                dict(environment_snapshot) if environment_snapshot is not None else None
+            )
+        else:
+            self._environment = None
         self._device_metadata: dict[str, Any] | None = None
         self._prepare_metadata: dict[str, Any] | None = None
         self._telemetry_metadata: dict[str, Any] | None = None
@@ -314,9 +320,6 @@ class _Execution:
             {"run_id": self._writer.run_id},
         )
         self._log(self._controller_log, f"run {self._writer.run_id} started")
-        self._environment = _environment_for_run(
-            self._clock, provided=self._environment_snapshot
-        )
         self._stage_validate()
         self._stage_prepare()
         self._stage_idle_baseline()
@@ -365,12 +368,16 @@ class _Execution:
         self._check(result, "prepare", "runtime prepare failed")
         self._prepare_metadata = dict(result.metadata)
         self._capture_adapter_alignments()
+        self._capture_prepare_end_environment()
         self._log(self._runtime_log, "runtime prepare succeeded")
         self._complete_stage("prepare")
 
     def _stage_idle_baseline(self) -> None:
         self._begin_stage("idle_baseline")
         assert self._telemetry is not None
+        self._settle_before_idle()
+        idle_start_s = self._clock.now()
+        self._stamp_preceding_gap(idle_start_s)
         self._baseline = self._telemetry.measure_idle(self._config, self._context)
         self._capture_adapter_alignments()
         self._capture_adapter_metadata()
@@ -491,6 +498,8 @@ class _Execution:
                     f"runtime cleanup failed ({result.message}); "
                     "run status unchanged (best-effort cleanup)",
                 )
+            elif result.metadata:
+                metadata.update(_jsonable(result.metadata))
         self._complete_stage("cleanup", metadata)
 
     def _stage_reduce(self) -> SummaryMetrics:
@@ -661,6 +670,43 @@ class _Execution:
         if telemetry_metadata:
             self._telemetry_metadata = telemetry_metadata
 
+    def _capture_prepare_end_environment(self) -> None:
+        if not self._should_capture_run_environment():
+            return
+        self._environment = _capture_environment(
+            self._clock,
+            capture_scope="run",
+            captured_for_rep=None,
+            settle_s=PRE_IDLE_SETTLE_S,
+        )
+
+    def _should_capture_run_environment(self) -> bool:
+        if self._environment_snapshot is _ENVIRONMENT_UNSET:
+            return True
+        if not isinstance(self._environment_snapshot, dict):
+            return False
+        return self._environment_snapshot.get("capture_scope") == "experiment"
+
+    def _settle_before_idle(self) -> None:
+        if not isinstance(self._environment, dict):
+            return
+        settle_s = self._environment.get("settle_s")
+        if isinstance(settle_s, int | float) and settle_s > 0:
+            self._clock.sleep(float(settle_s))
+
+    def _stamp_preceding_gap(self, idle_start_s: float) -> None:
+        if "preceding_member_end_s" not in self._extra_metadata:
+            return
+        preceding_end_s = self._extra_metadata.get("preceding_member_end_s")
+        self._extra_metadata["idle_start_s"] = idle_start_s
+        if isinstance(preceding_end_s, int | float):
+            gap_s = idle_start_s - float(preceding_end_s)
+            self._extra_metadata["preceding_gap_s"] = gap_s
+            if gap_s < 0.0:
+                self._extra_metadata["clock_step_suspect"] = True
+        else:
+            self._extra_metadata["preceding_gap_s"] = None
+
     # ------------------------------------------------------------------
     # Summaries
 
@@ -796,6 +842,7 @@ def cooldown_gate(
     # Each reading carries (timestamp_s, mean) so the rolling mean spans only
     # the most recent COOLDOWN_ROLLING_WINDOW_S of readings.
     readings: list[tuple[float, float]] = []
+    trace: list[dict[str, Any]] = []
     while True:
         baseline = telemetry.measure_idle(sub_config)
         now_s = clock.now()
@@ -804,10 +851,18 @@ def cooldown_gate(
         readings = [reading for reading in readings if reading[0] >= cutoff]
         rolling_mean = sum(value for _, value in readings) / len(readings)
         waited_s = now_s - start_s
+        trace.append(
+            {
+                "timestamp_s": now_s,
+                "waited_s": waited_s,
+                "rolling_mean_power_w": rolling_mean,
+                "baseline": _jsonable(asdict(baseline)),
+            }
+        )
         if _within_tolerance(rolling_mean, reference, COOLDOWN_TOLERANCE):
-            return {"result": "recovered", "waited_s": waited_s}
+            return {"result": "recovered", "waited_s": waited_s, "_trace": trace}
         if waited_s >= COOLDOWN_CAP_S:
-            return {"result": "cap_hit", "waited_s": waited_s}
+            return {"result": "cap_hit", "waited_s": waited_s, "_trace": trace}
 
 
 def _within_tolerance(value: float, reference: float, tolerance: float) -> bool:
@@ -874,11 +929,21 @@ def _environment_for_run(
 ) -> dict[str, Any] | None:
     if provided is not _ENVIRONMENT_UNSET:
         return dict(provided) if provided is not None else None
-    return _capture_environment(clock, capture_scope="run", captured_for_rep=None)
+    return _capture_environment(
+        clock,
+        capture_scope="run",
+        captured_for_rep=None,
+        settle_s=PRE_IDLE_SETTLE_S,
+    )
 
 
 def _environment_for_experiment(clock: Clock) -> dict[str, Any]:
-    return _capture_environment(clock, capture_scope="experiment", captured_for_rep=1)
+    return _capture_environment(
+        clock,
+        capture_scope="experiment",
+        captured_for_rep=1,
+        settle_s=None,
+    )
 
 
 def _capture_environment(
@@ -886,7 +951,9 @@ def _capture_environment(
     *,
     capture_scope: str,
     captured_for_rep: int | None,
+    settle_s: float | None,
 ) -> dict[str, Any]:
+    started_at_s = clock.now()
     if isinstance(clock, FakeClock):
         snapshot = empty_environment_snapshot()
         snapshot.update(
@@ -896,16 +963,21 @@ def _capture_environment(
                 "capture_scope": capture_scope,
                 "captured_for_rep": captured_for_rep,
                 "captured_at_s": None,
+                "env_capture_duration_s": 0.0,
+                "settle_s": settle_s,
             }
         )
         return snapshot
     snapshot = collect_environment_snapshot()
+    captured_at_s = clock.now()
     snapshot.update(
         {
             "capture_skipped": False,
             "capture_scope": capture_scope,
             "captured_for_rep": captured_for_rep,
-            "captured_at_s": clock.now(),
+            "captured_at_s": captured_at_s,
+            "env_capture_duration_s": captured_at_s - started_at_s,
+            "settle_s": settle_s,
         }
     )
     return snapshot
@@ -957,6 +1029,7 @@ def run_experiment(
         "config_sha256": config_sha256,
         "created_at_s": created_at_s,
         "members": [],
+        "member_gaps": [],
         "condition_order": [],
         "cooldown": [],
     }
@@ -965,20 +1038,25 @@ def run_experiment(
     manifest_path: Path | None = None
     # Pending cap-hit recorded against the NEXT rep's run_benchmark.
     next_extra_metadata: dict[str, Any] | None = None
+    previous_member_end_s: float | None = None
 
     for rep in range(1, repetitions + 1):
         member_config = replace(config, run_id=f"{experiment_id}__r{rep}")
+        member_extra_metadata = dict(next_extra_metadata or {})
+        member_extra_metadata["preceding_member_end_s"] = previous_member_end_s
         bundle_path, summary = run_benchmark(
             member_config,
             runs_root,
             clock,
             registry=registry,
-            extra_metadata=next_extra_metadata,
+            extra_metadata=member_extra_metadata,
             environment_snapshot=environment_snapshot,
         )
+        previous_member_end_s = clock.now()
         next_extra_metadata = None
         results.append((bundle_path, summary))
         manifest["members"].append(bundle_path.name)
+        manifest["member_gaps"].append(_member_gap_note(bundle_path))
         manifest["condition_order"].append(condition_name)
         manifest["aggregate"] = aggregate_experiment(runs_root, manifest)
         # Incremental write: a kill before the next rep leaves a valid manifest
@@ -987,7 +1065,7 @@ def run_experiment(
 
         if rep < repetitions:
             note, cap_hit = _cooldown_between_reps(
-                config, bundle_path.name, summary, registry, clock
+                config, runs_root, experiment_id, bundle_path.name, summary, registry, clock
             )
             manifest["cooldown"].append(note)
             manifest_path = write_experiment_manifest(runs_root, manifest)
@@ -1000,6 +1078,8 @@ def run_experiment(
 
 def _cooldown_between_reps(
     config: BenchmarkConfig,
+    runs_root: Path,
+    experiment_id: str,
     after_member: str,
     summary: SummaryMetrics,
     registry: AdapterRegistry,
@@ -1036,8 +1116,52 @@ def _cooldown_between_reps(
             }
         )
         return note, False
+    trace = gate.pop("_trace", [])
     note.update(gate)
+    if trace:
+        artifact, error = _write_cooldown_trace(
+            runs_root, experiment_id, after_member, trace
+        )
+        if artifact is not None:
+            note["raw_artifact"] = artifact
+        if error is not None:
+            note["raw_artifact_error"] = error
     return note, gate["result"] == "cap_hit"
+
+
+def _member_gap_note(bundle_path: Path) -> dict[str, Any]:
+    note: dict[str, Any] = {"member": bundle_path.name, "preceding_gap_s": None}
+    try:
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+    except Exception:  # noqa: BLE001 - manifest update must stay fail-soft.
+        note["error"] = "metadata_unavailable"
+        return note
+    extra = metadata.get("extra")
+    if isinstance(extra, dict):
+        note["preceding_gap_s"] = extra.get("preceding_gap_s")
+    return note
+
+
+def _write_cooldown_trace(
+    runs_root: Path,
+    experiment_id: str,
+    after_member: str,
+    trace: list[dict[str, Any]],
+) -> tuple[str | None, str | None]:
+    try:
+        raw_dir = Path(runs_root) / "experiments" / "raw"
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        filename = (
+            f"{sanitize_id_component(experiment_id)}__cooldown_after_"
+            f"{sanitize_id_component(after_member)}.jsonl"
+        )
+        path = raw_dir / filename
+        text = "".join(json.dumps(record, sort_keys=True) + "\n" for record in trace)
+        with path.open("x") as handle:
+            handle.write(text)
+        return f"raw/{filename}", None
+    except Exception as exc:  # noqa: BLE001 - cooldown evidence is fail-soft.
+        return None, f"{type(exc).__name__}: {exc}"
 
 
 def _config_sha256(config: BenchmarkConfig) -> str:

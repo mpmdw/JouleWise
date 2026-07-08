@@ -19,6 +19,30 @@ SUCCESS_OUTPUTS = {
     ("pmset", "-g"): " lowpowermode      1\n",
     ("pmset", "-g", "assertions"): "   PreventUserIdleDisplaySleep    1\n",
     ("memory_pressure", "-Q"): "System-wide memory free percentage: 42%\n",
+    ("vm_stat",): (
+        "Mach Virtual Memory Statistics: (page size of 4096 bytes)\n"
+        "Pages free:                               1000.\n"
+        "Pageins:                                  2000.\n"
+        "Pageouts:                                 30.\n"
+        "Pages occupied by compressor:             400.\n"
+        "Pages stored in compressor:               500.\n"
+    ),
+    ("sysctl", "vm.swapusage"): "vm.swapusage: total = 1024.00M used = 128.00M free = 896.00M\n",
+    ("ioreg", "-r", "-c", "IOMobileFramebuffer"): (
+        "+-o IOMobileFramebufferShim  <class IOMobileFramebufferShim, id 0x1, registered>\n"
+        '  |   "IONameMatched" = "disp0,t603x"\n'
+        "+-o IOMobileFramebufferShim  <class IOMobileFramebufferShim, id 0x2, registered>\n"
+        '  |   "external" = Yes\n'
+        '  |   "IONameMatched" = "dispext0,t603x"\n'
+    ),
+    ("ioreg", "-r", "-c", "AppleSmartBattery", "-d", "1"): (
+        '"ExternalConnected" = Yes\n'
+        '"IsCharging" = No\n'
+        '"FullyCharged" = Yes\n'
+        '"AdapterDetails" = {"Watts"=96,"Description"="USB-C Power Adapter"}\n'
+    ),
+    ("sysctl", "-n", "kern.boottime"): "{ sec = 1700000000, usec = 0 } Tue Nov 14 00:00:00 2023\n",
+    ("pgrep", "-x", "timed"): "123\n",
     ("uptime",): "10:00  up 1 day,  3 users, load averages: 1.25 2.50 3.75\n",
     ("sw_vers",): (
         "ProductName:\t\tmacOS\n"
@@ -56,6 +80,7 @@ def successful_fake_run(command, **kwargs):
 class EnvironmentSnapshotTests(unittest.TestCase):
     def test_collect_environment_snapshot_parses_successful_commands(self) -> None:
         outputs = {
+            **SUCCESS_OUTPUTS,
             ("pmset", "-g", "batt"): (
                 "Now drawing from 'AC Power'\n"
                 " -InternalBattery-0\t99%; charged; 0:00 remaining present: true\n"
@@ -92,6 +117,30 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         self.assertIs(snapshot["display_sleep_prevented"], True)
         self.assertEqual(snapshot["memory_free_percent"], 42.0)
         self.assertEqual(snapshot["memory_pressure_percent"], 58.0)
+        self.assertEqual(
+            snapshot["memory"]["swap_usage"],
+            {"total": "1024.00M", "used": "128.00M", "free": "896.00M"},
+        )
+        self.assertEqual(snapshot["memory"]["pageins"], 2000)
+        self.assertEqual(snapshot["memory"]["pageouts"], 30)
+        self.assertEqual(snapshot["memory"]["compressor_bytes"], 400 * 4096)
+        self.assertEqual(snapshot["display"]["active_displays"], 2)
+        self.assertEqual(snapshot["display"]["status"], "ok")
+        self.assertEqual(snapshot["display"]["probe"], "ioreg_iomobileframebuffer")
+        self.assertEqual(snapshot["display"]["built_in_display_count"], 1)
+        self.assertEqual(snapshot["display"]["external_display_count"], 1)
+        self.assertEqual(snapshot["power"]["adapter_watts"], 96)
+        self.assertEqual(snapshot["power"]["adapter_description"], "USB-C Power Adapter")
+        self.assertTrue(snapshot["power"]["external_connected"])
+        self.assertFalse(snapshot["power"]["is_charging"])
+        self.assertTrue(snapshot["power"]["fully_charged"])
+        self.assertEqual(snapshot["boot_time_s"], 1700000000)
+        self.assertGreaterEqual(snapshot["uptime_s"], 0.0)
+        self.assertEqual(snapshot["clock_sync"]["status"], "limited_without_admin")
+        self.assertEqual(snapshot["clock_sync"]["state"], "limited_without_admin")
+        self.assertTrue(snapshot["clock_sync"]["timed_running"])
+        self.assertIsNone(snapshot["clock_sync"]["ntp_enabled"])
+        self.assertIsNone(snapshot["clock_sync"]["network_time_server"])
         self.assertEqual(snapshot["load_average_1m"], 1.25)
         self.assertEqual(snapshot["product_version"], "15.5")
         self.assertEqual(snapshot["build_version"], "24F74")
@@ -119,6 +168,16 @@ class EnvironmentSnapshotTests(unittest.TestCase):
                 )
             if key == ("sysctl", "-n", "hw.memsize"):
                 return completed(command, "4096000\n")
+            if key == ("sysctl", "vm.swapusage"):
+                return completed(command, returncode=1)
+            if key == ("ioreg", "-r", "-c", "IOMobileFramebuffer"):
+                return completed(command, returncode=1)
+            if key == ("ioreg", "-r", "-c", "AppleSmartBattery", "-d", "1"):
+                return completed(command, returncode=1)
+            if key == ("sysctl", "-n", "kern.boottime"):
+                return completed(command, returncode=1)
+            if key == ("pgrep", "-x", "timed"):
+                return completed(command, returncode=3)
             if key == ("uptime",):
                 return completed(command, "unparseable\n")
             if key == ("sw_vers",):
@@ -142,11 +201,20 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["errors"]["pmset_batt"], "not_found")
         self.assertEqual(snapshot["errors"]["pmset_assertions"], "returncode_1")
         self.assertEqual(snapshot["errors"]["memory_pressure"], "timeout")
+        self.assertEqual(snapshot["errors"]["sysctl_vm_swapusage"], "returncode_1")
+        self.assertEqual(snapshot["errors"]["ioreg_display"], "returncode_1")
+        self.assertEqual(snapshot["display"]["status"], "probe_unavailable")
+        self.assertEqual(snapshot["display"]["reason"], "returncode_1")
+        self.assertEqual(snapshot["errors"]["ioreg_battery"], "returncode_1")
+        self.assertEqual(snapshot["errors"]["sysctl_kern_boottime"], "returncode_1")
+        self.assertEqual(snapshot["errors"]["pgrep_timed"], "returncode_3")
+        self.assertFalse(snapshot["clock_sync"]["timed_running"])
         self.assertEqual(snapshot["errors"]["uptime"], "parse")
         self.assertEqual(snapshot["errors"]["sysctl_host"], "returncode_1")
 
     def test_battery_and_sw_vers_garbage_outputs_record_parse_errors(self) -> None:
         outputs = {
+            **SUCCESS_OUTPUTS,
             ("pmset", "-g", "batt"): "garbage\n",
             ("pmset", "-g"): "",
             ("pmset", "-g", "assertions"): "",
@@ -170,6 +238,24 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["errors"]["sw_vers"], "parse")
         self.assertNotIn("pmset", snapshot["errors"])
         self.assertNotIn("pmset_assertions", snapshot["errors"])
+
+    def test_display_probe_without_framebuffer_entries_records_unavailable_status(self) -> None:
+        outputs = {
+            **SUCCESS_OUTPUTS,
+            ("ioreg", "-r", "-c", "IOMobileFramebuffer"): "no matching services\n",
+        }
+
+        def fake_run(command, **kwargs):
+            return completed(command, outputs[tuple(command)])
+
+        with patch("joulewise.environment.subprocess.run", side_effect=fake_run):
+            snapshot = collect_environment_snapshot()
+
+        self.assertEqual(snapshot["errors"], {})
+        self.assertEqual(snapshot["display"]["status"], "probe_unavailable")
+        self.assertEqual(snapshot["display"]["probe"], "ioreg_iomobileframebuffer")
+        self.assertEqual(snapshot["display"]["reason"], "no_framebuffer_entries")
+        self.assertIsNone(snapshot["display"]["active_displays"])
 
     def test_each_primary_command_failure_is_isolated(self) -> None:
         cases = [
@@ -236,6 +322,22 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         for key, value in snapshot.items():
             if key == "errors":
                 continue
+            if key == "clock_sync":
+                self.assertEqual(value["state"], "limited_without_admin")
+                self.assertEqual(value["status"], "limited_without_admin")
+                self.assertFalse(value["timed_running"])
+                self.assertEqual(value["timed_probe_error"], "not_found")
+                self.assertIsNone(value["ntp_enabled"])
+                self.assertIsNone(value["network_time_server"])
+                continue
+            if key == "display":
+                self.assertEqual(value["status"], "probe_unavailable")
+                self.assertEqual(value["reason"], "not_found")
+                continue
+            if isinstance(value, dict):
+                for nested_value in value.values():
+                    self.assertIsNone(nested_value, key)
+                continue
             self.assertIsNone(value, key)
         self.assertEqual(
             snapshot["errors"],
@@ -246,6 +348,11 @@ class EnvironmentSnapshotTests(unittest.TestCase):
                 "memory_pressure": "not_found",
                 "vm_stat": "not_found",
                 "sysctl_hw_memsize": "not_found",
+                "sysctl_vm_swapusage": "not_found",
+                "ioreg_display": "not_found",
+                "ioreg_battery": "not_found",
+                "sysctl_kern_boottime": "not_found",
+                "pgrep_timed": "not_found",
                 "uptime": "not_found",
                 "sw_vers": "not_found",
                 "sysctl_host": "not_found",
@@ -262,6 +369,22 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         for key, value in snapshot.items():
             if key == "errors":
                 continue
+            if key == "clock_sync":
+                self.assertEqual(value["state"], "limited_without_admin")
+                self.assertEqual(value["status"], "limited_without_admin")
+                self.assertFalse(value["timed_running"])
+                self.assertEqual(value["timed_probe_error"], "failed")
+                self.assertIsNone(value["ntp_enabled"])
+                self.assertIsNone(value["network_time_server"])
+                continue
+            if key == "display":
+                self.assertEqual(value["status"], "probe_unavailable")
+                self.assertEqual(value["reason"], "failed")
+                continue
+            if isinstance(value, dict):
+                for nested_value in value.values():
+                    self.assertIsNone(nested_value, key)
+                continue
             self.assertIsNone(value, key)
         self.assertEqual(
             snapshot["errors"],
@@ -272,6 +395,11 @@ class EnvironmentSnapshotTests(unittest.TestCase):
                 "memory_pressure": "failed",
                 "vm_stat": "failed",
                 "sysctl_hw_memsize": "failed",
+                "sysctl_vm_swapusage": "failed",
+                "ioreg_display": "failed",
+                "ioreg_battery": "failed",
+                "sysctl_kern_boottime": "failed",
+                "pgrep_timed": "failed",
                 "uptime": "failed",
                 "sw_vers": "failed",
                 "sysctl_host": "failed",

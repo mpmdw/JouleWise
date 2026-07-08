@@ -163,6 +163,44 @@ class PoisonRegistry:
         return adapters.resolve_transport(config)
 
 
+class FailingIdleTelemetry:
+    name = "failing-idle"
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+
+    def device_metadata(self, config: BenchmarkConfig, context=None) -> dict:
+        return self._inner.device_metadata(config, context)
+
+    def measure_idle(self, config: BenchmarkConfig, context=None):
+        from joulewise.interfaces import AdapterFailure
+
+        raise AdapterFailure(FailureReason.UNKNOWN_ERROR, "injected idle failure")
+
+    def thermal_state(self, config: BenchmarkConfig, context=None):
+        return self._inner.thermal_state(config, context)
+
+    def start_sampling(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        return self._inner.start_sampling(config, context)
+
+    def stop_sampling(self, config: BenchmarkConfig, context=None):
+        return self._inner.stop_sampling(config, context)
+
+
+class FailingIdleRegistry:
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            telemetry = FailingIdleTelemetry(telemetry)
+        return telemetry, failure
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
 class SuspectIdleTelemetry:
     """Wraps mock telemetry and marks the idle baseline suspect."""
 
@@ -315,6 +353,25 @@ def fake_environment_run(command, **kwargs):
         ("pmset", "-g"): " lowpowermode 0\n",
         ("pmset", "-g", "assertions"): "   PreventUserIdleDisplaySleep    0\n",
         ("memory_pressure", "-Q"): "System-wide memory free percentage: 42.0%\n",
+        ("vm_stat",): (
+            "Mach Virtual Memory Statistics: (page size of 4096 bytes)\n"
+            "Pages free: 1000.\n"
+            "Pageins: 2000.\n"
+            "Pageouts: 30.\n"
+            "Pages occupied by compressor: 400.\n"
+        ),
+        ("sysctl", "vm.swapusage"): "vm.swapusage: total = 1.00G used = 0.00M free = 1.00G\n",
+        ("ioreg", "-r", "-c", "IOMobileFramebuffer"): (
+            "+-o IOMobileFramebufferShim  <class IOMobileFramebufferShim, id 0x1, registered>\n"
+            '  |   "IONameMatched" = "disp0,t603x"\n'
+        ),
+        ("ioreg", "-r", "-c", "AppleSmartBattery", "-d", "1"): (
+            '"ExternalConnected" = Yes\n'
+            '"IsCharging" = No\n'
+            '"AdapterDetails" = {"Watts"=96,"Description"="USB-C"}\n'
+        ),
+        ("sysctl", "-n", "kern.boottime"): "{ sec = 1700000000, usec = 0 }\n",
+        ("pgrep", "-x", "timed"): "123\n",
         ("uptime",): "12:00 up 1 day, load averages: 1.00 2.00 3.00\n",
         ("sw_vers",): "ProductName:\t\tmacOS\nProductVersion:\t\t14.0\nBuildVersion:\t\t23A344\n",
         (
@@ -524,13 +581,60 @@ class HappyPathTests(ControllerTestCase):
         environment_calls = [
             call for call in run.call_args_list if call.args[0][0] != "git"
         ]
-        self.assertEqual(len(environment_calls), 7)
+        self.assertEqual(len(environment_calls), 13)
         self.assertEqual(environment["power_source"], "AC Power")
         self.assertEqual(environment["memory_free_percent"], 42.0)
+        self.assertEqual(environment["memory"]["pageins"], 2000)
+        self.assertEqual(environment["display"]["active_displays"], 1)
+        self.assertEqual(environment["power"]["adapter_watts"], 96)
+        self.assertEqual(environment["clock_sync"]["status"], "limited_without_admin")
+        self.assertIs(environment["clock_sync"]["timed_running"], True)
         self.assertFalse(environment["capture_skipped"])
         self.assertEqual(environment["capture_scope"], "run")
         self.assertIsNone(environment["captured_for_rep"])
         self.assertIsInstance(environment["captured_at_s"], (int, float))
+        self.assertIsInstance(environment["env_capture_duration_s"], (int, float))
+        self.assertEqual(environment["settle_s"], 2.0)
+
+    def test_idle_baseline_failure_preserves_prepare_end_environment(self) -> None:
+        config = make_config("controller-idle-failure-env")
+        clock = DeterministicClock()
+        with patch(
+            "joulewise.environment.subprocess.run",
+            side_effect=fake_environment_run,
+        ):
+            bundle_path, summary = run_benchmark(
+                config,
+                self.runs_root,
+                clock,
+                registry=FailingIdleRegistry(),
+            )
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertNotIn("idle_baseline", metadata)
+        environment = metadata["environment"]
+        self.assertEqual(environment["capture_scope"], "run")
+        self.assertFalse(environment["capture_skipped"])
+        self.assertEqual(environment["settle_s"], 2.0)
+        self.assertEqual(environment["power_source"], "AC Power")
+
+    def test_negative_preceding_gap_is_signed_and_flagged(self) -> None:
+        config = make_config("controller-negative-gap")
+        bundle_path, summary = run_benchmark(
+            config,
+            self.runs_root,
+            FakeClock(start=0.0),
+            extra_metadata={"preceding_member_end_s": 100.0},
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        extra = metadata["extra"]
+        self.assertEqual(extra["idle_start_s"], 2.0)
+        self.assertEqual(extra["preceding_gap_s"], -98.0)
+        self.assertIs(extra["clock_step_suspect"], True)
 
     def test_fake_clock_skips_environment_subprocesses(self) -> None:
         with patch(

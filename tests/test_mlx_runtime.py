@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 import unittest
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import Any
+from unittest.mock import patch
 
-from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
+from joulewise.adapters.mlx_runtime import (
+    MlxRuntimeAdapter,
+    _mlx_metal_memory,
+    _process_rss_bytes,
+)
 from joulewise.clock import FakeClock
 from joulewise.provenance import prompt_token_ids_sha256
 from joulewise.schemas import BenchmarkConfig, FailureReason
@@ -145,6 +152,10 @@ class MlxRuntimeTests(unittest.TestCase):
         self.assertEqual(
             [(event.event_type, event.phase) for event in result.events],
             [
+                ("phase_start", "tokenize"),
+                ("phase_end", "tokenize"),
+                ("phase_start", "generation_setup"),
+                ("phase_end", "generation_setup"),
                 ("phase_start", "prefill"),
                 ("phase_end", "prefill"),
                 ("phase_start", "decode"),
@@ -160,11 +171,12 @@ class MlxRuntimeTests(unittest.TestCase):
             [event.metadata for event in result.events if event.event_type == "token"],
             [{"index": 0}, {"index": 1}, {"index": 2}],
         )
+        self.assertEqual(result.events[1].metadata["prompt_tokens"], 4)
         self.assertEqual(
-            result.events[0].metadata["phase_boundary_method"],
+            result.events[4].metadata["phase_boundary_method"],
             "first_token",
         )
-        self.assertEqual(result.events[2].metadata["phase_boundary_method"], "first_token")
+        self.assertEqual(result.events[6].metadata["phase_boundary_method"], "first_token")
         self.assertEqual(result.output_artifacts["response.txt"], "ABC")
         self.assertEqual(
             result.workload_provenance["prompt"]["realized_token_count"],
@@ -183,6 +195,44 @@ class MlxRuntimeTests(unittest.TestCase):
         self.assertEqual([record["timestamp_s"] for record in records], [1000.0] * 3)
         self.assertEqual(result.output_token_count, 3)
 
+    def test_memory_snapshots_are_captured_at_lifecycle_boundaries(self) -> None:
+        adapter = MlxRuntimeAdapter(FakeClock(start=1000.0))
+        fake_mlx = FakeMlxLm(["A"])
+        fake_tokenizer = FakeTokenizer()
+
+        def fake_load(source, revision=None, return_config=True):
+            return object(), fake_tokenizer, {"model_type": "fake"}
+
+        fake_mlx.load = fake_load  # type: ignore[attr-defined]
+        adapter._import_mlx_lm = lambda: fake_mlx  # type: ignore[method-assign]
+
+        def fake_snapshot(label: str) -> dict[str, Any]:
+            return {
+                "label": label,
+                "captured_at_s": 1000.0,
+                "process_rss_bytes": 123456,
+                "mlx_metal": {
+                    "api_available": True,
+                    "active_memory_bytes": 1,
+                    "cache_memory_bytes": 2,
+                    "peak_memory_bytes": 3,
+                },
+            }
+
+        with patch.object(adapter, "_memory_snapshot", side_effect=fake_snapshot):
+            prepare = adapter.prepare(make_config())
+            result = adapter.run_workload(make_config(workload_profile={"output_tokens": 1}))
+            cleanup = adapter.cleanup(make_config())
+
+        self.assertTrue(prepare.ok)
+        self.assertEqual(
+            prepare.metadata["memory_snapshots"][0]["label"], "prepare_end"
+        )
+        self.assertEqual(result.metadata, {})
+        self.assertEqual(
+            cleanup.metadata["memory_snapshots"][0]["label"], "cleanup_start"
+        )
+
     def test_text_prompt_provenance_hashes_exact_generation_token_ids(self) -> None:
         adapter, fake_mlx = self.prepared_adapter(["A"])
         result = adapter.run_workload(make_config())
@@ -193,6 +243,78 @@ class MlxRuntimeTests(unittest.TestCase):
             result.workload_provenance["prompt"]["token_ids_sha256"],
             prompt_token_ids_sha256(generated_prompt),
         )
+
+
+class MemoryProbeHelperTests(unittest.TestCase):
+    def test_process_rss_bytes_success(self) -> None:
+        errors: dict[str, str] = {}
+
+        def fake_run(command, **kwargs):
+            self.assertEqual(command[:3], ["ps", "-o", "rss="])
+            return subprocess.CompletedProcess(command, 0, "123\n", "")
+
+        with patch("joulewise.adapters.mlx_runtime.subprocess.run", side_effect=fake_run):
+            self.assertEqual(_process_rss_bytes(errors), 123 * 1024)
+        self.assertEqual(errors, {})
+
+    def test_process_rss_bytes_timeout(self) -> None:
+        errors: dict[str, str] = {}
+
+        def fake_run(command, **kwargs):
+            raise subprocess.TimeoutExpired(command, timeout=kwargs["timeout"])
+
+        with patch("joulewise.adapters.mlx_runtime.subprocess.run", side_effect=fake_run):
+            self.assertIsNone(_process_rss_bytes(errors))
+        self.assertEqual(errors, {"process_rss": "timeout"})
+
+    def test_mlx_metal_memory_success(self) -> None:
+        errors: dict[str, str] = {}
+        fake_core = ModuleType("mlx.core")
+        fake_core.metal = SimpleNamespace(
+            get_active_memory=lambda: 10,
+            get_cache_memory=lambda: 20,
+            get_peak_memory=lambda: 30,
+        )
+        previous = sys.modules.get("mlx.core")
+        sys.modules["mlx.core"] = fake_core
+        try:
+            self.assertEqual(
+                _mlx_metal_memory(errors),
+                {
+                    "api_available": True,
+                    "active_memory_bytes": 10,
+                    "cache_memory_bytes": 20,
+                    "peak_memory_bytes": 30,
+                },
+            )
+        finally:
+            if previous is None:
+                sys.modules.pop("mlx.core", None)
+            else:
+                sys.modules["mlx.core"] = previous
+        self.assertEqual(errors, {})
+
+    def test_mlx_metal_memory_missing_api(self) -> None:
+        errors: dict[str, str] = {}
+        fake_core = ModuleType("mlx.core")
+        previous = sys.modules.get("mlx.core")
+        sys.modules["mlx.core"] = fake_core
+        try:
+            self.assertEqual(
+                _mlx_metal_memory(errors),
+                {
+                    "api_available": False,
+                    "active_memory_bytes": None,
+                    "cache_memory_bytes": None,
+                    "peak_memory_bytes": None,
+                },
+            )
+        finally:
+            if previous is None:
+                sys.modules.pop("mlx.core", None)
+            else:
+                sys.modules["mlx.core"] = previous
+        self.assertEqual(errors, {})
 
 
 if __name__ == "__main__":

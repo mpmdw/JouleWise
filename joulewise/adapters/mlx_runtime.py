@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
+import subprocess
 from collections.abc import Iterable
 from importlib import metadata as importlib_metadata
 from pathlib import Path
@@ -113,6 +115,7 @@ class MlxRuntimeAdapter:
         if isinstance(self._model_config, dict):
             metadata["model_config_name"] = self._model_config.get("model_type")
             metadata["model_config_eos_token_id"] = self._model_config.get("eos_token_id")
+        metadata["memory_snapshots"] = [self._memory_snapshot("prepare_end")]
         return AdapterResult(ok=True, metadata=metadata)
 
     def warmup(
@@ -147,13 +150,41 @@ class MlxRuntimeAdapter:
         if self._mlx_lm is None or self._model is None or self._tokenizer is None:
             raise RuntimeError("runtime backend 'mlx' run_workload called before prepare")
 
+        events: list[RuntimeEvent] = [
+            self._event("phase_start", "tokenize", "mlx tokenization started")
+        ]
         prompt, prompt_token_ids, prompt_text = self._prompt_for_workload(config)
         prompt_tokens = len(prompt_token_ids)
+        events.append(
+            self._event(
+                "phase_end",
+                "tokenize",
+                "mlx tokenization completed",
+                {"prompt_tokens": prompt_tokens},
+            )
+        )
+        events.append(
+            self._event(
+                "phase_start",
+                "generation_setup",
+                "mlx generation setup started",
+            )
+        )
         max_tokens = config.workload_profile.output_tokens or DEFAULT_OUTPUT_TOKENS
         original_eos_ids = self._suppress_eos()
         eos_suppressed = original_eos_ids is not None
-
-        events: list[RuntimeEvent] = [
+        events.append(
+            self._event(
+                "phase_end",
+                "generation_setup",
+                "mlx generation setup completed",
+                {
+                    "requested_output_tokens": max_tokens,
+                    "eos_suppressed": eos_suppressed,
+                },
+            )
+        )
+        events.append(
             self._event(
                 "phase_start",
                 "prefill",
@@ -165,7 +196,7 @@ class MlxRuntimeAdapter:
                     "eos_suppressed": eos_suppressed,
                 },
             )
-        ]
+        )
         token_records: list[dict[str, float | int]] = []
         text_parts: list[str] = []
         last_finish_reason: str | None = None
@@ -298,12 +329,25 @@ class MlxRuntimeAdapter:
     def cleanup(
         self, config: BenchmarkConfig, context: RunContext | None = None
     ) -> AdapterResult:
+        metadata = {"memory_snapshots": [self._memory_snapshot("cleanup_start")]}
         self._model = None
         self._tokenizer = None
         self._model_config = None
         self._mlx_lm = None
         self._original_eos_token_ids = None
-        return AdapterResult(ok=True)
+        return AdapterResult(ok=True, metadata=metadata)
+
+    def _memory_snapshot(self, label: str) -> dict[str, Any]:
+        errors: dict[str, str] = {}
+        snapshot: dict[str, Any] = {
+            "label": label,
+            "captured_at_s": self._clock.now(),
+            "process_rss_bytes": _process_rss_bytes(errors),
+            "mlx_metal": _mlx_metal_memory(errors),
+        }
+        if errors:
+            snapshot["errors"] = errors
+        return snapshot
 
     def _import_mlx_lm(self) -> Any:
         return importlib.import_module("mlx_lm")
@@ -449,3 +493,75 @@ def _distribution_version(distribution: str) -> str | None:
         return importlib_metadata.version(distribution)
     except importlib_metadata.PackageNotFoundError:
         return None
+
+
+def _process_rss_bytes(errors: dict[str, str]) -> int | None:
+    try:
+        completed = subprocess.run(
+            ["ps", "-o", "rss=", "-p", str(os.getpid())],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except FileNotFoundError:
+        errors["process_rss"] = "ps_not_found"
+        return None
+    except subprocess.TimeoutExpired:
+        errors["process_rss"] = "timeout"
+        return None
+    except Exception as exc:  # noqa: BLE001 - memory metadata must be fail-soft.
+        errors["process_rss"] = f"{type(exc).__name__}: {exc}"
+        return None
+    if completed.returncode != 0:
+        errors["process_rss"] = f"returncode_{completed.returncode}"
+        return None
+    try:
+        rss_kib = int(completed.stdout.strip())
+    except ValueError:
+        errors["process_rss"] = "parse"
+        return None
+    return rss_kib * 1024
+
+
+def _mlx_metal_memory(errors: dict[str, str]) -> dict[str, Any]:
+    unavailable = {
+        "api_available": False,
+        "active_memory_bytes": None,
+        "cache_memory_bytes": None,
+        "peak_memory_bytes": None,
+    }
+    try:
+        mx = importlib.import_module("mlx.core")
+    except ImportError:
+        errors["mlx_metal"] = "mlx_core_not_found"
+        return unavailable
+    except Exception as exc:  # noqa: BLE001 - memory metadata must be fail-soft.
+        errors["mlx_metal"] = f"{type(exc).__name__}: {exc}"
+        return unavailable
+    # Newer MLX exposes the getters on mx directly; mx.metal.* is deprecated.
+    metal = getattr(mx, "metal", None)
+    result: dict[str, Any] = {
+        "api_available": metal is not None or callable(getattr(mx, "get_active_memory", None)),
+        "active_memory_bytes": None,
+        "cache_memory_bytes": None,
+        "peak_memory_bytes": None,
+    }
+    for attr, key in (
+        ("get_active_memory", "active_memory_bytes"),
+        ("get_cache_memory", "cache_memory_bytes"),
+        ("get_peak_memory", "peak_memory_bytes"),
+    ):
+        getter = getattr(mx, attr, None)
+        if not callable(getter):
+            getter = getattr(metal, attr, None) if metal is not None else None
+        if not callable(getter):
+            continue
+        try:
+            value = getter()
+        except Exception as exc:  # noqa: BLE001 - MLX versions differ.
+            errors[f"mlx_metal.{attr}"] = f"{type(exc).__name__}: {exc}"
+            continue
+        if isinstance(value, int | float) and not isinstance(value, bool):
+            result[key] = int(value)
+    return result
