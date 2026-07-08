@@ -301,24 +301,28 @@ class RailSplitTests(ReduceTestCase):
 
 class PhaseAttributionTests(ReduceTestCase):
     def test_known_phase_windows_and_zero_length_phase(self) -> None:
-        # Constant 7.5 W over [0, 10]. prefill = [0, 2] -> 15 J; decode =
-        # [2, 8] -> 45 J; a zero-length serialize phase at t=8 -> 0.0 J.
+        # Constant 7.5 W over [0, 10]. tokenize = [0, 1] -> 7.5 J; prefill =
+        # [1, 2] -> 7.5 J; decode = [2, 8] -> 45 J; a zero-length serialize
+        # phase at t=8 -> 0.0 J.
         builder = self.builder()
         start_s, end_s = 0.0, 10.0
         builder.measured_window(start_s, end_s)
-        builder.add_phase("prefill", 0.0, 2.0)
+        builder.add_phase("tokenize", 0.0, 1.0)
+        builder.add_phase("prefill", 1.0, 2.0)
         builder.add_phase("decode", 2.0, 8.0)
         builder.add_phase("serialize", 8.0, 8.0)
-        builder.write_trace(constant_samples(start_s, end_s, hz=1.0, power_w=7.5))
+        builder.write_trace(constant_samples(start_s, end_s, hz=2.0, power_w=7.5))
         builder.write_metadata(rail_manifest=["mock"])
         summary = reduce_module.reduce_bundle(builder.path)
         self.assertIsNotNone(summary.phase_energy_j)
-        self.assertAlmostEqual(summary.phase_energy_j["prefill"], 15.0, places=9)
+        self.assertAlmostEqual(summary.phase_energy_j["tokenize"], 7.5, places=9)
+        self.assertAlmostEqual(summary.phase_energy_j["prefill"], 7.5, places=9)
         self.assertAlmostEqual(summary.phase_energy_j["decode"], 45.0, places=9)
         self.assertAlmostEqual(summary.phase_energy_j["serialize"], 0.0, places=9)
         self.assertEqual(
             summary.measurement_quality.phase_identifiability,
             {
+                "tokenize": "identifiable",
                 "prefill": "identifiable",
                 "decode": "identifiable",
                 "serialize": "identifiable",
