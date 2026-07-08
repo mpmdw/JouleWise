@@ -52,12 +52,17 @@ from joulewise.schemas import (
     IdleBaseline,
     MeasurementQuality,
     RunStatus,
+    SUMMARY_REDUCER_ID,
+    SUMMARY_REDUCER_VERSION,
     SummaryMetrics,
     TelemetryBackend,
 )
 from joulewise.validation import finite_float
 
-__all__ = ["reduce_bundle"]
+REDUCER_ID = SUMMARY_REDUCER_ID
+REDUCER_VERSION = SUMMARY_REDUCER_VERSION
+
+__all__ = ["REDUCER_ID", "REDUCER_VERSION", "reduce_bundle"]
 
 
 class _ReduceError(Exception):

@@ -16,6 +16,7 @@ from typing import Any
 
 from joulewise.clock import Clock
 from joulewise.interfaces import AdapterResult, RunContext, RuntimeEvent, RuntimeResult
+from joulewise.provenance import output_policy, prompt_provenance
 from joulewise.schemas import BenchmarkConfig, FailureReason
 
 DEFAULT_OUTPUT_TOKENS = 8
@@ -123,7 +124,7 @@ class MlxRuntimeAdapter:
                 failure_reason=FailureReason.RUNTIME_UNAVAILABLE,
                 message="runtime backend 'mlx' warmup called before prepare succeeded",
             )
-        prompt, _ = self._prompt_for_workload(config)
+        prompt, _, _ = self._prompt_for_workload(config)
         try:
             for _ in self._mlx_lm.stream_generate(
                 self._model,
@@ -146,7 +147,8 @@ class MlxRuntimeAdapter:
         if self._mlx_lm is None or self._model is None or self._tokenizer is None:
             raise RuntimeError("runtime backend 'mlx' run_workload called before prepare")
 
-        prompt, prompt_tokens = self._prompt_for_workload(config)
+        prompt, prompt_token_ids, prompt_text = self._prompt_for_workload(config)
+        prompt_tokens = len(prompt_token_ids)
         max_tokens = config.workload_profile.output_tokens or DEFAULT_OUTPUT_TOKENS
         original_eos_ids = self._suppress_eos()
         eos_suppressed = original_eos_ids is not None
@@ -166,6 +168,7 @@ class MlxRuntimeAdapter:
         ]
         token_records: list[dict[str, float | int]] = []
         text_parts: list[str] = []
+        last_finish_reason: str | None = None
 
         try:
             stream = self._mlx_lm.stream_generate(
@@ -203,6 +206,9 @@ class MlxRuntimeAdapter:
                     )
                 timestamp_s = self._clock.now()
                 text_parts.append(str(getattr(response, "text", "")))
+                finish_reason = getattr(response, "finish_reason", None)
+                if isinstance(finish_reason, str):
+                    last_finish_reason = finish_reason
                 events.append(
                     RuntimeEvent(
                         timestamp_s=timestamp_s,
@@ -256,6 +262,11 @@ class MlxRuntimeAdapter:
             json.dumps(record, sort_keys=True) + "\n" for record in token_records
         )
         output_tokens = len(token_records)
+        stop_condition = (
+            "requested_tokens_emitted"
+            if output_tokens == max_tokens
+            else last_finish_reason or "stream_exhausted"
+        )
         return RuntimeResult(
             events=events,
             output_artifacts={
@@ -264,6 +275,24 @@ class MlxRuntimeAdapter:
             },
             token_count=prompt_tokens + output_tokens,
             output_token_count=output_tokens,
+            workload_provenance={
+                "prompt": prompt_provenance(prompt_token_ids, text=prompt_text),
+                "generator": {
+                    "name": "mlx_lm.stream_generate",
+                    "version": _module_or_distribution_version(self._mlx_lm, "mlx-lm"),
+                },
+                "tokenizer": _tokenizer_identity(self._tokenizer, config),
+                "model": {
+                    "source": config.model.source,
+                    "revision": config.model.revision,
+                },
+                "output_policy": output_policy(
+                    "fixed_budget_exact",
+                    requested_tokens=max_tokens,
+                    emitted_tokens=output_tokens,
+                    stop_condition=stop_condition,
+                ),
+            },
         )
 
     def cleanup(
@@ -279,16 +308,20 @@ class MlxRuntimeAdapter:
     def _import_mlx_lm(self) -> Any:
         return importlib.import_module("mlx_lm")
 
-    def _prompt_for_workload(self, config: BenchmarkConfig) -> tuple[str | list[int], int]:
+    def _prompt_for_workload(
+        self, config: BenchmarkConfig
+    ) -> tuple[str | list[int], list[int], str | None]:
         profile = config.workload_profile
         if profile.prompt_text is not None:
-            return profile.prompt_text, self._count_prompt_tokens(profile.prompt_text)
+            token_ids = _encode(self._tokenizer, profile.prompt_text, add_special_tokens=True)
+            return profile.prompt_text, token_ids, profile.prompt_text
         if profile.prompt_tokens is not None:
             prompt_tokens = _synthetic_prompt_tokens(self._tokenizer, profile.prompt_tokens)
-            return prompt_tokens, len(prompt_tokens)
+            return prompt_tokens, prompt_tokens, None
         if profile.dataset_ref is not None:
             prompt = f"Dataset reference: {profile.dataset_ref}"
-            return prompt, self._count_prompt_tokens(prompt)
+            token_ids = _encode(self._tokenizer, prompt, add_special_tokens=True)
+            return prompt, token_ids, prompt
         raise RuntimeError("workload_profile must define prompt_text, prompt_tokens, or dataset_ref")
 
     def _count_prompt_tokens(self, prompt: str) -> int:
@@ -366,6 +399,45 @@ def _tokenizer_eos_ids(tokenizer: Any) -> set[int] | None:
             if isinstance(item, int) and not isinstance(item, bool):
                 result.add(item)
         return result or None
+    return None
+
+
+def _tokenizer_identity(tokenizer: Any, config: BenchmarkConfig) -> dict[str, Any]:
+    return {
+        "backend": "mlx",
+        "identifier": _tokenizer_identifier(tokenizer, config),
+        "revision": config.model.revision,
+        "class": type(tokenizer).__name__,
+        "vocab_size": _tokenizer_vocab_size(tokenizer),
+    }
+
+
+def _tokenizer_identifier(tokenizer: Any, config: BenchmarkConfig) -> str | None:
+    for attr in ("name_or_path", "model_id", "model_path"):
+        value = getattr(tokenizer, attr, None)
+        if isinstance(value, str) and value:
+            return value
+    return config.model.source
+
+
+def _tokenizer_vocab_size(tokenizer: Any) -> int | None:
+    value = getattr(tokenizer, "vocab_size", None)
+    if isinstance(value, int) and not isinstance(value, bool):
+        return value
+    get_vocab = getattr(tokenizer, "get_vocab", None)
+    if callable(get_vocab):
+        try:
+            vocab = get_vocab()
+        except Exception:  # noqa: BLE001 - tokenizer wrappers vary
+            return None
+        if isinstance(vocab, dict):
+            return len(vocab)
+    try:
+        size = len(tokenizer)
+    except Exception:  # noqa: BLE001 - tokenizer wrappers vary
+        return None
+    if isinstance(size, int) and not isinstance(size, bool):
+        return size
     return None
 
 

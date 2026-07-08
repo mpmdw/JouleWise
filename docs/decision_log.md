@@ -53,6 +53,9 @@ be re-derived by a future agent gets an entry here.
 | D-029 | Config schema declares nullable optionals; serialization (and config hashes) unchanged | accepted |
 | D-030 | `validate-bundle` stays structural by default; `--strict` adds raw-evidence checks | accepted |
 | D-031 | Multi-model council review; PR convention for multi-commit sessions; D-023 extension + end-of-session consistency sweep | accepted |
+| D-032 | `phase_energy_j` is gross-only in summary v0.1 | accepted |
+| D-033 | Prompt-content provenance is recorded per run bundle | accepted |
+| D-034 | Slice 2O owns the workload program after 2M and 3.0.1 | accepted |
 
 ---
 
@@ -1572,3 +1575,130 @@ run report). This is a SECOND provisional model alongside the small
 Qwen2.5-1.5B pick — it does not close D-016 (mid-model/CUDA/GGUF
 criteria still open) but extends the provisional set at user direction;
 mirrored per R-014.
+
+---
+
+## D-032: `phase_energy_j` is gross-only in summary v0.1
+
+- Date: 2026-07-07
+- Status: accepted
+- Phase: 2+
+
+Context: `SummaryMetrics.phase_energy_j` attributes energy to workload
+phase windows (`prefill`, `decode`, and later split phases). The reducer
+also computes idle-subtracted request energy for the measured window, so
+per-phase summaries need an explicit basis before 2M bundles are written.
+C-007 decided that idle-subtracted phase attribution is Phase 4 analysis
+policy, not a v0.1 bundle-summary contract.
+
+Options considered:
+
+1. Store gross phase energy only in `phase_energy_j`.
+2. Store idle-subtracted phase energy in `phase_energy_j`.
+3. Store both gross and idle-subtracted phase maps in summary v0.1.
+
+Decision: option 1. `phase_energy_j` is gross joules only in summary
+schema v0.1. Idle-subtracted phase attribution is derived later by
+Phase 4 analysis policy, with any allocation assumptions stated there.
+
+Considerations: gross phase windows are direct integrations over the
+recorded power curve and do not require choosing how to allocate one idle
+baseline across unequal or nested phase windows. This keeps the bundle
+summary close to evidence while preserving Phase 4 freedom to apply a
+documented attribution policy when answering analysis questions.
+
+Consequences: consumers must not read `phase_energy_j` as an
+idle-subtracted metric. Phase 4 may derive idle-subtracted phase values
+from gross phase energy, idle baseline, and phase durations, but those
+derived values are analysis outputs, not summary v0.1 fields.
+
+Revisit when: a future summary schema version adds explicit per-phase
+idle-subtracted fields with a named allocation policy.
+
+---
+
+## D-033: Prompt-content provenance is recorded per run bundle
+
+- Date: 2026-07-07
+- Status: accepted
+- Phase: 2+
+
+Context: The 2O placement council found that config hashes and token
+counts do not prove realized prompt content. A tokenizer or generator
+revision can produce a different token stream from the same nominal
+profile, which would weaken the 2M corpus before later workload
+enrichment begins. A-11 pinned the pre-2M workload provenance shape.
+
+Options considered:
+
+1. Rely on the normalized config hash and token counts. Con: misses
+   tokenizer/model drift under the same config.
+2. Record a text-only prompt hash. Con: insufficient for token-level
+   identity because tokenization is part of the workload.
+3. Record per-bundle workload provenance with a domain-separated hash of
+   canonical JSON prompt token IDs, supplemental text hash, generator
+   identity, tokenizer identity/revision/class/vocab size, model source
+   and revision, and the output policy actually applied.
+
+Decision: option 3. `metadata.json` gains additive
+`workload_provenance` computed by the runtime adapter and written by the
+controller. The prompt hash domain is
+`joulewise.prompt_token_ids.v1`; campaign sameness is checked by
+cross-bundle hash equality, not inferred from campaign membership.
+
+Considerations: the runtime adapter is the point where text/profile
+inputs become realized generation inputs, so it owns the provenance
+block. The controller only carries and serializes it through
+`RuntimeResult`. The block is per bundle (D-005), so repetitions can be
+audited independently.
+
+Consequences: new mock and MLX bundles record realized prompt-token
+identity, tokenizer/model identity, generator identity, and
+`fixed_budget_exact` output policy details. `run_campaign.py` needs no
+special logic because it shells normal `joulewise run` executions.
+
+Revisit when: a new runtime cannot expose token IDs or tokenizer
+identity; that adapter must either add an equivalent audited source or
+record a structured unavailable field before its bundles are admitted to
+analysis.
+
+---
+
+## D-034: Slice 2O owns the workload program after 2M and 3.0.1
+
+- Date: 2026-07-07
+- Status: accepted
+- Phase: 2+
+
+Context: Commit `aa665e1` created Phase 2 Slice 2O for workload program
+placement after the C-007 follow-on council. The slice owns queue tasks
+P2-010 (`affine_mod_ladder_v1`) and P2-012 (`jw_mixed_v1`) as
+post-baseline enrichment, not as pre-2M gates.
+
+Options considered:
+
+1. Put workload/prompt enrichment in Phase 4. Con: Phase 4 should
+   consume workload dimensions and analysis outputs, not construct the
+   workload corpus it analyzes.
+2. Start workload enrichment before 2M. Con: delays and contaminates the
+   homogeneous baseline milestone.
+3. Create a Phase 2 post-baseline slice, 2O, gated after 2M strict-valid
+   bundles, P2-013/P2-014, and the Stage 3.0.1 verdict.
+
+Decision: option 3. Slice 2O owns the workload program P2-010 through
+P2-012 after 2M and 3.0.1. Phase 4 consumes workload dimensions and
+analysis-ready annotations but does not own workload construction.
+
+Considerations: the 2O plan maps prompt/workload types to metrics and
+research questions while keeping correctness quarantined as annotation,
+not an intelligence-per-joule claim. This sequencing protects the 2M
+baseline and keeps later workload expansion additive.
+
+Consequences: P2-010 and P2-012 remain queued behind the 2M corpus and
+the Stage 3.0.1 verdict. P2-014(e) is the pre-2M obligation: prompt
+content provenance must exist before the campaign so later sameness
+claims are auditable.
+
+Revisit when: 2M is skipped or materially re-scoped; then 2O gates and
+research-question mapping must be re-approved rather than silently
+advanced.

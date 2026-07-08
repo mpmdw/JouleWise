@@ -448,6 +448,37 @@ class HappyPathTests(ControllerTestCase):
         self.assertEqual(written["status"], "succeeded")
         self.assertIs(written["measurement_quality"]["idle_window_suspect"], True)
 
+    def test_new_bundle_writes_summary_and_workload_provenance(self) -> None:
+        bundle_path, summary = self.run_happy()
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        workload = metadata["workload_provenance"]
+        self.assertEqual(workload["prompt"]["realized_token_count"], 32)
+        self.assertEqual(
+            workload["prompt"]["token_hash_domain"],
+            "joulewise.prompt_token_ids.v1",
+        )
+        self.assertEqual(len(workload["prompt"]["token_ids_sha256"]), 64)
+        self.assertEqual(workload["tokenizer"]["backend"], "mock")
+        self.assertEqual(workload["generator"]["name"], "mock_runtime")
+        self.assertEqual(workload["output_policy"]["name"], "fixed_budget_exact")
+        self.assertEqual(workload["output_policy"]["requested_tokens"], 8)
+        self.assertEqual(workload["output_policy"]["emitted_tokens"], 8)
+        self.assertEqual(
+            workload["output_policy"]["stop_condition"],
+            "requested_tokens_emitted",
+        )
+        written = json.loads((bundle_path / "summary_metrics.json").read_text())
+        self.assertEqual(
+            sorted(written["summary_provenance"]),
+            [
+                "config_schema_version",
+                "reducer_id",
+                "reducer_version",
+                "summary_schema_version",
+            ],
+        )
+
     def test_injected_reducer_summary_is_written(self) -> None:
         # The 2D seam: swapping the reducer changes the written summary.
         sentinel = SummaryMetrics(status=RunStatus.SUCCEEDED, energy_request_j=12.5)

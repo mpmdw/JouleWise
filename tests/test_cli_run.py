@@ -435,6 +435,15 @@ class StrictValidateTests(CliRunTestCase):
         )
         self.assertEqual(validate_bundle(bundle, strict=True), [])
 
+    def test_legacy_summary_missing_summary_provenance_passes_strict(self) -> None:
+        bundle = self.make_bundle("strict-legacy-summary-provenance")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["summary_provenance"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
     def test_stored_value_drift_still_fails_strict(self) -> None:
         bundle = self.make_bundle("strict-stored-drift")
         summary = json.loads((bundle / "summary_metrics.json").read_text())

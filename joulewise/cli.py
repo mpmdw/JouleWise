@@ -285,6 +285,8 @@ def _strict_summary_differences(fresh: Any, stored: Any, path: str = "") -> list
         for key in sorted(set(fresh) | set(stored)):
             child = f"{path}.{key}" if path else str(key)
             if key not in stored:
+                if child == "summary_provenance":
+                    continue
                 if fresh[key] is not None:
                     differences.append(child)
                 continue

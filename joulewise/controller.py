@@ -613,6 +613,10 @@ class _Execution:
                 "token_count": self._runtime_result.token_count,
                 "output_token_count": self._runtime_result.output_token_count,
             }
+            if self._runtime_result.workload_provenance is not None:
+                extra["workload_provenance"] = _jsonable(
+                    self._runtime_result.workload_provenance
+                )
         # Caller-supplied metadata (Slice 2F: the experiment runner records a
         # cooldown cap-hit against the following rep here). Lands under the
         # dedicated "extra" key so it never collides with controller fields and

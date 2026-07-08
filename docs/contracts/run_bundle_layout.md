@@ -37,9 +37,9 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
 - `config.json`: normalized benchmark config (sorted keys; hash in
   metadata).
 - `metadata.json`: a JSON object containing device, runtime, telemetry,
-  model, environment, clock, `config_sha256`, and rail-manifest metadata.
-  Valid JSON with any non-object top-level shape is invalid in default
-  validation.
+  model, environment, clock, `config_sha256`, rail-manifest metadata, and
+  optional workload provenance. Valid JSON with any non-object top-level
+  shape is invalid in default validation.
 - `metadata.environment` includes nullable capture provenance fields such as
   `capture_scope`, `captured_for_rep`, and `captured_at_s`; experiment members
   may intentionally share one snapshot, and `FakeClock` runs mark capture
@@ -95,6 +95,11 @@ Each event record must include exactly these keys, no more and no less:
 - `message`
 - `metadata`
 
+For future composite/split runs, node identity is event-type-specific detail:
+the merged composite `events.jsonl` records node role/identity inside each
+event's `metadata` object, not as a sixth top-level event key. The top-level
+event key set above remains stable.
+
 ## Power Trace Minimum Fields
 
 Each power sample should include:
@@ -133,6 +138,11 @@ reader policy:
 A status-only `{"status": "succeeded"}` summary is neither a complete bundle
 nor default-validation-valid.
 
+New summaries may additionally include top-level `summary_provenance` with
+`summary_schema_version`, `reducer_id`, `reducer_version`, and
+`config_schema_version`. It is optional for validation so historical bundles
+remain valid.
+
 ## Experiment Manifests
 
 Repetitions produce one bundle per repetition (decision D-005), grouped by
@@ -150,7 +160,10 @@ created timestamp, and cooldown-gate notes. Member bundle IDs are
 ## Composite Split Bundles (Phase 3 Preview)
 
 Split runs (schema v0.2, decision D-008) extend the layout with per-node
-sub-bundles; defined fully in `docs/phase_3/phase_3_plan.md` Stage 3.2:
+sub-bundles; defined fully in `docs/phase_3/phase_3_plan.md` Stage 3.2.
+The current `BundleReader` remains the reader for one standard node bundle;
+a future `CompositeBundleReader` owns composite/split bundle assembly,
+merged-event interpretation, and cross-node summary semantics:
 
 ```text
 runs/<run_id>/

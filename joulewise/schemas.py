@@ -15,6 +15,9 @@ from typing import Any
 from joulewise.validation import finite_float
 
 CONFIG_SCHEMA_VERSION = "0.1"
+SUMMARY_SCHEMA_VERSION = "0.1"
+SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
+SUMMARY_REDUCER_VERSION = "0.1.0"
 
 
 class SchemaError(ValueError):
@@ -551,6 +554,14 @@ class SummaryMetrics:
     uncertainty: UncertaintyInterval | None = None
     measurement_quality: MeasurementQuality | None = None
     phase_energy_j: dict[str, float] | None = None
+    summary_provenance: dict[str, str] | None = field(
+        default_factory=lambda: {
+            "summary_schema_version": SUMMARY_SCHEMA_VERSION,
+            "reducer_id": SUMMARY_REDUCER_ID,
+            "reducer_version": SUMMARY_REDUCER_VERSION,
+            "config_schema_version": CONFIG_SCHEMA_VERSION,
+        }
+    )
     failure_reason: FailureReason | None = None
     failure_message: str | None = None
 
@@ -591,6 +602,9 @@ class SummaryMetrics:
                     "anyOf": [{"$ref": "#/$defs/measurement_quality"}, {"type": "null"}]
                 },
                 "phase_energy_j": {"type": ["object", "null"]},
+                "summary_provenance": {
+                    "anyOf": [{"$ref": "#/$defs/summary_provenance"}, {"type": "null"}]
+                },
                 "failure_reason": {
                     "anyOf": [_string_enum_schema(FailureReason), {"type": "null"}]
                 },
@@ -631,6 +645,21 @@ class SummaryMetrics:
                         "cooldown_cap_hit": nullable_bool,
                         "token_count_source": {"type": ["string", "null"]},
                         "idle_window_suspect": nullable_bool,
+                    },
+                },
+                "summary_provenance": {
+                    "type": "object",
+                    "required": [
+                        "summary_schema_version",
+                        "reducer_id",
+                        "reducer_version",
+                        "config_schema_version",
+                    ],
+                    "properties": {
+                        "summary_schema_version": {"type": "string"},
+                        "reducer_id": {"type": "string"},
+                        "reducer_version": {"type": "string"},
+                        "config_schema_version": {"type": "string"},
                     },
                 },
             },

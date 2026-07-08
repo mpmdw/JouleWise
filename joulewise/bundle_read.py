@@ -7,9 +7,12 @@ bundles through :class:`BundleReader`, so policy questions - which rails sum to
 are misaligned (D-027), what makes a bundle complete (D-011) - are answered in
 exactly one place. Phase 4's ``aggregate`` verb becomes the fourth consumer.
 
-The reader owns parsing and interpretation policy; it does no metrics math
-(``_integrate`` and idle subtraction stay in ``joulewise.reduce``) and no
-rendering. Accessors come in two strictness levels:
+The reader owns parsing and interpretation policy for one standard node
+bundle; it does no metrics math (``_integrate`` and idle subtraction stay in
+``joulewise.reduce``) and no rendering. Future composite/split bundles should
+get a separate ``CompositeBundleReader`` that owns merged events, per-node
+sub-bundle coordination, and cross-node summary semantics while reusing this
+reader for each node bundle. Accessors come in two strictness levels:
 
 - strict (``config()``, ``metadata()``, ``events()``, ``summed_curve()``):
   raise :class:`BundleReadError` with a structured problem message on

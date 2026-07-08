@@ -45,6 +45,8 @@ def make_config(*, workload_profile: dict[str, Any] | None = None) -> BenchmarkC
 class FakeTokenizer:
     def __init__(self) -> None:
         self.eos_token_ids = {99}
+        self.name_or_path = "fake-tokenizer"
+        self.vocab_size = 12345
 
     def encode(self, text: str, *, add_special_tokens: bool = True) -> list[int]:
         tokens = [index + 10 for index, _ in enumerate(text.split())]
@@ -121,6 +123,19 @@ class MlxRuntimeTests(unittest.TestCase):
         self.assertEqual(result.token_count, 7)
         self.assertEqual(result.output_token_count, 2)
         self.assertEqual(result.output_artifacts["response.txt"], "xy")
+        provenance = result.workload_provenance
+        self.assertIsNotNone(provenance)
+        assert provenance is not None
+        self.assertEqual(provenance["prompt"]["realized_token_count"], 5)
+        self.assertEqual(provenance["prompt"]["text_sha256"], None)
+        self.assertEqual(provenance["tokenizer"]["identifier"], "fake-tokenizer")
+        self.assertEqual(provenance["tokenizer"]["vocab_size"], 12345)
+        self.assertEqual(provenance["output_policy"]["requested_tokens"], 2)
+        self.assertEqual(provenance["output_policy"]["emitted_tokens"], 2)
+        self.assertEqual(
+            provenance["output_policy"]["stop_condition"],
+            "requested_tokens_emitted",
+        )
 
     def test_run_workload_event_shape_and_token_timeline(self) -> None:
         adapter, _ = self.prepared_adapter(["A", "B", "C"])
@@ -150,6 +165,15 @@ class MlxRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(result.events[2].metadata["phase_boundary_method"], "first_token")
         self.assertEqual(result.output_artifacts["response.txt"], "ABC")
+        self.assertEqual(
+            result.workload_provenance["prompt"]["realized_token_count"],
+            4,
+        )
+        self.assertEqual(
+            len(result.workload_provenance["prompt"]["token_ids_sha256"]),
+            64,
+        )
+        self.assertEqual(result.workload_provenance["prompt"]["text_sha256"] is not None, True)
 
         lines = result.output_artifacts["tokens.jsonl"].splitlines()
         self.assertEqual(len(lines), 3)
