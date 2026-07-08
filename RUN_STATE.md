@@ -55,7 +55,7 @@ Phase 3's central technical risk retired on current hardware), plus
 D-035/D-036 (the ratified spike promotions). **PR #11 (2K NVIDIA fixture-first
 stack, all pins PROVISIONAL) MERGED 2026-07-08 under Ed's standing
 merge-with-review authorization — ALL FOUR STREAMS LANDED.** Suite on
-main: 564 OK (skipped=10, ZERO expected failures — as of 2026-07-08 after PR #12/C-011); all 6 real corpus
+main: 576 OK (skipped=10, ZERO expected failures — as of 2026-07-08 after PR #12/C-011); all 6 real corpus
 bundles pass `--strict` read-only. The 2M campaign (P2-006) is fully unblocked and
 is the next machine-state-compatible task.
 
@@ -64,7 +64,8 @@ critique counter-review landed fail-closed campaigns, counterbalanced
 order manifests, reducer honesty flags, the claims ladder (D-037), and
 queue item P2-015; the docs/site is now a designed reading experience
 (consensus-gated). **RESTART HERE:** read
-`docs/run_reports/2026-07-08-councils-critique-session.md`. Short
+`docs/run_reports/2026-07-08-site-observatory.md` (latest), then the
+councils-critique report. Short
 version: quiet-machine window running P2-015 (detection-floor
 calibration) FIRST, then P2-006 (2M) with the fail-closed runner, order
 manifest, and claims-ladder wording — under the C-009 T5 no-agent lock

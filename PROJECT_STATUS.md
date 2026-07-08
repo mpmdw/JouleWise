@@ -5,8 +5,8 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-08 (all four streams merged; critique second-pass
-  reassessment recorded with lead fact-check)
+- Last updated: 2026-07-08 (site observatory frontend merged as PR #13;
+  critique second-pass reassessment recorded with lead fact-check)
 - Project phase: Phase 1 closing; Phase 2 in progress - instrument
   CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
   are complete; the two-model baseline matrix is the next Mac corpus step
@@ -173,7 +173,7 @@ Complete so far (all verifiable in the repository):
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (564 tests, 10 skipped, zero expected
+  a CLI, plus a passing test suite (576 tests, 10 skipped, zero expected
   failures, run in CI on every push, including a mock end-to-end run +
   bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
@@ -446,7 +446,7 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (564 tests, 10 skipped, zero expected failures, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (576 tests, 10 skipped, zero expected failures, CI-enforced) |
 
 ## Process Note
 

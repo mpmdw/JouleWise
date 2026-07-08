@@ -115,11 +115,11 @@ Acceptance criteria:
 
 ### Phase 2: Harness, Mac Vertical Slice, And Homogeneous Baselines
 
-Status as of 2026-07-07: in progress — all hardware-independent work
+Status as of 2026-07-08: in progress — all hardware-independent work
 (2A-2F, 2J, and 2N pre-hardware hardening, landed 2026-07-06) is complete
 and runnable, the Mac vertical slice (2G/2H/2I) is complete, and P2-013 /
-P2-014 closed the integrity and provenance pins (564 tests, 10 skipped,
-zero expected failures). Remaining gated work is the 2M baseline corpus plus
+P2-014 closed the integrity and provenance pins (suite now 576 tests, 10
+skipped, zero expected failures). Remaining gated work is the 2M baseline corpus plus
 remote-target live validation. The 2K fixture-first NVIDIA implementation is
 merged as of 2026-07-08 (PR #11), but it is not live hardware-validated; all
 2K protocol pins remain PROVISIONAL until P1-006 evidence is captured. Detail:
@@ -231,7 +231,7 @@ Acceptance criteria:
 python3 -m unittest discover -s tests
 ```
 
-Expected result as of 2026-07-08 after P2-013/P2-014 + 2K + C-011: `Ran 564 tests, OK
+Expected result as of 2026-07-08 after P2-013/P2-014 + 2K + C-011: `Ran 576 tests, OK
 (skipped=10)` with zero expected failures.
 
 Useful commands:
