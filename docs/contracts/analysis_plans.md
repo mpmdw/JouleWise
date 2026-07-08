@@ -126,14 +126,14 @@ remain L0/L1 capability or instrument-result language under D-037.
 | Field | Value |
 |---|---|
 | Plan ID / RQ consumer | AP-5 / C5-1.9 controlled-envelope ladder (C-014/C-004). |
-| Metric + exact window class | Level-window energy, accuracy by level, and energy-per-correct only when the correctness denominator passes the guard. |
-| Unit of analysis + dependence structure | Bundle/block-level uncertainty over level windows; per-item windows are correctness/token audit evidence, not independent energy replicates. |
+| Metric + exact window class | Level-window energy, accuracy by level, and energy-per-correct only when the correctness denominator passes the guard. Amendment 2026-07-08 (D-047.6): scored-campaign accuracy predeclares malformed suite items as incorrect in the accuracy denominator, with malformed counts reported alongside. |
+| Unit of analysis + dependence structure | Bundle/block-level uncertainty over level windows; per-item windows are correctness/token audit evidence, not independent energy replicates. Amendment 2026-07-08 (D-047.3): under deterministic decoding, token, stop-reason, and correctness statistics are over distinct items; repeated bundles replicate energy only. |
 | Estimator/formula | Level means with D-014 uncertainty; energy-per-correct = level-window energy / correct count only after the binomial guard passes. |
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles; envelope-validation smoke gate must pass before any scored campaign; correctness remains quarantined annotation under C-004. |
 | Order/blocking/covariates | Level/block markers and session order recorded; adjacent levels may merge when the denominator guard requires it. |
 | Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for level windows. |
 | MDE/n sizing + predeclared top-up rule | Smoke ladder first; full n deferred until C5-1.9 has claims-index/figure consumer; top-up or merge adjacent levels before energy-per-correct claims. |
-| Denominator provenance requirement | Exact scorer output plus emitted-token/stop-reason audit; binomial lower-bound must be >=3 correct per level, else merge adjacent levels or report `not estimable`. |
+| Denominator provenance requirement | Exact scorer output plus emitted-token/stop-reason audit; binomial lower-bound must be >=3 correct per level, else merge adjacent levels or report `not estimable`. Amendment 2026-07-08 (D-047.3/D-047.6): the scored-campaign accuracy denominator is distinct scored items per level; malformed items count as incorrect for that denominator and are reported alongside emitted-token and stop-reason audits. |
 | Holdout cells (L3 only) | not applicable. |
 | Claim ceiling + exact forbidden upgrade | Ceiling L2 descriptive/scored workload result. Forbidden upgrade: no intelligence-per-joule or "difficulty causes energy" claim. |
 | Disqualifiers + not-resolvable conditions | Failed envelope validation, below-floor level windows, lower-bound <3 correct with no valid merge, or EOS-bias contamination gives `not estimable`/L1. |
@@ -144,15 +144,15 @@ remain L0/L1 capability or instrument-result language under D-037.
 | Field | Value |
 |---|---|
 | Plan ID / RQ consumer | AP-6 / content-sensitivity sentinel for synthetic-stream generalization (C-014). |
-| Metric + exact window class | Gross and idle-subtracted request energy at one equal shape; runtime-observed emitted tokens and stop reasons. |
+| Metric + exact window class | Gross and idle-subtracted request energy at one equal shape; runtime-observed emitted tokens and stop reasons. Amendment 2026-07-08 (D-046): equal shape is delivered ids-native as literal `token_ids` with no BOS for all five conditions; `bos_present=false` is recorded. |
 | Unit of analysis + dependence structure | Bundle-level repetitions across five equal-shape content conditions. |
 | Estimator/formula | One-way condition contrast against repeated-seed control; report condition deltas and MDE verdicts. |
-| Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only; conditions are repeated-seed, random-token, natural prose, code-like, and multilingual at equal shape. |
+| Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only; conditions are repeated-seed, random-token, natural prose, code-like, and multilingual at equal shape. Amendment 2026-07-08 (D-046): inclusion requires ids-native `prompt_source="token_ids"`, BOS-less delivery, and literal equal realized shape across all five AP-6 conditions. |
 | Order/blocking/covariates | Window-B block order recorded; randomized or balanced condition order where practical. |
 | Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for request windows. |
 | MDE/n sizing + predeclared top-up rule | n=5 per content condition provisional; Window A MDE may resize n before Window B. |
-| Denominator provenance requirement | Runtime-observed token counts, stop reasons, content-condition labels, and prompt/source hashes. |
+| Denominator provenance requirement | Runtime-observed token counts, stop reasons, content-condition labels, prompt/source hashes, and, amended 2026-07-08 (D-046), recorded `prompt_source` plus `bos_present` for each condition. |
 | Holdout cells (L3 only) | not applicable. |
-| Claim ceiling + exact forbidden upgrade | Ceiling L2 validity/sentinel result. Forbidden upgrade: no broad content-neutrality claim outside the five tested equal-shape conditions. |
+| Claim ceiling + exact forbidden upgrade | Ceiling L2 validity/sentinel result. Forbidden upgrade: no broad content-neutrality claim outside the five tested equal-shape conditions. Amendment 2026-07-08 (D-046): AP-6 ids-native/no-BOS results do not generalize to the AP-4 text path because `prompt_source` and BOS handling differ; AP-6b text bridge is the named option before making that upgrade. |
 | Disqualifiers + not-resolvable conditions | Realized shape mismatch, stop-policy divergence, below-floor content deltas, or missing prompt hashes force `not resolvable` or capability wording. |
 | Linked manifests/bundle hashes | pending post-execution. |
