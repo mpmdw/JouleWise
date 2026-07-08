@@ -31,10 +31,11 @@
 <a href="#process-trace">Process trace</a>
 <a href="#verification">Verification</a>
 <a href="#maintenance-folded-into-the-loop">Maintenance (folded into the loop)</a>
-<a href="#known-limitation">Known limitation</a></aside>
+<a href="#known-limitation">Known limitation</a>
+<a href="#addendum-session-close-scroll-performance-loop-health-ledger">Addendum — session close (scroll performance + loop-health ledger)</a></aside>
   <div class="doc-wrap doc-source-docs-run-reports-2026-07-08-lakebed-deploy-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-08-lakebed-deploy.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-08-lakebed-deploy.md · commit 699cc01"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-08-lakebed-deploy.md</span><span class="source-commit">commit 699cc01</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-08-lakebed-deploy.md · commit 4d582fe"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-08-lakebed-deploy.md</span><span class="source-commit">commit 4d582fe</span></span></div>
     <h1>Run Report — Site Deployed as a Lakebed Capsule with Live Freshness (2026-07-08)</h1>
 <p><strong>Outcome:</strong> the whole JouleWise site is live as one shareable link —
 <strong><a href="https://quiet-signal-6af8833395.lakebed.app">https://quiet-signal-6af8833395.lakebed.app</a></strong> — served from a Lakebed
@@ -102,6 +103,39 @@ deployId so redeploys keep the same URL.</p>
 system sans) because embedded woff2 exceeds the 1 MiB artifact cap. Editorial
 character holds; pixel-parity with the local Fraunces/Plex build would need a
 font-subsetting step (deferred — not worth a new pipeline for this).</p>
+<h2 id="addendum-session-close-scroll-performance-loop-health-ledger">Addendum — session close (scroll performance + loop-health ledger)</h2>
+<p><strong>Scroll fixes (both engine-specific, measurement-first):</strong> Chromium hitched
+on the sticky nav&#39;s <code>backdrop-filter: blur(10px)</code> (measured 1,986ms worst
+scroll frame; 9.9ms after removal — near-opaque nav instead). Firefox
+lagged continuously on the <code>position:fixed</code> + <code>mask-image</code> grid-paper
+texture (Firefox repaints the masked layer every scroll frame; Chromium
+composites it) — now a document-anchored absolute top band, look preserved.
+User-confirmed smooth in Firefox. Both patterns also fixed in the critique
+page&#39;s nav.</p>
+<p><strong>The freshness layer&#39;s first real catch was its own maintainer:</strong> the
+Firefox-fix redeploy skipped <code>build_site.py</code>, and the live drift banner
+correctly flagged the exact 4 sources the checkpoint commits had touched
+(RUN_STATE, PROJECT_STATUS, TASK_QUEUE, council log → 699cc01). Fixed by
+running the full canonical flow (regen commit 9fd8bc1 → pack → deploy).
+End-to-end validation of the drift path against real repo movement.</p>
+<p><strong>Layer-yield ledger for the whole session (loop instrumentation, rule 5):</strong></p>
+<ul>
+<li>Fresh 5.5 counterreviews: 5 unique blockers across 3 streams (critique
+preservation overclaim; invented lane state + council-index fallback;
+freshness false-not-moved + 5xx path) — every one confirmed and fixed;
+the layer is load-bearing.</li>
+<li>Codex image-critique rounds: 16 findings r1 + mobile root-causes r2;
+visual sign-off caught no false SHIPs (final-head data check agreed).</li>
+<li>Final-head gate: 1 HOLD (stale source count rendered honestly by the
+site) — unique catch, kept.</li>
+<li>Consistency sweeps: real drift every run (checklist 546; six residual
+564s; C-011 index row found by the fail-closed parser itself).</li>
+<li>Lead-side live verification: the Lakebed platform fight (6 deploy
+failures) and both scroll-perf root-causes were lead-owned — delegated
+&quot;tests green&quot; could not have caught any of them.</li>
+<li>Drift banner: 1 real catch (above).
+No layer had zero unique catches; nothing to drop this session.</li>
+</ul>
 
 
   </div>
@@ -110,7 +144,7 @@ font-subsetting step (deferred — not worth a new pipeline for this).</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-08-lakebed-deploy.md · commit 699cc01 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-08-lakebed-deploy.md · commit 4d582fe · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

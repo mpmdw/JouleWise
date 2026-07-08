@@ -46,7 +46,7 @@
 <a href="#maintenance-of-this-document">Maintenance Of This Document</a></aside>
   <div class="doc-wrap doc-source-project-status-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>PROJECT_STATUS.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit 699cc01"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 699cc01</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit 4d582fe"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 4d582fe</span></span></div>
     <h1>JouleWise: Project Status, Plan, And Architecture</h1>
 <p>Audience: project advisor. This is the standalone monitoring document - it
 summarizes what the project is, how it is built, where it stands, and what
@@ -65,7 +65,7 @@ capsule; shows a drift banner when the repo has moved past the snapshot)</li>
 <h2 id="this-update-as-of-2026-07-08-all-four-streams-merged-30-second-read">This Update (as of 2026-07-08, all four streams merged) — 30-second read</h2>
 <p><strong>Everything landed.</strong> The multi-stream session merged as four PRs:
 P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
-576 tests with 10 skips and zero expected failures (576 as of 2026-07-08 incl. the C-011 rigor mechanics and the PR #13 site parser tests), bundle provenance
+596 tests with 10 skips and zero expected failures (as of 2026-07-08; current-count authority is RUN_STATE.md Current Verification), bundle provenance
 now records prompt/workload identities, and <code>validate-bundle --strict</code>
 includes the powermetrics raw-plist-to-trace gate plus the legacy
 additive-summary comparison. The six existing real corpus bundles pass
@@ -299,7 +299,7 @@ provenance on new-era bundles. All bundle consumers read through one
 shared, tested read layer, so displayed numbers can never diverge from
 reported ones.</li>
 <li>Typed config and output schemas with validation, JSON-Schema export, and
-a CLI, plus a passing test suite (576 tests, 10 skipped, zero expected
+a CLI, plus a passing test suite (596 tests, 10 skipped, zero expected
 failures, run in CI on every push, including a mock end-to-end run +
 bundle validation); emitted configs
 round-trip their own published schema, and config hashes (run identity)
@@ -673,7 +673,7 @@ traceable to raw data.</li>
 </tr>
 <tr>
 <td><code>joulewise/</code>, <code>tests/</code></td>
-<td>the harness package + test suite (576 tests, 10 skipped, zero expected failures, CI-enforced)</td>
+<td>the harness package + test suite (596 tests, 10 skipped, zero expected failures, CI-enforced)</td>
 </tr>
 </tbody></table></div>
 <h2 id="process-note">Process Note</h2>
@@ -808,7 +808,7 @@ date above and the repository&#39;s run reports are the freshness check.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>PROJECT_STATUS.md · commit 699cc01 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>PROJECT_STATUS.md · commit 4d582fe · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

@@ -35,7 +35,7 @@
 <a href="#task-queue-protocol">Task Queue Protocol</a></aside>
   <div class="doc-wrap doc-source-agent-plan-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>AGENT_PLAN.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="AGENT_PLAN.md · commit 302d1df"><span class="source-file">AGENT_PLAN.md</span><span class="source-commit">commit 302d1df</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="AGENT_PLAN.md · commit 4d582fe"><span class="source-file">AGENT_PLAN.md</span><span class="source-commit">commit 4d582fe</span></span></div>
     <h1>Agent Implementation Plan</h1>
 <p>This repository implements JouleWise, an extensible energy-characterization
 benchmark for LLM inference across heterogeneous local hardware. The name is a
@@ -193,8 +193,8 @@ powermetrics vertical slice.</li>
 <p>Status as of 2026-07-08: in progress — all hardware-independent work
 (2A-2F, 2J, and 2N pre-hardware hardening, landed 2026-07-06) is complete
 and runnable, the Mac vertical slice (2G/2H/2I) is complete, and P2-013 /
-P2-014 closed the integrity and provenance pins (suite now 576 tests, 10
-skipped, zero expected failures). Remaining gated work is the 2M baseline corpus plus
+P2-014 closed the integrity and provenance pins (suite green, zero expected
+failures; current count per <code>RUN_STATE.md</code> Current Verification). Remaining gated work is the 2M baseline corpus plus
 remote-target live validation. The 2K fixture-first NVIDIA implementation is
 merged as of 2026-07-08 (PR #11), but it is not live hardware-validated; all
 2K protocol pins remain PROVISIONAL until P1-006 evidence is captured. Detail:
@@ -299,7 +299,7 @@ any time).</li>
 <h2 id="current-verification-command">Current Verification Command</h2>
 <pre><code class="language-bash">python3 -m unittest discover -s tests
 </code></pre>
-<p>Expected result as of 2026-07-08 after P2-013/P2-014 + 2K + C-011: <code>Ran 576 tests, OK (skipped=10)</code> with zero expected failures.</p>
+<p>Expected result as of 2026-07-08 after P2-013/P2-014 + 2K + C-011: <code>Ran &lt;N&gt; tests</code> (N per <code>RUN_STATE.md</code> Current Verification; <code>, OK (skipped=10)</code> with zero expected failures.</p>
 <p>Useful commands:</p>
 <pre><code class="language-bash"># Phase 1: config + schema verbs
 python3 -m joulewise validate-config configs/examples/mock_local.json
@@ -348,7 +348,7 @@ the current top queued task.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>AGENT_PLAN.md · commit 302d1df · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>AGENT_PLAN.md · commit 4d582fe · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
