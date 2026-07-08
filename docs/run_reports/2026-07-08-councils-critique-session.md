@@ -130,3 +130,11 @@ runner; order manifest; ladder wording). Then P2-010/P2-012, 3.0.2
 - A follow-up fix pass added layering annotations, hardened the reassessment
   wording against repo evidence, and recorded this addendum-only process
   footprint; the process-doc entries themselves are addendum-only.
+- Session-end: consistency sweep (Opus) found one real drift (phase-2 exit
+  checklist test count, fixed); the final-gate 5.5 review's unique catch was
+  the `build_site.py` provenance stamp mislabeling dirty-tree regens with the
+  prior commit hash — queued as P2-017; this session adopted the interim
+  sources-first/site-second two-commit pattern. Session learnings encoded in
+  the global codex-delegation and adversarial-review skills (history-vs-live
+  refinement for living reader-facing docs; self-provenance lens for
+  self-edited review artifacts; codex-run `.status` naming).

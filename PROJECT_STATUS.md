@@ -5,7 +5,8 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-08 (all four streams merged; meta-process section + docs/orchestration.md added)
+- Last updated: 2026-07-08 (all four streams merged; critique second-pass
+  reassessment recorded with lead fact-check)
 - Project phase: Phase 1 closing; Phase 2 in progress - instrument
   CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
   are complete; the two-model baseline matrix is the next Mac corpus step
@@ -27,9 +28,13 @@ New-era bundles must carry shape-valid provenance to pass. The Stage
 — Phase 3's central technical risk is retired on current hardware. The
 fixture-first 2K NVIDIA stack is merged; ALL its protocol pins remain
 PROVISIONAL until first live hardware contact (the live-verification
-checklist is ready). Next: the 2M two-model baseline campaign on a
-quiet machine. Reader-facing status below defers to the phase checklist
-matrix rows for per-item authority.
+checklist is ready). The independent project critique now carries a
+second-pass reassessment (its recommendations that became code are
+marked resolved; 16/17 of its checkable claims were lead-verified
+against file evidence): `docs/project_critique_review.html`. Next: the
+detection-floor calibration (P2-015) then the 2M two-model baseline
+campaign on a quiet machine. Reader-facing status below defers to the
+phase checklist matrix rows for per-item authority.
 
 ## Previous Update (2026-07-07, fifth update) — 30-second read
 

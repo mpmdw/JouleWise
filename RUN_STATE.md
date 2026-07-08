@@ -1,7 +1,7 @@
 # JouleWise Run State
 
-Last updated: 2026-07-08 (councils+critique session: site redesign,
-C-011 counter-review merged as PR #12)
+Last updated: 2026-07-08 (critique second-pass record: reassessment +
+lead fact-check + counterreview fix pass, commit 292e074)
 
 ## Start Here For Every Big Run
 
@@ -70,11 +70,21 @@ calibration) FIRST, then P2-006 (2M) with the fail-closed runner, order
 manifest, and claims-ladder wording — under the C-009 T5 no-agent lock
 (no worktrees remain).
 
+**Also landed (2026-07-08, commit 292e074):** the independent critique's
+second-pass reassessment is now committed with provenance layering; the
+lead fact-checked 16/17 of its claims against file evidence (one stale
+risk-register row, annotated) and a counterreview blocker on
+preservation wording was fixed pre-commit. Details: addendum in
+`docs/run_reports/2026-07-08-councils-critique-session.md`.
+
 ## Session History (pointers only — run reports own the narrative)
 
 Per the C-009 meta-review consensus, RUN_STATE no longer stacks
 previous-run narratives. Recent sessions, newest first:
 
+- 2026-07-08 critique second-pass record (reassessment + fact-check +
+  counterreview; addendum in the councils-critique report):
+  `docs/run_reports/2026-07-08-councils-critique-session.md`
 - 2026-07-08 councils+critique (site redesign; C-011 → PR #12):
   `docs/run_reports/2026-07-08-councils-critique-session.md`
 - 2026-07-07/08 resume+merge (C-009 topology first full run; PRs
