@@ -35,10 +35,10 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 443a31f"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 443a31f</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 4af29a9"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 4af29a9</span></span></div>
     <h1>JouleWise Run State</h1>
-<p>Last updated: 2026-07-08 (critique second-pass record: reassessment +
-lead fact-check + counterreview fix pass, commit 292e074)</p>
+<p>Last updated: 2026-07-08 (site observatory: data-driven status frontend
+merged as PR #13; suite 576 after the new parser tests)</p>
 <h2 id="start-here-for-every-big-run">Start Here For Every Big Run</h2>
 <p>Before starting substantial work:</p>
 <ol>
@@ -112,6 +112,9 @@ preservation wording was fixed pre-commit. Details: addendum in
 <p>Per the C-009 meta-review consensus, RUN_STATE no longer stacks
 previous-run narratives. Recent sessions, newest first:</p>
 <ul>
+<li>2026-07-08 site observatory (PR #13; status/roadmap/record frontend,
+fail-closed parsers, P2-017 stamps):
+<code>docs/run_reports/2026-07-08-site-observatory.md</code></li>
 <li>2026-07-08 critique second-pass record (reassessment + fact-check +
 counterreview; addendum in the councils-critique report):
 <code>docs/run_reports/2026-07-08-councils-critique-session.md</code></li>
@@ -132,8 +135,8 @@ counterreview; addendum in the councils-critique report):
 </ul>
 <h2 id="current-verification">Current Verification</h2>
 <ul>
-<li>Merged main: <code>python3 -m unittest discover -s tests</code> → <code>Ran 564 tests, OK (skipped=10)</code> — ZERO expected failures (as of 2026-07-08,
-after PRs #8/#9/#10/#11/#12).</li>
+<li>Merged main: <code>python3 -m unittest discover -s tests</code> → <code>Ran 576 tests, OK (skipped=10)</code> — ZERO expected failures (as of 2026-07-08,
+after PRs #8/#9/#10/#11/#12/#13; 564 + 12 build_site parser tests).</li>
 <li><code>validate-bundle --strict</code> green over all 6 real corpus bundles,
 read-only, unrewritten (incl. the new raw-to-trace gate).</li>
 <li>CI: mock e2e + suite on both matrix legs, green on every PR head.</li>
@@ -186,7 +189,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit 443a31f · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit 4af29a9 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

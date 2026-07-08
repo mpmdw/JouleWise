@@ -26,182 +26,80 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#product-outcomes">Product outcomes</a>
-<a href="#verification-evidence-lead-side">Verification evidence (lead-side)</a>
-<a href="#review-pipeline-yield-this-phase">Review-pipeline yield (this phase)</a>
-<a href="#process-notes">Process notes</a>
-<a href="#what-is-next">What is next</a>
-<a href="#workspace-state">Workspace state</a>
-<a href="#addendum-2026-07-08-second-pass-critique-reassessment">Addendum — 2026-07-08 Second-Pass Critique Reassessment</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-08-councils-critique-session-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-08-councils-critique-session.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-08-councils-critique-session.md · commit 443a31f"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-08-councils-critique-session.md</span><span class="source-commit">commit 443a31f</span></span></div>
-    <h1>Run Report — 2026-07-08: Site Redesign + Twin Councils + Critique Counter-Review (C-011)</h1>
-<p>Continuation of the resume+merge session (same conversation, Ed-directed
-second phase). Three deliverables: (1) the docs/site rebuilt as a
-designed reading experience; (2) a consensus council over that site;
-(3) a full counter-review of an independent 5.5 critique of the project,
-adjudicated in council C-011 and implemented same-session as PR #12
-(MERGED).</p>
-<h2 id="product-outcomes">Product outcomes</h2>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#honesty-mechanics-the-load-bearing-part">Honesty mechanics (the load-bearing part)</a>
+<a href="#process-trace-layers-and-unique-catches">Process trace (layers and unique catches)</a>
+<a href="#verification">Verification</a>
+<a href="#next">Next</a></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-08-site-observatory-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-08-site-observatory.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-08-site-observatory.md · commit 4af29a9"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-08-site-observatory.md</span><span class="source-commit">commit 4af29a9</span></span></div>
+    <h1>Run Report — Site Observatory: Data-Driven Status Frontend (2026-07-08)</h1>
+<p><strong>Outcome:</strong> the generated half of <code>docs/site/</code> is no longer rendered
+markdown in a skin. <code>scripts/build_site.py</code> was rewritten around
+fail-closed parsers over the live process docs, and three new pages
+present project state as a designed observation experience: <code>status.html</code>
+(console strip + five-station &quot;flight recorder&quot; spine: what is true now /
+what changed / what happens next / what could invalidate it / where the
+evidence lives), <code>roadmap.html</code> (queue lane cards, next-two flight plan,
+do-not-do interlock), <code>record.html</code> (sessions timeline, binding
+decisions, council timeline). The library became a grouped Sources layer;
+doc pages gained TOC sidebars and scrolling table wrappers. Merged as
+PR #13 under the standing merge-with-review authority.</p>
+<h2 id="honesty-mechanics-the-load-bearing-part">Honesty mechanics (the load-bearing part)</h2>
 <ul>
-<li><strong>docs/site redesigned</strong> (5cdc9b4): four hand-authored pages
-(story/results/process/research) in a dark instrument aesthetic —
-embedded Fraunces/IBM Plex (self-contained), palette validated by the
-dataviz six-checks, animated power-trace hero, readout tiles,
-catch-record and topology-evolution visuals — plus the 11-doc library
-restyled; <code>scripts/build_site.py</code> now generates only the library.
-Claims fidelity gated twice: a fresh 5.5 review (11 findings) then a
-council discussion round (FULL consensus; 3 additional findings from
-the discussion itself). Every number traces to a named source.</li>
-<li><strong>C-011 (PR #12, MERGED @ bef8ab6):</strong> the independent critique
-(<code>docs/project_critique_review.html</code>, now committed) was
-counter-reviewed by 4 verification lenses, adjudicated with 5.5-high
-(6 contested points, consensus on all, zero dissent), and its
-survivors implemented top-down:<ul>
-<li><strong>Fail-closed campaigns</strong> — per-member strict validation after
-every run and before every skip; usable = succeeded + strict-valid<ul>
-<li>quality-pass + unwaived; typed exact-match waivers with a CLOSED
-scope-class set, fail-closed duplicates, manifest-level only (never
-in bundles); end-of-campaign verdict
-(publishable|partial|blocked|invalid).</li>
+<li>Every number and state on a generated page derives from parsing the md
+sources at build time; parsers exit nonzero naming component, source,
+and expected pattern. No hand-typed data survives review (two hardcoded
+narrative strings were caught and derived; an invented <code>meta</code> lane
+state and a council-index fallback were caught by counterreview and
+removed — absence of a lane tag now renders as absence).</li>
+<li>P2-017 closed: per-source provenance stamps (<code>git log -1 -- &lt;source&gt;</code>
+plus a <code>+ uncommitted</code> dirty marker) on every generated page/component.</li>
+<li>The fail-closed parser found real source drift while being built: the
+council-log index table was missing its C-011 row (fixed at source).</li>
+<li>The final-head gate HELD the merge because the site truthfully rendered
+a stale RUN_STATE test count (564 vs the grown 576) — the site cannot
+be more honest than its sources; the source was fixed and re-stamped.</li>
 </ul>
-</li>
-<li><strong>Counterbalanced 2M ordering</strong> — model-blocked, workload-rotated
-order manifests (rotation + seeded rep-5 + recorded imbalance),
-consumed by the runner with executed-order logging; loud warning on
-fallback-sorted (D-014).</li>
-<li><strong>Reducer honesty flags</strong> (additive) — <code>phase_identifiability</code>
-(≥3 summed-curve samples per nonzero interval, else
-<code>not_resolvable_sample_count</code>) and <code>token_counts_source</code>
-(config-fallback nulls token-derived metrics; only decode/output
-token events count as runtime-observed). Era-gated into strict: new
--era summaries must carry both fields.</li>
-<li><strong>Claims ladder</strong> — <code>docs/contracts/claims_ladder.md</code> (L0–L4,
-binding from 2M; D-037) + Phase 4 §4.3 acceptance hook; riders:
-cross-boundary comparisons descriptive-only without a named
-calibration bundle; config-fallback token denominators force L0
-wording.</li>
-<li><strong>Docs</strong> — flagship-report ADDENDUM superseding the
-active-parameter wording (record untouched; immutability); question
--bank softening; stale-line batch; R-002/R-003 → closed-residual;
-PROJECT_STATUS Process Note re-anchored (middle path honoring Ed&#39;s
-showcase instruction — the one partial deviation from the critique,
-recorded in C-011).</li>
-<li><strong>Queue</strong> — P2-015 detection-floor calibration campaign at rank 1
-(same quiet window as 2M, runs first); P2-006 acceptance extended
-(fail-closed runner + order manifest + ladder wording); P2-016
-deferred batch (post-2M architecture, 2K-live telemetry/protocol
-items, claims-index seed) with rejected items recorded
-(RemoteNodeSession per B-1; run-ID randomization per D-010/D-022;
-console script pre-2M).</li>
-</ul>
-</li>
-</ul>
-<h2 id="verification-evidence-lead-side">Verification evidence (lead-side)</h2>
+<h2 id="process-trace-layers-and-unique-catches">Process trace (layers and unique catches)</h2>
 <ul>
-<li>Merged main @ bef8ab6: suite <strong>564 OK (skipped=10)</strong>; 6/6 real
-bundles strict-valid (spot-checked post-merge); CR fix round included
-a numeric identity check (stored vs fresh energy/ttft/throughput
-exactly equal on a legacy bundle after the decode-event filter).</li>
-<li>Site preview-verified in a live browser (fonts, charts, hover, doc
-pages); palette passed the dataviz validator on the dark surface.</li>
-<li>CI green on every PR #12 head.</li>
+<li>Dual-prior 5.5 design round (instrument-maximalist vs editorial): both
+converged on extend-don&#39;t-replace, status hub, fail-closed parsing;
+lead synthesized console-strip + flight-recorder and cut invented-
+metric components (gauges, radar).</li>
+<li>5.5 implementation (branch <code>stream/site-observatory</code>), then two Codex
+IMAGE critique rounds (7 then 8 screenshots; 16 findings r1, per-item
+verification r2) — Ed directed image-heavy analysis to Codex
+(higher-res, cheap tokens); encoded in the codex-delegation skill,
+with a <code>codex-run -i</code> passthrough added (variadic <code>--image</code> trap
+documented).</li>
+<li>Lead root-caused the persistent mobile overflow after tool-fighting
+(stale-CSS caching ×3, corrupted preview emulation, headless Chrome&#39;s
+~500px minimum window): a grid item with <code>margin: 0 auto</code> disables
+stretch alignment, so max-content sizing won — one-line fix; every
+page now fits 390px (iframe-measured).</li>
+<li>14-image Codex visual sign-off: SHIP; hand-page regression check
+clean.</li>
+<li>Fresh 5.5 counterreview: 2 blockers (both fail-closed honesty), 3
+should-fixes (derived latest-report, attribute escaping, escaped
+excerpt) — all fixed; 12 parser tests.</li>
+<li>Final-head 5.5 pass: HOLD on the stale-source test count (above) —
+the gate&#39;s unique catch; fixed in this bookkeeping.</li>
 </ul>
-<h2 id="review-pipeline-yield-this-phase">Review-pipeline yield (this phase)</h2>
-<div class="table-scroll"><table>
-<thead>
-<tr>
-<th>Layer</th>
-<th>Unique catches</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Site claims review (5.5)</td>
-<td>27-defects-vs-31-pins conflation ×2; sourcing overclaims; MVO floor drop; 6 more</td>
-</tr>
-<tr>
-<td>Site council discussion</td>
-<td>precision-card 87-vs-99.19 workload collision; summary-scoped trust wording; catch-table taxonomy — 3 findings its own source review missed</td>
-</tr>
-<tr>
-<td>Critique verification lenses ×4</td>
-<td>fail-closed cluster CONFIRMED with line cites; reducer config-token denominator (sharper than the critique); flagship overclaim survival; 2 settled-rejections (D-010/D-022, B-1)</td>
-</tr>
-<tr>
-<td>Adjudication discussion (5.5-high)</td>
-<td>C5 tightened to the exact ≥3-sample rule; C6 tightened to the concrete counterbalance scheme</td>
-</tr>
-<tr>
-<td>Branch 2-lens review</td>
-<td>waiver cross-namespace leak (BLOCKER); era-tolerance shielding the new honesty fields (BLOCKER, convergent); prompt-tokens-as-output-provenance (BLOCKER)</td>
-</tr>
-<tr>
-<td>Lead gate</td>
-<td>worktree-predates-designed-site rebase collision caught before PR</td>
-</tr>
-<tr>
-<td>Final-head review</td>
-<td>waiver scope not validated against a closed set; verified era-gate safe on no-phase bundles + decode-filter numerics + no site clobber</td>
-</tr>
-</tbody></table></div>
-<h2 id="process-notes">Process notes</h2>
+<h2 id="verification">Verification</h2>
 <ul>
-<li><strong>Adjudicated specs still need the lens tier:</strong> CR-1 implemented a
-council-pinned design and shipped 3 blocker-class defects only the
-adversarial round caught — one of them an interaction with the lead&#39;s
-own earlier design (the era tolerance). Consensus ≠ safe
-implementation.</li>
-<li><strong>Deliberation has independent yield:</strong> both discussion rounds
-produced findings/designs beyond what they were adjudicating (site: 3
-new findings; critique: 2 mechanical rules). Folded into C-011&#39;s
-process note.</li>
-<li><strong>Final-head rule boundary (lead ruling, this session):</strong> a commit
-that implements the final-head reviewer&#39;s own specified fix, written
-by the lead and verified by the suite, stays within the reviewed
-envelope — no infinite recursion. New functionality post-review still
-triggers the rule.</li>
-<li>The one knowing deviation from the critique (process-section
-compression declined in part) rests on Ed&#39;s explicit instruction;
-residual tension is his call.</li>
+<li>Suite: <code>Ran 576 tests, OK (skipped=10)</code> (564 + 12 parser tests),
+lead-run.</li>
+<li>Real build (<code>npx marked</code>) green; <code>--no-marked</code> sandbox path green.</li>
+<li>Mobile: all pages scrollWidth ≤ 390 at 390px (iframe-measured);
+desktop layouts visually verified.</li>
+<li>Degree framing corrected reader-facing (undergraduate CS capstone, not
+master&#39;s) in the site hero and PROJECT_STATUS.</li>
 </ul>
-<h2 id="what-is-next">What is next</h2>
-<p>Unchanged from the queue: <strong>P2-015 detection-floor calibration then
-P2-006 2M baselines in one quiet window</strong> (no-agent lock; fail-closed
-runner; order manifest; ladder wording). Then P2-010/P2-012, 3.0.2
-(R-003 approval), hardware-gated items.</p>
-<h2 id="workspace-state">Workspace state</h2>
-<ul>
-<li>main @ bef8ab6 + this bookkeeping, pushed. Worktree <code>../jw-critique</code>
-removed post-report (PR #12 merged). No worktrees remain.</li>
-<li>Session scratchpad lens/council out-files are ephemeral; all
-load-bearing content lives in C-011, the CR ledger
-(<code>docs/stream_logs/2026-07-08-critique-response.md</code>), and this report.</li>
-</ul>
-<h2 id="addendum-2026-07-08-second-pass-critique-reassessment">Addendum — 2026-07-08 Second-Pass Critique Reassessment</h2>
-<ul>
-<li>A second-pass reassessment was added to <code>docs/project_critique_review.html</code>
-after the critique-response work. The second pass updated several first-pass
-passages in place and marks them in-document; the verbatim C-011 first-pass
-text remains in git history at commit 6418084.</li>
-<li>Lead fact-check verified 16/17 checkable claims against file evidence; the
-one stale claim was the risk-register row wording, now annotated because
-R-002/R-003 are closed-residual as of 2026-07-08.</li>
-<li>A counterreview flagged the preservation overclaim as a blocker; the lead
-chose accurate labeling over content revert to keep reader-facing numbers
-current, with git as the verbatim record.</li>
-<li>A follow-up fix pass added layering annotations, hardened the reassessment
-wording against repo evidence, and recorded this addendum-only process
-footprint; the process-doc entries themselves are addendum-only.</li>
-<li>Session-end: consistency sweep (Opus) found one real drift (phase-2 exit
-checklist test count, fixed); the final-gate 5.5 review&#39;s unique catch was
-the <code>build_site.py</code> provenance stamp mislabeling dirty-tree regens with the
-prior commit hash — queued as P2-017; this session adopted the interim
-sources-first/site-second two-commit pattern. Session learnings encoded in
-the global codex-delegation and adversarial-review skills (history-vs-live
-refinement for living reader-facing docs; self-provenance lens for
-self-edited review artifacts; codex-run <code>.status</code> naming).</li>
-</ul>
+<h2 id="next">Next</h2>
+<p>Unchanged: P2-015 then P2-006 in one quiet window [QUIET-MAC]. The site
+regenerates via <code>python3 scripts/build_site.py</code> (commit sources first;
+stamps are per-source and dirty-aware).</p>
 
 
   </div>
@@ -210,7 +108,7 @@ self-edited review artifacts; codex-run <code>.status</code> naming).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-08-councils-critique-session.md · commit 443a31f · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-08-site-observatory.md · commit 4af29a9 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
