@@ -38,7 +38,7 @@ needs D-016 + install:  M5 (2G MLX)
 needs auth session:     M6 (2H powermetrics)
 needs M5+M6:            M7 (2I Mac slice — the flagship)
 needs P1-006 evidence:  M8 (2K/2L remote-target live validation;
-                         2K fixture-first branch exists later in queue)
+                         2K fixture-first stack merged 2026-07-08 via PR #11)
 needs M7:               M9 (2M baselines)
 post-docs branch:       M10 Stage 3.0.1 verdict is replay_supported
                          after lead live re-verification

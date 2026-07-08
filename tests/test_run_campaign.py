@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "run_campaign.py"
+BASE_CONFIG = ROOT / "configs" / "examples" / "mock_local.json"
 COMMAND_TIMEOUT_S = 60
 
 
@@ -25,6 +26,7 @@ def run_campaign(
     max_failures: int | None = None,
     log_path: Path | None = None,
     backup: Path | None = None,
+    waivers: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = [sys.executable, str(SCRIPT), str(config_dir), "--runs-dir", str(runs_dir)]
     if log_path is not None:
@@ -33,6 +35,8 @@ def run_campaign(
         command.append("--dry-run")
     if backup is not None:
         command.extend(["--backup", str(backup)])
+    if waivers is not None:
+        command.extend(["--waivers", str(waivers)])
     if cli_cmd is not None:
         command.extend(["--cli-cmd", cli_cmd])
     if max_failures is not None:
@@ -57,18 +61,21 @@ def rendered_cli_command(cli_cmd: str, config_path: Path, runs_dir: Path) -> str
 
 def write_config(config_dir: Path, filename: str, run_id: str, repetitions: int = 1) -> Path:
     path = config_dir / filename
-    payload = {"run_id": run_id, "workload_profile": {"repetitions": repetitions}}
+    payload = json.loads(BASE_CONFIG.read_text(encoding="utf-8"))
+    payload["run_id"] = run_id
+    payload["workload_profile"]["repetitions"] = repetitions
     path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
     return path
 
 
-def write_single_bundle(runs_dir: Path, run_id: str, status: str = "succeeded") -> None:
-    bundle = runs_dir / run_id
-    bundle.mkdir(parents=True, exist_ok=True)
-    (bundle / "summary_metrics.json").write_text(
-        json.dumps({"status": status}) + "\n",
-        encoding="utf-8",
-    )
+def write_single_bundle(
+    runs_dir: Path,
+    run_id: str,
+    status: str = "succeeded",
+    *,
+    idle_window_suspect: bool | None = None,
+) -> None:
+    _write_bundle(runs_dir, run_id, status, idle_window_suspect=idle_window_suspect)
 
 
 def write_experiment(
@@ -87,12 +94,7 @@ def write_experiment(
     for rep in range(1, completed + 1):
         member_name = f"{run_id}__r{rep}"
         members.append(member_name)
-        member = runs_dir / member_name
-        member.mkdir(parents=True, exist_ok=True)
-        (member / "summary_metrics.json").write_text(
-            json.dumps({"status": statuses[rep - 1]}) + "\n",
-            encoding="utf-8",
-        )
+        _write_bundle(runs_dir, member_name, statuses[rep - 1])
     experiments = runs_dir / "experiments"
     experiments.mkdir(parents=True, exist_ok=True)
     (experiments / f"{run_id}.json").write_text(
@@ -111,6 +113,107 @@ def write_experiment(
     )
 
 
+def _write_bundle(
+    runs_dir: Path,
+    run_id: str,
+    status: str,
+    *,
+    idle_window_suspect: bool | None = None,
+) -> None:
+    from joulewise import reduce as reduce_module
+    from joulewise.bundle import RunBundleWriter
+    from joulewise.clock import FakeClock
+    from joulewise.interfaces import PowerSample, RuntimeEvent
+    from joulewise.provenance import output_policy, prompt_provenance
+    from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus, SummaryMetrics
+
+    config_data = json.loads(BASE_CONFIG.read_text(encoding="utf-8"))
+    config_data["run_id"] = run_id
+    config_data["workload_profile"]["repetitions"] = 1
+    config = BenchmarkConfig.from_mapping(config_data)
+    writer = RunBundleWriter.create(runs_dir, config, FakeClock(start=3.0))
+
+    def event(timestamp_s: float, event_type: str, phase: str, message: str = "") -> None:
+        writer.append_event(
+            RuntimeEvent(
+                timestamp_s=timestamp_s,
+                event_type=event_type,
+                phase=phase,
+                message=message or f"{event_type} {phase}",
+                metadata={},
+            )
+        )
+
+    if status == "succeeded":
+        event(0.0, "stage_started", "measured_run")
+        event(0.0, "sampling_started", "measured_run")
+        event(0.0, "phase_start", "prefill")
+        event(0.5, "phase_end", "prefill")
+        event(0.5, "phase_start", "decode")
+        event(0.6, "token", "decode")
+        event(0.7, "token", "decode")
+        event(0.8, "phase_end", "decode")
+        event(1.0, "sampling_stopped", "measured_run")
+        event(1.0, "stage_completed", "measured_run")
+        writer.write_power_trace(
+            [
+                PowerSample(timestamp_s=0.0, power_w=7.5, source="mock", rail="mock"),
+                PowerSample(timestamp_s=0.5, power_w=7.5, source="mock", rail="mock"),
+                PowerSample(timestamp_s=1.0, power_w=7.5, source="mock", rail="mock"),
+            ]
+        )
+        idle = {
+            "power_w_mean": 5.0,
+            "power_w_stddev": 0.0,
+            "duration_s": 1.0,
+            "sample_count": 2,
+            "telemetry_backend": "mock",
+        }
+        if idle_window_suspect is not None:
+            idle["idle_window_suspect"] = idle_window_suspect
+        writer.write_metadata(
+            {
+                "device": {"telemetry": "mock", "rail_manifest": ["mock"]},
+                "adapters": {"telemetry": {"name": "mock"}},
+                "idle_baseline": idle,
+                "workload_observed": {"token_count": 34, "output_token_count": 2},
+                "workload_provenance": {
+                    "prompt": prompt_provenance([1, 2, 3], text="test"),
+                    "generator": {"name": "fake_cli", "version": "test"},
+                    "tokenizer": {
+                        "backend": "mock",
+                        "identifier": "fake",
+                        "revision": "test",
+                        "class": "FakeTokenizer",
+                        "vocab_size": None,
+                    },
+                    "model": {"source": config.model.source, "revision": config.model.revision},
+                    "output_policy": output_policy(
+                        "fixed_budget_exact",
+                        requested_tokens=2,
+                        emitted_tokens=2,
+                        stop_condition="requested_tokens_emitted",
+                    ),
+                },
+            }
+        )
+        summary = reduce_module.reduce_bundle(writer.path)
+    else:
+        writer.write_metadata(
+            {
+                "device": {"telemetry": "mock", "rail_manifest": ["mock"]},
+                "adapters": {"telemetry": {"name": "mock"}},
+            }
+        )
+        summary = SummaryMetrics(
+            status=RunStatus.FAILED,
+            failure_reason=FailureReason.UNKNOWN_ERROR,
+            failure_message="fake failure",
+        )
+    writer.write_summary(summary)
+    writer.finalize()
+
+
 def make_fake_cli(tmp: Path, sentinel: Path | None = None) -> Path:
     sentinel_line = f"Path({str(sentinel)!r}).write_text('invoked\\n', encoding='utf-8')" if sentinel else "pass"
     script = tmp / "fake_cli.py"
@@ -122,9 +225,16 @@ def make_fake_cli(tmp: Path, sentinel: Path | None = None) -> Path:
             from pathlib import Path
 
             ROOT = Path({str(ROOT)!r})
+            BASE_CONFIG = ROOT / "configs" / "examples" / "mock_local.json"
             if str(ROOT) not in sys.path:
                 sys.path.insert(0, str(ROOT))
+            from joulewise import reduce as reduce_module
             from joulewise.bundle import sanitize_id_component
+            from joulewise.bundle import RunBundleWriter
+            from joulewise.clock import FakeClock
+            from joulewise.interfaces import PowerSample, RuntimeEvent
+            from joulewise.provenance import output_policy, prompt_provenance
+            from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus, SummaryMetrics
 
             {sentinel_line}
             if len(sys.argv) < 5 or sys.argv[1] != "run":
@@ -142,14 +252,93 @@ def make_fake_cli(tmp: Path, sentinel: Path | None = None) -> Path:
             def emit_bundle(bundle, status):
                 print(f"bundle: {{bundle}} status={{status}}")
 
-            def write_single(status):
-                bundle = runs_dir / run_id
-                bundle.mkdir(parents=True, exist_ok=True)
-                (bundle / "summary_metrics.json").write_text(
-                    json.dumps({{"status": status}}) + "\\n",
-                    encoding="utf-8",
-                )
+            def write_bundle(bundle_run_id, status):
+                config_data = json.loads(BASE_CONFIG.read_text(encoding="utf-8"))
+                config_data["run_id"] = bundle_run_id
+                config_data["workload_profile"]["repetitions"] = 1
+                config = BenchmarkConfig.from_mapping(config_data)
+                writer = RunBundleWriter.create(runs_dir, config, FakeClock(start=3.0))
+
+                def event(timestamp_s, event_type, phase):
+                    writer.append_event(
+                        RuntimeEvent(
+                            timestamp_s=timestamp_s,
+                            event_type=event_type,
+                            phase=phase,
+                            message=f"{{event_type}} {{phase}}",
+                            metadata={{}},
+                        )
+                    )
+
+                if status == "succeeded":
+                    event(0.0, "stage_started", "measured_run")
+                    event(0.0, "sampling_started", "measured_run")
+                    event(0.0, "phase_start", "prefill")
+                    event(0.5, "phase_end", "prefill")
+                    event(0.5, "phase_start", "decode")
+                    event(0.6, "token", "decode")
+                    event(0.7, "token", "decode")
+                    event(0.8, "phase_end", "decode")
+                    event(1.0, "sampling_stopped", "measured_run")
+                    event(1.0, "stage_completed", "measured_run")
+                    writer.write_power_trace(
+                        [
+                            PowerSample(timestamp_s=0.0, power_w=7.5, source="mock", rail="mock"),
+                            PowerSample(timestamp_s=0.5, power_w=7.5, source="mock", rail="mock"),
+                            PowerSample(timestamp_s=1.0, power_w=7.5, source="mock", rail="mock"),
+                        ]
+                    )
+                    writer.write_metadata(
+                        {{
+                            "device": {{"telemetry": "mock", "rail_manifest": ["mock"]}},
+                            "adapters": {{"telemetry": {{"name": "mock"}}}},
+                            "idle_baseline": {{
+                                "power_w_mean": 5.0,
+                                "power_w_stddev": 0.0,
+                                "duration_s": 1.0,
+                                "sample_count": 2,
+                                "telemetry_backend": "mock",
+                            }},
+                            "workload_observed": {{"token_count": 34, "output_token_count": 2}},
+                            "workload_provenance": {{
+                                "prompt": prompt_provenance([1, 2, 3], text="test"),
+                                "generator": {{"name": "fake_cli", "version": "test"}},
+                                "tokenizer": {{
+                                    "backend": "mock",
+                                    "identifier": "fake",
+                                    "revision": "test",
+                                    "class": "FakeTokenizer",
+                                    "vocab_size": None,
+                                }},
+                                "model": {{"source": config.model.source, "revision": config.model.revision}},
+                                "output_policy": output_policy(
+                                    "fixed_budget_exact",
+                                    requested_tokens=2,
+                                    emitted_tokens=2,
+                                    stop_condition="requested_tokens_emitted",
+                                ),
+                            }},
+                        }}
+                    )
+                    summary = reduce_module.reduce_bundle(writer.path)
+                else:
+                    writer.write_metadata(
+                        {{
+                            "device": {{"telemetry": "mock", "rail_manifest": ["mock"]}},
+                            "adapters": {{"telemetry": {{"name": "mock"}}}},
+                        }}
+                    )
+                    summary = SummaryMetrics(
+                        status=RunStatus.FAILED,
+                        failure_reason=FailureReason.UNKNOWN_ERROR,
+                        failure_message="fake failure",
+                    )
+                writer.write_summary(summary)
+                bundle = writer.finalize()
                 emit_bundle(bundle, status)
+
+            def write_single(status):
+                write_bundle(run_id, status)
 
             def write_manifest(members):
                 experiments = runs_dir / "experiments"
@@ -178,13 +367,7 @@ def make_fake_cli(tmp: Path, sentinel: Path | None = None) -> Path:
                 for rep in range(1, completed + 1):
                     member_name = f"{{run_id}}__r{{rep}}"
                     members.append(member_name)
-                    member = runs_dir / member_name
-                    member.mkdir(parents=True, exist_ok=True)
-                    (member / "summary_metrics.json").write_text(
-                        json.dumps({{"status": statuses[rep - 1]}}) + "\\n",
-                        encoding="utf-8",
-                    )
-                    emit_bundle(member, statuses[rep - 1])
+                    write_bundle(member_name, statuses[rep - 1])
                 manifest = write_manifest(members)
                 print(f"experiment: {{manifest}} members={{len(members)}}")
 
@@ -227,6 +410,14 @@ def make_fake_cli(tmp: Path, sentinel: Path | None = None) -> Path:
 
 
 def read_jsonl(path: Path) -> list[dict]:
+    return [
+        row
+        for row in read_all_jsonl(path)
+        if row.get("record_type") != "campaign_verdict"
+    ]
+
+
+def read_all_jsonl(path: Path) -> list[dict]:
     return [
         json.loads(line)
         for line in path.read_text(encoding="utf-8").splitlines()
@@ -288,7 +479,31 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(rows[0]["members_succeeded"], 5)
             self.assertEqual(rows[0]["members_total"], 5)
 
-    def test_skipped_experiment_with_failed_member_prints_note(self) -> None:
+    def test_unvalidated_existing_summary_is_not_skippable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "complete.json", "complete")
+            write_single_bundle(runs_dir, "complete")
+            summary_path = runs_dir / "complete" / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["gross_energy_j"] = summary["gross_energy_j"] + 1.0
+            summary_path.write_text(json.dumps(summary) + "\n", encoding="utf-8")
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli))
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("not skippable", result.stderr)
+            self.assertIn("fresh re-reduction", result.stderr)
+            self.assertFalse((runs_dir / "order.log").exists())
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(rows[0]["status"], "failed")
+            self.assertFalse(rows[0]["members"][0]["strict_valid"])
+
+    def test_skipped_experiment_with_failed_member_fails_campaign(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -310,15 +525,272 @@ class RunCampaignTests(unittest.TestCase):
                 cli_cmd=cli_cmd_for(fake_cli),
             )
 
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.returncode, 1)
             self.assertFalse(sentinel.exists())
-            self.assertIn("4/5 members succeeded", result.stdout)
-            self.assertIn("non-succeeded members", result.stderr)
+            self.assertIn("not skippable", result.stderr)
             self.assertIn("failed-member-exp__r3", result.stderr)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
-            self.assertEqual(rows[0]["status"], "skipped")
+            self.assertEqual(rows[0]["status"], "failed")
             self.assertEqual(rows[0]["members_succeeded"], 4)
             self.assertEqual(rows[0]["members_total"], 5)
+
+    def test_waiver_allows_invalid_existing_member_and_records_partial_verdict(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            write_config(config_dir, "01-good.json", "good")
+            write_config(config_dir, "02-idle.json", "idle")
+            write_single_bundle(runs_dir, "good")
+            write_single_bundle(runs_dir, "idle", idle_window_suspect=True)
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": "idle",
+                            "reason": "manual idle-window review accepted",
+                            "approver": "council",
+                            "timestamp": "2026-07-08T00:00:00Z",
+                            "scope": "idle_window_suspect",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                waivers=waivers,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("VERDICT:", result.stdout)
+            self.assertIn("verdict: partial", result.stdout)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual([row["status"] for row in rows], ["skipped", "waived"])
+            all_rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
+            verdict = all_rows[-1]
+            self.assertEqual(verdict["record_type"], "campaign_verdict")
+            self.assertEqual(verdict["verdict"], "partial")
+            self.assertEqual(verdict["usable"], ["good"])
+            self.assertEqual(verdict["waived"], ["idle"])
+            self.assertIn("all-waived is invalid", verdict["taxonomy"]["partial"])
+
+    def test_waiver_target_namespace_is_exact_and_typed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            write_config(config_dir, "good.json", "bad")
+            write_single_bundle(runs_dir, "bad", idle_window_suspect=True)
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": "good",
+                            "reason": "wrong namespace must not match run_id or config",
+                            "approver": "council",
+                            "timestamp": "2026-07-08T00:00:00Z",
+                            "scope": "any",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                waivers=waivers,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("not skippable", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(rows[0]["status"], "failed")
+            self.assertIsNone(rows[0]["members"][0].get("waiver"))
+
+    def test_waiver_unknown_scope_class_fails_at_load(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            write_config(config_dir, "idle.json", "idle")
+            write_single_bundle(runs_dir, "idle", idle_window_suspect=True)
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": "idle",
+                            "reason": "typo scope must fail closed",
+                            "approver": "council",
+                            "timestamp": "2026-07-08T00:00:00Z",
+                            "scope": "idle_window_suspect,not_a_real_class",
+                        }
+                    ]
+                )
+            )
+            fake_cli = make_fake_cli(tmp_path)
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                waivers=waivers,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unknown scope class", result.stdout + result.stderr)
+
+    def test_waiver_scope_must_cover_failure_classes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            write_config(config_dir, "idle.json", "idle")
+            write_single_bundle(runs_dir, "idle", idle_window_suspect=True)
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": "idle",
+                            "reason": "wrong failure class",
+                            "approver": "council",
+                            "timestamp": "2026-07-08T00:00:00Z",
+                            "scope": "status_failed",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                waivers=waivers,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(rows[0]["status"], "failed")
+            self.assertEqual(rows[0]["members"][0]["quality_flags"], ["idle_window_suspect"])
+
+    def test_duplicate_waiver_targets_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            write_config(config_dir, "good.json", "good")
+            entry = {
+                "config": "good.json",
+                "reason": "duplicate",
+                "approver": "council",
+                "timestamp": "2026-07-08T00:00:00Z",
+                "scope": "any",
+            }
+            duplicate = {**entry, "config": "good"}
+            waivers.write_text(json.dumps([entry, duplicate]) + "\n", encoding="utf-8")
+
+            result = run_campaign(config_dir, runs_dir, waivers=waivers)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("duplicate waiver target", result.stderr)
+
+    def test_idle_suspect_existing_member_requires_waiver(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "idle.json", "idle")
+            write_single_bundle(runs_dir, "idle", idle_window_suspect=True)
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli))
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("idle_window_suspect", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(rows[0]["status"], "failed")
+            self.assertEqual(rows[0]["members"][0]["quality_flags"], ["idle_window_suspect"])
+
+    def test_all_waived_campaign_is_invalid_not_partial(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            write_config(config_dir, "idle.json", "idle")
+            write_single_bundle(runs_dir, "idle", idle_window_suspect=True)
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": "idle",
+                            "reason": "all waived is not publishable evidence",
+                            "approver": "council",
+                            "timestamp": "2026-07-08T00:00:00Z",
+                            "scope": "idle_window_suspect",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                waivers=waivers,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            all_rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
+            verdict = all_rows[-1]
+            self.assertEqual(verdict["verdict"], "invalid")
+            self.assertEqual(verdict["waived"], ["idle"])
+            self.assertIn("all-waived is invalid", verdict["taxonomy"]["partial"])
+
+    def test_verdict_block_content_for_publishable_campaign(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "one.json", "one")
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("VERDICT:", result.stdout)
+            self.assertIn("verdict: publishable", result.stdout)
+            all_rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(all_rows[-1]["record_type"], "campaign_verdict")
+            self.assertEqual(all_rows[-1]["verdict"], "publishable")
+            self.assertEqual(all_rows[-1]["usable"], ["one"])
+            self.assertEqual(all_rows[-1]["failed"], [])
 
     def test_partial_experiment_is_incomplete_and_does_not_invoke_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -405,6 +877,125 @@ class RunCampaignTests(unittest.TestCase):
             self.assertTrue((runs_dir / "alpha__r5" / "summary_metrics.json").is_file())
             self.assertTrue((runs_dir / "beta-fail__r5" / "summary_metrics.json").is_file())
             self.assertTrue((runs_dir / "gamma__r5" / "summary_metrics.json").is_file())
+
+    def test_order_manifest_controls_execution_order_and_log_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            alpha = write_config(config_dir, "01-alpha.json", "alpha")
+            beta = write_config(config_dir, "02-beta.json", "beta")
+            (config_dir / "order_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "joulewise.order_manifest.v1",
+                        "seed": 2000005,
+                        "rotation_scheme": {},
+                        "imbalance_note": "test",
+                        "executed_order": [
+                            {
+                                "index": 1,
+                                "config": beta.name,
+                                "run_id": "beta",
+                                "model_tag": "b",
+                                "rep": 1,
+                                "workload": "short_short",
+                            },
+                            {
+                                "index": 2,
+                                "config": alpha.name,
+                                "run_id": "alpha",
+                                "model_tag": "a",
+                                "rep": 1,
+                                "workload": "short_short",
+                            },
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((runs_dir / "order.log").read_text(encoding="utf-8").splitlines(), ["beta", "alpha"])
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual([row["run_id"] for row in rows], ["beta", "alpha"])
+            self.assertEqual([row["run_index"] for row in rows], [1, 2])
+            self.assertEqual(rows[0]["executed_order"]["model_tag"], "b")
+            self.assertIs(rows[0]["model_load_boundary"], True)
+            self.assertIs(rows[1]["model_load_boundary"], True)
+
+    def test_order_manifest_rejects_duplicate_and_non_contiguous_entries(self) -> None:
+        cases = [
+            (
+                "duplicate-config",
+                [
+                    {"index": 1, "config": "01-alpha.json"},
+                    {"index": 2, "config": "01-alpha.json"},
+                ],
+                "duplicate config",
+            ),
+            (
+                "duplicate-index",
+                [
+                    {"index": 1, "config": "01-alpha.json"},
+                    {"index": 1, "config": "02-beta.json"},
+                ],
+                "duplicate index",
+            ),
+            (
+                "gap-index",
+                [
+                    {"index": 1, "config": "01-alpha.json"},
+                    {"index": 3, "config": "02-beta.json"},
+                ],
+                "contiguous",
+            ),
+        ]
+        for label, executed_order, expected in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                config_dir = tmp_path / "configs"
+                runs_dir = tmp_path / "runs"
+                config_dir.mkdir()
+                write_config(config_dir, "01-alpha.json", "alpha")
+                write_config(config_dir, "02-beta.json", "beta")
+                (config_dir / "order_manifest.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "joulewise.order_manifest.v1",
+                            "executed_order": executed_order,
+                        }
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+
+                result = run_campaign(config_dir, runs_dir)
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(expected, result.stderr)
+
+    def test_missing_order_manifest_records_loud_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "one.json", "one")
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("no order_manifest.json found", result.stderr)
+            all_rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertIn("block_order_warning", all_rows[0])
+            self.assertIn("block_order_warning", all_rows[-1])
 
     def test_fresh_experiment_run_then_second_invocation_skips(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -715,7 +1306,11 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             lines = log_path.read_text(encoding="utf-8").splitlines()
             self.assertEqual(lines[0], "dead partial")
-            parsed = [json.loads(line) for line in lines[1:]]
+            parsed = [
+                json.loads(line)
+                for line in lines[1:]
+                if json.loads(line).get("record_type") != "campaign_verdict"
+            ]
             self.assertEqual([row["status"] for row in parsed], ["ok"])
 
     def test_lock_blocks_real_run_is_removed_after_success_and_dry_run_ignores_it(self) -> None:

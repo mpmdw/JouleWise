@@ -121,9 +121,9 @@ and runnable, the Mac vertical slice (2G/2H/2I) is complete, and P2-013 /
 P2-014 closed the integrity and provenance pins (546 tests, 10 skipped,
 zero expected failures). Remaining gated work is the 2M baseline corpus plus
 remote-target live validation. The 2K fixture-first NVIDIA implementation is
-complete on a later branch, but this stream does not claim it as merged or
-live hardware-validated; all 2K protocol pins remain PROVISIONAL until
-P1-006 evidence is captured. Detail: `docs/phase_2/phase_2_plan.md`. Exit:
+merged as of 2026-07-08 (PR #11), but it is not live hardware-validated; all
+2K protocol pins remain PROVISIONAL until P1-006 evidence is captured. Detail:
+`docs/phase_2/phase_2_plan.md`. Exit:
 `docs/phase_2/phase_2_exit_checklist.md`. Gated-slice specs:
 `docs/phase_2/hardware_slice_implementation_guide.md`.
 
@@ -148,9 +148,9 @@ gated on Phase 1 evidence); code-level specs for the gated slices live in
   window markers, shared BundleReader, rail contract, reduce verb,
   schema round-trip, token fallback, v0.2 compatibility note;
   D-024..D-029).
-- [ ] 2K NVIDIA/vLLM + nvidia-smi + SSH transport (fixture-first branch
-  complete later in the merge queue; live validation remains gated on
-  P1-006, protocol pins PROVISIONAL).
+- [x] 2K NVIDIA/vLLM + nvidia-smi + SSH transport (fixture-first
+  implementation merged 2026-07-08 via PR #11; live validation remains gated
+  on P1-006, protocol pins PROVISIONAL).
 - [ ] 2L Orin adapter (gated on P1-006).
 - [ ] 2M Homogeneous baselines + prefill/decode qualitative reproduction.
 

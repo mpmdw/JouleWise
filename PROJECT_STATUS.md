@@ -177,7 +177,7 @@ Complete so far (all verifiable in the repository):
   bundle artifact contract, and the measurement methodology (idle
   subtraction, measurement boundaries, clock synchronization, statistical
   protocol - highlights below).
-- Evidence-shaped plans for every phase, a design-decision log (36
+- Evidence-shaped plans for every phase, a design-decision log (37
   decisions, each with the alternatives considered), a risk register with
   an explicit descope ladder, and example configs for the Mac and mock
   targets.
@@ -445,6 +445,9 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 
 ## Process Note
 
+The machinery exists to protect measurement claims from unchecked summaries,
+stale assumptions, and review-induced drift.
+
 This project is developed by a human researcher directing a multi-agent
 AI system he designed and iteratively engineered over the course of the
 project — the orchestration itself is a second, deliberate piece of
@@ -462,15 +465,15 @@ unauditable claims), the hardware and access decisions, and — the part
 that is easy to underrate — the *process policy*: every rule below
 exists because he observed a failure or an opportunity and issued a
 standing instruction. The AI staff executes: a lead agent (Claude,
-Anthropic's Fable-class model) is the apex — decomposition, design
-adjudication, every final diff gate, all live verification, merges,
-bookkeeping — and a second, independent model (OpenAI Codex gpt-5.5)
-does the volume: implementation against pinned specs, adversarial
-review lenses, test writing, and fresh-instance test auditing. A third
-tier (Claude Opus) serves as specialist sweeper. Cross-model review is
-load-bearing by design: the attributed catch record shows the two
-models and the different review layers consistently catching different
-classes of defect.
+Anthropic's Fable-class model) is the final reviewer and single point
+of accountability: decomposition, design adjudication, every final diff
+gate, live verification, merges, and bookkeeping. A second, independent
+model (OpenAI Codex gpt-5.5) does the volume: implementation against
+pinned specs, adversarial review lenses, test writing, and
+fresh-instance test auditing. A third tier (Claude Opus) serves as
+specialist sweeper. Cross-model review is load-bearing by design: the
+attributed catch record shows the models and review layers catching
+different classes of defect.
 
 **The machinery, briefly.** Independent tasks run as parallel git
 worktrees, the lead driving each stream's Codex pipeline directly (a
@@ -498,9 +501,9 @@ who prevailed and why, and overridden dissents, so a future reader (or
 model) can reconstruct why any decision was made.
 
 **The paper trail (every claim auditable).** Each fact has one home:
-`docs/decision_log.md` — 36 binding design decisions, each with
+`docs/decision_log.md` — 37 binding design decisions, each with
 alternatives considered and revisit conditions; `docs/council_log.md`
-(C-001…C-010) — the deliberation record; `docs/stream_logs/` —
+(C-001…C-011) — the deliberation record; `docs/stream_logs/` —
 per-stream decision ledgers committed *with* the code they justify
 (wrong decisions are superseded in place, never erased);
 `docs/run_reports/` — one record per session with verification
@@ -519,20 +522,13 @@ the next session (C-010) validated the redesign with a zero-stall run.
 
 **What one day of this looks like (2026-07-07).** Five implementation
 streams plus a repo-wide test audit ran concurrently: statistical
-uncertainty (per-metric confidence intervals, re-derivable
-byte-for-byte from raw evidence), contamination detection, deep DVFS
-telemetry, campaign automation, and a KV-cache size model. All five
-merged the same day; the test suite grew 254 → 369; the layered review
-recorded thirteen attributed catches including three blockers that no
-single reviewer — human-style solo review included — would plausibly
-have found together (one blocker was caught only by running the real
-CLI against code whose own tests were green, because the tests encoded
-the same wrong assumption as the code). Roughly 6–7 million tokens of
-implementation and review work were delegated to the second model,
-about five times the volume the orchestrating side spent. The most
-satisfying data point: the new contamination gate's first live act was
-to correctly flag the lead agent's *own verification run* as
-contaminated — the instrument now audits its operators.
+uncertainty, contamination detection, deep DVFS telemetry, campaign
+automation, and a KV-cache size model. All five merged the same day;
+the test suite grew 254 → 369; the layered review recorded thirteen
+attributed catches including three blockers that no single reviewer
+would plausibly have found together. One blocker surfaced only when the
+real CLI was run against code whose own tests were green, because the
+tests encoded the same wrong assumption as the code.
 
 **How the scope grew.** The project began as an architecture sketch for
 "measure LLM inference energy on edge hardware." Contracts-first
@@ -566,10 +562,11 @@ suite went 415 → 546 tests with zero expected failures, and the lead
 never wrote implementation code and never skipped a gate.
 
 **Where to look.** `docs/orchestration.md` is the process description.
-`docs/council_log.md` (C-001…C-010) is the deliberation record — C-006
+`docs/council_log.md` (C-001…C-011) is the deliberation record — C-006
 is a full orchestration trace of the five-stream day; C-009/C-010 are
-the topology meta-review and its validation. `docs/decision_log.md`
-holds the 36 binding design decisions with alternatives considered.
+the topology meta-review and its validation; C-011 is the critique
+counter-review. `docs/decision_log.md` holds the 37 binding design
+decisions with alternatives considered.
 `docs/run_reports/` narrates each working session, with per-layer catch
 tables and the delegation-calibration ledger. The executable
 orchestration playbooks live outside this repository as reusable

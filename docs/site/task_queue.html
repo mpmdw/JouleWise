@@ -22,7 +22,7 @@
 </header>
 <main>
 <div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>TASK_QUEUE.md</code> · as of commit 64a04dc (2026-07-07)</p>
+<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>TASK_QUEUE.md</code> · as of commit 6418084 (2026-07-08)</p>
 <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -102,14 +102,22 @@ purchases, destinations.</li>
 </thead>
 <tbody><tr>
 <td align="right">1</td>
-<td>P2-006</td>
+<td>P2-015</td>
 <td>P2 Next Slice</td>
-<td>UNBLOCKED (P2-013/P2-014 merged 2026-07-08, PR #8 — see <code>docs/run_reports/2026-07-07-resume-merge-session.md</code>) [QUIET-MAC]</td>
-<td>Homogeneous baselines (slice 2M) on the Mac target — run the two-model campaign on a QUIET machine (command sequence in PR #3), then <code>docs/phase_2/baseline_results.md</code> with variance + prefill/decode comparison</td>
-<td>Campaign bundles born under the FIXED validator; pass <code>--strict</code> incl. raw-to-trace + provenance gates; no-agent quiet lock (C-009 T5); corpus backed up per R-016</td>
+<td>NEW (C-011: critique counter-review) [QUIET-MAC]</td>
+<td>Detection-floor calibration campaign — idle-only repeats, no-op/tiny workloads, measured-window duration ladder (50ms→30s); runs FIRST in the same quiet window as 2M</td>
+<td>Versioned calibration bundle set (strict-valid); <code>detection_floor_j</code> + <code>minimum_identifiable_window_s</code> per target/backend recorded in <code>docs/phase_2/detection_floor.md</code>; calibration manifest hash cited by later reports; phase-identifiability flags already mechanical (C-011 reducer change)</td>
 </tr>
 <tr>
 <td align="right">2</td>
+<td>P2-006</td>
+<td>P2 Next Slice</td>
+<td>UNBLOCKED; acceptance extended by C-011 [QUIET-MAC]</td>
+<td>Homogeneous baselines (slice 2M) on the Mac target — two-model campaign on a QUIET machine, then <code>docs/phase_2/baseline_results.md</code> with variance + prefill/decode comparison (phase columns honor identifiability flags)</td>
+<td>Campaign bundles born under the FIXED validator; pass <code>--strict</code>; run via the FAIL-CLOSED runner (per-member strict validation, idle-suspect waiver rule, campaign verdict = publishable) using the counterbalanced order manifest (C-011/D-014); claim wording per <code>docs/contracts/claims_ladder.md</code> (D-037); no-agent quiet lock (C-009 T5); corpus backed up per R-016; runs AFTER P2-015 in the same window</td>
+</tr>
+<tr>
+<td align="right">3</td>
 <td>P3-000</td>
 <td>P3 Research Expansion</td>
 <td>3.0.1 COMPLETE + MERGED (PR #9, verdict <code>replay_supported</code>, lead-re-verified; D-035/D-036 promoted); 3.0.2+ open — 3.0.2 needs installs (R-003 user approval) and inherits the 3.0.1 harness shape + its 2 deferred hardening fixes (ledger C-8) [AGENT]</td>
@@ -117,7 +125,7 @@ purchases, destinations.</li>
 <td>Verdicts in <code>docs/phase_3/kv_feasibility.md</code>; checklist rows are the status authority; must complete before any borrow-window scheduling</td>
 </tr>
 <tr>
-<td align="right">3</td>
+<td align="right">4</td>
 <td>P2-010</td>
 <td>P2 Next Slice</td>
 <td>open (C-004; quarantine rules apply) [AGENT]</td>
@@ -125,7 +133,7 @@ purchases, destinations.</li>
 <td><code>joulewise/workloads.py</code> generator/scorer (stdlib); item/level marker events; <code>BundleReader.item_windows()</code>; level-window energy primary, per-item identifiability flags; per-item token count/stop reason recorded (EOS-bias audit); design in <code>docs/research_question_bank.md</code> + C-004</td>
 </tr>
 <tr>
-<td align="right">4</td>
+<td align="right">5</td>
 <td>P2-012</td>
 <td>P2 Next Slice</td>
 <td>open (Ed 2026-07-07; C-005 synthesis landed — starter suite specified; runs after P2-010) [AGENT]</td>
@@ -133,7 +141,7 @@ purchases, destinations.</li>
 <td>Per the C-005 spec in <code>docs/research_question_bank.md</code>: 6 categories × 8 items, n=5, greedy <code>fixed_budget_exact</code> policy, synthetic shape-matched controls paired with hash-manifested realistic exemplars; additive config fields (<code>workload_profile.category</code>, <code>source_manifest</code>, per-item <code>output_policy</code>); category as campaign-matrix axis; per-item stop reason/token/response hash in outputs; reuses P2-010 item windows; consumes the landed P2-011 aggregate engine; natural-EOS 2-item pilot second. Unlocks C5-W.1..W.4</td>
 </tr>
 <tr>
-<td align="right">5</td>
+<td align="right">6</td>
 <td>P1-008</td>
 <td>P1 Phase Gate</td>
 <td>waiting-user [ED-EXTERNAL]</td>
@@ -157,7 +165,7 @@ purchases, destinations.</li>
 <td>User names the destination; one fresh restore test; R-016 → fully mitigated</td>
 </tr>
 <tr>
-<td align="right">6</td>
+<td align="right">7</td>
 <td>P1-003</td>
 <td>P1 Phase Gate</td>
 <td>open (elevated value: gates Q6 boundary-sensitivity, C-003) [ED-EXTERNAL]</td>
@@ -165,7 +173,7 @@ purchases, destinations.</li>
 <td>Meter make/model or &quot;unavailable&quot; verdict plus measurement/export method (exit-checklist wall-meter section; informs D-018 boundary calibration)</td>
 </tr>
 <tr>
-<td align="right">7</td>
+<td align="right">8</td>
 <td>P1-004</td>
 <td>P1 Phase Gate</td>
 <td>partial [ED-EXTERNAL]</td>
@@ -173,7 +181,7 @@ purchases, destinations.</li>
 <td>Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section</td>
 </tr>
 <tr>
-<td align="right">8</td>
+<td align="right">9</td>
 <td>P1-006</td>
 <td>P1 Phase Gate</td>
 <td>open [ED-EXTERNAL]</td>
@@ -181,7 +189,7 @@ purchases, destinations.</li>
 <td>SSH/runtime/telemetry command evidence in the exit-checklist instrumentation section, or marked pending with blocker (gates slices 2K/2L)</td>
 </tr>
 <tr>
-<td align="right">9</td>
+<td align="right">10</td>
 <td>P2-004</td>
 <td>P2 Next Slice</td>
 <td>partial (provisional small-model pick 2026-07-06 opens 2G; full closure gated P1-001)</td>
@@ -189,12 +197,20 @@ purchases, destinations.</li>
 <td>Decision-log entry: models, revisions, artifact paths, local mirror, fallback candidate. Mid-model pick, CUDA load, GGUF paths outstanding.</td>
 </tr>
 <tr>
-<td align="right">10</td>
+<td align="right">11</td>
 <td>P2-005</td>
 <td>P2 Next Slice</td>
 <td>2K fixture-first MERGED (PR #11, 2026-07-08); ALL protocol pins PROVISIONAL; live validation gated (P1-006, evidence script ready: <code>docs/phase_1/2k_live_verification_checklist.md</code>); 2L Orin open</td>
 <td>Remote targets (slices 2K NVIDIA/vLLM/ssh, 2L Orin)</td>
 <td>Remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide.</td>
+</tr>
+<tr>
+<td align="right">12</td>
+<td>P2-016</td>
+<td>P2 Next Slice</td>
+<td>NEW (C-011 deferred batch; post-2M / with-2K-live) [AGENT]</td>
+<td>Critique-adjudicated queue batch: (a) post-2M controller split (experiment loop/cooldown/env capture out of controller.py); (b) node-worker protocol parity tests + table-driven validation (with 2K live); (c) NVIDIA [N/A]-row skip counts surfaced into measurement quality (with 2K live); (d) per-backend raw-to-trace strict generalization (with 2K live); (e) claims-to-evidence index seeded once 2M corpus exists; (f) schema v0.2 loader/export parity acceptance rule; (g) boundary labels propagated into report index/chart titles before any cross-boundary claims</td>
+<td>Each item lands with its named gate; dispositions + rejected items (RemoteNodeSession per B-1, run-ID randomization per D-010/D-022, console script pre-2M) recorded in C-011</td>
 </tr>
 </tbody></table>
 <h2>Completed Queue Items</h2>
@@ -441,7 +457,7 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 64a04dc (2026-07-07) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>as of commit 6418084 (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

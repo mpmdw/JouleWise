@@ -875,3 +875,64 @@ pass over its post-review commit caught a real crash path + broken
 checklist snippets first (fixed as B-45/B-46) — validating the
 final-head rule now in operation-loop §5. All four streams landed;
 main suite 546 OK.
+
+---
+
+## C-011: Counter-review of the independent project critique (2026-07-08)
+
+FULL ENTRY (genuine deliberation). An independent 5.5 critique of the
+entire project (docs/project_critique_review.html — goals, docs,
+architecture, tests, methodology, stack; "strong instrument, not yet a
+settled study") was counter-reviewed per Ed's directive: four
+verification lenses checked every claim against code/docs/decision-log
+ground truth with citations; the lead drafted dispositions; a bounded
+5.5-high discussion round adjudicated six contested points; consensus
+was reached on all six (no recorded dissent). Separately and first, a
+consensus round on the new docs/site pages reached full agreement
+(11 review findings + 3 new from the discussion itself, all applied).
+
+Verification verdicts (details in the four lens out-files, summarized
+in the run-report addendum): the campaign fail-closed cluster CONFIRMED
+unanimously (skip-if-summary-exists, ok==exit-0, failed members
+skippable — the highest-leverage finding, directly in the 2M path,
+sharpened by the lenses with the reducer's config-token-denominator
+fallback); the methodology cluster CONFIRMED at implementation level
+while partly settled at planning level (C-007/DOC-007/D-014/D-018
+already own the policies; mechanics were missing); the architecture
+cluster judged directionally right but mis-timed (all queued post-2M;
+RemoteNodeSession rejected per B-1's revisit clause, run-ID
+randomization rejected per D-010/D-022); the docs cluster partly stale
+(main pages already reconciled) but caught the flagship report's
+surviving active-parameter overclaim and two stale-open Mac risks.
+
+Contested-point outcomes: (C1) historical records stay immutable — the
+flagship overclaim is superseded by a dated ADDENDUM, not amended;
+(C2) the PROJECT_STATUS process section stays per Ed's explicit
+showcase instruction but drops its self-congratulatory register (the
+critique's compression recommendation was DECLINED in part — recorded
+here as the one place the council knowingly deviated from the critique,
+on the owner's standing instruction; residual tension flagged to Ed);
+(C3) the claims ladder is adopted NOW as a binding contract
+(docs/contracts/claims_ladder.md, D-037) because it disciplines the
+imminent 2M report, with per-claim IDs deferred to Phase 4; (C4) idle
+fail-closed enforcement lives at the CAMPAIGN layer with manifest-level
+waivers — D-011 run semantics and strict's evidence-integrity scope are
+both preserved, and waivers are never written into bundles; (C5) phase
+identifiability ships pre-2M as a sample-count rule (>=3 per nonzero
+interval) with the energy-floor gates arriving via the new P2-015
+calibration campaign; (C6) 2M ordering is model-blocked,
+workload-rotated, counterbalanced with a recorded imbalance — full
+round-robin rejected for reload cost per D-014's own carve-out.
+
+Implemented same-session on stream/critique-response (ed31d84, dbc37ed,
+a42aeed): fail-closed campaign runner + verdict block + waiver schema,
+counterbalanced order manifests, reducer honesty flags, claims ladder +
+D-037, flagship addendum, stale-docs batch, R-002/R-003 re-scope,
+P2-015/P2-016 queue items. Suite 546→555; 6/6 legacy bundles remain
+strict-valid; mock e2e strict-valid.
+
+Process note for the meta-loop: the deliberation rounds themselves had
+independent yield beyond adjudication — the site round contributed three
+findings its own source review missed; the critique round tightened two
+designs into mechanical rules (C5's sample threshold, C6's rotation
+scheme). Discussion-before-decision is earning its cost.

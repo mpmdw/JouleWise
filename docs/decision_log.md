@@ -58,6 +58,7 @@ be re-derived by a future agent gets an entry here.
 | D-034 | Slice 2O owns the workload program after 2M and 3.0.1 | accepted |
 | D-035 | Replay claims require fresh-process (subprocess-per-stage) isolation | accepted |
 | D-036 | Spike verdict codes derive from measured data, never hardcoded | accepted |
+| D-037 | Claims ladder (L0-L4) binds reader-facing claim language from 2M onward | accepted |
 
 ---
 
@@ -1764,3 +1765,47 @@ the verdict derivation path as part of the evidence chain.
 
 Revisit when: a verdict genuinely requires human judgment inputs; those
 inputs then become recorded fields the code still derives from.
+
+---
+
+## D-037: Claims ladder (L0-L4) binds reader-facing claim language from 2M onward
+
+- Date: 2026-07-08
+- Status: accepted
+- Phase: 2+
+
+Context: an independent 5.5 critique of the whole project (counter-
+reviewed and adjudicated in council C-011) found that the project's
+claim discipline lived in scattered prose — the two-claim track, the
+detection-floor gate, question-bank quarantines — with no single binding
+taxonomy for how strongly a result may be worded. The 2M report is
+imminent; wording discipline is cheapest before the first corpus lands.
+
+Options considered:
+
+1. Keep prose discipline + the planned Phase 4 claims index. Con: the
+   strongest language can arrive before Phase 4 review catches it — it
+   already did once (the flagship report's active-parameter wording,
+   demoted by C-005/DOC-007 but resurfacing in derived prose).
+2. Full claims index now with per-claim IDs. Con: only six real bundles
+   exist; most rows would be placeholders (council: seed it post-2M).
+3. Adopt the ladder now as a lightweight binding contract; per-claim IDs
+   and mechanical enforcement arrive with the Phase 4 index.
+
+Decision: option 3. `docs/contracts/claims_ladder.md` defines L0
+(capability) through L4 (generalized finding) with allowed claim shape,
+required evidence, and forbidden language per level, plus two riders:
+cross-boundary comparisons are descriptive-only without a named
+calibration bundle, and energy-per-output-token claims require
+runtime-observed token counts + stop reason + output-policy label
+(config-fallback denominators force L0 wording). Phase 4 Stage 4.3
+acceptance requires every final-report claim to carry its ladder level.
+
+Consequences: reader-facing docs written from 2M onward cite the level
+their evidence supports; the flagship two-point comparison is pinned at
+hypothesis-generating (L1 with the confound caveat); reviewers check
+wording against the ladder as part of the standard lens rounds.
+
+Revisit when: the Phase 4 claims index lands (mechanical enforcement
+may subsume the prose rule), or a claim class appears that the five
+levels cannot express.

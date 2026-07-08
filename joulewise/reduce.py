@@ -61,8 +61,9 @@ from joulewise.validation import finite_float
 
 REDUCER_ID = SUMMARY_REDUCER_ID
 REDUCER_VERSION = SUMMARY_REDUCER_VERSION
+MIN_PHASE_SAMPLES = 3
 
-__all__ = ["REDUCER_ID", "REDUCER_VERSION", "reduce_bundle"]
+__all__ = ["MIN_PHASE_SAMPLES", "REDUCER_ID", "REDUCER_VERSION", "reduce_bundle"]
 
 
 class _ReduceError(Exception):
@@ -404,7 +405,7 @@ def _reduce(
     energy_request_j = idle_subtracted_energy_j
 
     token_timestamps = reader.token_timestamps()
-    output_token_count = _output_token_count(config, token_timestamps)
+    output_token_count, token_counts_source = _output_token_count(config, token_timestamps)
     total_tokens, token_count_source = _total_tokens(config, metadata, output_token_count)
 
     energy_token_j = _energy_token_j(energy_request_j, total_tokens)
@@ -414,7 +415,9 @@ def _reduce(
     decode_latency_s = _decode_latency_s(token_timestamps)
     throughput_tokens_s = _throughput_tokens_s(token_timestamps, output_token_count)
 
-    phase_energy_j = _phase_energy(reader.phase_windows(), curve)
+    phase_windows = reader.phase_windows()
+    phase_energy_j = _phase_energy(phase_windows, curve)
+    phase_identifiability = _phase_identifiability(phase_windows, curve)
 
     quality = MeasurementQuality(
         requested_sampling_hz=config.sampling.power_hz,
@@ -428,6 +431,8 @@ def _reduce(
         cooldown_cap_hit=_cooldown_cap_hit(metadata),
         token_count_source=token_count_source,
         idle_window_suspect=_idle_window_suspect(idle_baseline),
+        token_counts_source=token_counts_source,
+        phase_identifiability=phase_identifiability,
     )
 
     return SummaryMetrics(
@@ -456,7 +461,7 @@ def _zero_window_summary(
 ) -> SummaryMetrics:
     """A zero-length measured window: energies are exactly 0.0 (not an error)."""
     token_timestamps = reader.token_timestamps()
-    output_token_count = _output_token_count(config, token_timestamps)
+    output_token_count, token_counts_source = _output_token_count(config, token_timestamps)
     total_tokens, token_count_source = _total_tokens(config, metadata, output_token_count)
 
     energy_request_j = 0.0 if idle_baseline is not None else None
@@ -472,6 +477,8 @@ def _zero_window_summary(
         cooldown_cap_hit=_cooldown_cap_hit(metadata),
         token_count_source=token_count_source,
         idle_window_suspect=_idle_window_suspect(idle_baseline),
+        token_counts_source=token_counts_source,
+        phase_identifiability=_phase_identifiability(reader.phase_windows(), curve),
     )
     return SummaryMetrics(
         status=RunStatus.SUCCEEDED,
@@ -495,12 +502,19 @@ def _zero_window_summary(
 
 def _output_token_count(
     config: BenchmarkConfig, token_timestamps: list[float]
-) -> int | None:
-    """Token count is the number of ``token`` events; fall back to the config
-    ``output_tokens`` when no token events exist."""
+) -> tuple[int | None, str | None]:
+    """Return ``(output token count, source)``.
+
+    Runtime token events are the only acceptable denominator for output-token
+    metrics. When legacy bundles lack token events but the config carries an
+    ``output_tokens`` fallback, report that provenance and leave the
+    denominator absent so derived metrics stay ``None``.
+    """
     if token_timestamps:
-        return len(token_timestamps)
-    return _config_output_tokens(config)
+        return len(token_timestamps), "runtime_observed"
+    if _config_output_tokens(config) is not None:
+        return None, "config_fallback"
+    return None, None
 
 
 def _energy_token_j(
@@ -561,4 +575,25 @@ def _phase_energy(
             if curve:
                 total += _integrate(curve, interval.start_s, interval.end_s)
         result[phase] = total
+    return result
+
+
+def _phase_identifiability(
+    windows: dict[str, list[Window]], curve: list[TracePoint]
+) -> dict[str, str] | None:
+    if not windows:
+        return None
+    result: dict[str, str] = {}
+    for phase, intervals in windows.items():
+        identifiable = True
+        for interval in intervals:
+            if interval.duration_s == 0.0:
+                continue
+            count = _in_window_sample_count(curve, interval)
+            if count < MIN_PHASE_SAMPLES:
+                identifiable = False
+                break
+        result[phase] = (
+            "identifiable" if identifiable else "not_resolvable_sample_count"
+        )
     return result

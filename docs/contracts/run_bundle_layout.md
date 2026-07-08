@@ -100,6 +100,12 @@ the merged composite `events.jsonl` records node role/identity inside each
 event's `metadata` object, not as a sixth top-level event key. The top-level
 event key set above remains stable.
 
+Output-token events are records with `event_type: "token"` in the `decode`
+phase. Prompt-side token provenance is recorded in `metadata.json`
+(`workload_provenance.prompt`) and must not be counted as output-token
+runtime evidence. When decode phase windows are present, output-token events
+used by reduction must fall inside a decode window.
+
 ## Power Trace Minimum Fields
 
 Each power sample should include:

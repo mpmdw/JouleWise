@@ -22,7 +22,7 @@
 </header>
 <main>
 <div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>AGENT_PLAN.md</code> · as of commit 64a04dc (2026-07-07)</p>
+<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>AGENT_PLAN.md</code> · as of commit 6418084 (2026-07-08)</p>
 <h1>Agent Implementation Plan</h1>
 <p>This repository implements JouleWise, an extensible energy-characterization
 benchmark for LLM inference across heterogeneous local hardware. The name is a
@@ -183,9 +183,9 @@ and runnable, the Mac vertical slice (2G/2H/2I) is complete, and P2-013 /
 P2-014 closed the integrity and provenance pins (546 tests, 10 skipped,
 zero expected failures). Remaining gated work is the 2M baseline corpus plus
 remote-target live validation. The 2K fixture-first NVIDIA implementation is
-complete on a later branch, but this stream does not claim it as merged or
-live hardware-validated; all 2K protocol pins remain PROVISIONAL until
-P1-006 evidence is captured. Detail: <code>docs/phase_2/phase_2_plan.md</code>. Exit:
+merged as of 2026-07-08 (PR #11), but it is not live hardware-validated; all
+2K protocol pins remain PROVISIONAL until P1-006 evidence is captured. Detail:
+<code>docs/phase_2/phase_2_plan.md</code>. Exit:
 <code>docs/phase_2/phase_2_exit_checklist.md</code>. Gated-slice specs:
 <code>docs/phase_2/hardware_slice_implementation_guide.md</code>.</p>
 <p>Mock-first ordering (matches <code>TASK_QUEUE.md</code>; the real-hardware slices are
@@ -209,9 +209,9 @@ P1-001 scope.</li>
 window markers, shared BundleReader, rail contract, reduce verb,
 schema round-trip, token fallback, v0.2 compatibility note;
 D-024..D-029).</li>
-<li><input disabled="" type="checkbox"> 2K NVIDIA/vLLM + nvidia-smi + SSH transport (fixture-first branch
-complete later in the merge queue; live validation remains gated on
-P1-006, protocol pins PROVISIONAL).</li>
+<li><input checked="" disabled="" type="checkbox"> 2K NVIDIA/vLLM + nvidia-smi + SSH transport (fixture-first
+implementation merged 2026-07-08 via PR #11; live validation remains gated
+on P1-006, protocol pins PROVISIONAL).</li>
 <li><input disabled="" type="checkbox"> 2L Orin adapter (gated on P1-006).</li>
 <li><input disabled="" type="checkbox"> 2M Homogeneous baselines + prefill/decode qualitative reproduction.</li>
 </ul>
@@ -334,7 +334,7 @@ the current top queued task.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 64a04dc (2026-07-07) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>as of commit 6418084 (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

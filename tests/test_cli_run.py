@@ -444,6 +444,33 @@ class StrictValidateTests(CliRunTestCase):
         )
         self.assertEqual(validate_bundle(bundle, strict=True), [])
 
+    def test_new_era_summary_missing_honesty_fields_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-new-era-missing-honesty")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["measurement_quality"]["token_counts_source"]
+        del summary["measurement_quality"]["phase_identifiability"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertEqual(len(problems), 1)
+        self.assertIn("measurement_quality.token_counts_source", problems[0])
+        self.assertIn("measurement_quality.phase_identifiability", problems[0])
+
+    def test_legacy_summary_missing_honesty_fields_keeps_strict_tolerance(self) -> None:
+        bundle = self.make_bundle("strict-legacy-missing-honesty")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["summary_provenance"]
+        del summary["measurement_quality"]["token_counts_source"]
+        del summary["measurement_quality"]["phase_identifiability"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
     def test_stored_value_drift_still_fails_strict(self) -> None:
         bundle = self.make_bundle("strict-stored-drift")
         summary = json.loads((bundle / "summary_metrics.json").read_text())

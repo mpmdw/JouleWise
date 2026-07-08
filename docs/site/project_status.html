@@ -22,7 +22,7 @@
 </header>
 <main>
 <div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>PROJECT_STATUS.md</code> · as of commit 64a04dc (2026-07-07)</p>
+<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>PROJECT_STATUS.md</code> · as of commit 6418084 (2026-07-08)</p>
 <h1>JouleWise: Project Status, Plan, And Architecture</h1>
 <p>Audience: project advisor. This is the standalone monitoring document - it
 summarizes what the project is, how it is built, where it stands, and what
@@ -277,7 +277,7 @@ are pinned by test.</li>
 bundle artifact contract, and the measurement methodology (idle
 subtraction, measurement boundaries, clock synchronization, statistical
 protocol - highlights below).</li>
-<li>Evidence-shaped plans for every phase, a design-decision log (36
+<li>Evidence-shaped plans for every phase, a design-decision log (37
 decisions, each with the alternatives considered), a risk register with
 an explicit descope ladder, and example configs for the Mac and mock
 targets.</li>
@@ -646,6 +646,8 @@ traceable to raw data.</li>
 </tr>
 </tbody></table>
 <h2>Process Note</h2>
+<p>The machinery exists to protect measurement claims from unchecked summaries,
+stale assumptions, and review-induced drift.</p>
 <p>This project is developed by a human researcher directing a multi-agent
 AI system he designed and iteratively engineered over the course of the
 project — the orchestration itself is a second, deliberate piece of
@@ -661,15 +663,15 @@ unauditable claims), the hardware and access decisions, and — the part
 that is easy to underrate — the <em>process policy</em>: every rule below
 exists because he observed a failure or an opportunity and issued a
 standing instruction. The AI staff executes: a lead agent (Claude,
-Anthropic&#39;s Fable-class model) is the apex — decomposition, design
-adjudication, every final diff gate, all live verification, merges,
-bookkeeping — and a second, independent model (OpenAI Codex gpt-5.5)
-does the volume: implementation against pinned specs, adversarial
-review lenses, test writing, and fresh-instance test auditing. A third
-tier (Claude Opus) serves as specialist sweeper. Cross-model review is
-load-bearing by design: the attributed catch record shows the two
-models and the different review layers consistently catching different
-classes of defect.</p>
+Anthropic&#39;s Fable-class model) is the final reviewer and single point
+of accountability: decomposition, design adjudication, every final diff
+gate, live verification, merges, and bookkeeping. A second, independent
+model (OpenAI Codex gpt-5.5) does the volume: implementation against
+pinned specs, adversarial review lenses, test writing, and
+fresh-instance test auditing. A third tier (Claude Opus) serves as
+specialist sweeper. Cross-model review is load-bearing by design: the
+attributed catch record shows the models and review layers catching
+different classes of defect.</p>
 <p><strong>The machinery, briefly.</strong> Independent tasks run as parallel git
 worktrees, the lead driving each stream&#39;s Codex pipeline directly (a
 topology that is itself the product of a signed cross-model
@@ -695,9 +697,9 @@ verdicts: the council log preserves positions, the reasoning exchanged,
 who prevailed and why, and overridden dissents, so a future reader (or
 model) can reconstruct why any decision was made.</p>
 <p><strong>The paper trail (every claim auditable).</strong> Each fact has one home:
-<code>docs/decision_log.md</code> — 36 binding design decisions, each with
+<code>docs/decision_log.md</code> — 37 binding design decisions, each with
 alternatives considered and revisit conditions; <code>docs/council_log.md</code>
-(C-001…C-010) — the deliberation record; <code>docs/stream_logs/</code> —
+(C-001…C-011) — the deliberation record; <code>docs/stream_logs/</code> —
 per-stream decision ledgers committed <em>with</em> the code they justify
 (wrong decisions are superseded in place, never erased);
 <code>docs/run_reports/</code> — one record per session with verification
@@ -715,20 +717,13 @@ meta-review consensus (C-009) redesigned the coordination topology, and
 the next session (C-010) validated the redesign with a zero-stall run.</p>
 <p><strong>What one day of this looks like (2026-07-07).</strong> Five implementation
 streams plus a repo-wide test audit ran concurrently: statistical
-uncertainty (per-metric confidence intervals, re-derivable
-byte-for-byte from raw evidence), contamination detection, deep DVFS
-telemetry, campaign automation, and a KV-cache size model. All five
-merged the same day; the test suite grew 254 → 369; the layered review
-recorded thirteen attributed catches including three blockers that no
-single reviewer — human-style solo review included — would plausibly
-have found together (one blocker was caught only by running the real
-CLI against code whose own tests were green, because the tests encoded
-the same wrong assumption as the code). Roughly 6–7 million tokens of
-implementation and review work were delegated to the second model,
-about five times the volume the orchestrating side spent. The most
-satisfying data point: the new contamination gate&#39;s first live act was
-to correctly flag the lead agent&#39;s <em>own verification run</em> as
-contaminated — the instrument now audits its operators.</p>
+uncertainty, contamination detection, deep DVFS telemetry, campaign
+automation, and a KV-cache size model. All five merged the same day;
+the test suite grew 254 → 369; the layered review recorded thirteen
+attributed catches including three blockers that no single reviewer
+would plausibly have found together. One blocker surfaced only when the
+real CLI was run against code whose own tests were green, because the
+tests encoded the same wrong assumption as the code.</p>
 <p><strong>How the scope grew.</strong> The project began as an architecture sketch for
 &quot;measure LLM inference energy on edge hardware.&quot; Contracts-first
 engineering turned that into an auditable instrument: typed configs,
@@ -759,10 +754,11 @@ fabricated-evidence defect caught only at the lead&#39;s diff gate. The
 suite went 415 → 546 tests with zero expected failures, and the lead
 never wrote implementation code and never skipped a gate.</p>
 <p><strong>Where to look.</strong> <code>docs/orchestration.md</code> is the process description.
-<code>docs/council_log.md</code> (C-001…C-010) is the deliberation record — C-006
+<code>docs/council_log.md</code> (C-001…C-011) is the deliberation record — C-006
 is a full orchestration trace of the five-stream day; C-009/C-010 are
-the topology meta-review and its validation. <code>docs/decision_log.md</code>
-holds the 36 binding design decisions with alternatives considered.
+the topology meta-review and its validation; C-011 is the critique
+counter-review. <code>docs/decision_log.md</code> holds the 37 binding design
+decisions with alternatives considered.
 <code>docs/run_reports/</code> narrates each working session, with per-layer catch
 tables and the delegation-calibration ledger. The executable
 orchestration playbooks live outside this repository as reusable
@@ -780,7 +776,7 @@ date above and the repository&#39;s run reports are the freshness check.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 64a04dc (2026-07-07) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>as of commit 6418084 (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

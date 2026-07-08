@@ -96,8 +96,8 @@ Each fact has exactly one home; everything else points at it:
 
 | Artifact | Role |
 |---|---|
-| `docs/decision_log.md` | 36 binding design decisions (D-001..D-036), each with alternatives considered, consequences, and revisit conditions. Nothing re-decides these silently. |
-| `docs/council_log.md` | The deliberation record (C-001..C-010): review-council positions, reasoning exchanged, who prevailed, overridden dissents — so a future reader can reconstruct *why*, not just *what*. |
+| `docs/decision_log.md` | 37 binding design decisions (D-001..D-037), each with alternatives considered, consequences, and revisit conditions. Nothing re-decides these silently. |
+| `docs/council_log.md` | The deliberation record (C-001..C-011): review-council positions, reasoning exchanged, who prevailed, overridden dissents — so a future reader can reconstruct *why*, not just *what*. |
 | `docs/stream_logs/` | Per-stream decision ledgers, committed WITH the code they justify: every non-trivial in-stream decision (`A-1..A-30`, `B-1..B-46`, …) with mandatory evidence pointers; wrong pins are SUPERSEDED in place, never erased. |
 | `docs/run_reports/` | One record per working session: outcomes, verification evidence, a per-layer catch/yield table, the delegation-calibration ledger, restart instructions. |
 | `TASK_QUEUE.md` | Ranked queue with machine-state lanes ([QUIET-MAC] / [AGENT] / [ED-EXTERNAL]) — a session picks the top task *compatible with the machine's state*, so agent load never contaminates measurements. |

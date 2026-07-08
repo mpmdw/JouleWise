@@ -85,8 +85,9 @@ A run bundle (`runs/<run_id>/`) contains the normalized `config.json`,
 `summary_metrics.json` (written last; its presence marks a complete bundle).
 
 Bundles are immutable evidence: re-running the same config into the same
-`--runs-dir` fails by design with a run-ID collision (delete the old
-bundle directory, change `run_id`, or use a fresh runs dir).
+`--runs-dir` fails by design with a run-ID collision (D-010/D-022). To rerun
+a member, move the old bundle aside, change `run_id`, or use a fresh runs
+dir; collisions are refusals, not bugs.
 
 ## Config And Schema Verbs
 

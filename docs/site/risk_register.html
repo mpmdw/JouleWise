@@ -22,7 +22,7 @@
 </header>
 <main>
 <div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>docs/risk_register.md</code> · as of commit 64a04dc (2026-07-07)</p>
+<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>docs/risk_register.md</code> · as of commit 6418084 (2026-07-08)</p>
 <h1>Risk Register</h1>
 <p>Living register of risks that could sink, delay, or weaken the capstone.
 Review at the start of every phase and whenever a trigger fires; update
@@ -63,7 +63,7 @@ repo work.</li>
 <td>2</td>
 <td>low</td>
 <td>high</td>
-<td>open</td>
+<td>closed-residual</td>
 </tr>
 <tr>
 <td>R-003</td>
@@ -71,7 +71,7 @@ repo work.</li>
 <td>2</td>
 <td>low</td>
 <td>medium</td>
-<td>open</td>
+<td>closed-residual</td>
 </tr>
 <tr>
 <td>R-004</td>
@@ -212,6 +212,10 @@ blocked-on-approval.</li>
 <li>Phase: 2. Likelihood: low (user controls the machine; a local auth
 session needs rescheduling - the planned 2026-06-10 slot passed without
 one). Impact: high (no Mac telemetry = no flagship vertical slice).</li>
+<li>Status: closed-residual (2026-07-08). The working Mac slice completed
+2G/2H/2I on 2026-07-06 with privileged powermetrics capture and
+strict-valid bundles; revisit for new macOS/MLX/powermetrics versions or
+new Mac hardware.</li>
 <li>Trigger: scoped sudoers rule (D-004) cannot be installed, or privileged
 sample capture fails after the auth session.</li>
 <li>Mitigation: D-004 defines a minimal, single-binary sudoers rule with the
@@ -226,6 +230,9 @@ first available CUDA target - recorded as a finding, not hidden.</li>
 <h2>R-003: MLX install or model-load failure on Mac</h2>
 <ul>
 <li>Phase: 2. Likelihood: low. Impact: medium (delays flagship slice).</li>
+<li>Status: closed-residual (2026-07-08). The working Mac slice completed
+2G/2H/2I on 2026-07-06 with MLX generation and strict-valid bundles;
+revisit for new MLX/mlx-lm versions or new Mac hardware.</li>
 <li>Trigger: <code>pip install mlx mlx-lm</code> fails, or the chosen model (D-016) has
 no working MLX artifact.</li>
 <li>Mitigation: install into a dedicated venv with versions recorded in run
@@ -481,7 +488,7 @@ the remote (<code>origin/main</code>) bounds code loss to the working tree.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 64a04dc (2026-07-07) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>as of commit 6418084 (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

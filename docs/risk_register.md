@@ -19,8 +19,8 @@ Conventions:
 | ID | Risk | Phase | Likelihood | Impact | Status |
 |---|---|---|---|---|---|
 | R-001 | Supervisor approval delayed or scope shifts | 1 | medium | high | open |
-| R-002 | powermetrics sudo workflow not approved on measurement Mac | 2 | low | high | open |
-| R-003 | MLX install or model-load failure on Mac | 2 | low | medium | open |
+| R-002 | powermetrics sudo workflow not approved on measurement Mac | 2 | low | high | closed-residual |
+| R-003 | MLX install or model-load failure on Mac | 2 | low | medium | closed-residual |
 | R-004 | KV persist/resume unsupported in a target runtime | 3 | medium | high | open |
 | R-005 | llama.cpp cache files not portable across machines/backends | 3 | medium | high | open |
 | R-006 | 3080 Ti borrow window slips or shrinks | 3 | medium | medium | open |
@@ -62,6 +62,10 @@ Conventions:
 - Phase: 2. Likelihood: low (user controls the machine; a local auth
   session needs rescheduling - the planned 2026-06-10 slot passed without
   one). Impact: high (no Mac telemetry = no flagship vertical slice).
+- Status: closed-residual (2026-07-08). The working Mac slice completed
+  2G/2H/2I on 2026-07-06 with privileged powermetrics capture and
+  strict-valid bundles; revisit for new macOS/MLX/powermetrics versions or
+  new Mac hardware.
 - Trigger: scoped sudoers rule (D-004) cannot be installed, or privileged
   sample capture fails after the auth session.
 - Mitigation: D-004 defines a minimal, single-binary sudoers rule with the
@@ -76,6 +80,9 @@ Conventions:
 ## R-003: MLX install or model-load failure on Mac
 
 - Phase: 2. Likelihood: low. Impact: medium (delays flagship slice).
+- Status: closed-residual (2026-07-08). The working Mac slice completed
+  2G/2H/2I on 2026-07-06 with MLX generation and strict-valid bundles;
+  revisit for new MLX/mlx-lm versions or new Mac hardware.
 - Trigger: `pip install mlx mlx-lm` fails, or the chosen model (D-016) has
   no working MLX artifact.
 - Mitigation: install into a dedicated venv with versions recorded in run
