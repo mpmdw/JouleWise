@@ -707,7 +707,11 @@ capture hardening stream; everything else unchanged. Only P2-021 and
 Window-A capture hardening (`window-a-capture` stream) may precede
 P2-015/2M. ALL 2O substrate implementation, shim spike, imports, q4-grid
 execution, and `jw_mixed` execution remain post-2M unless D-034 is
-reopened. STOP-LINE - until Window A + 2M are strict-valid and reduced:
+reopened. (Amendment 2026-07-08, D-042 — owner directive: the
+IMPLEMENTATION lane is reopened; P2-010a/b, P2-012 phase-1, and P2-020
+content build may proceed [AGENT] pre-2M. Campaign EXECUTION ordering,
+the quiet-machine clause, the minimal-substrate cap, and the drop-order
+below are unchanged.) STOP-LINE - until Window A + 2M are strict-valid and reduced:
 no suite/import/export work consumes quiet-machine time, no new benchmark
 campaign is scheduled, and P2-010a stays within minimal substrate. Under
 schedule pressure, drop P2-022/P2-023, imports, FLORES, q4 grid, and

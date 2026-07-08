@@ -31,7 +31,9 @@ remain L0/L1 capability or instrument-result language under D-037.
 
 - MDE reference arithmetic at n=5 is pinned by C-014: for two-condition
   comparisons, `MDE95 ~= 1.46 x CV` and approximately 80%-power
-  `MDE ~= 1.77 x CV`. Observed CV anchors are 0.3% in the flagship
+  `MDE ~= 2.0 x CV` using the t-based factor
+  `(t_.975,8 + t_.80,8) * sqrt(2/5) = (2.306+0.889)*0.632 ~= 2.02`.
+  Observed CV anchors are 0.3% in the flagship
   Qwen3.5-122B run report, 1.4% gross in the first real-energy run
   report, and 7.4% contaminated idle-subtracted in the same first
   real-energy report (docs/run_reports/2026-07-07-flagship-qwen35-122b.md;
@@ -108,7 +110,7 @@ remain L0/L1 capability or instrument-result language under D-037.
 | Plan ID / RQ consumer | AP-4 / C5-W.1 Token-Shape Sufficiency Null on the common-shape stratum (C-014). |
 | Metric + exact window class | Request energy on the common `512/256 fixed_budget_exact` shape; optional gross phase-window descriptors only. |
 | Unit of analysis + dependence structure | Bundle-level or block-level uncertainty over itemized category bundles; item windows are not independent replicates. |
-| Estimator/formula | Category residual after controlling for common shape; equivalence passes only when category residual <2% of request energy AND above the floor. |
+| Estimator/formula | Category residual after controlling for common shape; equivalence gate is: (a) the 2% equivalence margin itself must exceed `max(floor_abs_j, floor_cmp_j)`, else the comparison is `not resolvable`; and (b) the residual confidence interval must lie entirely within +/-2% of request energy. |
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid common-shape synthetic + realistic items only; source manifest and output policy required; waivers named in text. |
 | Order/blocking/covariates | Round-robin category order; source type and item/block may be blocking factors; no category ranking from the starter suite before common-shape residuals clear the floor. |
 | Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for request windows. |
@@ -116,7 +118,7 @@ remain L0/L1 capability or instrument-result language under D-037.
 | Denominator provenance requirement | Runtime-observed emitted tokens and stop reasons; source-manifest hashes and `fixed_budget_exact` policy recorded per item. |
 | Holdout cells (L3 only) | not applicable. |
 | Claim ceiling + exact forbidden upgrade | Ceiling L2. Forbidden upgrade: no category energy-ranking or category mechanism claim from unmatched shapes. |
-| Disqualifiers + not-resolvable conditions | Category residual below floor, MDE wider than the equivalence margin, missing source hashes, or item-as-independent uncertainty forces `not resolvable`. |
+| Disqualifiers + not-resolvable conditions | MDE/floor wider than the equivalence margin, missing source hashes, or item-as-independent uncertainty forces `not resolvable`. |
 | Linked manifests/bundle hashes | pending post-execution. |
 
 ### AP-5: affine ladder level-window energy + energy-per-correct

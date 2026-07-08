@@ -2007,6 +2007,11 @@ Decision (specs in the bank C-015 section + adapter_contracts.md):
    under schedule pressure, interop and suite expansion drop before
    P2-015/2M/Mac characterization — the guaranteed capstone is the
    instrument plus Mac characterization, never the expansion.
+   (Amended 2026-07-08 pre-merge: the allowlist names pre-Window-A
+   work items; prep steps internal to P2-015, including the lead-run
+   tasks-sampler overhead smoke that also validates the 2s env-capture
+   settle absorbs the probe burst, are part of P2-015 itself, not
+   additional items.)
 
 Consequences: queue gains P2-022/P2-023/P2-024; adapter_contracts.md
 gains the shim contract; the bank gains C5-I.1..I.5 and the capability
@@ -2014,3 +2019,38 @@ map; export direction prioritized over import for adoption-per-build-day.
 
 Revisit when: the P2-022 spike returns unsupported/partial, or D-034 is
 reopened.
+
+---
+
+## D-042: D-034 implementation lane reopened — suite build proceeds pre-2M (owner directive)
+
+- Date: 2026-07-08
+- Status: accepted
+- Phase: 2+
+
+Context: Ed directed (this session) that the test-prompt suite for
+observation/trace generation be actually built with dedicated research
+and effort, not only specified. D-034 (reaffirmed by the C-015 gate
+amendment) held ALL 2O substrate/suite implementation post-2M; its
+revisit clause names exactly this: reopening by decision rather than
+silent advancement.
+
+Decision: the IMPLEMENTATION lane of the workload program is open now:
+P2-010a substrate, P2-010b smoke ladder, P2-012 phase-1 content
+generators, and P2-020 sentinel content generation may proceed as
+[AGENT] work before 2M. UNCHANGED: campaign EXECUTION ordering (Window A
+P2-015 floors then P2-006 2M first; Window B after), the quiet-machine
+clause of the C-015 stop-line (no suite work consumes quiet-machine
+time), the minimal-substrate cap (D-040.4), and all quarantines. The
+drop-order under schedule pressure also stands: suite build drops before
+P2-015/2M/Mac characterization.
+
+Research input: `docs/phase_2/suite_implementation_research.md`
+(4 cross-checked reports; amendments are UNRESOLVED review findings the
+implementing session adjudicates first).
+
+Consequences: P2-010/P2-012/P2-020 status cells flip to build-unblocked;
+the 2O gate paragraph carries a dated amendment note pointing here.
+
+Revisit when: suite build threatens the Window A/2M schedule (drop it),
+or 2M lands (gate question dissolves).
