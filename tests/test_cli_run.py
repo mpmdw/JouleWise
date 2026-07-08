@@ -422,6 +422,52 @@ class StrictValidateTests(CliRunTestCase):
         self.assertEqual(exit_code, 2)
         self.assertIn("invalid: strict:", out)
 
+    def test_legacy_summary_missing_additive_null_keys_passes_strict(self) -> None:
+        bundle = self.make_bundle("strict-legacy-null-additive")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["idle_baseline"]["gpu_freq_hz_mean"]
+        del summary["idle_baseline"]["gpu_idle_ratio_mean"]
+        del summary["idle_baseline"]["gpu_idle_ratio_min"]
+        del summary["idle_baseline"]["idle_window_suspect"]
+        del summary["measurement_quality"]["idle_window_suspect"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_stored_value_drift_still_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-stored-drift")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["idle_baseline"]["gpu_freq_hz_mean"] = 123.0
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        problems = validate_bundle(bundle, strict=True)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("idle_baseline.gpu_freq_hz_mean", problems[0])
+
+    def test_non_null_fresh_value_missing_from_stored_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-missing-non-null")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["idle_baseline"]["power_w_mean"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        problems = validate_bundle(bundle, strict=True)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("idle_baseline.power_w_mean", problems[0])
+
+    def test_stored_extra_key_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-stored-extra")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["stored_extra"] = None
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        problems = validate_bundle(bundle, strict=True)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("stored_extra", problems[0])
+
     def test_strict_adds_nothing_for_non_succeeded_bundles(self) -> None:
         # Failed/unsupported summaries are controller-written from partial
         # evidence; strict only judges claims of success.

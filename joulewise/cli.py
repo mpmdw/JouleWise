@@ -264,17 +264,38 @@ def _strict_problems(reader: BundleReader) -> list[str]:
             )
     problems.extend(_strict_raw_to_trace_problems(reader))
     fresh = reduce_bundle(reader.path).to_dict()
-    if fresh != summary:
-        differing = sorted(
-            key
-            for key in set(fresh) | set(summary)
-            if fresh.get(key) != summary.get(key)
-        )
+    differing = _strict_summary_differences(fresh, summary)
+    if differing:
         problems.append(
             "strict: summary_metrics.json does not match a fresh re-reduction "
             f"of the raw artifacts (differing keys: {', '.join(differing)})"
         )
     return problems
+
+
+def _strict_summary_differences(fresh: Any, stored: Any, path: str = "") -> list[str]:
+    """Compare fresh vs stored summaries with legacy-additive null tolerance.
+
+    A freshly emitted key that is absent from a legacy stored summary is
+    tolerated only when the fresh value is ``None``. Stored keys, including
+    stored extras, remain exact claims and must match the fresh reduction.
+    """
+    if isinstance(fresh, dict) and isinstance(stored, dict):
+        differences: list[str] = []
+        for key in sorted(set(fresh) | set(stored)):
+            child = f"{path}.{key}" if path else str(key)
+            if key not in stored:
+                if fresh[key] is not None:
+                    differences.append(child)
+                continue
+            if key not in fresh:
+                differences.append(child)
+                continue
+            differences.extend(_strict_summary_differences(fresh[key], stored[key], child))
+        return differences
+    if fresh != stored:
+        return [path or "<summary>"]
+    return []
 
 
 def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
