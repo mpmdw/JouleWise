@@ -56,6 +56,8 @@ be re-derived by a future agent gets an entry here.
 | D-032 | `phase_energy_j` is gross-only in summary v0.1 | accepted |
 | D-033 | Prompt-content provenance is recorded per run bundle | accepted |
 | D-034 | Slice 2O owns the workload program after 2M and 3.0.1 | accepted |
+| D-035 | Replay claims require fresh-process (subprocess-per-stage) isolation | accepted |
+| D-036 | Spike verdict codes derive from measured data, never hardcoded | accepted |
 
 ---
 
@@ -1706,3 +1708,59 @@ claims are auditable.
 Revisit when: 2M is skipped or materially re-scoped; then 2O gates and
 research-question mapping must be re-approved rather than silently
 advanced.
+
+---
+
+## D-035: Replay claims require fresh-process (subprocess-per-stage) isolation
+
+- Date: 2026-07-07
+- Status: accepted
+- Phase: 3+
+
+Context: Stage 3.0.1 (verdict `replay_supported`, PR #9) established the
+evidence standard that makes a KV-cache replay claim trustworthy: the
+prefill/save, load/resume, and monolithic-reference stages each ran in a
+fresh OS process, so no in-process cache or object reuse could fake
+resume continuity. Promoted from the 3.0.1 stream ledger
+(`docs/stream_logs/2026-07-07-kv-spike-301.md`, ratified by the lead
+2026-07-07).
+
+Decision: any future replay/persistence claim (3.0.2 llama.cpp, 3.0.3
+vLLM, cross-machine variants, and Phase 3 measurement runs that assert
+resume equivalence) must isolate the stages being compared in separate
+OS processes, with only on-disk artifacts crossing the boundary.
+Residual shared state (OS page cache, compiled-kernel caches) is
+accepted as timing-only, not correctness-bearing.
+
+Consequences: spike/measurement harnesses inherit the 3.0.1 script's
+subprocess-per-stage shape; an in-process "resume" result is not
+admissible evidence for a replay verdict.
+
+Revisit when: a runtime cannot be driven per-stage from a fresh process;
+that limitation must be recorded in the verdict itself.
+
+---
+
+## D-036: Spike verdict codes derive from measured data, never hardcoded
+
+- Date: 2026-07-07
+- Status: accepted
+- Phase: 3+
+
+Context: the 3.0.1 script computes `replay_supported` from the measured
+token-identity comparison and the size-vs-prediction delta; a regression
+flips the verdict to `partial(...)`/`replay_unsupported` with the failing
+reason. Promoted from the 3.0.1 stream ledger (ratified by the lead
+2026-07-07); aligns with D-015's evidence discipline.
+
+Decision: every Stage 3.0.x feasibility verdict (and any later
+feasibility gate) must be COMPUTED by the evidence-producing script from
+its recorded measurements, with the failure branch emitting a distinct
+verdict plus reason. A verdict string asserted by prose or hardcoded in
+a report is not evidence.
+
+Consequences: 3.0.2/3.0.3 spikes reuse this contract; reviewers check
+the verdict derivation path as part of the evidence chain.
+
+Revisit when: a verdict genuinely requires human judgment inputs; those
+inputs then become recorded fields the code still derives from.
