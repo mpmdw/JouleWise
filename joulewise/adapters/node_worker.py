@@ -61,7 +61,7 @@ VLLM_COMPLETIONS_PATH = "/v1/completions"
 VLLM_PIDFILE = "vllm.pid"
 VLLM_STDERR = "vllm.stderr"
 VLLM_STDOUT = "vllm.stdout"
-VLLM_READINESS_TIMEOUT_S = 30.0
+VLLM_READINESS_TIMEOUT_S = 300.0
 VLLM_READINESS_POLL_S = 0.1
 VLLM_REQUEST_TIMEOUT_S = 60.0
 VLLM_RUN_TIMEOUT_S = 600.0
@@ -97,6 +97,12 @@ class WorkerValidationError(ValueError):
     """Raised when the task JSON violates protocol v1."""
 
 
+class VllmHttpError(RuntimeError):
+    """HTTP error carrying vLLM response body text for classification."""
+
+    pass
+
+
 def handle_vllm_prepare(
     task: Dict[str, Any],
     artifacts_dir: str,
@@ -116,6 +122,7 @@ def handle_vllm_prepare(
         "host": VLLM_HOST,
         "health_endpoint": _vllm_url(port, VLLM_HEALTH_PATH),
         "oom_patterns": list(VLLM_OOM_PATTERNS),
+        "readiness_timeout_s": _task_timeout_s(task, VLLM_READINESS_TIMEOUT_S),
     }
 
     try:
@@ -178,18 +185,36 @@ def handle_vllm_prepare(
             metadata,
         )
 
-    ready = _wait_for_vllm_health(process, port, stderr_path)
+    ready = _wait_for_vllm_health(
+        process,
+        port,
+        stderr_path,
+        timeout_s=_task_timeout_s(task, VLLM_READINESS_TIMEOUT_S),
+    )
     metadata["readiness"] = ready
     metadata["pid"] = process.pid
     metadata["stderr_tail"] = _read_tail(stderr_path)
     artifacts = _copy_vllm_pidfile_artifact(pid_path, artifacts_dir)
     if not ready.get("ok"):
         _terminate_process_object_with_timeouts(process, VLLM_STOP_TIMEOUT_S)
-        if _text_has_vllm_oom(metadata.get("stderr_tail", "")):
+        readiness_text = "%s\n%s\n%s" % (
+            metadata.get("stderr_tail", ""),
+            ready.get("stderr_tail", ""),
+            ready.get("message", ""),
+        )
+        if _text_has_vllm_oom(readiness_text):
             return (
                 STATUS_UNSUPPORTED,
                 FAILURE_DID_NOT_FIT,
                 ready.get("message", "vLLM server failed with out-of-memory evidence"),
+                artifacts,
+                metadata,
+            )
+        if _text_has_import_unavailable(readiness_text):
+            return (
+                STATUS_UNSUPPORTED,
+                FAILURE_RUNTIME_UNAVAILABLE,
+                ready.get("message", "vLLM server failed with import/module evidence"),
                 artifacts,
                 metadata,
             )
@@ -449,6 +474,16 @@ def handle_vllm_cleanup(
 
     metadata["pid"] = pid
     metadata["pidfile_payload"] = pid_payload
+    if pid not in _DETACHED_VLLM_PROCESSES and not _pidfile_matches_live_process(pid_payload, metadata):
+        metadata["termination"] = "stale_pidfile"
+        _remove_if_exists(pid_path)
+        return (
+            STATUS_SUCCEEDED,
+            None,
+            "vLLM pidfile was stale; no matching process was signaled",
+            {},
+            metadata,
+        )
     _terminate_vllm_pid(pid, metadata)
     _remove_if_exists(pid_path)
     log("vLLM cleanup requested pid=%s" % pid)
@@ -481,6 +516,7 @@ def handle_nvidia_smi_start_sampling(
         "query_fields": telemetry.get("query_fields"),
         "rail_manifest": telemetry.get("rail_manifest"),
     }
+    metadata.update(_node_timezone_metadata())
     try:
         _remove_if_exists(raw_path)
         _remove_if_exists(pid_path)
@@ -527,6 +563,7 @@ def handle_nvidia_smi_start_sampling(
         "query_fields": telemetry.get("query_fields"),
         "rail_manifest": telemetry.get("rail_manifest"),
     }
+    pid_payload.update(_node_timezone_metadata())
     try:
         _write_json(pid_path, pid_payload)
     except OSError as exc:
@@ -589,6 +626,16 @@ def handle_nvidia_smi_stop_sampling(
 
     metadata["pid"] = pid
     metadata["pidfile_payload"] = pid_payload
+    if pid not in _DETACHED_NVIDIA_SMI_PROCESSES and not _pidfile_matches_live_process(pid_payload, metadata):
+        metadata["termination"] = "stale_pidfile"
+        _remove_if_exists(pid_path)
+        return (
+            STATUS_FAILED,
+            FAILURE_UNKNOWN_ERROR,
+            "nvidia-smi pidfile was stale; no matching sampler was signaled",
+            artifacts,
+            metadata,
+        )
     _terminate_pid(pid, metadata)
     log("nvidia-smi sampler stop requested pid=%s" % pid)
 
@@ -642,6 +689,7 @@ def handle_nvidia_smi_measure_idle(
         "query_fields": telemetry.get("query_fields"),
         "rail_manifest": telemetry.get("rail_manifest"),
     }
+    metadata.update(_node_timezone_metadata())
     try:
         _remove_if_exists(raw_path)
         with open(raw_path, "ab") as stdout_handle, open(stderr_path, "ab") as stderr_handle:
@@ -713,6 +761,23 @@ def _telemetry_idle_seconds(telemetry: Dict[str, Any]) -> float:
     except (TypeError, ValueError):
         idle_seconds = 1.0
     return max(0.0, idle_seconds)
+
+
+def _task_timeout_s(task: Dict[str, Any], default: float) -> float:
+    try:
+        value = float(task.get("timeout_s", default))
+    except (TypeError, ValueError):
+        value = default
+    return max(0.1, value)
+
+
+def _node_timezone_metadata() -> Dict[str, Any]:
+    now = datetime.datetime.now().astimezone()
+    offset = now.utcoffset()
+    metadata: Dict[str, Any] = {"node_tzname": now.tzname()}
+    if offset is not None:
+        metadata["node_utc_offset_s"] = offset.total_seconds()
+    return metadata
 
 
 def _nvidia_smi_command(interval_ms: int) -> List[str]:
@@ -794,8 +859,10 @@ def _wait_for_vllm_health(
     process: subprocess.Popen[Any],
     port: int,
     stderr_path: str,
+    *,
+    timeout_s: float,
 ) -> Dict[str, Any]:
-    deadline = time.monotonic() + VLLM_READINESS_TIMEOUT_S
+    deadline = time.monotonic() + timeout_s
     last_error = ""
     while time.monotonic() < deadline:
         if process.poll() is not None:
@@ -823,7 +890,7 @@ def _wait_for_vllm_health(
         "ok": False,
         "message": (
             "vLLM health endpoint did not become ready within %.1f s: %s"
-            % (VLLM_READINESS_TIMEOUT_S, last_error)
+            % (timeout_s, last_error)
         ),
     }
 
@@ -843,8 +910,12 @@ def _vllm_json_post(port: int, path: str, payload: Dict[str, Any]) -> Dict[str, 
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=VLLM_REQUEST_TIMEOUT_S) as response:
-        body = response.read().decode("utf-8", errors="replace")
+    try:
+        with urllib.request.urlopen(request, timeout=VLLM_REQUEST_TIMEOUT_S) as response:
+            body = response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise VllmHttpError("HTTP %s from vLLM %s: %s" % (exc.code, path, body)) from exc
     if not body:
         return {}
     parsed = json.loads(body)
@@ -867,7 +938,12 @@ def _vllm_stream_completion(
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=timeout_s) as response:
+    try:
+        response = urllib.request.urlopen(request, timeout=timeout_s)
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        raise VllmHttpError("HTTP %s from vLLM %s: %s" % (exc.code, path, body)) from exc
+    with response:
         for raw_line in response:
             line = raw_line.decode("utf-8", errors="replace").strip()
             if not line:
@@ -943,6 +1019,11 @@ def _write_jsonl(path: str, records: List[Dict[str, Any]]) -> None:
 def _text_has_vllm_oom(text: str) -> bool:
     normalized = text.lower().replace("_", "")
     return any(pattern.replace("_", "") in normalized for pattern in VLLM_OOM_PATTERNS)
+
+
+def _text_has_import_unavailable(text: str) -> bool:
+    lowered = text.lower()
+    return "modulenotfounderror" in lowered or "importerror" in lowered
 
 
 def _copy_vllm_pidfile_artifact(pid_path: str, artifacts_dir: str) -> Dict[str, str]:
@@ -1097,6 +1178,125 @@ def _terminate_process_object(process: subprocess.Popen[Any]) -> None:
     except subprocess.TimeoutExpired:
         process.kill()
         process.communicate()
+
+
+def _pidfile_matches_live_process(
+    pid_payload: Dict[str, Any],
+    metadata: Dict[str, Any],
+) -> bool:
+    try:
+        pid = int(pid_payload["pid"])
+    except (KeyError, TypeError, ValueError):
+        metadata["pid_verification"] = "invalid_pid"
+        return False
+
+    expected_command = pid_payload.get("command")
+    if not isinstance(expected_command, list) or not expected_command:
+        metadata["pid_verification"] = "missing_expected_command"
+        return False
+
+    live_command = _live_process_cmdline(pid)
+    if live_command is None:
+        metadata["pid_verification"] = "process_not_found"
+        return False
+    metadata["live_cmdline"] = live_command
+    if not _command_matches(expected_command, live_command):
+        metadata["pid_verification"] = "cmdline_mismatch"
+        return False
+
+    expected_started_at = _float_or_none(pid_payload.get("node_started_at_s"))
+    live_started_at = _linux_process_start_epoch_s(pid)
+    if live_started_at is not None:
+        metadata["live_started_at_s"] = live_started_at
+    if expected_started_at is not None and live_started_at is not None:
+        if abs(live_started_at - expected_started_at) > 10.0:
+            metadata["pid_verification"] = "start_time_mismatch"
+            return False
+
+    metadata["pid_verification"] = "matched"
+    return True
+
+
+def _live_process_cmdline(pid: int) -> Optional[List[str]]:
+    proc_path = "/proc/%s/cmdline" % pid
+    try:
+        with open(proc_path, "rb") as handle:
+            payload = handle.read()
+    except OSError:
+        payload = b""
+    if payload:
+        parts = [
+            item.decode("utf-8", errors="replace")
+            for item in payload.split(b"\0")
+            if item
+        ]
+        if parts:
+            return parts
+
+    try:
+        completed = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "args="],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    args = completed.stdout.strip()
+    return args.split() if args else None
+
+
+def _command_matches(expected: List[Any], live: List[str]) -> bool:
+    expected_strings = [str(item) for item in expected]
+    if len(live) < len(expected_strings):
+        return False
+    for index, expected_value in enumerate(expected_strings):
+        live_value = live[index]
+        if index == 0:
+            if os.path.basename(live_value) != os.path.basename(expected_value):
+                return False
+        elif live_value != expected_value:
+            return False
+    return True
+
+
+def _linux_process_start_epoch_s(pid: int) -> Optional[float]:
+    try:
+        with open("/proc/%s/stat" % pid, "r", encoding="utf-8") as handle:
+            stat_text = handle.read()
+        with open("/proc/stat", "r", encoding="utf-8") as handle:
+            proc_stat = handle.readlines()
+    except OSError:
+        return None
+    parts = stat_text.split()
+    if len(parts) < 22:
+        return None
+    try:
+        start_ticks = float(parts[21])
+        ticks_per_second = float(os.sysconf(os.sysconf_names["SC_CLK_TCK"]))
+    except (KeyError, OSError, TypeError, ValueError):
+        return None
+    boot_time = None
+    for line in proc_stat:
+        if line.startswith("btime "):
+            try:
+                boot_time = float(line.split()[1])
+            except (IndexError, ValueError):
+                return None
+            break
+    if boot_time is None:
+        return None
+    return boot_time + start_ticks / ticks_per_second
+
+
+def _float_or_none(value: Any) -> Optional[float]:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _terminate_pid(pid: int, metadata: Dict[str, Any]) -> None:

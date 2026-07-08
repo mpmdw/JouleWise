@@ -84,14 +84,19 @@ def compute_stage_bound(pre: ClockMarker, post: ClockMarker) -> float:
 
 
 class NodeWorkerClient:
-    """Controller-side client for one run-scoped remote worker directory."""
+    """Controller-side client for one remote worker shipment.
+
+    Task JSON owns run identity. The shipped worker lives at the remote work
+    root, while each task's ``run_id`` derives isolated task, artifact, and
+    state directories under that root.
+    """
 
     def __init__(
         self,
         transport: NodeTransport,
         clock: Clock,
         *,
-        run_id: str,
+        run_id: str | None = None,
         remote_work_root: str = DEFAULT_REMOTE_WORK_ROOT,
         remote_python: str = DEFAULT_REMOTE_PYTHON,
     ) -> None:
@@ -100,11 +105,7 @@ class NodeWorkerClient:
         self.run_id = run_id
         self.remote_work_root = remote_work_root.rstrip("/") or "/"
         self.remote_python = remote_python
-        self.remote_run_dir = posixpath.join(self.remote_work_root, run_id)
-        self.remote_tasks_dir = posixpath.join(self.remote_run_dir, "tasks")
-        self.remote_artifacts_dir = posixpath.join(self.remote_run_dir, "artifacts")
-        self.remote_state_dir = posixpath.join(self.remote_run_dir, "state")
-        self.remote_worker_path = posixpath.join(self.remote_run_dir, WORKER_FILENAME)
+        self.remote_worker_path = posixpath.join(self.remote_work_root, WORKER_FILENAME)
         self._worker_shipped = False
 
     def take_clock_marker(self) -> ClockMarker | AdapterResult:
@@ -148,14 +149,25 @@ class NodeWorkerClient:
                 FailureReason.UNKNOWN_ERROR,
                 "task_id is required before dispatch",
             )
+        run_id = task.get("run_id")
+        if not isinstance(run_id, str) or not run_id.strip():
+            return self._task_failure(
+                FailureReason.UNKNOWN_ERROR,
+                "run_id is required before dispatch",
+            )
 
         ship_result = self._ensure_worker_shipped()
         if not ship_result.ok:
             return self._task_failure_from_adapter(ship_result, "ship worker failed")
 
-        prepared_task = self._prepare_task_payload(task)
-        remote_task_path = posixpath.join(self.remote_tasks_dir, "%s.json" % task_id)
-        remote_artifacts_path = posixpath.join(self.remote_artifacts_dir, task_id)
+        paths = self._remote_paths_for_run(run_id)
+        dirs_result = self._ensure_run_dirs(paths)
+        if not dirs_result.ok:
+            return self._task_failure_from_adapter(dirs_result, "create remote run dirs failed")
+
+        prepared_task = self._prepare_task_payload(task, run_id=run_id, paths=paths, timeout_s=timeout_s)
+        remote_task_path = posixpath.join(paths["tasks_dir"], "%s.json" % task_id)
+        remote_artifacts_path = posixpath.join(paths["artifacts_dir"], task_id)
 
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as tmp:
             json.dump(prepared_task, tmp, indent=2, sort_keys=True)
@@ -209,6 +221,7 @@ class NodeWorkerClient:
             )
 
         alignment = self._alignment_record(pre, post)
+        alignment["stage"] = self._stage_name(prepared_task)
         recorder = getattr(self.transport, "record_clock_alignment", None)
         if callable(recorder):
             recorder(alignment)
@@ -269,10 +282,7 @@ class NodeWorkerClient:
             [
                 "mkdir",
                 "-p",
-                self.remote_run_dir,
-                self.remote_tasks_dir,
-                self.remote_artifacts_dir,
-                self.remote_state_dir,
+                self.remote_work_root,
             ],
             timeout_s=FILE_TRANSFER_TIMEOUT_S,
         )
@@ -290,13 +300,46 @@ class NodeWorkerClient:
         self._worker_shipped = True
         return AdapterResult(ok=True)
 
-    def _prepare_task_payload(self, task: dict[str, Any]) -> dict[str, Any]:
+    def _ensure_run_dirs(self, paths: dict[str, str]) -> AdapterResult:
+        mkdir_result = self.transport.run(
+            [
+                "mkdir",
+                "-p",
+                paths["run_dir"],
+                paths["tasks_dir"],
+                paths["artifacts_dir"],
+                paths["state_dir"],
+            ],
+            timeout_s=FILE_TRANSFER_TIMEOUT_S,
+        )
+        if not mkdir_result.ok:
+            return self._transport_failure_from_result(mkdir_result, "create remote run dirs failed")
+        return AdapterResult(ok=True)
+
+    def _remote_paths_for_run(self, run_id: str) -> dict[str, str]:
+        run_dir = posixpath.join(self.remote_work_root, run_id)
+        return {
+            "run_dir": run_dir,
+            "tasks_dir": posixpath.join(run_dir, "tasks"),
+            "artifacts_dir": posixpath.join(run_dir, "artifacts"),
+            "state_dir": posixpath.join(run_dir, "state"),
+        }
+
+    def _prepare_task_payload(
+        self,
+        task: dict[str, Any],
+        *,
+        run_id: str,
+        paths: dict[str, str],
+        timeout_s: float,
+    ) -> dict[str, Any]:
         payload = dict(task)
         payload.setdefault("protocol_version", PROTOCOL_VERSION)
-        payload.setdefault("run_id", self.run_id)
-        paths = dict(payload.get("paths") or {})
-        paths["state_dir"] = self.remote_state_dir
-        payload["paths"] = paths
+        payload["run_id"] = run_id
+        payload["timeout_s"] = float(timeout_s)
+        task_paths = dict(payload.get("paths") or {})
+        task_paths["state_dir"] = paths["state_dir"]
+        payload["paths"] = task_paths
         return payload
 
     def _parse_clock_echo(self, stdout: Any) -> dict[str, Any]:
@@ -319,6 +362,11 @@ class NodeWorkerClient:
             "offset_estimate_s": offset_estimate_s,
             "offset_bound_s": compute_stage_bound(pre, post),
         }
+
+    def _stage_name(self, task: dict[str, Any]) -> str:
+        task_type = str(task.get("task_type", "task"))
+        operation = str(task.get("operation", "unknown"))
+        return "%s.%s" % (task_type, operation)
 
     def _transport_failure_from_result(self, result: AdapterResult, fallback: str) -> AdapterResult:
         return AdapterResult(

@@ -47,6 +47,13 @@ def load_config(run_id: str, *, host: str = "fake-nvidia-node") -> BenchmarkConf
     return BenchmarkConfig.from_mapping(payload)
 
 
+def load_generated_config(*, host: str = "fake-nvidia-node") -> BenchmarkConfig:
+    payload = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+    payload.pop("run_id", None)
+    payload["hardware_target"]["host"] = host
+    return BenchmarkConfig.from_mapping(payload)
+
+
 def _csv_timestamp(epoch_s: float) -> str:
     return datetime.fromtimestamp(epoch_s).strftime("%Y/%m/%d %H:%M:%S.%f")[:-3]
 
@@ -63,6 +70,9 @@ class StubNode:
         self.runtime_events_text = ""
         self.runtime_tokens_text = ""
         self.power_sample_controller_times: list[float] = []
+        self.task_run_ids: list[str] = []
+        self.task_paths: list[str] = []
+        self.artifact_paths: list[str] = []
 
     def cleanup(self) -> None:
         self.tmp.cleanup()
@@ -81,6 +91,9 @@ class StubNode:
 
     def run_task(self, task_path: str, artifacts_path: str, clock: AutoClock) -> int:
         task = json.loads(self.remote_files[task_path].decode("utf-8"))
+        self.task_run_ids.append(task["run_id"])
+        self.task_paths.append(task_path)
+        self.artifact_paths.append(artifacts_path)
         local_dir = Path(self.tmp.name) / artifacts_path.strip("/").replace("/", "__")
         if local_dir.exists():
             shutil.rmtree(local_dir)
@@ -379,6 +392,33 @@ class NvidiaNodeIntegrationTests(unittest.TestCase):
         self.assertEqual(metadata["connection"], {"transport": "ssh", "host": "fake-nvidia-node"})
         self.assertEqual(metadata["adapters"]["runtime"]["name"], "vllm")
         self.assertEqual(metadata["adapters"]["telemetry"]["name"], "nvidia_smi")
+        runtime_alignments = metadata["adapters"]["runtime"]["clock_alignments"]
+        telemetry_alignments = metadata["adapters"]["telemetry"]["clock_alignments"]
+        self.assertEqual(
+            [alignment["stage"] for alignment in runtime_alignments],
+            ["runtime.prepare", "runtime.warmup", "runtime.run_workload", "runtime.cleanup"],
+        )
+        self.assertEqual(
+            [alignment["stage"] for alignment in telemetry_alignments],
+            ["telemetry.measure_idle", "telemetry.start_sampling", "telemetry.stop_sampling"],
+        )
+        stop_alignment = next(
+            alignment for alignment in telemetry_alignments if alignment["stage"] == "telemetry.stop_sampling"
+        )
+        rederived = raw_rows[0].node_timestamp_s - stop_alignment["offset_estimate_s"]
+        self.assertAlmostEqual(rederived, float(trace_rows[0]["timestamp_s"]))
+
+    def test_generated_run_id_is_used_for_remote_task_isolation(self) -> None:
+        node = StubNode()
+        bundle_path, summary = self.run_with_node(load_generated_config(), node)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        generated_run_id = bundle_path.name
+        self.assertNotEqual(generated_run_id, "pending-run-id")
+        self.assertTrue(generated_run_id)
+        self.assertEqual(set(node.task_run_ids), {generated_run_id})
+        self.assertTrue(all(f"/{generated_run_id}/tasks/" in path for path in node.task_paths))
+        self.assertTrue(all(f"/{generated_run_id}/artifacts/" in path for path in node.artifact_paths))
 
     def test_missing_vllm_launcher_surfaces_structured_unsupported(self) -> None:
         bundle_path, summary = self.run_with_node(

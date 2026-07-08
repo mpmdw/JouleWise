@@ -56,6 +56,10 @@ class VllmRuntimeAdapter:
         self._clock = clock
         self._client = client
         self._task_counter = 0
+        self._clock_alignments: list[dict[str, Any]] = []
+
+    def clock_alignments(self) -> list[dict[str, Any]]:
+        return [dict(alignment) for alignment in self._clock_alignments]
 
     def prepare(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -117,6 +121,7 @@ class VllmRuntimeAdapter:
             },
             token_count=(prompt_tokens + output_tokens if prompt_tokens is not None else output_tokens),
             output_token_count=output_tokens,
+            metadata=self._result_metadata(result),
         )
 
     def cleanup(
@@ -142,9 +147,10 @@ class VllmRuntimeAdapter:
         block: dict[str, Any],
     ) -> NodeTaskResult:
         self._task_counter += 1
+        run_id = self._task_run_id(config, context)
         task: dict[str, Any] = {
             "task_id": "task-runtime-%s-%03d" % (operation, self._task_counter),
-            "run_id": context.run_id if context is not None else (config.run_id or "run-vllm"),
+            "run_id": run_id,
             "task_type": "runtime",
             "operation": operation,
             "node_role": context.node_role if context is not None else None,
@@ -153,7 +159,9 @@ class VllmRuntimeAdapter:
             task["workload"] = block
         else:
             task["runtime"] = block
-        return self._client.run_task(task, timeout_s=timeout_s)
+        result = self._client.run_task(task, timeout_s=timeout_s)
+        self._record_clock_alignment(result)
+        return result
 
     def _runtime_block(self, config: BenchmarkConfig) -> dict[str, Any]:
         served_model_name = _served_model_name(config)
@@ -265,6 +273,21 @@ class VllmRuntimeAdapter:
         if result.offset_bound_s is not None:
             metadata["offset_bound_s"] = result.offset_bound_s
         return metadata
+
+    def _record_clock_alignment(self, result: NodeTaskResult) -> None:
+        alignment = result.metadata.get("clock_alignment")
+        if isinstance(alignment, dict):
+            self._clock_alignments.append(dict(alignment))
+
+    def _task_run_id(self, config: BenchmarkConfig, context: RunContext | None) -> str:
+        if context is not None and context.run_id:
+            return context.run_id
+        if config.run_id:
+            return config.run_id
+        raise AdapterFailure(
+            FailureReason.UNKNOWN_ERROR,
+            "vLLM node task requires a run_id from RunContext or config",
+        )
 
     def _prompt_token_target(self, config: BenchmarkConfig) -> int | None:
         profile = config.workload_profile

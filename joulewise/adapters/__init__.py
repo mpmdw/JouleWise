@@ -23,7 +23,6 @@ import importlib
 from joulewise.adapters.local_transport import LocalTransport
 from joulewise.adapters.mock_runtime import MockRuntimeAdapter
 from joulewise.adapters.mock_telemetry import MockTelemetryAdapter
-from joulewise.bundle import sanitize_id_component
 from joulewise.clock import Clock, SystemClock
 from joulewise.interfaces import (
     AdapterResult,
@@ -81,12 +80,6 @@ def _failure(reason: FailureReason, message: str) -> tuple[None, AdapterResult]:
     return None, AdapterResult(ok=False, failure_reason=reason, message=message)
 
 
-def _configured_run_id(config: BenchmarkConfig) -> str:
-    if config.run_id is not None:
-        return sanitize_id_component(config.run_id)
-    return "pending-run-id"
-
-
 def _remote_node_client(config: BenchmarkConfig, clock: Clock):
     target = config.hardware_target
     if target.transport != TransportKind.SSH:
@@ -112,7 +105,6 @@ def _remote_node_client(config: BenchmarkConfig, clock: Clock):
         client = client_module.NodeWorkerClient(
             transport,
             clock,
-            run_id=_configured_run_id(config),
         )
     except Exception as exc:  # noqa: BLE001 - registry resolution stays structured
         return _failure(

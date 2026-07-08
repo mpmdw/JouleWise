@@ -34,7 +34,9 @@ clock-marker discipline (D-003) — is transport-independent and shared by:
 For SSH transport targets, `hardware_target.host` is an opaque OpenSSH
 destination string. It is passed verbatim to `ssh`/`scp`; user, port, key,
 and identity details come from OpenSSH config rather than JouleWise schema
-fields.
+fields. The SSH argv terminator is placed before the destination:
+`ssh <opts> -- <destination> <remote argv...>`. SCP uses the same rule:
+`scp <opts> -- <src> <dst>`.
 
 The remote node does not import or install `joulewise`. The shipped worker
 mirrors D-012 `FailureReason` string values in its own file and must not
@@ -54,7 +56,8 @@ embedded in the task because they are stale by remote dispatch time.
 | `task_type` | yes | string | Open enum: `runtime`, `telemetry`, `transfer-send`, `transfer-receive`. |
 | `operation` | yes | string | Scoped by task type. Runtime: `prepare`, `warmup`, `run_workload`, `cleanup`. Telemetry: `measure_idle`, `start_sampling`, `stop_sampling`. |
 | `node_role` | yes | string or null | Phase 3 role such as `prefill`/`decode`; null for single-node Slice 2K tasks. |
-| `paths.state_dir` | yes | string | Remote persistent working directory for pidfiles, ports, and run-scoped state shared across tasks. The worker creates it if needed. |
+| `timeout_s` | yes | number | Controller-supplied task timeout. vLLM readiness honors this value; if omitted by a legacy client, the worker defaults readiness to 300 s. |
+| `paths.state_dir` | yes | string | Remote persistent working directory for pidfiles, ports, and run-scoped state shared across tasks. The controller derives it from each task's `run_id` as `<remote_work_root>/<run_id>/state`; the worker creates it if needed. |
 | `runtime` | task-specific | object | Exactly one task-specific block is present. Used for runtime `prepare`, `warmup`, and `cleanup`; contains `model`, `quantization`, and backend `options`. |
 | `workload` | task-specific | object | Used for runtime `run_workload`; contains prompt/output token targets and deterministic `sampling_params`. |
 | `telemetry` | task-specific | object | Used for telemetry operations; contains backend, interval, query fields, and rail manifest. |
@@ -69,8 +72,9 @@ Runtime example for a realistic RTX 3050 target:
   "task_type": "runtime",
   "operation": "prepare",
   "node_role": null,
+  "timeout_s": 900.0,
   "paths": {
-    "state_dir": "/tmp/joulewise/run-3050-smoke-001"
+    "state_dir": "/tmp/joulewise/run-3050-smoke-001/state"
   },
   "runtime": {
     "backend": "vllm",
@@ -101,8 +105,9 @@ Telemetry example for the same target:
   "task_type": "telemetry",
   "operation": "start_sampling",
   "node_role": null,
+  "timeout_s": 30.0,
   "paths": {
-    "state_dir": "/tmp/joulewise/run-3050-smoke-001"
+    "state_dir": "/tmp/joulewise/run-3050-smoke-001/state"
   },
   "telemetry": {
     "backend": "nvidia_smi",
@@ -152,7 +157,7 @@ merged into the run's runtime result.
 | `monotonic_started_s` | number | Node `time.monotonic()` at worker start. |
 | `monotonic_ended_s` | number | Node `time.monotonic()` at worker end. |
 | `artifacts` | object | Map from logical artifact name to relative filename actually written. |
-| `metadata` | object | Open metadata dictionary. |
+| `metadata` | object | Open metadata dictionary. For remote stages, adapter metadata also persists the corresponding controller-side `clock_alignment` records under bundle `metadata.json` as `metadata.adapters.<runtime|telemetry>.clock_alignments[]`. |
 
 Worker exit code is secondary crash evidence: `0` iff `status == "succeeded"`,
 `1` otherwise, and `2` only when the worker cannot even create or write the
@@ -167,7 +172,7 @@ worker and transport code report the following D-012 strings:
 | --- | --- | --- |
 | Unreachable host, missing `ssh`/`scp`, SSH auth or name-resolution failure, artifact collection failure | `failed` | `transport_unavailable` |
 | Missing `nvidia-smi` or unsupported `nvidia-smi` query | `unsupported` | `telemetry_unavailable` |
-| vLLM import failure | `unsupported` | `runtime_unavailable` |
+| vLLM launcher missing, `ModuleNotFoundError`, or `ImportError` during readiness | `unsupported` | `runtime_unavailable` |
 | CUDA/vLLM out of memory while loading or running | `unsupported` | `did_not_fit` |
 | Runner crash, malformed or missing `status.json`, malformed task JSON, invalid protocol version, missing required field | `failed` | `unknown_error` |
 | Task type or operation not known to this worker build | `unsupported` | `unsupported_workload` |
@@ -209,13 +214,63 @@ offset_bound =
   + abs(post.offset_estimate - pre.offset_estimate)
 ```
 
-Adapter metadata records `clock_alignment` with the method name, pre/post
-marker records, `offset_estimate_s`, and `offset_bound_s`. Node-stamped
+Adapter metadata records `clock_alignment` with the stage name, method name,
+pre/post marker records, `offset_estimate_s`, and `offset_bound_s`.
+`metadata.json` persists every remote runtime stage alignment
+(`prepare`, `warmup`, `run_workload`, `cleanup`) and every remote telemetry
+stage alignment (`measure_idle`, `start_sampling`, `stop_sampling`) under
+`metadata.adapters.<runtime|telemetry>.clock_alignments[]`. Node-stamped
 derived data is converted to the controller clock domain by subtracting
 `offset_estimate_s` before creating `PowerSample`, `RuntimeEvent`, or other
 derived artifacts. Raw files remain verbatim in the node clock domain per
 D-002 so the conversion can be re-derived. Phase 3 reducers add bounds from
 both nodes and flag cross-node intervals shorter than that uncertainty.
+
+## Remote Path Layout
+
+The controller ships one worker script per `NodeWorkerClient` to:
+
+```text
+<remote_work_root>/node_worker.py
+```
+
+Each task's `run_id` derives isolated per-run directories:
+
+```text
+<remote_work_root>/<run_id>/tasks/<task_id>.json
+<remote_work_root>/<run_id>/artifacts/<task_id>/
+<remote_work_root>/<run_id>/state/
+```
+
+There is no `pending-run-id` fallback. The bundle-created run id carried in
+task JSON is authoritative.
+
+## nvidia-smi Timestamp And CSV Rules
+
+The worker records the node timezone at sampling start and idle capture in
+metadata and `nvidia_smi.pid`:
+
+```json
+{"node_utc_offset_s": 0.0, "node_tzname": "UTC"}
+```
+
+The controller parses naive `YYYY/MM/DD HH:MM:SS.mmm` CSV timestamps with
+that node UTC offset before applying the B-5 clock alignment. Legacy artifacts
+without `node_utc_offset_s` fall back to the controller/parser local timezone
+and record a provenance warning in parse diagnostics.
+
+The parser skips a malformed final unterminated CSV row and records the
+diagnostic count. Malformed interior rows remain hard parse errors.
+
+## Pidfile Safety
+
+Before signaling a PID from `vllm.pid` or `nvidia_smi.pid`, the worker verifies
+that the live process command line matches the pidfile command. On Linux it
+also compares `/proc/<pid>/stat` start time with `node_started_at_s`; when
+`/proc` is unavailable it falls back to `ps -p <pid> -o args=` command-line
+matching. A mismatch is a stale pidfile: runtime cleanup succeeds with a
+stale-pidfile note and removes the pidfile; telemetry `stop_sampling` fails
+structurally without producing a CSV and removes the pidfile.
 
 ## Worker Invocation
 

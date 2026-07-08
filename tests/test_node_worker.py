@@ -391,7 +391,7 @@ class NodeWorkerTests(unittest.TestCase):
             old_wait = node_worker._wait_for_vllm_health
             old_post = node_worker._vllm_json_post
             old_stream = node_worker._vllm_stream_completion
-            node_worker._wait_for_vllm_health = lambda process, port, stderr_path: {  # type: ignore[assignment]
+            node_worker._wait_for_vllm_health = lambda process, port, stderr_path, timeout_s: {  # type: ignore[assignment]
                 "ok": True,
                 "ready_check": "fake_http_health",
                 "status": 200,
@@ -572,6 +572,192 @@ class NodeWorkerTests(unittest.TestCase):
                 else:
                     os.environ["JW_FAKE_VLLM_MODE"] = old_mode
 
+    def test_runtime_vllm_import_error_during_readiness_is_runtime_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            bin_dir = tmpdir / "bin"
+            self.write_fake_vllm(bin_dir)
+            old_path = os.environ.get("PATH", "")
+            old_mode = os.environ.get("JW_FAKE_VLLM_MODE")
+            os.environ["PATH"] = str(bin_dir) + os.pathsep + old_path
+            os.environ["JW_FAKE_VLLM_MODE"] = "import_error"
+            try:
+                artifacts_dir = tmpdir / "artifacts"
+                runtime = valid_runtime_task()["runtime"]
+                runtime["options"] = {**runtime["options"], "port": 32126}
+                task_path = self.write_task(
+                    tmpdir,
+                    valid_runtime_task(task_id="task-vllm-import-error", runtime=runtime),
+                )
+
+                code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+
+                self.assertEqual(code, 1)
+                status = self.read_status(artifacts_dir)
+                self.assertEqual(status["status"], "unsupported")
+                self.assertEqual(status["failure_reason"], "runtime_unavailable")
+                self.assertIn("ModuleNotFoundError", status["metadata"]["stderr_tail"])
+            finally:
+                os.environ["PATH"] = old_path
+                if old_mode is None:
+                    os.environ.pop("JW_FAKE_VLLM_MODE", None)
+                else:
+                    os.environ["JW_FAKE_VLLM_MODE"] = old_mode
+
+    def test_vllm_prepare_honors_task_readiness_timeout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            bin_dir = tmpdir / "bin"
+            self.write_fake_vllm(bin_dir)
+            old_path = os.environ.get("PATH", "")
+            old_wait = node_worker._wait_for_vllm_health
+            captured: dict[str, float] = {}
+            os.environ["PATH"] = str(bin_dir) + os.pathsep + old_path
+
+            def fake_wait(process, port, stderr_path, timeout_s):
+                captured["timeout_s"] = timeout_s
+                return {"ok": False, "message": "not ready"}
+
+            node_worker._wait_for_vllm_health = fake_wait  # type: ignore[assignment]
+            try:
+                artifacts_dir = tmpdir / "artifacts"
+                runtime = valid_runtime_task()["runtime"]
+                runtime["options"] = {**runtime["options"], "port": 32127}
+                task = valid_runtime_task(task_id="task-vllm-timeout", runtime=runtime)
+                task["timeout_s"] = 123.0
+                task_path = self.write_task(tmpdir, task)
+
+                code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+
+                self.assertEqual(code, 1)
+                self.assertEqual(captured["timeout_s"], 123.0)
+                status = self.read_status(artifacts_dir)
+                self.assertEqual(status["metadata"]["readiness_timeout_s"], 123.0)
+            finally:
+                os.environ["PATH"] = old_path
+                node_worker._wait_for_vllm_health = old_wait
+
+    def test_vllm_http_error_body_participates_in_oom_classification(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            state_dir = tmpdir / "state"
+            artifacts_dir = tmpdir / "artifacts"
+            state_dir.mkdir()
+            artifacts_dir.mkdir()
+            pidfile = state_dir / "vllm.pid"
+            pidfile.write_text(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "command": ["python"],
+                        "port": 32128,
+                        "served_model_name": "jw-3050-smoke",
+                        "stderr_path": str(state_dir / "vllm.stderr"),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            old_stream = node_worker._vllm_stream_completion
+            node_worker._vllm_stream_completion = (  # type: ignore[assignment]
+                lambda port, path, payload, timeout_s: (_ for _ in ()).throw(
+                    node_worker.VllmHttpError("HTTP 500: CUDA out of memory in body")
+                )
+            )
+            try:
+                status, reason, message, artifacts, metadata = node_worker.handle_vllm_run_workload(
+                    valid_workload_task(paths={"state_dir": str(state_dir)}),
+                    str(artifacts_dir),
+                    lambda line: None,
+                )
+            finally:
+                node_worker._vllm_stream_completion = old_stream
+
+            self.assertEqual(status, "unsupported")
+            self.assertEqual(reason, "did_not_fit")
+            self.assertIn("out-of-memory", message)
+            self.assertIn("CUDA out of memory", metadata["exception"])
+
+    def test_vllm_cleanup_stale_pidfile_does_not_signal_reused_pid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            state_dir = tmpdir / "state"
+            state_dir.mkdir()
+            pidfile = state_dir / "vllm.pid"
+            pidfile.write_text(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "command": ["definitely-not-this-process"],
+                        "node_started_at_s": 1.0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            old_kill = node_worker.os.kill
+            calls: list[tuple[int, int]] = []
+
+            def fake_kill(pid: int, sig: int) -> None:
+                calls.append((pid, sig))
+                raise AssertionError("stale pidfile should not signal")
+
+            node_worker.os.kill = fake_kill  # type: ignore[assignment]
+            try:
+                status, reason, message, artifacts, metadata = node_worker.handle_vllm_cleanup(
+                    valid_runtime_task(operation="cleanup", paths={"state_dir": str(state_dir)}),
+                    str(tmpdir / "artifacts"),
+                    lambda line: None,
+                )
+            finally:
+                node_worker.os.kill = old_kill  # type: ignore[assignment]
+
+            self.assertEqual(status, "succeeded")
+            self.assertIsNone(reason)
+            self.assertIn("stale", message)
+            self.assertFalse(pidfile.exists())
+            self.assertEqual(calls, [])
+
+    def test_nvidia_smi_stop_stale_pidfile_does_not_signal_reused_pid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            state_dir = tmpdir / "state"
+            artifacts_dir = tmpdir / "artifacts"
+            state_dir.mkdir()
+            artifacts_dir.mkdir()
+            pidfile = state_dir / "nvidia_smi.pid"
+            pidfile.write_text(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "command": ["definitely-not-nvidia-smi"],
+                        "node_started_at_s": 1.0,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            old_kill = node_worker.os.kill
+            calls: list[tuple[int, int]] = []
+
+            def fake_kill(pid: int, sig: int) -> None:
+                calls.append((pid, sig))
+                raise AssertionError("stale pidfile should not signal")
+
+            node_worker.os.kill = fake_kill  # type: ignore[assignment]
+            try:
+                status, reason, message, artifacts, metadata = node_worker.handle_nvidia_smi_stop_sampling(
+                    valid_task(operation="stop_sampling", paths={"state_dir": str(state_dir)}),
+                    str(artifacts_dir),
+                    lambda line: None,
+                )
+            finally:
+                node_worker.os.kill = old_kill  # type: ignore[assignment]
+
+            self.assertEqual(status, "failed")
+            self.assertEqual(reason, "unknown_error")
+            self.assertIn("stale", message)
+            self.assertNotIn("nvidia_smi_csv", artifacts)
+            self.assertFalse(pidfile.exists())
+            self.assertEqual(calls, [])
+
     def write_fake_nvidia_smi(self, bin_dir: Path) -> Path:
         bin_dir.mkdir()
         path = bin_dir / "nvidia-smi"
@@ -615,6 +801,9 @@ class NodeWorkerTests(unittest.TestCase):
                     "if os.environ.get('JW_FAKE_VLLM_MODE') == 'oom':",
                     "    print('CUDA out of memory while loading fake model', file=sys.stderr, flush=True)",
                     "    sys.exit(3)",
+                    "if os.environ.get('JW_FAKE_VLLM_MODE') == 'import_error':",
+                    "    print('ModuleNotFoundError: No module named vllm', file=sys.stderr, flush=True)",
+                    "    sys.exit(4)",
                     "running = True",
                     "def stop(signum, frame):",
                     "    global running",

@@ -244,7 +244,7 @@ class SshTransport:
         )
 
     def _ssh_argv(self, command: list[str]) -> list[str]:
-        return [SSH_BINARY, *SSH_OPTIONS, self.destination, "--", *command]
+        return [SSH_BINARY, *SSH_OPTIONS, "--", self.destination, *command]
 
     def _scp_argv(self, source: str, destination: str, *, recursive: bool) -> list[str]:
         argv = [SCP_BINARY, *SSH_OPTIONS]

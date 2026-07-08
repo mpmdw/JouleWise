@@ -3,9 +3,8 @@
 The node worker owns process control and raw CSV collection. This controller
 adapter owns CSV parsing, node-to-controller timestamp conversion, bundle raw
 preservation (D-002), and JouleWise telemetry object construction. The raw CSV
-timestamp is a naive node-local wall time string; this module interprets it as
-the local timezone of the parser process, pinned for U3 fixture tests pending
-live node timezone validation.
+timestamp is a naive node-local wall time string; new worker artifacts include
+the node UTC offset used to parse it before B-5 clock-domain conversion.
 """
 
 from __future__ import annotations
@@ -13,7 +12,7 @@ from __future__ import annotations
 import math
 import statistics
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -41,9 +40,9 @@ QUERY_FIELDS = ["timestamp", "power.draw", "temperature.gpu"]
 SOURCE = "nvidia_smi"
 BOUNDARY = "NVIDIA GPU board power via nvidia-smi power.draw; host CPU/DRAM excluded"
 TIMESTAMP_ASSUMPTION = (
-    "nvidia-smi CSV timestamps are parsed as naive node-local wall time and "
-    "interpreted using the parser process local timezone; derived samples are "
-    "then converted to controller clock domain with NodeTaskResult.offset_estimate_s."
+    "nvidia-smi CSV timestamps are parsed as node-local wall time using the "
+    "node UTC offset recorded by the worker. Legacy artifacts without an "
+    "offset fall back to parser-local timezone with a provenance warning."
 )
 POWER_NA_POLICY = (
     "Rows whose power.draw field is [N/A] or [Not Supported] are skipped; "
@@ -70,6 +69,11 @@ class NvidiaSmiTelemetryAdapter:
         self._last_rows: list[NvidiaSmiRow] = []
         self._last_thermal_timestamp_s: float | None = None
         self._last_temperature_c: float | None = None
+        self._clock_alignments: list[dict[str, Any]] = []
+        self._last_parse_diagnostics: dict[str, Any] = {}
+
+    def clock_alignments(self) -> list[dict[str, Any]]:
+        return [dict(alignment) for alignment in self._clock_alignments]
 
     def device_metadata(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -111,7 +115,13 @@ class NvidiaSmiTelemetryAdapter:
         data = self._artifact_bytes(result, "nvidia_smi_idle_csv", RAW_IDLE_NAME)
         if context is not None:
             write_raw_artifact(context, RAW_IDLE_NAME, data)
-        rows = parse_nvidia_smi_csv(data.decode("utf-8", errors="replace"))
+        parse_diagnostics: dict[str, Any] = {}
+        rows = parse_nvidia_smi_csv(
+            data.decode("utf-8", errors="replace"),
+            node_utc_offset_s=self._node_utc_offset(result),
+            diagnostics=parse_diagnostics,
+        )
+        self._last_parse_diagnostics = parse_diagnostics
         self._remember_rows(rows, result)
         powers = [row.power_w for row in rows]
         converted_timestamps = [
@@ -164,7 +174,13 @@ class NvidiaSmiTelemetryAdapter:
         data = self._artifact_bytes(result, "nvidia_smi_csv", RAW_SAMPLES_NAME)
         if context is not None:
             write_raw_artifact(context, RAW_SAMPLES_NAME, data)
-        rows = parse_nvidia_smi_csv(data.decode("utf-8", errors="replace"))
+        parse_diagnostics = {}
+        rows = parse_nvidia_smi_csv(
+            data.decode("utf-8", errors="replace"),
+            node_utc_offset_s=self._node_utc_offset(result),
+            diagnostics=parse_diagnostics,
+        )
+        self._last_parse_diagnostics = parse_diagnostics
         self._remember_rows(rows, result)
         return self._samples_from_rows(rows, result)
 
@@ -206,13 +222,15 @@ class NvidiaSmiTelemetryAdapter:
             telemetry["idle_seconds"] = float(idle_seconds)
         task = {
             "task_id": "task-telemetry-%s-%03d" % (operation, self._task_counter),
-            "run_id": context.run_id if context is not None else (config.run_id or "run-nvidia-smi"),
+            "run_id": self._task_run_id(config, context),
             "task_type": "telemetry",
             "operation": operation,
             "node_role": context.node_role if context is not None else None,
             "telemetry": telemetry,
         }
-        return self._client.run_task(task, timeout_s=timeout_s)
+        result = self._client.run_task(task, timeout_s=timeout_s)
+        self._record_clock_alignment(result)
+        return result
 
     def _samples_from_rows(
         self,
@@ -307,7 +325,37 @@ class NvidiaSmiTelemetryAdapter:
             metadata["offset_estimate_s"] = result.offset_estimate_s
         if result.offset_bound_s is not None:
             metadata["offset_bound_s"] = result.offset_bound_s
+        if self._last_parse_diagnostics:
+            metadata["parse_diagnostics"] = dict(self._last_parse_diagnostics)
         return metadata
+
+    def _record_clock_alignment(self, result: NodeTaskResult) -> None:
+        alignment = result.metadata.get("clock_alignment")
+        if isinstance(alignment, dict):
+            self._clock_alignments.append(dict(alignment))
+
+    def _task_run_id(self, config: BenchmarkConfig, context: RunContext | None) -> str:
+        if context is not None and context.run_id:
+            return context.run_id
+        if config.run_id:
+            return config.run_id
+        raise AdapterFailure(
+            FailureReason.UNKNOWN_ERROR,
+            "nvidia-smi node task requires a run_id from RunContext or config",
+        )
+
+    def _node_utc_offset(self, result: NodeTaskResult) -> float | None:
+        if result.raw_status and isinstance(result.raw_status.get("metadata"), dict):
+            metadata = result.raw_status["metadata"]
+            if "node_utc_offset_s" in metadata:
+                return _float_or_none(metadata.get("node_utc_offset_s"))
+            pidfile = metadata.get("pidfile_payload")
+            if isinstance(pidfile, dict) and "node_utc_offset_s" in pidfile:
+                return _float_or_none(pidfile.get("node_utc_offset_s"))
+        worker_metadata = result.metadata.get("worker_metadata")
+        if isinstance(worker_metadata, dict):
+            return _float_or_none(worker_metadata.get("node_utc_offset_s"))
+        return None
 
     @staticmethod
     def _offset(result: NodeTaskResult) -> float:
@@ -323,7 +371,12 @@ class NvidiaSmiTelemetryAdapter:
         return max(30.0, nominal_s + interval_s + 15.0)
 
 
-def parse_nvidia_smi_csv(text: str) -> list[NvidiaSmiRow]:
+def parse_nvidia_smi_csv(
+    text: str,
+    *,
+    node_utc_offset_s: float | None = None,
+    diagnostics: dict[str, Any] | None = None,
+) -> list[NvidiaSmiRow]:
     """Parse ``nvidia-smi --format=csv,noheader,nounits`` output.
 
     Blank lines are ignored. Rows with unsupported power fields are skipped
@@ -332,12 +385,20 @@ def parse_nvidia_smi_csv(text: str) -> list[NvidiaSmiRow]:
     preserved verbatim.
     """
 
+    if diagnostics is not None:
+        diagnostics.setdefault("truncated_final_rows_skipped", 0)
     rows: list[NvidiaSmiRow] = []
-    for index, line in enumerate(text.splitlines()):
+    lines = text.splitlines()
+    timestamp_tz = _timestamp_timezone(node_utc_offset_s, diagnostics)
+    for index, line in enumerate(lines):
         if not line.strip():
             continue
         parts = [part.strip() for part in line.split(",")]
         if len(parts) != 3:
+            if _is_truncated_final_row(text, lines, index):
+                if diagnostics is not None:
+                    diagnostics["truncated_final_rows_skipped"] += 1
+                continue
             raise ValueError("nvidia-smi CSV row %d has %d fields, expected 3" % (index, len(parts)))
         power_w = _power_or_none(parts[1])
         if power_w is None:
@@ -346,12 +407,16 @@ def parse_nvidia_smi_csv(text: str) -> list[NvidiaSmiRow]:
             timestamp = datetime.strptime(parts[0], "%Y/%m/%d %H:%M:%S.%f")
             temperature_c = float(parts[2])
         except ValueError as exc:
+            if _is_truncated_final_row(text, lines, index):
+                if diagnostics is not None:
+                    diagnostics["truncated_final_rows_skipped"] += 1
+                continue
             raise ValueError("nvidia-smi CSV row %d is not parseable: %s" % (index, exc)) from exc
         if not math.isfinite(power_w) or not math.isfinite(temperature_c):
             continue
         rows.append(
             NvidiaSmiRow(
-                node_timestamp_s=timestamp.timestamp(),
+                node_timestamp_s=timestamp.replace(tzinfo=timestamp_tz).timestamp(),
                 power_w=power_w,
                 temperature_c=temperature_c,
             )
@@ -364,3 +429,31 @@ def _power_or_none(value: str) -> float | None:
     if normalized in {"n/a", "not supported", "na", ""}:
         return None
     return float(value)
+
+
+def _timestamp_timezone(
+    node_utc_offset_s: float | None,
+    diagnostics: dict[str, Any] | None,
+) -> timezone | None:
+    if node_utc_offset_s is None:
+        if diagnostics is not None:
+            diagnostics["timestamp_timezone_source"] = "parser_local_legacy_fallback"
+            diagnostics.setdefault("warnings", []).append(
+                "node UTC offset missing; parsed nvidia-smi timestamps with parser local timezone"
+            )
+        return None
+    if diagnostics is not None:
+        diagnostics["timestamp_timezone_source"] = "node_utc_offset_s"
+        diagnostics["node_utc_offset_s"] = node_utc_offset_s
+    return timezone(timedelta(seconds=float(node_utc_offset_s)))
+
+
+def _is_truncated_final_row(text: str, lines: list[str], index: int) -> bool:
+    return index == len(lines) - 1 and not text.endswith(("\n", "\r"))
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None

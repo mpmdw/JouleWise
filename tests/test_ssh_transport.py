@@ -74,8 +74,9 @@ class SshTransportTests(unittest.TestCase):
         self.assertIn("ConnectTimeout=10", argv)
         self.assertIn("gpu box", argv)
         separator_index = argv.index("--")
-        self.assertEqual(argv[separator_index - 1], "gpu box")
-        self.assertEqual(argv[separator_index + 1 :], ["python3", "-c", "print('x y')"])
+        self.assertLess(separator_index, argv.index("gpu box"))
+        self.assertEqual(argv[separator_index + 1], "gpu box")
+        self.assertEqual(argv[separator_index + 2 :], ["python3", "-c", "print('x y')"])
 
     def test_run_command_success_returns_stdout_metadata(self) -> None:
         runner = CapturingRunner(RunnerCompleted(returncode=0, stdout=b"ok\n"))
@@ -132,6 +133,8 @@ class SshTransportTests(unittest.TestCase):
         self.assertEqual(timeout, 13)
         self.assertEqual(argv[0], "scp")
         self.assertIn("-r", argv)
+        separator_index = argv.index("--")
+        self.assertEqual(argv[separator_index + 1 :], ["gpu box:/remote/artifacts", "/local/artifacts"])
         self.assertIn("gpu box:/remote/artifacts", argv)
 
 

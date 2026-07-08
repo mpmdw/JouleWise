@@ -3,6 +3,8 @@ from __future__ import annotations
 import statistics
 import tempfile
 import unittest
+import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -139,6 +141,61 @@ class NvidiaSmiParserTests(unittest.TestCase):
             rows[0].node_timestamp_s,
             datetime.strptime("2026/07/07 12:00:00.000", "%Y/%m/%d %H:%M:%S.%f").timestamp(),
         )
+
+    def test_parser_uses_node_utc_offset_not_controller_timezone(self) -> None:
+        old_tz = os.environ.get("TZ")
+        os.environ["TZ"] = "America/Los_Angeles"
+        if hasattr(time, "tzset"):
+            time.tzset()
+        try:
+            rows = parse_nvidia_smi_csv(
+                "2026/07/07 12:00:00.000, 10.0, 40\n",
+                node_utc_offset_s=0.0,
+            )
+        finally:
+            if old_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old_tz
+            if hasattr(time, "tzset"):
+                time.tzset()
+
+        self.assertEqual(rows[0].node_timestamp_s, 1783425600.0)
+
+    def test_parser_records_legacy_timezone_warning_when_offset_missing(self) -> None:
+        diagnostics: dict[str, Any] = {}
+
+        parse_nvidia_smi_csv(
+            "2026/07/07 12:00:00.000, 10.0, 40\n",
+            diagnostics=diagnostics,
+        )
+
+        self.assertEqual(
+            diagnostics["timestamp_timezone_source"],
+            "parser_local_legacy_fallback",
+        )
+        self.assertIn("node UTC offset missing", diagnostics["warnings"][0])
+
+    def test_parser_skips_only_malformed_final_truncated_row(self) -> None:
+        diagnostics: dict[str, Any] = {}
+
+        rows = parse_nvidia_smi_csv(
+            "2026/07/07 12:00:00.000, 10.0, 40\n"
+            "2026/07/07 12:00:01.000, 11",
+            node_utc_offset_s=0.0,
+            diagnostics=diagnostics,
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(diagnostics["truncated_final_rows_skipped"], 1)
+
+    def test_parser_rejects_malformed_interior_row(self) -> None:
+        with self.assertRaises(ValueError):
+            parse_nvidia_smi_csv(
+                "2026/07/07 12:00:00.000, 10\n"
+                "2026/07/07 12:00:01.000, 11.0, 41\n",
+                node_utc_offset_s=0.0,
+            )
 
 
 class NvidiaSmiAdapterTests(unittest.TestCase):

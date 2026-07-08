@@ -58,6 +58,8 @@ def valid_telemetry_task(task_id: str = "task-telemetry-idle-001") -> dict[str, 
 class LoopbackTransport:
     def __init__(self) -> None:
         self.clock_alignment: dict[str, Any] | None = None
+        self.put_destinations: list[str] = []
+        self.collect_sources: list[str] = []
 
     def run(self, command: list[str], *, timeout_s: float | None = None) -> AdapterResult:
         if command[:2] == ["mkdir", "-p"]:
@@ -91,12 +93,14 @@ class LoopbackTransport:
     ) -> AdapterResult:
         Path(destination).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
+        self.put_destinations.append(destination)
         return AdapterResult(ok=True, metadata={"source": source, "destination": destination})
 
     def collect(
         self, source: str, destination: str, *, timeout_s: float | None = None
     ) -> AdapterResult:
         shutil.copytree(source, destination)
+        self.collect_sources.append(source)
         return AdapterResult(ok=True, metadata={"source": source, "destination": destination})
 
     def record_clock_alignment(self, alignment: dict[str, Any]) -> None:
@@ -265,6 +269,58 @@ class NodeClientTests(unittest.TestCase):
             self.assertEqual(result.status, "failed")
             self.assertEqual(result.failure_reason, FailureReason.UNKNOWN_ERROR)
             self.assertIn("status.json", result.message)
+
+    def test_run_task_uses_each_task_run_id_for_remote_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            transport = LoopbackTransport()
+            client = self.make_client(
+                transport,
+                SequencedClock([100.0, 100.2, 101.0, 101.2, 102.0, 102.2, 103.0, 103.2]),
+                str(Path(tmp) / "remote"),
+            )
+            task_one = valid_telemetry_task(task_id="task-one")
+            task_one["run_id"] = "run-one"
+            task_two = valid_telemetry_task(task_id="task-two")
+            task_two["run_id"] = "run-two"
+
+            result_one = client.run_task(task_one, timeout_s=10)
+            result_two = client.run_task(task_two, timeout_s=10)
+
+            self.assertFalse(result_one.ok)
+            self.assertFalse(result_two.ok)
+            task_puts = [path for path in transport.put_destinations if path.endswith(".json")]
+            self.assertTrue(any("/run-one/tasks/task-one.json" in path for path in task_puts), task_puts)
+            self.assertTrue(any("/run-two/tasks/task-two.json" in path for path in task_puts), task_puts)
+            self.assertTrue(
+                any("/run-one/artifacts/task-one" in path for path in transport.collect_sources),
+                transport.collect_sources,
+            )
+            self.assertTrue(
+                any("/run-two/artifacts/task-two" in path for path in transport.collect_sources),
+                transport.collect_sources,
+            )
+            self.assertTrue((Path(tmp) / "remote" / "node_worker.py").exists())
+            self.assertTrue((Path(tmp) / "remote" / "run-one" / "state").is_dir())
+            self.assertTrue((Path(tmp) / "remote" / "run-two" / "state").is_dir())
+
+    def test_run_task_without_task_run_id_fails_before_shipping(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            transport = LoopbackTransport()
+            client = NodeWorkerClient(
+                transport,
+                SequencedClock([]),
+                remote_work_root=str(Path(tmp) / "remote"),
+                remote_python=sys.executable,
+            )
+            task = valid_telemetry_task()
+            del task["run_id"]
+
+            result = client.run_task(task, timeout_s=10)
+
+            self.assertFalse(result.ok)
+            self.assertEqual(result.failure_reason, FailureReason.UNKNOWN_ERROR)
+            self.assertIn("run_id is required", result.message)
+            self.assertEqual(transport.put_destinations, [])
 
 
 if __name__ == "__main__":

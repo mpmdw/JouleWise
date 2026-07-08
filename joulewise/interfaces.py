@@ -86,6 +86,7 @@ class RuntimeResult:
     token_count: int | None = None
     output_token_count: int | None = None
     workload_provenance: dict[str, Any] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
