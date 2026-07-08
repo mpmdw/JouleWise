@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import shutil
 import tempfile
@@ -13,12 +14,14 @@ from unittest.mock import patch
 import joulewise.adapters as adapters
 from joulewise.adapters.nvidia_smi import parse_nvidia_smi_csv
 from joulewise.clock import Clock
+from joulewise.cli import validate_bundle
 from joulewise.controller import run_benchmark
 from joulewise.interfaces import AdapterResult
 from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "configs" / "examples" / "nvidia_vllm_ssh.json"
+PROMPT_TOKEN_DOMAIN = "joulewise.prompt_token_ids.v1"
 
 
 class AutoClock:
@@ -56,6 +59,11 @@ def load_generated_config(*, host: str = "fake-nvidia-node") -> BenchmarkConfig:
 
 def _csv_timestamp(epoch_s: float) -> str:
     return datetime.fromtimestamp(epoch_s).strftime("%Y/%m/%d %H:%M:%S.%f")[:-3]
+
+
+def expected_prompt_token_hash(token_ids: list[int]) -> str:
+    canonical = json.dumps(token_ids, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256((PROMPT_TOKEN_DOMAIN + "\0" + canonical).encode("utf-8")).hexdigest()
 
 
 class StubNode:
@@ -195,6 +203,16 @@ class StubNode:
                     "tokens_jsonl": "tokens.jsonl",
                 }
             )
+            self._write_status(
+                local_dir,
+                task,
+                "succeeded",
+                None,
+                "ok",
+                artifacts,
+                metadata={"prompt_token_ids": [701, 702, 703, 704, 705, 706, 707, 708, 709]},
+            )
+            return 0
         self._write_status(local_dir, task, "succeeded", None, "ok", artifacts)
         return 0
 
@@ -234,6 +252,7 @@ class StubNode:
         failure_reason: FailureReason | None,
         message: str,
         artifacts: dict[str, str] | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         mapped = {
             "status_json": "status.json",
@@ -249,7 +268,7 @@ class StubNode:
             "failure_reason": failure_reason.value if failure_reason else None,
             "message": message,
             "artifacts": mapped,
-            "metadata": {"stub_node": self.mode},
+            "metadata": {"stub_node": self.mode, **(metadata or {})},
         }
         (local_dir / "status.json").write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n",
@@ -389,6 +408,16 @@ class NvidiaNodeIntegrationTests(unittest.TestCase):
         ]
         self.assertIn(("phase_start", "prefill"), [(e["event_type"], e["phase"]) for e in events])
         metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertEqual(validate_bundle(bundle_path, strict=True), [])
+        self.assertEqual(
+            metadata["workload_provenance"]["prompt"]["realized_token_count"],
+            9,
+        )
+        self.assertEqual(
+            metadata["workload_provenance"]["prompt"]["token_ids_sha256"],
+            expected_prompt_token_hash([701, 702, 703, 704, 705, 706, 707, 708, 709]),
+        )
+        self.assertEqual(metadata["workload_provenance"]["generator"]["name"], "vllm_node_worker")
         self.assertEqual(metadata["connection"], {"transport": "ssh", "host": "fake-nvidia-node"})
         self.assertEqual(metadata["adapters"]["runtime"]["name"], "vllm")
         self.assertEqual(metadata["adapters"]["telemetry"]["name"], "nvidia_smi")

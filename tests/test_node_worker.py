@@ -87,7 +87,6 @@ def valid_workload_task(**overrides: Any) -> dict[str, Any]:
         "paths": {"state_dir": ""},
         "workload": {
             "prompt_text": "alpha beta",
-            "prompt_tokens": 2,
             "output_tokens": 3,
             "sampling_params": {
                 "max_tokens": 3,
@@ -406,7 +405,12 @@ class NodeWorkerTests(unittest.TestCase):
                 "ready_check": "fake_http_health",
                 "status": 200,
             }
-            node_worker._vllm_json_post = lambda port, path, payload: {"choices": [{"text": "W"}]}  # type: ignore[assignment]
+            def fake_post(port: int, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+                if path == node_worker.VLLM_TOKENIZE_PATH:
+                    return {"tokens": [11, 22]}
+                return {"choices": [{"text": "W"}]}
+
+            node_worker._vllm_json_post = fake_post  # type: ignore[assignment]
             node_worker._vllm_stream_completion = lambda port, path, payload, timeout_s: iter(["A", "B", "C"])  # type: ignore[assignment]
             port = 32123
             try:
@@ -463,6 +467,9 @@ class NodeWorkerTests(unittest.TestCase):
                 self.assertEqual(run_status["artifacts"]["events_jsonl"], "events.jsonl")
                 self.assertEqual(run_status["artifacts"]["response_txt"], "response.txt")
                 self.assertEqual(run_status["artifacts"]["tokens_jsonl"], "tokens.jsonl")
+                self.assertEqual(run_status["metadata"]["prompt_token_ids"], [11, 22])
+                self.assertEqual(run_status["metadata"]["prompt_token_count"], 2)
+                self.assertEqual(run_status["metadata"]["tokenize_path"], "/tokenize")
                 self.assertEqual((run_artifacts / "response.txt").read_text(encoding="utf-8"), "ABC")
                 tokens = [
                     json.loads(line)
@@ -687,6 +694,60 @@ class NodeWorkerTests(unittest.TestCase):
             self.assertEqual(reason, "did_not_fit")
             self.assertIn("out-of-memory", message)
             self.assertIn("CUDA out of memory", metadata["exception"])
+
+    def test_vllm_tokenize_unavailable_records_structured_absence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            state_dir = tmpdir / "state"
+            artifacts_dir = tmpdir / "artifacts"
+            state_dir.mkdir()
+            artifacts_dir.mkdir()
+            (state_dir / "vllm.pid").write_text(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "command": ["python"],
+                        "port": 32129,
+                        "served_model_name": "jw-3050-smoke",
+                        "stderr_path": str(state_dir / "vllm.stderr"),
+                    }
+                ),
+                encoding="utf-8",
+            )
+            old_post = node_worker._vllm_json_post
+            old_stream = node_worker._vllm_stream_completion
+            node_worker._vllm_json_post = (  # type: ignore[assignment]
+                lambda port, path, payload: (_ for _ in ()).throw(
+                    node_worker.VllmHttpError("HTTP 404 from vLLM /tokenize")
+                )
+            )
+            node_worker._vllm_stream_completion = (  # type: ignore[assignment]
+                lambda port, path, payload, timeout_s: iter(["A"])
+            )
+            try:
+                status, reason, message, artifacts, metadata = node_worker.handle_vllm_run_workload(
+                    valid_workload_task(paths={"state_dir": str(state_dir)}),
+                    str(artifacts_dir),
+                    lambda line: None,
+                )
+            finally:
+                node_worker._vllm_json_post = old_post
+                node_worker._vllm_stream_completion = old_stream
+
+            self.assertEqual(status, "succeeded")
+            self.assertIsNone(reason)
+            self.assertIn("completed", message)
+            self.assertEqual(artifacts["response_txt"], "response.txt")
+            self.assertNotIn("prompt_token_ids", metadata)
+            self.assertEqual(
+                metadata["prompt_token_ids_unavailable_reason"]["endpoint"],
+                "/tokenize",
+            )
+            self.assertEqual(
+                metadata["prompt_token_ids_unavailable_reason"]["error_class"],
+                "VllmHttpError",
+            )
+            self.assertEqual((artifacts_dir / "response.txt").read_text(encoding="utf-8"), "A")
 
     def test_vllm_cleanup_stale_pidfile_does_not_signal_reused_pid(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

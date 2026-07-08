@@ -14,6 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from joulewise import __version__
 from joulewise.adapters.node_client import (
     NodeTaskResult,
     NodeWorkerClient,
@@ -27,6 +28,12 @@ from joulewise.interfaces import (
     RunContext,
     RuntimeEvent,
     RuntimeResult,
+)
+from joulewise.provenance import (
+    PROMPT_TOKEN_IDS_HASH_DOMAIN,
+    output_policy,
+    prompt_provenance,
+    sha256_hex,
 )
 from joulewise.schemas import BenchmarkConfig, FailureReason
 
@@ -112,7 +119,12 @@ class VllmRuntimeAdapter:
         offset = self._offset(result)
         events = parse_vllm_events_jsonl(events_text, offset)
         converted_tokens_text, output_tokens = convert_vllm_tokens_jsonl(tokens_text, offset)
-        prompt_tokens = self._prompt_token_target(config)
+        prompt_token_ids = _worker_prompt_token_ids(result)
+        prompt_tokens = (
+            len(prompt_token_ids)
+            if prompt_token_ids is not None
+            else self._prompt_token_target(config)
+        )
         return RuntimeResult(
             events=events,
             output_artifacts={
@@ -121,6 +133,11 @@ class VllmRuntimeAdapter:
             },
             token_count=(prompt_tokens + output_tokens if prompt_tokens is not None else output_tokens),
             output_token_count=output_tokens,
+            workload_provenance=self._workload_provenance(
+                config,
+                result,
+                emitted_tokens=output_tokens,
+            ),
             metadata=self._result_metadata(result),
         )
 
@@ -190,13 +207,17 @@ class VllmRuntimeAdapter:
         output_tokens = profile.output_tokens or DEFAULT_OUTPUT_TOKENS
         sampling_params = dict(DEFAULT_SAMPLING_PARAMS)
         sampling_params["max_tokens"] = output_tokens
-        return {
-            "prompt_text": profile.prompt_text,
-            "prompt_tokens": profile.prompt_tokens,
-            "dataset_ref": profile.dataset_ref,
+        block: dict[str, Any] = {
             "output_tokens": output_tokens,
             "sampling_params": sampling_params,
         }
+        if profile.prompt_text is not None:
+            block["prompt_text"] = profile.prompt_text
+        elif profile.prompt_tokens is not None:
+            block["prompt_tokens"] = profile.prompt_tokens
+        elif profile.dataset_ref is not None:
+            block["dataset_ref"] = profile.dataset_ref
+        return block
 
     def _adapter_result(self, result: NodeTaskResult) -> AdapterResult:
         return AdapterResult(
@@ -289,13 +310,58 @@ class VllmRuntimeAdapter:
             "vLLM node task requires a run_id from RunContext or config",
         )
 
-    def _prompt_token_target(self, config: BenchmarkConfig) -> int | None:
+    @staticmethod
+    def _prompt_token_target(config: BenchmarkConfig) -> int | None:
         profile = config.workload_profile
         if profile.prompt_tokens is not None:
             return profile.prompt_tokens
         if profile.prompt_text is not None:
             return len(profile.prompt_text.split())
         return None
+
+    def _workload_provenance(
+        self,
+        config: BenchmarkConfig,
+        result: NodeTaskResult,
+        *,
+        emitted_tokens: int,
+    ) -> dict[str, Any]:
+        prompt_text = _worker_prompt_text(config)
+        prompt_token_ids = _worker_prompt_token_ids(result)
+        unavailable_reason = _worker_prompt_token_ids_unavailable_reason(result)
+        requested_tokens = config.workload_profile.output_tokens or DEFAULT_OUTPUT_TOKENS
+        return {
+            "prompt": _prompt_provenance_from_worker(
+                prompt_token_ids,
+                text=prompt_text,
+                unavailable_reason=unavailable_reason,
+            ),
+            "generator": {
+                "name": "vllm_node_worker",
+                "version": __version__,
+            },
+            "tokenizer": {
+                "backend": "vllm",
+                "identifier": _served_model_name(config),
+                "revision": config.model.revision,
+                "class": "remote_vllm_tokenizer",
+                "vocab_size": None,
+            },
+            "model": {
+                "source": config.model.source,
+                "revision": config.model.revision,
+            },
+            "output_policy": output_policy(
+                "fixed_budget_stream",
+                requested_tokens=requested_tokens,
+                emitted_tokens=emitted_tokens,
+                stop_condition=(
+                    "requested_tokens_emitted"
+                    if emitted_tokens >= requested_tokens
+                    else "backend_stop"
+                ),
+            ),
+        }
 
     @staticmethod
     def _offset(result: NodeTaskResult) -> float:
@@ -344,6 +410,68 @@ def convert_vllm_tokens_jsonl(text: str, offset_estimate_s: float) -> tuple[str,
 
 def _served_model_name(config: BenchmarkConfig) -> str:
     return "%s-joulewise" % _slug(config.model.name)
+
+
+def _worker_prompt_text(config: BenchmarkConfig) -> str:
+    profile = config.workload_profile
+    if profile.prompt_text is not None:
+        return profile.prompt_text
+    if profile.dataset_ref is not None:
+        return "Dataset reference: %s" % profile.dataset_ref
+    prompt_tokens = profile.prompt_tokens or 1
+    return " ".join("jw%d" % index for index in range(prompt_tokens))
+
+
+def _worker_prompt_token_ids(result: NodeTaskResult) -> list[int] | None:
+    metadata = _worker_status_metadata(result)
+    value = metadata.get("prompt_token_ids")
+    if not isinstance(value, list):
+        return None
+    token_ids: list[int] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, int):
+            return None
+        token_ids.append(item)
+    return token_ids
+
+
+def _worker_prompt_token_ids_unavailable_reason(result: NodeTaskResult) -> dict[str, Any]:
+    metadata = _worker_status_metadata(result)
+    reason = metadata.get("prompt_token_ids_unavailable_reason")
+    if isinstance(reason, dict):
+        return dict(reason)
+    if "prompt_token_ids" in metadata:
+        return {
+            "source": "node_worker_status",
+            "message": "node worker prompt_token_ids were malformed",
+        }
+    return {
+        "source": "node_worker_status",
+        "message": "node worker did not return prompt_token_ids",
+    }
+
+
+def _worker_status_metadata(result: NodeTaskResult) -> dict[str, Any]:
+    if result.raw_status and isinstance(result.raw_status.get("metadata"), dict):
+        return dict(result.raw_status["metadata"])
+    return {}
+
+
+def _prompt_provenance_from_worker(
+    token_ids: list[int] | None,
+    *,
+    text: str | None,
+    unavailable_reason: dict[str, Any],
+) -> dict[str, Any]:
+    if token_ids is not None:
+        return prompt_provenance(token_ids, text=text)
+    return {
+        "realized_token_count": None,
+        "token_hash_domain": PROMPT_TOKEN_IDS_HASH_DOMAIN,
+        "token_ids_sha256": None,
+        "token_ids_unavailable_reason": unavailable_reason,
+        "text_sha256": sha256_hex(text) if text is not None else None,
+    }
 
 
 def _slug(value: str) -> str:

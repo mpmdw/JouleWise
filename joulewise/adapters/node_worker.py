@@ -58,6 +58,7 @@ VLLM_COMMAND_BASE = [VLLM_BINARY, "serve"]
 VLLM_HOST = "127.0.0.1"
 VLLM_HEALTH_PATH = "/health"
 VLLM_COMPLETIONS_PATH = "/v1/completions"
+VLLM_TOKENIZE_PATH = "/tokenize"
 VLLM_PIDFILE = "vllm.pid"
 VLLM_STDERR = "vllm.stderr"
 VLLM_STDOUT = "vllm.stdout"
@@ -308,9 +309,10 @@ def handle_vllm_run_workload(
         sampling_params.get("max_tokens"),
         max_tokens,
     )
+    prompt = _workload_prompt(workload)
     request_payload = {
         "model": server.get("served_model_name"),
-        "prompt": _workload_prompt(workload),
+        "prompt": prompt,
         "stream": True,
     }
     request_payload.update(sampling_params)
@@ -322,6 +324,23 @@ def handle_vllm_run_workload(
         "requested_output_tokens": max_tokens,
         "phase_boundary_method": "first_stream_chunk",
     }
+    try:
+        prompt_token_ids = _vllm_tokenize_prompt(
+            int(server["port"]),
+            server.get("served_model_name"),
+            prompt,
+        )
+    except Exception as exc:  # noqa: BLE001 - absence is structured provenance.
+        metadata["prompt_token_ids_unavailable_reason"] = {
+            "source": "vllm_tokenize_endpoint",
+            "endpoint": VLLM_TOKENIZE_PATH,
+            "error_class": exc.__class__.__name__,
+            "message": str(exc),
+        }
+    else:
+        metadata["prompt_token_ids"] = prompt_token_ids
+        metadata["prompt_token_count"] = len(prompt_token_ids)
+        metadata["tokenize_path"] = VLLM_TOKENIZE_PATH
     events: List[Dict[str, Any]] = []
     token_count = 0
     text_parts: List[str] = []
@@ -926,6 +945,43 @@ def _vllm_json_post(port: int, path: str, payload: Dict[str, Any]) -> Dict[str, 
     if not isinstance(parsed, dict):
         raise ValueError("vLLM response JSON must be an object")
     return parsed
+
+
+def _vllm_tokenize_prompt(port: int, model: Any, prompt: str) -> List[int]:
+    payload = {
+        "model": model,
+        "prompt": prompt,
+    }
+    response = _vllm_json_post(port, VLLM_TOKENIZE_PATH, payload)
+    return _vllm_token_ids_from_response(response)
+
+
+def _vllm_token_ids_from_response(payload: Dict[str, Any]) -> List[int]:
+    for key in ("token_ids", "input_ids", "tokens"):
+        candidate = payload.get(key)
+        if not isinstance(candidate, list):
+            continue
+        ids = _coerce_token_id_list(candidate)
+        if ids is not None:
+            return ids
+    raise ValueError("vLLM tokenize response did not contain token IDs")
+
+
+def _coerce_token_id_list(values: List[Any]) -> Optional[List[int]]:
+    ids: List[int] = []
+    for value in values:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            ids.append(value)
+            continue
+        if isinstance(value, dict):
+            token_id = value.get("id", value.get("token_id"))
+            if isinstance(token_id, int) and not isinstance(token_id, bool):
+                ids.append(token_id)
+                continue
+        return None
+    return ids
 
 
 def _vllm_stream_completion(

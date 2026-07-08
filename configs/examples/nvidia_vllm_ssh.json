@@ -24,7 +24,6 @@
   "workload_profile": {
     "name": "nvidia_vllm_smoke",
     "prompt_text": "Summarize why idle-subtracted energy matters for LLM inference benchmarking.",
-    "prompt_tokens": 9,
     "output_tokens": 16,
     "repetitions": 1,
     "warmup_runs": 1

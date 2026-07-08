@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import tempfile
 import unittest
@@ -17,6 +18,8 @@ from joulewise.adapters.vllm_runtime import (
 from joulewise.clock import FakeClock
 from joulewise.interfaces import AdapterFailure, RunContext
 from joulewise.schemas import BenchmarkConfig, FailureReason
+
+PROMPT_TOKEN_DOMAIN = "joulewise.prompt_token_ids.v1"
 
 
 def make_config(*, workload_profile: dict[str, Any] | None = None) -> BenchmarkConfig:
@@ -41,7 +44,6 @@ def make_config(*, workload_profile: dict[str, Any] | None = None) -> BenchmarkC
         "workload_profile": {
             "name": "vllm_smoke",
             "prompt_text": "alpha beta gamma",
-            "prompt_tokens": 3,
             "output_tokens": 3,
             "repetitions": 1,
             "warmup_runs": 1,
@@ -94,6 +96,11 @@ def task_result(
     )
 
 
+def expected_prompt_token_hash(token_ids: list[int]) -> str:
+    canonical = json.dumps(token_ids, separators=(",", ":"), sort_keys=True)
+    return hashlib.sha256((PROMPT_TOKEN_DOMAIN + "\0" + canonical).encode("utf-8")).hexdigest()
+
+
 def runtime_artifacts(root: Path) -> NodeTaskResult:
     root.mkdir(parents=True, exist_ok=True)
     events_text = "\n".join(
@@ -137,7 +144,7 @@ def runtime_artifacts(root: Path) -> NodeTaskResult:
                 "response_txt": "response.txt",
                 "tokens_jsonl": "tokens.jsonl",
             },
-            "metadata": {"worker": "fake-vllm"},
+            "metadata": {"prompt_token_ids": [101, 202, 303], "worker": "fake-vllm"},
         },
         offset=7.0,
     )
@@ -240,6 +247,12 @@ class VllmRuntimeAdapterTests(unittest.TestCase):
             self.assertEqual(result.output_artifacts["response.txt"], "AB")
             self.assertEqual(result.output_token_count, 2)
             self.assertEqual(result.token_count, 5)
+            prompt = result.workload_provenance["prompt"]
+            self.assertEqual(prompt["realized_token_count"], 3)
+            self.assertEqual(
+                prompt["token_ids_sha256"],
+                expected_prompt_token_hash([101, 202, 303]),
+            )
             self.assertEqual([event.timestamp_s for event in result.events], [93.0, 94.0])
             self.assertEqual(result.events[0].phase, "prefill")
             token_records = [
@@ -254,6 +267,9 @@ class VllmRuntimeAdapterTests(unittest.TestCase):
             task = client.tasks[0]["task"]
             self.assertEqual(task["operation"], "run_workload")
             self.assertNotIn("runtime", task)
+            self.assertEqual(task["workload"]["prompt_text"], "alpha beta gamma")
+            self.assertNotIn("prompt_tokens", task["workload"])
+            self.assertNotIn("dataset_ref", task["workload"])
             self.assertEqual(task["workload"]["sampling_params"]["temperature"], 0.0)
             self.assertEqual(task["workload"]["sampling_params"]["top_p"], 1.0)
             self.assertEqual(task["workload"]["sampling_params"]["seed"], 0)
@@ -277,6 +293,36 @@ class VllmRuntimeAdapterTests(unittest.TestCase):
             adapter.run_workload(make_config())
 
         self.assertEqual(caught.exception.failure_reason, FailureReason.DID_NOT_FIT)
+
+    def test_run_workload_records_structured_prompt_token_absence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            result = runtime_artifacts(root / "artifacts")
+            assert result.raw_status is not None
+            result.raw_status["metadata"] = {
+                "prompt_token_ids_unavailable_reason": {
+                    "source": "vllm_tokenize_endpoint",
+                    "endpoint": "/tokenize",
+                    "error_class": "VllmHttpError",
+                    "message": "HTTP 404",
+                }
+            }
+            adapter = VllmRuntimeAdapter(FakeClock(), FakeClient([result]))  # type: ignore[arg-type]
+
+            runtime_result = adapter.run_workload(make_config())
+
+            prompt = runtime_result.workload_provenance["prompt"]
+            self.assertIsNone(prompt["realized_token_count"])
+            self.assertIsNone(prompt["token_ids_sha256"])
+            self.assertEqual(
+                prompt["token_ids_unavailable_reason"],
+                {
+                    "source": "vllm_tokenize_endpoint",
+                    "endpoint": "/tokenize",
+                    "error_class": "VllmHttpError",
+                    "message": "HTTP 404",
+                },
+            )
 
     def test_cleanup_uses_runtime_operation(self) -> None:
         client = FakeClient([task_result(message="stopped")])

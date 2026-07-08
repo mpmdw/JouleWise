@@ -163,6 +163,15 @@ Worker exit code is secondary crash evidence: `0` iff `status == "succeeded"`,
 `1` otherwise, and `2` only when the worker cannot even create or write the
 artifacts path.
 
+For vLLM `runtime.run_workload`, the worker calls the same server's
+`POST /tokenize` endpoint before streaming `POST /v1/completions`. On
+success, `status.json.metadata.prompt_token_ids` records the realized prompt
+token IDs and `prompt_token_count` records their count. If `/tokenize` is
+unavailable or does not expose token IDs, the workload may still stream, but
+metadata records `prompt_token_ids_unavailable_reason` with `source`,
+`endpoint`, `error_class`, and `message`; adapters must not synthesize token
+IDs for the D-033 v1 prompt-token hash.
+
 ## Failure Taxonomy
 
 The controller remains the only `FailureReason` to run-status mapper. Remote
