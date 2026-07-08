@@ -39,10 +39,17 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* grid-paper texture + vignette */
+/* grid-paper texture + vignette.
+   Document-anchored (absolute, top band), NOT position:fixed: a fixed
+   full-viewport layer with a mask forces Firefox to repaint the mask
+   every scroll frame (Chromium composites it) — reported as heavy scroll
+   lag in Firefox. The radial mask already fades the grid out near the
+   top, so anchoring it to the page keeps the look and scrolls for free. */
+body { position: relative; }
 body::before {
   content: "";
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  position: absolute; top: 0; left: 0; right: 0; height: 170vh;
+  z-index: 0; pointer-events: none;
   background-image:
     linear-gradient(var(--line-soft) 1px, transparent 1px),
     linear-gradient(90deg, var(--line-soft) 1px, transparent 1px);
