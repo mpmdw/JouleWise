@@ -34,6 +34,7 @@ RAW_EVENTS_NAME = "vllm_events.jsonl"
 RAW_RESPONSE_NAME = "vllm_response.txt"
 RAW_TOKENS_NAME = "vllm_tokens.jsonl"
 WORKER_EVENTS_NAME = "events.jsonl"
+WORKER_LOG_NAME = "worker.log"
 WORKER_RESPONSE_NAME = "response.txt"
 WORKER_TOKENS_NAME = "tokens.jsonl"
 DEFAULT_TENSOR_PARALLEL_SIZE = 1
@@ -66,6 +67,7 @@ class VllmRuntimeAdapter:
             timeout_s=900.0,
             block=self._runtime_block(config),
         )
+        self._preserve_worker_log(result, context, "prepare")
         return self._adapter_result(result)
 
     def warmup(
@@ -78,6 +80,7 @@ class VllmRuntimeAdapter:
             timeout_s=120.0,
             block=self._runtime_block(config),
         )
+        self._preserve_worker_log(result, context, "warmup")
         return self._adapter_result(result)
 
     def run_workload(
@@ -90,6 +93,7 @@ class VllmRuntimeAdapter:
             timeout_s=900.0,
             block=self._workload_block(config),
         )
+        self._preserve_worker_log(result, context, "run_workload")
         if not result.ok:
             self._raise_task_failure(result, "vLLM workload failed")
 
@@ -125,6 +129,7 @@ class VllmRuntimeAdapter:
             timeout_s=120.0,
             block=self._runtime_block(config),
         )
+        self._preserve_worker_log(result, context, "cleanup")
         return self._adapter_result(result)
 
     def _run_task(
@@ -216,6 +221,32 @@ class VllmRuntimeAdapter:
                 "could not read collected vLLM artifact %s: %s" % (path.name, exc),
                 self._result_metadata(result),
             ) from exc
+
+    def _preserve_worker_log(
+        self,
+        result: NodeTaskResult,
+        context: RunContext | None,
+        operation: str,
+    ) -> None:
+        if context is None or result.artifacts_path is None:
+            return
+        artifacts = result.raw_status.get("artifacts", {}) if result.raw_status else {}
+        relative = artifacts.get("worker_log", WORKER_LOG_NAME)
+        source = Path(result.artifacts_path) / str(relative)
+        task_id = (
+            str(result.raw_status.get("task_id"))
+            if result.raw_status and result.raw_status.get("task_id")
+            else "vllm-%s" % operation
+        )
+        safe_task_id = task_id.replace("/", "-")
+        try:
+            text = source.read_text(encoding="utf-8")
+        except OSError:
+            return
+        (context.logs_dir / ("%s_worker.log" % safe_task_id)).write_text(
+            text,
+            encoding="utf-8",
+        )
 
     def _raise_task_failure(self, result: NodeTaskResult, fallback: str) -> None:
         raise AdapterFailure(

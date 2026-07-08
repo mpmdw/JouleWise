@@ -35,6 +35,7 @@ from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline, Tele
 
 RAW_SAMPLES_NAME = "nvidia_smi.csv"
 RAW_IDLE_NAME = "nvidia_smi_idle.csv"
+WORKER_LOG_NAME = "worker.log"
 RAIL_MANIFEST = ["gpu_board"]
 QUERY_FIELDS = ["timestamp", "power.draw", "temperature.gpu"]
 SOURCE = "nvidia_smi"
@@ -103,6 +104,7 @@ class NvidiaSmiTelemetryAdapter:
             timeout_s=self._idle_timeout_s(config),
             idle_seconds=config.sampling.idle_seconds,
         )
+        self._preserve_worker_log(result, context, "measure_idle")
         if not result.ok:
             self._raise_task_failure(result, "nvidia-smi idle measurement failed")
 
@@ -137,6 +139,7 @@ class NvidiaSmiTelemetryAdapter:
             context,
             timeout_s=30.0,
         )
+        self._preserve_worker_log(result, context, "start_sampling")
         metadata = self._result_metadata(result)
         return AdapterResult(
             ok=result.ok,
@@ -154,6 +157,7 @@ class NvidiaSmiTelemetryAdapter:
             context,
             timeout_s=30.0,
         )
+        self._preserve_worker_log(result, context, "stop_sampling")
         if not result.ok:
             self._raise_task_failure(result, "nvidia-smi stop sampling failed")
 
@@ -260,6 +264,32 @@ class NvidiaSmiTelemetryAdapter:
                 "could not read collected nvidia-smi artifact %s: %s" % (path.name, exc),
                 self._result_metadata(result),
             ) from exc
+
+    def _preserve_worker_log(
+        self,
+        result: NodeTaskResult,
+        context: RunContext | None,
+        operation: str,
+    ) -> None:
+        if context is None or result.artifacts_path is None:
+            return
+        artifacts = result.raw_status.get("artifacts", {}) if result.raw_status else {}
+        relative = artifacts.get("worker_log", WORKER_LOG_NAME)
+        source = Path(result.artifacts_path) / str(relative)
+        task_id = (
+            str(result.raw_status.get("task_id"))
+            if result.raw_status and result.raw_status.get("task_id")
+            else "nvidia-smi-%s" % operation
+        )
+        safe_task_id = task_id.replace("/", "-")
+        try:
+            text = source.read_text(encoding="utf-8")
+        except OSError:
+            return
+        (context.logs_dir / ("%s_worker.log" % safe_task_id)).write_text(
+            text,
+            encoding="utf-8",
+        )
 
     def _raise_task_failure(self, result: NodeTaskResult, fallback: str) -> None:
         raise AdapterFailure(

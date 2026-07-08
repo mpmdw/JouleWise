@@ -1,0 +1,45 @@
+{
+  "schema_version": "0.1",
+  "run_id": "example-nvidia-vllm-ssh",
+  "model": {
+    "name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "family": "llama",
+    "source": "/models/TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+    "revision": "main",
+    "weight_format": "safetensors",
+    "context_window": 2048
+  },
+  "quantization": {
+    "name": "none"
+  },
+  "hardware_target": {
+    "id": "nvidia_node_rtx_3050",
+    "transport": "ssh",
+    "host": "nvidia-3050-node",
+    "runtime_backend": "vllm",
+    "telemetry_backend": "nvidia_smi",
+    "device_kind": "nvidia_discrete_gpu",
+    "notes": "Slice 2K provisional NVIDIA node path. hardware_target.host is an opaque OpenSSH destination; user, port, and identity are expected to come from SSH config."
+  },
+  "workload_profile": {
+    "name": "nvidia_vllm_smoke",
+    "prompt_text": "Summarize why idle-subtracted energy matters for LLM inference benchmarking.",
+    "prompt_tokens": 9,
+    "output_tokens": 16,
+    "repetitions": 1,
+    "warmup_runs": 1
+  },
+  "interconnect": {
+    "name": "ssh"
+  },
+  "sampling": {
+    "power_hz": 2.0,
+    "idle_seconds": 1.0,
+    "warmup_seconds": 0.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "jon",
+    "tags": ["phase2", "nvidia", "vllm", "nvidia-smi", "ssh", "provisional"]
+  }
+}

@@ -34,6 +34,7 @@ PINNED_CONFIG_SHA256 = {
     "mac_mlx_local.json": "e9878c0ed7735eb48293581b0944c1f5e1d08e67c9b77f0fafd8c4c265020f3e",
     "mac_mlx_mock_telemetry.json": "4023dee935eb17d1a4da1f2bd90af9404de2eca33f1df9c41382e4750fd93eda",
     "mac_mlx_qwen35_122b.json": "100d76977dffab1ae841124c4708727ac45ab793bbe0061dd87a6d9f54dbb97a",
+    "nvidia_vllm_ssh.json": "7d7b0996dab424a85f38155e35a39c45a0ba807514e4e485e4a7298d0e65c0b4",
 }
 
 
