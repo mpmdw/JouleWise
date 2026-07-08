@@ -697,9 +697,10 @@ wording for these elements follows `docs/contracts/analysis_plans.md`.
 Gates: the 2M baseline data milestone (whatever target set 2M ran on —
 Mac-only degraded floor included) exists and passes
 `validate-bundle --strict`; P2-013 + P2-014 complete; Stage 3.0.1 verdict
-recorded (C-007 execution order). This is post-baseline feature work: it
-must not move ahead of 2M, and it is NOT Phase 2 exit-critical (additive
-enrichment, not gate).
+recorded (C-007 execution order). This is post-baseline feature work: its
+campaign EXECUTION must not move ahead of 2M (BUILD is separately
+governed — reopened pre-2M by D-042, see the amendment below), and it is
+NOT Phase 2 exit-critical (additive enrichment, not gate).
 
 C-015 sequencing and stop-line (2026-07-08): GATE AMENDMENT - amends the
 D-039 allowlist (which named only P2-021) to also allow the Window-A
