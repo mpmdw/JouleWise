@@ -183,7 +183,7 @@ class MockRuntimeAdapter:
         context: RunContext | None = None,
     ) -> RuntimeResult:
         manifest_sha256 = suite_manifest_sha256(manifest.to_dict())
-        rep_index = 0
+        rep_index = _suite_rep_index_from_run_id(config.run_id)
         derived_order_seed = order_seed(
             manifest.suite_seed,
             manifest.execution_policy.order_policy,
@@ -540,3 +540,10 @@ class MockRuntimeAdapter:
     @staticmethod
     def _prompt_token_ids(prompt_tokens: int) -> list[int]:
         return list(range(1, prompt_tokens + 1))
+
+
+def _suite_rep_index_from_run_id(run_id: str | None) -> int:
+    if run_id is None or "__r" not in run_id:
+        return 0
+    suffix = run_id.rsplit("__r", 1)[1]
+    return int(suffix) if suffix.isdigit() else 0

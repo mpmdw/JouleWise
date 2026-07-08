@@ -138,6 +138,11 @@ class SummaryMetricsTests(unittest.TestCase):
         schema = SummaryMetrics.json_schema()
         self.assertIn("suite_metrics", schema["properties"])
         self.assertNotIn("suite_metrics", schema["required"])
+        suite_summary = schema["$defs"]["suite_summary"]
+        self.assertIn("floor_abs_j", suite_summary["required"])
+        self.assertIn("floor_cmp_j", suite_summary["required"])
+        self.assertEqual(suite_summary["properties"]["floor_abs_j"], {"type": ["number", "null"]})
+        self.assertEqual(suite_summary["properties"]["floor_cmp_j"], {"type": ["number", "null"]})
         payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()
         self.assertIsNone(payload["suite_metrics"])
         self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.2.0")

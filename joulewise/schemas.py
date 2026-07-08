@@ -601,6 +601,8 @@ class SuiteSummary:
     items: list[SuiteItemMetrics]
     blocks: list[SuiteGroupMetrics]
     levels: list[SuiteGroupMetrics]
+    floor_abs_j: float | None
+    floor_cmp_j: float | None
     floor_source: str | None
 
 
@@ -792,6 +794,9 @@ class SummaryMetrics:
                         "items",
                         "blocks",
                         "levels",
+                        "floor_abs_j",
+                        "floor_cmp_j",
+                        "floor_source",
                     ],
                     "properties": {
                         "suite_id": {"type": "string"},
@@ -811,6 +816,8 @@ class SummaryMetrics:
                             "type": "array",
                             "items": {"$ref": "#/$defs/suite_group_metrics"},
                         },
+                        "floor_abs_j": nullable_number,
+                        "floor_cmp_j": nullable_number,
                         "floor_source": {"type": ["string", "null"]},
                     },
                 },

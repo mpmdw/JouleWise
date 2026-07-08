@@ -54,6 +54,9 @@ from joulewise.schemas import (
     RunStatus,
     SUMMARY_REDUCER_ID,
     SUMMARY_REDUCER_VERSION,
+    SuiteGroupMetrics,
+    SuiteItemMetrics,
+    SuiteSummary,
     SummaryMetrics,
     TelemetryBackend,
 )
@@ -321,6 +324,12 @@ def reduce_bundle(path: Path) -> SummaryMetrics:
     Degenerate inputs - including missing/corrupt ``config.json`` or
     ``metadata.json`` and D-027 rail misalignment - yield a structured
     ``FAILED``/``unknown_error`` summary rather than raising.
+
+    Suite per-item/block/level energies are gross-only attribution evidence
+    (C-014/D-045). Headline ``phase_energy_j`` remains suite-total through
+    existing multi-interval phase pairing, and suite TTFT is the first item
+    token timestamp because runtime suite items execute serially in marker
+    order.
     """
     reader = BundleReader(Path(path))
     try:
@@ -418,6 +427,7 @@ def _reduce(
     phase_windows = reader.phase_windows()
     phase_energy_j = _phase_energy(phase_windows, curve)
     phase_identifiability = _phase_identifiability(phase_windows, curve)
+    suite_metrics = _suite_metrics(reader, curve)
 
     quality = MeasurementQuality(
         requested_sampling_hz=config.sampling.power_hz,
@@ -448,6 +458,7 @@ def _reduce(
         idle_baseline=idle_baseline,
         measurement_quality=quality,
         phase_energy_j=phase_energy_j,
+        suite_metrics=suite_metrics,
     )
 
 
@@ -493,6 +504,7 @@ def _zero_window_summary(
         idle_baseline=idle_baseline,
         measurement_quality=quality,
         phase_energy_j=_phase_energy(reader.phase_windows(), curve),
+        suite_metrics=_suite_metrics(reader, curve),
     )
 
 
@@ -597,3 +609,154 @@ def _phase_identifiability(
             "identifiable" if identifiable else "not_resolvable_sample_count"
         )
     return result
+
+
+def _suite_metrics(
+    reader: BundleReader,
+    curve: list[TracePoint],
+    *,
+    floor_abs_j: float | None = None,
+    floor_cmp_j: float | None = None,
+    floor_source: str = "none_pending_P2-015",
+) -> SuiteSummary | None:
+    """Return gross-only suite metrics, or ``None`` for non-suite bundles.
+
+    ``floor_abs_j`` and ``floor_cmp_j`` are the P2-015 floor seam. They are
+    accepted with provenance now, but no ``below_floor`` assignment is made
+    until calibration artifacts exist.
+    """
+    manifest = reader.suite_manifest()
+    if manifest is None:
+        return None
+
+    item_windows = reader.item_windows()
+    items: list[SuiteItemMetrics] = []
+    status_counts: dict[str, int] = {}
+    for item in item_windows:
+        status_counts[item.status] = status_counts.get(item.status, 0) + 1
+        items.append(
+            SuiteItemMetrics(
+                item_id=item.item_id,
+                item_index=item.item_index,
+                status=item.status,
+                start_s=item.window.start_s,
+                end_s=item.window.end_s,
+                energy_gross_j=_window_energy(curve, item.window),
+                identifiability=_window_identifiability(curve, item.window),
+                emitted_tokens=_optional_int(item.end_metadata.get("emitted_tokens")),
+                stop_reason=_optional_str(item.end_metadata.get("stop_reason")),
+                response_sha256=_optional_str(item.end_metadata.get("response_sha256")),
+            )
+        )
+
+    metadata = reader.metadata()
+    suite_metadata = metadata.get("suite")
+    manifest_hash = None
+    if isinstance(suite_metadata, dict):
+        value = suite_metadata.get("manifest_sha256")
+        if isinstance(value, str):
+            manifest_hash = value
+
+    return SuiteSummary(
+        suite_id=manifest.suite_id,
+        manifest_sha256=manifest_hash,
+        planned_item_count=len(manifest.items),
+        executed_item_count=len(item_windows),
+        status_counts=status_counts,
+        items=items,
+        blocks=_suite_group_metrics(reader.block_windows(), item_windows, curve),
+        levels=_suite_level_metrics(reader.level_windows(), item_windows, curve),
+        floor_abs_j=floor_abs_j,
+        floor_cmp_j=floor_cmp_j,
+        floor_source=floor_source,
+    )
+
+
+def _suite_group_metrics(
+    windows: dict[str, list[Window]],
+    items: list[Any],
+    curve: list[TracePoint],
+) -> list[SuiteGroupMetrics]:
+    result: list[SuiteGroupMetrics] = []
+    for group_id, intervals in windows.items():
+        group_items = [
+            item for item in items if any(_window_contains(interval, item.window) for interval in intervals)
+        ]
+        result.append(
+            SuiteGroupMetrics(
+                group_id=group_id,
+                energy_gross_j=_windows_energy(curve, intervals),
+                identifiability=_windows_identifiability(curve, intervals),
+                item_count=len(group_items),
+                status_counts=_status_counts(group_items),
+            )
+        )
+    return result
+
+
+def _suite_level_metrics(
+    windows: dict[tuple[str, str], list[Window]],
+    items: list[Any],
+    curve: list[TracePoint],
+) -> list[SuiteGroupMetrics]:
+    result: list[SuiteGroupMetrics] = []
+    for (block_id, level_id), intervals in windows.items():
+        group_items = [
+            item for item in items if any(_window_contains(interval, item.window) for interval in intervals)
+        ]
+        result.append(
+            SuiteGroupMetrics(
+                group_id=f"{block_id}/{level_id}",
+                energy_gross_j=_windows_energy(curve, intervals),
+                identifiability=_windows_identifiability(curve, intervals),
+                item_count=len(group_items),
+                status_counts=_status_counts(group_items),
+            )
+        )
+    return result
+
+
+def _window_energy(curve: list[TracePoint], window: Window) -> float | None:
+    if not curve:
+        return None
+    return _integrate(curve, window.start_s, window.end_s)
+
+
+def _windows_energy(curve: list[TracePoint], windows: list[Window]) -> float | None:
+    if not curve:
+        return None
+    return sum(_integrate(curve, window.start_s, window.end_s) for window in windows)
+
+
+def _window_identifiability(curve: list[TracePoint], window: Window) -> str:
+    if window.duration_s == 0.0 or _in_window_sample_count(curve, window) >= MIN_PHASE_SAMPLES:
+        return "identifiable"
+    return "not_resolvable_sample_count"
+
+
+def _windows_identifiability(curve: list[TracePoint], windows: list[Window]) -> str:
+    for window in windows:
+        if _window_identifiability(curve, window) != "identifiable":
+            return "not_resolvable_sample_count"
+    return "identifiable"
+
+
+def _status_counts(items: list[Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        counts[item.status] = counts.get(item.status, 0) + 1
+    return counts
+
+
+def _window_contains(outer: Window, inner: Window) -> bool:
+    return outer.start_s <= inner.start_s and inner.end_s <= outer.end_s
+
+
+def _optional_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
+def _optional_str(value: Any) -> str | None:
+    return value if isinstance(value, str) else None

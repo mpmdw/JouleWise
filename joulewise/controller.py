@@ -77,6 +77,7 @@ from joulewise.interfaces import (
     RuntimeAdapter,
     RuntimeEvent,
     RuntimeResult,
+    SuiteRuntimeAdapter,
     TelemetryAdapter,
     ThermalState,
     TransportAdapter,
@@ -90,6 +91,13 @@ from joulewise.schemas import (
     SamplingConfig,
     SummaryMetrics,
     TelemetryBackend,
+)
+from joulewise.suite import (
+    SuiteManifest,
+    canonical_effective_manifest,
+    load_suite_manifest,
+    order_seed,
+    suite_manifest_sha256,
 )
 
 __all__ = [
@@ -276,6 +284,11 @@ class _Execution:
         self._thermal_pre: ThermalState | None = None
         self._thermal_post: ThermalState | None = None
         self._runtime_result: RuntimeResult | None = None
+        self._suite_manifest: SuiteManifest | None = None
+        self._suite_effective_manifest: dict[str, Any] | None = None
+        self._suite_manifest_sha256: str | None = None
+        self._suite_source_file_sha256: str | None = None
+        self._suite_order_seed: str | None = None
         self._samples: list[PowerSample] = []
         self._sampling_active = False
         # Idempotence flags so the failure path writes only what is missing.
@@ -333,6 +346,14 @@ class _Execution:
     # Stages
 
     def _stage_validate(self) -> None:
+        """Resolve adapters and validate suite manifests before any sampling.
+
+        When ``workload_profile.suite_manifest_ref`` is set, the manifest path
+        is used as given if absolute, otherwise resolved by ``Path(ref)`` from
+        the process current working directory. The raw source bytes are hashed
+        for audit metadata, while run identity and bundle evidence use the
+        canonical effective manifest hash (D-044).
+        """
         self._begin_stage("validate")
         transport, failure = self._registry.resolve_transport(self._config)
         if transport is None:
@@ -343,6 +364,7 @@ class _Execution:
             raise self._resolution_failure("validate", "runtime", failure)
         self._runtime = runtime
         self._log(self._runtime_log, f"resolved runtime adapter '{runtime.name}'")
+        self._validate_suite_manifest_if_present(runtime)
         telemetry, failure = self._registry.resolve_telemetry(self._config, self._clock)
         if telemetry is None:
             raise self._resolution_failure("validate", "telemetry", failure)
@@ -361,6 +383,8 @@ class _Execution:
         self._begin_stage("prepare")
         assert self._transport is not None and self._runtime is not None
         assert self._telemetry is not None
+        if self._suite_effective_manifest is not None:
+            self._writer.write_suite_manifest(self._suite_effective_manifest)
         self._connection_metadata = self._transport.connection_metadata(
             self._config, self._context
         )
@@ -428,7 +452,12 @@ class _Execution:
         # D-013 quiescent window: between start_sampling and stop_sampling the
         # controller only blocks on the runtime - no file writes, no disk event
         # appends, no logging (buffers flush after the window).
-        runtime_result = self._runtime.run_workload(self._config, self._context)
+        if self._suite_manifest is not None:
+            runtime_result = self._runtime.run_suite(  # type: ignore[attr-defined]
+                self._config, self._suite_manifest, self._context
+            )
+        else:
+            runtime_result = self._runtime.run_workload(self._config, self._context)
         self._capture_adapter_alignments()
         # The stop marker's timestamp is captured before stop_sampling so the
         # sampler's wind-down (process stop, plist parsing) stays outside the
@@ -662,6 +691,16 @@ class _Execution:
                 extra["workload_provenance"] = _jsonable(
                     self._runtime_result.workload_provenance
                 )
+        if self._suite_manifest is not None:
+            extra["suite"] = {
+                "suite_id": self._suite_manifest.suite_id,
+                "suite_profile": self._suite_manifest.suite_profile,
+                "suite_revision": self._suite_manifest.suite_revision,
+                "manifest_sha256": self._suite_manifest_sha256,
+                "source_file_sha256": self._suite_source_file_sha256,
+                "item_count": len(self._suite_manifest.items),
+                "order_seed": self._suite_order_seed,
+            }
         # Caller-supplied metadata (Slice 2F: the experiment runner records a
         # cooldown cap-hit against the following rep here). Lands under the
         # dedicated "extra" key so it never collides with controller fields and
@@ -779,6 +818,50 @@ class _Execution:
             return
         reason = result.failure_reason or FailureReason.UNKNOWN_ERROR
         raise _StageFailure(stage, reason, result.message or default_message)
+
+    def _validate_suite_manifest_if_present(self, runtime: RuntimeAdapter) -> None:
+        profile = self._config.workload_profile
+        if profile.suite_manifest_ref is None:
+            return
+        if not isinstance(runtime, SuiteRuntimeAdapter) or not callable(
+            getattr(runtime, "run_suite", None)
+        ):
+            raise _StageFailure(
+                "validate",
+                FailureReason.UNSUPPORTED_WORKLOAD,
+                "runtime adapter does not support suite workloads",
+            )
+        ref_path = Path(profile.suite_manifest_ref)
+        try:
+            source_bytes = ref_path.read_bytes()
+            manifest = load_suite_manifest(ref_path)
+            effective = canonical_effective_manifest(json.loads(source_bytes))
+        except Exception as exc:  # noqa: BLE001 - fail closed into a complete bundle
+            raise _StageFailure(
+                "validate",
+                FailureReason.UNKNOWN_ERROR,
+                f"suite manifest cannot be loaded from {profile.suite_manifest_ref!r}: "
+                f"{type(exc).__name__}: {exc}",
+            ) from exc
+        actual_hash = suite_manifest_sha256(effective)
+        if actual_hash != profile.suite_manifest_sha256:
+            raise _StageFailure(
+                "validate",
+                FailureReason.UNKNOWN_ERROR,
+                "suite manifest hash mismatch: "
+                f"config has {profile.suite_manifest_sha256!r}, "
+                f"{profile.suite_manifest_ref!r} hashes to {actual_hash!r}",
+            )
+        rep_index = _suite_rep_index_from_run_id(self._config.run_id)
+        self._suite_manifest = manifest
+        self._suite_effective_manifest = effective
+        self._suite_manifest_sha256 = actual_hash
+        self._suite_source_file_sha256 = hashlib.sha256(source_bytes).hexdigest()
+        self._suite_order_seed = order_seed(
+            manifest.suite_seed,
+            manifest.execution_policy.order_policy,
+            rep_index,
+        )
 
     @staticmethod
     def _resolution_failure(
@@ -1197,3 +1280,23 @@ def _config_sha256(config: BenchmarkConfig) -> str:
         json.dumps(config.to_dict(), indent=2, sort_keys=True) + "\n"
     ).encode("utf-8")
     return hashlib.sha256(config_bytes).hexdigest()
+
+
+def _suite_rep_index_from_run_id(run_id: str | None) -> int:
+    """Suite order-seed repetition index from the existing D-010 ``__rN`` suffix.
+
+    Single runs and custom run IDs without that suffix use index 0. Experiment
+    members are created by ``run_experiment`` as ``<experiment_id>__rN`` and use
+    the one-based ``N`` already present in the run id. The ``__rN`` segment is
+    the D-022-reserved experiment-member suffix, so any run id carrying it gets
+    that repetition index deliberately; malformed or zero values fall back to 0.
+    """
+    if run_id is None:
+        return 0
+    marker = "__r"
+    if marker not in run_id:
+        return 0
+    suffix = run_id.rsplit(marker, 1)[1]
+    if not suffix.isdigit():
+        return 0
+    return int(suffix)
