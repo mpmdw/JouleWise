@@ -26,133 +26,155 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#product-outcomes-all-merged-to-main-head-fcd111a">Product outcomes (all merged to main, HEAD fcd111a)</a>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#product-outcomes-all-merged">Product outcomes (all merged)</a>
 <a href="#verification-evidence">Verification evidence</a>
+<a href="#process-record">Process record</a>
 <a href="#restart-instructions-next-agent">Restart instructions (next agent)</a>
 <a href="#process-trace-appendix">Process trace appendix</a>
-<a href="#addendum-post-large-workload-meta-reassessment-same-day-c-016">Addendum — post-large-workload meta-reassessment (same day, C-016)</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-08-suite-science-expansion-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-08-suite-science-expansion.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-08-suite-science-expansion.md · commit ce12445"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-08-suite-science-expansion.md</span><span class="source-commit">commit ce12445</span></span></div>
-    <h1>Run report — suite-science hardening + benchmark expansion (2026-07-08)</h1>
-<p><strong>Deliverable check (Ed&#39;s session ask, restated):</strong> harden the science the
-prompt/workload suite can answer; decide and begin what to build next;
-expand toward multi-prompt/difficulty/type suites and benchmark interop.
-SHIPPED: the science-hardening contract stack, the expansion design, the
-Window-A capture + sentinel code, and the cross-checked implementation
-research for the suite itself. NOT YET SHIPPED: the suite implementation
-(P2-010a/P2-012/P2-020 code) — build lane reopened by D-042; the handoff is
-<code>docs/phase_2/suite_implementation_research.md</code> (adjudicate its amendments
-first). Mid-session, Ed had to point out the suite itself wasn&#39;t being
-built — recorded as a process lesson (skill-usage log).</p>
-<h2>Product outcomes (all merged to main, HEAD <code>fcd111a</code>)</h2>
+<a href="#10-note-post-large-workload-trigger">§10 note (post-large-workload trigger)</a></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-08-suite-build-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-08-suite-build.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-08-suite-build.md · commit 6b1f73a"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-08-suite-build.md</span><span class="source-commit">commit 6b1f73a</span></span></div>
+    <h1>Run report — suite build: adjudication + P2-010a/b + P2-012/P2-020 engines (2026-07-08)</h1>
+<p><strong>Deliverable check (§0 sentence):</strong> WORKING SUITE CODE ON MAIN — P2-010a
+substrate + P2-010b smoke ladder + P2-012 phase-1 generators + P2-020
+sentinel generator. <strong>SHIPPED</strong>: all four are merged to main (HEAD
+<code>c752c30</code>), 732 tests green, live-verified on real MLX and via the CLI
+mock flows, post-merge integration review clean.</p>
+<h2 id="product-outcomes-all-merged">Product outcomes (all merged)</h2>
 <ul>
-<li><strong>PR #14 (suite-science-hardening, 4 commits, merged <code>5c19099</code>):</strong><ul>
-<li><code>docs/contracts/analysis_plans.md</code> (D-038): pre-registered analysis
-plans binding L2/L3 claims; AP-1..AP-6 seeded; MDE arithmetic
-(<code>MDE95 ~= 1.46xCV</code>, 80%-power <code>~2.0xCV</code> t-based); pseudo-replication
-rule; floor gate <code>max(floor_abs, floor_cmp)</code>.</li>
-<li>Program v2 (D-039): <code>q4_l3_shape_grid_v1</code> (4x3 + interpolation/
-extrapolation holdouts — the only current path to L3), P2-015 expanded
-to per-metric/window-class floors + comparative MDE, jw_mixed
-common-shape stratum + 3-phase sequencing, P2-010a/b split,
-two-quiet-window plan, Phase 4 figures F9-F12.</li>
-<li>Suite architecture v2 + interop (C-015, D-040/D-041): one generic
-suite mechanism (B×k bundles, r_within=1, per-item status model,
-difficulty as quarantined metadata); <code>benchmark_import</code> manifest
-(HumanEval smoke first, FLORES second); marker-shim energy layer
-(contract in <code>adapter_contracts.md</code>; P2-022 verdict-shaped spike);
-kill list; capability map by claim ceiling (bank).</li>
-<li><code>docs/phase_2/suite_implementation_research.md</code>: 4 cross-checked
-research reports (execution architecture, category generators,
-affine ladder, licensing) — amendments unresolved by design.</li>
-<li>D-042: owner directive reopens the suite BUILD lane pre-2M; campaign
-execution ordering unchanged.</li>
-<li>Queue: P2-019..P2-024 added; P2-010/012/015/016/020 amended.</li>
-</ul>
-</li>
-<li><strong>PR #15 (p2-021-drift-sentinels, merged <code>8765ee1</code>):</strong> P2-021 DONE —
-<code>short_short_sentinel</code> at each model-block boundary (self-identifying
-tags), block/position covariates in the order manifest + campaign-log
-echo, fail-loud on sentinel-less blocks. Suite 602.</li>
-<li><strong>PR #16 (window-a-capture, merged <code>fcd111a</code>):</strong> the C-015/R2
-collect-before-Window-A set: per-run env snapshots at prepare-end
-(+2s settle; failure_fallback scope for early failures), cooldown-gate
-trace preservation, signed inter-run gaps + <code>clock_step_suspect</code>,
-<code>tokenize</code>/<code>generation_setup</code> phase markers, MLX memory snapshots
-(prepare_end/cleanup_start), powermetrics sampler metadata,
-connected-display semantics via system_profiler (framebuffer pipes
-separated). Suite 611.</li>
-<li>Councils C-014 + C-015 (full entries); decisions D-038..D-042.</li>
-<li>Global: skill-usage logging started (<code>~/.claude/skills/skill-usage-log.md</code>,
-Ed&#39;s standing instruction; memory entry added).</li>
+<li><strong>Adjudication (main <code>fadbd41</code> + <code>c2cfd99</code>):</strong> all 37
+suite_implementation_research.md cross-check amendments dispositioned
+(Codex disposition draft → fresh Codex adversarial round → lead calls);
+binding pins D-044 (suite config identity: omission serialization +
+canonical effective-manifest hash), D-045 (substrate execution
+semantics, 9 pins), D-046 (AP-6 ids-native BOS-less sentinels), D-047
+(affine ladder pins); AP-5/AP-6 row amendments; bank sketch amendments;
+D-029/C-015 back-annotations (D-043 discipline). Amendments during the
+merge gate: D-047.2 k=25 accounting (<code>336b515</code>), D-045.1 order_seed
+signature (<code>024cec9</code>).</li>
+<li><strong>P2-010a substrate (PR #17, 4 commits):</strong> <code>joulewise/suite.py</code>
+(manifest dataclasses, canonical effective manifest + sha256, marker
+vocabulary, ItemStatus + assignable subsets, pinned policy
+vocabularies, sentinel-gated duplicates, per-block level contiguity);
+<code>WorkloadProfile.suite_manifest_ref/sha256</code> with all pre-existing
+config hashes byte-identical; <code>SuiteRuntimeAdapter.run_suite(..., order_seed)</code> (controller-derived, never runtime-chosen); mock + MLX
+suite execution with per-item statuses incl. <code>fixed_budget_underrun</code>;
+<code>outputs/suite_items.jsonl</code> with response text, token-id hashes,
+<code>prompt_source</code>/<code>bos_present</code>; BundleReader suite accessors +
+validation (hash chain on the effective manifest, keyed marker
+pairing/nesting, group-marker requirements, ids-native expected-hash
+closure, status vocabulary policing incl. all status_counts, suite_end
+arithmetic, status-aware gating so failure bundles stay D-011-valid);
+reducer <code>suite_metrics</code> (gross-only, identifiability, both-floor seam
+<code>none_pending_P2-015</code>); strict rollup provenance
+(<code>joulewise.suite_prompt_token_ids.v1</code>, recomputed from the JSONL at
+strict validation); D-047.5 sampler pinning (both mlx_lm API homes);
+contracts docs (run_bundle_layout, adapter_contracts suite sections);
+stream ledger SUB-1..SUB-7.</li>
+<li><strong>P2-010b affine core (PR #18 → promoted via #20):</strong>
+<code>joulewise/workloads.py</code> (derive_item byte-exact to report C §1.1,
+raw-completion render_prompt, ASCII-only scorer, audit-hash chain);
+smoke manifest <code>affine_smoke_v1</code> (levels {1,8,64}×8 + dedicated
+sentinel item at positions 0/25; k=25 distinct/26 executions; clean
+8-item level denominators); annotations sidecar (ground truth
+quarantined, C-004); mock example config. Envelope-gate analysis
+script is the named follow-on (queue row).</li>
+<li><strong>P2-012 phase-1 + P2-020 engine (PR #19):</strong> <code>joulewise/gensuite</code> —
+sha256-ctr DRBG (golden-vector pinned), exact-shape grow/greedy-fill
+(full re-encode, fail-closed, no pad/truncate), six category
+generators (reasoning DAG integer-safe with independent
+parse-and-evaluate tests), five AP-6 sentinel conditions ids-native
+BOS-less (D-046), B7 tokenizer file-manifest identity (mandatory
+sidecar; no silent fallback), truthful provenance (GEN-3). Real-
+tokenizer manifest generation is a lead-side <code>.venv</code> follow-on.</li>
 </ul>
 <h2 id="verification-evidence">Verification evidence</h2>
 <ul>
-<li>Merged main (fcd111a): <code>python3 -m unittest discover -s tests</code> → 617 OK
-(skipped=10), lead-run post-merge (PR heads were 602/611 standalone;
-the merge union adds the cross-stream tests).</li>
-<li>Live lead gates on the capture head (real MLX 1.5B + mock telemetry,
-<code>.venv</code> python): strict-valid bundles at both 740c32c and db54cc2;
-no run_end snapshot (blocker fix live-proven); all 4 phases paired and
-honestly <code>not_resolvable</code> at sub-sample durations; prepare_end snapshot
-871MB active; display 1 built-in/0 external with pipes 5/4 separated;
-clock probe correct on host (<code>timed_running: true</code>).</li>
-<li>6/6 real corpus bundles strict-valid under the new code (run twice:
-pre- and post-fix rounds).</li>
-<li>CI green both matrix legs on every PR final head.</li>
-<li>Review stack: C-014 (scout + 3 lenses + peer), C-015 (2 reach + 2
-design lenses + peer), pre-commit docs-verify workflow (1 blocker +
-6 should-fixes), stream reviews (S: 7 should-fixes; C: 1 BLOCKER —
-in-window run_end snapshot — + 8 should-fixes), pre-merge oversight
-(3 reviewers + refuters; AP-4 self-contradiction caught), final-head
-passes on every post-review commit (3 wording fixes on #14; #16 clear).</li>
-<li>Post-merge integration review: launched post-fcd111a; its findings and
-the stale-line bookkeeping fixes land in the checkpoint commit
-(see RUN_STATE for outcome).</li>
+<li>Merged main (<code>c752c30</code>): 732 tests OK (skipped=10), lead-run (617 at
+session start; +115). CI green both legs on every PR head and every
+post-review commit.</li>
+<li>Lead live gates (never delegated; 5 rounds): mock suite CLI
+run → <code>validate-bundle --strict</code> → <code>reduce</code> green; real MLX
+(Qwen2.5-1.5B + mock telemetry) suite runs at three code states incl.
+merged main — strict-valid, per-item energies with honest
+<code>not_resolvable</code> flags, <code>order_seed</code> byte-stable across the plumbing
+change, sampler <code>pinned: true</code> via <code>mlx_lm.sample_utils.make_sampler</code>;
+affine smoke end-to-end on the merged validator (26/26, statuses
+<code>capped</code> ×26 as expected for mock-at-budget under natural_eos).</li>
+<li>Three live-only catches, all fixed + regression-tested: cwd-relative
+manifest refs (SUB-5), missing strict rollup provenance (SUB-6),
+sampler API namespace (SUB-7). None was visible to 680+ unit tests.</li>
+<li>Post-merge integration review (fresh Codex, full-flow commands): NO
+CROSS-STREAM DEFECTS; AP-6 vocabulary join verified
+(<code>prompt_source: &quot;token_ids&quot;</code>, <code>bos_present: false</code> consistent between
+gensuite sidecars and adapter JSONL); repeated-seed drift test green.</li>
+</ul>
+<h2 id="process-record">Process record</h2>
+<ul>
+<li>Review stack: 2 Explore fact checks; Codex adjudication draft + fresh
+adversarial round (2 material amendments: effective-manifest hash;
+ids-native path as substrate requirement); 9 Codex lenses across 3
+units + 2 per stacked stream; 1 Opus fresh-eyes pass (Codex quota
+outage) that caught a real tokenize-window regression; 7-reviewer
+pre-merge oversight batch (10+ unique catches incl. two validation
+holes); 3 final-head passes; post-merge integration review. ~30 codex
+sessions + 3 Claude subagents.</li>
+<li>Codex quota outage (~13:10–14:0x, resolved by Ed&#39;s account upgrade):
+degraded mode ran lead line-reads + one Opus lens; recorded, no layer
+skipped — the oversight batch ran post-reset before any merge.</li>
+<li>Merge-gate process slip (lead): PR #18 merged into its stacked base
+<code>suite-substrate</code> instead of main (base never retargeted after #17).
+Recovered via promotion PR #20; #19 retargeted before touching.
+Lesson folded: stacked PRs get their base retargeted immediately after
+the parent merges, before any merge command.</li>
 </ul>
 <h2 id="restart-instructions-next-agent">Restart instructions (next agent)</h2>
 <ol>
-<li>Read RUN_STATE, then this report, then
-<code>docs/phase_2/suite_implementation_research.md</code>.</li>
-<li><strong>Suite build (D-042, [AGENT], unblocked):</strong> adjudicate the four
-reports&#39; cross-check amendments (recorded dispositions), then
-implement P2-010a substrate → P2-010b smoke ladder → P2-012 phase-1
-generators + P2-020 sentinel content, per the execution-architecture
-report. Full review tier (measurement-semantics).</li>
-<li><strong>Quiet Window A ([QUIET-MAC], next machine-quiet opportunity):</strong>
-P2-015 expanded floors (incl. lead-run tasks-sampler + settle smoke)
-then P2-006 2M with drift sentinels. Corpus now carries covariates.</li>
-<li>Window B (P2-019 q4 grid + P2-020 campaign) sized from Window A.</li>
+<li>Suite work follow-ons, all [AGENT]: (a) envelope-gate analysis script
+(AFF-CHECKPOINT: E1–E4 + E5 advisory per D-047.3/4, sentinel-tag
+exclusion, distinct-item denominators); (b) lead-side real-tokenizer
+(<code>.venv</code>, Qwen2.5-1.5B) jw_mixed + sentinel manifest generation and
+commit (GEN-CHECKPOINT); (c) campaign-runner expected-vs-realized
+hash check for text-path items (B8&#39;s deferred half).</li>
+<li>Quiet Window A ([QUIET-MAC]) unchanged: P2-015 expanded floors, then
+P2-006 2M. The affine smoke campaign (B=5, ~10–25 min) can ride a
+quiet-window tail after P2-015.</li>
+<li>Window B: P2-019 q4 grid + P2-020 sentinel campaign, n sized from A.</li>
+<li>Background chip pending: alignment-capture-outside-window fix
+(pre-existing D-013 concern, spun off).</li>
 </ol>
 <h2 id="process-trace-appendix">Process trace appendix</h2>
 <ul>
-<li><strong>Shape:</strong> 1 design stream → re-decomposed to 3 (L docs / C capture /
-S sentinels) on Ed&#39;s worktree directive; ultracode → 6 Workflow runs
-(2 stream reviews, docs-verify, oversight, suite research, +
-final-head codex passes) over ~60 workflow agents + ~25 codex-run
-sessions. Tiers: full pipeline for capture (measurement semantics) and
-all contract docs; standard for sentinels.</li>
-<li><strong>Catches (unique, by layer):</strong> lead pre-lens audit 4 (incl. Q4-at-L3
-gap); scout 4; C-014 lenses 16; C-014 peer overturned 2 lead designs
-(4x3 grid, two windows); C-015 peer 1 unique (per-item failure
-economics); docs-verify 7 (incl. 1 blocker: 2O self-contradiction);
-stream-S review 7; stream-C review 9 (incl. THE blocker: run_end
-snapshot inside the measured window — all 3 code lenses independently,
-refuters confirmed with line chains); oversight 8 (incl. AP-4
-equivalence self-contradiction, display pipe-counting via live DUT
-repro); final-head passes 3; lead diff/live gates 4 (C-014 impl 2,
-deprecation fix, venv/runtime_unavailable diagnosis).</li>
-<li><strong>Deliberations:</strong> P2-010 split (consensus), jw_mixed phasing
-(supersedes C-005 sequencing, consensus), window packing (peer
-OVERTURNED lead single-window — position reversal), Q4 grid (peer
-AMENDED 3x3→4x3 — position reversal), D-042 gate reopening (owner
-directive, recorded not re-decided).</li>
-<li><strong>Interventions:</strong> zero wake stalls across all codex-runs/workflows.
-Worktree-commit sandbox block hit 2x (lead commits at gate — skill
-fold staged). Ed interventions: worktrees directive; ultracode;
-skill-usage logging; hold-skill-folds-for-full-evidence; the
-object-level suite catch (the session&#39;s most important correction).</li>
+<li><strong>Shape:</strong> ADJ (adjudication) → Stream A (substrate, 3 units +
+oversight fixes) → Streams B/G parallel in worktrees off unit-1. Full
+tier all streams (measurement semantics). Report D not built against —
+deferred-binding dispositions. Machine state agent-heavy → quiet-lane
+tasks untouched.</li>
+<li><strong>Catches (unique, by layer):</strong> Explore fact checks 2 (B10 moot, B1
+confirmed); adj attack round 4 (effective-hash identity gap the
+standout); unit lenses ~20 accepted across A1/A2/B1/G1 rounds (real
+validation/design defects, incl. D-011 completeness break, sentinel
+index mispairing, sentinel-tag denominator corruption, B7-not-recorded,
+ascii-tail enforcement); Opus fresh-eyes 1 major (tokenize-window
+bracketing regression — FakeClock-blind); LEAD LIVE GATES 3 (refs,
+strict rollup, sampler namespace) — historically consistent: the
+blocker-class catches live only at this layer; oversight batch 10+
+(status_counts holes, tamperable rollup digest, order_seed plumbing,
+group-marker vanishing, AP-6 evidence fields); final-head 2 (doc
+signature staleness; public sidecar-less builders); integration 0
+(clean). Lead triage amendments: sentinel-tag-gated duplicates (blanket
+uniqueness would break D-040), fh19 negative-test overreach rejected.</li>
+<li><strong>Deliberations:</strong> A1 omission (consensus); A3 lead-stronger → attack
+amended to effective-hash (position refinement, accepted); B5 lead
+DEVIATED from draft (ids-native all-five; attack sustained with
+non-generalization caveat); C3 consensus. Affine sentinel redesign
+(lens catch → lead option (d): dedicated item, k=25) → D-047.2
+amendment.</li>
+<li><strong>Interventions:</strong> Ed × 2 (max-Codex directive — adjudication drafting
+moved lead→Codex; quota upgrade mid-outage). Zero wake stalls across
+~30 codex-runs. One lead process slip (PR #18 base retarget) —
+recovered same session, lesson folded.</li>
 <li><strong>Delegation calibration (schema v2):</strong></li>
 </ul>
 <div class="table-scroll"><table>
@@ -168,100 +190,145 @@ object-level suite catch (the session&#39;s most important correction).</li>
 </tr>
 </thead>
 <tbody><tr>
-<td>scout-1</td>
-<td>codex</td>
-<td>review packet</td>
+<td>explore ×2</td>
+<td>claude</td>
+<td>fact sweeps</td>
 <td>pinned-spec</td>
 <td>good</td>
-<td>4 unique</td>
+<td>2</td>
 <td>none</td>
 </tr>
 <tr>
-<td>lenses x9</td>
+<td>adj-draft</td>
 <td>codex</td>
-<td>design/reach/review</td>
+<td>37 dispositions + 8 argued calls</td>
 <td>design-freedom</td>
-<td>good-excellent</td>
-<td>40+ unique</td>
+<td>excellent</td>
+<td>1</td>
 <td>none</td>
 </tr>
 <tr>
-<td>peers x2</td>
+<td>adj-attack</td>
 <td>codex</td>
-<td>counterreview</td>
+<td>adversarial review of lead batch</td>
 <td>judgment-invited</td>
 <td>excellent</td>
-<td>2 overturns + 1 unique</td>
+<td>4 amendments</td>
 <td>none</td>
 </tr>
 <tr>
-<td>impl-docs x2</td>
+<td>docs-batch</td>
 <td>codex</td>
-<td>doc batches</td>
+<td>adjudication record + AP/bank edits</td>
 <td>pinned-spec</td>
 <td>good</td>
 <td>—</td>
-<td>2 inline gate fixes</td>
+<td>1 gate fix (false provenance claim)</td>
 </tr>
 <tr>
-<td>impl-code x2</td>
+<td>streamA u1-u3</td>
 <td>codex</td>
-<td>streams C/S</td>
+<td>substrate implementation</td>
 <td>pinned+design</td>
-<td>good; review layers caught 1 blocker + 15 SF</td>
+<td>good ×3</td>
 <td>—</td>
-<td>1 deprecation fix</td>
+<td>1 (Opus finding fixes lead-implemented during outage)</td>
 </tr>
 <tr>
-<td>fix rounds x5</td>
+<td>streamB/G u1</td>
+<td>codex</td>
+<td>affine + gensuite</td>
+<td>design-freedom</td>
+<td>good ×2</td>
+<td>1 (prompt-defect flag)</td>
+<td>none</td>
+</tr>
+<tr>
+<td>lenses ×11</td>
+<td>codex</td>
+<td>counterreview</td>
+<td>design-freedom</td>
+<td>good-excellent</td>
+<td>~20 accepted</td>
+<td>triage only</td>
+</tr>
+<tr>
+<td>opus lens ×1</td>
+<td>claude(opus)</td>
+<td>outage substitute</td>
+<td>judgment-invited</td>
+<td>excellent</td>
+<td>1 major + 3</td>
+<td>none</td>
+</tr>
+<tr>
+<td>fix rounds ×7</td>
 <td>codex</td>
 <td>pinned fixes</td>
 <td>pinned-spec</td>
-<td>clean one-shot each</td>
+<td>clean one-shot ×7</td>
 <td>—</td>
 <td>none</td>
 </tr>
 <tr>
-<td>workflows x6</td>
-<td>workflow(codex)</td>
-<td>review/research fan-outs</td>
-<td>pinned-spec</td>
-<td>high precision (~2 refuted / ~30 confirmed)</td>
-<td>—</td>
-<td>none</td>
-</tr>
-<tr>
-<td>research x4</td>
-<td>2 codex + 2 claude(web)</td>
-<td>suite research</td>
+<td>oversight ×7</td>
+<td>codex</td>
+<td>pre-merge gate</td>
 <td>design-freedom</td>
-<td>sound-with-amendments x4</td>
-<td>37 amendments self-caught</td>
+<td>excellent</td>
+<td>10+</td>
+<td>triage only</td>
+</tr>
+<tr>
+<td>final-head ×3+1</td>
+<td>codex</td>
+<td>tail-commit passes</td>
+<td>pinned-spec</td>
+<td>good</td>
+<td>2</td>
+<td>none</td>
+</tr>
+<tr>
+<td>integration ×1</td>
+<td>codex</td>
+<td>cross-stream</td>
+<td>pinned-spec</td>
+<td>clean</td>
+<td>0</td>
 <td>none</td>
 </tr>
 </tbody></table></div>
 <ul>
-<li><strong>Yield/spend:</strong> ~2.3M workflow-agent tokens + ~25 codex sessions.
-Pre-merge catches that would have been expensive post-2M: the
-sacred-window blocker (would have contaminated the entire 2M corpus),
-the AP-4 unfalsifiable-null (would have poisoned pre-registration),
-dead probes (silent evidence loss on every Window-A bundle).</li>
-<li><strong>Skill-usage:</strong> full entry + staged folds in
-<code>~/.claude/skills/skill-usage-log.md</code> (folds applied at session close
-per Ed&#39;s full-evidence hold).</li>
+<li><strong>Prompt-defect log:</strong> streamB test-spec error (cross-level value
+identity) — model correctly preferred the pinned report and flagged;
+fh19 criterion overreach (negative tests correctly pass None). Lesson:
+re-derive prompt-pinned test expectations from the spec, and scope
+&quot;no caller passes X&quot; criteria to positive paths.</li>
+<li><strong>Yield/spend:</strong> ~30 codex sessions + 3 Claude subagents + ~5 lead
+live-gate rounds. The expensive-miss prevention cases: the
+effective-hash identity hole (would have let code-default changes
+alter semantics without changing run identity), the sentinel-tag
+denominator corruption (would have silently broken every AP-5 level
+claim), and the three live-only integration defects.</li>
 </ul>
-<h2 id="addendum-post-large-workload-meta-reassessment-same-day-c-016">Addendum — post-large-workload meta-reassessment (same day, C-016)</h2>
-<p>Run after all merges as the session&#39;s final step (now standing per
-operation-loop §10 / Ed&#39;s directive). Shape: 4 parallel analysts over the
-full council log, decision log, and skill stack + a cold-start
-derivability audit + a completeness critic; then a pre-commit docs-verify
-pass over its own batch (5 should-fixes caught, two by D-043&#39;s self-test).
-Landed: D-043 supersession-closure discipline + back-annotations
-(ef37128), scripts/codex-run committed, orchestration.md refreshed with
-the clean-machine reconstruction pointer map, playbook/CLAUDE.md routing
-fixes, 5 skill-stack divergences fixed, codex-delegation structurally
-rewritten (procedure-first), §10 standing trigger encoded. Full analyst
-outputs: session scratchpad + <code>~/.claude/skills/skill-usage-log.md</code> entry.</p>
+<h2 id="10-note-post-large-workload-trigger">§10 note (post-large-workload trigger)</h2>
+<p>The standing reassessment trigger fires (multi-PR merge session). Ran at
+SCALED depth rather than the full 4-analyst workflow: C-016&#39;s full run
+happened earlier the same day over the same logs, so a second full pass
+would re-mine near-identical evidence. Scaled compliance: (a)
+skill-usage entry finalized with folds applied same-session; (b)
+supersession closure verified by the sweep (4 findings, all fixed
+pre-commit); (c) calibration longitudinal: design-freedom delegation ran
+excellent for the second consecutive session (adjudication draft, attack
+round, oversight) — the runs-hot signal is now a trend, not an anecdote;
+prompt-defect rows 2 (both lead-side spec-transcription errors); (d)
+oversight dispositions all traced to commits or queue rows (P2-025, the
+alignment chip); (e) layer overlap: the Opus outage substitute produced
+1 major unique catch — evidence that a non-Codex fresh-eyes lens has
+standalone value at the adapter-refactor tier, worth one deliberate
+A/B in a future session before any standing role change; (f)
+derivability: the stacked-PR lesson and outage pattern are folded where
+a fresh agent will find them (multi-stream skill; skill-usage log).</p>
 
 
   </div>
@@ -270,7 +337,7 @@ outputs: session scratchpad + <code>~/.claude/skills/skill-usage-log.md</code> e
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-08-suite-science-expansion.md · commit ce12445 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-08-suite-build.md · commit 6b1f73a · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

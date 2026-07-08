@@ -46,15 +46,17 @@
 <a href="#maintenance-of-this-document">Maintenance Of This Document</a></aside>
   <div class="doc-wrap doc-source-project-status-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>PROJECT_STATUS.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit ef37128"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit ef37128</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit 6b1f73a"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 6b1f73a</span></span></div>
     <h1>JouleWise: Project Status, Plan, And Architecture</h1>
 <p>Audience: project advisor. This is the standalone monitoring document - it
 summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.</p>
 <ul>
-<li>Last updated: 2026-07-08 (site observatory frontend merged as PR #13;
-critique second-pass reassessment recorded with lead fact-check)</li>
+<li>Last updated: 2026-07-08 (workload suite BUILT and merged: generic
+suite substrate + affine smoke ladder + jw_mixed/sentinel generator
+engine, PRs #17-#20, suite 732 tests; adjudicated decisions
+D-044..D-047; live-verified on real MLX)</li>
 <li>Project phase: Phase 1 closing; Phase 2 in progress - instrument
 CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
 are complete; the two-model baseline matrix is the next Mac corpus step</li>
@@ -65,7 +67,7 @@ capsule; shows a drift banner when the repo has moved past the snapshot)</li>
 <h2 id="this-update-as-of-2026-07-08-all-four-streams-merged-30-second-read">This Update (as of 2026-07-08, all four streams merged) — 30-second read</h2>
 <p><strong>Everything landed.</strong> The multi-stream session merged as four PRs:
 P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
-617 tests with 10 skips and zero expected failures (as of 2026-07-08; current-count authority is RUN_STATE.md Current Verification), bundle provenance
+732 tests with 10 skips and zero expected failures (as of 2026-07-08; current-count authority is RUN_STATE.md Current Verification), bundle provenance
 now records prompt/workload identities, and <code>validate-bundle --strict</code>
 includes the powermetrics raw-plist-to-trace gate plus the legacy
 additive-summary comparison. The six existing real corpus bundles pass
@@ -221,7 +223,7 @@ recorded in the Phase 2 plan.</p>
 <tr>
 <td>2. Harness, Mac vertical slice, homogeneous baselines</td>
 <td>runnable harness, first real measurements, per-target baselines</td>
-<td><strong>in progress</strong> - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation); suite-science hardening + expansion MERGED 2026-07-08 (analysis-plans contract D-038, Q4 L3 grid design, drift sentinels, Window-A capture covariates, suite architecture v2 + benchmark-interop direction, capability map — see the research-questions pointer above) — 2M baselines are fully tooled and covariate-complete; 2K fixture-first implementation is MERGED (2026-07-08) with ALL protocol pins PROVISIONAL pending live hardware validation; 2L gated on device access</td>
+<td><strong>in progress</strong> - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation); suite-science hardening + expansion MERGED 2026-07-08 (analysis-plans contract D-038, Q4 L3 grid design, drift sentinels, Window-A capture covariates, suite architecture v2 + benchmark-interop direction, capability map — see the research-questions pointer above); the WORKLOAD SUITE ITSELF is now BUILT and MERGED (2026-07-08, PRs #17-#20: generic suite substrate with one-manifest/marker/window mechanism, mock+MLX suite execution, affine_mod_ladder_v1 core + smoke manifest, six jw_mixed_v1 category generators + five content-sentinel conditions; adjudicated pins D-044..D-047; live-verified on real Apple-Silicon MLX) — 2M baselines are fully tooled and covariate-complete; 2K fixture-first implementation is MERGED (2026-07-08) with ALL protocol pins PROVISIONAL pending live hardware validation; 2L gated on device access</td>
 </tr>
 <tr>
 <td>3. Disaggregation, KV replay, interconnect sweep</td>
@@ -303,7 +305,7 @@ provenance on new-era bundles. All bundle consumers read through one
 shared, tested read layer, so displayed numbers can never diverge from
 reported ones.</li>
 <li>Typed config and output schemas with validation, JSON-Schema export, and
-a CLI, plus a passing test suite (617 tests, 10 skipped, zero expected
+a CLI, plus a passing test suite (732 tests, 10 skipped, zero expected
 failures, run in CI on every push, including a mock end-to-end run +
 bundle validation); emitted configs
 round-trip their own published schema, and config hashes (run identity)
@@ -677,7 +679,7 @@ traceable to raw data.</li>
 </tr>
 <tr>
 <td><code>joulewise/</code>, <code>tests/</code></td>
-<td>the harness package + test suite (617 tests, 10 skipped, zero expected failures, CI-enforced)</td>
+<td>the harness package + test suite (732 tests, 10 skipped, zero expected failures, CI-enforced)</td>
 </tr>
 </tbody></table></div>
 <h2 id="process-note">Process Note</h2>
@@ -812,7 +814,7 @@ date above and the repository&#39;s run reports are the freshness check.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>PROJECT_STATUS.md · commit ef37128 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>PROJECT_STATUS.md · commit 6b1f73a · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

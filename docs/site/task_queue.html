@@ -36,7 +36,7 @@
 <a href="#queue-maintenance">Queue Maintenance</a></aside>
   <div class="doc-wrap doc-source-task-queue-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 620f0dd"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 620f0dd</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span></div>
     <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -142,9 +142,9 @@ purchases, destinations.</li>
 <td align="right">4</td>
 <td>P2-010</td>
 <td>P2 Next Slice</td>
-<td>BUILD UNBLOCKED (D-042 owner directive; quarantine rules + minimal-substrate cap apply; research input <code>docs/phase_2/suite_implementation_research.md</code> — adjudicate its amendments first) [AGENT]</td>
-<td>P2-010a minimal generic suite substrate + P2-010b smoke ladder (<code>affine_mod_ladder_v1</code> envelope validation); full scored campaign deferred</td>
-<td>Substrate: suite/item/block/level markers, <code>BundleReader.item_windows()</code>, category/source/output-policy fields, per-item stop/token/response hashes, order/cache metadata, manifest validation, and per-item status model per the bank C-015 section (spec home); future <code>run_bundle_layout.md</code> contract fields for suite/item/block/level markers and per-item outputs are named in <code>docs/research_question_bank.md</code> and land with implementation; smoke ladder acceptance in AP-5</td>
+<td>SUBSTRATE + LADDER CORE BUILT AND MERGED 2026-07-08 (PRs #17/#18/#20; D-044..D-047; run report <code>2026-07-08-suite-build.md</code>); REMAINING: envelope-gate analysis script [AGENT], then the smoke CAMPAIGN (B=5) on a quiet-window tail [QUIET-MAC]</td>
+<td>P2-010b remainder: envelope-gate analysis script (E1-E4 gate + E5 advisory per D-047.3/4, sentinel-tag exclusion, distinct-item denominators, D-036 computed verdict) + smoke campaign execution</td>
+<td>Script emits <code>envelope_validated</code>/<code>envelope_failed([codes])</code> from strict-valid smoke bundles; acceptance in AP-5; ledger pointer <code>docs/stream_logs/2026-07-08-affine-ladder.md</code> AFF-CHECKPOINT</td>
 </tr>
 <tr>
 <td align="right">5</td>
@@ -158,17 +158,17 @@ purchases, destinations.</li>
 <td align="right">6</td>
 <td>P2-020</td>
 <td>P2 Next Slice</td>
-<td>NEW (C-014); generator BUILD unblocked D-042 [AGENT]; campaign execution Window B [QUIET-MAC]</td>
-<td>Content-sensitivity sentinel — Window B, AP-6; generator design in <code>docs/phase_2/suite_implementation_research.md</code></td>
-<td>Five equal-shape content conditions (repeated-seed, random-token, natural prose, code-like, multilingual), n sized from Window A; request-energy deltas and MDE verdicts reported</td>
+<td>GENERATOR BUILT AND MERGED 2026-07-08 (PR #19; five ids-native BOS-less conditions per D-046); campaign execution Window B [QUIET-MAC] with real-tokenizer manifests (see P2-012 row)</td>
+<td>Content-sensitivity sentinel campaign — Window B, AP-6</td>
+<td>Five equal-shape ids-native conditions, n sized from Window A; request-energy deltas and MDE verdicts; AP-6 non-generalization caveat applies (D-046)</td>
 </tr>
 <tr>
 <td align="right">7</td>
 <td>P2-012</td>
 <td>P2 Next Slice</td>
-<td>phase-1 BUILD UNBLOCKED (D-042; after P2-010a substrate; research input <code>docs/phase_2/suite_implementation_research.md</code>) [AGENT]</td>
-<td>Implement <code>jw_mixed_v1</code> workload expansion in phases — identification core first, natural-EOS pilot second, full panels only after above-floor structure</td>
-<td>Per <code>docs/research_question_bank.md</code> + AP-4: common-shape 512/256 <code>fixed_budget_exact</code> stratum across 6 categories, synthetic + realistic; natural-EOS pilot &gt;=4 items/category on reasoning/JSON/chat/multilingual; additive fields and per-item stop/token/response hashes; no category claims outside matched strata</td>
+<td>phase-1 ENGINE BUILT AND MERGED 2026-07-08 (PR #19: six category generators, exact-shape fill, B7 identity); REMAINING: lead-side real-tokenizer (<code>.venv</code> Qwen2.5-1.5B) jw_mixed + sentinel manifest generation and commit (GEN-CHECKPOINT in <code>docs/stream_logs/2026-07-08-jw-mixed-generators.md</code>) [AGENT with lead .venv step]; natural-EOS pilot + full panels later phases</td>
+<td>Generate + commit the real-tokenizer manifests + sidecars; identification-core campaign after Window A</td>
+<td>Manifests substrate-valid, sidecars complete (B7 rows, ground truths), per AP-4; no category claims outside matched strata</td>
 </tr>
 <tr>
 <td align="right">8</td>
@@ -201,6 +201,14 @@ purchases, destinations.</li>
 <td>waiting-user [ED-EXTERNAL]</td>
 <td>Map phases to academic calendar</td>
 <td>Colloquium/report dates + borrow window entered in <code>docs/milestones.md</code>; phase target dates derived</td>
+</tr>
+<tr>
+<td align="right">11b</td>
+<td>P2-025</td>
+<td>P2 Next Slice</td>
+<td>NEW (2026-07-08 suite-build oversight, B8 deferred half) [AGENT]</td>
+<td>Campaign-runner expected-vs-realized prompt-hash check for text-path suite items (ids-native items are already validator-checked)</td>
+<td>Runner compares generator sidecar <code>expected token_ids_sha256</code> against realized per-item hashes post-window; mismatch fails closed; lands with the first real-tokenizer campaign tooling</td>
 </tr>
 <tr>
 <td align="right">meta</td>
@@ -533,7 +541,7 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit 620f0dd · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit 6b1f73a · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

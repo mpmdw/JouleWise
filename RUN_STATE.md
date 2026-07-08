@@ -100,6 +100,9 @@ integration review: zero cross-stream defects.
   bundle strict-valid + reduced (sampler pinned via sample_utils; honest
   per-item identifiability); mock affine smoke 26/26 strict-valid.
 - CI green on both matrix legs on every PR head and post-review commit.
+- `validate-bundle --strict` green over all 6 real corpus bundles
+  (unchanged this session; the lead-gate suite bundles are disposable
+  /tmp artifacts, not corpus).
 - Post-merge integration review: no cross-stream defects; AP-6
   vocabulary join verified; repeated-seed drift test green.
 

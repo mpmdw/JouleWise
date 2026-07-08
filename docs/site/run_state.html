@@ -35,10 +35,10 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 620f0dd"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 620f0dd</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 6b1f73a + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 6b1f73a + uncommitted</span></span></div>
     <h1>JouleWise Run State</h1>
-<p>Last updated: 2026-07-08 (suite-science + expansion session close; PRs
-#14/#15/#16 merged; suite 617; site redeployed against this checkpoint)</p>
+<p>Last updated: 2026-07-08 (suite BUILD session close; adjudication
+D-044..D-047 + PRs #17/#18/#20/#19 merged; suite 732; C-017)</p>
 <h2 id="start-here-for-every-big-run">Start Here For Every Big Run</h2>
 <p>Before starting substantial work:</p>
 <ol>
@@ -82,38 +82,37 @@ REDEPLOY the site so the public snapshot tracks the repo (C-012):
 committed.</li>
 </ol>
 <h2 id="current-project-status">Current Project Status</h2>
-<p><strong>Suite-science + expansion session COMPLETE and MERGED (2026-07-08;
-C-014/C-015; D-038..D-042).</strong> Three PRs landed: #14 (analysis-plans
-contract; program v2 with the Q4 L3 grid + comparative-MDE floors; suite
-architecture v2 + benchmark interop + capability map; the suite
-implementation research handoff), #15 (P2-021 drift sentinels — DONE),
-#16 (Window-A capture set — the 2M corpus will carry its covariates:
-per-run env snapshots, cooldown traces, inter-run gaps, tokenize/setup
-phases, memory snapshots, sampler metadata). A sacred-window blocker
-(in-window run_end memory snapshot) was caught by the review stack and
-fixed pre-merge; the AP-4 equivalence gate was corrected pre-merge
-(margin-clears-floor). Post-merge integration review: zero cross-stream
-defects; live two-model matrix + sentinel campaign subset verified.</p>
+<p><strong>Suite BUILD session COMPLETE and MERGED (2026-07-08; C-017;
+D-044..D-047).</strong> The workload suite is now CODE, not contracts: P2-010a
+generic substrate (PR #17: suite.py, run_suite protocol, mock+MLX
+execution, BundleReader suite validation, reducer suite_metrics, strict
+rollup provenance), P2-010b affine core + smoke manifest (PR #18,
+promoted via #20 after a base-retarget slip), P2-012 phase-1 + P2-020
+generator engine (PR #19: gensuite, six categories + five ids-native
+sentinels). All 37 research-doc amendments adjudicated first (recorded
+dispositions). Live-verified on real MLX at three code states; three
+live-only defects caught and fixed at the lead gate. Post-merge
+integration review: zero cross-stream defects.</p>
 <p><strong>RESTART HERE (next agent):</strong></p>
 <ol>
-<li>Read <code>docs/run_reports/2026-07-08-suite-science-expansion.md</code> (the
-session record incl. restart detail), then
-<code>docs/phase_2/suite_implementation_research.md</code>.</li>
-<li><strong>Suite build [AGENT], UNBLOCKED (D-042):</strong> adjudicate the research
-doc&#39;s cross-check amendments (recorded dispositions), then implement
-P2-010a generic substrate → P2-010b smoke ladder → P2-012 phase-1
-generators + P2-020 sentinel content. Full review tier
-(measurement-semantics). This is the top agent-lane task.</li>
+<li>Read <code>docs/run_reports/2026-07-08-suite-build.md</code> (session record +
+restart detail).</li>
+<li><strong>Suite follow-ons [AGENT]:</strong> envelope-gate analysis script (queue
+P2-010 row), lead-side real-tokenizer manifest generation (P2-012
+row), campaign-runner text-item hash check (P2-025).</li>
 <li><strong>Quiet Window A [QUIET-MAC], next machine-quiet opportunity:</strong>
 P2-015 expanded floors FIRST (incl. lead-run tasks-sampler + settle
 smoke), then P2-006 2M with drift sentinels; fail-closed runner +
 order manifest; claims per <code>docs/contracts/claims_ladder.md</code> +
 <code>docs/contracts/analysis_plans.md</code>; no-agent quiet lock (C-009 T5);
-corpus backed up per R-016.</li>
+corpus backed up per R-016. The affine smoke campaign (B=5,
+~10-25 min) may ride a quiet-window tail after P2-015.</li>
 <li>Window B (P2-019 q4 grid + P2-020 campaign) with n sized from A.</li>
 </ol>
 <h2 id="session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</h2>
 <ul>
+<li>2026-07-08 suite build (C-017; adjudication + PRs #17/#18/#20/#19;
+D-044..D-047): <code>docs/run_reports/2026-07-08-suite-build.md</code></li>
 <li>2026-07-08 suite-science + expansion (C-014/C-015; PRs #14/#15/#16;
 D-038..D-042): <code>docs/run_reports/2026-07-08-suite-science-expansion.md</code></li>
 <li>2026-07-08 Lakebed deploy (C-013):
@@ -128,31 +127,32 @@ D-038..D-042): <code>docs/run_reports/2026-07-08-suite-science-expansion.md</cod
 </ul>
 <h2 id="current-verification">Current Verification</h2>
 <ul>
-<li>Merged main (fcd111a): <code>python3 -m unittest discover -s tests</code> →
-<code>Ran 617 tests, OK (skipped=10)</code> (as of 2026-07-08, post PRs #14..#16).</li>
-<li><code>validate-bundle --strict</code> green over all 6 real corpus bundles under
-the merged capture code, read-only, unrewritten.</li>
-<li>Live lead gate on the capture head: real MLX (1.5B, mock telemetry)
-strict-valid bundle with the new evidence fields populated and honest
-(display 1/0 with pipes separated; clock probe correct; phases
-identifiability-flagged; no in-window snapshots).</li>
-<li>CI green on both matrix legs on every merged PR head.</li>
-<li>Post-merge integration review: no cross-stream defects; 2-model matrix
-gen + sentinel validate-config + mock campaign subset verified.</li>
+<li>Merged main (c752c30): <code>python3 -m unittest discover -s tests</code> →
+<code>Ran 732 tests, OK (skipped=10)</code> (post PRs #17/#18/#20/#19).</li>
+<li>Live lead gates on merged main: real MLX (1.5B, mock telemetry) suite
+bundle strict-valid + reduced (sampler pinned via sample_utils; honest
+per-item identifiability); mock affine smoke 26/26 strict-valid.</li>
+<li>CI green on both matrix legs on every PR head and post-review commit.</li>
+<li><code>validate-bundle --strict</code> green over all 6 real corpus bundles
+(unchanged this session; the lead-gate suite bundles are disposable
+/tmp artifacts, not corpus).</li>
+<li>Post-merge integration review: no cross-stream defects; AP-6
+vocabulary join verified; repeated-seed drift test green.</li>
 </ul>
 <h2 id="known-workspace-state">Known Workspace State</h2>
 <ul>
 <li><code>main</code> is pushed and current (through this session&#39;s bookkeeping).</li>
-<li>No worktrees remain (both removed after their PRs merged).</li>
+<li>Worktrees <code>jw-wt-suite</code>, <code>jw-wt-affine</code>, <code>jw-wt-gens</code> may remain
+(branches merged; safe to remove with <code>git worktree remove</code>).</li>
 <li><code>/tmp/jw-lead-verify/</code> holds disposable lead-verification artifacts.</li>
 </ul>
 <h2 id="what-is-next">What Is Next</h2>
 <p>Follow <code>TASK_QUEUE.md</code> (lane-annotated). In order:</p>
 <ol>
-<li><strong>Suite implementation</strong> [AGENT] — P2-010a/b, P2-012 phase 1, P2-020
-generators, per D-042 + the research handoff (rank 3 row P2-010; the
-queue&#39;s quiet-lane rows 1-2 stay top for the next quiet window).</li>
-<li><strong>P2-015 then P2-006 in quiet Window A</strong> [QUIET-MAC].</li>
+<li><strong>P2-015 then P2-006 in quiet Window A</strong> [QUIET-MAC] (unchanged top;
+affine smoke campaign may ride the window tail).</li>
+<li><strong>Suite follow-ons</strong> [AGENT]: envelope-gate script; real-tokenizer
+manifest generation; P2-025 runner hash check.</li>
 <li><strong>Ed&#39;s external one-pass</strong> [ED-EXTERNAL]: calendar, device access,
 borrow window, wall meter, backup destination (P0-003).</li>
 <li><strong>3.0.2 llama.cpp spike</strong> [AGENT after R-003 approval].</li>
@@ -180,7 +180,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit 620f0dd · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit 6b1f73a + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

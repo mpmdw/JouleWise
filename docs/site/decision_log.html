@@ -70,10 +70,14 @@
 <a href="#d-040-suite-architecture-v2-one-generic-suite-mechanism-bundle-level-replication">D-040: Suite architecture v2 — one generic suite mechanism, bundle-level replication</a>
 <a href="#d-041-benchmark-interop-frozen-subset-imports-marker-shim-energy-layer">D-041: Benchmark interop — frozen-subset imports + marker-shim energy layer</a>
 <a href="#d-042-d-034-implementation-lane-reopened-suite-build-proceeds-pre-2m-owner-directive">D-042: D-034 implementation lane reopened — suite build proceeds pre-2M (owner directive)</a>
-<a href="#d-043-supersession-closure-discipline">D-043: Supersession-closure discipline</a></aside>
+<a href="#d-043-supersession-closure-discipline">D-043: Supersession-closure discipline</a>
+<a href="#d-044-suite-config-identity-omission-serialized-ref-effective-manifest-hash">D-044: Suite config identity — omission-serialized ref + effective-manifest hash</a>
+<a href="#d-045-suite-substrate-execution-semantics">D-045: Suite substrate execution semantics</a>
+<a href="#d-046-ap-6-sentinel-delivery-ids-native-bos-less-literal-equal-shape">D-046: AP-6 sentinel delivery — ids-native, BOS-less, literal equal shape</a>
+<a href="#d-047-affine-ladder-pins-level-set-smoke-sizing-gate-denominators">D-047: Affine ladder pins — level set, smoke sizing, gate denominators</a></aside>
   <div class="doc-wrap doc-source-docs-decision-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/decision_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit ef37128"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit ef37128</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 024cec9"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 024cec9</span></span></div>
     <h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
@@ -314,6 +318,26 @@ must be re-examined, not quietly worked around.</li>
 <tr>
 <td>D-043</td>
 <td>Supersession-closure discipline</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-044</td>
+<td>Suite config identity: omission-serialized ref + effective-manifest hash</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-045</td>
+<td>Suite substrate execution semantics (run_suite, statuses, per-item outputs)</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-046</td>
+<td>AP-6 sentinel delivery is ids-native BOS-less at literal equal shape</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-047</td>
+<td>Affine ladder pins: level set, smoke sizing, gate denominators</td>
 <td>accepted</td>
 </tr>
 </tbody></table></div>
@@ -1349,20 +1373,14 @@ the whole-bundle reader cannot serve.</p>
 </ul>
 <p>Context: the reducer integrated energy between the <code>measured_run</code>
 <code>stage_started</code> and <code>stage_completed</code> events. <code>stage_started</code> is stamped
-before <code>thermal_state</code> and <code>start_sampling</code>, and <code>stage_completed</code> after
-<code>stop_sampling</code>, <code>thermal_state</code>, and the outputs/trace writes - so under
-<code>SystemClock</code>, real sampler spawn latency (sudo probe, process start,
-first sample) and wind-down cost (process stop, plist parsing) land
-inside the integrated window, inflating gross energy, the
-idle-subtraction duration, and TTFT. <code>FakeClock</code> collapses these
-intervals to zero, so the mock suite could n
+before <code>thermal_state</code> an
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/decision_log.md · commit ef37128 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/decision_log.md · commit 024cec9 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
