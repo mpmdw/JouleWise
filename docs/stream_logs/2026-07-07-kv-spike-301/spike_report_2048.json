@@ -1,0 +1,42 @@
+{
+  "cache_bytes_delta": 5367,
+  "cache_bytes_measured": 58725623,
+  "cache_bytes_pct": 0.00913994652884347,
+  "cache_bytes_predicted": 58720256,
+  "decode_tokens": 64,
+  "first_divergence_index": null,
+  "mlx_lm_version": "0.31.3",
+  "mlx_version": "0.31.2",
+  "model": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+  "prefill_offset": 2048,
+  "prompt_len": 2048,
+  "resume_post_trim_offset": 2047,
+  "resume_pre_trim_offset": 2048,
+  "timings": {
+    "decode": {
+      "cacheload_s": 0.000455000001238659,
+      "decode_s": 0.3073732079938054,
+      "load_s": 0.33635612500074785,
+      "total_s": 0.6452523750049295,
+      "trim_s": 5.374997272156179e-06
+    },
+    "monolithic": {
+      "decode_s": 0.7883894999977201,
+      "load_s": 0.3311601670066011,
+      "total_s": 1.120996457997535
+    },
+    "prefill": {
+      "load_s": 0.33568620800360804,
+      "prefill_s": 0.5162874160014326,
+      "save_s": 0.027560582995647565,
+      "total_s": 0.8808257920027245
+    },
+    "subprocess": {
+      "decode": 1.4070435840039863,
+      "monolithic": 1.8225876249998691,
+      "prefill": 1.5803798339984496
+    }
+  },
+  "tokens_identical": true,
+  "verdict": "replay_supported"
+}
