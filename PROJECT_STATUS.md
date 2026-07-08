@@ -18,7 +18,7 @@ are provided for anyone who wants the full evidence trail.
 
 **Everything landed.** The multi-stream session merged as four PRs:
 P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
-576 tests with 10 skips and zero expected failures (576 as of 2026-07-08 incl. the C-011 rigor mechanics and the PR #13 site parser tests), bundle provenance
+596 tests with 10 skips and zero expected failures (as of 2026-07-08; current-count authority is RUN_STATE.md Current Verification), bundle provenance
 now records prompt/workload identities, and `validate-bundle --strict`
 includes the powermetrics raw-plist-to-trace gate plus the legacy
 additive-summary comparison. The six existing real corpus bundles pass
@@ -175,7 +175,7 @@ Complete so far (all verifiable in the repository):
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (576 tests, 10 skipped, zero expected
+  a CLI, plus a passing test suite (596 tests, 10 skipped, zero expected
   failures, run in CI on every push, including a mock end-to-end run +
   bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
@@ -448,7 +448,7 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (576 tests, 10 skipped, zero expected failures, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (596 tests, 10 skipped, zero expected failures, CI-enforced) |
 
 ## Process Note
 

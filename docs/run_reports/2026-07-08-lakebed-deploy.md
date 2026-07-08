@@ -73,3 +73,38 @@ Production uses CSS fallback fonts (Iowan/Georgia serif, SF Mono/Menlo,
 system sans) because embedded woff2 exceeds the 1 MiB artifact cap. Editorial
 character holds; pixel-parity with the local Fraunces/Plex build would need a
 font-subsetting step (deferred — not worth a new pipeline for this).
+
+## Addendum — session close (scroll performance + loop-health ledger)
+
+**Scroll fixes (both engine-specific, measurement-first):** Chromium hitched
+on the sticky nav's `backdrop-filter: blur(10px)` (measured 1,986ms worst
+scroll frame; 9.9ms after removal — near-opaque nav instead). Firefox
+lagged continuously on the `position:fixed` + `mask-image` grid-paper
+texture (Firefox repaints the masked layer every scroll frame; Chromium
+composites it) — now a document-anchored absolute top band, look preserved.
+User-confirmed smooth in Firefox. Both patterns also fixed in the critique
+page's nav.
+
+**The freshness layer's first real catch was its own maintainer:** the
+Firefox-fix redeploy skipped `build_site.py`, and the live drift banner
+correctly flagged the exact 4 sources the checkpoint commits had touched
+(RUN_STATE, PROJECT_STATUS, TASK_QUEUE, council log → 699cc01). Fixed by
+running the full canonical flow (regen commit 9fd8bc1 → pack → deploy).
+End-to-end validation of the drift path against real repo movement.
+
+**Layer-yield ledger for the whole session (loop instrumentation, rule 5):**
+- Fresh 5.5 counterreviews: 5 unique blockers across 3 streams (critique
+  preservation overclaim; invented lane state + council-index fallback;
+  freshness false-not-moved + 5xx path) — every one confirmed and fixed;
+  the layer is load-bearing.
+- Codex image-critique rounds: 16 findings r1 + mobile root-causes r2;
+  visual sign-off caught no false SHIPs (final-head data check agreed).
+- Final-head gate: 1 HOLD (stale source count rendered honestly by the
+  site) — unique catch, kept.
+- Consistency sweeps: real drift every run (checklist 546; six residual
+  564s; C-011 index row found by the fail-closed parser itself).
+- Lead-side live verification: the Lakebed platform fight (6 deploy
+  failures) and both scroll-perf root-causes were lead-owned — delegated
+  "tests green" could not have caught any of them.
+- Drift banner: 1 real catch (above).
+No layer had zero unique catches; nothing to drop this session.

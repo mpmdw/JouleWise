@@ -71,8 +71,8 @@ critique counter-review landed fail-closed campaigns, counterbalanced
 order manifests, reducer honesty flags, the claims ladder (D-037), and
 queue item P2-015; the docs/site is now a designed reading experience
 (consensus-gated). **RESTART HERE:** read
-`docs/run_reports/2026-07-08-site-observatory.md` (latest), then the
-councils-critique report. Short
+`docs/run_reports/2026-07-08-lakebed-deploy.md` (latest), then the
+site-observatory and councils-critique reports. Short
 version: quiet-machine window running P2-015 (detection-floor
 calibration) FIRST, then P2-006 (2M) with the fail-closed runner, order
 manifest, and claims-ladder wording — under the C-009 T5 no-agent lock
