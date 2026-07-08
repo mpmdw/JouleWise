@@ -22,7 +22,7 @@
 </header>
 <main>
 <div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>README.md</code> · as of commit 64a04dc (2026-07-07)</p>
+<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>README.md</code> · as of commit 6418084 (2026-07-08)</p>
 <h1>JouleWise</h1>
 <p>JouleWise is an extensible benchmark for energy-wise LLM inference across
 heterogeneous local hardware. The name is a deliberate nod to JouleSort and
@@ -97,8 +97,9 @@ python3 -m joulewise report runs --output report
 <code>power_trace.csv</code>, model outputs, per-component logs, and the reduced
 <code>summary_metrics.json</code> (written last; its presence marks a complete bundle).</p>
 <p>Bundles are immutable evidence: re-running the same config into the same
-<code>--runs-dir</code> fails by design with a run-ID collision (delete the old
-bundle directory, change <code>run_id</code>, or use a fresh runs dir).</p>
+<code>--runs-dir</code> fails by design with a run-ID collision (D-010/D-022). To rerun
+a member, move the old bundle aside, change <code>run_id</code>, or use a fresh runs
+dir; collisions are refusals, not bugs.</p>
 <h2>Config And Schema Verbs</h2>
 <pre><code class="language-bash">python3 -m joulewise validate-config configs/examples/mock_local.json
 python3 -m joulewise print-config-schema
@@ -133,7 +134,7 @@ constraints live in <code>docs/milestones.md</code>; cross-model review sessions
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 64a04dc (2026-07-07) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>as of commit 6418084 (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

@@ -22,7 +22,7 @@
 </header>
 <main>
 <div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>docs/decision_log.md</code> · as of commit 64a04dc (2026-07-07)</p>
+<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>docs/decision_log.md</code> · as of commit 6418084 (2026-07-08)</p>
 <h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
@@ -228,6 +228,11 @@ must be re-examined, not quietly worked around.</li>
 <tr>
 <td>D-036</td>
 <td>Spike verdict codes derive from measured data, never hardcoded</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-037</td>
+<td>Claims ladder (L0-L4) binds reader-facing claim language from 2M onward</td>
 <td>accepted</td>
 </tr>
 </tbody></table>
@@ -1283,15 +1288,13 @@ back to stage boundaries for pre-2N bundles.</li>
 </ol>
 <p>Decision: option 2. <code>sampling_started</code> is stamped only after
 <code>start_sampling</code> returns ok (sampling confirmed active);
-<code>sampling_stopped</code> is stamped before <code>stop_sampling</code> is invoked (the
-wind-down happens after the window closes). TTFT is measured from
-<code>sampling_started</c
+<code>sampling_stopped</code> is stamped before <code>sto
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 64a04dc (2026-07-07) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>as of commit 6418084 (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
