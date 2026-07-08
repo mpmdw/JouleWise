@@ -408,11 +408,12 @@ guide §2K/§2L.
 
 Wrapper notes:
 
-- Merge-order note as of 2026-07-07: the 2K NVIDIA fixture-first
-  implementation is complete on a later branch (protocol v1, SSH transport,
-  `nvidia-smi` + vLLM adapters, registry wiring, 545 CI-safe tests), but it
-  merges after this docs stream. Do not mark protocol pins non-provisional
-  until the P1-006 live evidence script has contacted real hardware.
+- 2K status as of 2026-07-08: the NVIDIA fixture-first implementation is
+  MERGED (PR #11: protocol v1, SSH transport, `nvidia-smi` + vLLM
+  adapters, registry wiring). Do not mark protocol pins non-provisional
+  until the P1-006 live evidence script
+  (`docs/phase_1/2k_live_verification_checklist.md`) has contacted real
+  hardware.
 - P1-006 evidence-gathering (SSH reachability, `nvidia-smi` power query,
   VRAM) is itself recordable work if the user provides access during the
   session: capture command outputs into the Phase 1 exit checklist
