@@ -15,10 +15,13 @@ fit. Killed ideas stay recorded with their cause of death.
   devices and enables compositional split-energy prediction (predict
   split-run energy from monolithic coefficients + transfer measurements,
   validate on a subset) — the method that makes Q1 answerable at scale.
-  Subsumes the prefill-scaling-exponent question.
-- **Q5 Ranking stability** — do device rankings survive workload changes
-  (prompt/output/quantization regimes), or where do they flip? Uses the 2M
-  matrix directly.
+  Subsumes the prefill-scaling-exponent question. L3 wording requires AP-1
+  in `docs/contracts/analysis_plans.md` (2026-07-08, C-014).
+- **Q5 Ranking stability** — do within-machine rankings survive workload
+  changes (prompt/output/quantization regimes), or where do they flip?
+  Cross-device extension is hardware-gated. Uses the 2M matrix directly
+  as a substrate; rank wording follows AP-3 in
+  `docs/contracts/analysis_plans.md` (2026-07-08, C-014).
 - **Q6 Boundary sensitivity** — do conclusions change when measured at
   platform rails vs AC wall power? (Gated on the wall meter, P1-003/R-007;
   reframes calibration as a research result.)
@@ -60,6 +63,12 @@ fit. Killed ideas stay recorded with their cause of death.
   token/stop-reason distributions must be reported to verify residual
   EOS/output-length effects are negligible (wrong-answers-terminate-early
   would bias the curve's magnitude). NOT "difficulty causes energy."
+  Amendment 2026-07-08 (C-014): before any scored campaign, an
+  envelope-validation smoke gate must show level-invariant emitted-token
+  and stop-reason distributions; energy/correct also requires the binomial
+  guard in AP-5 (`docs/contracts/analysis_plans.md`). The full 64-level
+  scored campaign is deferred until C5-1.9 has a claims-index/figure
+  consumer.
 - **Speculative-decoding energy**: joules per accepted token with/without
   a draft model. Needs runtime support + quality-equivalence controls.
 - **Power-mode Pareto**: energy-latency tradeoff across OS power modes;
@@ -94,7 +103,9 @@ fit. Killed ideas stay recorded with their cause of death.
   correctness lives in stdlib `joulewise/workloads.py`, scored by the
   reducer so summaries stay re-reducible). Quarantine rules (C-004):
   one optional workload profile, correctness as annotation, no
-  "difficulty causes energy" claims.
+  "difficulty causes energy" claims. Amendment 2026-07-08 (C-014):
+  P2-010 splits into P2-010a suite substrate and P2-010b smoke ladder;
+  the full scored ladder remains deferred as above.
 
 
 # Hardware-gated research agenda — steelmanned potential (Council C-005)
@@ -190,7 +201,11 @@ cheap.
   after MLX updates as a separate condition. Threat: model families
   differ in more than active params; the dense bridge and quant pinning
   carry the inference. Who cares: efficient-ML and MoE architecture
-  researchers; local-inference benchmark authors.
+  researchers; local-inference benchmark authors. Amendment 2026-07-08
+  (C-014): with 4-6 model points, this supports descriptive L2 pairwise
+  contrasts only unless the model set grows enough for a predeclared
+  one-covariate fit; never fit active+total+KV covariates on 4-6 model
+  points.
 
 - **C5-1.2 Context-length energy scaling.** Where does measured energy
   stop being linear in prompt length? Measure: prefill/decode energy over
@@ -340,29 +355,39 @@ JSON; FLORES-200 for multilingual (CC BY-SA, parallel sentences enable
 the semantic-matched leg). Where licenses are uncertain, synthetic wins.
 
 **Concrete recommendation — `jw_mixed_v1` (adopt as the first official
-workload expansion).** 6 categories × 8 items = 48 items per
-target/model/quant, n=5, greedy `fixed_budget_exact` policy, categories
-interleaved round-robin: chat 512/256; code 4×512/256 + 4×1024/512;
+workload expansion).** Amendment 2026-07-08 (C-014): this supersedes the
+C-005 fixed-budget-full-first sequencing; the C-005 category/source
+discipline otherwise remains intact. Phase 1 is the identification core:
+all 6 categories at the common-shape identification stratum, `512/256`
+`fixed_budget_exact`, synthetic + realistic where licensing is clean.
+Phase 2 is a natural-EOS pilot with >=4 items/category on reasoning, JSON,
+chat, and multilingual. Phase 3 is the full category panels, gated on
+above-floor structure from Phases 1-2. The original full panel remains the
+expansion target after the gate: 6 categories x 8 items = 48 items per
+target/model/quant, n=5, categories interleaved round-robin, with the
+C-005 category shapes (chat 512/256; code 4x512/256 + 4x1024/512;
 summarization 4096/256; reasoning 512/512; JSON extraction 1024/128;
 multilingual FLORES 8 languages semantic-matched then token-matched
-512/256. Sizing: 240 bundles ≈ 3-8 hours per target/model/quant at
-observed throughput. `jw_mixed_v1_natural_eos` runs first as a
-2-item/category PILOT (full dual-policy doubles the campaign; earn it
-after fixed-budget traces are stable). Harness needs (all additive):
-`workload_profile.category` + `source_manifest` + sha256 + per-item
-`output_policy` fields; category as a campaign-matrix axis alongside
-shape (never instead of it); per-item stop reason/emitted-token/response
-hash in outputs; reuse P2-010 item windows + identifiability flags;
-aggregation waits on P2-011. Out of scope stays out: no accuracy evals,
-no judges, no retries — correctness only as quarantined annotation.
+512/256; ~240 bundles = 3-8 hours per target/model/quant at observed
+throughput) unless the Phase 1/2 gate amends them. Harness needs (all additive): `workload_profile.category` +
+`source_manifest` + sha256 + per-item `output_policy` fields; category as
+a campaign-matrix axis alongside shape (never instead of it); per-item
+stop reason/emitted-token/response hash in outputs; reuse P2-010a item
+windows + identifiability flags; aggregation waits on P2-011. Out of
+scope stays out: no accuracy evals, no judges, no retries — correctness
+only as quarantined annotation. Category claims follow AP-4 in
+`docs/contracts/analysis_plans.md`.
 
 **Questions it unlocks (Tier 1):**
 
 - **C5-W.1 Does category explain energy beyond token counts?** Paired
   synthetic controls vs realistic exemplars at identical shape; either a
   category effect or the Token-Shape Sufficiency Null — both reportable.
-  Threat: small deltas need the detection floor first (examiner #2).
-  Who cares: benchmark authors, app engineers budgeting features.
+  Threat: small deltas need the detection floor first (examiner #2). The
+  reportable comparison is AP-4 in `docs/contracts/analysis_plans.md`,
+  using the common-shape stratum and the predeclared equivalence margin
+  from C-014. Who cares: benchmark authors, app engineers budgeting
+  features.
 - **C5-W.2 Does thinking-token inflation dominate reasoning-model request
   energy?** Fixed-budget vs natural-EOS on the reasoning flagship;
   measures the energy price of "thinking" as output-length inflation.

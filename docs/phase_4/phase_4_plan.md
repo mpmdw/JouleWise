@@ -125,6 +125,10 @@ Figure registry (initial; extend by editing the table and script together):
 | F6 | Energy-latency Pareto: energy/token vs TTFT (and vs throughput), points = configurations, frontier marked | Q3 |
 | F7 | Interconnect: transfer energy/GiB and effective throughput vs payload size per link (synthetic sweep) | Q2 |
 | F8 | Measurement quality summary: observed vs requested sampling rate, idle stddev, thermal drift, cooldown-cap hits | honesty/limitations |
+| F9 | Q4 coefficient fit: fixed+prompt+decode categorical effects, holdout prediction error, and residuals from AP-1 (C-014) | Q4 |
+| F10 | Q5 ranking-stability/flip table with rank-gap-vs-MDE rule from AP-3 (C-014) | Q5 |
+| F11 | Boundary comparison: rails-vs-wall, explicitly `out-of-data` until P1-003 wall meter evidence exists | Q6 |
+| F12 | Detection floor + comparative MDE table per target/backend/metric/window class (C-014/P2-015) | methodology centerpiece |
 
 Pareto definition (pinned now): a configuration is on the frontier if no
 other configuration in the same comparison set has both lower energy/token

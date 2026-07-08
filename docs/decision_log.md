@@ -1809,3 +1809,105 @@ wording against the ladder as part of the standard lens rounds.
 Revisit when: the Phase 4 claims index lands (mechanical enforcement
 may subsume the prose rule), or a claim class appears that the five
 levels cannot express.
+
+---
+
+## D-038: Analysis-plans contract binds L2/L3 claims to pre-registered plans
+
+- Date: 2026-07-08
+- Status: accepted
+- Phase: 2+
+
+Context: the suite-science hardening council (C-014) found that planned
+comparisons carried no pre-registered analysis: estimators, floor gates,
+sample sizing, and claim ceilings lived in scattered prose, and the
+Token-Shape Sufficiency Null (C5-W.1) was unfalsifiable as designed. The
+claims ladder (D-037) disciplines wording but not the analysis that
+produces the number being worded.
+
+Options considered:
+
+1. Keep discipline in the question bank per question. Con: the bank
+   records what a question is, not how its comparison will be analyzed;
+   the C-W.1 confound survived three council passes there.
+2. Full statistical analysis plan documents per campaign. Con:
+   pre-registration theater; prose ritual the loop would stop reading.
+3. A compact per-comparison plan table as a contract, with a binding
+   rule: no reader-facing L2/L3 claim without a filled plan row.
+
+Decision: option 3. `docs/contracts/analysis_plans.md` defines the plan
+schema (metric + window class, unit of analysis + dependence structure,
+estimator, inclusion/waiver rules, order/blocking, floor gate =
+max(floor_abs, floor_cmp), MDE/n sizing with predeclared top-up,
+denominator provenance, holdouts for L3, claim ceiling, disqualifiers,
+post-execution manifest links) plus standing reporting rules: phase
+metrics are gross-only until phase-idle modeling exists; short-prefill
+windows below 3 samples report `not resolvable`; capped cells are
+excluded from prompt-slope/rank claims unless realized lengths match;
+rank claims require rank gap > comparison MDE; itemized suites
+(ladder/mixed items inside one bundle) are never treated as independent
+replicates — uncertainty is computed at bundle or block level.
+
+Consequences: six plans seeded (Q4 grid fit, 2M asymmetry, Q5 rank
+stability, C5-W.1 equivalence, ladder level-energy guards, content
+sentinel); floor fields fill from the P2-015 calibration artifact;
+reviewers check L2/L3 wording against plan rows as part of standard
+lens rounds.
+
+Revisit when: the Phase 4 claims index lands (plans may merge into it),
+or a comparison class appears the schema cannot express.
+
+---
+
+## D-039: Workload program v2 — substrate first, identification before scale
+
+- Date: 2026-07-08
+- Status: accepted
+- Phase: 2+
+
+Context: C-014 (lead audit + scout + three design lenses + peer
+counterreview) found the planned suite could measure things no consumer
+cites and claim things no design could support: Q4 unreachable at L3
+from the 4-cell 2M grid; P2-015 yielding only an absolute floor while
+L2/L3 claims are gated by the comparative MDE; jw_mixed_v1 cross-
+category comparisons shape-confounded; the full 64-level scored ladder
+having no claims-index consumer; Q4-Q6 having no Phase 4 figure slots.
+
+Decision, five parts (specs live in the amended
+`docs/research_question_bank.md`, `docs/phase_2/phase_2_plan.md` 2O, and
+`docs/contracts/analysis_plans.md`):
+
+1. P2-010 splits: P2-010a reusable suite substrate (item/level markers,
+   `BundleReader.item_windows()`, category/source_manifest/output_policy
+   fields, per-item stop/token/response hashes); P2-010b smoke-scale
+   ladder whose acceptance is envelope validation. The full scored
+   64-level campaign is deferred until C5-1.9 has a named consumer.
+2. jw_mixed_v1 runs phased: common-shape identification stratum (all six
+   categories at one matched shape) → natural-EOS pilot (>=4
+   items/category on reasoning/JSON/chat/multilingual) → full panels
+   only if earlier phases show above-floor structure. Supersedes the
+   fixed-budget-full-first sequencing from C-005; quarantines intact.
+3. New suite element `q4_l3_shape_grid_v1` (AP-1): 4x3 prompt x decode
+   grid with predeclared interpolation + extrapolation holdouts,
+   categorical-additive fit first — the only planned path to an L3
+   claim on current hardware.
+4. Quiet-window execution is TWO windows: A = expanded P2-015 floors +
+   2M + drift sentinels, then reduce and compute CV/floor/MDE; B = Q4
+   grid with n sized from Window A, plus the content-sensitivity
+   sentinel. Rationale: MDE-sized n cannot honestly precede the floor
+   measurement.
+5. P2-015 expands to per-metric/window-class floors (gross request,
+   idle-subtracted request, phase, item/level) plus comparative MDE
+   tables; `docs/phase_2/detection_floor.md` becomes a per-consumer
+   table.
+
+D-034's gate is unchanged: 2O work stays post-2M; the only pre-Window-A
+item is P2-021 (drift-sentinel support in the 2M generator), which is 2M
+campaign tooling, not workload enrichment.
+
+Consequences: queue rows P2-015/P2-006/P2-010/P2-012 amended; P2-019,
+P2-020, P2-021 added; Phase 4 figure registry gains F9-F12 so Q4-Q6
+data has named consumers before it is collected.
+
+Revisit when: Window A results contradict the sizing assumptions, or a
+consumer for the full scored ladder appears.

@@ -43,6 +43,7 @@ standing instructions.
 | C-011 | 2026-07-08 | Counter-review of the independent project critique (4 verification lenses + 5.5-high adjudication; full entry below) | Critique findings adjudicated into mechanics: fail-closed campaign runner, counterbalanced order manifest, reducer honesty flags, claims ladder (D-037), P2-015 ranked before 2M; merged as PR #12 |
 | C-012 | 2026-07-08 | Site observatory stream (pointer entry; full record in run report `2026-07-08-site-observatory.md`) — dual-prior design round, 2 image-critique rounds, visual sign-off, counterreview, final-head gate | Data-driven status frontend merged as PR #13; fail-closed parser honesty enforced (2 counterreview blockers fixed); P2-017 per-source stamps closed; image-heavy analysis routed to Codex as standing doctrine (Ed) |
 | C-013 | 2026-07-08 | Lakebed deployment stream (pointer entry; full record in run report `2026-07-08-lakebed-deploy.md`) — 5.5 impl + 6 platform-constraint fix rounds + fresh counterreview | Site live as a shareable capsule with a live GitHub freshness layer (fails soft); lead owns deploy/claim (no sandbox network); site regen+redeploy folded into the RUN_STATE end-of-work loop |
+| C-014 | 2026-07-08 | Workload-suite science hardening (full entry below) — lead audit + scout + 3 design lenses + invited peer counterreview | Q4-at-L3 gap closed via `q4_l3_shape_grid_v1` (4x3 + holdouts); P2-015 expanded to comparative MDE floors; jw_mixed common-shape stratum (C-W.1 was unfalsifiable); P2-010 split substrate/smoke, scored ladder deferred; two-quiet-window plan; analysis-plans contract (D-038); program restructure (D-039); two lead designs overturned by invited peer |
 
 ---
 
@@ -950,3 +951,55 @@ C-011 first-pass text remains in git history at commit 6418084. A
 follow-up fix pass added provenance layering annotations, hardened the
 reassessment against repo evidence, and recorded this addendum-only
 process footprint; the process-doc entries themselves are addendum-only.
+
+## C-014: Workload-suite science hardening council (2026-07-08)
+
+FULL ENTRY (genuine deliberation; position reversals recorded). Convened
+on Ed's session directive: harden the science the prompt/workload suite
+can answer and decide what to build next. Shape: lead independent audit
+(formed before any lens output, deliberately), Codex scout packet, three
+fresh Codex design lenses (statistical power/DoE, negative-space
+consumer audit, adversarial confound hunt), lead triage with
+dispositions, one Codex peer counterreview of the full synthesis with
+design judgment explicitly invited, lead adjudication. Design docs
+implemented by a pinned Codex session; lead diff gate before commit.
+
+Convergent blockers (lead + all three lenses independently): Q4
+unreachable at L3 from the 2M 4-cell grid; P2-015's absolute floor is
+not the comparative MDE that gates L2/L3 claims. Unique catches by
+layer: skeptic — jw_mixed category x shape confound (the C-W.1 null was
+unfalsifiable as designed), silent long_short cap divergence, drift
+sentinels, content-sensitivity sentinel promotion; power — the MDE
+arithmetic (n=5 resolves ~1.5-1.8x CV), C5-1.1 between-model df
+insufficiency, rank-gap rule, binomial energy/correct guard;
+consumers — Q4-Q6 had NO Phase 4 figure/claims-index consumers, P2-010
+substrate/ladder split, energy_token_j over-promotion under config
+denominators; scout — phase-gross vs idle-subtracted headline mixing,
+token_count_source naming drift, summary_provenance not strict-required.
+
+Deliberated outcomes (all consensus; no dissent recorded):
+(1) P2-010 splits into substrate + smoke ladder, full scored campaign
+deferred — amends C-004's packaging; peer AGREE. (2) jw_mixed_v1 runs
+phased with a common-shape identification stratum — supersedes C-005's
+fixed-budget-full-first sequencing; peer AGREE ("spend-before-
+identification"). (3) Quiet-window packing: lead leaned one window; peer
+OVERTURNED to two (MDE-sized n cannot precede the floor campaign; a 4-6h
+single window raises drift risk exactly while establishing a floor) —
+lead adopted. POSITION REVERSAL. (4) Q4 grid: lead proposed 3x3; peer
+AMENDED to 4x3 with named interpolation + extrapolation holdouts and
+categorical-additive-first fitting — lead adopted. POSITION REVERSAL.
+(5) analysis-plans contract adopted as a compact binding table (D-038);
+peer contributed the full field schema and the pseudo-replication rule
+(item windows are not independent replicates) — a gap every other layer
+missed. (6) Consumer-lens implication that the next suite must include
+the split matrix REJECTED: Q1-Q3 are Phase 3's by design (D-034 gate
+unchanged).
+
+Bindings: D-038 (analysis plans), D-039 (workload program v2). Queue:
+P2-015/P2-006/P2-010/P2-012 amended; P2-019/P2-020/P2-021 added.
+
+Meta-loop yield note: the invited-peer-design pattern paid again — two
+lead designs overturned with strictly better ones (grid, window
+packing), consistent with the 2026-07-07 calibration signal that
+design-freedom delegation to 5.5 runs hotter than doctrine assumed.
+Every layer produced unique catches this session; no drop candidates.
