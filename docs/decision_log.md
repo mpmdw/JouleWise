@@ -52,13 +52,19 @@ be re-derived by a future agent gets an entry here.
 | D-028 | `reduce` verb rewrites `summary_metrics.json` in place (the one sanctioned post-finalize mutation) | accepted |
 | D-029 | Config schema declares nullable optionals; serialization (and config hashes) unchanged | accepted |
 | D-030 | `validate-bundle` stays structural by default; `--strict` adds raw-evidence checks | accepted |
-| D-031 | Multi-model council review; PR convention for multi-commit sessions; D-023 extension + end-of-session consistency sweep | accepted |
+| D-031 | Multi-model council review; PR convention for multi-commit sessions (merge authority amended by C-010); D-023 extension + end-of-session consistency sweep | accepted |
 | D-032 | `phase_energy_j` is gross-only in summary v0.1 | accepted |
 | D-033 | Prompt-content provenance is recorded per run bundle | accepted |
-| D-034 | Slice 2O owns the workload program after 2M and 3.0.1 | accepted |
+| D-034 | Slice 2O owns the workload program after 2M and 3.0.1; implementation lane reopened by D-042 | accepted |
 | D-035 | Replay claims require fresh-process (subprocess-per-stage) isolation | accepted |
 | D-036 | Spike verdict codes derive from measured data, never hardcoded | accepted |
 | D-037 | Claims ladder (L0-L4) binds reader-facing claim language from 2M onward | accepted |
+| D-038 | Analysis plans bind L2/L3 claims to pre-registered comparison rows | accepted |
+| D-039 | Workload program v2: substrate first, identification before scale; pre-Window-A allowlist superseded by D-041/D-042 | accepted |
+| D-040 | Suite architecture v2: generic suite mechanism, bundle-level replication | accepted |
+| D-041 | Benchmark interop via frozen-subset imports and marker-shim energy layer; interop lane remains post-2M + post-P2-010a | accepted |
+| D-042 | D-034 implementation lane reopened; suite build may proceed pre-2M | accepted |
+| D-043 | Supersession-closure discipline | accepted |
 
 ---
 
@@ -1580,6 +1586,11 @@ Qwen2.5-1.5B pick — it does not close D-016 (mid-model/CUDA/GGUF
 criteria still open) but extends the provisional set at user direction;
 mirrored per R-014.
 
+(Amended 2026-07-08, D-043 back-annotation: the PR convention's
+"the user merges" clause is superseded by Ed's 2026-07-08 standing
+self-merge-with-review authority, recorded in C-010; the gate shape
+lives in the resume-merge run report and `docs/orchestration.md`.)
+
 ---
 
 ## D-032: `phase_energy_j` is gross-only in summary v0.1
@@ -1709,6 +1720,10 @@ claims are auditable.
 Revisit when: 2M is skipped or materially re-scoped; then 2O gates and
 research-question mapping must be re-approved rather than silently
 advanced.
+
+(Amended 2026-07-08, D-043 back-annotation: D-042 reopened the
+implementation lane for suite build before 2M; campaign-execution
+ordering remains unchanged.)
 
 ---
 
@@ -1905,6 +1920,9 @@ D-034's gate is unchanged: 2O work stays post-2M; the only pre-Window-A
 item is P2-021 (drift-sentinel support in the 2M generator), which is 2M
 campaign tooling, not workload enrichment.
 
+(Amended 2026-07-08, D-043 back-annotation: this pre-Window-A allowlist
+was superseded twice: first by D-041 item 5's amendment, then by D-042.)
+
 Consequences: queue rows P2-015/P2-006/P2-010/P2-012 amended; P2-019,
 P2-020, P2-021 added; Phase 4 figure registry gains F9-F12 so Q4-Q6
 data has named consumers before it is collected.
@@ -2020,6 +2038,11 @@ map; export direction prioritized over import for adoption-per-build-day.
 Revisit when: the P2-022 spike returns unsupported/partial, or D-034 is
 reopened.
 
+(Amended 2026-07-08, D-043 back-annotation: the revisit clause FIRED by
+D-042's reopening. ADJUDICATION RECORDED: D-042 opened only the
+suite-BUILD lane; the interop lane (P2-022 shim spike, P2-023 imports)
+REMAINS post-2M + post-P2-010a as originally gated.)
+
 ---
 
 ## D-042: D-034 implementation lane reopened — suite build proceeds pre-2M (owner directive)
@@ -2054,3 +2077,45 @@ the 2O gate paragraph carries a dated amendment note pointing here.
 
 Revisit when: suite build threatens the Window A/2M schedule (drop it),
 or 2M lands (gate question dissolves).
+
+---
+
+## D-043: Supersession-closure discipline
+
+- Date: 2026-07-08
+- Status: accepted
+- Phase: all
+
+Context: a meta-reassessment (5-analyst workflow over the full
+council/decision/skill logs) found ~70% of accumulated doc defects were
+one mode: a rule superseded while its losing surfaces stayed live (merge
+authority x3 surfaces, the pre-2M allowlist x3 versions, topology x3
+docs, the decision index ending at D-037, unamended fired revisit
+clauses).
+
+Options considered:
+
+1. Continue relying on broad end-of-session consistency sweeps. Con: the
+   drift pattern survived repeated sweeps because losing surfaces were
+   outside the immediate diff.
+2. Require only the winning decision to mention what it supersedes. Con:
+   readers landing on the older rule still see a live instruction.
+3. Add write-time back-annotation plus a sweep-time supersession check
+   keyed by the session's supersessions.
+
+Decision: option 3.
+
+1. WRITE-TIME: any change that supersedes a prior rule MUST, same
+   session, append a dated amendment/supersession line to EVERY surface
+   stating the losing version, including the superseded decision/council
+   entry and its index row.
+2. SWEEP-TIME: the end-of-session consistency sweep includes a
+   supersession check driven by the session's SUPERSESSIONS (grep the
+   superseded wording across both logs, contracts, process docs), not
+   only its diff.
+
+Consequences: fired-clause back-annotations above land under this rule;
+the sweep prompt gains check five.
+
+Revisit when: if two consecutive sweeps find zero supersession drift, the
+sweep-time check may relax to spot-checks.

@@ -513,7 +513,7 @@ who prevailed and why, and overridden dissents, so a future reader (or
 model) can reconstruct why any decision was made.
 
 **The paper trail (every claim auditable).** Each fact has one home:
-`docs/decision_log.md` — 42 binding design decisions, each with
+`docs/decision_log.md` — the binding design decisions (the log is the count authority), each with
 alternatives considered and revisit conditions; `docs/council_log.md`
 (C-001…C-015) — the deliberation record; `docs/stream_logs/` —
 per-stream decision ledgers committed *with* the code they justify
@@ -577,8 +577,8 @@ never wrote implementation code and never skipped a gate.
 `docs/council_log.md` (C-001…C-015) is the deliberation record — C-006
 is a full orchestration trace of the five-stream day; C-009/C-010 are
 the topology meta-review and its validation; C-011 is the critique
-counter-review. `docs/decision_log.md` holds the 37 binding design
-decisions with alternatives considered.
+counter-review. `docs/decision_log.md` holds the binding design
+decisions with alternatives considered (the log is the count authority).
 `docs/run_reports/` narrates each working session, with per-layer catch
 tables and the delegation-calibration ledger. The executable
 orchestration playbooks live outside this repository as reusable

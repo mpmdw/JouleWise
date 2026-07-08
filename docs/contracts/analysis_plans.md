@@ -38,7 +38,7 @@ remain L0/L1 capability or instrument-result language under D-037.
   report, and 7.4% contaminated idle-subtracted in the same first
   real-energy report (docs/run_reports/2026-07-07-flagship-qwen35-122b.md;
   docs/run_reports/2026-07-06-slice-2i-first-real-energy.md).
-- Phase metrics are GROSS-only until phase-idle modeling exists (C-014).
+- Phase metrics are GROSS-only until phase-idle modeling exists (C-014/D-032).
   They must not be mixed with idle-subtracted request headlines.
 - Short-prefill windows with fewer than 3 samples report `not resolvable`,
   never near-zero point values (C-014).

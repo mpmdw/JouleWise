@@ -21,6 +21,11 @@ Standing council roles (adopted C-001; process decision D-031):
   (commit hygiene, docs consistency, fixture audits) whose findings feed
   the discussion; cheap enough to run every session.
 
+(Amended 2026-07-08: the Opus fast-reviewer tier was dropped at C-006
+after zero unique catches; lead-driven pipelines are the default per
+C-010; Ed granted standing self-merge-with-review authority in the C-010
+addendum.)
+
 Disagreements are discussed in at most one or two rounds; unresolved
 disagreements are decided by the lead and recorded here with the
 dissent. Anything user-facing (push/merge/publish) follows the user's
@@ -65,6 +70,9 @@ standing instructions.
   (fail-fast at idle_baseline, `permission_denied`, no fabricated
   baseline). Precedent: green tests are necessary, never sufficient —
   the blocker was invisible to a fully green suite.
+(Amended 2026-07-08: the Opus-refuter tier was dropped at C-006 after
+zero unique catches; refutation-as-protocol lives on with fresh Codex
+refuters, as recorded in the adversarial-review evolution.)
 
 ## C-002: Reverse review of the vertical-slice series; push vs PR
 

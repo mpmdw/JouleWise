@@ -9,6 +9,10 @@ recorded disposition) BEFORE building against its report, per the
 findings-are-discussed rule. Sections: execution architecture, category
 generators, affine ladder, sources. Owner queue rows: P2-010, P2-012, P2-020.
 Session record: docs/run_reports/2026-07-08-suite-science-expansion.md.
+(Amended 2026-07-08, D-043 back-annotation: the D-034/D-041 reopen that
+the execution report's amendment 2 calls for WAS recorded the same day
+as D-042 — the suite-BUILD lane is open; campaign-execution ordering and
+the interop lane's post-2M gate are unchanged.)
 
 
 ---

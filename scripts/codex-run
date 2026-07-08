@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+# codex-run — stable single-shot Codex invocation for agent orchestration.
+#
+# THE ONE STABLE PATTERN: launch this as a SINGLE harness background Bash
+# call (run_in_background: true). It always redirects stdin from /dev/null
+# (kills the background stdin-hang), always timeout-bounds the run with a
+# pure-bash watchdog (no GNU `timeout` dependency — macOS lacks it; a wedged
+# Codex becomes a bounded FAILURE, not a permastall), and writes a status
+# sentinel on exit. Because it always EXITS, the harness always re-invokes
+# you — no separate watcher, no polling, no "await" stall. When re-invoked,
+# read <out> and the status sentinel (<out> with its extension replaced by .status, e.g. foo.md -> foo.status). That is the whole protocol.
+#
+# Usage:
+#   codex-run <out.md> [--timeout SEC] [-C DIR] [-s SANDBOX] <prompt>
+#   codex-run <out.md> [--timeout SEC] --resume <prompt>      # resume --last
+#
+# Defaults: --timeout 900 (15m), -C $PWD, -s read-only.
+set -u
+
+json_quote() {
+  printf '"'
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+  printf '"'
+}
+
+observer_now() {
+  date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+observer_prompt_preview() {
+  printf '%.240s' "$1" | tr '\n\r\t' '   '
+}
+
+observer_session_id_from_log() {
+  [ -f "$LOG" ] || return 1
+  sed -n 's/^session id: //p' "$LOG" 2>/dev/null | tail -n 1
+}
+
+observer_emit() {
+  event="$1"
+  status_text="$2"
+  session_id="$3"
+  message="$4"
+
+  mkdir -p "$OBSERVER_DIR" 2>/dev/null || true
+  ts="$(observer_now)"
+  prompt_preview="$(observer_prompt_preview "$PROMPT")"
+
+  {
+    printf '{"schema_version":1'
+    printf ',"event":%s' "$(json_quote "$event")"
+    printf ',"timestamp":%s' "$(json_quote "$ts")"
+    printf ',"run_key":%s' "$(json_quote "$RUN_KEY")"
+    printf ',"session_id":%s' "$(json_quote "$session_id")"
+    printf ',"status":%s' "$(json_quote "$status_text")"
+    printf ',"message":%s' "$(json_quote "$message")"
+    printf ',"cwd":%s' "$(json_quote "$CDIR")"
+    printf ',"out":%s' "$(json_quote "$OUT")"
+    printf ',"log":%s' "$(json_quote "$LOG")"
+    printf ',"status_file":%s' "$(json_quote "$STATUS")"
+    printf ',"observer_file":%s' "$(json_quote "$OBSERVER_FILE")"
+    printf ',"timeout_s":%s' "$(json_quote "$TIMEOUT")"
+    printf ',"sandbox":%s' "$(json_quote "$SANDBOX")"
+    printf ',"resume":%s' "$(json_quote "$RESUME")"
+    printf ',"codex_pid":%s' "$(json_quote "$cpid")"
+    printf ',"prompt_preview":%s' "$(json_quote "$prompt_preview")"
+    printf '}\n'
+  } >> "$OBSERVER_INDEX" 2>/dev/null || true
+
+  {
+    printf '{"schema_version":1'
+    printf ',"event":%s' "$(json_quote "$event")"
+    printf ',"timestamp":%s' "$(json_quote "$ts")"
+    printf ',"run_key":%s' "$(json_quote "$RUN_KEY")"
+    printf ',"session_id":%s' "$(json_quote "$session_id")"
+    printf ',"status":%s' "$(json_quote "$status_text")"
+    printf ',"message":%s' "$(json_quote "$message")"
+    printf ',"cwd":%s' "$(json_quote "$CDIR")"
+    printf ',"out":%s' "$(json_quote "$OUT")"
+    printf ',"log":%s' "$(json_quote "$LOG")"
+    printf ',"status_file":%s' "$(json_quote "$STATUS")"
+    printf ',"timeout_s":%s' "$(json_quote "$TIMEOUT")"
+    printf ',"sandbox":%s' "$(json_quote "$SANDBOX")"
+    printf ',"resume":%s' "$(json_quote "$RESUME")"
+    printf ',"codex_pid":%s' "$(json_quote "$cpid")"
+    printf ',"prompt_preview":%s' "$(json_quote "$prompt_preview")"
+    printf '}\n'
+  } >> "$OBSERVER_FILE" 2>/dev/null || true
+}
+
+observer_watch_session_id() {
+  # Codex prints "session id: <uuid>" near startup. Record it as soon as it
+  # appears so the Codex app can navigate to the headless run while it runs.
+  n=0
+  while [ "$n" -lt 120 ]; do
+    sid="$(observer_session_id_from_log || true)"
+    if [ -n "$sid" ]; then
+      observer_emit "SESSION_READY" "RUNNING" "$sid" "session id captured"
+      return 0
+    fi
+    kill -0 "$cpid" 2>/dev/null || return 0
+    sleep 1
+    n=$((n + 1))
+  done
+  observer_emit "SESSION_PENDING" "RUNNING" "" "session id not found within observer window"
+}
+
+if [ $# -lt 2 ]; then
+  echo "usage: codex-run <out.md> [--timeout SEC] [-C DIR] [-s SANDBOX] [--resume] <prompt>" >&2
+  exit 64
+fi
+
+OUT="$1"; shift
+case "$OUT" in /*) ;; *) OUT="$PWD/$OUT" ;; esac
+mkdir -p "$(dirname "$OUT")" 2>/dev/null || true
+TIMEOUT=900
+CDIR="$PWD"
+SANDBOX="read-only"
+RESUME=0
+IMAGES=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --timeout) TIMEOUT="$2"; shift 2 ;;
+    -C)        CDIR="$2";    shift 2 ;;
+    -s)        SANDBOX="$2"; shift 2 ;;
+    -i|--image) IMAGES+=(-i "$2"); shift 2 ;;
+    --resume)  RESUME=1;     shift   ;;
+    --)        shift; break ;;
+    *)         break ;;
+  esac
+done
+PROMPT="$*"
+
+STATUS="${OUT%.md}.status"
+LOG="${OUT%.md}.log"
+OBSERVER_DIR="${CODEX_OBSERVER_DIR:-${CODEX_HOME:-"$HOME/.codex"}/claude-spawned}"
+OBSERVER_INDEX="$OBSERVER_DIR/index.jsonl"
+OBSERVER_FILE="${OUT%.md}.codex-observer.jsonl"
+RUN_KEY="$(date -u +%Y%m%dT%H%M%SZ)-$$-$(basename "${OUT%.md}")"
+cpid=""
+echo "RUNNING" > "$STATUS"
+
+# Launch Codex in the background so a pure-bash watchdog can bound it.
+# Resume note: `codex exec resume` has no -C/-s flags; cwd is forwarded by
+# cd-ing (also scopes --last's cwd session filter to CDIR) and sandbox via
+# the -c sandbox_mode config override. (C-009 T4: a bare resume silently
+# fell back to read-only in the caller's cwd.)
+if [ "$RESUME" = "1" ]; then
+  printf '%s' "$PROMPT" | (cd "$CDIR" && codex exec resume --last -c sandbox_mode="$SANDBOX" -o "$OUT" -) > "$LOG" 2>&1 &
+else
+  # Images go FIRST: `-i <FILE>...` is variadic and a trailing -i would
+  # swallow the positional prompt; the following flags terminate the list.
+  codex exec ${IMAGES[@]+"${IMAGES[@]}"} -C "$CDIR" -s "$SANDBOX" -o "$OUT" "$PROMPT" < /dev/null > "$LOG" 2>&1 &
+fi
+cpid=$!
+
+observer_emit "RUNNING" "RUNNING" "" "codex process launched"
+observer_watch_session_id &
+owpid=$!
+
+# Watchdog: TERM then KILL if still alive past the deadline.
+( sleep "$TIMEOUT"
+  kill -0 "$cpid" 2>/dev/null && kill -TERM "$cpid" 2>/dev/null
+  sleep 3
+  kill -0 "$cpid" 2>/dev/null && kill -KILL "$cpid" 2>/dev/null
+) 2>/dev/null &
+wpid=$!
+
+wait "$cpid" 2>/dev/null
+rc=$?
+kill "$wpid" 2>/dev/null   # cancel the watchdog if Codex finished first
+wait "$wpid" 2>/dev/null
+kill "$owpid" 2>/dev/null
+wait "$owpid" 2>/dev/null
+
+case "$rc" in
+  0)
+    # C-009 T4: a thin final message usually means the real work is in the
+    # diff/artifacts — warn the consumer instead of letting OK imply substance.
+    out_bytes=$(wc -c < "$OUT" 2>/dev/null | tr -d ' ' || echo 0)
+    if [ "${out_bytes:-0}" -lt 400 ]; then
+      echo "OK (WARN: thin output, ${out_bytes} bytes — verify via git diff/artifacts)" > "$STATUS"
+    else
+      echo "OK" > "$STATUS"
+    fi
+    ;;
+  143|137)   echo "TIMEOUT after ${TIMEOUT}s" > "$STATUS" ;;
+  *)         echo "FAILED rc=$rc" > "$STATUS" ;;
+esac
+final_status="$(cat "$STATUS" 2>/dev/null || printf 'UNKNOWN')"
+final_session_id="$(observer_session_id_from_log || true)"
+observer_emit "FINISHED" "$final_status" "$final_session_id" "codex process exited"
+echo "codex-run exit: $(cat "$STATUS") -> $OUT"
+exit 0

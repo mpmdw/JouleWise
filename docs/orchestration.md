@@ -35,6 +35,11 @@ lands in this repo.) As of 2026-07-08.
   (e.g. the docs-consistency sweep) and, when a stream genuinely needs
   mid-stream judgment, as a stream director — a role that is now the
   exception rather than the default (see Topology).
+- **Image-heavy analysis routes to Codex** as standing doctrine from
+  C-012, after the site-observatory stream's image-critique rounds.
+- **Invited-peer validation is allowed to overturn lead designs**; C-014
+  recorded two lead designs overturned by an invited peer before
+  implementation.
 
 ## The loop, end to end
 
@@ -79,16 +84,26 @@ Every substantial session runs one conductor procedure:
    verbatim process-trace appendix; the intake pointer and queue
    refreshed; a delegated docs-consistency sweep before the final
    commit (its latest pass found 15 real drift items; earlier passes
-   found 5–6).
+   found 5–6). Large documentation batches add the pre-commit
+   docs-verify mode; the `consistency-sweep` skill owns that shape,
+   including the D-043 supersession check.
 8. **Same-session distillation** — lessons fold into the process
    playbooks the same session they are learned. Measured effect: one
    failure mode recurred five times before its fix was distilled, zero
-   times after.
-9. **Meta-review** — event-driven, not calendar-driven: when a review
-   layer stops earning its keep, when an intervention repeats despite a
-   folded fix, or when the user asks, the loop is reviewed with its own
-   evidence discipline (see Topology for the consensus one such review
-   produced).
+   times after. The current operation-loop also runs its §0
+   primary-deliverable check and §8 shipped-check before the session is
+   considered done.
+9. **Post-landing verification and close-out** — landed work gets the
+   matching verification workflow with severity-tiered refuters; site
+   changes add the regen+redeploy close-out step pointed to by
+   `RUN_STATE.md` end-of-work step 8.
+10. **Meta-review (the final step)** — event-driven, not calendar-driven:
+    when a review layer stops earning its keep, when an intervention
+    repeats despite a folded fix, or when the user asks, the loop is
+    reviewed with its own evidence discipline (see Topology for the
+    consensus one such review produced). After large workloads the
+    post-large-workload meta-reassessment (owned by operation-loop §10)
+    always fires, and it runs LAST.
 
 ## The artifact system (where rigor becomes auditable)
 
@@ -96,8 +111,9 @@ Each fact has exactly one home; everything else points at it:
 
 | Artifact | Role |
 |---|---|
-| `docs/decision_log.md` | 37 binding design decisions (D-001..D-037), each with alternatives considered, consequences, and revisit conditions. Nothing re-decides these silently. |
-| `docs/council_log.md` | The deliberation record (C-001..C-011): review-council positions, reasoning exchanged, who prevailed, overridden dissents — so a future reader can reconstruct *why*, not just *what*. |
+| `docs/decision_log.md` | Binding design decisions, each with alternatives considered, consequences, and revisit conditions. The log is the count authority; nothing re-decides these silently. |
+| `docs/council_log.md` | The deliberation record: review-council positions, reasoning exchanged, who prevailed, overridden dissents — so a future reader can reconstruct *why*, not just *what*. The log is the range/count authority. |
+| `docs/contracts/` | Claim/evidence contracts: `claims_ladder.md` (D-037) plus `analysis_plans.md` (D-038) form the claim gate; strict validation is the evidence ticket. |
 | `docs/stream_logs/` | Per-stream decision ledgers, committed WITH the code they justify: every non-trivial in-stream decision (`A-1..A-30`, `B-1..B-46`, …) with mandatory evidence pointers; wrong pins are SUPERSEDED in place, never erased. |
 | `docs/run_reports/` | One record per working session: outcomes, verification evidence, a per-layer catch/yield table, the delegation-calibration ledger, restart instructions. |
 | `TASK_QUEUE.md` | Ranked queue with machine-state lanes ([QUIET-MAC] / [AGENT] / [ED-EXTERNAL]) — a session picks the top task *compatible with the machine's state*, so agent load never contaminates measurements. |
@@ -164,6 +180,31 @@ caught only by the final-head rule on the last commit of the night.
 Suite: 415 → 546 tests, zero expected failures. Roughly two dozen
 delegated Codex sessions; the lead never wrote implementation code and
 never skipped a gate.
+
+## Reconstructing the loop on a clean machine
+
+Pointer map only; mechanics stay in their owning files.
+
+- Committed invocation wrapper: `scripts/codex-run`.
+  Usage: `codex-run <out.md> [--timeout SEC] [-C DIR] [-s SANDBOX] [--resume] '<prompt>'`.
+  It writes `<out>.status`.
+- Project bridge: `scripts/codex-bridge`.
+- Skill-only mechanics on the operator's machine live under
+  `~/.claude/skills`: `operation-loop` is the conductor,
+  `codex-delegation` is the invocation/consumption contract,
+  `adversarial-review` defines refutation tiers,
+  `multi-stream-worktrees` defines parallel stream mechanics,
+  `consistency-sweep` owns drift control, and `council` owns
+  triggers/roles.
+- Repo-derivable on a clean clone: this file gives the loop shape;
+  council log C-009/C-010 give topology and gates; the claims and
+  analysis-plans contracts give claim gating; `docs/stream_logs/` and
+  `docs/run_reports/` provide live templates for ledgers and trace
+  appendices; `scripts/codex-run` and `scripts/codex-bridge` provide
+  execution entry points.
+- Skill-only: exact conductor sequencing, Codex prompt/consumption
+  contract, severity-tiered refuter recipes, multi-worktree stream
+  operations, and consistency-sweep checklists.
 
 ## Where to read the evidence
 

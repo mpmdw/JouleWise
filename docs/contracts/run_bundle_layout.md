@@ -183,6 +183,9 @@ reader policy:
   `failure_reason`. Other metric keys remain optional/nullable so partial
   evidence failure bundles stay complete.
 
+`phase_energy_j` values are GROSS-only; the rule's contract home is
+`docs/contracts/analysis_plans.md` standing rules (D-032/C-014).
+
 A status-only `{"status": "succeeded"}` summary is neither a complete bundle
 nor default-validation-valid.
 
