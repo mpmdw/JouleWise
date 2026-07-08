@@ -1,170 +1,958 @@
 #!/usr/bin/env python3
-"""Build the library half of docs/site/ — styled HTML renderings of the
-front-facing Markdown docs, matching the hand-designed site pages.
+"""Build docs/site/ from repository source documents.
 
-The designed pages (index/results/process/research.html + style.css +
-fonts/) are hand-authored and NOT touched by this script; it generates
-library.html and one page per source doc, all wrapped in the shared
-"instrument" design system (style.css).
-
-Renders Markdown via `npx --yes marked --gfm` (Node). Docs-only tooling;
-deliberately independent of the measurement venv.
-
-Usage: python3 scripts/build_site.py
+Generated pages use repository-local sources as truth. Markdown rendering is
+isolated in render_markdown(); use --no-marked in networkless sandboxes to
+exercise parsers/templates without invoking npx marked.
 """
 
 from __future__ import annotations
 
+import argparse
 import html
+import re
 import subprocess
+import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "site"
 
-# (source path, output name, card title, one-line description)
-PAGES = [
-    ("README.md", "readme.html", "README",
-     "What the repo is and how to run the mock path end to end."),
-    ("PROJECT_STATUS.md", "project_status.html", "Project Status",
-     "The advisor-facing monitoring document — thesis, status, plan, process."),
-    ("docs/orchestration.md", "orchestration.html", "The Orchestration Process",
-     "The multi-model loop, the artifact system, and how the topology evolved."),
-    ("AGENT_PLAN.md", "agent_plan.html", "Agent Plan",
-     "Phase index and per-phase implementation plans."),
-    ("RUN_STATE.md", "run_state.html", "Run State",
-     "The live intake pointer: current state, next action."),
-    ("TASK_QUEUE.md", "task_queue.html", "Task Queue",
-     "Ranked live queue with machine-state lanes."),
-    ("docs/decision_log.md", "decision_log.html", "Decision Log",
-     "36 binding design decisions with alternatives and revisit conditions."),
-    ("docs/council_log.md", "council_log.html", "Council Log",
-     "Deliberation record C-001…C-010: positions, dissents, adjudications."),
-    ("docs/milestones.md", "milestones.html", "Milestones",
-     "Dates, heartbeats, and the academic calendar mapping."),
-    ("docs/risk_register.md", "risk_register.html", "Risk Register",
-     "Live risks with triggers and mitigation states."),
-    ("docs/run_reports/2026-07-07-resume-merge-session.md",
-     "latest_run_report.html", "Latest Run Report",
-     "The resume+merge session: outcomes, catch record, calibration ledger."),
+
+class SiteBuildError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class SourceStamp:
+    source: str
+    commit: str
+    dirty: bool = False
+
+    @property
+    def label(self) -> str:
+        suffix = " + uncommitted" if self.dirty else ""
+        return f"{self.source} · commit {self.commit}{suffix}"
+
+
+@dataclass(frozen=True)
+class StatusPhase:
+    phase: str
+    scope: str
+    status: str
+    state: str
+
+
+@dataclass(frozen=True)
+class Verification:
+    tests: int
+    skips: int
+
+
+@dataclass(frozen=True)
+class ProjectNow:
+    phase_line: str
+    first_status_sentence: str
+
+
+@dataclass(frozen=True)
+class SessionPointer:
+    date: str
+    title: str
+    report: str
+
+
+@dataclass(frozen=True)
+class QueueItem:
+    rank: str
+    task_id: str
+    priority: str
+    status: str
+    task: str
+    acceptance: str
+    lane: str | None
+
+
+@dataclass(frozen=True)
+class RiskRow:
+    risk_id: str
+    risk: str
+    phase: str
+    likelihood: str
+    impact: str
+    status: str
+
+
+@dataclass(frozen=True)
+class DecisionRow:
+    decision_id: str
+    title: str
+    status: str
+
+
+@dataclass(frozen=True)
+class CouncilRow:
+    council_id: str
+    date: str
+    topic: str
+    outcome: str
+
+
+@dataclass(frozen=True)
+class DocPage:
+    source: str
+    out_name: str
+    title: str
+    description: str
+    group: str
+
+
+BASE_DOC_PAGES = [
+    DocPage("README.md", "readme.html", "README", "What the repo is and how to run the mock path end to end.", "Status & Planning"),
+    DocPage("PROJECT_STATUS.md", "project_status.html", "Project Status", "Advisor-facing status, plan, and architecture.", "Status & Planning"),
+    DocPage("AGENT_PLAN.md", "agent_plan.html", "Agent Plan", "Phase index and per-phase implementation plans.", "Status & Planning"),
+    DocPage("RUN_STATE.md", "run_state.html", "Run State", "The live intake pointer: current state, next action.", "Status & Planning"),
+    DocPage("TASK_QUEUE.md", "task_queue.html", "Task Queue", "Ranked live queue with machine-state lanes.", "Status & Planning"),
+    DocPage("docs/risk_register.md", "risk_register.html", "Risk Register", "Live risks with triggers and mitigation states.", "Evidence & Contracts"),
+    DocPage("docs/contracts/adapter_contracts.md", "adapter_contracts.html", "Adapter Contracts", "Runtime, telemetry, and transport adapter contracts.", "Evidence & Contracts"),
+    DocPage("docs/contracts/measurement_methodology.md", "measurement_methodology.html", "Measurement Methodology", "The measurement boundary, statistics, and validation contract.", "Evidence & Contracts"),
+    DocPage("docs/contracts/claims_ladder.md", "claims_ladder.html", "Claims Ladder", "Binding reader-facing claim language from 2M onward.", "Evidence & Contracts"),
+    DocPage("docs/orchestration.md", "orchestration.html", "The Orchestration Process", "The multi-model loop and artifact system.", "Process & Record"),
+    DocPage("docs/decision_log.md", "decision_log.html", "Decision Log", "Binding design decisions and revisit triggers.", "Process & Record"),
+    DocPage("docs/council_log.md", "council_log.html", "Council Log", "Cross-model deliberation record.", "Process & Record"),
+    DocPage("docs/milestones.md", "milestones.html", "Milestones", "Dates, heartbeats, and academic calendar mapping.", "Process & Record"),
 ]
 
-NAV = """<header class="site">
-  <nav class="nav">
-    <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
-    <div class="links">
-      <a href="index.html">Story</a>
-      <a href="results.html">Results</a>
-      <a href="process.html">Process</a>
-      <a href="research.html">Research</a>
-      <a href="library.html"{lib_active}>Library</a>
-    </div>
-  </nav>
-</header>"""
+HAND_PAGES = {
+    "index.html": "Story",
+    "results.html": "Results",
+    "process.html": "Process",
+    "research.html": "Research",
+}
 
-FOOTER = """<footer class="site">
-  <div class="inner">
-    <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>{stamp} · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
-  </div>
-</footer>"""
-
-PAGE_TEMPLATE = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title} — JouleWise</title>
-<link rel="stylesheet" href="style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
-</head>
-<body>
-{nav}
-<main>
-<div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>{source}</code> · {stamp}</p>
-{body}
-</div>
-</main>
-{footer}
-</body>
-</html>
-"""
-
-LIBRARY_TEMPLATE = """<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Library — JouleWise</title>
-<link rel="stylesheet" href="style.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
-</head>
-<body>
-{nav}
-<main>
-<div class="hero" style="padding-bottom:6px">
-  <div class="kicker">Primary sources</div>
-  <h1 style="font-size:clamp(36px,5vw,56px)">The library.</h1>
-  <p class="lede">Every claim on this site traces back to these documents —
-  rendered here for reading, canonical as Markdown in the repository.</p>
-</div>
-<section class="band tight">
-  <div class="lib-grid">
-{cards}
-  </div>
-</section>
-</main>
-{footer}
-</body>
-</html>
-"""
+NAV_ORDER = [
+    ("index.html", "Story"),
+    ("status.html", "Status"),
+    ("roadmap.html", "Roadmap"),
+    ("record.html", "Record"),
+    ("results.html", "Results"),
+    ("process.html", "Process"),
+    ("research.html", "Research"),
+    ("library.html", "Sources"),
+]
 
 
-def render_markdown(path: Path) -> str:
+def fail(component: str, source: str, expected: str) -> None:
+    raise SiteBuildError(f"{component}: {source}: expected {expected}")
+
+
+def read_source(source: str) -> str:
+    path = ROOT / source
+    if not path.exists():
+        fail("source", source, "file to exist")
+    return path.read_text(encoding="utf-8")
+
+
+def attr_escape(value: object) -> str:
+    return html.escape(str(value), quote=True)
+
+
+def doc_pages(latest_report_source: str) -> list[DocPage]:
+    return [
+        *BASE_DOC_PAGES,
+        DocPage(
+            latest_report_source,
+            "latest_run_report.html",
+            "Latest Run Report",
+            "Latest run report, derived from RUN_STATE.md.",
+            "Reports",
+        ),
+    ]
+
+
+def git_source_stamp(source: str) -> SourceStamp:
+    commit = subprocess.run(
+        ["git", "log", "-1", "--format=%h", "--", source],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    if not commit:
+        commit = "untracked"
+    dirty = bool(
+        subprocess.run(
+            ["git", "status", "--porcelain", "--", source],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    return SourceStamp(source=source, commit=commit, dirty=dirty)
+
+
+def parse_pipe_row(line: str) -> list[str]:
+    return [cell.strip() for cell in line.strip().strip("|").split("|")]
+
+
+def parse_table_after_heading(md: str, source: str, heading: str, headers: list[str]) -> list[dict[str, str]]:
+    heading_match = re.search(rf"^##\s+{re.escape(heading)}\s*$", md, re.MULTILINE)
+    if not heading_match:
+        fail(heading, source, f"heading '## {heading}'")
+    tail = md[heading_match.end():]
+    lines = tail.splitlines()
+    table_start = None
+    for index, line in enumerate(lines):
+        if line.strip().startswith("|"):
+            table_start = index
+            break
+        if line.startswith("## "):
+            break
+    if table_start is None:
+        fail(heading, source, "markdown table after heading")
+    parsed_headers = parse_pipe_row(lines[table_start])
+    if parsed_headers != headers:
+        fail(heading, source, f"table headers {headers!r}")
+    if table_start + 1 >= len(lines) or not re.match(r"^\s*\|?\s*:?-{3,}", lines[table_start + 1]):
+        fail(heading, source, "markdown table separator")
+    rows: list[dict[str, str]] = []
+    for line in lines[table_start + 2:]:
+        if not line.strip().startswith("|"):
+            break
+        cells = parse_pipe_row(line)
+        if len(cells) != len(headers):
+            fail(heading, source, f"{len(headers)} table cells per row")
+        rows.append(dict(zip(headers, cells)))
+    if not rows:
+        fail(heading, source, "at least one table row")
+    return rows
+
+
+def parse_status_at_glance(md: str, source: str = "PROJECT_STATUS.md") -> list[StatusPhase]:
+    rows = parse_table_after_heading(md, source, "Status At A Glance", ["Phase", "Scope", "Status"])
+    phases = []
+    for row in rows:
+        status = row["Status"]
+        leading = re.match(r"\s*\*\*(.+?)\*\*", status)
+        state_source = leading.group(1) if leading else status
+        plain = re.sub(r"[*`]", "", state_source).lower()
+        if "in progress" in plain:
+            state = "in progress"
+        elif "complete" in plain:
+            state = "complete"
+        elif "gated" in plain:
+            state = "gated"
+        elif "planned" in plain:
+            state = "planned"
+        else:
+            fail("Status At A Glance", source, "status state complete/in progress/planned/gated")
+        phases.append(StatusPhase(row["Phase"], row["Scope"], status, state))
+    return phases
+
+
+def parse_current_verification(md: str, source: str = "RUN_STATE.md") -> Verification:
+    section = section_text(md, source, "Current Verification")
+    match = re.search(r"Ran\s+(\d+)\s*tests,\s*OK\s*\(skipped=(\d+)\)", section)
+    if not match:
+        fail("Current Verification", source, r"Ran (\d+)\s*tests, OK \(skipped=(\d+)\)")
+    return Verification(tests=int(match.group(1)), skips=int(match.group(2)))
+
+
+def parse_bundle_count(*texts: str, source: str = "RUN_STATE.md/PROJECT_STATUS.md") -> int:
+    found: set[int] = set()
+    for text in texts:
+        for match in re.finditer(r"all\s+(\d+)\s+real corpus bundles", text, re.IGNORECASE):
+            found.add(int(match.group(1)))
+    if len(found) != 1:
+        fail("bundle count", source, "one non-conflicting 'all N real corpus bundles' count")
+    return found.pop()
+
+
+def parse_project_now(project_md: str, run_md: str) -> ProjectNow:
+    match = re.search(r"^- Project phase:\s*(.+(?:\n\s{2,}.+)*)", project_md, re.MULTILINE)
+    if not match:
+        fail("project phase", "PROJECT_STATUS.md", "bullet '- Project phase: ...'")
+    phase_line = re.sub(r"\s+", " ", match.group(1)).strip()
+    current = section_text(run_md, "RUN_STATE.md", "Current Project Status")
+    first_para = current.strip().split("\n\n", 1)[0].replace("\n", " ")
+    bold = re.search(r"(\*\*.+?[.!?]\*\*)", first_para)
+    if not bold:
+        fail("Current Project Status", "RUN_STATE.md", "first bolded sentence")
+    return ProjectNow(phase_line=phase_line, first_status_sentence=bold.group(1))
+
+
+def section_text(md: str, source: str, heading: str) -> str:
+    match = re.search(rf"^##\s+{re.escape(heading)}\s*$", md, re.MULTILINE)
+    if not match:
+        fail(heading, source, f"heading '## {heading}'")
+    next_match = re.search(r"^##\s+", md[match.end():], re.MULTILINE)
+    end = match.end() + next_match.start() if next_match else len(md)
+    text = md[match.end():end]
+    if not text.strip():
+        fail(heading, source, "non-empty section")
+    return text
+
+
+def parse_session_history(md: str, source: str = "RUN_STATE.md") -> list[SessionPointer]:
+    section = section_text(md, source, "Session History (pointers only — run reports own the narrative)")
+    sessions: list[SessionPointer] = []
+    entries = re.findall(r"(?ms)^-\s+(.*?)(?=^-\s+|\Z)", section)
+    for entry in entries:
+        if entry.lstrip().startswith("Older:"):
+            continue
+        header = re.match(r"(?s)^(\d{4}-\d{2}-\d{2}(?:/\d{2})?)\s+(.+?):", entry)
+        if not header:
+            fail("Session History", source, "dated session bullet with backticked docs/run_reports/...md pointer")
+        pointer = re.search(r"`(docs/run_reports/[^`]+\.md)`", entry)
+        if not pointer:
+            fail("Session History", source, "backticked docs/run_reports/...md pointer in each dated entry")
+        title = re.sub(r"\s+", " ", header.group(2)).strip()
+        sessions.append(SessionPointer(header.group(1), title, pointer.group(1)))
+    if not sessions:
+        fail("Session History", source, "newest-first bullet list with report links")
+    return sessions
+
+
+def latest_report_source_from_sessions(sessions: list[SessionPointer], source: str = "RUN_STATE.md") -> str:
+    if not sessions:
+        fail("latest run report", source, "first Session History entry with docs/run_reports/...md pointer")
+    report = sessions[0].report
+    if not re.fullmatch(r"docs/run_reports/[^`]+\.md", report):
+        fail("latest run report", source, "first Session History entry with docs/run_reports/...md pointer")
+    return report
+
+
+def parse_current_queue(md: str, source: str = "TASK_QUEUE.md") -> list[QueueItem]:
+    rows = parse_table_after_heading(
+        md,
+        source,
+        "Current Queue",
+        ["Rank", "ID", "Priority", "Status", "Task", "Evidence / Acceptance"],
+    )
+    items = []
+    for row in rows:
+        lane_match = re.search(r"\[(QUIET-MAC|AGENT|ED-EXTERNAL)\]", row["Status"])
+        lane = lane_match.group(1) if lane_match else None
+        status = re.sub(r"\s*\[(?:QUIET-MAC|AGENT|ED-EXTERNAL)\]", "", row["Status"]).strip()
+        items.append(
+            QueueItem(
+                rank=row["Rank"],
+                task_id=row["ID"],
+                priority=row["Priority"],
+                status=status,
+                task=row["Task"],
+                acceptance=row["Evidence / Acceptance"],
+                lane=lane,
+            )
+        )
+    return items
+
+
+def parse_completed_queue(md: str, source: str = "TASK_QUEUE.md") -> list[dict[str, str]]:
+    return parse_table_after_heading(md, source, "Completed Queue Items", ["ID", "Priority", "Completed", "Task", "Evidence"])
+
+
+def parse_do_not_do(md: str, source: str = "TASK_QUEUE.md") -> list[str]:
+    section = section_text(md, source, "Current Do-Not-Do-Yet List")
+    items = []
+    current: list[str] = []
+    for line in section.splitlines():
+        if line.startswith("- "):
+            if current:
+                items.append(" ".join(current).strip())
+            current = [line[2:].strip()]
+        elif current and line.startswith("  "):
+            current.append(line.strip())
+    if current:
+        items.append(" ".join(current).strip())
+    if not items:
+        fail("Current Do-Not-Do-Yet List", source, "bullet list")
+    return items
+
+
+def parse_risk_summary(md: str, source: str = "docs/risk_register.md") -> list[RiskRow]:
+    rows = parse_table_after_heading(md, source, "Summary", ["ID", "Risk", "Phase", "Likelihood", "Impact", "Status"])
+    return [RiskRow(row["ID"], row["Risk"], row["Phase"], row["Likelihood"], row["Impact"], row["Status"]) for row in rows]
+
+
+def parse_decision_index(md: str, source: str = "docs/decision_log.md") -> list[DecisionRow]:
+    rows = parse_table_after_heading(md, source, "Index", ["ID", "Title", "Status"])
+    return [DecisionRow(row["ID"], row["Title"], row["Status"]) for row in rows]
+
+
+def parse_council_index(md: str, source: str = "docs/council_log.md") -> list[CouncilRow]:
+    rows = parse_table_after_heading(md, source, "Index", ["ID", "Date", "Topic", "Outcome"])
+    councils = [CouncilRow(row["ID"], row["Date"], row["Topic"], row["Outcome"]) for row in rows]
+    existing = {row.council_id for row in councils}
+    for match in re.finditer(r"^##\s+(C-\d{3}):\s+(.+?)\s+\((\d{4}-\d{2}-\d{2})\)", md, re.MULTILINE):
+        council_id = match.group(1)
+        if council_id not in existing:
+            fail("council index", source, "each detailed '## C-NNN' heading listed in index table")
+    if not councils:
+        fail("Council Index", source, "council rows")
+    return sorted(councils, key=lambda row: row.council_id)
+
+
+def render_markdown(path: Path, no_marked: bool = False) -> str:
+    text = path.read_text(encoding="utf-8")
+    if no_marked:
+        return '<pre class="markdown-placeholder">' + html.escape(text) + "</pre>"
     result = subprocess.run(
         ["npx", "--yes", "marked", "--gfm"],
-        input=path.read_text(encoding="utf-8"),
+        input=text,
         capture_output=True,
         text=True,
         check=True,
         cwd=ROOT,
     )
-    return result.stdout
+    return wrap_tables(result.stdout)
 
 
-def main() -> None:
-    stamp = subprocess.run(
-        ["git", "log", "-1", "--format=as of commit %h (%ad)", "--date=short"],
-        capture_output=True, text=True, cwd=ROOT, check=True,
-    ).stdout.strip()
-    OUT.mkdir(parents=True, exist_ok=True)
-    footer = FOOTER.format(stamp=html.escape(stamp))
+def wrap_tables(rendered: str) -> str:
+    """Wrap tables in a scroll container: a bare display:block table keeps
+    its intrinsic min-content width and widens the page on mobile."""
+    return re.sub(r"(<table\b[^>]*>)", r'<div class="table-scroll">\1', rendered).replace("</table>", "</table></div>")
 
-    cards = []
-    for src, out_name, title, desc in PAGES:
-        body = render_markdown(ROOT / src)
-        page = PAGE_TEMPLATE.format(
-            title=html.escape(title),
-            nav=NAV.format(lib_active=' class="active"'),
-            source=html.escape(src), stamp=html.escape(stamp),
-            body=body, footer=footer,
-        )
-        (OUT / out_name).write_text(page, encoding="utf-8")
-        cards.append(
-            f'    <a class="lib-card" href="{out_name}">'
-            f'<div class="t">{html.escape(title)}</div>'
-            f'<div class="d">{html.escape(desc)}</div></a>'
-        )
-        print(f"built {out_name}")
 
-    library = LIBRARY_TEMPLATE.format(
-        nav=NAV.format(lib_active=' class="active"'),
-        cards="\n".join(cards), footer=footer,
+def inline_md(text: str) -> str:
+    escaped = html.escape(text)
+    escaped = re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
+    escaped = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", escaped)
+    escaped = re.sub(
+        r"\[([^\]]+)\]\(([^)]+)\)",
+        lambda match: f'<a href="{attr_escape(html.unescape(match.group(2)))}">{match.group(1)}</a>',
+        escaped,
     )
-    (OUT / "library.html").write_text(library, encoding="utf-8")
-    print(f"built library.html -> {OUT}")
+    escaped = re.sub(r"`([^`]+)`", r"<code>\1</code>", escaped)
+    return escaped
+
+
+def plain_md(text: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[*`]", "", text)).strip()
+
+
+def phase_number(phase: StatusPhase) -> str:
+    match = re.match(r"\s*(\d+)\.", phase.phase)
+    if not match:
+        fail("Status At A Glance", "PROJECT_STATUS.md", "phase number prefix like '2.'")
+    return match.group(1)
+
+
+def phase_display_label(phase: StatusPhase) -> str:
+    label = re.sub(r"^\s*\d+\.\s*", "", phase.phase).strip()
+    label = re.split(r",| and ", label, maxsplit=1)[0].strip()
+    if not label:
+        fail("Status At A Glance", "PROJECT_STATUS.md", "non-empty phase label")
+    return label
+
+
+def current_phase_summary(phases: list[StatusPhase]) -> str:
+    active = [phase for phase in phases if phase.state == "in progress"]
+    if not active:
+        fail("Status At A Glance", "PROJECT_STATUS.md", "at least one in-progress phase")
+    phase = active[-1]
+    return f"Phase {phase_number(phase)} {phase.state}"
+
+
+def queue_status_view(status: str) -> tuple[str, str]:
+    plain = plain_md(status)
+    candidates = [
+        ("MERGED", r"\bMERGED\b"),
+        ("COMPLETE", r"\bCOMPLETE\b"),
+        ("UNBLOCKED", r"\bUNBLOCKED\b"),
+        ("NEW", r"\bNEW\b"),
+        ("WAITING", r"\bwaiting-user\b"),
+        ("PARTIAL", r"\bpartial\b"),
+        ("OPEN", r"\bopen\b"),
+    ]
+    for label, pattern in candidates:
+        if re.search(pattern, plain, re.IGNORECASE):
+            return label, plain
+    words = plain.split()
+    if not words:
+        fail("Current Queue", "TASK_QUEUE.md", "non-empty status")
+    return words[0].upper(), plain
+
+
+def next_two_queue_sentence(queue: list[QueueItem]) -> str:
+    if len(queue) < 2:
+        fail("Current Queue", "TASK_QUEUE.md", "at least two ranked rows for next-two narrative")
+    first, second = queue[0], queue[1]
+    shared_window = " in the same quiet-machine window" if first.lane == second.lane == "QUIET-MAC" else ""
+    return f"{first.task_id} runs first, then {second.task_id}{shared_window}."
+
+
+def lane_chip(lane: str | None) -> str:
+    if lane is None:
+        return ""
+    return f'<span class="lane-chip lane-{attr_escape(lane_slug(lane))}">{html.escape(lane)}</span>'
+
+
+def source_chip(stamp: SourceStamp) -> str:
+    dirty = " + uncommitted" if stamp.dirty else ""
+    source = html.escape(stamp.source).replace("/", "/<wbr>")
+    return (
+        f'<span class="source-chip" title="{attr_escape(stamp.label)}">'
+        f'<span class="source-file">{source}</span>'
+        f'<span class="source-commit">commit {html.escape(stamp.commit)}{html.escape(dirty)}</span>'
+        "</span>"
+    )
+
+
+def page_footer(stamps: Iterable[SourceStamp]) -> str:
+    labels = " · ".join(html.escape(stamp.label) for stamp in stamps)
+    return f"""<footer class="site">
+  <div class="inner">
+    <span>JouleWise · github.com/mpmdw/JouleWise</span>
+    <span>{labels} · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+  </div>
+</footer>"""
+
+
+def nav(active_label: str | None = None) -> str:
+    links = []
+    for href, label in NAV_ORDER:
+        active = ' class="active"' if label == active_label else ""
+        links.append(f'      <a href="{attr_escape(href)}"{active}>{html.escape(label)}</a>')
+    return """<header class="site">
+  <nav class="nav">
+    <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
+    <div class="links">
+{links}
+    </div>
+  </nav>
+</header>""".format(links="\n".join(links))
+
+
+def page_shell(title: str, active: str, body: str, footer: str) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{html.escape(title)} - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+{nav(active)}
+<main>
+{body}
+</main>
+{footer}
+</body>
+</html>
+"""
+
+
+def render_status_page(
+    phases: list[StatusPhase],
+    verification: Verification,
+    bundle_count: int,
+    now: ProjectNow,
+    sessions: list[SessionPointer],
+    queue: list[QueueItem],
+    risks: list[RiskRow],
+    stamps: dict[str, SourceStamp],
+    latest_report_source: str,
+) -> str:
+    lamps = []
+    class_map = {"complete": "green", "in progress": "amber", "planned": "blue", "gated": "red"}
+    for index, phase in enumerate(phases, start=1):
+        label = phase_display_label(phase)
+        lamps.append(
+            f"""<div class="phase-step">
+          <span class="lamp lamp-{class_map[phase.state]}" aria-hidden="true"></span>
+          <span class="mono">P{index}</span>
+          <strong>{inline_md(phase.state)}</strong>
+          <small title="{attr_escape(phase.phase)}">{html.escape(label)}</small>
+        </div>"""
+        )
+    quiet = [item for item in queue if item.lane == "QUIET-MAC"][:2]
+    if not quiet:
+        fail("Current Queue", "TASK_QUEUE.md", "at least one QUIET-MAC row for status annunciator")
+    annunciator = "\n".join(
+        f'<div><span class="mono">{html.escape(item.task_id)}</span> {inline_md(item.task)}</div>' for item in quiet
+    )
+    latest = sessions[0]
+    top_three = queue[:3]
+    open_risks = [risk for risk in risks if risk.status.startswith("open") and risk.impact == "high"]
+    open_count = sum(1 for risk in risks if risk.status.startswith("open"))
+    residual_count = sum(1 for risk in risks if risk.status == "closed-residual")
+    risk_cards = "\n".join(
+        f'<li><span class="mono">{html.escape(risk.risk_id)}</span> {inline_md(risk.risk)} <span class="status-chip danger">{html.escape(risk.status)}</span></li>'
+        for risk in open_risks
+    )
+    next_rows = "\n".join(
+        f"""<li><span class="mono">#{html.escape(item.rank)} {html.escape(item.task_id)}</span>
+        {lane_chip(item.lane)}
+        <span>{inline_md(item.task)}</span></li>"""
+        for item in top_three
+    )
+    body = f"""<section class="observatory-hero">
+  <div class="kicker">Status observatory</div>
+  <h1>The project state, read from the instruments.</h1>
+</section>
+<section class="console-strip">
+  <div class="status-summary">
+    <div><span class="card-label">Current phase</span><strong>{html.escape(current_phase_summary(phases))}</strong></div>
+    <div><span class="card-label">Next</span><strong class="mono">{html.escape(queue[0].task_id)}</strong></div>
+    <div><span class="card-label">Verification</span><strong class="mono">{verification.tests} tests</strong></div>
+    <div><span class="card-label">Corpus</span><strong class="mono">{bundle_count} bundles</strong></div>
+  </div>
+  <div class="console-detail">
+    <div class="phase-rail">{''.join(lamps)}</div>
+    <div class="annunciator">
+      <div class="card-label">Next quiet-machine window <span class="status-chip amber">NO-AGENT-LOCK</span></div>
+      {annunciator}
+      {source_chip(stamps["TASK_QUEUE.md"])}
+    </div>
+  </div>
+</section>
+<section class="flight-recorder">
+  <article class="station reveal-stagger" style="--delay:0ms">
+    <div class="station-num">01</div><div><h2>What is true now</h2>
+    <p>{inline_md(now.phase_line)}</p><p>{inline_md(now.first_status_sentence)} <a href="run_state.html">RUN_STATE.md</a></p>{source_chip(stamps["PROJECT_STATUS.md"])} {source_chip(stamps["RUN_STATE.md"])}</div>
+  </article>
+  <article class="station reveal-stagger" style="--delay:90ms">
+    <div class="station-num">02</div><div><h2>What changed</h2>
+    <p><span class="mono">{html.escape(latest.date)}</span> {inline_md(latest.title)}</p>
+    <p><a href="{attr_escape(report_href(latest.report, latest_report_source))}">{html.escape(latest.report)}</a></p>{source_chip(stamps["RUN_STATE.md"])}</div>
+  </article>
+  <article class="station reveal-stagger" style="--delay:180ms">
+    <div class="station-num">03</div><div><h2>What happens next</h2>
+    <ol class="queue-mini">{next_rows}</ol>{source_chip(stamps["TASK_QUEUE.md"])}</div>
+  </article>
+  <article class="station reveal-stagger" style="--delay:270ms">
+    <div class="station-num">04</div><div><h2>What could invalidate it</h2>
+    <p><span class="mono">{open_count}</span> open risks · <span class="mono">{residual_count}</span> closed-residual risks. High-impact open risks:</p>
+    <ul>{risk_cards}</ul><p>The 2K NVIDIA protocol pins remain <strong>PROVISIONAL</strong> until live hardware contact.</p>{source_chip(stamps["docs/risk_register.md"])} {source_chip(stamps["PROJECT_STATUS.md"])}</div>
+  </article>
+  <article class="station reveal-stagger" style="--delay:360ms">
+    <div class="station-num">05</div><div><h2>Where the evidence lives</h2>
+    <p><span class="mono">{bundle_count}</span> real corpus bundles pass strict validation. Start from <a href="library.html">Sources</a>, <a href="risk_register.html">Risk Register</a>, and <a href="../project_critique_review.html">Independent critique · second-passed</a>.</p>{source_chip(stamps["RUN_STATE.md"])}</div>
+  </article>
+</section>"""
+    return page_shell("Status", "Status", body, page_footer([stamps["PROJECT_STATUS.md"], stamps["RUN_STATE.md"], stamps["TASK_QUEUE.md"], stamps["docs/risk_register.md"]]))
+
+
+def lane_slug(lane: str) -> str:
+    return lane.lower().replace("[", "").replace("]", "").replace("_", "-").replace(" ", "-")
+
+
+def report_href(path: str, latest_report_source: str | None = None) -> str:
+    filename = Path(path).name
+    if latest_report_source is not None and path == latest_report_source:
+        return "latest_run_report.html"
+    if path.startswith("docs/run_reports/"):
+        return "../run_reports/" + filename
+    return "../" + path
+
+
+def priority_slug(priority: str) -> str:
+    if priority.startswith("P0"):
+        return "p0"
+    if priority.startswith("P1"):
+        return "p1"
+    if priority.startswith("P2"):
+        return "p2"
+    if priority.startswith("P3"):
+        return "p3"
+    return "p4"
+
+
+def render_roadmap_page(queue: list[QueueItem], completed: list[dict[str, str]], do_not_do: list[str], stamp: SourceStamp) -> str:
+    cards = []
+    for item in queue:
+        status_label, status_note = queue_status_view(item.status)
+        cards.append(f"""<article class="lane-card" data-lane="{attr_escape(item.lane or "")}">
+  <div class="priority-band {attr_escape(priority_slug(item.priority))}"></div>
+  <div class="lane-main">
+    <div class="lane-head"><span class="lane-rank mono">#{html.escape(item.rank)}</span><span class="mono task-code">{html.escape(item.task_id)}</span><span class="status-chip">{html.escape(status_label)}</span>{lane_chip(item.lane)}</div>
+    <p class="status-note">{inline_md(status_note)}</p>
+    <h2>{inline_md(item.task)}</h2>
+    <details><summary>Acceptance</summary><p>{inline_md(item.acceptance)}</p></details>
+    {source_chip(stamp)}
+  </div>
+</article>""")
+    next_two = " -> ".join(html.escape(item.task_id) for item in queue[:2])
+    next_two_sentence = html.escape(next_two_queue_sentence(queue))
+    interlocks = "\n".join(f"<li>{inline_md(item)}</li>" for item in do_not_do)
+    timeline = "\n".join(
+        f"""<div class="timeline-node"><span class="mono">{html.escape(row["Completed"])}</span><strong>{html.escape(row["ID"])}</strong><p>{inline_md(row["Task"])}</p></div>"""
+        for row in completed[:12]
+    )
+    body = f"""<section class="observatory-hero">
+  <div class="kicker">Roadmap</div>
+  <h1>Queue rank is the flight plan.</h1>
+  <p class="lede">The current queue is parsed from the exact live table headers in <code>TASK_QUEUE.md</code>. Lane filters are progressive enhancement.</p>
+  {source_chip(stamp)}
+</section>
+<section class="flight-plan">
+  <div class="next-two"><span class="card-label">Next two</span><strong class="mono">{next_two}</strong><p>{next_two_sentence}</p></div>
+  <div class="lane-filters" aria-label="Filter queue by lane">
+    <button type="button" data-lane-filter="all" aria-pressed="true" class="active">All</button>
+    <button type="button" data-lane-filter="QUIET-MAC" aria-pressed="false">Quiet Mac</button>
+    <button type="button" data-lane-filter="AGENT" aria-pressed="false">Agent</button>
+    <button type="button" data-lane-filter="ED-EXTERNAL" aria-pressed="false">Ed</button>
+  </div>
+</section>
+<section class="queue-stack">{''.join(cards)}</section>
+<section class="interlock"><h2>Do not do yet</h2><ul>{interlocks}</ul>{source_chip(stamp)}</section>
+<section class="timeline-rail"><h2>Completed reel</h2>{timeline}{source_chip(stamp)}</section>
+<script>
+(function () {{
+  var buttons = document.querySelectorAll('[data-lane-filter]');
+  var cards = document.querySelectorAll('.lane-card');
+  buttons.forEach(function (button) {{
+    button.addEventListener('click', function () {{
+      var lane = button.getAttribute('data-lane-filter');
+      buttons.forEach(function (candidate) {{
+        var selected = candidate === button;
+        candidate.classList.toggle('active', selected);
+        candidate.setAttribute('aria-pressed', selected ? 'true' : 'false');
+      }});
+      cards.forEach(function (card) {{
+        card.hidden = lane !== 'all' && card.getAttribute('data-lane') !== lane;
+      }});
+    }});
+  }});
+}}());
+</script>"""
+    return page_shell("Roadmap", "Roadmap", body, page_footer([stamp]))
+
+
+def first_markdown_paragraph(md: str, source: str) -> str:
+    body = re.sub(r"^# .+?\n+", "", md, count=1, flags=re.DOTALL).strip()
+    for paragraph in re.split(r"\n\s*\n", body):
+        if paragraph.strip() and not paragraph.lstrip().startswith("|"):
+            return paragraph.replace("\n", " ")
+    fail("latest run report", source, "first paragraph")
+    return ""
+
+
+def report_title(report_md: str, source: str) -> str:
+    match = re.search(r"^#\s+(.+)$", report_md, re.MULTILINE)
+    if not match:
+        fail("latest run report", source, "h1 title")
+    return plain_md(match.group(1))
+
+
+def plain_markdown_excerpt(text: str) -> str:
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"[*_`#>]", "", text)
+    return re.sub(r"\s+", " ", html.unescape(text)).strip()
+
+
+def first_report_paragraph(report_md: str, source: str) -> str:
+    excerpt = plain_markdown_excerpt(first_markdown_paragraph(report_md, source))
+    if not excerpt:
+        fail("latest run report", source, "non-empty first paragraph text")
+    return html.escape(excerpt)
+
+
+def render_grouped_timeline(nodes: list[tuple[str, str, str]]) -> str:
+    if not nodes:
+        fail("timeline", "parsed records", "at least one node")
+    groups: list[tuple[str, list[tuple[str, str]]]] = []
+    for date, title, body in nodes:
+        if groups and groups[-1][0] == date:
+            groups[-1][1].append((title, body))
+        else:
+            groups.append((date, [(title, body)]))
+    rendered = []
+    for date, entries in groups:
+        rendered_entries = "\n".join(
+            f"""<div class="timeline-node"><strong>{title}</strong><p>{body}</p></div>"""
+            for title, body in entries
+        )
+        rendered.append(f"""<div class="timeline-day"><h3 class="mono">{html.escape(date)}</h3>{rendered_entries}</div>""")
+    return "\n".join(rendered)
+
+
+def render_record_page(
+    sessions: list[SessionPointer],
+    report_md: str,
+    report_source: str,
+    decisions: list[DecisionRow],
+    councils: list[CouncilRow],
+    stamps: dict[str, SourceStamp],
+) -> str:
+    latest = sessions[0]
+    session_nodes = render_grouped_timeline([
+        (session.date, inline_md(session.title), f'<a href="{attr_escape(report_href(session.report, report_source))}">{html.escape(session.report)}</a>')
+        for session in sessions
+    ])
+    accepted = [row for row in decisions if row.status.startswith("accepted")]
+    open_rows = [row for row in decisions if row.status.startswith("open")]
+    superseded = [row for row in decisions if row.status.startswith("superseded")]
+    recent = sorted(accepted, key=lambda row: int(row.decision_id.split("-")[1]), reverse=True)[:6]
+    decision_cards = "\n".join(
+        f'<article class="record-card"><span class="mono">{html.escape(row.decision_id)}</span><h3>{inline_md(row.title)}</h3><p>{inline_md(row.status)}</p></article>'
+        for row in recent
+    )
+    council_nodes = render_grouped_timeline([
+        (row.date, f'<span class="mono">{html.escape(row.council_id)}</span> {inline_md(row.topic)}', inline_md(row.outcome))
+        for row in councils
+    ])
+    body = f"""<section class="observatory-hero">
+  <div class="kicker">Record</div>
+  <h1>The narrative stays in the reports.</h1>
+</section>
+<section class="record-grid">
+  <div class="latest-card"><span class="card-label">Latest run report · {html.escape(latest.date)}</span><h2>{html.escape(report_title(report_md, report_source))}</h2><p>{first_report_paragraph(report_md, report_source)}</p>{source_chip(stamps[report_source])}</div>
+</section>
+<section class="timeline-rail"><h2>Sessions timeline</h2>{session_nodes}{source_chip(stamps["RUN_STATE.md"])}</section>
+<section class="decision-summary">
+  <div class="readout-row compact">
+    <div class="readout"><div class="val">{len(accepted)}</div><div class="sub">accepted</div></div>
+    <div class="readout cyan"><div class="val">{len(open_rows)}</div><div class="sub">open</div></div>
+    <div class="readout plain"><div class="val">{len(superseded)}</div><div class="sub">superseded</div></div>
+  </div>
+  <div class="record-cards">{decision_cards}</div>{source_chip(stamps["docs/decision_log.md"])}
+</section>
+<section class="timeline-rail"><h2>Council timeline</h2>{council_nodes}{source_chip(stamps["docs/council_log.md"])}</section>"""
+    return page_shell("Record", "Record", body, page_footer([stamps["RUN_STATE.md"], stamps["docs/decision_log.md"], stamps["docs/council_log.md"], stamps[report_source]]))
+
+
+def markdown_h2_toc(md: str) -> list[tuple[str, str]]:
+    items = []
+    for match in re.finditer(r"^##\s+(.+)$", md, re.MULTILINE):
+        text = re.sub(r"[#*`]", "", match.group(1)).strip()
+        slug = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+        if text and slug:
+            items.append((text, slug))
+    return items
+
+
+def inject_heading_ids(body: str, toc: list[tuple[str, str]]) -> str:
+    for text, slug in toc:
+        pattern = re.compile(rf"<h2>{re.escape(text)}</h2>", re.IGNORECASE)
+        body = pattern.sub(f'<h2 id="{attr_escape(slug)}">{html.escape(text)}</h2>', body, count=1)
+    return body
+
+
+def render_doc_page(doc: DocPage, no_marked: bool, stamp: SourceStamp) -> str:
+    path = ROOT / doc.source
+    md = path.read_text(encoding="utf-8")
+    body = render_markdown(path, no_marked=no_marked)
+    toc = markdown_h2_toc(md)
+    if not no_marked:
+        body = inject_heading_ids(body, toc)
+    toc_links = "\n".join(f'<a href="#{attr_escape(slug)}">{html.escape(text)}</a>' for text, slug in toc)
+    if not toc_links:
+        toc_links = '<span class="muted">No h2 sections found.</span>'
+    source_class = "doc-source-" + re.sub(r"[^a-z0-9]+", "-", doc.source.lower()).strip("-")
+    page_body = f"""<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div>{toc_links}</aside>
+  <div class="doc-wrap {attr_escape(source_class)}">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>{html.escape(doc.source)}</code></p>
+    <div class="provenance-plate">{source_chip(stamp)}</div>
+    {body}
+  </div>
+</div>"""
+    return page_shell(doc.title, "Sources", page_body, page_footer([stamp]))
+
+
+def render_library(docs: list[DocPage], stamps: dict[str, SourceStamp]) -> str:
+    group_html = []
+    for group in ["Status & Planning", "Evidence & Contracts", "Process & Record", "Reports"]:
+        cards = []
+        for doc in [item for item in docs if item.group == group]:
+            stamp = stamps[doc.source]
+            cards.append(
+                f"""<a class="lib-card" href="{attr_escape(doc.out_name)}">
+  <div class="t">{html.escape(doc.title)}</div>
+  <div class="d">{html.escape(doc.description)}</div>
+  <div class="provenance-plate">{source_chip(stamp)}</div>
+</a>"""
+            )
+        group_html.append(f"""<section class="source-group"><h2>{html.escape(group)}</h2><div class="lib-grid">{''.join(cards)}</div></section>""")
+    body = f"""<div class="hero" style="padding-bottom:6px">
+  <div class="kicker">Primary sources</div>
+  <h1 style="font-size:clamp(36px,5vw,56px)">Sources.</h1>
+  <p class="lede">Every generated status page is built from these repository documents. Each card carries the source file's own commit stamp.</p>
+</div>
+{''.join(group_html)}"""
+    return page_shell("Sources", "Sources", body, page_footer(stamps[doc.source] for doc in docs))
+
+
+def update_hand_page_nav() -> None:
+    pattern = re.compile(r"<header class=\"site\">.*?</header>", re.DOTALL)
+    for filename, active in HAND_PAGES.items():
+        path = OUT / filename
+        if not path.exists():
+            continue
+        text = path.read_text(encoding="utf-8")
+        updated, count = pattern.subn(nav(active), text, count=1)
+        if count != 1:
+            fail("hand page nav", f"docs/site/{filename}", "one header.site block")
+        path.write_text(updated, encoding="utf-8")
+
+
+def write(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8")
+    print(f"built {path.name}")
+
+
+def build(no_marked: bool = False) -> None:
+    OUT.mkdir(parents=True, exist_ok=True)
+    project_md = read_source("PROJECT_STATUS.md")
+    run_md = read_source("RUN_STATE.md")
+    queue_md = read_source("TASK_QUEUE.md")
+    risk_md = read_source("docs/risk_register.md")
+    decision_md = read_source("docs/decision_log.md")
+    council_md = read_source("docs/council_log.md")
+
+    phases = parse_status_at_glance(project_md)
+    verification = parse_current_verification(run_md)
+    bundle_count = parse_bundle_count(project_md, run_md)
+    now = parse_project_now(project_md, run_md)
+    sessions = parse_session_history(run_md)
+    report_source = latest_report_source_from_sessions(sessions)
+    report_md = read_source(report_source)
+    docs = doc_pages(report_source)
+    stamps = {doc.source: git_source_stamp(doc.source) for doc in docs}
+    for source in ["PROJECT_STATUS.md", "RUN_STATE.md", "TASK_QUEUE.md", "docs/risk_register.md", "docs/decision_log.md", "docs/council_log.md", report_source]:
+        stamps[source] = git_source_stamp(source)
+    queue = parse_current_queue(queue_md)
+    completed = parse_completed_queue(queue_md)
+    do_not_do = parse_do_not_do(queue_md)
+    risks = parse_risk_summary(risk_md)
+    decisions = parse_decision_index(decision_md)
+    councils = parse_council_index(council_md)
+
+    write(OUT / "status.html", render_status_page(phases, verification, bundle_count, now, sessions, queue, risks, stamps, report_source))
+    write(OUT / "roadmap.html", render_roadmap_page(queue, completed, do_not_do, stamps["TASK_QUEUE.md"]))
+    write(OUT / "record.html", render_record_page(sessions, report_md, report_source, decisions, councils, stamps))
+    for doc in docs:
+        write(OUT / doc.out_name, render_doc_page(doc, no_marked, stamps[doc.source]))
+    write(OUT / "library.html", render_library(docs, stamps))
+    update_hand_page_nav()
+    print(f"built docs/site -> {OUT}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--no-marked", action="store_true", help="render long-form markdown as escaped pre blocks")
+    args = parser.parse_args(argv)
+    try:
+        build(no_marked=args.no_marked)
+    except SiteBuildError as exc:
+        print(f"build_site.py: {exc}", file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as exc:
+        print(f"build_site.py: command failed: {' '.join(exc.cmd)}", file=sys.stderr)
+        if exc.stderr:
+            print(exc.stderr, file=sys.stderr)
+        return exc.returncode or 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

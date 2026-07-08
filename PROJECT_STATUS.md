@@ -96,11 +96,11 @@ system; disaggregated ("split") inference - running prefill and decode on
 different machines with the KV cache transferred between them - is the
 validating research study, not the whole architecture.
 
-The thesis now has two explicit claim tracks. The guaranteed capstone is
+The capstone now has two explicit claim tracks. The guaranteed capstone is
 auditable local LLM energy measurement: the harness plus the Apple-Silicon
 characterization it can already execute on the M3 Max. Split
 (disaggregated) inference remains the differentiating validating study;
-when Phase 3 hardware and feasibility gates land, it upgrades the thesis
+when Phase 3 hardware and feasibility gates land, it upgrades the capstone
 from local characterization to a split-energy crossover study.
 
 The first working slice runs on a MacBook (Apple Silicon) with MLX as the
@@ -145,9 +145,9 @@ than a numbered question.
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
 
-## Thesis Artifact Map
+## Capstone Artifact Map
 
-| chapter/thesis-component | owning doc or deliverable | status | missing evidence |
+| chapter/report-component | owning doc or deliverable | status | missing evidence |
 |---|---|---|---|
 | Background / related work | Phase 4 Stage 4.6, `docs/phase_4/related_work_draft.md` | drafted (11 verified sources) | background-chapter assembly and the Phase 4 exit pass |
 | Measurement methodology | `docs/contracts/measurement_methodology.md` | complete | Phase 4 ratification may amend statistical details against observed variance |
