@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Council Log — JouleWise</title>
+<title>Council Log - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -13,17 +14,38 @@
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
       <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
       <a href="results.html">Results</a>
       <a href="process.html">Process</a>
       <a href="research.html">Research</a>
-      <a href="library.html" class="active">Library</a>
+      <a href="library.html" class="active">Sources</a>
     </div>
   </nav>
 </header>
 <main>
-<div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>docs/council_log.md</code> · as of commit 443a31f (2026-07-08)</p>
-<h1>Council Log</h1>
+<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#index">Index</a>
+<a href="#c-001-review-counterreview-adopted-slice-2h">C-001: Review/counterreview adopted (Slice 2H)</a>
+<a href="#c-002-reverse-review-of-the-vertical-slice-series-push-vs-pr">C-002: Reverse review of the vertical-slice series; push vs PR</a>
+<a href="#c-003-research-agenda-expansion-ideation-council">C-003: Research agenda expansion (ideation council)</a>
+<a href="#c-004-scored-difficulty-suites-per-run-collection-expansion">C-004: Scored difficulty suites + per-run collection expansion</a>
+<a href="#unique-contributions-per-lens">Unique contributions per lens</a>
+<a href="#adjudications-steelman-position-attack-reasoning-outcome">Adjudications (steelman position → attack → reasoning → outcome)</a>
+<a href="#what-the-devil-s-advocate-killed-outright-summary-list">What the devil&#x27;s advocate killed outright (summary list)</a>
+<a href="#dissents">Dissents</a>
+<a href="#process-notes">Process notes</a>
+<a href="#c-006-session-trace-meta-review-2026-07-07-six-stream-parallel-batch-integration-review-process-meta-review">C-006 (session trace + meta-review, 2026-07-07): six-stream parallel batch, integration review, process meta-review</a>
+<a href="#c-007-whole-project-design-planning-council-p2-013-fix-design-user-directed">C-007: Whole-project design/planning council + P2-013 fix design (user-directed)</a>
+<a href="#c-008-multi-stream-session-checkpointed-2026-07-07-pm">C-008: Multi-stream session, checkpointed (2026-07-07 PM)</a>
+<a href="#c-009-meta-review-of-the-orchestration-system-signed-consensus">C-009: Meta-review of the orchestration system (SIGNED consensus)</a>
+<a href="#c-010-resume-merge-session-c-009-topology-first-full-run-2026-07-07-08">C-010: Resume + merge session — C-009 topology first full run (2026-07-07/08)</a>
+<a href="#c-011-counter-review-of-the-independent-project-critique-2026-07-08">C-011: Counter-review of the independent project critique (2026-07-08)</a></aside>
+  <div class="doc-wrap doc-source-docs-council-log-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/council_log.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/council_log.md · commit 440907b"><span class="source-file">docs/<wbr>council_log.md</span><span class="source-commit">commit 440907b</span></span></div>
+    <h1>Council Log</h1>
 <p>Chronicle of multi-model review councils: sessions where more than one
 model reviews, counterreviews, or votes on JouleWise work before it
 lands. Companion to <code>docs/decision_log.md</code> (which records WHAT was
@@ -48,8 +70,8 @@ the discussion; cheap enough to run every session.</li>
 disagreements are decided by the lead and recorded here with the
 dissent. Anything user-facing (push/merge/publish) follows the user&#39;s
 standing instructions.</p>
-<h2>Index</h2>
-<table>
+<h2 id="index">Index</h2>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>ID</th>
@@ -118,9 +140,15 @@ standing instructions.</p>
 <td>Resume+merge session — first full run under the C-009 topology (pointer entry; full record in the resume-merge run report)</td>
 <td>Lead-driven pipelines validated (zero stalls, no subagent directors); B-14/B-15 wire pins overturned by lens review pre-hardware; fabricated-evidence defect caught at lead diff gate (B-44); Ed grants standing self-merge-with-review authority; final-head review rule adopted; PRs #8/#9/#10/#11 merged</td>
 </tr>
-</tbody></table>
+<tr>
+<td>C-011</td>
+<td>2026-07-08</td>
+<td>Counter-review of the independent project critique (4 verification lenses + 5.5-high adjudication; full entry below)</td>
+<td>Critique findings adjudicated into mechanics: fail-closed campaign runner, counterbalanced order manifest, reducer honesty flags, claims ladder (D-037), P2-015 ranked before 2M; merged as PR #12</td>
+</tr>
+</tbody></table></div>
 <hr>
-<h2>C-001: Review/counterreview adopted (Slice 2H)</h2>
+<h2 id="c-001-review-counterreview-adopted-slice-2h">C-001: Review/counterreview adopted (Slice 2H)</h2>
 <ul>
 <li>Date: 2026-07-06. Participants: Claude (lead), Codex gpt-5.5 (author +
 counterreviewer), 22 review/verification subagents.</li>
@@ -138,7 +166,7 @@ exception; controller maps the true <code>FailureReason</code>).</li>
 baseline). Precedent: green tests are necessary, never sufficient —
 the blocker was invisible to a fully green suite.</li>
 </ul>
-<h2>C-002: Reverse review of the vertical-slice series; push vs PR</h2>
+<h2 id="c-002-reverse-review-of-the-vertical-slice-series-push-vs-pr">C-002: Reverse review of the vertical-slice series; push vs PR</h2>
 <ul>
 <li>Date: 2026-07-07. Participants: Claude (lead), Codex gpt-5.5 (reverse
 reviewer of Claude&#39;s commits AND decisions), 2 Opus subagents (commit
@@ -188,7 +216,7 @@ line in docs, this log, queue re-rank.</li>
 by a Fable orchestrator subagent driving its own Codex thread, landing
 as separate PRs (D-031 execution-topology addendum).</li>
 </ul>
-<h2>C-003: Research agenda expansion (ideation council)</h2>
+<h2 id="c-003-research-agenda-expansion-ideation-council">C-003: Research agenda expansion (ideation council)</h2>
 <ul>
 <li>Date: 2026-07-07. Participants: Claude (lead), Codex gpt-5.5 (ideation +
 critique), 3 Opus subagents (RQ-from-instrument; collection feasibility;
@@ -208,7 +236,7 @@ methodology centerpiece (detection floor) rather than a numbered RQ.</li>
 <li>Resolutions: promote Q4-Q6; queue D-014 implementation as the highest
 credibility-per-hour item; question bank doc created.</li>
 </ul>
-<h2>C-004: Scored difficulty suites + per-run collection expansion</h2>
+<h2 id="c-004-scored-difficulty-suites-per-run-collection-expansion">C-004: Scored difficulty suites + per-run collection expansion</h2>
 <ul>
 <li>Date: 2026-07-07. Participants: Claude (lead), Codex gpt-5.5 (3 parallel
 read-only ideation threads: suite design / collect-more / examiner,
@@ -267,7 +295,7 @@ classes with cost tiers; the <code>jw_mixed_v1</code> starter workload suite
 per target/model/quant); 8 ranked applications + explicit
 deferred/killed application list.</li>
 </ul>
-<h2>Unique contributions per lens</h2>
+<h2 id="unique-contributions-per-lens">Unique contributions per lens</h2>
 <ul>
 <li><strong>Steelman</strong>: the auditability reframe (see adjudication 1 below — the
 lens attacked its own brief); &quot;the big model costs time, not watts&quot; as
@@ -297,7 +325,7 @@ realistic-exemplar hybrid discipline; the <code>jw_mixed_v1</code> starter suite
 proposal; the &quot;token counts explain everything&quot; null result named as
 itself reportable.</li>
 </ul>
-<h2>Adjudications (steelman position → attack → reasoning → outcome)</h2>
+<h2 id="adjudications-steelman-position-attack-reasoning-outcome">Adjudications (steelman position → attack → reasoning → outcome)</h2>
 <p>Recorded in full because the WHY must survive for future sessions; the
 examiner named a passing version for every attack, so nothing was dropped
 without a surviving scoped form. No follow-up Codex round was needed —
@@ -476,14 +504,14 @@ reproduction.</li>
 <li>Present-tense capability wording for queued features.</li>
 <li>(Re-affirmed standing kill) general intelligence-per-joule.</li>
 </ul>
-<h2>Dissents</h2>
+<h2 id="dissents">Dissents</h2>
 <p>None outstanding. The lead notes one deliberate tension left in the
 agenda rather than resolved: the steelman ranks the split-inference study
 (Q1-Q3) among the top-3 claims while the examiner&#39;s hardware audit makes
 it the most gate-dependent item in the entire agenda (links + second
 node + borrow window). The agenda records both positions; the existing
 feasibility-first Phase 3 ladder is already the mitigation.</p>
-<h2>Process notes</h2>
+<h2 id="process-notes">Process notes</h2>
 <ul>
 <li>One operational failure: the fifth (workload) Codex lens initially
 hung on stdin when launched in background (<code>codex exec</code> read stdin);
@@ -496,7 +524,7 @@ Codex rounds were spent.</li>
 <li>Spend: 5 Codex lens invocations + orchestrator grounding/synthesis;
 no repo mutations (session shape B honored).</li>
 </ul>
-<h2>C-006 (session trace + meta-review, 2026-07-07): six-stream parallel batch, integration review, process meta-review</h2>
+<h2 id="c-006-session-trace-meta-review-2026-07-07-six-stream-parallel-batch-integration-review-process-meta-review">C-006 (session trace + meta-review, 2026-07-07): six-stream parallel batch, integration review, process meta-review</h2>
 <p>Streams: A uncertainty/D-014 (in flight) · B campaign automation (merged,
 PR #3) · C mock-hardening/P2-008 (in flight) · D rich-telemetry/P2-009
 (merged, PR #4) · E kv-size helper (merged, PR #2) · F repo test-audit
@@ -540,7 +568,7 @@ structurally cannot see cross-stream interactions. Vindicated same
 session: it found 2 real interaction defects (K-9, K-10).</li>
 </ul>
 <h3>Catches (differential attribution)</h3>
-<table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>id</th>
@@ -642,7 +670,7 @@ session: it found 2 real interaction defects (K-9, K-10).</li>
 <td>same</td>
 <td>per-rep overhead inside measured runs</td>
 </tr>
-</tbody></table>
+</tbody></table></div>
 <h3>Deliberations (design-bearing disagreements only)</h3>
 <ul>
 <li><strong>DL-1 (ideation council):</strong> recorded in full in the C-005 entry above
@@ -677,7 +705,7 @@ reviewer — findings were accepted on argument without design-bearing
 dissent. Zero blocks is a valid outcome.</li>
 </ul>
 <h3>Interventions (lead acted from outside the agents&#39; self-reports)</h3>
-<table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>id</th>
@@ -715,7 +743,7 @@ dissent. Zero blocks is a valid outcome.</li>
 <td>relaunch on surviving worktree state</td>
 <td>this log (diagnostic recorded)</td>
 </tr>
-</tbody></table>
+</tbody></table></div>
 <h3>Layer yield + spend (rough; spend capture starts next session)</h3>
 <ul>
 <li>Fresh-eyes Codex counterreview lenses: 2 unique (K-1, K-2) + 6 robustness
@@ -819,7 +847,7 @@ experiment → 10 metrics aggregated, energy/output-token 99.19 ± 1.36 mJ
 flagged, aggregate re-derived BYTE-IDENTICALLY from bundles alone.</li>
 </ul>
 <hr>
-<h2>C-007: Whole-project design/planning council + P2-013 fix design (user-directed)</h2>
+<h2 id="c-007-whole-project-design-planning-council-p2-013-fix-design-user-directed">C-007: Whole-project design/planning council + P2-013 fix design (user-directed)</h2>
 <ul>
 <li>Date: 2026-07-07. Participants: Fable (lead, final judge), Codex gpt-5.5
 (7 parallel read-only lenses + 1 round-2 attack session). Shape: ideation
@@ -951,7 +979,7 @@ queue item&#39;s acceptance is &quot;all 31 pins flip&quot;). Recorded as dissen
 consensus.</li>
 </ul>
 <h3>Per-layer catches (instrumentation)</h3>
-<table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>layer</th>
@@ -999,7 +1027,7 @@ consensus.</li>
 <td>A/B contradiction in lead&#39;s synthesis; B2 scope trim; Ed-burden flag; D-030 wording overclaim; 6 code spot-checks all confirmed</td>
 <td>ratify-with-changes; all changes accepted</td>
 </tr>
-</tbody></table>
+</tbody></table></div>
 <p>Spend: 8 Codex read-only sessions (~free per economics doctrine); lead
 context spent on briefs, adjudication, and this record. Zero-unique-catch
 layers: none — every lens landed at least one consensus-shaping catch.</p>
@@ -1014,7 +1042,7 @@ D-027, D-030 amendments; phase_energy_j; provenance; lanes convention).</li>
 <li>PROJECT_STATUS refresh + two-track framing: with the docs task.</li>
 </ul>
 <hr>
-<h2>C-008: Multi-stream session, checkpointed (2026-07-07 PM)</h2>
+<h2 id="c-008-multi-stream-session-checkpointed-2026-07-07-pm">C-008: Multi-stream session, checkpointed (2026-07-07 PM)</h2>
 <p>Session entry (format v2), kept slim because the full Shape / Catches /
 Deliberations / Interventions / Spend record was preserved VERBATIM as
 <code>docs/run_reports/2026-07-07-checkpoint-session-trace.md</code>, and the
@@ -1029,7 +1057,7 @@ deliberation-class fact belongs here: the session&#39;s process conventions
 by a Codex review that OVERTURNED two lead-designed schemas — dissents
 and adjudications in the trace appendix.</p>
 <hr>
-<h2>C-009: Meta-review of the orchestration system (SIGNED consensus)</h2>
+<h2 id="c-009-meta-review-of-the-orchestration-system-signed-consensus">C-009: Meta-review of the orchestration system (SIGNED consensus)</h2>
 <ul>
 <li>Date: 2026-07-07. Participants: Fable (lead), Codex gpt-5.5 (2 blind
 analysis sessions + 1 conferral session). Shape: both sides analyzed
@@ -1074,7 +1102,7 @@ cells slimmed, C-008 converted to pointer style, codex-run patch task
 queued.</li>
 </ul>
 <hr>
-<h2>C-010: Resume + merge session — C-009 topology first full run (2026-07-07/08)</h2>
+<h2 id="c-010-resume-merge-session-c-009-topology-first-full-run-2026-07-07-08">C-010: Resume + merge session — C-009 topology first full run (2026-07-07/08)</h2>
 <p>Pointer entry: all product state, the per-layer catch/yield table, the
 delegation-calibration aggregate, and restart instructions live in
 <code>docs/run_reports/2026-07-07-resume-merge-session.md</code> (Process Trace
@@ -1102,7 +1130,7 @@ checklist snippets first (fixed as B-45/B-46) — validating the
 final-head rule now in operation-loop §5. All four streams landed;
 main suite 546 OK.</p>
 <hr>
-<h2>C-011: Counter-review of the independent project critique (2026-07-08)</h2>
+<h2 id="c-011-counter-review-of-the-independent-project-critique-2026-07-08">C-011: Counter-review of the independent project critique (2026-07-08)</h2>
 <p>FULL ENTRY (genuine deliberation). An independent 5.5 critique of the
 entire project (docs/project_critique_review.html — goals, docs,
 architecture, tests, methodology, stack; &quot;strong instrument, not yet a
@@ -1161,18 +1189,14 @@ fact-check verified 16/17 checkable claims; the one stale claim was the
 Mac powermetrics/MLX risk-register wording, now annotated because
 R-002/R-003 are closed-residual. The second pass updated several
 first-pass passages in place and marks them in-document; the verbatim
-C-011 first-pass text remains in git history at commit 6418084. A
-follow-up fix pass added provenance layering annotations, hardened the
-reassessment against repo evidence, and recorded this addendum-only
-process footprint; the process-doc entries themselves are addendum-only.</p>
-
-
+C-011 first-pass text remains in git hist
+  </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 443a31f (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/council_log.md · commit 440907b · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

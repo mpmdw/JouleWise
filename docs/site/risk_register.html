@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Risk Register — JouleWise</title>
+<title>Risk Register - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -13,17 +14,40 @@
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
       <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
       <a href="results.html">Results</a>
       <a href="process.html">Process</a>
       <a href="research.html">Research</a>
-      <a href="library.html" class="active">Library</a>
+      <a href="library.html" class="active">Sources</a>
     </div>
   </nav>
 </header>
 <main>
-<div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>docs/risk_register.md</code> · as of commit 443a31f (2026-07-08)</p>
-<h1>Risk Register</h1>
+<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#summary">Summary</a>
+<a href="#r-001-supervisor-approval-delayed-or-scope-shifts">R-001: Supervisor approval delayed or scope shifts</a>
+<a href="#r-002-powermetrics-sudo-workflow-not-approved-on-measurement-mac">R-002: powermetrics sudo workflow not approved on measurement Mac</a>
+<a href="#r-003-mlx-install-or-model-load-failure-on-mac">R-003: MLX install or model-load failure on Mac</a>
+<a href="#r-004-kv-persist-resume-unsupported-in-a-target-runtime">R-004: KV persist/resume unsupported in a target runtime</a>
+<a href="#r-005-llama-cpp-cache-files-not-portable-across-machines-backends">R-005: llama.cpp cache files not portable across machines/backends</a>
+<a href="#r-006-3080-ti-borrow-window-slips-or-shrinks">R-006: 3080 Ti borrow window slips or shrinks</a>
+<a href="#r-007-no-wall-meter-available">R-007: No wall meter available</a>
+<a href="#r-008-orin-telemetry-inaccessible">R-008: Orin telemetry inaccessible</a>
+<a href="#r-009-hailo-cannot-run-llm-shaped-workloads">R-009: Hailo cannot run LLM-shaped workloads</a>
+<a href="#r-010-controller-as-dut-contamination-on-mac-runs">R-010: Controller-as-DUT contamination on Mac runs</a>
+<a href="#r-011-benchmark-network-cannot-be-isolated">R-011: Benchmark network cannot be isolated</a>
+<a href="#r-012-schedule-five-phases-vs-fixed-academic-deadlines">R-012: Schedule: five phases vs fixed academic deadlines</a>
+<a href="#r-013-thermal-throttling-confounds-measurements">R-013: Thermal throttling confounds measurements</a>
+<a href="#r-014-model-weights-become-unavailable-or-gated">R-014: Model weights become unavailable or gated</a>
+<a href="#r-015-schema-changes-after-data-collection-starts">R-015: Schema changes after data collection starts</a>
+<a href="#r-016-measurement-corpus-loss-runs-has-no-backup-path">R-016: Measurement-corpus loss (runs/ has no backup path)</a>
+<a href="#r-017-repo-lives-on-icloud-synced-desktop-eperm-lock-recurrence">R-017: Repo lives on iCloud-synced Desktop (EPERM lock recurrence)</a></aside>
+  <div class="doc-wrap doc-source-docs-risk-register-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/risk_register.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/risk_register.md · commit 1581cd2"><span class="source-file">docs/<wbr>risk_register.md</span><span class="source-commit">commit 1581cd2</span></span></div>
+    <h1>Risk Register</h1>
 <p>Living register of risks that could sink, delay, or weaken the capstone.
 Review at the start of every phase and whenever a trigger fires; update
 statuses at the end of substantial runs alongside <code>RUN_STATE.md</code>.</p>
@@ -37,8 +61,8 @@ publishable result, even if smaller.</li>
 <li>Owner: <code>user</code> for actions needing human/lab/supervisor access, <code>agent</code> for
 repo work.</li>
 </ul>
-<h2>Summary</h2>
-<table>
+<h2 id="summary">Summary</h2>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>ID</th>
@@ -185,8 +209,8 @@ repo work.</li>
 <td>medium</td>
 <td>mitigated (repo moved 2026-07-05; residual: session launch paths)</td>
 </tr>
-</tbody></table>
-<h2>R-001: Supervisor approval delayed or scope shifts</h2>
+</tbody></table></div>
+<h2 id="r-001-supervisor-approval-delayed-or-scope-shifts">R-001: Supervisor approval delayed or scope shifts</h2>
 <ul>
 <li>Phase: 1. Likelihood: medium. Impact: high (wrong deliverable built).</li>
 <li>Trigger: Phase 2 implementation slices ready to start (2A-2F complete)
@@ -207,7 +231,7 @@ mock/local work and mark every hardware purchase or borrow decision
 blocked-on-approval.</li>
 <li>Owner: user.</li>
 </ul>
-<h2>R-002: powermetrics sudo workflow not approved on measurement Mac</h2>
+<h2 id="r-002-powermetrics-sudo-workflow-not-approved-on-measurement-mac">R-002: powermetrics sudo workflow not approved on measurement Mac</h2>
 <ul>
 <li>Phase: 2. Likelihood: low (user controls the machine; a local auth
 session needs rescheduling - the planned 2026-06-10 slot passed without
@@ -227,7 +251,7 @@ runtime-supported/telemetry-blocked and the first real slice moves to the
 first available CUDA target - recorded as a finding, not hidden.</li>
 <li>Owner: user (install rule), agent (pre-check + structured failure).</li>
 </ul>
-<h2>R-003: MLX install or model-load failure on Mac</h2>
+<h2 id="r-003-mlx-install-or-model-load-failure-on-mac">R-003: MLX install or model-load failure on Mac</h2>
 <ul>
 <li>Phase: 2. Likelihood: low. Impact: medium (delays flagship slice).</li>
 <li>Status: closed-residual (2026-07-08). The working Mac slice completed
@@ -243,7 +267,7 @@ planned runtime for split portability under D-015); the MLX adapter then
 becomes optional rather than flagship.</li>
 <li>Owner: agent (with user approving installs).</li>
 </ul>
-<h2>R-004: KV persist/resume unsupported in a target runtime</h2>
+<h2 id="r-004-kv-persist-resume-unsupported-in-a-target-runtime">R-004: KV persist/resume unsupported in a target runtime</h2>
 <ul>
 <li>Phase: 3. Likelihood: medium overall (high for vLLM file-based replay,
 low for llama.cpp, low-medium for mlx-lm). Impact: high if unmitigated -
@@ -261,7 +285,7 @@ measured decode energy (node B) bounds the split cost honestly; the report
 states the composition method explicitly.</li>
 <li>Owner: agent.</li>
 </ul>
-<h2>R-005: llama.cpp cache files not portable across machines/backends</h2>
+<h2 id="r-005-llama-cpp-cache-files-not-portable-across-machines-backends">R-005: llama.cpp cache files not portable across machines/backends</h2>
 <ul>
 <li>Phase: 3. Likelihood: medium (session files are version- and
 model-sensitive; cross-backend CUDA-save -&gt; Metal-load is unverified).
@@ -277,7 +301,7 @@ with the analytical composition (R-004 fallback); report the portability
 finding itself - it is a legitimate disaggregation-practicality result.</li>
 <li>Owner: agent.</li>
 </ul>
-<h2>R-006: 3080 Ti borrow window slips or shrinks</h2>
+<h2 id="r-006-3080-ti-borrow-window-slips-or-shrinks">R-006: 3080 Ti borrow window slips or shrinks</h2>
 <ul>
 <li>Phase: 3. Likelihood: medium. Impact: medium (loses GPU-&gt;GPU pairing, not
 the phase).</li>
@@ -292,7 +316,7 @@ decomposition plus analytical composition; 3050&lt;-&gt;Orin and Orin&lt;-&gt;Or
 remain.</li>
 <li>Owner: user (scheduling), agent (runbook readiness).</li>
 </ul>
-<h2>R-007: No wall meter available</h2>
+<h2 id="r-007-no-wall-meter-available">R-007: No wall meter available</h2>
 <ul>
 <li>Phase: 1-4. Likelihood: medium. Impact: medium (boundary calibration and
 Pi/Hailo coverage lost; per-target results stand).</li>
@@ -305,7 +329,7 @@ caveat; targets with no platform telemetry (Pi) become
 telemetry-unavailable findings.</li>
 <li>Owner: user.</li>
 </ul>
-<h2>R-008: Orin telemetry inaccessible</h2>
+<h2 id="r-008-orin-telemetry-inaccessible">R-008: Orin telemetry inaccessible</h2>
 <ul>
 <li>Phase: 2-3. Likelihood: medium (rail sysfs paths vary by L4T version).
 Impact: low (one target of several).</li>
@@ -316,7 +340,7 @@ wall-meter fallback if R-007 resolves positively.</li>
 telemetry-unavailable, or drops to a stretch target.</li>
 <li>Owner: user (access), agent (adapter).</li>
 </ul>
-<h2>R-009: Hailo cannot run LLM-shaped workloads</h2>
+<h2 id="r-009-hailo-cannot-run-llm-shaped-workloads">R-009: Hailo cannot run LLM-shaped workloads</h2>
 <ul>
 <li>Phase: 1. Likelihood: high. Impact: low - <em>by design</em>: the plan treats
 Hailo as a feasibility investigation whose negative verdict is itself a
@@ -337,7 +361,7 @@ optional low-power data point if the meter exists; otherwise Pi/Hailo
 appears only in the applicability table.</li>
 <li>Owner: user (device access), agent (verdict documentation - done).</li>
 </ul>
-<h2>R-010: Controller-as-DUT contamination on Mac runs</h2>
+<h2 id="r-010-controller-as-dut-contamination-on-mac-runs">R-010: Controller-as-DUT contamination on Mac runs</h2>
 <ul>
 <li>Phase: 2. Likelihood: high if unmitigated. Impact: medium (biased flagship
 numbers).</li>
@@ -348,7 +372,7 @@ show a delta beyond run-to-run variance.</li>
 <li>Fallback: move Mac headline measurements to remote-controlled runs.</li>
 <li>Owner: agent.</li>
 </ul>
-<h2>R-011: Benchmark network cannot be isolated</h2>
+<h2 id="r-011-benchmark-network-cannot-be-isolated">R-011: Benchmark network cannot be isolated</h2>
 <ul>
 <li>Phase: 3. Likelihood: medium (campus/home network constraints unknown
 until P1-004 closes). Impact: medium (noisy transfer measurements).</li>
@@ -361,7 +385,7 @@ alongside nominal link speed (the bundle already records measured
 throughput per D-008&#39;s transfer block).</li>
 <li>Owner: user (hardware), agent (recording).</li>
 </ul>
-<h2>R-012: Schedule: five phases vs fixed academic deadlines</h2>
+<h2 id="r-012-schedule-five-phases-vs-fixed-academic-deadlines">R-012: Schedule: five phases vs fixed academic deadlines</h2>
 <ul>
 <li>Phase: all. Likelihood: medium. Impact: high (capstones fail by calendar,
 not by code).</li>
@@ -385,7 +409,7 @@ complete, defensible benchmark-plus-study.</li>
 </li>
 <li>Owner: user (dates), agent (floor discipline).</li>
 </ul>
-<h2>R-013: Thermal throttling confounds measurements</h2>
+<h2 id="r-013-thermal-throttling-confounds-measurements">R-013: Thermal throttling confounds measurements</h2>
 <ul>
 <li>Phase: 2-4. Likelihood: medium (high on passively-cooled Orin/Pi).
 Impact: medium (rep-to-rep drift, biased late reps).</li>
@@ -398,7 +422,7 @@ recorded in bundles.</li>
 or excluding throttled reps <em>with documented cause</em> per D-014.</li>
 <li>Owner: agent.</li>
 </ul>
-<h2>R-014: Model weights become unavailable or gated</h2>
+<h2 id="r-014-model-weights-become-unavailable-or-gated">R-014: Model weights become unavailable or gated</h2>
 <ul>
 <li>Phase: 2+. Likelihood: low. Impact: medium (mid-project model swap breaks
 comparability).</li>
@@ -409,7 +433,7 @@ immediately on selection, with revisions and hashes recorded.</li>
 baselines (the config hash separates old/new data cleanly).</li>
 <li>Owner: agent.</li>
 </ul>
-<h2>R-015: Schema changes after data collection starts</h2>
+<h2 id="r-015-schema-changes-after-data-collection-starts">R-015: Schema changes after data collection starts</h2>
 <ul>
 <li>Phase: 2+. Likelihood: low. Impact: high (existing bundles unreadable or
 silently misread).</li>
@@ -425,7 +449,7 @@ on disk.</li>
 script; never edit bundles in place (they are evidence).</li>
 <li>Owner: agent.</li>
 </ul>
-<h2>R-016: Measurement-corpus loss (runs/ has no backup path)</h2>
+<h2 id="r-016-measurement-corpus-loss-runs-has-no-backup-path">R-016: Measurement-corpus loss (runs/ has no backup path)</h2>
 <ul>
 <li>Phase: 2-5. Likelihood: low. Impact: high (the dataset behind every
 claim is a gitignored directory on one disk; a disk failure or an
@@ -456,7 +480,7 @@ hash separates old/new data cleanly per D-005/D-010); report any
 unrecoverable gap honestly in the exclusion log.</li>
 <li>Owner: user (destination/media), agent (protocol doc + restore test).</li>
 </ul>
-<h2>R-017: Repo lives on iCloud-synced Desktop (EPERM lock recurrence)</h2>
+<h2 id="r-017-repo-lives-on-icloud-synced-desktop-eperm-lock-recurrence">R-017: Repo lives on iCloud-synced Desktop (EPERM lock recurrence)</h2>
 <ul>
 <li>Phase: all. Likelihood: low (mitigated; was high while on Desktop).
 Impact: medium (blocks work sessions mid-run; small integrity risk
@@ -483,12 +507,13 @@ the remote (<code>origin/main</code>) bounds code loss to the working tree.</li>
 </ul>
 
 
+  </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 443a31f (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/risk_register.md · commit 1581cd2 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

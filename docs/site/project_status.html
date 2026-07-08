@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Project Status — JouleWise</title>
+<title>Project Status - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -13,17 +14,40 @@
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
       <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
       <a href="results.html">Results</a>
       <a href="process.html">Process</a>
       <a href="research.html">Research</a>
-      <a href="library.html" class="active">Library</a>
+      <a href="library.html" class="active">Sources</a>
     </div>
   </nav>
 </header>
 <main>
-<div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>PROJECT_STATUS.md</code> · as of commit 443a31f (2026-07-08)</p>
-<h1>JouleWise: Project Status, Plan, And Architecture</h1>
+<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#this-update-as-of-2026-07-08-all-four-streams-merged-30-second-read">This Update (as of 2026-07-08, all four streams merged) — 30-second read</a>
+<a href="#previous-update-2026-07-07-fifth-update-30-second-read">Previous Update (2026-07-07, fifth update) — 30-second read</a>
+<a href="#previous-update-2026-07-07-fourth-update-30-second-read">Previous Update (2026-07-07, fourth update) — 30-second read</a>
+<a href="#update-ledger">Update Ledger</a>
+<a href="#summary">Summary</a>
+<a href="#status-at-a-glance">Status At A Glance</a>
+<a href="#capstone-artifact-map">Capstone Artifact Map</a>
+<a href="#architecture">Architecture</a>
+<a href="#measurement-methodology-highlights">Measurement Methodology Highlights</a>
+<a href="#experiment-plan">Experiment Plan</a>
+<a href="#phase-plan-detail">Phase Plan Detail</a>
+<a href="#evolution-from-the-original-architecture-sketch">Evolution From The Original Architecture Sketch</a>
+<a href="#risks-and-minimum-viable-outcome">Risks And Minimum Viable Outcome</a>
+<a href="#timeline">Timeline</a>
+<a href="#deliverables-at-completion">Deliverables At Completion</a>
+<a href="#repository-map-for-verification">Repository Map (for verification)</a>
+<a href="#process-note">Process Note</a>
+<a href="#maintenance-of-this-document">Maintenance Of This Document</a></aside>
+  <div class="doc-wrap doc-source-project-status-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>PROJECT_STATUS.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit 440907b"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 440907b</span></span></div>
+    <h1>JouleWise: Project Status, Plan, And Architecture</h1>
 <p>Audience: project advisor. This is the standalone monitoring document - it
 summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
@@ -36,7 +60,7 @@ CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
 are complete; the two-model baseline matrix is the next Mac corpus step</li>
 <li>Repository: <code>github.com/mpmdw/JouleWise</code> (branch <code>main</code>)</li>
 </ul>
-<h2>This Update (as of 2026-07-08, all four streams merged) — 30-second read</h2>
+<h2 id="this-update-as-of-2026-07-08-all-four-streams-merged-30-second-read">This Update (as of 2026-07-08, all four streams merged) — 30-second read</h2>
 <p><strong>Everything landed.</strong> The multi-stream session merged as four PRs:
 P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
 564 tests with 10 skips and zero expected failures (564 as of 2026-07-08 incl. the C-011 rigor mechanics), bundle provenance
@@ -58,7 +82,7 @@ against file evidence): <code>docs/project_critique_review.html</code>. Next: th
 detection-floor calibration (P2-015) then the 2M two-model baseline
 campaign on a quiet machine. Reader-facing status below defers to the
 phase checklist matrix rows for per-item authority.</p>
-<h2>Previous Update (2026-07-07, fifth update) — 30-second read</h2>
+<h2 id="previous-update-2026-07-07-fifth-update-30-second-read">Previous Update (2026-07-07, fifth update) — 30-second read</h2>
 <p><strong>The instrument grew four capabilities in one session and is now
 campaign-ready.</strong> Five parallel work streams landed (PRs #2-#6):
 (1) <strong>statistical uncertainty</strong> — every multi-repetition experiment now
@@ -79,7 +103,7 @@ hardware alone, 10 more behind planned gates
 (<code>docs/research_question_bank.md</code>). The P2-013 evidence-integrity and
 P2-014 provenance fixes are now complete; next Mac corpus step is the
 baseline matrix on a quiet machine.</p>
-<h2>Previous Update (2026-07-07, fourth update) — 30-second read</h2>
+<h2 id="previous-update-2026-07-07-fourth-update-30-second-read">Previous Update (2026-07-07, fourth update) — 30-second read</h2>
 <p><strong>A flagship-class model is now benchmarked.</strong> Qwen3.5-122B (Feb 2026
 generation, 122B-parameter mixture-of-experts with 10B active, a
 reasoning model) ran through the identical harness and workload on the
@@ -96,8 +120,8 @@ multi-model review council, with a curated question bank
 (<code>docs/research_question_bank.md</code>) and an instrument roadmap (richer
 telemetry parsing, a difficulty-graded scored workload suite, and
 implementing the statistical-uncertainty protocol) queued.</p>
-<h2>Update Ledger</h2>
-<table>
+<h2 id="update-ledger">Update Ledger</h2>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>date</th>
@@ -130,19 +154,19 @@ implementing the statistical-uncertainty protocol) queued.</p>
 <td>The mock-first harness reached an end-to-end auditable run path before hardware time: typed config to complete bundle, validation, reduction, and report.</td>
 <td><code>docs/run_reports/2026-06-12-phase-2-mock-vertical-slice.md</code></td>
 </tr>
-</tbody></table>
-<h2>Summary</h2>
+</tbody></table></div>
+<h2 id="summary">Summary</h2>
 <p>JouleWise is a reusable, typed, extensible benchmark harness for measuring
 the energy of LLM inference across heterogeneous local hardware. The name
 nods to JouleSort and Splitwise: energy measurement is the spine of the
 system; disaggregated (&quot;split&quot;) inference - running prefill and decode on
 different machines with the KV cache transferred between them - is the
 validating research study, not the whole architecture.</p>
-<p>The thesis now has two explicit claim tracks. The guaranteed capstone is
+<p>The capstone now has two explicit claim tracks. The guaranteed capstone is
 auditable local LLM energy measurement: the harness plus the Apple-Silicon
 characterization it can already execute on the M3 Max. Split
 (disaggregated) inference remains the differentiating validating study;
-when Phase 3 hardware and feasibility gates land, it upgrades the thesis
+when Phase 3 hardware and feasibility gates land, it upgrades the capstone
 from local characterization to a split-energy crossover study.</p>
 <p>The first working slice runs on a MacBook (Apple Silicon) with MLX as the
 runtime and <code>powermetrics</code> as the power source, producing complete,
@@ -174,8 +198,8 @@ extension is hardware-gated.</li>
 ones) lives in <code>docs/research_question_bank.md</code>; the measurement noise
 floor / detection limit is treated as the methodology centerpiece rather
 than a numbered question.</p>
-<h2>Status At A Glance</h2>
-<table>
+<h2 id="status-at-a-glance">Status At A Glance</h2>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Phase</th>
@@ -208,12 +232,12 @@ than a numbered question.</p>
 <td>report, colloquium, reproducible release</td>
 <td>planned</td>
 </tr>
-</tbody></table>
-<h2>Thesis Artifact Map</h2>
-<table>
+</tbody></table></div>
+<h2 id="capstone-artifact-map">Capstone Artifact Map</h2>
+<div class="table-scroll"><table>
 <thead>
 <tr>
-<th>chapter/thesis-component</th>
+<th>chapter/report-component</th>
 <th>owning doc or deliverable</th>
 <th>status</th>
 <th>missing evidence</th>
@@ -255,7 +279,7 @@ than a numbered question.</p>
 <td>planned</td>
 <td>needs the analysis dataset and detection-floor gate</td>
 </tr>
-</tbody></table>
+</tbody></table></div>
 <p>Complete so far (all verifiable in the repository):</p>
 <ul>
 <li>A runnable harness: from a typed config, one command
@@ -322,7 +346,7 @@ remains harness-shaped and valuable under any scope.</li>
 <p>Closed since the last revision: the Mac privileged-telemetry gate — the
 <code>powermetrics</code> sample was captured and the scoped sudo rule installed
 (2026-07-06), which is what enabled the vertical slice above.</p>
-<h2>Architecture</h2>
+<h2 id="architecture">Architecture</h2>
 <pre><code class="language-text">typed config
   -&gt; controller
     -&gt; transport adapter: local | ssh
@@ -343,7 +367,7 @@ measured. They are independent, so any runtime can pair with any
 telemetry source.</p>
 </li>
 <li><p><strong>A target is a composition</strong> of transport + runtime + telemetry:</p>
-<table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Target</th>
@@ -376,7 +400,7 @@ telemetry source.</p>
 <td>hailo - unsupported (verdict 2026-06-12)</td>
 <td>wall meter</td>
 </tr>
-</tbody></table>
+</tbody></table></div>
 </li>
 <li><p><strong>Every run writes a self-contained run bundle</strong>: normalized config,
 device/environment metadata, timestamped event log (lifecycle + phase +
@@ -399,7 +423,7 @@ from bundles (run table, per-run pages, power traces with phase
 shading). It has no orchestration role.</p>
 </li>
 </ul>
-<h2>Measurement Methodology Highlights</h2>
+<h2 id="measurement-methodology-highlights">Measurement Methodology Highlights</h2>
 <ul>
 <li><strong>Idle subtraction.</strong> Every run measures an idle baseline; energy
 metrics report gross and idle-subtracted values, with idle variance
@@ -424,7 +448,7 @@ trusted.</li>
 sampling rate, dropped samples, idle variance, thermal drift, telemetry
 source - all in every summary.</li>
 </ul>
-<h2>Experiment Plan</h2>
+<h2 id="experiment-plan">Experiment Plan</h2>
 <p><strong>Homogeneous baselines (Phase 2).</strong> Per target and model: a workload
 matrix spanning prefill-heavy, decode-heavy, and balanced profiles
 (prompt 128-4096 tokens x decode 64-512), n=5, producing energy/token and
@@ -459,7 +483,7 @@ exclusion log (no silent data drops); a deterministic figure pipeline
 index (every quantitative claim traces to figure -&gt; script -&gt; raw
 bundles); a sensitivity audit checking that headline effects exceed their
 confidence intervals.</p>
-<h2>Phase Plan Detail</h2>
+<h2 id="phase-plan-detail">Phase Plan Detail</h2>
 <p>Each phase has a step-by-step plan and an evidence-gated exit checklist
 in the repository; a phase closes only when every required item has
 recorded evidence or a documented blocker.</p>
@@ -488,12 +512,12 @@ extension guide (verified by a shipped tutorial adapter), sample
 bundles, dataset freeze with hash manifest and release tag, colloquium
 slides, final report.</li>
 </ul>
-<h2>Evolution From The Original Architecture Sketch</h2>
+<h2 id="evolution-from-the-original-architecture-sketch">Evolution From The Original Architecture Sketch</h2>
 <p>The project began from the &quot;Energy Benchmark Architecture And Expanded
 Plan&quot; sketch. Its architecture survives intact; implementation thinking
 has been refined in documented ways (full rationale in
 <code>docs/decision_log.md</code>):</p>
-<table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Original sketch</th>
@@ -536,15 +560,15 @@ has been refined in documented ways (full rationale in
 <td>measurement boundaries, multi-node clock discipline, controller co-residency mitigation, statistical protocol</td>
 <td>added rigor required for defensible cross-device energy claims (D-003, D-013, D-014, D-018)</td>
 </tr>
-</tbody></table>
+</tbody></table></div>
 <p>Verdict from the 2026-06-09 audit: the sketch remains coherent; nothing
 in it has been contradicted - the changes above are refinements with
 recorded rationale, and the repository&#39;s plans are the maintained,
 authoritative version of it.</p>
-<h2>Risks And Minimum Viable Outcome</h2>
+<h2 id="risks-and-minimum-viable-outcome">Risks And Minimum Viable Outcome</h2>
 <p>Top risks (full register with triggers and fallbacks in
 <code>docs/risk_register.md</code>):</p>
-<table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Risk</th>
@@ -575,13 +599,13 @@ authoritative version of it.</p>
 <td>Advisor approval delay</td>
 <td>all current work is harness-shaped and valuable under any scope</td>
 </tr>
-</tbody></table>
+</tbody></table></div>
 <p>Minimum viable outcome (worst-case floor; still a complete, defensible
 capstone if reached):
 the reusable harness + Mac vertical slice + homogeneous baselines +
 synthetic interconnect sweep + an analytical split-energy model - honest,
 measured, reproducible.</p>
-<h2>Timeline</h2>
+<h2 id="timeline">Timeline</h2>
 <p>Dates pending (this is an explicit ask): colloquium date, report
 deadline, borrow window. Once known they anchor <code>docs/milestones.md</code> and
 phase target dates are derived backwards (slides want frozen figures &gt;=1
@@ -593,7 +617,7 @@ windows with desk work filling gaps.</p>
 captured, scoped sudo rule installed); remote-device access (NVIDIA,
 Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 2026-07-04 (planned break, recorded in <code>docs/milestones.md</code>).</p>
-<h2>Deliverables At Completion</h2>
+<h2 id="deliverables-at-completion">Deliverables At Completion</h2>
 <ul>
 <li>The JouleWise repository: harness, adapters, tests, CI, extension
 guide, README quickstart that a new user can run in minutes.</li>
@@ -605,8 +629,8 @@ verdicts).</li>
 <li>Final report and colloquium presentation, every quantitative claim
 traceable to raw data.</li>
 </ul>
-<h2>Repository Map (for verification)</h2>
-<table>
+<h2 id="repository-map-for-verification">Repository Map (for verification)</h2>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Where</th>
@@ -649,8 +673,8 @@ traceable to raw data.</li>
 <td><code>joulewise/</code>, <code>tests/</code></td>
 <td>the harness package + test suite (564 tests, 10 skipped, zero expected failures, CI-enforced)</td>
 </tr>
-</tbody></table>
-<h2>Process Note</h2>
+</tbody></table></div>
+<h2 id="process-note">Process Note</h2>
 <p>The machinery exists to protect measurement claims from unchecked summaries,
 stale assumptions, and review-induced drift.</p>
 <p>This project is developed by a human researcher directing a multi-agent
@@ -770,18 +794,19 @@ orchestration playbooks live outside this repository as reusable
 skills (council, delegation, multi-stream worktrees, adversarial
 review, and a top-level operation-loop that sequences them), so the
 machinery survives this project and transfers to the next one.</p>
-<h2>Maintenance Of This Document</h2>
+<h2 id="maintenance-of-this-document">Maintenance Of This Document</h2>
 <p>Updated at phase transitions and whenever advisor-visible state changes
 (a gate closes, a verdict lands, the schedule moves). The &quot;Last updated&quot;
 date above and the repository&#39;s run reports are the freshness check.</p>
 
 
+  </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 443a31f (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>PROJECT_STATUS.md · commit 440907b · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

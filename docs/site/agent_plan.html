@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Plan — JouleWise</title>
+<title>Agent Plan - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -13,22 +14,34 @@
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
       <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
       <a href="results.html">Results</a>
       <a href="process.html">Process</a>
       <a href="research.html">Research</a>
-      <a href="library.html" class="active">Library</a>
+      <a href="library.html" class="active">Sources</a>
     </div>
   </nav>
 </header>
 <main>
-<div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>AGENT_PLAN.md</code> · as of commit 443a31f (2026-07-08)</p>
-<h1>Agent Implementation Plan</h1>
+<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#ground-rules-for-agents">Ground Rules For Agents</a>
+<a href="#single-source-of-truth-map">Single Source Of Truth Map</a>
+<a href="#canonical-architecture">Canonical Architecture</a>
+<a href="#phase-index">Phase Index</a>
+<a href="#current-verification-command">Current Verification Command</a>
+<a href="#run-report-protocol">Run Report Protocol</a>
+<a href="#task-queue-protocol">Task Queue Protocol</a></aside>
+  <div class="doc-wrap doc-source-agent-plan-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>AGENT_PLAN.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="AGENT_PLAN.md · commit 07332e6"><span class="source-file">AGENT_PLAN.md</span><span class="source-commit">commit 07332e6</span></span></div>
+    <h1>Agent Implementation Plan</h1>
 <p>This repository implements JouleWise, an extensible energy-characterization
 benchmark for LLM inference across heterogeneous local hardware. The name is a
 nod to JouleSort and Splitwise: energy measurement as the spine, split inference
 as the first research application that validates the harness.</p>
-<h2>Ground Rules For Agents</h2>
+<h2 id="ground-rules-for-agents">Ground Rules For Agents</h2>
 <ul>
 <li>At the start of every substantial run, read <code>RUN_STATE.md</code> first.</li>
 <li>For any new/random user task, triage it in <code>TASK_QUEUE.md</code> before deciding
@@ -53,11 +66,11 @@ crashes.</li>
 <li>Make every result traceable to a config, raw power trace, event log, and
 reducer output.</li>
 </ul>
-<h2>Single Source Of Truth Map</h2>
+<h2 id="single-source-of-truth-map">Single Source Of Truth Map</h2>
 <p>Detail lives in exactly one place; everything else links to it. When
 documents disagree, fix the drift in the same run and note it in the run
 report.</p>
-<table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Artifact</th>
@@ -120,8 +133,8 @@ report.</p>
 <td><code>docs/contracts/node_worker_protocol.md</code></td>
 <td>remote-execution protocol (transport-independent; pinned during 2K, reused by 2L + Phase 3)</td>
 </tr>
-</tbody></table>
-<h2>Canonical Architecture</h2>
+</tbody></table></div>
+<h2 id="canonical-architecture">Canonical Architecture</h2>
 <pre><code class="language-text">typed config
   -&gt; controller
     -&gt; transport adapter: local or ssh
@@ -131,7 +144,7 @@ report.</p>
     -&gt; reducers
     -&gt; dashboard / notebooks / report figures
 </code></pre>
-<h2>Phase Index</h2>
+<h2 id="phase-index">Phase Index</h2>
 <h3>Phase 1: Approval, Feasibility, And Measurement Design</h3>
 <p>Status: in progress (most design/feasibility items closed; the remaining
 gates need external/hardware input). Detail: <code>docs/phase_1/phase_1_plan.md</code>.
@@ -283,7 +296,7 @@ any time).</li>
 <li>A new developer can add a backend from the adapter guide.</li>
 <li>Final figures regenerate from published data.</li>
 </ul>
-<h2>Current Verification Command</h2>
+<h2 id="current-verification-command">Current Verification Command</h2>
 <pre><code class="language-bash">python3 -m unittest discover -s tests
 </code></pre>
 <p>Expected result as of 2026-07-08 after P2-013/P2-014 + 2K + C-011: <code>Ran 564 tests, OK (skipped=10)</code> with zero expected failures.</p>
@@ -299,7 +312,7 @@ python3 -m joulewise validate-bundle runs/example-mock-local
 python3 -m joulewise reduce runs/example-mock-local   # post-hoc re-reduction (D-028)
 python3 -m joulewise report runs --output report   # needs the [analysis] extra
 </code></pre>
-<h2>Run Report Protocol</h2>
+<h2 id="run-report-protocol">Run Report Protocol</h2>
 <p>Every big run must leave a human-readable handoff note. The report should cover:</p>
 <ul>
 <li>Planning reflection performed at the start of the run.</li>
@@ -315,7 +328,7 @@ python3 -m joulewise report runs --output report   # needs the [analysis] extra
 <p>Every new phase also needs an exit checklist or equivalent section that states
 the evidence required to close that phase. See
 <code>docs/planning_reflection_protocol.md</code> for the reusable format.</p>
-<h2>Task Queue Protocol</h2>
+<h2 id="task-queue-protocol">Task Queue Protocol</h2>
 <p>Random or newly discovered work should be ranked in <code>TASK_QUEUE.md</code> before it is
 executed. The queue ranks tasks against:</p>
 <ul>
@@ -329,12 +342,13 @@ executed. The queue ranks tasks against:</p>
 the current top queued task.</p>
 
 
+  </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 443a31f (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>AGENT_PLAN.md · commit 07332e6 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

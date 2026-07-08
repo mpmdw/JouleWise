@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adapter Contracts - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+<header class="site">
+  <nav class="nav">
+    <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
+    <div class="links">
+      <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
+      <a href="results.html">Results</a>
+      <a href="process.html">Process</a>
+      <a href="research.html">Research</a>
+      <a href="library.html" class="active">Sources</a>
+    </div>
+  </nav>
+</header>
+<main>
+<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#run-context-d-024-slice-2n-1">Run Context (D-024, Slice 2N.1)</a>
+<a href="#measured-window-markers-d-026-slice-2n-2">Measured-Window Markers (D-026, Slice 2N.2)</a>
+<a href="#transport-adapter">Transport Adapter</a>
+<a href="#runtime-adapter">Runtime Adapter</a>
+<a href="#telemetry-adapter">Telemetry Adapter</a>
+<a href="#structured-failure-reasons">Structured Failure Reasons</a></aside>
+  <div class="doc-wrap doc-source-docs-contracts-adapter-contracts-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/contracts/adapter_contracts.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/adapter_contracts.md · commit 2254570"><span class="source-file">docs/<wbr>contracts/<wbr>adapter_contracts.md</span><span class="source-commit">commit 2254570</span></span></div>
+    <h1>Adapter Contracts</h1>
+<p>Living cross-phase contract, drafted in Phase 1; the executable form is
+<code>joulewise/interfaces.py</code>. The benchmark separates runtime work from
+telemetry measurement. A target is a composition of transport, runtime
+adapter, and telemetry adapter.</p>
+<h2 id="run-context-d-024-slice-2n-1">Run Context (D-024, Slice 2N.1)</h2>
+<p>Every adapter lifecycle method takes a trailing optional
+<code>context: RunContext | None = None</code> parameter. The <code>RunContext</code> is an
+immutable dataclass the controller constructs once per run, after bundle
+creation: <code>config</code>, <code>clock</code>, <code>run_id</code>, <code>bundle_path</code>, <code>raw_dir</code>,
+<code>logs_dir</code>, <code>outputs_dir</code>, and optional <code>node_role</code> (None for single-node
+runs; reserved for Phase 3 split orchestration).</p>
+<p>Rules:</p>
+<ul>
+<li>Context is data, not capability: adapters receive paths and identity,
+never the bundle writer. Write-order and immutability invariants stay
+with the controller and <code>RunBundleWriter</code>.</li>
+<li>The controller always passes the context. Out-of-run invocations - the
+D-014 cooldown gate&#39;s <code>measure_idle</code> between repetitions, direct adapter
+tests - pass <code>None</code>; adapters must tolerate a missing context by
+producing no raw output (one lifecycle code path either way).</li>
+<li>Raw evidence (D-002): a telemetry adapter preserves its native sampler
+output verbatim under <code>context.raw_dir</code> (e.g. the powermetrics plist),
+via <code>joulewise.bundle.write_raw_artifact(context, name, data)</code> - the
+helper enforces the plain-file-name and no-overwrite rules without
+handing the adapter the bundle writer. Adapters must not write <code>raw/</code>
+paths directly (2026-07-06 status review P3).</li>
+<li>Adapters must ignore context fields they do not need.</li>
+</ul>
+<h2 id="measured-window-markers-d-026-slice-2n-2">Measured-Window Markers (D-026, Slice 2N.2)</h2>
+<p>The controller emits <code>sampling_started</code> (stamped only after
+<code>start_sampling</code> returns ok - sampling confirmed active) and
+<code>sampling_stopped</code> (stamped before <code>stop_sampling</code> is invoked) events on
+the <code>measured_run</code> phase. The reducer integrates energy between these
+markers, so sampler spawn latency (sudo probe, process start, first
+sample) and wind-down cost (process stop, output parsing) never land
+inside the measured window. Telemetry adapters therefore must:</p>
+<ul>
+<li>Return from <code>start_sampling</code> only once sampling is actually running.</li>
+<li>Do stop-side parsing inside <code>stop_sampling</code> (after the window closes),
+not lazily during the window.</li>
+</ul>
+<h2 id="transport-adapter">Transport Adapter</h2>
+<p>Transport answers where commands execute.</p>
+<p>Required behavior:</p>
+<ul>
+<li>Run a command locally or over SSH.</li>
+<li>Copy artifacts into the controller&#39;s run bundle.</li>
+<li>Report connection metadata.</li>
+<li>Return structured failure on unreachable hosts.</li>
+</ul>
+<p>Initial transports:</p>
+<ul>
+<li><code>local</code></li>
+<li><code>ssh</code></li>
+</ul>
+<h2 id="runtime-adapter">Runtime Adapter</h2>
+<p>Runtime answers how a model workload is executed.</p>
+<p>Required behavior:</p>
+<ul>
+<li>Prepare runtime environment.</li>
+<li>Load or initialize model.</li>
+<li>Warm up workload.</li>
+<li>Run full request.</li>
+<li>Run prefill-only workload when supported.</li>
+<li>Run decode-only or replay workload when supported.</li>
+<li>Emit phase events.</li>
+<li>Emit output artifacts.</li>
+<li>Cleanup.</li>
+</ul>
+<p>Initial runtimes:</p>
+<ul>
+<li><code>mock</code></li>
+<li><code>mlx</code></li>
+<li><code>vllm</code></li>
+</ul>
+<p>Candidate runtimes:</p>
+<ul>
+<li><code>llama_cpp</code></li>
+<li><code>hailo</code></li>
+</ul>
+<h2 id="telemetry-adapter">Telemetry Adapter</h2>
+<p>Telemetry answers how power and thermal state are measured.</p>
+<p>Required behavior:</p>
+<ul>
+<li>Report device metadata, including the rail manifest: the exact rail
+names whose per-timestamp sum defines the backend&#39;s canonical
+<code>power_w</code> (D-018). Rail manifest entries are strings; non-string entries
+are rejected by the bundle reader rather than coerced.</li>
+<li>Measure idle baseline.</li>
+<li>Start power sampling.</li>
+<li>Stop power sampling.</li>
+<li>Emit raw power samples.</li>
+<li>Report thermal state when available.</li>
+<li>Return structured failure if telemetry permission is missing.</li>
+</ul>
+<p>Rail-row timestamp contract (D-027, Slice 2N.4): one sample instant is
+one clock read, fanned out to one row per manifest rail, all carrying
+that instant&#39;s single <code>timestamp_s</code>. A manifest rail may appear at most
+once for a given timestamp; duplicate <code>(timestamp_s, rail)</code> rows are
+invalid, including single-rail manifests. With a multi-rail manifest, a
+timestamp carrying only a subset of the manifest rails is a
+misalignment: the shared bundle reader raises a structured failure (the
+reducer reports FAILED; the report omits the chart) and default bundle
+validation reports the same trace-policy problem rather than silently
+producing an interleaved, undersummed, or double-counted curve. An
+adapter whose hardware samples rails at genuinely different instants
+must resample/align to shared timestamps before emitting rows -
+alignment policy belongs to the adapter that knows its hardware.</p>
+<p>Powermetrics NUL-framed plist parsing is lenient only for the final
+unparseable frame, and only after at least one complete frame parsed
+successfully. The adapter preserves the raw plist verbatim, drops that final
+frame only from derived parsing (<code>power_trace.csv</code> and rich telemetry), and
+records a non-gating <code>metadata.device.parse_diagnostics[]</code> entry describing
+the dropped tail. A midstream unparseable frame, or a capture with no complete
+frames, is still a hard parse failure.</p>
+<p>Mock telemetry sampling convention (D-019): for any nonzero
+<code>start_sampling</code>/<code>stop_sampling</code> span, <code>MockTelemetryAdapter</code> stamps
+synthetic measured samples strictly inside that adapter span, never at
+the boundary clock reads. It uses a centered nominal-period grid at the
+configured <code>sampling.power_hz</code>; if that would produce fewer than two
+samples, it emits two evenly spaced interior samples instead. This
+preserves deterministic constant-power math while ensuring the
+controller&#39;s post-start/pre-stop measured markers contain enough samples
+for reducer integration under both fake and real clocks.</p>
+<p>Initial telemetry backends:</p>
+<ul>
+<li><code>mock</code></li>
+<li><code>powermetrics</code></li>
+<li><code>nvidia_smi</code></li>
+<li><code>jetson_rails</code></li>
+<li><code>wall_meter</code></li>
+</ul>
+<h2 id="structured-failure-reasons">Structured Failure Reasons</h2>
+<p>Adapters should report failures with stable reason codes:</p>
+<ul>
+<li><code>did_not_fit</code></li>
+<li><code>runtime_unavailable</code></li>
+<li><code>telemetry_unavailable</code></li>
+<li><code>format_unavailable</code></li>
+<li><code>permission_denied</code></li>
+<li><code>transport_unavailable</code></li>
+<li><code>unsupported_workload</code></li>
+<li><code>unknown_error</code></li>
+</ul>
+
+
+  </div>
+</div>
+</main>
+<footer class="site">
+  <div class="inner">
+    <span>JouleWise · github.com/mpmdw/JouleWise</span>
+    <span>docs/contracts/adapter_contracts.md · commit 2254570 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+  </div>
+</footer>
+</body>
+</html>

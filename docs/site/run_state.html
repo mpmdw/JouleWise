@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Run State — JouleWise</title>
+<title>Run State - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -13,20 +14,32 @@
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
       <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
       <a href="results.html">Results</a>
       <a href="process.html">Process</a>
       <a href="research.html">Research</a>
-      <a href="library.html" class="active">Library</a>
+      <a href="library.html" class="active">Sources</a>
     </div>
   </nav>
 </header>
 <main>
-<div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>RUN_STATE.md</code> · as of commit 443a31f (2026-07-08)</p>
-<h1>JouleWise Run State</h1>
+<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#start-here-for-every-big-run">Start Here For Every Big Run</a>
+<a href="#current-project-status">Current Project Status</a>
+<a href="#session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</a>
+<a href="#current-verification">Current Verification</a>
+<a href="#known-workspace-state">Known Workspace State</a>
+<a href="#what-is-next">What Is Next</a>
+<a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
+  <div class="doc-wrap doc-source-run-state-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 443a31f"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 443a31f</span></span></div>
+    <h1>JouleWise Run State</h1>
 <p>Last updated: 2026-07-08 (critique second-pass record: reassessment +
 lead fact-check + counterreview fix pass, commit 292e074)</p>
-<h2>Start Here For Every Big Run</h2>
+<h2 id="start-here-for-every-big-run">Start Here For Every Big Run</h2>
 <p>Before starting substantial work:</p>
 <ol>
 <li>Read this file.</li>
@@ -65,7 +78,7 @@ must carry an as-of date and defer to matrix rows (D-023 extension).</li>
 <li>Call out any dirty working-tree state that should not be accidentally
 committed.</li>
 </ol>
-<h2>Current Project Status</h2>
+<h2 id="current-project-status">Current Project Status</h2>
 <p><strong>P2-013 and P2-014 are COMPLETE and MERGED (2026-07-08).</strong> The
 checkpointed multi-stream session resumed under the C-009 topology and
 landed: PR #8 (all 31 audit pins fixed; strict raw-to-trace gate +
@@ -95,7 +108,7 @@ lead fact-checked 16/17 of its claims against file evidence (one stale
 risk-register row, annotated) and a counterreview blocker on
 preservation wording was fixed pre-commit. Details: addendum in
 <code>docs/run_reports/2026-07-08-councils-critique-session.md</code>.</p>
-<h2>Session History (pointers only — run reports own the narrative)</h2>
+<h2 id="session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</h2>
 <p>Per the C-009 meta-review consensus, RUN_STATE no longer stacks
 previous-run narratives. Recent sessions, newest first:</p>
 <ul>
@@ -117,7 +130,7 @@ counterreview; addendum in the councils-critique report):
 <code>docs/run_reports/2026-07-07-flagship-qwen35-122b.md</code></li>
 <li>Older: see <code>docs/run_reports/</code> (dated files).</li>
 </ul>
-<h2>Current Verification</h2>
+<h2 id="current-verification">Current Verification</h2>
 <ul>
 <li>Merged main: <code>python3 -m unittest discover -s tests</code> → <code>Ran 564 tests, OK (skipped=10)</code> — ZERO expected failures (as of 2026-07-08,
 after PRs #8/#9/#10/#11/#12).</li>
@@ -127,13 +140,13 @@ read-only, unrewritten (incl. the new raw-to-trace gate).</li>
 <li>The merged 2K stack includes fake-e2e strict validation of a
 provenance-carrying synthetic 2K bundle.</li>
 </ul>
-<h2>Known Workspace State</h2>
+<h2 id="known-workspace-state">Known Workspace State</h2>
 <ul>
 <li><code>main</code> is pushed and current (through this session&#39;s bookkeeping).</li>
 <li>No worktrees remain (all four removed after their PRs merged).</li>
 <li><code>/tmp/jw-lead-verify/</code> holds disposable lead-verification artifacts.</li>
 </ul>
-<h2>What Is Next</h2>
+<h2 id="what-is-next">What Is Next</h2>
 <p>Follow <code>TASK_QUEUE.md</code> (lane-annotated). In order:</p>
 <ol>
 <li><strong>P2-015 then P2-006 in ONE quiet window</strong> [QUIET-MAC]:
@@ -150,7 +163,7 @@ borrow window, wall meter, backup destination (P0-003).</li>
 </ol>
 <p>Hardware-gated (unchanged): 2K/2L (P1-006), wall meter (P1-003),
 topology (P1-004), calendar mapping (P1-008).</p>
-<h2>Open Decisions And Blockers</h2>
+<h2 id="open-decisions-and-blockers">Open Decisions And Blockers</h2>
 <ul>
 <li>Supervisor approval and scope pending (P1-001, R-001 — trigger fired
 2026-06-12, mitigation holding); gates FULL D-016 closure (a
@@ -167,12 +180,13 @@ different identity is needed.</li>
 </ul>
 
 
+  </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 443a31f (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit 443a31f · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Orchestration Process — JouleWise</title>
+<title>The Orchestration Process - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -13,17 +14,28 @@
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
       <a href="index.html">Story</a>
+      <a href="status.html">Status</a>
+      <a href="roadmap.html">Roadmap</a>
+      <a href="record.html">Record</a>
       <a href="results.html">Results</a>
       <a href="process.html">Process</a>
       <a href="research.html">Research</a>
-      <a href="library.html" class="active">Library</a>
+      <a href="library.html" class="active">Sources</a>
     </div>
   </nav>
 </header>
 <main>
-<div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>docs/orchestration.md</code> · as of commit 443a31f (2026-07-08)</p>
-<h1>The Orchestration Process</h1>
+<div class="doc-layout">
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#roles-an-apex-model-a-volume-model-and-a-human-at-the-top">Roles: an apex model, a volume model, and a human at the top</a>
+<a href="#the-loop-end-to-end">The loop, end to end</a>
+<a href="#the-artifact-system-where-rigor-becomes-auditable">The artifact system (where rigor becomes auditable)</a>
+<a href="#topology-how-it-evolved-an-example-of-the-loop-improving-itself">Topology: how it evolved (an example of the loop improving itself)</a>
+<a href="#what-one-session-looks-like-2026-07-07-08-the-merge-session">What one session looks like (2026-07-07/08, the merge session)</a>
+<a href="#where-to-read-the-evidence">Where to read the evidence</a></aside>
+  <div class="doc-wrap doc-source-docs-orchestration-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/orchestration.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/orchestration.md · commit 6418084"><span class="source-file">docs/<wbr>orchestration.md</span><span class="source-commit">commit 6418084</span></span></div>
+    <h1>The Orchestration Process</h1>
 <p>How this project is actually built: a human researcher directing a
 multi-model AI system whose workflow is itself a deliberate, versioned,
 self-instrumenting piece of engineering. This document is the single
@@ -31,7 +43,7 @@ in-repo description of that process. (The executable playbooks live
 outside the repository as reusable &quot;skills&quot; so they transfer to future
 projects; this page describes what they do and where their evidence
 lands in this repo.) As of 2026-07-08.</p>
-<h2>Roles: an apex model, a volume model, and a human at the top</h2>
+<h2 id="roles-an-apex-model-a-volume-model-and-a-human-at-the-top">Roles: an apex model, a volume model, and a human at the top</h2>
 <ul>
 <li><strong>Ed (researcher)</strong> sets research direction, methodology
 non-negotiables (raw-evidence bundles, idle subtraction, named
@@ -59,7 +71,7 @@ models consistently catching different classes of defect.</li>
 mid-stream judgment, as a stream director — a role that is now the
 exception rather than the default (see Topology).</li>
 </ul>
-<h2>The loop, end to end</h2>
+<h2 id="the-loop-end-to-end">The loop, end to end</h2>
 <p>Every substantial session runs one conductor procedure:</p>
 <ol>
 <li><strong>Intake</strong> — read <code>RUN_STATE.md</code> (the intake pointer), the task
@@ -112,9 +124,9 @@ folded fix, or when the user asks, the loop is reviewed with its own
 evidence discipline (see Topology for the consensus one such review
 produced).</li>
 </ol>
-<h2>The artifact system (where rigor becomes auditable)</h2>
+<h2 id="the-artifact-system-where-rigor-becomes-auditable">The artifact system (where rigor becomes auditable)</h2>
 <p>Each fact has exactly one home; everything else points at it:</p>
-<table>
+<div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Artifact</th>
@@ -149,7 +161,7 @@ produced).</li>
 <td><code>docs/risk_register.md</code></td>
 <td>Live risks with triggers and mitigation states.</td>
 </tr>
-</tbody></table>
+</tbody></table></div>
 <p>Two instrumentation ledgers close the loop on the process itself:</p>
 <ul>
 <li><strong>Per-layer yield:</strong> every review layer&#39;s unique catches are
@@ -166,7 +178,7 @@ defect-free; the serious defects cluster in volunteered additions and
 design-freedom wire contracts — which is exactly where the full lens
 tier is now mandatory.</li>
 </ul>
-<h2>Topology: how it evolved (an example of the loop improving itself)</h2>
+<h2 id="topology-how-it-evolved-an-example-of-the-loop-improving-itself">Topology: how it evolved (an example of the loop improving itself)</h2>
 <ul>
 <li><strong>v1 (2026-07-07 AM):</strong> per-stream Fable orchestrator subagents, each
 driving its own Codex thread. Worked, but expensive at the apex tier.</li>
@@ -192,7 +204,7 @@ better ones (now the v2 ledger and calibration formats), and review
 lenses have refuted two of the lead&#39;s sanctioned wire-protocol pins
 before they could reach hardware. Seniority is not infallibility; the
 adjudication of every such challenge remains the lead&#39;s.</p>
-<h2>What one session looks like (2026-07-07/08, the merge session)</h2>
+<h2 id="what-one-session-looks-like-2026-07-07-08-the-merge-session">What one session looks like (2026-07-07/08, the merge session)</h2>
 <p>Four checkpointed streams resumed, completed, and landed as four PRs:
 the integrity/provenance overhaul (all 31 audit-pinned defects fixed;
 strict validation now re-derives the power trace from raw evidence),
@@ -208,7 +220,7 @@ caught only by the final-head rule on the last commit of the night.
 Suite: 415 → 546 tests, zero expected failures. Roughly two dozen
 delegated Codex sessions; the lead never wrote implementation code and
 never skipped a gate.</p>
-<h2>Where to read the evidence</h2>
+<h2 id="where-to-read-the-evidence">Where to read the evidence</h2>
 <ul>
 <li>Yield tables and calibration aggregates: the latest run reports
 (<code>docs/run_reports/2026-07-07-resume-merge-session.md</code> and
@@ -220,12 +232,13 @@ design council; C-009 topology consensus; C-010 validation).</li>
 </ul>
 
 
+  </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 443a31f (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/orchestration.md · commit 6418084 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
