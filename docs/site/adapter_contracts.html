@@ -28,13 +28,14 @@
 <div class="doc-layout">
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#run-context-d-024-slice-2n-1">Run Context (D-024, Slice 2N.1)</a>
 <a href="#measured-window-markers-d-026-slice-2n-2">Measured-Window Markers (D-026, Slice 2N.2)</a>
+<a href="#external-marked-runner-energy-layer-shim-contract-c-015">External marked-runner (energy-layer shim) contract (C-015)</a>
 <a href="#transport-adapter">Transport Adapter</a>
 <a href="#runtime-adapter">Runtime Adapter</a>
 <a href="#telemetry-adapter">Telemetry Adapter</a>
 <a href="#structured-failure-reasons">Structured Failure Reasons</a></aside>
   <div class="doc-wrap doc-source-docs-contracts-adapter-contracts-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/contracts/adapter_contracts.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/adapter_contracts.md · commit 2254570"><span class="source-file">docs/<wbr>contracts/<wbr>adapter_contracts.md</span><span class="source-commit">commit 2254570</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/adapter_contracts.md · commit e97fdfa"><span class="source-file">docs/<wbr>contracts/<wbr>adapter_contracts.md</span><span class="source-commit">commit e97fdfa</span></span></div>
     <h1>Adapter Contracts</h1>
 <p>Living cross-phase contract, drafted in Phase 1; the executable form is
 <code>joulewise/interfaces.py</code>. The benchmark separates runtime work from
@@ -77,6 +78,86 @@ inside the measured window. Telemetry adapters therefore must:</p>
 <li>Do stop-side parsing inside <code>stop_sampling</code> (after the window closes),
 not lazily during the window.</li>
 </ul>
+<h2 id="external-marked-runner-energy-layer-shim-contract-c-015">External marked-runner (energy-layer shim) contract (C-015)</h2>
+<p>The C-015 export path is a marker-emitting shim, not a full benchmark
+adapter framework. The external harness owns prompts, generation semantics,
+accuracy artifacts, and metric artifacts. JouleWise owns power capture,
+bundle assembly, marker validation, and energy reduction.</p>
+<p>Contract fields:</p>
+<pre><code class="language-text">shim_schema_version
+invocation:
+  harness_name
+  harness_version
+  command_argv_sha256
+  working_dir_sha256_or_null
+  environment_allowlist
+  benchmark_name
+  benchmark_revision
+  subset_id
+  external_results_path
+  external_results_sha256
+events:
+  timestamp_s
+  event_type: item_start | item_end | harness_start | harness_end
+  phase
+  message
+  metadata:
+    run_id
+    harness_item_id
+    item_index
+    benchmark_name
+    subset_id
+    prompt_sha256_or_null
+    output_sha256_or_null
+    external_metric_record_id_or_null
+    status
+    error_type_or_null
+    token_counts_if_reported
+    timestamp_source
+validation:
+  require_paired_item_markers
+  require_monotonic_timestamps
+  require_markers_inside_measured_window
+  require_no_overlapping_items_unless_declared
+  require_external_results_hash
+</code></pre>
+<p>Shim events ride the existing run-bundle event shape: the only top-level
+event keys are <code>timestamp_s</code>, <code>event_type</code>, <code>phase</code>, <code>message</code>, and
+<code>metadata</code>. Harness-specific data, benchmark item IDs, prompt/output hashes,
+external metric IDs, status, errors, and any token counts reported by the
+harness stay inside <code>metadata</code> (C-015).</p>
+<p>Validation rules for C-015/P2-022: item markers must pair; timestamps must
+be monotonic; all item markers must fall inside the measured window; item
+windows must not overlap unless the shim declares an overlapping execution
+mode; the external result artifact must be preserved and hashed; and strict
+bundle validation plus reduction must succeed before any energy result is
+claim-bearing.</p>
+<p>Permitted claim shapes (C-015):</p>
+<ul>
+<li>&quot;External harness X version Y reported metric artifact Z; JouleWise
+measured energy for the same marked item/subset windows.&quot;</li>
+<li>L1 observed energy for an external harness run under a named stack,
+measurement boundary, subset, and output policy.</li>
+<li>L2 energy comparisons only with strict bundles, repeated runs, same
+boundary or calibrated boundary, and AP coverage.</li>
+</ul>
+<p>Forbidden claims (C-015/C-004):</p>
+<ul>
+<li>JouleWise-computed accuracy unless a future quarantined scorer explicitly
+exists.</li>
+<li>Intelligence per joule, pass@k per joule, or &quot;more capable per watt.&quot;</li>
+<li>Leaderboard standing from joined accuracy(theirs)+energy(ours).</li>
+<li>Item-window statistical independence.</li>
+<li>Any pass@k, retry, judge, or benchmark-score normalization claim from the
+shim layer.</li>
+</ul>
+<p>The P2-022 feasibility spike launches the external runner as a subprocess
+and inherits D-035 fresh-process isolation. Its verdict is computed, not
+hand-labeled, per D-036, from marker pairing, timestamp placement,
+subprocess exit status, external result hash presence, strict bundle
+validity, and reduction success. Verdict codes are
+<code>external_markers_supported</code>, <code>partial(&lt;limitation&gt;)</code>, and
+<code>external_markers_unsupported</code>.</p>
 <h2 id="transport-adapter">Transport Adapter</h2>
 <p>Transport answers where commands execute.</p>
 <p>Required behavior:</p>
@@ -188,7 +269,7 @@ for reducer integration under both fake and real clocks.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/contracts/adapter_contracts.md · commit 2254570 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/contracts/adapter_contracts.md · commit e97fdfa · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

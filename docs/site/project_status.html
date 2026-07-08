@@ -46,7 +46,7 @@
 <a href="#maintenance-of-this-document">Maintenance Of This Document</a></aside>
   <div class="doc-wrap doc-source-project-status-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>PROJECT_STATUS.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit 4d582fe"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 4d582fe</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit 620f0dd"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 620f0dd</span></span></div>
     <h1>JouleWise: Project Status, Plan, And Architecture</h1>
 <p>Audience: project advisor. This is the standalone monitoring document - it
 summarizes what the project is, how it is built, where it stands, and what
@@ -65,7 +65,7 @@ capsule; shows a drift banner when the repo has moved past the snapshot)</li>
 <h2 id="this-update-as-of-2026-07-08-all-four-streams-merged-30-second-read">This Update (as of 2026-07-08, all four streams merged) — 30-second read</h2>
 <p><strong>Everything landed.</strong> The multi-stream session merged as four PRs:
 P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
-596 tests with 10 skips and zero expected failures (as of 2026-07-08; current-count authority is RUN_STATE.md Current Verification), bundle provenance
+617 tests with 10 skips and zero expected failures (as of 2026-07-08; current-count authority is RUN_STATE.md Current Verification), bundle provenance
 now records prompt/workload identities, and <code>validate-bundle --strict</code>
 includes the powermetrics raw-plist-to-trace gate plus the legacy
 additive-summary comparison. The six existing real corpus bundles pass
@@ -200,6 +200,10 @@ extension is hardware-gated.</li>
 ones) lives in <code>docs/research_question_bank.md</code>; the measurement noise
 floor / detection limit is treated as the methodology centerpiece rather
 than a numbered question.</p>
+<p>The capability map by claim ceiling lives in
+<code>docs/research_question_bank.md</code> (C-015), alongside the suite architecture
+v2 and benchmark interop direction; the guaranteed-capstone stop-line is
+recorded in the Phase 2 plan.</p>
 <h2 id="status-at-a-glance">Status At A Glance</h2>
 <div class="table-scroll"><table>
 <thead>
@@ -217,7 +221,7 @@ than a numbered question.</p>
 <tr>
 <td>2. Harness, Mac vertical slice, homogeneous baselines</td>
 <td>runnable harness, first real measurements, per-target baselines</td>
-<td><strong>in progress</strong> - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation) — 2M baselines are fully tooled; 2K fixture-first implementation is MERGED (2026-07-08) with ALL protocol pins PROVISIONAL pending live hardware validation; 2L gated on device access</td>
+<td><strong>in progress</strong> - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation); suite-science hardening + expansion MERGED 2026-07-08 (analysis-plans contract D-038, Q4 L3 grid design, drift sentinels, Window-A capture covariates, suite architecture v2 + benchmark-interop direction, capability map — see the research-questions pointer above) — 2M baselines are fully tooled and covariate-complete; 2K fixture-first implementation is MERGED (2026-07-08) with ALL protocol pins PROVISIONAL pending live hardware validation; 2L gated on device access</td>
 </tr>
 <tr>
 <td>3. Disaggregation, KV replay, interconnect sweep</td>
@@ -299,7 +303,7 @@ provenance on new-era bundles. All bundle consumers read through one
 shared, tested read layer, so displayed numbers can never diverge from
 reported ones.</li>
 <li>Typed config and output schemas with validation, JSON-Schema export, and
-a CLI, plus a passing test suite (596 tests, 10 skipped, zero expected
+a CLI, plus a passing test suite (617 tests, 10 skipped, zero expected
 failures, run in CI on every push, including a mock end-to-end run +
 bundle validation); emitted configs
 round-trip their own published schema, and config hashes (run identity)
@@ -504,7 +508,7 @@ schema -&gt; transfer microbenchmark -&gt; offline-replay splits with
 per-stage energy decomposition (prefill / transfer / deserialize /
 decode) -&gt; interconnect sweep -&gt; crossover dataset.</li>
 <li><strong>Phase 4</strong> - <code>docs/phase_4/</code>: statistics ratification, aggregation,
-figures F1-F8 (baselines, traces, phase asymmetry, split decomposition,
+figures F1-F12 (baselines, traces, phase asymmetry, split decomposition,
 crossover curves, Pareto frontier, interconnect costs, measurement
 quality), claims index, results + limitations draft, background /
 related-work draft (new stage 4.6 — the report&#39;s background chapter now
@@ -673,7 +677,7 @@ traceable to raw data.</li>
 </tr>
 <tr>
 <td><code>joulewise/</code>, <code>tests/</code></td>
-<td>the harness package + test suite (596 tests, 10 skipped, zero expected failures, CI-enforced)</td>
+<td>the harness package + test suite (617 tests, 10 skipped, zero expected failures, CI-enforced)</td>
 </tr>
 </tbody></table></div>
 <h2 id="process-note">Process Note</h2>
@@ -728,9 +732,9 @@ verdicts: the council log preserves positions, the reasoning exchanged,
 who prevailed and why, and overridden dissents, so a future reader (or
 model) can reconstruct why any decision was made.</p>
 <p><strong>The paper trail (every claim auditable).</strong> Each fact has one home:
-<code>docs/decision_log.md</code> — 37 binding design decisions, each with
+<code>docs/decision_log.md</code> — 42 binding design decisions, each with
 alternatives considered and revisit conditions; <code>docs/council_log.md</code>
-(C-001…C-011) — the deliberation record; <code>docs/stream_logs/</code> —
+(C-001…C-015) — the deliberation record; <code>docs/stream_logs/</code> —
 per-stream decision ledgers committed <em>with</em> the code they justify
 (wrong decisions are superseded in place, never erased);
 <code>docs/run_reports/</code> — one record per session with verification
@@ -785,7 +789,7 @@ fabricated-evidence defect caught only at the lead&#39;s diff gate. The
 suite went 415 → 546 tests with zero expected failures, and the lead
 never wrote implementation code and never skipped a gate.</p>
 <p><strong>Where to look.</strong> <code>docs/orchestration.md</code> is the process description.
-<code>docs/council_log.md</code> (C-001…C-011) is the deliberation record — C-006
+<code>docs/council_log.md</code> (C-001…C-015) is the deliberation record — C-006
 is a full orchestration trace of the five-stream day; C-009/C-010 are
 the topology meta-review and its validation; C-011 is the critique
 counter-review. <code>docs/decision_log.md</code> holds the 37 binding design
@@ -808,7 +812,7 @@ date above and the repository&#39;s run reports are the freshness check.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>PROJECT_STATUS.md · commit 4d582fe · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>PROJECT_STATUS.md · commit 620f0dd · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
