@@ -26,9 +26,12 @@ from joulewise.schemas import (
     RunStatus,
     TelemetryBackend,
 )
+from joulewise.suite import suite_manifest_sha256
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
+SUITE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_suite_local.json"
+SUITE_MANIFEST_PATH = REPO_ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json"
 
 #: Idle-baseline metadata block the controller writes (asdict of IdleBaseline).
 DEFAULT_IDLE = {
@@ -45,6 +48,23 @@ def load_config(**overrides) -> BenchmarkConfig:
     for key, value in overrides.items():
         data[key] = value
     return BenchmarkConfig.from_mapping(data)
+
+
+def load_suite_config(run_id: str) -> BenchmarkConfig:
+    data = json.loads(SUITE_CONFIG_PATH.read_text())
+    manifest = json.loads(SUITE_MANIFEST_PATH.read_text())
+    data["run_id"] = run_id
+    data["workload_profile"]["suite_manifest_ref"] = str(SUITE_MANIFEST_PATH)
+    data["workload_profile"]["suite_manifest_sha256"] = suite_manifest_sha256(manifest)
+    return BenchmarkConfig.from_mapping(data)
+
+
+def read_jsonl(path: Path) -> list[dict]:
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+def write_jsonl(path: Path, records: list[dict]) -> None:
+    path.write_text("".join(json.dumps(record, sort_keys=True) + "\n" for record in records))
 
 
 class BundleBuilder:
@@ -697,6 +717,88 @@ class RailMisalignmentTests(ReduceTestCase):
         summary = reduce_module.reduce_bundle(builder.path)
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         self.assertAlmostEqual(summary.gross_energy_j, 14.0, places=9)
+
+
+class SuiteReduceTests(ReduceTestCase):
+    def test_suite_metrics_are_reducible_from_mock_bundle(self) -> None:
+        bundle_path, _ = run_benchmark(
+            load_suite_config("reduce-suite"),
+            self.runs_root,
+            FakeClock(start=0.0),
+        )
+        summary = reduce_module.reduce_bundle(bundle_path)
+        suite = summary.suite_metrics
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNotNone(suite)
+        self.assertEqual(suite.planned_item_count, 5)
+        self.assertEqual(suite.executed_item_count, 5)
+        self.assertEqual(suite.status_counts["succeeded"], 5)
+        self.assertEqual(suite.floor_source, "none_pending_P2-015")
+        self.assertIsNone(suite.floor_abs_j)
+        self.assertIsNone(suite.floor_cmp_j)
+        self.assertEqual([item.item_index for item in suite.items], [0, 1, 2, 3, 4])
+        # Mock suite durations derive from D-019 constants at 7.5 W:
+        # (4ms+30ms, 4ms+20ms, 5ms+10ms, 2ms+10ms, 2ms+10ms) * 7.5 W.
+        expected_item_j = [0.255, 0.18, 0.1125, 0.09, 0.09]
+        for item, expected in zip(suite.items, expected_item_j, strict=True):
+            self.assertAlmostEqual(item.energy_gross_j, expected, places=9)
+        self.assertEqual(
+            [item.item_index for item in suite.items if item.item_id == "mock_sentinel_repeat"],
+            [3, 4],
+        )
+        blocks = {block.group_id: block for block in suite.blocks}
+        self.assertEqual(set(blocks), {"block_a", "block_b"})
+        self.assertAlmostEqual(blocks["block_a"].energy_gross_j, 0.435, places=9)
+        self.assertAlmostEqual(blocks["block_b"].energy_gross_j, 0.2925, places=9)
+        self.assertAlmostEqual(summary.gross_energy_j, 0.7275, places=9)
+        self.assertIn("block_a/level_1", {level.group_id for level in suite.levels})
+        self.assertIn("block_b/level_1", {level.group_id for level in suite.levels})
+
+    def test_zero_window_suite_bundle_retains_degenerate_suite_metrics(self) -> None:
+        bundle_path, _ = run_benchmark(
+            load_suite_config("reduce-suite-zero-window"),
+            self.runs_root,
+            FakeClock(start=1_700_000_000.0),
+        )
+        events_path = bundle_path / "events.jsonl"
+        events = read_jsonl(events_path)
+        sampling_start = next(
+            event["timestamp_s"] for event in events if event["event_type"] == "sampling_started"
+        )
+        for event in events:
+            if event["event_type"] == "sampling_stopped" or event["phase"] == "suite":
+                event["timestamp_s"] = sampling_start
+        write_jsonl(events_path, events)
+
+        summary = reduce_module.reduce_bundle(bundle_path)
+        suite = summary.suite_metrics
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertAlmostEqual(summary.gross_energy_j, 0.0, places=9)
+        self.assertIsNotNone(suite)
+        self.assertEqual(suite.executed_item_count, 5)
+        self.assertTrue(
+            all(item.energy_gross_j == 0.0 for item in suite.items),
+            [item.energy_gross_j for item in suite.items],
+        )
+        self.assertTrue(
+            all(block.energy_gross_j == 0.0 for block in suite.blocks),
+            [block.energy_gross_j for block in suite.blocks],
+        )
+
+    def test_single_prompt_reduction_has_null_suite_metrics(self) -> None:
+        bundle_path, _ = run_benchmark(
+            load_config(run_id="reduce-single-suite-null"),
+            self.runs_root,
+            FakeClock(start=1_700_000_000.0),
+        )
+        summary = reduce_module.reduce_bundle(bundle_path)
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNone(summary.suite_metrics)
+        self.assertEqual(
+            summary.summary_provenance["reducer_version"],
+            reduce_module.REDUCER_VERSION,
+        )
 
 
 if __name__ == "__main__":

@@ -225,6 +225,7 @@ class RunBundleWriter:
         self._clock = clock
         self._metadata_written = False
         self._power_trace_written = False
+        self._suite_manifest_written = False
         self._staged_summary: dict[str, Any] | None = None
         self._closed = False
 
@@ -343,6 +344,23 @@ class RunBundleWriter:
             json.dumps(merged, indent=2, sort_keys=True, default=str) + "\n"
         )
         self._metadata_written = True
+
+    def write_suite_manifest(self, mapping: dict[str, Any]) -> Path:
+        """Write the canonical effective suite manifest artifact.
+
+        The controller supplies the already materialized mapping. The writer
+        owns only bundle-layout invariants: sorted-key D-001 JSON, open-bundle
+        ordering, and one immutable ``suite_manifest.json`` per bundle.
+        """
+        self._require_open("write suite manifest")
+        if self._suite_manifest_written:
+            raise BundleError("suite_manifest.json already written")
+        path = self._path / "suite_manifest.json"
+        if path.exists():
+            raise BundleError("suite_manifest.json already exists")
+        path.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n")
+        self._suite_manifest_written = True
+        return path
 
     def write_output(self, name: str, text: str) -> Path:
         """Write ``outputs/<name>`` and return its path."""

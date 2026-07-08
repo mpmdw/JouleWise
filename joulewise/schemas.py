@@ -17,7 +17,7 @@ from joulewise.validation import finite_float
 CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
-SUMMARY_REDUCER_VERSION = "0.1.0"
+SUMMARY_REDUCER_VERSION = "0.2.0"
 
 
 class SchemaError(ValueError):
@@ -200,6 +200,8 @@ class WorkloadProfile:
     output_tokens: int | None = None
     prompt_text: str | None = None
     dataset_ref: str | None = None
+    suite_manifest_ref: str | None = None
+    suite_manifest_sha256: str | None = None
     repetitions: int = 1
     warmup_runs: int = 1
 
@@ -220,23 +222,38 @@ class WorkloadProfile:
             output_tokens=output_tokens,
             prompt_text=_optional_string(data.get("prompt_text"), "workload_profile.prompt_text"),
             dataset_ref=_optional_string(data.get("dataset_ref"), "workload_profile.dataset_ref"),
+            suite_manifest_ref=_optional_string(
+                data.get("suite_manifest_ref"),
+                "workload_profile.suite_manifest_ref",
+            ),
+            suite_manifest_sha256=_optional_string(
+                data.get("suite_manifest_sha256"),
+                "workload_profile.suite_manifest_sha256",
+            ),
             repetitions=_positive_int(repetitions, "workload_profile.repetitions"),
             warmup_runs=_positive_int(warmup_runs, "workload_profile.warmup_runs"),
         )
 
     def validate(self) -> None:
+        if (self.suite_manifest_ref is None) != (self.suite_manifest_sha256 is None):
+            raise SchemaError(
+                "workload_profile.suite_manifest_ref and "
+                "suite_manifest_sha256 are required together"
+            )
         prompt_sources = [
             name
             for name, value in (
                 ("prompt_text", self.prompt_text),
                 ("prompt_tokens", self.prompt_tokens),
                 ("dataset_ref", self.dataset_ref),
+                ("suite_manifest_ref", self.suite_manifest_ref),
             )
             if value is not None
         ]
         if not prompt_sources:
             raise SchemaError(
-                "workload_profile must define prompt_text, prompt_tokens, or dataset_ref"
+                "workload_profile must define prompt_text, prompt_tokens, "
+                "or dataset_ref, or suite_manifest_ref"
             )
         if len(prompt_sources) > 1:
             raise SchemaError(
@@ -361,7 +378,17 @@ class BenchmarkConfig:
             raise SchemaError("hardware_target.host is required when transport is ssh")
 
     def to_dict(self) -> dict[str, Any]:
-        return _enum_to_value(asdict(self))
+        data = _enum_to_value(asdict(self))
+        # D-044: suite_manifest_ref/suite_manifest_sha256 are the scoped
+        # omission-serialized optionals. Existing non-suite configs keep their
+        # byte-identical normalized JSON while every pre-existing optional keeps
+        # the D-029 null-emission behavior.
+        workload = data["workload_profile"]
+        if workload.get("suite_manifest_ref") is None:
+            del workload["suite_manifest_ref"]
+        if workload.get("suite_manifest_sha256") is None:
+            del workload["suite_manifest_sha256"]
+        return data
 
     @staticmethod
     def json_schema() -> dict[str, Any]:
@@ -442,6 +469,8 @@ class BenchmarkConfig:
                         "output_tokens": nullable_positive_int,
                         "prompt_text": nullable_string,
                         "dataset_ref": nullable_string,
+                        "suite_manifest_ref": nullable_string,
+                        "suite_manifest_sha256": nullable_string,
                         "repetitions": {"type": "integer", "minimum": 1},
                         "warmup_runs": {"type": "integer", "minimum": 1},
                     },
@@ -540,6 +569,44 @@ class MeasurementQuality:
 
 
 @dataclass(frozen=True)
+class SuiteItemMetrics:
+    item_id: str
+    item_index: int
+    status: str
+    start_s: float
+    end_s: float
+    energy_gross_j: float | None
+    identifiability: str
+    emitted_tokens: int | None
+    stop_reason: str | None
+    response_sha256: str | None
+
+
+@dataclass(frozen=True)
+class SuiteGroupMetrics:
+    group_id: str
+    energy_gross_j: float | None
+    identifiability: str
+    item_count: int
+    status_counts: dict[str, int]
+
+
+@dataclass(frozen=True)
+class SuiteSummary:
+    suite_id: str
+    manifest_sha256: str | None
+    planned_item_count: int
+    executed_item_count: int
+    status_counts: dict[str, int]
+    items: list[SuiteItemMetrics]
+    blocks: list[SuiteGroupMetrics]
+    levels: list[SuiteGroupMetrics]
+    floor_abs_j: float | None
+    floor_cmp_j: float | None
+    floor_source: str | None
+
+
+@dataclass(frozen=True)
 class SummaryMetrics:
     """Reducer output for one run.
 
@@ -564,6 +631,7 @@ class SummaryMetrics:
     uncertainty: UncertaintyInterval | None = None
     measurement_quality: MeasurementQuality | None = None
     phase_energy_j: dict[str, float] | None = None
+    suite_metrics: SuiteSummary | None = None
     summary_provenance: dict[str, str] | None = field(
         default_factory=lambda: {
             "summary_schema_version": SUMMARY_SCHEMA_VERSION,
@@ -612,6 +680,9 @@ class SummaryMetrics:
                     "anyOf": [{"$ref": "#/$defs/measurement_quality"}, {"type": "null"}]
                 },
                 "phase_energy_j": {"type": ["object", "null"]},
+                "suite_metrics": {
+                    "anyOf": [{"$ref": "#/$defs/suite_summary"}, {"type": "null"}]
+                },
                 "summary_provenance": {
                     "anyOf": [{"$ref": "#/$defs/summary_provenance"}, {"type": "null"}]
                 },
@@ -672,6 +743,82 @@ class SummaryMetrics:
                         "reducer_id": {"type": "string"},
                         "reducer_version": {"type": "string"},
                         "config_schema_version": {"type": "string"},
+                    },
+                },
+                "suite_item_metrics": {
+                    "type": "object",
+                    "required": [
+                        "item_id",
+                        "item_index",
+                        "status",
+                        "start_s",
+                        "end_s",
+                        "identifiability",
+                    ],
+                    "properties": {
+                        "item_id": {"type": "string"},
+                        "item_index": {"type": "integer"},
+                        "status": {"type": "string"},
+                        "start_s": {"type": "number"},
+                        "end_s": {"type": "number"},
+                        "energy_gross_j": nullable_number,
+                        "identifiability": {"type": "string"},
+                        "emitted_tokens": {"type": ["integer", "null"]},
+                        "stop_reason": {"type": ["string", "null"]},
+                        "response_sha256": {"type": ["string", "null"]},
+                    },
+                },
+                "suite_group_metrics": {
+                    "type": "object",
+                    "required": [
+                        "group_id",
+                        "identifiability",
+                        "item_count",
+                        "status_counts",
+                    ],
+                    "properties": {
+                        "group_id": {"type": "string"},
+                        "energy_gross_j": nullable_number,
+                        "identifiability": {"type": "string"},
+                        "item_count": {"type": "integer"},
+                        "status_counts": {"type": "object"},
+                    },
+                },
+                "suite_summary": {
+                    "type": "object",
+                    "required": [
+                        "suite_id",
+                        "planned_item_count",
+                        "executed_item_count",
+                        "status_counts",
+                        "items",
+                        "blocks",
+                        "levels",
+                        "floor_abs_j",
+                        "floor_cmp_j",
+                        "floor_source",
+                    ],
+                    "properties": {
+                        "suite_id": {"type": "string"},
+                        "manifest_sha256": {"type": ["string", "null"]},
+                        "planned_item_count": {"type": "integer"},
+                        "executed_item_count": {"type": "integer"},
+                        "status_counts": {"type": "object"},
+                        "items": {
+                            "type": "array",
+                            "items": {"$ref": "#/$defs/suite_item_metrics"},
+                        },
+                        "blocks": {
+                            "type": "array",
+                            "items": {"$ref": "#/$defs/suite_group_metrics"},
+                        },
+                        "levels": {
+                            "type": "array",
+                            "items": {"$ref": "#/$defs/suite_group_metrics"},
+                        },
+                        "floor_abs_j": nullable_number,
+                        "floor_cmp_j": nullable_number,
+                        "floor_source": {"type": ["string", "null"]},
                     },
                 },
             },

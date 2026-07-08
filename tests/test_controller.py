@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 import unittest
@@ -13,7 +14,12 @@ from unittest.mock import patch
 
 import joulewise.adapters as adapters
 from joulewise.clock import Clock, FakeClock
-from joulewise.controller import STATUS_BY_REASON, run_benchmark
+from joulewise.controller import (
+    STATUS_BY_REASON,
+    _suite_rep_index_from_run_id,
+    run_benchmark,
+    run_experiment,
+)
 from joulewise.interfaces import AdapterResult
 from joulewise.schemas import (
     BenchmarkConfig,
@@ -21,9 +27,12 @@ from joulewise.schemas import (
     RunStatus,
     SummaryMetrics,
 )
+from joulewise.suite import order_seed, suite_manifest_sha256
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
+SUITE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_suite_local.json"
+SUITE_MANIFEST_PATH = REPO_ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json"
 
 EVENT_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
 
@@ -82,6 +91,16 @@ def make_config(
         data["model"]["name"] = model_name
     if notes is not None:
         data["hardware_target"]["notes"] = notes
+    return BenchmarkConfig.from_mapping(data)
+
+
+def make_suite_config(run_id: str, *, repetitions: int = 1, sha: str | None = None) -> BenchmarkConfig:
+    data = json.loads(SUITE_CONFIG_PATH.read_text())
+    manifest = json.loads(SUITE_MANIFEST_PATH.read_text())
+    data["run_id"] = run_id
+    data["workload_profile"]["suite_manifest_ref"] = str(SUITE_MANIFEST_PATH)
+    data["workload_profile"]["suite_manifest_sha256"] = sha or suite_manifest_sha256(manifest)
+    data["workload_profile"]["repetitions"] = repetitions
     return BenchmarkConfig.from_mapping(data)
 
 
@@ -1089,6 +1108,125 @@ class SamplingWindowTests(ControllerTestCase):
         self.assertGreaterEqual(
             by_type["stage_completed"] - by_type["sampling_stopped"], 2.0
         )
+
+
+class SuiteControllerTests(ControllerTestCase):
+    def test_suite_rep_index_parser_edges(self) -> None:
+        cases = {
+            "plain-run": 0,
+            "exp__rX": 0,
+            "exp__r0": 0,
+            "exp__r007": 7,
+            "outer__r2__r5": 5,
+        }
+        for run_id, expected in cases.items():
+            with self.subTest(run_id=run_id):
+                self.assertEqual(_suite_rep_index_from_run_id(run_id), expected)
+
+    def test_suite_run_writes_manifest_metadata_and_bracketed_markers(self) -> None:
+        bundle_path, summary = run_benchmark(
+            make_suite_config("suite-happy"), self.runs_root, self.clock
+        )
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNotNone(summary.suite_metrics)
+        self.assertTrue((bundle_path / "suite_manifest.json").is_file())
+        self.assertTrue((bundle_path / "outputs" / "suite_items.jsonl").is_file())
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertEqual(metadata["suite"]["suite_id"], "mock_suite_smoke")
+        events = self.read_events(bundle_path)
+        types = [event["event_type"] for event in events]
+        sampling_started = types.index("sampling_started")
+        sampling_stopped = types.index("sampling_stopped")
+        self.assertEqual(types.count("suite_start"), 1)
+        self.assertEqual(types.count("suite_end"), 1)
+        self.assertLess(sampling_started, types.index("suite_start"))
+        self.assertLess(types.index("suite_end"), sampling_stopped)
+        suite_indices = [
+            index for index, event in enumerate(events) if event["phase"] == "suite"
+        ]
+        self.assertTrue(suite_indices)
+        self.assertTrue(all(sampling_started < index < sampling_stopped for index in suite_indices))
+
+    def test_suite_controller_passes_controller_derived_order_seed_to_runtime(self) -> None:
+        config = make_suite_config("suite-seed__r3")
+        bundle_path, summary = run_benchmark(config, self.runs_root, self.clock)
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        manifest = json.loads(SUITE_MANIFEST_PATH.read_text())
+        expected = order_seed(
+            manifest["suite_seed"],
+            manifest["execution_policy"]["order_policy"],
+            3,
+        )
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        events = self.read_events(bundle_path)
+        suite_start = next(event for event in events if event["event_type"] == "suite_start")
+        self.assertEqual(metadata["suite"]["order_seed"], expected)
+        self.assertEqual(suite_start["metadata"]["order_seed"], expected)
+        self.assertEqual(
+            metadata["workload_provenance"]["suite"]["order_seed"],
+            expected,
+        )
+
+    def test_suite_manifest_ref_relative_to_cwd_from_repo_root(self) -> None:
+        data = json.loads(SUITE_CONFIG_PATH.read_text())
+        manifest = json.loads(SUITE_MANIFEST_PATH.read_text())
+        data["run_id"] = "suite-relative-ref"
+        data["workload_profile"]["suite_manifest_ref"] = (
+            "configs/suite_manifests/mock_suite_manifest.json"
+        )
+        data["workload_profile"]["suite_manifest_sha256"] = suite_manifest_sha256(manifest)
+        old_cwd = Path.cwd()
+        try:
+            os.chdir(REPO_ROOT)
+            bundle_path, summary = run_benchmark(
+                BenchmarkConfig.from_mapping(data), self.runs_root, self.clock
+            )
+        finally:
+            os.chdir(old_cwd)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertTrue((bundle_path / "suite_manifest.json").is_file())
+
+    def test_suite_runtime_without_run_suite_is_unsupported_complete_bundle(self) -> None:
+        bundle_path, summary = run_benchmark(
+            make_suite_config("suite-unsupported"),
+            self.runs_root,
+            self.clock,
+            registry=ExplodingRegistry(),
+        )
+        self.assertEqual(summary.status, RunStatus.UNSUPPORTED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNSUPPORTED_WORKLOAD)
+        for artifact in COMPLETE_BUNDLE_ARTIFACTS:
+            self.assertTrue((bundle_path / artifact).exists(), artifact)
+
+    def test_suite_manifest_hash_mismatch_fails_closed_with_complete_bundle(self) -> None:
+        bundle_path, summary = run_benchmark(
+            make_suite_config("suite-bad-hash", sha="bad"),
+            self.runs_root,
+            self.clock,
+        )
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertIn("suite manifest hash mismatch", summary.failure_message)
+        for artifact in COMPLETE_BUNDLE_ARTIFACTS:
+            self.assertTrue((bundle_path / artifact).exists(), artifact)
+
+    def test_run_experiment_suite_uses_repetition_order_seed(self) -> None:
+        manifest_path, results = run_experiment(
+            make_suite_config("suite-experiment", repetitions=2),
+            self.runs_root,
+            self.clock,
+        )
+        self.assertTrue(manifest_path.is_file())
+        self.assertEqual(len(results), 2)
+        for rep, (bundle_path, summary) in enumerate(results, start=1):
+            self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+            self.assertTrue((bundle_path / "suite_manifest.json").is_file())
+            metadata = json.loads((bundle_path / "metadata.json").read_text())
+            self.assertEqual(
+                metadata["suite"]["order_seed"],
+                order_seed("mock-suite-seed", "manifest_order", rep),
+            )
 
 
 if __name__ == "__main__":

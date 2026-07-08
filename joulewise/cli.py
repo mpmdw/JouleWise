@@ -35,6 +35,11 @@ from joulewise.kv_size import (
     format_bytes,
     prompt_totals,
 )
+from joulewise.provenance import (
+    PROMPT_TOKEN_IDS_HASH_DOMAIN,
+    SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN,
+    suite_prompt_rollup,
+)
 from joulewise.reduce import reduce_bundle
 from joulewise.report import ReportError, generate_report
 from joulewise.schemas import (
@@ -47,7 +52,8 @@ from joulewise.schemas import (
 )
 from joulewise.validation import finite_float
 
-_PROMPT_TOKEN_IDS_HASH_DOMAIN = "joulewise.prompt_token_ids.v1"
+_PROMPT_TOKEN_IDS_HASH_DOMAIN = PROMPT_TOKEN_IDS_HASH_DOMAIN
+_SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN = SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN
 
 
 def _load_config(path: Path) -> dict[str, Any]:
@@ -389,11 +395,35 @@ def _strict_workload_provenance_problems(
                 "is missing or not a lowercase SHA-256 hex string"
             )
         domain = prompt.get("token_hash_domain")
-        if domain != _PROMPT_TOKEN_IDS_HASH_DOMAIN:
+        expected_domain = (
+            _SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN
+            if isinstance(metadata.get("suite"), dict)
+            else _PROMPT_TOKEN_IDS_HASH_DOMAIN
+        )
+        if domain != expected_domain:
             problems.append(
                 "strict: metadata.workload_provenance.prompt.token_hash_domain "
-                f"is not {_PROMPT_TOKEN_IDS_HASH_DOMAIN!r}"
+                f"is not {expected_domain!r}"
             )
+        if isinstance(metadata.get("suite"), dict):
+            expected_rollup, rollup_problems = _strict_suite_prompt_rollup(reader)
+            problems.extend(rollup_problems)
+            if expected_rollup is not None:
+                expected_hash = expected_rollup["token_ids_sha256"]
+                expected_count = expected_rollup["realized_token_count"]
+                if token_hash != expected_hash:
+                    problems.append(
+                        "strict: metadata.workload_provenance.prompt.token_ids_sha256 "
+                        "does not match outputs/suite_items.jsonl rollup: "
+                        f"metadata has {token_hash!r}, recomputed has {expected_hash!r}"
+                    )
+                if realized_token_count != expected_count:
+                    problems.append(
+                        "strict: metadata.workload_provenance.prompt.realized_token_count "
+                        "does not match outputs/suite_items.jsonl rollup: "
+                        f"metadata has {realized_token_count!r}, "
+                        f"recomputed has {expected_count!r}"
+                    )
         text_hash = prompt.get("text_sha256")
         if text_hash is not None and not _is_sha256_hex(text_hash):
             problems.append(
@@ -437,6 +467,57 @@ def _strict_workload_provenance_problems(
         )
     )
     return problems
+
+
+def _strict_suite_prompt_rollup(
+    reader: BundleReader,
+) -> tuple[dict[str, Any] | None, list[str]]:
+    path = reader.path / "outputs" / "suite_items.jsonl"
+    if not path.is_file():
+        return None, ["strict: outputs/suite_items.jsonl is missing for suite rollup"]
+    try:
+        text = path.read_text()
+    except OSError as exc:
+        return None, [f"strict: outputs/suite_items.jsonl cannot be read: {exc}"]
+    prompt_hashes: list[str] = []
+    total_tokens = 0
+    problems: list[str] = []
+    for index, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            problems.append(
+                f"strict: outputs/suite_items.jsonl line {index} is not valid JSON: {exc}"
+            )
+            continue
+        if not isinstance(record, dict):
+            problems.append(
+                f"strict: outputs/suite_items.jsonl line {index} is not a JSON object"
+            )
+            continue
+        prompt = record.get("prompt")
+        token_hash = prompt.get("token_ids_sha256") if isinstance(prompt, dict) else None
+        if not _is_sha256_hex(token_hash):
+            problems.append(
+                "strict: outputs/suite_items.jsonl line "
+                f"{index} prompt.token_ids_sha256 is missing or not a lowercase "
+                "SHA-256 hex string"
+            )
+            continue
+        prompt_tokens = record.get("prompt_tokens")
+        if not _is_nonnegative_int(prompt_tokens):
+            problems.append(
+                f"strict: outputs/suite_items.jsonl line {index} prompt_tokens "
+                "is not a non-negative integer"
+            )
+            continue
+        prompt_hashes.append(token_hash)
+        total_tokens += prompt_tokens
+    if problems:
+        return None, problems
+    return suite_prompt_rollup(prompt_hashes, total_tokens), []
 
 
 def _strict_required_object_keys(
@@ -547,6 +628,10 @@ def _is_sha256_hex(value: Any) -> bool:
 
 def _is_positive_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def _is_nonnegative_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
 def _cmd_validate_bundle(args: argparse.Namespace) -> int:

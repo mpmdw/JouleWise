@@ -46,11 +46,29 @@ from joulewise.schemas import (
     RunStatus,
     SchemaError,
 )
+from joulewise.provenance import prompt_token_ids_sha256
+from joulewise.suite import (
+    BLOCK_END,
+    BLOCK_START,
+    ITEM_END,
+    ITEM_START,
+    LEVEL_END,
+    LEVEL_START,
+    MARKER_REQUIRED_METADATA_KEYS,
+    REDUCER_ASSIGNABLE,
+    RUNTIME_ASSIGNABLE,
+    SUITE_END,
+    SUITE_START,
+    SuiteManifest,
+    canonical_effective_manifest,
+    suite_manifest_sha256,
+)
 from joulewise.validation import finite_float, is_finite_number
 
 __all__ = [
     "BundleReadError",
     "BundleReader",
+    "ItemWindow",
     "TracePoint",
     "Window",
 ]
@@ -111,6 +129,16 @@ class Window:
     @property
     def duration_s(self) -> float:
         return self.end_s - self.start_s
+
+
+@dataclass(frozen=True)
+class ItemWindow:
+    item_id: str
+    item_index: int
+    status: str
+    window: Window
+    start_metadata: dict[str, Any]
+    end_metadata: dict[str, Any]
 
 
 class BundleReader:
@@ -246,6 +274,10 @@ class BundleReader:
     def raw_summary(self) -> dict[str, Any] | None:
         return self._tolerant_json("summary_metrics.json")
 
+    def suite_manifest_raw(self) -> dict[str, Any] | None:
+        """Tolerant parsed ``suite_manifest.json``; ``None`` when absent/damaged."""
+        return self._tolerant_json("suite_manifest.json")
+
     def is_complete(self) -> bool:
         """D-011: complete iff ``summary_metrics.json`` validates by status."""
         summary = self.raw_summary()
@@ -336,6 +368,132 @@ class BundleReader:
             if _is_decode_token_event(event, decode_windows)
         ]
 
+    def suite_manifest(self) -> SuiteManifest | None:
+        """Strict suite manifest accessor.
+
+        Returns ``None`` when ``suite_manifest.json`` is absent. If the file
+        exists, it must parse and validate as a :class:`SuiteManifest`.
+        """
+        if "suite_manifest" not in self._cache:
+            if not (self._path / "suite_manifest.json").is_file():
+                self._cache["suite_manifest"] = None
+            else:
+                raw = self._strict_json("suite_manifest.json")
+                try:
+                    self._cache["suite_manifest"] = SuiteManifest.from_mapping(raw)
+                except SchemaError as exc:
+                    raise BundleReadError(
+                        f"suite_manifest.json does not re-validate: {exc}"
+                    ) from exc
+        return self._cache["suite_manifest"]
+
+    def suite_window(self) -> Window | None:
+        """FIFO-pair the first ``suite_start``/``suite_end`` marker."""
+        starts: list[float] = []
+        for event in self.events():
+            event_type = event.get("event_type")
+            if event_type == SUITE_START:
+                starts.append(float(event["timestamp_s"]))
+            elif event_type == SUITE_END and starts:
+                return Window(start_s=starts.pop(0), end_s=float(event["timestamp_s"]))
+        return None
+
+    def item_windows(self) -> list[ItemWindow]:
+        """Pair item markers by ``(item_id, item_index)`` and order by index.
+
+        Unpaired starts and ends are skipped by this accessor; validation owns
+        reporting malformed marker sets. Matching by index prevents repeated
+        sentinel item IDs with reordered end markers from being misattributed.
+        """
+        open_starts: dict[str, list[dict[str, Any]]] = {}
+        windows: list[ItemWindow] = []
+        for event in self.events():
+            metadata = event.get("metadata")
+            if not isinstance(metadata, dict):
+                continue
+            item_id = metadata.get("item_id")
+            if not isinstance(item_id, str):
+                continue
+            event_type = event.get("event_type")
+            if event_type == ITEM_START:
+                open_starts.setdefault(item_id, []).append(event)
+            elif event_type == ITEM_END:
+                starts = open_starts.get(item_id, [])
+                if not starts:
+                    continue
+                end_metadata = dict(metadata)
+                item_index = end_metadata.get("item_index")
+                status = end_metadata.get("status")
+                if isinstance(item_index, bool) or not isinstance(item_index, int):
+                    continue
+                if not isinstance(status, str):
+                    continue
+                match_index = next(
+                    (
+                        index
+                        for index, start in enumerate(starts)
+                        if isinstance(start.get("metadata"), dict)
+                        and start["metadata"].get("item_index") == item_index
+                    ),
+                    None,
+                )
+                if match_index is None:
+                    continue
+                start = starts.pop(match_index)
+                start_metadata = dict(start["metadata"])
+                windows.append(
+                    ItemWindow(
+                        item_id=item_id,
+                        item_index=item_index,
+                        status=status,
+                        window=Window(
+                            start_s=float(start["timestamp_s"]),
+                            end_s=float(event["timestamp_s"]),
+                        ),
+                        start_metadata=start_metadata,
+                        end_metadata=end_metadata,
+                    )
+                )
+        return sorted(windows, key=lambda item: item.item_index)
+
+    def block_windows(self) -> dict[str, list[Window]]:
+        return _paired_group_windows(self.events(), BLOCK_START, BLOCK_END, "block_id")
+
+    def level_windows(self) -> dict[tuple[str, str], list[Window]]:
+        """Pair level markers by ``(block_id, level_id)`` (SUB-2).
+
+        Level marker metadata carries ``level_id``; the enclosing block marker
+        supplies ``block_id`` while scanning, so a recurring level id in two
+        blocks yields two independent keys/windows.
+        """
+        open_starts: dict[tuple[str, str], list[float]] = {}
+        windows: dict[tuple[str, str], list[Window]] = {}
+        current_block: str | None = None
+        for event in self.events():
+            metadata = event.get("metadata")
+            if not isinstance(metadata, dict):
+                continue
+            event_type = event.get("event_type")
+            if event_type == BLOCK_START and isinstance(metadata.get("block_id"), str):
+                current_block = metadata["block_id"]
+            elif event_type == BLOCK_END:
+                current_block = None
+            elif event_type in {LEVEL_START, LEVEL_END}:
+                level_id = metadata.get("level_id")
+                if current_block is None or not isinstance(level_id, str):
+                    continue
+                key = (current_block, level_id)
+                if event_type == LEVEL_START:
+                    open_starts.setdefault(key, []).append(float(event["timestamp_s"]))
+                else:
+                    starts = open_starts.get(key)
+                    if not starts:
+                        continue
+                    windows.setdefault(key, []).append(
+                        Window(start_s=starts.pop(0), end_s=float(event["timestamp_s"]))
+                    )
+        return windows
+
     # ------------------------------------------------------------------
     # Structural validation (the validate-bundle policy)
 
@@ -387,6 +545,10 @@ class BundleReader:
             problems.extend(_check_events(path / "events.jsonl"))
 
         problems.extend(_check_power_trace(path, summary, metadata))
+        if _has_suite_contract(path, parsed.get("config.json")):
+            problems.extend(
+                self._suite_problems(parsed.get("config.json"), metadata, summary)
+            )
 
         return problems
 
@@ -413,6 +575,11 @@ class BundleReader:
                 value = None
             self._cache[key] = value if isinstance(value, dict) else None
         return self._cache[key]
+
+    def _suite_problems(
+        self, raw_config: Any, metadata: Any, summary: Any
+    ) -> list[str]:
+        return _suite_problems(self, raw_config, metadata, summary)
 
 
 # ---------------------------------------------------------------------------
@@ -474,6 +641,606 @@ def _is_decode_token_event(
     return any(
         window.start_s <= timestamp_s <= window.end_s for window in decode_windows
     )
+
+
+def _paired_group_windows(
+    events: list[dict[str, Any]],
+    start_event: str,
+    end_event: str,
+    id_key: str,
+) -> dict[str, list[Window]]:
+    open_starts: dict[str, list[float]] = {}
+    windows: dict[str, list[Window]] = {}
+    for event in events:
+        metadata = event.get("metadata")
+        if not isinstance(metadata, dict):
+            continue
+        group_id = metadata.get(id_key)
+        if not isinstance(group_id, str):
+            continue
+        event_type = event.get("event_type")
+        if event_type == start_event:
+            open_starts.setdefault(group_id, []).append(float(event["timestamp_s"]))
+        elif event_type == end_event:
+            starts = open_starts.get(group_id)
+            if not starts:
+                continue
+            windows.setdefault(group_id, []).append(
+                Window(start_s=starts.pop(0), end_s=float(event["timestamp_s"]))
+            )
+    return windows
+
+
+def _has_suite_contract(path: Path, raw_config: Any) -> bool:
+    if (path / "suite_manifest.json").is_file():
+        return True
+    if isinstance(raw_config, dict):
+        workload = raw_config.get("workload_profile")
+        return isinstance(workload, dict) and workload.get("suite_manifest_ref") is not None
+    return False
+
+
+def _suite_problems(
+    reader: BundleReader,
+    raw_config: Any,
+    metadata: Any,
+    summary: Any,
+) -> list[str]:
+    problems: list[str] = []
+    artifact_exists = (reader.path / "suite_manifest.json").is_file()
+    raw_status = summary.get("status") if isinstance(summary, dict) else None
+    status_is_success = raw_status == RunStatus.SUCCEEDED.value
+    events: list[dict[str, Any]] | None = None
+
+    config: BenchmarkConfig | None = None
+    if isinstance(raw_config, dict):
+        try:
+            config = BenchmarkConfig.from_mapping(raw_config)
+        except SchemaError:
+            config = None
+    config_ref = (
+        config.workload_profile.suite_manifest_ref if config is not None else None
+    )
+    config_hash = (
+        config.workload_profile.suite_manifest_sha256 if config is not None else None
+    )
+
+    if config_ref is None and artifact_exists:
+        problems.append(
+            "suite_manifest.json is present but config.workload_profile."
+            "suite_manifest_ref is absent"
+        )
+    if config_ref is not None and not artifact_exists:
+        try:
+            events = reader.events()
+        except BundleReadError as exc:
+            return [str(exc)]
+        # D-011/D-012: validate-stage failures occur before prepare writes the
+        # manifest. Missing suite_manifest.json becomes a suite artifact
+        # problem only after a successful summary, or after prepare started.
+        if status_is_success or _run_reached_prepare(events):
+            problems.append(
+                "config.workload_profile.suite_manifest_ref is set but "
+                "suite_manifest.json is missing"
+            )
+        return problems
+    if not artifact_exists:
+        return problems
+
+    try:
+        raw_manifest = json.loads((reader.path / "suite_manifest.json").read_text())
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        return [f"suite_manifest.json is not valid JSON: {exc}"]
+    try:
+        manifest = SuiteManifest.from_mapping(raw_manifest)
+        effective = canonical_effective_manifest(raw_manifest)
+        actual_hash = suite_manifest_sha256(effective)
+    except SchemaError as exc:
+        return [f"suite_manifest.json does not re-validate: {exc}"]
+
+    if config_hash is not None and config_hash != actual_hash:
+        problems.append(
+            "config.workload_profile.suite_manifest_sha256 mismatch: "
+            f"config has {config_hash!r}, suite_manifest.json hashes to {actual_hash!r}"
+        )
+    suite_metadata = metadata.get("suite") if isinstance(metadata, dict) else None
+    if not isinstance(suite_metadata, dict):
+        problems.append("metadata.suite is missing or not an object")
+    else:
+        problems.extend(_metadata_suite_problems(suite_metadata, manifest))
+        metadata_hash = suite_metadata.get("manifest_sha256")
+        if metadata_hash != actual_hash:
+            problems.append(
+                "metadata.suite.manifest_sha256 mismatch: "
+                f"metadata has {metadata_hash!r}, suite_manifest.json hashes to {actual_hash!r}"
+            )
+
+    if events is None:
+        try:
+            events = reader.events()
+        except BundleReadError as exc:
+            return problems + [str(exc)]
+
+    suite_window = reader.suite_window()
+    if suite_window is None:
+        problems.append("suite markers are missing a paired suite_start/suite_end window")
+    else:
+        measured = reader.measured_window()
+        if measured is not None and not _window_contains(measured, suite_window):
+            problems.append("suite window is not inside the measured window")
+
+    problems.extend(_marker_pair_problems(events, SUITE_START, SUITE_END, "suite"))
+    problems.extend(_marker_pair_problems(events, BLOCK_START, BLOCK_END, "block_id"))
+    problems.extend(_marker_pair_problems(events, LEVEL_START, LEVEL_END, "level_id"))
+    problems.extend(_item_marker_pair_problems(events))
+    problems.extend(_suite_summary_metrics_problems(summary))
+
+    item_start_indices: list[int] = []
+    start_by_index: dict[int, dict[str, Any]] = {}
+    for event in events:
+        if event.get("event_type") != ITEM_START:
+            continue
+        metadata = event.get("metadata")
+        if not isinstance(metadata, dict):
+            continue
+        index = metadata.get("item_index")
+        if isinstance(index, bool) or not isinstance(index, int):
+            problems.append(f"item_start.item_index is not an integer: {index!r}")
+            continue
+        item_start_indices.append(index)
+        if index in start_by_index:
+            problems.append(f"item_index is duplicated in item_start markers: {index}")
+        start_by_index[index] = metadata
+    if item_start_indices != sorted(item_start_indices):
+        problems.append("item_index values are not monotonic in item_start order")
+
+    measured_window = reader.measured_window()
+    paired_items = {window.item_index: window for window in reader.item_windows()}
+    expected_indices = set(range(len(manifest.items)))
+    if set(paired_items) != expected_indices:
+        missing = sorted(expected_indices - set(paired_items))
+        extra = sorted(set(paired_items) - expected_indices)
+        if missing:
+            problems.append(f"manifest item(s) missing paired item markers: {missing}")
+        if extra:
+            problems.append(f"paired item marker(s) outside manifest item_index range: {extra}")
+
+    block_windows = reader.block_windows()
+    level_windows = reader.level_windows()
+    manifest_block_ids = sorted({item.grouping.block_id for item in manifest.items})
+    manifest_level_keys = sorted(
+        {(item.grouping.block_id, item.grouping.level_id) for item in manifest.items}
+    )
+    for block_id in manifest_block_ids:
+        if not block_windows.get(block_id):
+            problems.append(
+                f"manifest block_id {block_id!r} is missing paired block markers"
+            )
+    for block_id, level_id in manifest_level_keys:
+        if not level_windows.get((block_id, level_id)):
+            problems.append(
+                "manifest level grouping "
+                f"{(block_id, level_id)!r} is missing paired level markers"
+            )
+
+    suite_item_records, record_problems = _suite_item_records(reader.path)
+    problems.extend(record_problems)
+    if suite_item_records is not None:
+        records_by_index: dict[int, dict[str, Any]] = {}
+        for line_index, record in enumerate(suite_item_records, start=1):
+            item_index = record.get("item_index")
+            if isinstance(item_index, bool) or not isinstance(item_index, int):
+                problems.append(
+                    "outputs/suite_items.jsonl line "
+                    f"{line_index} item_index is not an integer: {item_index!r}"
+                )
+                continue
+            records_by_index[item_index] = record
+        for item_index, item in enumerate(manifest.items):
+            if item.source.prompt_token_ids is None:
+                continue
+            record = records_by_index.get(item_index)
+            if record is None:
+                problems.append(
+                    "outputs/suite_items.jsonl is missing item_index "
+                    f"{item_index} for ids-native prompt validation"
+                )
+                continue
+            prompt = record.get("prompt")
+            actual = prompt.get("token_ids_sha256") if isinstance(prompt, dict) else None
+            expected_hash = prompt_token_ids_sha256(item.source.prompt_token_ids)
+            if actual != expected_hash:
+                problems.append(
+                    "outputs/suite_items.jsonl item_index "
+                    f"{item_index} prompt.token_ids_sha256 mismatch for ids-native "
+                    f"manifest prompt_token_ids: expected {expected_hash!r}, "
+                    f"actual {actual!r}"
+                )
+
+    if isinstance(suite_metadata, dict):
+        suite_start_metadata = _first_marker_metadata(events, SUITE_START)
+        if isinstance(suite_start_metadata, dict):
+            if suite_metadata.get("order_seed") != suite_start_metadata.get("order_seed"):
+                problems.append(
+                    "metadata.suite.order_seed mismatch: metadata has "
+                    f"{suite_metadata.get('order_seed')!r}, suite_start metadata has "
+                    f"{suite_start_metadata.get('order_seed')!r}"
+                )
+        suite_end_metadata = _first_marker_metadata(events, SUITE_END)
+        if isinstance(suite_end_metadata, dict):
+            expected_counts = _status_counts_from_windows(list(paired_items.values()))
+            if suite_end_metadata.get("items_executed") != len(paired_items):
+                problems.append(
+                    "suite_end.metadata.items_executed mismatch: suite_end has "
+                    f"{suite_end_metadata.get('items_executed')!r}, paired item "
+                    f"windows count is {len(paired_items)}"
+                )
+            if suite_end_metadata.get("status_counts") != expected_counts:
+                problems.append(
+                    "suite_end.metadata.status_counts mismatch: suite_end has "
+                    f"{suite_end_metadata.get('status_counts')!r}, paired item "
+                    f"windows status counts are {expected_counts!r}"
+                )
+
+    assignable = {status.value for status in RUNTIME_ASSIGNABLE}
+    for window in paired_items.values():
+        if window.status not in assignable:
+            problems.append(
+                f"item_end.status for item_index {window.item_index} is not "
+                f"runtime-assignable: {window.status!r}"
+            )
+        if measured_window is not None and not _window_contains(measured_window, window.window):
+            problems.append(
+                f"item_index {window.item_index} window is not inside the measured window"
+            )
+        if suite_window is not None and not _window_contains(suite_window, window.window):
+            problems.append(
+                f"item_index {window.item_index} window is not inside the suite window"
+            )
+        expected = manifest.items[window.item_index] if window.item_index < len(manifest.items) else None
+        if expected is not None:
+            if window.item_id != expected.item_id:
+                problems.append(
+                    f"item_index {window.item_index} item_id mismatch: "
+                    f"manifest has {expected.item_id!r}, events have {window.item_id!r}"
+                )
+            if (
+                window.start_metadata.get("output_policy") == "fixed_budget_exact"
+                and window.status == "succeeded"
+                and window.end_metadata.get("emitted_tokens")
+                != window.start_metadata.get("planned_output_tokens")
+            ):
+                problems.append(
+                    "fixed_budget_exact item succeeded with emitted_tokens != "
+                    f"planned_output_tokens at item_index {window.item_index}"
+                )
+
+    if suite_window is not None:
+        for block_id, windows in block_windows.items():
+            for window in windows:
+                if not _window_contains(suite_window, window):
+                    problems.append(f"block {block_id!r} window is not inside the suite window")
+        for (block_id, level_id), windows in level_windows.items():
+            containers = block_windows.get(block_id, [])
+            for window in windows:
+                if not _window_contains(suite_window, window):
+                    problems.append(
+                        f"level {(block_id, level_id)!r} window is not inside the suite window"
+                    )
+                if containers and not any(_window_contains(block, window) for block in containers):
+                    problems.append(
+                        f"level {(block_id, level_id)!r} window is not inside its block window"
+                    )
+
+    return problems
+
+
+def _run_reached_prepare(events: list[dict[str, Any]]) -> bool:
+    return any(
+        event.get("phase") == "prepare"
+        and event.get("event_type") in {"stage_started", "stage_completed"}
+        for event in events
+    )
+
+
+def _metadata_suite_problems(
+    suite_metadata: dict[str, Any], manifest: SuiteManifest
+) -> list[str]:
+    problems: list[str] = []
+    required = {
+        "suite_id",
+        "suite_profile",
+        "suite_revision",
+        "manifest_sha256",
+        "source_file_sha256",
+        "item_count",
+        "order_seed",
+    }
+    missing = sorted(required - set(suite_metadata))
+    for key in missing:
+        problems.append(f"metadata.suite.{key} is missing")
+    for key in ("suite_id", "suite_profile", "suite_revision", "manifest_sha256", "order_seed"):
+        if key in suite_metadata and not _nonempty_string(suite_metadata.get(key)):
+            problems.append(f"metadata.suite.{key} is not a non-empty string: {suite_metadata.get(key)!r}")
+    source_hash = suite_metadata.get("source_file_sha256")
+    if "source_file_sha256" in suite_metadata and not _sha256_hex(source_hash):
+        problems.append(
+            "metadata.suite.source_file_sha256 is not a 64-character hex string: "
+            f"{source_hash!r}"
+        )
+    item_count = suite_metadata.get("item_count")
+    if isinstance(item_count, bool) or not isinstance(item_count, int):
+        if "item_count" in suite_metadata:
+            problems.append(f"metadata.suite.item_count is not an integer: {item_count!r}")
+    elif item_count != len(manifest.items):
+        problems.append(
+            f"metadata.suite.item_count mismatch: metadata has {item_count!r}, "
+            f"suite_manifest.json has {len(manifest.items)} item(s)"
+        )
+    expected_strings = {
+        "suite_id": manifest.suite_id,
+        "suite_profile": manifest.suite_profile,
+        "suite_revision": manifest.suite_revision,
+    }
+    for key, expected in expected_strings.items():
+        actual = suite_metadata.get(key)
+        if isinstance(actual, str) and actual != expected:
+            problems.append(
+                f"metadata.suite.{key} mismatch: metadata has {actual!r}, "
+                f"suite_manifest.json has {expected!r}"
+            )
+    return problems
+
+
+def _suite_summary_metrics_problems(summary: Any) -> list[str]:
+    if not isinstance(summary, dict):
+        return []
+    suite_metrics = summary.get("suite_metrics")
+    if suite_metrics is None:
+        return []
+    if not isinstance(suite_metrics, dict):
+        return ["summary_metrics.json suite_metrics is not an object"]
+    assignable = {status.value for status in REDUCER_ASSIGNABLE}
+    problems: list[str] = []
+    problems.extend(
+        _status_count_key_problems(
+            suite_metrics.get("status_counts"),
+            "summary_metrics.json suite_metrics.status_counts",
+            assignable,
+        )
+    )
+    for surface in ("blocks", "levels"):
+        groups = suite_metrics.get(surface)
+        if groups is None:
+            continue
+        if not isinstance(groups, list):
+            problems.append(f"summary_metrics.json suite_metrics.{surface} is not a list")
+            continue
+        for index, group in enumerate(groups):
+            if not isinstance(group, dict):
+                problems.append(
+                    f"summary_metrics.json suite_metrics.{surface}[{index}] "
+                    "is not an object"
+                )
+                continue
+            problems.extend(
+                _status_count_key_problems(
+                    group.get("status_counts"),
+                    "summary_metrics.json suite_metrics."
+                    f"{surface}[{index}].status_counts",
+                    assignable,
+                )
+            )
+    items = suite_metrics.get("items")
+    if items is None:
+        return problems
+    if not isinstance(items, list):
+        return problems + ["summary_metrics.json suite_metrics.items is not a list"]
+    for index, item in enumerate(items):
+        if not isinstance(item, dict):
+            problems.append(
+                f"summary_metrics.json suite_metrics.items[{index}] is not an object"
+            )
+            continue
+        status = item.get("status")
+        if status not in assignable:
+            problems.append(
+                "summary_metrics.json suite_metrics.items"
+                f"[{index}].status is not reducer-assignable: {status!r}"
+            )
+    return problems
+
+
+def _status_count_key_problems(
+    status_counts: Any, path: str, assignable: set[str]
+) -> list[str]:
+    if status_counts is None:
+        return []
+    if not isinstance(status_counts, dict):
+        return [f"{path} is not an object"]
+    problems: list[str] = []
+    for status in sorted(status_counts):
+        if status not in assignable:
+            problems.append(f"{path} contains non-reducer-assignable status: {status!r}")
+    return problems
+
+
+def _suite_item_records(path: Path) -> tuple[list[dict[str, Any]] | None, list[str]]:
+    suite_items_path = path / "outputs" / "suite_items.jsonl"
+    if not suite_items_path.is_file():
+        return None, ["outputs/suite_items.jsonl is missing for suite bundle"]
+    try:
+        text = suite_items_path.read_text()
+    except OSError as exc:
+        return None, [f"outputs/suite_items.jsonl cannot be read: {exc}"]
+    records: list[dict[str, Any]] = []
+    problems: list[str] = []
+    for index, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            problems.append(
+                f"outputs/suite_items.jsonl line {index} is not valid JSON: {exc}"
+            )
+            continue
+        if not isinstance(record, dict):
+            problems.append(
+                f"outputs/suite_items.jsonl line {index} is not a JSON object"
+            )
+            continue
+        records.append(record)
+    return records, problems
+
+
+def _first_marker_metadata(
+    events: list[dict[str, Any]], event_type: str
+) -> dict[str, Any] | None:
+    for event in events:
+        if event.get("event_type") != event_type:
+            continue
+        metadata = event.get("metadata")
+        return metadata if isinstance(metadata, dict) else None
+    return None
+
+
+def _status_counts_from_windows(windows: list[ItemWindow]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for window in windows:
+        counts[window.status] = counts.get(window.status, 0) + 1
+    return counts
+
+
+def _marker_required_metadata_problems(
+    event_type: str, metadata: dict[str, Any]
+) -> list[str]:
+    required = MARKER_REQUIRED_METADATA_KEYS.get(event_type, frozenset())
+    return [
+        f"{event_type} marker metadata.{key} is missing"
+        for key in sorted(required - set(metadata))
+    ]
+
+
+def _marker_identity(metadata: dict[str, Any], id_key: str) -> str | None:
+    if id_key == "suite":
+        return "__suite__"
+    value = metadata.get(id_key)
+    return value if isinstance(value, str) else None
+
+
+def _nonempty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _sha256_hex(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdefABCDEF" for char in value)
+    )
+
+
+def _marker_pair_problems(
+    events: list[dict[str, Any]],
+    start_event: str,
+    end_event: str,
+    id_key: str,
+) -> list[str]:
+    problems: list[str] = []
+    stack: list[tuple[str, dict[str, Any]]] = []
+    start_counts: dict[str, int] = {}
+    end_counts: dict[str, int] = {}
+    for event in events:
+        event_type = event.get("event_type")
+        if event_type not in {start_event, end_event}:
+            continue
+        metadata = event.get("metadata")
+        if not isinstance(metadata, dict):
+            problems.append(f"{event_type} marker metadata is missing or not an object")
+            metadata = {}
+        problems.extend(_marker_required_metadata_problems(event_type, metadata))
+        marker_id = _marker_identity(metadata, id_key)
+        if marker_id is None:
+            marker_id = "<missing>"
+            if id_key != "suite":
+                problems.append(f"{event_type} marker metadata.{id_key} is missing or not a string")
+        if event_type == start_event:
+            stack.append((marker_id, event))
+            start_counts[marker_id] = start_counts.get(marker_id, 0) + 1
+            continue
+        end_counts[marker_id] = end_counts.get(marker_id, 0) + 1
+        if not stack:
+            problems.append(f"{end_event} marker for {marker_id!r} has no paired {start_event}")
+            continue
+        open_id, _open_event = stack[-1]
+        if open_id != marker_id:
+            problems.append(
+                f"{end_event} marker for {marker_id!r} closes while {start_event} "
+                f"for {open_id!r} is still open"
+            )
+            matching_index = next(
+                (
+                    index
+                    for index in range(len(stack) - 1, -1, -1)
+                    if stack[index][0] == marker_id
+                ),
+                None,
+            )
+            if matching_index is not None:
+                stack.pop(matching_index)
+            else:
+                problems.append(f"{end_event} marker for {marker_id!r} has no paired {start_event}")
+            continue
+        stack.pop()
+    for marker_id in sorted(set(start_counts) | set(end_counts)):
+        starts = start_counts.get(marker_id, 0)
+        ends = end_counts.get(marker_id, 0)
+        if starts != ends:
+            problems.append(
+                f"{start_event}/{end_event} marker count mismatch for "
+                f"{marker_id!r}: starts={starts}, ends={ends}"
+            )
+    for marker_id, _event in stack:
+        problems.append(f"{start_event} marker for {marker_id!r} has no paired {end_event}")
+    return problems
+
+
+def _item_marker_pair_problems(events: list[dict[str, Any]]) -> list[str]:
+    open_starts: dict[str, list[dict[str, Any]]] = {}
+    problems: list[str] = []
+    for event in events:
+        metadata = event.get("metadata")
+        if not isinstance(metadata, dict):
+            continue
+        item_id = metadata.get("item_id")
+        if not isinstance(item_id, str):
+            continue
+        event_type = event.get("event_type")
+        if event_type == ITEM_START:
+            open_starts.setdefault(item_id, []).append(event)
+        elif event_type == ITEM_END:
+            starts = open_starts.get(item_id, [])
+            if not starts:
+                problems.append(f"item_end marker for {item_id!r} has no paired item_start")
+                continue
+            start = starts.pop(0)
+            start_metadata = start.get("metadata")
+            start_index = start_metadata.get("item_index") if isinstance(start_metadata, dict) else None
+            end_index = metadata.get("item_index")
+            if start_index != end_index:
+                problems.append(
+                    f"item_start/item_end item_index mismatch for item_id {item_id!r}: "
+                    f"start item_index {start_index!r}, end item_index {end_index!r}"
+                )
+    for item_id, starts in sorted(open_starts.items()):
+        for _start in starts:
+            problems.append(f"item_start marker for {item_id!r} has no paired item_end")
+    return problems
+
+
+def _window_contains(outer: Window, inner: Window) -> bool:
+    return outer.start_s <= inner.start_s and inner.end_s <= outer.end_s
 
 
 def _check_summary(summary: Any) -> list[str]:

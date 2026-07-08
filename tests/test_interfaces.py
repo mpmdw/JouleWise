@@ -5,7 +5,12 @@ from pathlib import Path
 
 from joulewise.adapters import LocalTransport, MockRuntimeAdapter, MockTelemetryAdapter
 from joulewise.clock import FakeClock
-from joulewise.interfaces import RuntimeAdapter, TelemetryAdapter, TransportAdapter
+from joulewise.interfaces import (
+    RuntimeAdapter,
+    SuiteRuntimeAdapter,
+    TelemetryAdapter,
+    TransportAdapter,
+)
 from joulewise.schemas import BenchmarkConfig, TelemetryBackend
 
 
@@ -27,6 +32,9 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(result.output_token_count, 8)
         self.assertEqual(result.events[0].event_type, "phase_start")
         self.assertEqual(result.events[0].phase, "prefill")
+
+    def test_mock_runtime_satisfies_suite_protocol(self) -> None:
+        self.assertIsInstance(MockRuntimeAdapter(self.clock), SuiteRuntimeAdapter)
 
     def test_mock_telemetry_satisfies_protocol(self) -> None:
         telemetry = MockTelemetryAdapter(self.clock)

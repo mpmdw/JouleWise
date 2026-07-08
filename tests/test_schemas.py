@@ -34,7 +34,12 @@ PINNED_CONFIG_SHA256 = {
     "mac_mlx_local.json": "e9878c0ed7735eb48293581b0944c1f5e1d08e67c9b77f0fafd8c4c265020f3e",
     "mac_mlx_mock_telemetry.json": "4023dee935eb17d1a4da1f2bd90af9404de2eca33f1df9c41382e4750fd93eda",
     "mac_mlx_qwen35_122b.json": "100d76977dffab1ae841124c4708727ac45ab793bbe0061dd87a6d9f54dbb97a",
+    "mock_suite_local.json": "e33e9587b37996e4c94767129eaae5575079821dc07ce5dbbe4331095a4ed58d",
     "nvidia_vllm_ssh.json": "a8a8ed0ca03e5d50247ef1f3b0520962660141f144107cef8e8b4bdb6e7e8f81",
+}
+
+OMITTED_OPTIONAL_KEYS = {
+    "workload_profile": {"suite_manifest_ref", "suite_manifest_sha256"},
 }
 
 
@@ -60,6 +65,24 @@ class BenchmarkConfigTests(unittest.TestCase):
         data["workload_profile"].pop("dataset_ref", None)
         with self.assertRaisesRegex(SchemaError, "prompt_text, prompt_tokens, or dataset_ref"):
             BenchmarkConfig.from_mapping(data)
+
+    def test_suite_manifest_ref_and_sha256_are_required_together(self) -> None:
+        data = json.loads((ROOT / "configs" / "examples" / "mock_local.json").read_text())
+        data["workload_profile"].pop("prompt_tokens")
+        data["workload_profile"]["suite_manifest_ref"] = "suite.json"
+        with self.assertRaisesRegex(SchemaError, "required together"):
+            BenchmarkConfig.from_mapping(data)
+
+    def test_suite_manifest_ref_is_fourth_prompt_source(self) -> None:
+        data = json.loads((ROOT / "configs" / "examples" / "mock_local.json").read_text())
+        data["workload_profile"]["suite_manifest_ref"] = "suite.json"
+        data["workload_profile"]["suite_manifest_sha256"] = "abc"
+        with self.assertRaisesRegex(SchemaError, "mutually exclusive"):
+            BenchmarkConfig.from_mapping(data)
+        data["workload_profile"].pop("prompt_tokens")
+        config = BenchmarkConfig.from_mapping(data)
+        self.assertEqual(config.workload_profile.suite_manifest_ref, "suite.json")
+        self.assertEqual(config.workload_profile.suite_manifest_sha256, "abc")
 
     def test_json_schema_has_required_contract_fields(self) -> None:
         schema = BenchmarkConfig.json_schema()
@@ -110,6 +133,19 @@ class SummaryMetricsTests(unittest.TestCase):
             status=RunStatus.SUCCEEDED, phase_energy_j={"prefill": 1.0, "decode": 2.0}
         ).to_dict()
         self.assertEqual(payload["phase_energy_j"], {"prefill": 1.0, "decode": 2.0})
+
+    def test_summary_metrics_has_additive_suite_metrics_field(self) -> None:
+        schema = SummaryMetrics.json_schema()
+        self.assertIn("suite_metrics", schema["properties"])
+        self.assertNotIn("suite_metrics", schema["required"])
+        suite_summary = schema["$defs"]["suite_summary"]
+        self.assertIn("floor_abs_j", suite_summary["required"])
+        self.assertIn("floor_cmp_j", suite_summary["required"])
+        self.assertEqual(suite_summary["properties"]["floor_abs_j"], {"type": ["number", "null"]})
+        self.assertEqual(suite_summary["properties"]["floor_cmp_j"], {"type": ["number", "null"]})
+        payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()
+        self.assertIsNone(payload["suite_metrics"])
+        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.2.0")
 
     def test_summary_metrics_schema_has_idle_gpu_quality_fields(self) -> None:
         schema = SummaryMetrics.json_schema()
@@ -201,9 +237,36 @@ class EmittedConfigRoundTripTests(unittest.TestCase):
                     continue
                 section_schema = _resolve_ref(schema, schema["properties"][section_key])
                 with self.subTest(config=name, section=section_key):
+                    allowed_omissions = OMITTED_OPTIONAL_KEYS.get(section_key, set())
                     self.assertEqual(
-                        set(section_value), set(section_schema["properties"])
+                        set(section_value) | allowed_omissions,
+                        set(section_schema["properties"]),
                     )
+
+    def test_workload_to_dict_omits_suite_fields_only_when_none(self) -> None:
+        self.assertEqual(
+            OMITTED_OPTIONAL_KEYS,
+            {"workload_profile": {"suite_manifest_ref", "suite_manifest_sha256"}},
+        )
+        schema = BenchmarkConfig.json_schema()
+        for name, emitted in self.emitted_examples():
+            for section_key, section_value in emitted.items():
+                if not isinstance(section_value, dict):
+                    continue
+                section_schema = _resolve_ref(schema, schema["properties"][section_key])
+                omitted = set(section_schema["properties"]) - set(section_value)
+                if section_key == "workload_profile":
+                    suite_ref = section_value.get("suite_manifest_ref")
+                    suite_sha = section_value.get("suite_manifest_sha256")
+                    expected = (
+                        {"suite_manifest_ref", "suite_manifest_sha256"}
+                        if suite_ref is None and suite_sha is None
+                        else set()
+                    )
+                else:
+                    expected = set()
+                with self.subTest(config=name, section=section_key):
+                    self.assertEqual(omitted, expected)
 
     @unittest.skipUnless(HAS_JSONSCHEMA, "jsonschema not installed (optional)")
     def test_full_validator_round_trip(self) -> None:

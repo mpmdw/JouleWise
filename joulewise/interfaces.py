@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from joulewise.clock import Clock
 from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline
+
+if TYPE_CHECKING:
+    from joulewise.suite import SuiteManifest
 
 
 @dataclass(frozen=True)
@@ -131,6 +134,21 @@ class RuntimeAdapter(Protocol):
         self, config: BenchmarkConfig, context: RunContext | None = None
     ) -> AdapterResult:
         """Release runtime resources."""
+
+
+@runtime_checkable
+class SuiteRuntimeAdapter(RuntimeAdapter, Protocol):
+    """Runtime adapter that can execute a materialized suite manifest."""
+
+    def run_suite(
+        self,
+        config: BenchmarkConfig,
+        manifest: "SuiteManifest",
+        context: RunContext | None = None,
+        *,
+        order_seed: str,
+    ) -> RuntimeResult:
+        """Run every suite item inside one measured adapter call."""
 
 
 @runtime_checkable
