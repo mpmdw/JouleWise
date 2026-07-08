@@ -37,6 +37,7 @@ standing instructions.
 | C-005 | 2026-07-07 | Steelmanned research agenda + workload expansion | 31 tiered questions + kill list; jw_mixed_v1 starter suite specified (→ P2-012) |
 | C-006 | 2026-07-07 | Session trace + orchestration meta-review of the six-stream parallel day | 13 attributed catches; integration-review step vindicated; skills deduplicated; operation-loop installed |
 | C-007 | 2026-07-07 | Whole-project design/planning council (user-directed) + P2-013 fix design | P2-013 re-ranked above 2M with raw-to-trace gate added in-stream; two-claim-track framing adopted; detection floor gets an owning Phase 4 gate; machine-state queue lanes; pre-2M contract amendments (P2-014) |
+| C-008 | 2026-07-07 | Multi-stream hardware-prep session (4 streams, Opus directors + Codex volume), user-checkpointed mid-flight | 3.0.1 verdict replay_supported; P2-013 groups 1-4 (19/31 pins); 2K protocol v1 provisional; DOC-007 done; Slice 2O landed; ledgers v2 + calibration + wake-gap lessons folded into skills same-session |
 
 ---
 
@@ -773,3 +774,29 @@ layers: none — every lens landed at least one consensus-shaping catch.
   D-027, D-030 amendments; phase_energy_j; provenance; lanes convention).
 - Docs maintenance queued as its own task (item 16), not done inline.
 - PROJECT_STATUS refresh + two-track framing: with the docs task.
+
+
+---
+
+## C-008: Multi-stream session, checkpointed (2026-07-07 PM)
+
+Session entry (format v2), kept slim because the full Shape / Catches /
+Deliberations / Interventions / Spend record was preserved VERBATIM as
+`docs/run_reports/2026-07-07-checkpoint-session-trace.md`, and the
+product state + restart instructions live in
+`docs/run_reports/2026-07-07-checkpoint-multistream-session.md`. Do not
+restate; read those.
+
+Headlines: 4 worktree streams (Opus orchestrators directing Codex 5.5,
+Fable apex-only per Ed's directive); Stage 3.0.1 verdict
+**replay_supported** (Phase 3's central risk retired on current
+hardware); P2-013 groups 1-4 landed (19/31 pins); 2K wire protocol v1
+pinned PROVISIONAL with zero shared-file edits; DOC-007 complete +
+lead-reviewed. Process: stream decision ledgers v2 + delegation
+calibration ledger + 5.5-reviews-consequential-decisions doctrine
+adopted, validated, and folded into the global skills same-session; the
+SUBAGENT WAKE GAP found (structural, twice-triggered, mitigation
+standing in multi-stream-worktrees). Killed stream: first 2K launch
+(false hardware premise — lesson: confirm the device list before
+shaping streams on a hardware claim). Per-layer catches + the
+delegation-calibration aggregate: see the trace file.

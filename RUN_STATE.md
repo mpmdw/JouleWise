@@ -63,7 +63,30 @@ item P2-013 created from its findings). A whole-project design council
 (P2-013 → P2-014 → 2M), and adopted machine-state lanes + the
 two-claim-track framing — see the latest-run section below.
 
-## What The Latest Run Did (2026-07-07, WHOLE-PROJECT DESIGN COUNCIL C-007)
+## What The Latest Run Did (2026-07-07 PM, MULTI-STREAM SESSION — CHECKPOINTED MID-FLIGHT)
+
+User-directed checkpoint stop. Four worktree streams ran (Opus
+orchestrators directing Codex 5.5, Fable apex): **A** P2-013/P2-014
+integrity fixes — groups 1–4 committed, 19/31 pins flipped, suite
+423/10/12 in-worktree, corpus validates clean under the tightened
+validator; **B** 2K NVIDIA fixture-first — wire protocol v1 +
+worker/transport/client landed (438 tests, zero shared-file edits, all
+pins PROVISIONAL pending live hardware); **C** Stage 3.0.1 mlx-lm
+prompt-cache spike — **DONE, verdict `replay_supported`** (fresh-process
+token-identical resume; cache size matches kv-size prediction to
++0.018%) pending one lead re-verification command; **D** DOC-007
+docs/framing — DONE + lead-reviewed, merges after A with one
+reconciliation pass. Slice 2O (workload program) landed on main
+(`aa665e1`). ALL FOUR STREAM BRANCHES PUSHED; every stream ledger ends
+with a `*-CHECKPOINT` entry naming its exact resume action.
+
+**RESTART HERE:** read
+`docs/run_reports/2026-07-07-checkpoint-multistream-session.md` (stream
+table, merge order A→D→C→B, process learnings — esp. the SUBAGENT WAKE
+GAP), then resume streams from their ledgers. After all merges +
+integration review: the quiet-machine 2M campaign (P2-006).
+
+## Previous Run (2026-07-07, WHOLE-PROJECT DESIGN COUNCIL C-007)
 
 User-directed council over the entire project (design, architecture,
 high-level docs, planning): Fable lead/final judge, 7 parallel read-only
