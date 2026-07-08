@@ -1,0 +1,9 @@
+**Findings**
+
+`should-fix` [scripts/spike_mlx_prompt_cache.py](/Users/edr/code/jw-spike301/scripts/spike_mlx_prompt_cache.py:414): `run_stage()` copies the parent environment and preserves any existing `PYTHONPATH`, only prepending the repo root. That means the subprocesses are fresh OS processes, but not a sterile import/runtime environment. Concrete failure scenario: the caller has `PYTHONPATH=/tmp/mlx_lm_shadow` with a stale or patched `mlx_lm` package. All three stages import that code instead of the installed `/Users/edr/code/JouleWise/.venv/.../mlx_lm`, while `importlib.metadata.version("mlx-lm")` can still report `0.31.3`. A patched `generate_step`/cache loader could make monolithic and resumed tokens agree without proving the installed mlx-lm prompt-cache replay path. This weakens the “verified against installed source” and “only persisted cache + tokens” claim via environment-controlled code injection.
+
+**What Holds**
+
+I found no evidence that Python globals, MLX in-process state, tokenizer objects, or the monolithic stage can cross into the decode stage on the intended `run` path. `run` invokes `monolithic`, `prefill`, and `decode` as separate `sys.executable` subprocesses, and `decode` reloads the model plus `prompt_cache.safetensors`/`prompt_tokens.json`.
+
+The trim-by-1 boundary is correct for mlx-lm 0.31.3: installed `generate_step` bulk-prefills until one prompt token remains, then `_step(prompt)` advances the cache over that final prompt token before yielding generated tokens. The script’s prefill offset checks and decode trim to `len(prompt)-1` line up with that behavior. Greedy sampling is deterministic by default (`sampler = argmax`), so no seed issue jumped out.
