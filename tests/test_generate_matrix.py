@@ -22,12 +22,28 @@ PROFILE_EXPECTED = {
     "short_long": {"prompt_tokens": 128, "output_tokens": 512},
     "mid_mid": {"prompt_tokens": 1024, "output_tokens": 256},
 }
+SENTINEL_PROFILE = "short_short_sentinel"
+SENTINEL_POSITIONS = ("start", "end")
 COMMAND_TIMEOUT_S = 60
 REPETITIONS = 5
 ORDER_MANIFEST = "order_manifest.json"
 
 
 def expected_filenames(model_tag: str) -> set[str]:
+    baseline = {
+        f"{model_tag}-r{rep}-{profile}.json"
+        for rep in range(1, REPETITIONS + 1)
+        for profile in PROFILE_EXPECTED
+    }
+    sentinels = {
+        f"{model_tag}-r{rep}-{SENTINEL_PROFILE}-{position}.json"
+        for rep in range(1, REPETITIONS + 1)
+        for position in SENTINEL_POSITIONS
+    }
+    return baseline | sentinels
+
+
+def expected_baseline_filenames(model_tag: str) -> set[str]:
     return {
         f"{model_tag}-r{rep}-{profile}.json"
         for rep in range(1, REPETITIONS + 1)
@@ -155,7 +171,7 @@ class GenerateMatrixTests(unittest.TestCase):
                 expected_filenames(other_tag) | expected_filenames(tag) | {ORDER_MANIFEST},
             )
 
-    def test_both_example_base_configs_produce_forty_distinct_run_ids(self) -> None:
+    def test_both_example_base_configs_produce_sixty_distinct_run_ids(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = Path(tmp) / "out"
             for base, tag in BASE_CONFIGS:
@@ -164,8 +180,8 @@ class GenerateMatrixTests(unittest.TestCase):
 
             payloads = generated_payloads(out_dir)
             run_ids = [payload["run_id"] for payload in payloads.values()]
-            self.assertEqual(len(payloads), 40)
-            self.assertEqual(len(set(run_ids)), 40)
+            self.assertEqual(len(payloads), 60)
+            self.assertEqual(len(set(run_ids)), 60)
 
     def test_matrix_cells_for_both_base_configs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -180,6 +196,10 @@ class GenerateMatrixTests(unittest.TestCase):
                     self.assertEqual(
                         set(payloads),
                         expected_filenames(tag),
+                    )
+                    self.assertEqual(
+                        {name for name in payloads if SENTINEL_PROFILE not in name},
+                        expected_baseline_filenames(tag),
                     )
                     base_payload = json.loads(base.read_text(encoding="utf-8"))
                     for profile, expected in PROFILE_EXPECTED.items():
@@ -198,6 +218,18 @@ class GenerateMatrixTests(unittest.TestCase):
                             payload["run_metadata"]["tags"],
                             base_payload["run_metadata"]["tags"] + ["2m", profile, "rep1"],
                         )
+                    for position in SENTINEL_POSITIONS:
+                        payload = payloads[f"{tag}-r1-{SENTINEL_PROFILE}-{position}.json"]
+                        self.assertEqual(
+                            payload["run_id"],
+                            f"{tag}-r1-{SENTINEL_PROFILE}-{position}",
+                        )
+                        workload = payload["workload_profile"]
+                        self.assertEqual(workload["name"], SENTINEL_PROFILE)
+                        self.assertEqual(workload["prompt_tokens"], 128)
+                        self.assertEqual(workload["output_tokens"], 64)
+                        self.assertEqual(workload["repetitions"], 1)
+                        self.assertEqual(workload["warmup_runs"], 1)
 
     def test_context_window_cap_records_tag(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -253,14 +285,155 @@ class GenerateMatrixTests(unittest.TestCase):
             self.assertEqual(manifest["rotation_scheme"]["rep_model_order"]["1"], [tag_a, tag_b])
             self.assertEqual(manifest["rotation_scheme"]["rep_model_order"]["2"], [tag_b, tag_a])
             order = manifest["executed_order"]
-            self.assertEqual(len(order), 40)
+            self.assertEqual(len(order), 60)
             self.assertEqual(order[0]["rep"], 1)
             self.assertEqual(order[0]["model_tag"], tag_a)
-            self.assertEqual(order[0]["workload"], "short_short")
-            self.assertEqual(order[4]["model_tag"], tag_b)
-            self.assertEqual(order[8]["rep"], 2)
-            self.assertEqual(order[8]["model_tag"], tag_b)
-            self.assertEqual(order[8]["workload"], "long_short")
+            self.assertEqual(order[0]["workload"], SENTINEL_PROFILE)
+            self.assertEqual(order[0]["role"], "drift_sentinel")
+            self.assertEqual(order[0]["block_index"], 1)
+            self.assertEqual(order[0]["position_in_block"], 1)
+            self.assertEqual(order[1]["workload"], "short_short")
+            self.assertEqual(order[1]["block_index"], 1)
+            self.assertEqual(order[1]["position_in_block"], 2)
+            self.assertEqual(order[5]["workload"], SENTINEL_PROFILE)
+            self.assertEqual(order[5]["role"], "drift_sentinel")
+            self.assertEqual(order[5]["block_index"], 1)
+            self.assertEqual(order[5]["position_in_block"], 6)
+            self.assertEqual(order[6]["model_tag"], tag_b)
+            self.assertEqual(order[6]["block_index"], 2)
+            self.assertEqual(order[12]["rep"], 2)
+            self.assertEqual(order[12]["model_tag"], tag_b)
+            self.assertEqual(order[12]["workload"], SENTINEL_PROFILE)
+            self.assertEqual(order[13]["workload"], "long_short")
+            self.assertEqual(order[13]["block_index"], 3)
+            self.assertEqual(order[13]["position_in_block"], 2)
+
+            for entry in order:
+                self.assertIn("block_index", entry)
+                self.assertIn("position_in_block", entry)
+                if entry["workload"] == SENTINEL_PROFILE:
+                    self.assertEqual(entry["role"], "drift_sentinel")
+                    self.assertIn(entry["position_in_block"], {1, 6})
+                else:
+                    self.assertNotIn("role", entry)
+
+    def test_order_manifest_records_start_and_end_sentinel_identity_per_block(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            for base, tag in BASE_CONFIGS:
+                result = run_generator(base, tag, out_dir)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+            order = order_manifest(out_dir)["executed_order"]
+            block_indexes = sorted({entry["block_index"] for entry in order})
+
+            for block_index in block_indexes:
+                with self.subTest(block_index=block_index):
+                    block = [entry for entry in order if entry["block_index"] == block_index]
+                    self.assertEqual([entry["position_in_block"] for entry in block], [1, 2, 3, 4, 5, 6])
+                    start = block[0]
+                    end = block[-1]
+                    self.assertEqual(start["role"], "drift_sentinel")
+                    self.assertEqual(start["sentinel_position"], "start")
+                    self.assertTrue(start["config"].endswith(f"-{SENTINEL_PROFILE}-start.json"))
+                    self.assertTrue(start["run_id"].endswith(f"-{SENTINEL_PROFILE}-start"))
+                    self.assertEqual(end["role"], "drift_sentinel")
+                    self.assertEqual(end["sentinel_position"], "end")
+                    self.assertTrue(end["config"].endswith(f"-{SENTINEL_PROFILE}-end.json"))
+                    self.assertTrue(end["run_id"].endswith(f"-{SENTINEL_PROFILE}-end"))
+
+    def test_order_manifest_has_complete_model_block_structure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            for base, tag in BASE_CONFIGS:
+                result = run_generator(base, tag, out_dir)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+            order = order_manifest(out_dir)["executed_order"]
+            expected_blocks = REPETITIONS * len(BASE_CONFIGS)
+
+            self.assertEqual([entry["index"] for entry in order], list(range(1, len(order) + 1)))
+            self.assertEqual(
+                sorted({entry["block_index"] for entry in order}),
+                list(range(1, expected_blocks + 1)),
+            )
+            for block_index in range(1, expected_blocks + 1):
+                with self.subTest(block_index=block_index):
+                    block = [entry for entry in order if entry["block_index"] == block_index]
+                    self.assertEqual(len(block), 6)
+                    self.assertEqual([entry["position_in_block"] for entry in block], [1, 2, 3, 4, 5, 6])
+                    sentinel_entries = [
+                        entry for entry in block if entry["workload"] == SENTINEL_PROFILE
+                    ]
+                    self.assertEqual(
+                        [entry["sentinel_position"] for entry in sentinel_entries],
+                        ["start", "end"],
+                    )
+                    self.assertEqual(
+                        [entry["role"] for entry in sentinel_entries],
+                        ["drift_sentinel", "drift_sentinel"],
+                    )
+                    self.assertEqual(
+                        [entry["workload"] for entry in block[1:5]],
+                        order_manifest(out_dir)["rotation_scheme"]["rep_workload_order"][str(block[0]["rep"])],
+                    )
+
+    def test_single_model_out_dir_manifest_content(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            base, tag = BASE_CONFIGS[0]
+
+            result = run_generator(base, tag, out_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            manifest = order_manifest(out_dir)
+            order = manifest["executed_order"]
+            self.assertEqual(len(order), REPETITIONS * 6)
+            self.assertEqual(manifest["rotation_scheme"]["workloads"], list(PROFILE_EXPECTED))
+            self.assertEqual(
+                manifest["rotation_scheme"]["rep_model_order"],
+                {str(rep): [tag] for rep in range(1, REPETITIONS + 1)},
+            )
+            self.assertEqual([entry["block_index"] for entry in order[:6]], [1] * 6)
+            self.assertEqual(order[0]["sentinel_position"], "start")
+            self.assertEqual(order[5]["sentinel_position"], "end")
+            self.assertEqual({entry["model_tag"] for entry in order}, {tag})
+
+    def test_sentinel_config_tags_include_role_and_position(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            base, tag = BASE_CONFIGS[0]
+
+            result = run_generator(base, tag, out_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+
+            payloads = generated_payloads(out_dir)
+            for position in SENTINEL_POSITIONS:
+                with self.subTest(position=position):
+                    payload = payloads[f"{tag}-r1-{SENTINEL_PROFILE}-{position}.json"]
+                    tags = payload["run_metadata"]["tags"]
+                    self.assertIn("drift_sentinel", tags)
+                    self.assertIn(f"sentinel_{position}", tags)
+
+    def test_manifest_builder_errors_when_existing_model_blocks_lack_sentinels(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            base, old_tag = BASE_CONFIGS[0]
+            _, new_tag = BASE_CONFIGS[1]
+
+            old = run_generator(base, old_tag, out_dir)
+            self.assertEqual(old.returncode, 0, old.stderr)
+            for path in out_dir.glob(f"{old_tag}-r*-{SENTINEL_PROFILE}-*.json"):
+                path.unlink()
+            (out_dir / ORDER_MANIFEST).unlink()
+
+            new = run_generator(base, new_tag, out_dir)
+
+            self.assertEqual(new.returncode, 1)
+            self.assertIn("missing drift sentinel config", new.stderr)
+            self.assertIn(f"model_tag={old_tag}, rep=1", new.stderr)
+            self.assertIn("start, end", new.stderr)
+            self.assertNotIn(f"model_tag={new_tag}, rep=1", new.stderr)
 
     def test_invalid_model_tag_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

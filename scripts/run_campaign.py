@@ -166,6 +166,30 @@ class OrderEntry:
     model_tag: str | None = None
     rep: int | None = None
     workload: str | None = None
+    role: str | None = None
+    block_index: int | None = None
+    position_in_block: int | None = None
+    sentinel_position: str | None = None
+
+    def to_log(self) -> dict[str, Any]:
+        row: dict[str, Any] = {
+            "index": self.index,
+            "config": self.config,
+            "model_tag": self.model_tag,
+            "rep": self.rep,
+            "workload": self.workload,
+        }
+        for field_name in (
+            "run_id",
+            "role",
+            "block_index",
+            "position_in_block",
+            "sentinel_position",
+        ):
+            value = getattr(self, field_name)
+            if value is not None:
+                row[field_name] = value
+        return row
 
 
 VALID_WAIVER_SCOPES = {
@@ -607,6 +631,16 @@ def load_order_entries(config_dir: Path) -> tuple[list[OrderEntry], str | None]:
         rep = raw.get("rep")
         if rep is not None and (isinstance(rep, bool) or not isinstance(rep, int)):
             raise ValueError(f"order manifest entry {index} has invalid rep")
+        block_index = raw.get("block_index")
+        if block_index is not None and (
+            isinstance(block_index, bool) or not isinstance(block_index, int)
+        ):
+            raise ValueError(f"order manifest entry {index} has invalid block_index")
+        position_in_block = raw.get("position_in_block")
+        if position_in_block is not None and (
+            isinstance(position_in_block, bool) or not isinstance(position_in_block, int)
+        ):
+            raise ValueError(f"order manifest entry {index} has invalid position_in_block")
         entries.append(
             OrderEntry(
                 index=raw_index,
@@ -615,6 +649,14 @@ def load_order_entries(config_dir: Path) -> tuple[list[OrderEntry], str | None]:
                 model_tag=raw.get("model_tag") if isinstance(raw.get("model_tag"), str) else None,
                 rep=rep,
                 workload=raw.get("workload") if isinstance(raw.get("workload"), str) else None,
+                role=raw.get("role") if isinstance(raw.get("role"), str) else None,
+                block_index=block_index,
+                position_in_block=position_in_block,
+                sentinel_position=(
+                    raw.get("sentinel_position")
+                    if isinstance(raw.get("sentinel_position"), str)
+                    else None
+                ),
             )
         )
     expected_indexes = set(range(1, len(entries) + 1))
@@ -867,13 +909,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             if order_entry is not None:
                 order_extra = {
                     "run_index": order_entry.index,
-                    "executed_order": {
-                        "index": order_entry.index,
-                        "config": order_entry.config,
-                        "model_tag": order_entry.model_tag,
-                        "rep": order_entry.rep,
-                        "workload": order_entry.workload,
-                    },
+                    "executed_order": order_entry.to_log(),
                     "model_load_boundary": model_boundary,
                 }
             elif order_warning is not None:

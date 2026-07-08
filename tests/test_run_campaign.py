@@ -929,6 +929,85 @@ class RunCampaignTests(unittest.TestCase):
             self.assertIs(rows[0]["model_load_boundary"], True)
             self.assertIs(rows[1]["model_load_boundary"], True)
 
+    def test_order_manifest_log_echo_carries_drift_covariates_when_present(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_cli = make_fake_cli(tmp_path)
+
+            config_dir = tmp_path / "configs-with-covariates"
+            runs_dir = tmp_path / "runs-with-covariates"
+            config_dir.mkdir()
+            sentinel = write_config(config_dir, "sentinel.json", "alpha-r1-short_short_sentinel-start")
+            (config_dir / "order_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "joulewise.order_manifest.v1",
+                        "executed_order": [
+                            {
+                                "index": 1,
+                                "config": sentinel.name,
+                                "run_id": "alpha-r1-short_short_sentinel-start",
+                                "model_tag": "alpha",
+                                "rep": 1,
+                                "workload": "short_short_sentinel",
+                                "role": "drift_sentinel",
+                                "block_index": 7,
+                                "position_in_block": 1,
+                                "sentinel_position": "start",
+                            }
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = run_campaign(config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            echoed = rows[0]["executed_order"]
+            self.assertEqual(echoed["run_id"], "alpha-r1-short_short_sentinel-start")
+            self.assertEqual(echoed["role"], "drift_sentinel")
+            self.assertEqual(echoed["block_index"], 7)
+            self.assertEqual(echoed["position_in_block"], 1)
+            self.assertEqual(echoed["sentinel_position"], "start")
+
+            old_config_dir = tmp_path / "configs-old-manifest"
+            old_runs_dir = tmp_path / "runs-old-manifest"
+            old_config_dir.mkdir()
+            old_config = write_config(old_config_dir, "baseline.json", "alpha-r1-short_short")
+            (old_config_dir / "order_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "joulewise.order_manifest.v1",
+                        "executed_order": [
+                            {
+                                "index": 1,
+                                "config": old_config.name,
+                                "run_id": "alpha-r1-short_short",
+                                "model_tag": "alpha",
+                                "rep": 1,
+                                "workload": "short_short",
+                            }
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            old_result = run_campaign(old_config_dir, old_runs_dir, cli_cmd=cli_cmd_for(fake_cli))
+
+            self.assertEqual(old_result.returncode, 0, old_result.stderr)
+            old_rows = read_jsonl(old_runs_dir / "campaign_log.jsonl")
+            old_echoed = old_rows[0]["executed_order"]
+            self.assertEqual(old_echoed["run_id"], "alpha-r1-short_short")
+            self.assertNotIn("role", old_echoed)
+            self.assertNotIn("block_index", old_echoed)
+            self.assertNotIn("position_in_block", old_echoed)
+            self.assertNotIn("sentinel_position", old_echoed)
+
     def test_order_manifest_rejects_duplicate_and_non_contiguous_entries(self) -> None:
         cases = [
             (
