@@ -161,6 +161,21 @@ class CompletionStateTests(ReaderTestCase):
         self.assertIsNone(reader.raw_summary())
 
 
+class ProblemCollectionTests(ReaderTestCase):
+    def test_invalid_utf8_json_artifact_is_reported_not_raised(self) -> None:
+        for artifact in ("config.json", "metadata.json", "summary_metrics.json"):
+            with self.subTest(artifact=artifact):
+                writer = self.make_bundle(f"invalid-utf8-{artifact}")
+                writer.path.joinpath(artifact).write_bytes(b"\xff")
+
+                problems = BundleReader(writer.path).problems()
+
+                self.assertTrue(
+                    any(artifact in problem and "not valid JSON" in problem for problem in problems),
+                    problems,
+                )
+
+
 class MeasuredWindowTests(ReaderTestCase):
     def test_markers_preferred_over_stage_boundaries(self) -> None:
         writer = self.make_bundle("markers")

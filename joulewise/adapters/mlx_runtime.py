@@ -310,23 +310,19 @@ class MlxRuntimeAdapter:
 
     def _prompt_for_workload(
         self, config: BenchmarkConfig
-    ) -> tuple[str | list[int], list[int], str | None]:
+    ) -> tuple[list[int], list[int], str | None]:
         profile = config.workload_profile
         if profile.prompt_text is not None:
             token_ids = _encode(self._tokenizer, profile.prompt_text, add_special_tokens=True)
-            return profile.prompt_text, token_ids, profile.prompt_text
+            return token_ids, token_ids, profile.prompt_text
         if profile.prompt_tokens is not None:
             prompt_tokens = _synthetic_prompt_tokens(self._tokenizer, profile.prompt_tokens)
             return prompt_tokens, prompt_tokens, None
         if profile.dataset_ref is not None:
             prompt = f"Dataset reference: {profile.dataset_ref}"
             token_ids = _encode(self._tokenizer, prompt, add_special_tokens=True)
-            return prompt, token_ids, prompt
+            return token_ids, token_ids, prompt
         raise RuntimeError("workload_profile must define prompt_text, prompt_tokens, or dataset_ref")
-
-    def _count_prompt_tokens(self, prompt: str) -> int:
-        encoded = _encode(self._tokenizer, prompt, add_special_tokens=True)
-        return len(encoded)
 
     def _suppress_eos(self) -> set[int] | None:
         original = _tokenizer_eos_ids(self._tokenizer)

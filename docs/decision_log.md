@@ -1485,11 +1485,12 @@ should run `validate-bundle --strict`.
 
 Considerations: the raw-to-trace comparison is semantic row equality:
 the powermetrics adapter owns plist timestamp and rail semantics, and
-CSV formatting is incidental. The re-reduction comparison is also exact
-(the reducer is deterministic over on-disk artifacts, D-002, and JSON
-round-trips floats exactly), so any drift - tampering, a reducer version
-change, partial rewrites - surfaces as a named key diff. Strict mode
-lives in `cli.py`, not the reader: it composes the reader with the
+CSV formatting is incidental. The re-reduction comparison has one
+legacy-additive exception: fresh-only null keys and a missing legacy
+`summary_provenance` block are tolerated (A-19), while all stored values
+and stored extras remain exact claims. Any other drift - tampering, a
+reducer version change, partial rewrites - surfaces as a named key diff.
+Strict mode lives in `cli.py`, not the reader: it composes the reader with the
 powermetrics adapter and reducer, and the reducer already consumes the
 reader (D-025), so putting it in `bundle_read` would create an import
 cycle.
@@ -1656,6 +1657,9 @@ Consequences: new mock and MLX bundles record realized prompt-token
 identity, tokenizer/model identity, generator identity, and
 `fixed_budget_exact` output policy details. `run_campaign.py` needs no
 special logic because it shells normal `joulewise run` executions.
+Residual limitation: deleting both `summary_provenance` and
+`metadata.workload_provenance` makes a new bundle indistinguishable from
+a legacy bundle to strict validation.
 
 Revisit when: a new runtime cannot expose token IDs or tokenizer
 identity; that adapter must either add an equivalent audited source or

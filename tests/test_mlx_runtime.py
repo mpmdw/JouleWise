@@ -9,6 +9,7 @@ from typing import Any
 
 from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
 from joulewise.clock import FakeClock
+from joulewise.provenance import prompt_token_ids_sha256
 from joulewise.schemas import BenchmarkConfig, FailureReason
 
 
@@ -181,6 +182,17 @@ class MlxRuntimeTests(unittest.TestCase):
         self.assertEqual([record["index"] for record in records], [0, 1, 2])
         self.assertEqual([record["timestamp_s"] for record in records], [1000.0] * 3)
         self.assertEqual(result.output_token_count, 3)
+
+    def test_text_prompt_provenance_hashes_exact_generation_token_ids(self) -> None:
+        adapter, fake_mlx = self.prepared_adapter(["A"])
+        result = adapter.run_workload(make_config())
+
+        generated_prompt = fake_mlx.calls[0]["prompt"]
+        self.assertEqual(generated_prompt, [1, 10, 11, 12])
+        self.assertEqual(
+            result.workload_provenance["prompt"]["token_ids_sha256"],
+            prompt_token_ids_sha256(generated_prompt),
+        )
 
 
 if __name__ == "__main__":

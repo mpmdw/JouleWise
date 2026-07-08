@@ -780,14 +780,6 @@ def _powermetrics_documents(
             raise ValueError(message) from exc
         if not isinstance(document, dict):
             message = f"powermetrics document {index} is not a dictionary"
-            if index == len(parts) - 1 and documents:
-                diagnostic = _DroppedFrameDiagnostic(
-                    frame_index=index,
-                    byte_count=len(part),
-                    sha256=hashlib.sha256(part).hexdigest(),
-                    error=message,
-                )
-                break
             raise ValueError(message)
         documents.append(document)
     return documents, diagnostic

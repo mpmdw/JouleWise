@@ -262,6 +262,7 @@ def _strict_problems(reader: BundleReader) -> list[str]:
                 "measured window; a succeeded summary needs a "
                 "reducer-consumable curve"
             )
+    problems.extend(_strict_workload_provenance_problems(reader, summary))
     problems.extend(_strict_raw_to_trace_problems(reader))
     fresh = reduce_bundle(reader.path).to_dict()
     differing = _strict_summary_differences(fresh, summary)
@@ -300,18 +301,56 @@ def _strict_summary_differences(fresh: Any, stored: Any, path: str = "") -> list
     return []
 
 
-def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
+def _strict_workload_provenance_problems(
+    reader: BundleReader, summary: dict[str, Any]
+) -> list[str]:
+    if not isinstance(summary.get("summary_provenance"), dict):
+        return []
     metadata = reader.raw_metadata()
     if not isinstance(metadata, dict):
-        return []
-    adapters = metadata.get("adapters")
-    telemetry = adapters.get("telemetry") if isinstance(adapters, dict) else None
-    telemetry_name = telemetry.get("name") if isinstance(telemetry, dict) else None
-    if telemetry_name != TelemetryBackend.POWERMETRICS.value:
-        return []
+        return ["strict: metadata.workload_provenance is missing"]
+    workload = metadata.get("workload_provenance")
+    if not isinstance(workload, dict):
+        return ["strict: metadata.workload_provenance is missing or not an object"]
+
+    problems: list[str] = []
+    prompt = workload.get("prompt")
+    if not isinstance(prompt, dict):
+        problems.append("strict: metadata.workload_provenance.prompt is missing or not an object")
+    else:
+        token_hash = prompt.get("token_ids_sha256")
+        if not _is_sha256_hex(token_hash):
+            problems.append(
+                "strict: metadata.workload_provenance.prompt.token_ids_sha256 "
+                "is missing or not a SHA-256 hex string"
+            )
+        domain = prompt.get("token_hash_domain")
+        if not isinstance(domain, str) or not domain:
+            problems.append(
+                "strict: metadata.workload_provenance.prompt.token_hash_domain "
+                "is missing or not a string"
+            )
+    if not isinstance(workload.get("tokenizer"), dict):
+        problems.append(
+            "strict: metadata.workload_provenance.tokenizer is missing or not an object"
+        )
+    if not isinstance(workload.get("output_policy"), dict):
+        problems.append(
+            "strict: metadata.workload_provenance.output_policy is missing or not an object"
+        )
+    return problems
+
+
+def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
     raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
+    telemetry_backend = _validated_config_telemetry_backend(reader)
+    if telemetry_backend != TelemetryBackend.POWERMETRICS and not raw_path.is_file():
+        return []
     if not raw_path.is_file():
         return [f"strict: raw-to-trace: missing raw/{RAW_SAMPLES_NAME}"]
+    metadata = reader.raw_metadata()
+    if not isinstance(metadata, dict):
+        return ["strict: raw-to-trace: metadata.json is missing or invalid"]
     device = metadata.get("device")
     if not isinstance(device, dict):
         return ["strict: raw-to-trace: metadata.device is missing or not an object"]
@@ -378,6 +417,19 @@ def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
                 f"{expected_rail!r}"
             ]
     return []
+
+
+def _validated_config_telemetry_backend(reader: BundleReader) -> TelemetryBackend | None:
+    try:
+        return reader.config().hardware_target.telemetry_backend
+    except BundleReadError:
+        return None
+
+
+def _is_sha256_hex(value: Any) -> bool:
+    if not isinstance(value, str) or len(value) != 64:
+        return False
+    return all(char in "0123456789abcdefABCDEF" for char in value)
 
 
 def _cmd_validate_bundle(args: argparse.Namespace) -> int:

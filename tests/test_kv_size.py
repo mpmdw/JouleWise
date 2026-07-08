@@ -6,7 +6,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from joulewise.cli import main
-from joulewise.kv_size import bytes_per_token, extract_kv_params, prompt_totals
+from joulewise.kv_size import KVSizeError, bytes_per_token, extract_kv_params, prompt_totals
 
 
 class KVSizeTests(unittest.TestCase):
@@ -87,6 +87,28 @@ class KVSizeTests(unittest.TestCase):
         )
         self.assertEqual(params.n_kv_heads, 8)
         self.assertEqual(bytes_per_token(params.n_layers, params.n_kv_heads, params.head_dim), 32_768)
+
+    def test_equal_kv_head_aliases_are_accepted(self) -> None:
+        params = extract_kv_params(
+            {
+                "num_hidden_layers": 16,
+                "num_key_value_heads": 2,
+                "num_kv_heads": 2,
+                "head_dim": 64,
+            }
+        )
+        self.assertEqual(params.n_kv_heads, 2)
+
+    def test_conflicting_kv_head_aliases_raise(self) -> None:
+        with self.assertRaises(KVSizeError):
+            extract_kv_params(
+                {
+                    "num_hidden_layers": 16,
+                    "num_key_value_heads": 2,
+                    "num_kv_heads": 4,
+                    "head_dim": 64,
+                }
+            )
 
     def test_cli_config_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

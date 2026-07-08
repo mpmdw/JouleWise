@@ -42,9 +42,7 @@ def extract_kv_params(config: Mapping[str, Any]) -> KVSizeParams:
 
     n_layers = _resolved_int(primary, fallback, "num_hidden_layers")
     attention_heads = _resolved_int(primary, fallback, "num_attention_heads", required=False)
-    n_kv_heads = _resolved_int(
-        primary, fallback, "num_key_value_heads", "num_kv_heads", required=False
-    )
+    n_kv_heads = _resolved_kv_heads(primary, fallback)
     if n_kv_heads is None:
         if _resolved_bool(primary, fallback, "multi_query", required=False) is True:
             n_kv_heads = 1
@@ -139,6 +137,36 @@ def _resolved_bool(
     if not isinstance(value, bool):
         raise KVSizeError(f"{key} must be a boolean")
     return value
+
+
+def _resolved_kv_heads(
+    config: Mapping[str, Any],
+    fallback: Mapping[str, Any] | None,
+) -> int | None:
+    value = _kv_heads_from_mapping(config)
+    if value is None and fallback is not None:
+        value = _kv_heads_from_mapping(fallback)
+    if value is None:
+        return None
+    return _positive_int(value, "num_key_value_heads")
+
+
+def _kv_heads_from_mapping(mapping: Mapping[str, Any]) -> Any:
+    primary = mapping.get("num_key_value_heads")
+    alias = mapping.get("num_kv_heads")
+    if primary is not None and alias is not None:
+        primary_int = _positive_int(primary, "num_key_value_heads")
+        alias_int = _positive_int(alias, "num_kv_heads")
+        if primary_int != alias_int:
+            raise KVSizeError(
+                "num_key_value_heads and num_kv_heads disagree; KV-head metadata is ambiguous"
+            )
+        return primary_int
+    if primary is not None:
+        return primary
+    if alias is not None:
+        return alias
+    return None
 
 
 def _mapping_value(mapping: Mapping[str, Any], *keys: str) -> Any:

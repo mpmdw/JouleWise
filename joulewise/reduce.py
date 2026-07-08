@@ -149,12 +149,9 @@ def _idle_baseline_int(raw: dict[str, Any], key: str) -> int:
         value = raw[key]
     except KeyError as exc:
         raise _ReduceError(f"idle_baseline.{key} is required") from exc
-    if isinstance(value, bool):
+    if isinstance(value, bool) or not isinstance(value, int):
         raise _ReduceError(f"idle_baseline.{key} must be an integer")
-    try:
-        return int(value)
-    except (TypeError, ValueError) as exc:
-        raise _ReduceError(f"idle_baseline.{key} must be an integer") from exc
+    return value
 
 
 def _idle_baseline_telemetry_backend(raw: dict[str, Any]) -> TelemetryBackend:

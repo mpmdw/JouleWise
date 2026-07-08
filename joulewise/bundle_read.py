@@ -355,7 +355,7 @@ class BundleReader:
                 continue
             try:
                 parsed[name] = json.loads((path / name).read_text())
-            except (OSError, json.JSONDecodeError) as exc:
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
                 problems.append(f"{name} is not valid JSON: {exc}")
 
         if "config.json" in parsed:
@@ -392,7 +392,7 @@ class BundleReader:
             raise BundleReadError(f"missing required artifact: {name}") from exc
         except OSError as exc:
             raise BundleReadError(f"{name} cannot be read: {exc}") from exc
-        except json.JSONDecodeError as exc:
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise BundleReadError(f"{name} is not valid JSON: {exc}") from exc
 
     def _tolerant_json(self, name: str) -> dict[str, Any] | None:
@@ -400,7 +400,7 @@ class BundleReader:
         if key not in self._cache:
             try:
                 value = json.loads((self._path / name).read_text())
-            except (OSError, json.JSONDecodeError):
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
                 value = None
             self._cache[key] = value if isinstance(value, dict) else None
         return self._cache[key]

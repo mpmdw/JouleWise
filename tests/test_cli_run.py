@@ -539,6 +539,14 @@ class StrictValidateTests(CliRunTestCase):
             for line in (bundle / "power_trace.csv").read_text().splitlines()
         ]
 
+    def _tamper_gpu_power_row(self, bundle: Path) -> None:
+        rows = self._trace_rows(bundle)
+        self.assertEqual(rows[2][3], "gpu_power")
+        rows[2][1] = str(float(rows[2][1]) + 1.0)
+        (bundle / "power_trace.csv").write_text(
+            "".join(",".join(row) + "\n" for row in rows)
+        )
+
     def test_powermetrics_raw_to_trace_matching_bundle_passes_strict(self) -> None:
         bundle = self._make_powermetrics_bundle("strict-pm-clean")
         self.assertEqual(validate_bundle(bundle, strict=True), [])
@@ -548,12 +556,7 @@ class StrictValidateTests(CliRunTestCase):
 
     def test_powermetrics_raw_to_trace_value_tamper_fails_with_row_and_rail(self) -> None:
         bundle = self._make_powermetrics_bundle("strict-pm-tamper")
-        rows = self._trace_rows(bundle)
-        self.assertEqual(rows[2][3], "gpu_power")
-        rows[2][1] = str(float(rows[2][1]) + 1.0)
-        (bundle / "power_trace.csv").write_text(
-            "".join(",".join(row) + "\n" for row in rows)
-        )
+        self._tamper_gpu_power_row(bundle)
 
         problems = validate_bundle(bundle, strict=True)
         self.assertTrue(any("strict: raw-to-trace:" in p for p in problems), problems)
@@ -561,6 +564,36 @@ class StrictValidateTests(CliRunTestCase):
         self.assertIn("row 3", problem)
         self.assertIn("gpu_power", problem)
         self.assertIn("power_w", problem)
+
+    def test_raw_to_trace_ignores_tampered_metadata_adapter_name(self) -> None:
+        bundle = self._make_powermetrics_bundle("strict-pm-metadata-tampered")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["adapters"]["telemetry"]["name"] = "mock"
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+        self._tamper_gpu_power_row(bundle)
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(any("strict: raw-to-trace:" in p for p in problems), problems)
+
+    def test_raw_to_trace_runs_without_metadata_adapters_block(self) -> None:
+        bundle = self._make_powermetrics_bundle("strict-pm-no-adapters")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata.pop("adapters")
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+        self._tamper_gpu_power_row(bundle)
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(any("strict: raw-to-trace:" in p for p in problems), problems)
+
+    def test_config_powermetrics_missing_raw_plist_fails_strict(self) -> None:
+        bundle = self._make_powermetrics_bundle("strict-pm-missing-raw")
+        (bundle / "raw" / RAW_SAMPLES_NAME).unlink()
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any(f"missing raw/{RAW_SAMPLES_NAME}" in p for p in problems),
+            problems,
+        )
 
     def test_powermetrics_raw_to_trace_formatting_only_variant_passes_strict(self) -> None:
         bundle = self._make_powermetrics_bundle("strict-pm-format")
@@ -583,6 +616,18 @@ class StrictValidateTests(CliRunTestCase):
         )
         problems = validate_bundle(bundle, strict=True)
         self.assertFalse(any("raw-to-trace" in p for p in problems), problems)
+
+    def test_new_summary_missing_workload_provenance_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-missing-workload-provenance")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata.pop("workload_provenance")
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("metadata.workload_provenance" in p for p in problems),
+            problems,
+        )
 
 
 class ReduceVerbTests(CliRunTestCase):

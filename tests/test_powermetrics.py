@@ -255,6 +255,12 @@ class PowermetricsParserTests(unittest.TestCase):
         records = decode_rich_telemetry(FIXTURE.read_bytes() + b"\0garbage")
         self.assertEqual(len(records), 5)
 
+    def test_complete_final_plist_array_is_not_dropped(self) -> None:
+        data = FIXTURE.read_bytes() + b"\0" + plistlib.dumps([])
+        with self.assertRaises(ValueError) as ctx:
+            parse_powermetrics_records(data)
+        self.assertIn("not a dictionary", str(ctx.exception))
+
     def test_rich_helpers_handle_zero_document_streams(self) -> None:
         self.assertEqual(decode_rich_telemetry(b"\0\0"), [])
         self.assertEqual(rich_telemetry_jsonl(b"\0\0"), "")
