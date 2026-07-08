@@ -114,3 +114,19 @@ runner; order manifest; ladder wording). Then P2-010/P2-012, 3.0.2
 - Session scratchpad lens/council out-files are ephemeral; all
   load-bearing content lives in C-011, the CR ledger
   (`docs/stream_logs/2026-07-08-critique-response.md`), and this report.
+
+## Addendum — 2026-07-08 Second-Pass Critique Reassessment
+
+- A second-pass reassessment was added to `docs/project_critique_review.html`
+  after the critique-response work. The second pass updated several first-pass
+  passages in place and marks them in-document; the verbatim C-011 first-pass
+  text remains in git history at commit 6418084.
+- Lead fact-check verified 16/17 checkable claims against file evidence; the
+  one stale claim was the risk-register row wording, now annotated because
+  R-002/R-003 are closed-residual as of 2026-07-08.
+- A counterreview flagged the preservation overclaim as a blocker; the lead
+  chose accurate labeling over content revert to keep reader-facing numbers
+  current, with git as the verbatim record.
+- A follow-up fix pass added layering annotations, hardened the reassessment
+  wording against repo evidence, and recorded this addendum-only process
+  footprint; the process-doc entries themselves are addendum-only.

@@ -936,3 +936,14 @@ independent yield beyond adjudication — the site round contributed three
 findings its own source review missed; the critique round tightened two
 designs into mechanical rules (C5's sample threshold, C6's rotation
 scheme). Discussion-before-decision is earning its cost.
+
+Addendum (2026-07-08): a second-pass reassessment was added to
+`docs/project_critique_review.html` after C-011 implementation. Lead
+fact-check verified 16/17 checkable claims; the one stale claim was the
+Mac powermetrics/MLX risk-register wording, now annotated because
+R-002/R-003 are closed-residual. The second pass updated several
+first-pass passages in place and marks them in-document; the verbatim
+C-011 first-pass text remains in git history at commit 6418084. A
+follow-up fix pass added provenance layering annotations, hardened the
+reassessment against repo evidence, and recorded this addendum-only
+process footprint; the process-doc entries themselves are addendum-only.

@@ -261,6 +261,18 @@
       border-color: #ebd891;
     }
 
+    .tag.updated {
+      background: #fff7da;
+      color: #6a530f;
+      border-color: #ebd891;
+    }
+
+    .tag.resolved {
+      background: #edf7ee;
+      color: #245b2c;
+      border-color: #b9d8bf;
+    }
+
     .source-list {
       columns: 2;
       column-gap: 32px;
@@ -301,13 +313,14 @@
     <div class="wrap">
       <p class="eyebrow">Independent project critique</p>
       <h1>JouleWise is a strong instrument, not yet a settled study.</h1>
-      <p class="subtitle">A critic-forward review of the project goals, documents, architecture, tests, measurement methodology, stack choices, and research usefulness. Prepared from a local codebase review plus four focused parallel critiques.</p>
+      <p class="subtitle">A critic-forward review of the project goals, documents, architecture, tests, measurement methodology, stack choices, and research usefulness. Prepared from a local codebase review, focused parallel critiques, and a second-pass reassessment after the project's critique-response work.</p>
     </div>
   </header>
 
   <nav aria-label="Report sections">
     <div class="wrap">
       <a href="#verdict">Verdict</a>
+      <a href="#reassessment">Reassessment</a>
       <a href="#research">Research</a>
       <a href="#docs">Docs</a>
       <a href="#architecture">Architecture</a>
@@ -328,12 +341,12 @@
           <p>JouleWise is useful and worth continuing. Its strongest current contribution is not a headline energy result; it is the auditable measurement instrument: typed configs, adapter boundaries, raw evidence bundles, reducer re-derivation, and explicit measurement boundaries.</p>
           <p>The project should be judged harshly on claims. Today it can support a narrow statement: <strong>auditable local LLM inference energy measurement on one Apple-Silicon stack is working and has produced real bundles.</strong> It cannot yet support broad cross-device rankings, split-inference crossover claims, or general model-scaling laws.</p>
           <div class="callout warning">
-            <strong>Main critical finding:</strong> the project has built more measurement credibility than research evidence. The next decisive work is not more architecture prose; it is a quiet-machine baseline corpus, a detection-floor study, and campaign validation that fails closed.
+            <strong>Main critical finding after reassessment:</strong> the project has converted several critique findings into real mechanics, but the center of gravity is still ahead: detection-floor calibration, the quiet-machine 2M baseline corpus, and live non-Mac validation.
           </div>
         </div>
         <div class="score">
           <div class="metric">
-            <strong>546 tests pass</strong>
+            <strong>564 tests pass</strong>
             <span>Local suite ran green with 10 skips and zero expected failures.</span>
           </div>
           <div class="metric">
@@ -351,6 +364,130 @@
         </div>
       </div>
     </section>
+
+    <section id="reassessment" class="panel">
+      <h2>Second-Pass Reassessment</h2>
+      <p>I reassessed the project after the critique-response session that explicitly asked other reviewers to judge what this report was right about. The new verdict is more nuanced: the first critique was directionally right about the research risks, but several of its highest-leverage recommendations are no longer open critiques. They have become code, contracts, tests, and queue gates.</p>
+
+      <div class="callout">
+        <strong>Updated thesis:</strong> JouleWise is now a substantially stronger evidence-preserving measurement harness than the first critique gave it credit for. It is still not yet a complete empirical study. That distinction matters: the engineering instrument is credible; the broad scientific claims still need the calibration and campaign corpus.
+      </div>
+
+      <h3>What The First Critique Was Right About</h3>
+      <table>
+        <thead>
+          <tr><th>Original Concern</th><th>Reassessment</th><th>Current Evidence</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>More instrument than study</td>
+            <td>Still true. The core contribution today is an auditable harness and evidence model, not a settled energy ranking or split-inference result.</td>
+            <td>The repo has six real Mac bundles and a green suite, but the 2M baseline corpus is still in the next quiet-machine window after P2-015 calibration.</td>
+          </tr>
+          <tr>
+            <td>Active-parameter scaling was overclaimed</td>
+            <td>Correct. The flagship comparison is hypothesis-generating because model size, architecture, quantization, and runtime conditions are confounded.</td>
+            <td>The flagship report now has an addendum superseding stronger scaling language.</td>
+          </tr>
+          <tr>
+            <td>Detection floor is the hinge</td>
+            <td>Correct, and now even more central. Phase-identifiability flags are useful, but they do not replace a measured energy floor.</td>
+            <td>P2-015 is now ranked before 2M: idle-only repeats, no-op/tiny workloads, and measured-window duration ladders.</td>
+          </tr>
+          <tr>
+            <td>Cross-boundary comparisons must be restrained</td>
+            <td>Correct. Apple SoC rails, NVIDIA board power, Jetson module input, and wall power are different physical boundaries.</td>
+            <td>The measurement methodology and claims ladder now require boundary labels and calibration bundles for stronger cross-boundary claims.</td>
+          </tr>
+          <tr>
+            <td>NVIDIA and split inference remain gated</td>
+            <td>Correct. Fixture-first remote work is useful, but live hardware contact is still the gate that turns protocol confidence into measurement evidence.</td>
+            <td>The status docs mark 2K protocol pins as provisional and Jetson/remote validation as gated on access.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>What Is Now Stale Or Too Harsh</h3>
+      <table>
+        <thead>
+          <tr><th>Earlier Critique</th><th>Current Reality</th><th>Why It Matters</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>"Create a claims ladder."</td>
+            <td>Done. <code>docs/contracts/claims_ladder.md</code> now binds reader-facing claims from 2M onward with L0-L4 levels.</td>
+            <td>The project now has a formal vocabulary for capability, instrument result, comparison, model fit, and generalized finding.</td>
+          </tr>
+          <tr>
+            <td>"Make campaigns fail closed."</td>
+            <td>Mostly done for the runner path. Campaigns now evaluate members with strict validation, quality flags, typed waivers, and publishable/partial/blocked/invalid verdicts.</td>
+            <td>The old risk that "summary exists" could masquerade as publishable evidence has been materially reduced.</td>
+          </tr>
+          <tr>
+            <td>"Add ordering controls."</td>
+            <td>Done for 2M tooling. Matrix generation emits an order manifest with workload rotation and model-block counterbalancing.</td>
+            <td>The experimental design is now recorded as data, which makes thermal and time-order drift auditable.</td>
+          </tr>
+          <tr>
+            <td>"Expose reducer honesty flags."</td>
+            <td>Done in core summaries. <code>measurement_quality.token_counts_source</code> and <code>phase_identifiability</code> are emitted and strict-gated for new-era bundles.</td>
+            <td>Per-token and per-phase metrics now carry enough provenance to downgrade unsafe claims mechanically.</td>
+          </tr>
+          <tr>
+            <td>"The tests are not enough."</td>
+            <td>Partly stale. The suite now has 564 tests, zero expected failures, strict validation pins, powermetrics raw-to-trace checks, campaign tests, and remote fixture tests.</td>
+            <td>The test suite is strong for an instrument. It still cannot prove hardware-dependent research conclusions.</td>
+          </tr>
+          <tr>
+            <td>"Architecture may be thin."</td>
+            <td>Too harsh if aimed at the core. The lifecycle, bundle immutability, shared reader, reducer purity, and adapter seams are serious architecture.</td>
+            <td>The static report may be simple, but the measurement core is not just scripts glued together.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Layer-By-Layer Updated Verdict</h3>
+      <div class="grid two">
+        <div>
+          <h3>Research Claims</h3>
+          <p><strong>Grade: promising but still gated.</strong> The best current claim is that the project can produce auditable local LLM energy evidence on one Apple-Silicon stack. The next acceptable research step is not a grand conclusion; it is a calibrated 2M corpus with confidence intervals and claim levels.</p>
+        </div>
+        <div>
+          <h3>Measurement Core</h3>
+          <p><strong>Grade: strong for this stage.</strong> Typed configs, immutable bundles, raw artifacts, config hashes, strict re-reduction, and source-preserving telemetry make the instrument more trustworthy than a normal benchmark script.</p>
+        </div>
+        <div>
+          <h3>Campaign Science</h3>
+          <p><strong>Grade: recently upgraded, not yet proven in the field.</strong> The runner now has the right fail-closed shape. The remaining proof is operational: run P2-015 and 2M under quiet-machine constraints and see whether the mechanics hold under real pressure.</p>
+        </div>
+        <div>
+          <h3>Architecture And Stack</h3>
+          <p><strong>Grade: pragmatic and test-backed.</strong> The stdlib-only core is a good measurement choice. The price is custom validation and protocol code, so the project must keep pinning edge cases with tests rather than relying on conventions.</p>
+        </div>
+        <div>
+          <h3>Tests And CI</h3>
+          <p><strong>Grade: unusually good for a prototype.</strong> The suite tests the evidence path, not just happy-path functions. The gap is live optional paths: MLX privileges, real SSH, vLLM, nvidia-smi behavior, and cross-boundary calibration remain outside ordinary CI.</p>
+        </div>
+        <div>
+          <h3>Documentation</h3>
+          <p><strong>Grade: rich but high-maintenance.</strong> The docs have become a strength because they preserve decisions, reversals, and caveats. They also need editorial pressure so old status or old overclaim wording does not leak into reader-facing summaries.</p>
+        </div>
+      </div>
+
+      <h3>What I Would Do Next After This Reassessment</h3>
+      <ol>
+        <li><strong>Run P2-015 first.</strong> Produce a versioned detection-floor corpus and record <code>detection_floor_j</code> plus <code>minimum_identifiable_window_s</code> per target/backend.</li>
+        <li><strong>Run 2M only under the new gates.</strong> Use the order manifest, no-agent quiet lock, strict validation per member, quality-pass requirements, and a final campaign verdict.</li>
+        <li><strong>Start the claims index before Phase 4.</strong> Seed it with README/status claims, the first-energy report, the flagship addendum, and the public site claims. Waiting until final writing invites drift.</li>
+        <li><strong>Make "strict" unavoidable for publication workflows.</strong> Default CLI validation can stay structural, but any dataset, report, or campaign command that implies publishability should call strict validation or fail loudly.</li>
+        <li><strong>Keep the remote stack provisional until live artifacts land.</strong> The fixture-first NVIDIA path is good engineering, but the report should treat it as a protocol rehearsal until raw nvidia-smi/vLLM evidence exists.</li>
+        <li><strong>Preserve humility in the headline.</strong> The durable contribution is not "we found the universal energy law." It is "we built an auditable referee for local inference energy, and here is the first bounded corpus it can defend."</li>
+      </ol>
+    </section>
+
+    <div class="callout caution">
+      <strong>Provenance note (2026-07-08):</strong> The sections below originate from the first-pass critique. During the second pass, several passages were updated in place where the repo state had changed: test counts, the campaign fail-closed evidence risk, methodology recommended controls, and recommended-action ordering. The verbatim first-pass text adjudicated by council C-011 is preserved in git history at commit 6418084. The Reassessment section above supersedes these sections where they conflict.
+    </div>
 
     <section id="research" class="panel">
       <h2>Research Value</h2>
@@ -399,7 +536,7 @@
           </tr>
           <tr>
             <td>Risk register and descope ladder are honest about hardware, schedule, wall-meter, and split feasibility risks.</td>
-            <td>Risks such as Mac powermetrics and MLX availability appear open in places after the Mac slice is working.</td>
+            <td>Risks such as Mac powermetrics and MLX availability appear open in places after the Mac slice is working.<br><span class="tag resolved">Resolved 2026-07-08: R-002/R-003 closed-residual</span></td>
           </tr>
           <tr>
             <td>Research question bank is stronger than most project idea lists because it kills or quarantines tempting overclaims.</td>
@@ -444,18 +581,19 @@
 
     <section id="tests" class="panel">
       <h2>Tests And Evidence</h2>
-      <p>The test suite is a real asset. It covers schema edges, bundle writing and reading, reducer degenerates, CLI behavior, mock E2E, powermetrics parsing, MLX adapter shape, node worker/client behavior, campaign tooling, aggregation, and reports. The local verification command completed successfully: <code>Ran 546 tests in 9.529s OK (skipped=10)</code>.</p>
+      <p>The test suite is a real asset. It covers schema edges, bundle writing and reading, reducer degenerates, CLI behavior, mock E2E, powermetrics parsing, MLX adapter shape, node worker/client behavior, campaign tooling, aggregation, and reports. The lead-side verification command completed successfully during reassessment: <code>Ran 564 tests, OK (skipped=10)</code>. <span class="tag updated">Updated in second pass</span></p>
 
-      <div class="callout warning">
-        <strong>Most actionable test/evidence risk:</strong> <code>scripts/run_campaign.py</code> treats existing bundles as skippable when summaries exist, even if they failed or have not been strict-validated. A measurement campaign should not let "already present" masquerade as "usable evidence."
+      <div class="callout caution">
+        <strong>Updated evidence risk:</strong> <span class="tag updated">Updated in second pass</span> the old campaign fail-closed concern has largely been addressed in code. The remaining risk is that the new gates have not yet been proven on the quiet-machine detection-floor and 2M campaigns.
       </div>
 
-      <h3>False Confidence Risks</h3>
+      <h3>Remaining False Confidence Risks</h3>
       <ul>
-        <li>Campaign <code>ok</code> currently means subprocess exit code 0, not post-run strict evidence validation.</li>
-        <li>Existing failed experiment members can be skipped with a note rather than forcing a failed campaign verdict.</li>
+        <li>The 2M config generator and campaign runner are tested, but the real 2M corpus has not yet run.</li>
+        <li>Detection-floor calibration is queued, not completed.</li>
         <li>The 2M config generator is deterministic and schema-valid, but it does not prove that four hardcoded profiles are representative.</li>
         <li>The NVIDIA/vLLM path is fixture-first and honest about being provisional, but tests are still fake/stub dominated until live hardware contact.</li>
+        <li>CI intentionally avoids optional/hardware paths, so live-gated verification scripts remain important.</li>
       </ul>
 
       <h3>What The Current Evidence Actually Proves</h3>
@@ -465,6 +603,7 @@
     <section id="methodology" class="panel">
       <h2>Measurement Methodology</h2>
       <p>The methodology is better than the average energy benchmark because it names measurement boundaries, keeps raw evidence, records idle baselines, and treats uncertainty as part of the artifact. The next step is to make several caveats mechanically binding.</p>
+      <p class="muted"><span class="tag updated">Updated in second pass</span> Recommended controls in this table were revised to reflect current repo mechanics.</p>
 
       <table>
         <thead>
@@ -474,17 +613,17 @@
           <tr>
             <td>Detection floor unknown</td>
             <td>Short phases such as prefill can be shorter than a 9 Hz sampler can resolve.</td>
-            <td>Run idle/no-op/window-duration ladder and add phase-identifiability flags.</td>
+            <td>Phase-identifiability flags now exist; still run the P2-015 calibration ladder before 2M.</td>
           </tr>
           <tr>
             <td>Idle subtraction fragility</td>
             <td>One contaminated idle baseline can materially alter idle-subtracted joules.</td>
-            <td>Fail closed or require explicit waiver when idle windows are suspect.</td>
+            <td>Campaign waivers and quality flags now exist; verify them under real quiet-machine campaign conditions.</td>
           </tr>
           <tr>
             <td>Sequential campaign ordering</td>
             <td>Condition can be confounded with time, heat, and operator state.</td>
-            <td>Interleave by repetition or use ABBA/randomized profile order.</td>
+            <td>Use the new counterbalanced order manifest and audit metric-vs-run-index drift.</td>
           </tr>
           <tr>
             <td>Boundary mismatch</td>
@@ -494,7 +633,7 @@
           <tr>
             <td>Remote telemetry thinning</td>
             <td>Skipping <code>[N/A]</code> nvidia-smi rows can bias windows if not surfaced.</td>
-            <td>Expose skipped-row counts and quality flags in summaries.</td>
+            <td>Keep this in the deferred P2-016/NVIDIA live-validation batch.</td>
           </tr>
         </tbody>
       </table>
@@ -508,8 +647,9 @@
         <strong>Rigor principle:</strong> no result should become a headline because it is interesting. It becomes a headline only after it survives detection-floor, ordering, validation, boundary, and provenance checks.
       </div>
 
-      <h3>1. Create A Claims Ladder</h3>
+      <h3>1. Create A Claims Ladder <span class="tag resolved">Resolved since first pass</span></h3>
       <p>Right now the project distinguishes engineering progress from research evidence in prose, but the distinction should become a formal ladder that every report uses. This would prevent the strongest language from arriving too early.</p>
+      <p class="muted"><span class="tag resolved">Superseded - see Reassessment</span> A binding claims ladder now exists for reader-facing claims from Slice 2M onward.</p>
 
       <table>
         <thead>
@@ -575,8 +715,9 @@
         </div>
       </div>
 
-      <h3>3. Make Campaigns Fail Closed</h3>
+      <h3>3. Make Campaigns Fail Closed <span class="tag resolved">Resolved since first pass</span></h3>
       <p>The campaign runner should stop acting like an executor and become a research gatekeeper. A campaign should not call a run usable merely because a command exited successfully or a summary file exists.</p>
+      <p class="muted"><span class="tag resolved">Superseded - see Reassessment</span> The runner path now has strict per-member validation, typed campaign waivers, quality flags, and publishable/partial/blocked/invalid verdicts.</p>
 
       <table>
         <thead>
@@ -606,8 +747,9 @@
         </tbody>
       </table>
 
-      <h3>4. Deconfound Ordering</h3>
+      <h3>4. Deconfound Ordering <span class="tag resolved">Resolved since first pass</span></h3>
       <p>The baseline matrix should not be sorted and run as a neat block if the goal is comparative evidence. Sorted order is convenient for humans and dangerous for thermals. I would change the generator and runner to make execution order an explicit experimental design choice.</p>
+      <p class="muted"><span class="tag resolved">Superseded - see Reassessment</span> The 2M generator now emits an order manifest with workload rotation and model-block counterbalancing.</p>
 
       <ul>
         <li><strong>Interleave by repetition:</strong> run profile A rep 1, profile B rep 1, profile C rep 1, then loop, instead of A1-A5 then B1-B5.</li>
@@ -669,10 +811,10 @@
         <strong>Example downgrade:</strong> "Energy per token scales almost exactly with active parameters" should become "In two strict-valid Mac/MLX/powermetrics points, energy per output token was consistent with active-parameter-driven scaling; this is a hypothesis pending bridge models and a fitted Q4 matrix."
       </div>
 
-      <h3>8. Sequence The Rigor Work</h3>
+      <h3>8. Sequence The Rigor Work <span class="tag updated">Updated in second pass</span></h3>
       <ol>
-        <li><strong>Before 2M:</strong> patch campaign fail-closed behavior and run the detection-floor calibration.</li>
-        <li><strong>During 2M:</strong> interleave order, strict-validate each member, record machine state, and produce a campaign verdict.</li>
+        <li><strong>Before 2M:</strong> use the already-patched campaign fail-closed behavior and run the detection-floor calibration.</li>
+        <li><strong>During 2M:</strong> use the counterbalanced order manifest, strict-validate each member, record machine state, and produce a campaign verdict.</li>
         <li><strong>After 2M:</strong> fit Q4 only inside one boundary, with raw points and interval separation rules.</li>
         <li><strong>Before cross-target claims:</strong> de-provisionalize NVIDIA/Orin and calibrate at least one external power boundary.</li>
         <li><strong>Before final report:</strong> freeze the dataset, generate a claim index, and rewrite every claim to the highest level its evidence actually supports.</li>
@@ -708,11 +850,11 @@
     </section>
 
     <section id="actions" class="panel">
-      <h2>Recommended Next Actions</h2>
+      <h2>Recommended Next Actions <span class="tag updated">Updated in second pass</span></h2>
       <ol>
-        <li><strong>Harden campaign validation before the 2M run.</strong> Require strict validation after each run and before every skip; require all experiment members to have <code>status=succeeded</code>.</li>
-        <li><strong>Run a detection-floor study.</strong> Use idle-only repeats, no-op/small workloads, and phase-window duration ladders. Add <code>phase_identifiable=false</code> or equivalent summary flags.</li>
-        <li><strong>Interleave the baseline matrix.</strong> Do not run all repetitions of one condition as a block unless the order is explicitly part of the experiment.</li>
+        <li><strong>Run the detection-floor study first.</strong> Use idle-only repeats, no-op/small workloads, and phase-window duration ladders. Treat the output as a calibration corpus, not a prose caveat.</li>
+        <li><strong>Run 2M under the new campaign gates.</strong> Use strict validation after each run and before every skip; require usable members or explicit typed waivers.</li>
+        <li><strong>Use the counterbalanced baseline order.</strong> Preserve the order manifest and audit metric-vs-run-index drift before writing comparisons.</li>
         <li><strong>Fit Q4 narrowly first.</strong> One stack, one model family where possible, prompt/output ladders, n >= 5, clear uncertainty intervals.</li>
         <li><strong>Demote active-parameter scaling language.</strong> Treat the 1.5B vs 122B comparison as hypothesis-generating until bridge models exist.</li>
         <li><strong>De-provisionalize NVIDIA only with live artifacts.</strong> Require SSH, vLLM, nvidia-smi, raw CSV, strict validation, and quality flags before cross-target charts.</li>
@@ -732,8 +874,11 @@
         <li><a href="research_question_bank.md">docs/research_question_bank.md</a></li>
         <li><a href="risk_register.md">docs/risk_register.md</a></li>
         <li><a href="contracts/measurement_methodology.md">docs/contracts/measurement_methodology.md</a></li>
+        <li><a href="contracts/claims_ladder.md">docs/contracts/claims_ladder.md</a></li>
         <li><a href="contracts/run_bundle_layout.md">docs/contracts/run_bundle_layout.md</a></li>
         <li><a href="test_audit_2026-07-07.md">docs/test_audit_2026-07-07.md</a></li>
+        <li><a href="stream_logs/2026-07-08-critique-response.md">critique-response ledger</a></li>
+        <li><a href="run_reports/2026-07-08-councils-critique-session.md">critique counter-review report</a></li>
         <li><a href="run_reports/2026-07-06-slice-2i-first-real-energy.md">first real energy report</a></li>
         <li><a href="run_reports/2026-07-07-flagship-qwen35-122b.md">flagship model report</a></li>
         <li><a href="phase_3/kv_feasibility.md">docs/phase_3/kv_feasibility.md</a></li>
