@@ -51,8 +51,11 @@ be re-derived by a future agent gets an entry here.
 | D-027 | Per-rail rows must share per-sample timestamps; misalignment is a structured failure | accepted |
 | D-028 | `reduce` verb rewrites `summary_metrics.json` in place (the one sanctioned post-finalize mutation) | accepted |
 | D-029 | Config schema declares nullable optionals; serialization (and config hashes) unchanged | accepted |
-| D-030 | `validate-bundle` stays structural by default; `--strict` adds re-reduction checks for succeeded bundles | accepted |
+| D-030 | `validate-bundle` stays structural by default; `--strict` adds raw-evidence checks | accepted |
 | D-031 | Multi-model council review; PR convention for multi-commit sessions; D-023 extension + end-of-session consistency sweep | accepted |
+| D-032 | `phase_energy_j` is gross-only in summary v0.1 | accepted |
+| D-033 | Prompt-content provenance is recorded per run bundle | accepted |
+| D-034 | Slice 2O owns the workload program after 2M and 3.0.1 | accepted |
 
 ---
 
@@ -507,6 +510,19 @@ Consequences: bundle writer enforces write order; reducers never run on
 incomplete bundles.
 
 Revisit when: never expected.
+
+Amendment (2026-07-07, P2-013 group 4, C-007 resolution 2): "schema-valid
+`summary_metrics.json`" is now enforced by ONE shared summary validator
+used by both `BundleReader.is_complete()` and default validation
+(`_check_summary`), with required keys per status: a `succeeded` summary
+must carry the headline energy fields present AND finite (audit finding
+B1 showed a status-only succeeded summary previously counted as complete
+and valid, hiding truncated metrics); token-derived and idle-subtracted
+metrics stay nullable; failed/unsupported summaries keep their looser
+per-status requirements. "Complete" therefore means "contains a summary
+that satisfies the per-status contract", not merely "parseable JSON
+object". Historical bundles are unaffected: real corpus summaries
+already carry the full field set.
 
 ---
 
@@ -1323,6 +1339,15 @@ Revisit when: a real telemetry backend cannot share one timestamp
 across rails at source (then the adapter grows an explicit, tested
 alignment step - still adapter-side, not reader-side).
 
+Amendment (2026-07-07, P2-013 group 4, C-007 resolution 4): the rail-set
+rule is extended to DUPLICATES — at any timestamp on the summed curve,
+each manifest rail must appear exactly once; a duplicate rail row at one
+timestamp (including the single-rail case) is rejected rather than
+summed, since silent double-counting is the same wrong-number failure
+mode as undersumming (audit finding B5). Enforcement stays in the one
+shared trace-validation path consumed by both `summed_curve()` and
+default validation, so all consumers inherit it identically (D-025).
+
 ---
 
 ## D-028: `reduce` verb rewrites `summary_metrics.json` in place
@@ -1421,17 +1446,18 @@ omit-None artifacts (then revisit WITH a hash-migration plan).
 
 ---
 
-## D-030: `validate-bundle` stays structural by default; `--strict` adds re-reduction checks
+## D-030: `validate-bundle` stays structural by default; `--strict` adds raw-evidence checks
 
 - Date: 2026-07-06
 - Status: accepted (from the 2026-07-06 project status review, finding P2)
 - Phase: 2 (matters most at Phase 5 dataset publication)
 
 Context: the independent status review demonstrated that the default
-validator blesses succeeded bundles whose derived metrics no longer
-follow from their raw evidence - an emptied rail manifest and a tampered
-`energy_request_j` both validated clean. Structural checks alone cannot
-gate a published dataset.
+validator blesses succeeded bundles whose analysis artifacts no longer
+follow from their source evidence - an emptied rail manifest, a tampered
+`energy_request_j`, and an unverified powermetrics `power_trace.csv`
+derivation all validated clean. Structural checks alone cannot gate a
+published dataset.
 
 Options considered:
 
@@ -1442,28 +1468,38 @@ Options considered:
    makes the structural verb slower and noisier for its most common use.
 2. A `--strict` opt-in mode: for `status=succeeded` bundles only, (a)
    the measured window must exist, (b) the summed curve must be
-   reducer-consumable (>= 2 in-window samples for a nonzero window), and
-   (c) `summary_metrics.json` must equal a fresh `reduce_bundle` of the
-   raw artifacts (exact-key diff reported). Failed/unsupported bundles
-   pass strict untouched.
+   reducer-consumable (>= 2 in-window samples for a nonzero window), (c)
+   powermetrics `power_trace.csv` rows must equal the adapter's
+   re-derivation from `raw/powermetrics.plist` plus
+   `metadata.device.plist_anchor_offset_s` as parsed analytical values
+   (exact timestamps, watts, source, rail, row count, and order; not
+   byte-exact CSV spelling and not tolerance-based), and (d)
+   `summary_metrics.json` must equal a fresh `reduce_bundle` result
+   (exact-key diff reported). Failed/unsupported bundles pass strict
+   untouched; non-powermetrics bundles skip the powermetrics sub-check.
 
 Decision: option 2. Default semantics are unchanged; strict mode is the
 gate for any "all bundles intended for analysis pass validation" claim -
 Phase 5 dataset publication (Stage 5.2) and Phase 4 aggregation intake
 should run `validate-bundle --strict`.
 
-Considerations: the re-reduction comparison is exact (the reducer is
-deterministic over on-disk artifacts, D-002, and JSON round-trips floats
-exactly), so any drift - tampering, a reducer version change, partial
-rewrites - surfaces as a named key diff. Strict mode lives in `cli.py`,
-not the reader: it composes the reader with the reducer, and the reducer
-already consumes the reader (D-025), so putting it in `bundle_read`
-would create an import cycle.
+Considerations: the raw-to-trace comparison is semantic row equality:
+the powermetrics adapter owns plist timestamp and rail semantics, and
+CSV formatting is incidental. The re-reduction comparison has one
+legacy-additive exception: fresh-only null keys and a missing legacy
+`summary_provenance` block are tolerated (A-19), while all stored values
+and stored extras remain exact claims. Any other drift - tampering, a
+reducer version change, partial rewrites - surfaces as a named key diff.
+Strict mode lives in `cli.py`, not the reader: it composes the reader with the
+powermetrics adapter and reducer, and the reducer already consumes the
+reader (D-025), so putting it in `bundle_read` would create an import
+cycle.
 
 Consequences: `validate_bundle(path, strict=False)` keeps its importable
 signature; CLI gains `--strict`; the reviewer's two reproductions are
-pinned as tests (manifest emptied, summary tampered); Phase 5 Stage 5.2
-should adopt `--strict` for the published sample bundles.
+pinned as tests (manifest emptied, summary tampered), along with the
+powermetrics raw-to-trace gate; Phase 5 Stage 5.2 should adopt
+`--strict` for the published sample bundles.
 
 Revisit when: bundle schema v0.2 lands (composite summaries need their
 own strict semantics), or a reducer version bump makes historical
@@ -1540,3 +1576,133 @@ run report). This is a SECOND provisional model alongside the small
 Qwen2.5-1.5B pick — it does not close D-016 (mid-model/CUDA/GGUF
 criteria still open) but extends the provisional set at user direction;
 mirrored per R-014.
+
+---
+
+## D-032: `phase_energy_j` is gross-only in summary v0.1
+
+- Date: 2026-07-07
+- Status: accepted
+- Phase: 2+
+
+Context: `SummaryMetrics.phase_energy_j` attributes energy to workload
+phase windows (`prefill`, `decode`, and later split phases). The reducer
+also computes idle-subtracted request energy for the measured window, so
+per-phase summaries need an explicit basis before 2M bundles are written.
+C-007 decided that idle-subtracted phase attribution is Phase 4 analysis
+policy, not a v0.1 bundle-summary contract.
+
+Options considered:
+
+1. Store gross phase energy only in `phase_energy_j`.
+2. Store idle-subtracted phase energy in `phase_energy_j`.
+3. Store both gross and idle-subtracted phase maps in summary v0.1.
+
+Decision: option 1. `phase_energy_j` is gross joules only in summary
+schema v0.1. Idle-subtracted phase attribution is derived later by
+Phase 4 analysis policy, with any allocation assumptions stated there.
+
+Considerations: gross phase windows are direct integrations over the
+recorded power curve and do not require choosing how to allocate one idle
+baseline across unequal or nested phase windows. This keeps the bundle
+summary close to evidence while preserving Phase 4 freedom to apply a
+documented attribution policy when answering analysis questions.
+
+Consequences: consumers must not read `phase_energy_j` as an
+idle-subtracted metric. Phase 4 may derive idle-subtracted phase values
+from gross phase energy, idle baseline, and phase durations, but those
+derived values are analysis outputs, not summary v0.1 fields.
+
+Revisit when: a future summary schema version adds explicit per-phase
+idle-subtracted fields with a named allocation policy.
+
+---
+
+## D-033: Prompt-content provenance is recorded per run bundle
+
+- Date: 2026-07-07
+- Status: accepted
+- Phase: 2+
+
+Context: The 2O placement council found that config hashes and token
+counts do not prove realized prompt content. A tokenizer or generator
+revision can produce a different token stream from the same nominal
+profile, which would weaken the 2M corpus before later workload
+enrichment begins. A-11 pinned the pre-2M workload provenance shape.
+
+Options considered:
+
+1. Rely on the normalized config hash and token counts. Con: misses
+   tokenizer/model drift under the same config.
+2. Record a text-only prompt hash. Con: insufficient for token-level
+   identity because tokenization is part of the workload.
+3. Record per-bundle workload provenance with a domain-separated hash of
+   canonical JSON prompt token IDs, supplemental text hash, generator
+   identity, tokenizer identity/revision/class/vocab size, model source
+   and revision, and the output policy actually applied.
+
+Decision: option 3. `metadata.json` gains additive
+`workload_provenance` computed by the runtime adapter and written by the
+controller. The prompt hash domain is
+`joulewise.prompt_token_ids.v1`; campaign sameness is checked by
+cross-bundle hash equality, not inferred from campaign membership.
+
+Considerations: the runtime adapter is the point where text/profile
+inputs become realized generation inputs, so it owns the provenance
+block. The controller only carries and serializes it through
+`RuntimeResult`. The block is per bundle (D-005), so repetitions can be
+audited independently.
+
+Consequences: new mock and MLX bundles record realized prompt-token
+identity, tokenizer/model identity, generator identity, and
+`fixed_budget_exact` output policy details. `run_campaign.py` needs no
+special logic because it shells normal `joulewise run` executions.
+Residual limitation: deleting both `summary_provenance` and
+`metadata.workload_provenance` makes a new bundle indistinguishable from
+a legacy bundle to strict validation.
+
+Revisit when: a new runtime cannot expose token IDs or tokenizer
+identity; that adapter must either add an equivalent audited source or
+record a structured unavailable field before its bundles are admitted to
+analysis.
+
+---
+
+## D-034: Slice 2O owns the workload program after 2M and 3.0.1
+
+- Date: 2026-07-07
+- Status: accepted
+- Phase: 2+
+
+Context: Commit `aa665e1` created Phase 2 Slice 2O for workload program
+placement after the C-007 follow-on council. The slice owns queue tasks
+P2-010 (`affine_mod_ladder_v1`) and P2-012 (`jw_mixed_v1`) as
+post-baseline enrichment, not as pre-2M gates.
+
+Options considered:
+
+1. Put workload/prompt enrichment in Phase 4. Con: Phase 4 should
+   consume workload dimensions and analysis outputs, not construct the
+   workload corpus it analyzes.
+2. Start workload enrichment before 2M. Con: delays and contaminates the
+   homogeneous baseline milestone.
+3. Create a Phase 2 post-baseline slice, 2O, gated after 2M strict-valid
+   bundles, P2-013/P2-014, and the Stage 3.0.1 verdict.
+
+Decision: option 3. Slice 2O owns the workload program P2-010 through
+P2-012 after 2M and 3.0.1. Phase 4 consumes workload dimensions and
+analysis-ready annotations but does not own workload construction.
+
+Considerations: the 2O plan maps prompt/workload types to metrics and
+research questions while keeping correctness quarantined as annotation,
+not an intelligence-per-joule claim. This sequencing protects the 2M
+baseline and keeps later workload expansion additive.
+
+Consequences: P2-010 and P2-012 remain queued behind the 2M corpus and
+the Stage 3.0.1 verdict. P2-014(e) is the pre-2M obligation: prompt
+content provenance must exist before the campaign so later sameness
+claims are auditable.
+
+Revisit when: 2M is skipped or materially re-scoped; then 2O gates and
+research-question mapping must be re-approved rather than silently
+advanced.

@@ -62,7 +62,6 @@ class BundleAuditCase(unittest.TestCase):
 
 class BundleValidationBugPins(BundleAuditCase):
     # B2/S5: BundleReader.problems() never recomputes config.json sha256 against metadata.config_sha256.
-    @unittest.expectedFailure
     def test_validate_bundle_rejects_config_sha256_mismatch(self) -> None:
         bundle = self.make_complete_bundle("audit-sha")
         config = json.loads((bundle / "config.json").read_text())
@@ -72,8 +71,16 @@ class BundleValidationBugPins(BundleAuditCase):
         problems = validate_bundle(bundle)
         self.assertTrue(any("config_sha256" in problem for problem in problems), problems)
 
+    def test_validate_bundle_requires_metadata_config_sha256(self) -> None:
+        bundle = self.make_complete_bundle("audit-sha-missing")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata.pop("config_sha256")
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+
+        problems = validate_bundle(bundle)
+        self.assertIn("metadata.config_sha256 is missing", problems)
+
     # B1/rank 7: summary validation accepts a status-only succeeded summary with no metrics.
-    @unittest.expectedFailure
     def test_status_only_succeeded_summary_is_not_complete_or_valid(self) -> None:
         bundle = self.make_complete_bundle("audit-status-only")
         (bundle / "summary_metrics.json").write_text('{"status": "succeeded"}\n')
@@ -82,8 +89,53 @@ class BundleValidationBugPins(BundleAuditCase):
         problems = validate_bundle(bundle)
         self.assertTrue(any("energy_request_j" in problem for problem in problems), problems)
 
+    def test_is_complete_false_for_status_only_succeeded_summary(self) -> None:
+        bundle = self.make_complete_bundle("audit-status-only-complete")
+        (bundle / "summary_metrics.json").write_text('{"status": "succeeded"}\n')
+
+        self.assertFalse(BundleReader(bundle).is_complete())
+
+    def test_summary_validator_consistency_for_completion(self) -> None:
+        cases = [
+            ("valid-writer-success", None, True),
+            ("status-only-success", {"status": "succeeded"}, False),
+            (
+                "nullable-token-success",
+                {
+                    **json.loads(
+                        (self.make_complete_bundle("audit-summary-template") / "summary_metrics.json")
+                        .read_text()
+                    ),
+                    "energy_token_j": None,
+                    "energy_output_token_j": None,
+                    "idle_subtracted_energy_j": None,
+                },
+                True,
+            ),
+            (
+                "minimal-failed",
+                {"status": "failed", "failure_reason": "unknown_error"},
+                True,
+            ),
+        ]
+        for label, summary, should_be_complete in cases:
+            bundle = self.make_complete_bundle(f"audit-summary-{label}")
+            if summary is not None:
+                (bundle / "summary_metrics.json").write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                )
+            reader = BundleReader(bundle)
+            summary_problems = [
+                problem
+                for problem in validate_bundle(bundle)
+                if problem.startswith("summary ")
+                or problem == "summary_metrics.json is not a JSON object"
+            ]
+            with self.subTest(label=label):
+                self.assertEqual(reader.is_complete(), should_be_complete)
+                self.assertEqual(summary_problems == [], should_be_complete, summary_problems)
+
     # B3: default bundle validation parses metadata.json but never requires it to be an object.
-    @unittest.expectedFailure
     def test_validate_bundle_rejects_metadata_non_object(self) -> None:
         bundle = self.make_complete_bundle("audit-metadata-list")
         (bundle / "metadata.json").write_text("[]\n")
@@ -92,7 +144,6 @@ class BundleValidationBugPins(BundleAuditCase):
         self.assertIn("metadata.json is not a JSON object", problems)
 
     # B4/ranks 2-3: power_trace.csv NaN/Infinity rows parse as floats and are not rejected.
-    @unittest.expectedFailure
     def test_summed_curve_rejects_non_finite_trace_numbers(self) -> None:
         bundle = self.make_complete_bundle("audit-nan-curve")
         (bundle / "power_trace.csv").write_text(
@@ -105,7 +156,6 @@ class BundleValidationBugPins(BundleAuditCase):
             BundleReader(bundle).summed_curve()
 
     # B4/ranks 2-3: validate-bundle only checks the power trace header, not row values.
-    @unittest.expectedFailure
     def test_validate_bundle_rejects_non_finite_trace_rows(self) -> None:
         bundle = self.make_complete_bundle("audit-nan-validate")
         (bundle / "power_trace.csv").write_text(
@@ -118,7 +168,6 @@ class BundleValidationBugPins(BundleAuditCase):
         self.assertTrue(any("power_trace.csv row 2" in problem for problem in problems), problems)
 
     # B5: duplicate rail rows at one timestamp are silently summed, double-counting energy.
-    @unittest.expectedFailure
     def test_summed_curve_rejects_duplicate_rail_at_timestamp(self) -> None:
         bundle = self.make_complete_bundle("audit-duplicate-rail")
         (bundle / "power_trace.csv").write_text(
@@ -131,22 +180,44 @@ class BundleValidationBugPins(BundleAuditCase):
         with self.assertRaisesRegex(BundleReadError, "duplicate"):
             BundleReader(bundle).summed_curve()
 
+    def test_validate_bundle_rejects_duplicate_rail_at_timestamp(self) -> None:
+        bundle = self.make_complete_bundle("audit-duplicate-rail-validate")
+        (bundle / "power_trace.csv").write_text(
+            "timestamp_s,power_w,source,rail\n"
+            "0.0,7.0,mock,mock\n"
+            "0.0,7.0,mock,mock\n"
+            "1.0,7.0,mock,mock\n"
+        )
+
+        problems = validate_bundle(bundle)
+        self.assertTrue(any("duplicate rail row" in problem for problem in problems), problems)
+
+    def test_single_rail_duplicate_timestamp_is_rejected(self) -> None:
+        bundle = self.make_complete_bundle("audit-single-rail-duplicate")
+        (bundle / "power_trace.csv").write_text(
+            "timestamp_s,power_w,source,rail\n"
+            "0.0,7.0,mock,mock\n"
+            "0.0,8.0,mock,mock\n"
+        )
+
+        with self.assertRaisesRegex(BundleReadError, "duplicate"):
+            BundleReader(bundle).summed_curve()
+        problems = validate_bundle(bundle)
+        self.assertTrue(any("duplicate rail row" in problem for problem in problems), problems)
+
     # Rank 1: write_output() accepts traversal out of outputs/.
-    @unittest.expectedFailure
     def test_write_output_rejects_path_traversal_name(self) -> None:
         writer = RunBundleWriter.create(self.runs_root, load_config("audit-output-traversal"), self.clock)
         with self.assertRaisesRegex(BundleError, "plain file name"):
             writer.write_output("../escape.txt", "nope")
 
     # Rank 1: log_path() accepts traversal out of logs/.
-    @unittest.expectedFailure
     def test_log_path_rejects_path_traversal_name(self) -> None:
         writer = RunBundleWriter.create(self.runs_root, load_config("audit-log-traversal"), self.clock)
         with self.assertRaisesRegex(BundleError, "plain file name"):
             writer.log_path("../escape.log")
 
     # Rank 11: rail_manifest() coerces non-string rails with str() instead of rejecting metadata.
-    @unittest.expectedFailure
     def test_rail_manifest_rejects_non_string_entries(self) -> None:
         bundle = self.make_complete_bundle("audit-rail-manifest")
         metadata = json.loads((bundle / "metadata.json").read_text())
@@ -157,7 +228,6 @@ class BundleValidationBugPins(BundleAuditCase):
             BundleReader(bundle).rail_manifest()
 
     # Rank 12: strict events() accepts missing/extra keys that validate-bundle rejects.
-    @unittest.expectedFailure
     def test_strict_events_rejects_non_contract_key_set(self) -> None:
         bundle = self.make_complete_bundle("audit-event-keys")
         records = [json.loads(line) for line in (bundle / "events.jsonl").read_text().splitlines()]
@@ -176,13 +246,15 @@ class BundleValidationBugPins(BundleAuditCase):
         self.assertRegex(writer.run_id, r"^[a-z0-9_-]+$")
 
     # B8: write_raw() can leave a partial raw artifact that blocks retry.
-    @unittest.expectedFailure
     def test_write_raw_partial_failure_does_not_poison_retry(self) -> None:
         writer = RunBundleWriter.create(self.runs_root, load_config("audit-raw-retry"), self.clock)
         original_write_bytes = Path.write_bytes
+        failed_once = False
 
         def flaky_write_bytes(path: Path, data: bytes):
-            if path.name == "capture.bin":
+            nonlocal failed_once
+            if path.parent == writer.path / "raw" and path.name.startswith(".capture.bin.") and not failed_once:
+                failed_once = True
                 original_write_bytes(path, data[:2])
                 raise OSError("simulated crash during raw write")
             return original_write_bytes(path, data)

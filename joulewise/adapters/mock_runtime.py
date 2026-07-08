@@ -27,6 +27,7 @@ import json
 from joulewise import __version__
 from joulewise.clock import Clock
 from joulewise.interfaces import AdapterResult, RunContext, RuntimeEvent, RuntimeResult
+from joulewise.provenance import output_policy, prompt_provenance
 from joulewise.schemas import BenchmarkConfig, FailureReason
 
 #: model.name value that triggers the did_not_fit fault injection (see module
@@ -80,6 +81,7 @@ class MockRuntimeAdapter:
         self, config: BenchmarkConfig, context: RunContext | None = None
     ) -> RuntimeResult:
         prompt_tokens = self._prompt_tokens(config)
+        prompt_token_ids = self._prompt_token_ids(prompt_tokens)
         output_tokens = config.workload_profile.output_tokens or DEFAULT_OUTPUT_TOKENS
         clock = self._clock
 
@@ -120,6 +122,33 @@ class MockRuntimeAdapter:
             },
             token_count=prompt_tokens + output_tokens,
             output_token_count=output_tokens,
+            workload_provenance={
+                "prompt": prompt_provenance(
+                    prompt_token_ids,
+                    text=config.workload_profile.prompt_text,
+                ),
+                "generator": {
+                    "name": "mock_runtime",
+                    "version": __version__,
+                },
+                "tokenizer": {
+                    "backend": "mock",
+                    "identifier": "joulewise.mock_tokenizer.v1",
+                    "revision": __version__,
+                    "class": "MockRuntimeAdapter",
+                    "vocab_size": None,
+                },
+                "model": {
+                    "source": config.model.source,
+                    "revision": config.model.revision,
+                },
+                "output_policy": output_policy(
+                    "fixed_budget_exact",
+                    requested_tokens=output_tokens,
+                    emitted_tokens=output_tokens,
+                    stop_condition="requested_tokens_emitted",
+                ),
+            },
         )
 
     def cleanup(
@@ -143,3 +172,7 @@ class MockRuntimeAdapter:
         if profile.prompt_text:
             return len(profile.prompt_text.split())
         return DEFAULT_PROMPT_TOKENS
+
+    @staticmethod
+    def _prompt_token_ids(prompt_tokens: int) -> list[int]:
+        return list(range(1, prompt_tokens + 1))

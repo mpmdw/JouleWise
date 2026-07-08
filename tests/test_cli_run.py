@@ -12,16 +12,25 @@ from __future__ import annotations
 import io
 import json
 import re
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
+from joulewise.adapters.powermetrics import RAW_SAMPLES_NAME
+from joulewise.clock import FakeClock
 from joulewise.cli import main, validate_bundle
+from joulewise.controller import run_benchmark
+from joulewise.schemas import BenchmarkConfig, RunStatus
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
+POWERMETRICS_FIXTURE = (
+    REPO_ROOT / "tests" / "fixtures" / "powermetrics_sample.plist"
+)
 
 #: The single machine-greppable success line shape the contract pins.
 SUCCEEDED_LINE = re.compile(r"^bundle: (\S+) status=succeeded$")
@@ -34,6 +43,10 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
     with redirect_stdout(out), redirect_stderr(err):
         exit_code = main(argv)
     return exit_code, out.getvalue(), err.getvalue()
+
+
+def _completed(command: list[str]) -> subprocess.CompletedProcess:
+    return subprocess.CompletedProcess(command, 0, stdout=b"", stderr=b"")
 
 
 class CliRunTestCase(unittest.TestCase):
@@ -409,6 +422,61 @@ class StrictValidateTests(CliRunTestCase):
         self.assertEqual(exit_code, 2)
         self.assertIn("invalid: strict:", out)
 
+    def test_legacy_summary_missing_additive_null_keys_passes_strict(self) -> None:
+        bundle = self.make_bundle("strict-legacy-null-additive")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["idle_baseline"]["gpu_freq_hz_mean"]
+        del summary["idle_baseline"]["gpu_idle_ratio_mean"]
+        del summary["idle_baseline"]["gpu_idle_ratio_min"]
+        del summary["idle_baseline"]["idle_window_suspect"]
+        del summary["measurement_quality"]["idle_window_suspect"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_legacy_summary_missing_summary_provenance_passes_strict(self) -> None:
+        bundle = self.make_bundle("strict-legacy-summary-provenance")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["summary_provenance"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_stored_value_drift_still_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-stored-drift")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["idle_baseline"]["gpu_freq_hz_mean"] = 123.0
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        problems = validate_bundle(bundle, strict=True)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("idle_baseline.gpu_freq_hz_mean", problems[0])
+
+    def test_non_null_fresh_value_missing_from_stored_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-missing-non-null")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["idle_baseline"]["power_w_mean"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        problems = validate_bundle(bundle, strict=True)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("idle_baseline.power_w_mean", problems[0])
+
+    def test_stored_extra_key_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-stored-extra")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["stored_extra"] = None
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        problems = validate_bundle(bundle, strict=True)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("stored_extra", problems[0])
+
     def test_strict_adds_nothing_for_non_succeeded_bundles(self) -> None:
         # Failed/unsupported summaries are controller-written from partial
         # evidence; strict only judges claims of success.
@@ -417,6 +485,276 @@ class StrictValidateTests(CliRunTestCase):
         )
         self.assertEqual(exit_code, 3)
         bundle = self.bundle_path_from_line(out.splitlines()[0])
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def _make_powermetrics_bundle(self, run_id: str) -> Path:
+        fixture = POWERMETRICS_FIXTURE.read_bytes()
+        config_data = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+        config_data["run_id"] = run_id
+        config_data["hardware_target"]["telemetry_backend"] = "powermetrics"
+        config_data["workload_profile"]["output_tokens"] = 300
+        config_data["sampling"] = {"power_hz": 2.0, "idle_seconds": 5.0}
+        config = BenchmarkConfig.from_mapping(config_data)
+
+        def fake_run(command, **kwargs):
+            if "-o" in command:
+                Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return _completed(command)
+
+        class FakePopen:
+            def __init__(self, command, **kwargs):
+                self.path = Path(command[command.index("-o") + 1])
+                self.path.write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def kill(self):
+                self.returncode = -9
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        with (
+            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+            patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+        ):
+            bundle, summary = run_benchmark(
+                config,
+                self.runs_dir,
+                FakeClock(start=1_783_394_100.0),
+            )
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertTrue((bundle / "raw" / RAW_SAMPLES_NAME).is_file())
+        return bundle
+
+    def _trace_rows(self, bundle: Path) -> list[list[str]]:
+        return [
+            line.split(",")
+            for line in (bundle / "power_trace.csv").read_text().splitlines()
+        ]
+
+    def _tamper_gpu_power_row(self, bundle: Path) -> None:
+        rows = self._trace_rows(bundle)
+        self.assertEqual(rows[2][3], "gpu_power")
+        rows[2][1] = str(float(rows[2][1]) + 1.0)
+        (bundle / "power_trace.csv").write_text(
+            "".join(",".join(row) + "\n" for row in rows)
+        )
+
+    def test_powermetrics_raw_to_trace_matching_bundle_passes_strict(self) -> None:
+        bundle = self._make_powermetrics_bundle("strict-pm-clean")
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+        code, out, err = _run(["validate-bundle", "--strict", str(bundle)])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(out.strip(), f"valid bundle: {bundle}")
+
+    def test_powermetrics_raw_to_trace_value_tamper_fails_with_row_and_rail(self) -> None:
+        bundle = self._make_powermetrics_bundle("strict-pm-tamper")
+        self._tamper_gpu_power_row(bundle)
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(any("strict: raw-to-trace:" in p for p in problems), problems)
+        problem = next(p for p in problems if "strict: raw-to-trace:" in p)
+        self.assertIn("row 3", problem)
+        self.assertIn("gpu_power", problem)
+        self.assertIn("power_w", problem)
+
+    def test_raw_to_trace_ignores_tampered_metadata_adapter_name(self) -> None:
+        bundle = self._make_powermetrics_bundle("strict-pm-metadata-tampered")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["adapters"]["telemetry"]["name"] = "mock"
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+        self._tamper_gpu_power_row(bundle)
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(any("strict: raw-to-trace:" in p for p in problems), problems)
+
+    def test_raw_to_trace_runs_without_metadata_adapters_block(self) -> None:
+        bundle = self._make_powermetrics_bundle("strict-pm-no-adapters")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata.pop("adapters")
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+        self._tamper_gpu_power_row(bundle)
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(any("strict: raw-to-trace:" in p for p in problems), problems)
+
+    def test_config_powermetrics_missing_raw_plist_fails_strict(self) -> None:
+        bundle = self._make_powermetrics_bundle("strict-pm-missing-raw")
+        (bundle / "raw" / RAW_SAMPLES_NAME).unlink()
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any(f"missing raw/{RAW_SAMPLES_NAME}" in p for p in problems),
+            problems,
+        )
+
+    def test_powermetrics_raw_to_trace_formatting_only_variant_passes_strict(self) -> None:
+        bundle = self._make_powermetrics_bundle("strict-pm-format")
+        rows = self._trace_rows(bundle)
+        for row in rows[1:]:
+            row[0] = row[0] + "0"
+            row[1] = row[1] + "0"
+        (bundle / "power_trace.csv").write_text(
+            "".join(",".join(row) + "\n" for row in rows)
+        )
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_raw_to_trace_subcheck_skips_non_powermetrics_bundle(self) -> None:
+        bundle = self.make_bundle("strict-non-pm-skip")
+        self.assertFalse((bundle / "raw" / RAW_SAMPLES_NAME).exists())
+        rows = self._trace_rows(bundle)
+        rows[1][1] = str(float(rows[1][1]) + 1.0)
+        (bundle / "power_trace.csv").write_text(
+            "".join(",".join(row) + "\n" for row in rows)
+        )
+        problems = validate_bundle(bundle, strict=True)
+        self.assertFalse(any("raw-to-trace" in p for p in problems), problems)
+
+    def test_new_summary_missing_workload_provenance_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-missing-workload-provenance")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata.pop("workload_provenance")
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("metadata.workload_provenance" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_wrong_prompt_hash_domain_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-wrong-prompt-domain")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["prompt"]["token_hash_domain"] = (
+            "joulewise.prompt_token_ids.v2"
+        )
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("prompt.token_hash_domain" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_missing_generator_block_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-missing-generator")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"].pop("generator")
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("workload_provenance.generator" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_malformed_prompt_hash_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-malformed-prompt-hash")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["prompt"]["token_ids_sha256"] = "A" * 64
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("prompt.token_ids_sha256" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_missing_tokenizer_revision_key_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-missing-tokenizer-revision")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        del metadata["workload_provenance"]["tokenizer"]["revision"]
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("tokenizer" in p and "revision" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_missing_tokenizer_vocab_size_key_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-missing-tokenizer-vocab-size")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        del metadata["workload_provenance"]["tokenizer"]["vocab_size"]
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("tokenizer" in p and "vocab_size" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_null_tokenizer_vocab_size_passes_strict(self) -> None:
+        bundle = self.make_bundle("strict-null-tokenizer-vocab-size")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["tokenizer"]["vocab_size"] = None
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_new_summary_missing_prompt_realized_token_count_key_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-missing-prompt-realized-count")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        del metadata["workload_provenance"]["prompt"]["realized_token_count"]
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("prompt" in p and "realized_token_count" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_non_positive_prompt_realized_token_count_fails_strict(
+        self,
+    ) -> None:
+        bundle = self.make_bundle("strict-bad-prompt-realized-count")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["prompt"]["realized_token_count"] = 0
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("prompt.realized_token_count" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_non_positive_tokenizer_vocab_size_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-bad-tokenizer-vocab-size")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["tokenizer"]["vocab_size"] = 0
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("tokenizer.vocab_size" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_malformed_prompt_text_hash_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-malformed-prompt-text-hash")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["prompt"]["text_sha256"] = "not-a-sha"
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("prompt.text_sha256" in p for p in problems),
+            problems,
+        )
+
+    def test_new_summary_null_present_model_source_passes_strict(self) -> None:
+        bundle = self.make_bundle("strict-null-model-source")
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["workload_provenance"]["model"]["source"] = None
+        (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
+
         self.assertEqual(validate_bundle(bundle, strict=True), [])
 
 

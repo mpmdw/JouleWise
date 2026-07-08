@@ -165,6 +165,22 @@ class RectangleTests(ReduceTestCase):
         self.assertIsNotNone(summary.idle_baseline)
         self.assertEqual(summary.idle_baseline.telemetry_backend, TelemetryBackend.MOCK)
 
+    def test_idle_baseline_sample_count_rejects_non_integer_values(self) -> None:
+        cases = [1.9, "3"]
+        for value in cases:
+            with self.subTest(value=value):
+                builder = self.builder()
+                start_s, end_s = 100.0, 110.0
+                builder.measured_window(start_s, end_s)
+                builder.write_trace(constant_samples(start_s, end_s, hz=1.0, power_w=7.5))
+                idle = {**DEFAULT_IDLE, "sample_count": value}
+                builder.write_metadata(rail_manifest=["mock"], idle=idle)
+
+                summary = reduce_module.reduce_bundle(builder.path)
+
+                self.assertEqual(summary.status, RunStatus.FAILED)
+                self.assertIn("idle_baseline.sample_count must be an integer", summary.failure_message)
+
 
 class RampTests(ReduceTestCase):
     def test_linear_ramp_exact_trapezoid(self) -> None:

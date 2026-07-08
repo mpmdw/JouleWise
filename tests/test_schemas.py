@@ -10,6 +10,9 @@ from joulewise.schemas import (
     FailureReason,
     RunStatus,
     SchemaError,
+    SUMMARY_REDUCER_ID,
+    SUMMARY_REDUCER_VERSION,
+    SUMMARY_SCHEMA_VERSION,
     SummaryMetrics,
 )
 
@@ -118,6 +121,21 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertEqual(idle_props["idle_window_suspect"], {"type": ["boolean", "null"]})
         self.assertEqual(quality_schema["required"], ["requested_sampling_hz"])
         self.assertEqual(quality_props["idle_window_suspect"], {"type": ["boolean", "null"]})
+
+    def test_summary_metrics_emit_summary_provenance(self) -> None:
+        payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()
+        self.assertEqual(
+            payload["summary_provenance"],
+            {
+                "summary_schema_version": SUMMARY_SCHEMA_VERSION,
+                "reducer_id": SUMMARY_REDUCER_ID,
+                "reducer_version": SUMMARY_REDUCER_VERSION,
+                "config_schema_version": "0.1",
+            },
+        )
+        schema = SummaryMetrics.json_schema()
+        self.assertIn("summary_provenance", schema["properties"])
+        self.assertNotIn("summary_provenance", schema["required"])
 
 
 def _resolve_ref(schema: dict[str, Any], node: dict[str, Any]) -> dict[str, Any]:

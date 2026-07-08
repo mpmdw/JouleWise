@@ -12,6 +12,8 @@ from __future__ import annotations
 import time
 from typing import Any, Protocol, runtime_checkable
 
+from joulewise.validation import is_finite_number
+
 
 @runtime_checkable
 class Clock(Protocol):
@@ -56,6 +58,8 @@ class FakeClock:
         return self._now
 
     def sleep(self, seconds: float) -> None:
+        if not is_finite_number(seconds):
+            raise ValueError("sleep duration must be a finite number")
         if seconds < 0:
             raise ValueError("cannot sleep a negative duration")
         self._now += seconds

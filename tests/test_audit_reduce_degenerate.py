@@ -62,7 +62,6 @@ class ReduceAuditCase(unittest.TestCase):
 
 class ReduceDegenerateBugPins(ReduceAuditCase):
     # R2: _idle_baseline(metadata) is called outside the structured-failure try.
-    @unittest.expectedFailure
     def test_malformed_idle_baseline_is_structured_failure(self) -> None:
         writer = self.make_writer()
         self.add_window(writer, 0.0, 2.0)
@@ -82,7 +81,6 @@ class ReduceDegenerateBugPins(ReduceAuditCase):
         self.assertIn("idle_baseline", summary.failure_message or "")
 
     # R3: idle_baseline.power_w_mean=NaN yields a succeeded summary with NaN metrics.
-    @unittest.expectedFailure
     def test_nan_idle_baseline_fails_instead_of_nan_success(self) -> None:
         writer = self.make_writer()
         self.add_window(writer, 0.0, 2.0)
@@ -100,7 +98,6 @@ class ReduceDegenerateBugPins(ReduceAuditCase):
         self.assertFalse(math.isnan(summary.energy_request_j or 0.0))
 
     # R4: in-window power_trace NaN reduces to succeeded with NaN gross energy.
-    @unittest.expectedFailure
     def test_nan_power_trace_fails_instead_of_nan_success(self) -> None:
         writer = self.make_writer()
         self.add_window(writer, 0.0, 2.0)
@@ -118,7 +115,6 @@ class ReduceDegenerateBugPins(ReduceAuditCase):
         self.assertFalse(math.isnan(summary.gross_energy_j or 0.0))
 
     # R5: nonnumeric thermal metadata raises raw ValueError while building quality.
-    @unittest.expectedFailure
     def test_bad_thermal_metadata_is_structured_failure(self) -> None:
         writer = self.make_writer()
         self.add_window(writer, 0.0, 2.0)

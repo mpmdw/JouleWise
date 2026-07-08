@@ -14,10 +14,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import sys
 from pathlib import Path
 from typing import Any
 
+from joulewise.adapters.powermetrics import (
+    RAW_SAMPLES_NAME,
+    samples_from_raw_powermetrics,
+)
 from joulewise.bundle import BundleError
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.clock import Clock, FakeClock, SystemClock
@@ -40,12 +45,18 @@ from joulewise.schemas import (
     SummaryMetrics,
     TelemetryBackend,
 )
+from joulewise.validation import finite_float
+
+_PROMPT_TOKEN_IDS_HASH_DOMAIN = "joulewise.prompt_token_ids.v1"
 
 
 def _load_config(path: Path) -> dict[str, Any]:
     if path.suffix.lower() != ".json":
         raise SchemaError("Phase 1 CLI supports JSON configs; YAML parsing is planned for Phase 2")
-    return json.loads(path.read_text())
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except UnicodeDecodeError as exc:
+        raise SchemaError(f"config is not valid UTF-8: {path}") from exc
 
 
 def _cmd_validate_config(args: argparse.Namespace) -> int:
@@ -156,7 +167,7 @@ def _select_clock(config: BenchmarkConfig) -> Clock:
 
 def _bundle_line(bundle_path: Path, summary: SummaryMetrics) -> str:
     """The single machine-greppable per-bundle result line (D-011 status map)."""
-    line = f"bundle: {bundle_path} status={summary.status.value}"
+    line = f"bundle: {shlex.quote(str(bundle_path))} status={summary.status.value}"
     if summary.failure_reason is not None:
         line += f" reason={summary.failure_reason.value}"
     return line
@@ -253,18 +264,250 @@ def _strict_problems(reader: BundleReader) -> list[str]:
                 "measured window; a succeeded summary needs a "
                 "reducer-consumable curve"
             )
+    problems.extend(_strict_workload_provenance_problems(reader, summary))
+    problems.extend(_strict_raw_to_trace_problems(reader))
     fresh = reduce_bundle(reader.path).to_dict()
-    if fresh != summary:
-        differing = sorted(
-            key
-            for key in set(fresh) | set(summary)
-            if fresh.get(key) != summary.get(key)
-        )
+    differing = _strict_summary_differences(fresh, summary)
+    if differing:
         problems.append(
             "strict: summary_metrics.json does not match a fresh re-reduction "
             f"of the raw artifacts (differing keys: {', '.join(differing)})"
         )
     return problems
+
+
+def _strict_summary_differences(fresh: Any, stored: Any, path: str = "") -> list[str]:
+    """Compare fresh vs stored summaries with legacy-additive null tolerance.
+
+    A freshly emitted key that is absent from a legacy stored summary is
+    tolerated only when the fresh value is ``None``. Stored keys, including
+    stored extras, remain exact claims and must match the fresh reduction.
+    """
+    if isinstance(fresh, dict) and isinstance(stored, dict):
+        differences: list[str] = []
+        for key in sorted(set(fresh) | set(stored)):
+            child = f"{path}.{key}" if path else str(key)
+            if key not in stored:
+                if child == "summary_provenance":
+                    continue
+                if fresh[key] is not None:
+                    differences.append(child)
+                continue
+            if key not in fresh:
+                differences.append(child)
+                continue
+            differences.extend(_strict_summary_differences(fresh[key], stored[key], child))
+        return differences
+    if fresh != stored:
+        return [path or "<summary>"]
+    return []
+
+
+def _strict_workload_provenance_problems(
+    reader: BundleReader, summary: dict[str, Any]
+) -> list[str]:
+    if not isinstance(summary.get("summary_provenance"), dict):
+        return []
+    metadata = reader.raw_metadata()
+    if not isinstance(metadata, dict):
+        return ["strict: metadata.workload_provenance is missing"]
+    workload = metadata.get("workload_provenance")
+    if not isinstance(workload, dict):
+        return ["strict: metadata.workload_provenance is missing or not an object"]
+
+    problems: list[str] = []
+    prompt = workload.get("prompt")
+    if not isinstance(prompt, dict):
+        problems.append("strict: metadata.workload_provenance.prompt is missing or not an object")
+    else:
+        missing = [
+            key
+            for key in (
+                "realized_token_count",
+                "token_hash_domain",
+                "token_ids_sha256",
+                "text_sha256",
+            )
+            if key not in prompt
+        ]
+        if missing:
+            problems.append(
+                "strict: metadata.workload_provenance.prompt is missing "
+                f"required key(s): {', '.join(missing)}"
+            )
+        realized_token_count = prompt.get("realized_token_count")
+        if realized_token_count is not None and not _is_positive_int(
+            realized_token_count
+        ):
+            problems.append(
+                "strict: metadata.workload_provenance.prompt.realized_token_count "
+                "is not null or a positive integer"
+            )
+        token_hash = prompt.get("token_ids_sha256")
+        if not _is_sha256_hex(token_hash):
+            problems.append(
+                "strict: metadata.workload_provenance.prompt.token_ids_sha256 "
+                "is missing or not a lowercase SHA-256 hex string"
+            )
+        domain = prompt.get("token_hash_domain")
+        if domain != _PROMPT_TOKEN_IDS_HASH_DOMAIN:
+            problems.append(
+                "strict: metadata.workload_provenance.prompt.token_hash_domain "
+                f"is not {_PROMPT_TOKEN_IDS_HASH_DOMAIN!r}"
+            )
+        text_hash = prompt.get("text_sha256")
+        if text_hash is not None and not _is_sha256_hex(text_hash):
+            problems.append(
+                "strict: metadata.workload_provenance.prompt.text_sha256 "
+                "is not null or a lowercase SHA-256 hex string"
+            )
+    problems.extend(
+        _strict_required_object_keys(
+            workload,
+            "generator",
+            ("name", "version"),
+        )
+    )
+    problems.extend(
+        _strict_required_object_keys(
+            workload,
+            "tokenizer",
+            ("backend", "identifier", "revision", "class", "vocab_size"),
+        )
+    )
+    tokenizer = workload.get("tokenizer")
+    if isinstance(tokenizer, dict):
+        vocab_size = tokenizer.get("vocab_size")
+        if vocab_size is not None and not _is_positive_int(vocab_size):
+            problems.append(
+                "strict: metadata.workload_provenance.tokenizer.vocab_size "
+                "is not null or a positive integer"
+            )
+    problems.extend(
+        _strict_required_object_keys(
+            workload,
+            "model",
+            ("source", "revision"),
+        )
+    )
+    problems.extend(
+        _strict_required_object_keys(
+            workload,
+            "output_policy",
+            ("name", "requested_tokens", "emitted_tokens", "stop_condition"),
+        )
+    )
+    return problems
+
+
+def _strict_required_object_keys(
+    workload: dict[str, Any], block_name: str, required_keys: tuple[str, ...]
+) -> list[str]:
+    block = workload.get(block_name)
+    path = f"metadata.workload_provenance.{block_name}"
+    if not isinstance(block, dict):
+        return [f"strict: {path} is missing or not an object"]
+    missing = [key for key in required_keys if key not in block]
+    if not missing:
+        return []
+    return [
+        f"strict: {path} is missing required key(s): {', '.join(missing)}"
+    ]
+
+
+def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
+    raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
+    telemetry_backend = _validated_config_telemetry_backend(reader)
+    if telemetry_backend != TelemetryBackend.POWERMETRICS and not raw_path.is_file():
+        return []
+    if not raw_path.is_file():
+        return [f"strict: raw-to-trace: missing raw/{RAW_SAMPLES_NAME}"]
+    metadata = reader.raw_metadata()
+    if not isinstance(metadata, dict):
+        return ["strict: raw-to-trace: metadata.json is missing or invalid"]
+    device = metadata.get("device")
+    if not isinstance(device, dict):
+        return ["strict: raw-to-trace: metadata.device is missing or not an object"]
+    try:
+        anchor_offset_s = finite_float(
+            device.get("plist_anchor_offset_s"),
+            "metadata.device.plist_anchor_offset_s",
+        )
+    except ValueError as exc:
+        return [f"strict: raw-to-trace: {exc}"]
+    try:
+        expected = samples_from_raw_powermetrics(
+            raw_path.read_bytes(),
+            plist_anchor_offset_s=anchor_offset_s,
+        )
+    except (OSError, ValueError) as exc:
+        return [f"strict: raw-to-trace: cannot derive raw/{RAW_SAMPLES_NAME}: {exc}"]
+    try:
+        rows = reader.trace_rows()
+    except BundleReadError as exc:
+        return [f"strict: raw-to-trace: {exc}"]
+    if len(rows) != len(expected):
+        return [
+            "strict: raw-to-trace: power_trace.csv row count "
+            f"{len(rows)} does not match raw-derived {len(expected)}"
+        ]
+    for index, (row, sample) in enumerate(zip(rows, expected), start=2):
+        rail = row.get("rail") or ""
+        try:
+            timestamp_s = finite_float(
+                row.get("timestamp_s"),
+                f"power_trace.csv row {index} timestamp_s",
+            )
+            power_w = finite_float(
+                row.get("power_w"),
+                f"power_trace.csv row {index} power_w",
+            )
+        except ValueError as exc:
+            return [f"strict: raw-to-trace: {exc}"]
+        source = row.get("source") or ""
+        expected_rail = sample.rail or ""
+        if timestamp_s != sample.timestamp_s:
+            return [
+                "strict: raw-to-trace: power_trace.csv row "
+                f"{index} rail {rail!r} timestamp_s {timestamp_s!r} "
+                f"does not match raw-derived {sample.timestamp_s!r}"
+            ]
+        if power_w != sample.power_w:
+            return [
+                "strict: raw-to-trace: power_trace.csv row "
+                f"{index} rail {rail!r} power_w {power_w!r} "
+                f"does not match raw-derived {sample.power_w!r}"
+            ]
+        if source != sample.source:
+            return [
+                "strict: raw-to-trace: power_trace.csv row "
+                f"{index} rail {rail!r} source {source!r} "
+                f"does not match raw-derived {sample.source!r}"
+            ]
+        if rail != expected_rail:
+            return [
+                "strict: raw-to-trace: power_trace.csv row "
+                f"{index} rail {rail!r} does not match raw-derived "
+                f"{expected_rail!r}"
+            ]
+    return []
+
+
+def _validated_config_telemetry_backend(reader: BundleReader) -> TelemetryBackend | None:
+    try:
+        return reader.config().hardware_target.telemetry_backend
+    except BundleReadError:
+        return None
+
+
+def _is_sha256_hex(value: Any) -> bool:
+    if not isinstance(value, str) or len(value) != 64:
+        return False
+    return all(char in "0123456789abcdef" for char in value)
+
+
+def _is_positive_int(value: Any) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
 def _cmd_validate_bundle(args: argparse.Namespace) -> int:

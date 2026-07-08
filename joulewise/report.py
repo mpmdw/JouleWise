@@ -336,7 +336,7 @@ def _flatten(value: Any, prefix: str = "") -> list[tuple[str, str]]:
             pairs.extend(_flatten(item, f"{prefix}[{index}]"))
     else:
         pairs.append((prefix, "" if value is None else str(value)))
-    return pairs
+    return sorted(pairs, key=lambda pair: pair[0])
 
 
 def _key_value_table(pairs: list[tuple[str, str]]) -> str:
