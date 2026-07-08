@@ -445,6 +445,9 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 
 ## Process Note
 
+The machinery exists to protect measurement claims from unchecked summaries,
+stale assumptions, and review-induced drift.
+
 This project is developed by a human researcher directing a multi-agent
 AI system he designed and iteratively engineered over the course of the
 project — the orchestration itself is a second, deliberate piece of
@@ -462,15 +465,15 @@ unauditable claims), the hardware and access decisions, and — the part
 that is easy to underrate — the *process policy*: every rule below
 exists because he observed a failure or an opportunity and issued a
 standing instruction. The AI staff executes: a lead agent (Claude,
-Anthropic's Fable-class model) is the apex — decomposition, design
-adjudication, every final diff gate, all live verification, merges,
-bookkeeping — and a second, independent model (OpenAI Codex gpt-5.5)
-does the volume: implementation against pinned specs, adversarial
-review lenses, test writing, and fresh-instance test auditing. A third
-tier (Claude Opus) serves as specialist sweeper. Cross-model review is
-load-bearing by design: the attributed catch record shows the two
-models and the different review layers consistently catching different
-classes of defect.
+Anthropic's Fable-class model) is the final reviewer and single point
+of accountability: decomposition, design adjudication, every final diff
+gate, live verification, merges, and bookkeeping. A second, independent
+model (OpenAI Codex gpt-5.5) does the volume: implementation against
+pinned specs, adversarial review lenses, test writing, and
+fresh-instance test auditing. A third tier (Claude Opus) serves as
+specialist sweeper. Cross-model review is load-bearing by design: the
+attributed catch record shows the models and review layers catching
+different classes of defect.
 
 **The machinery, briefly.** Independent tasks run as parallel git
 worktrees, the lead driving each stream's Codex pipeline directly (a
@@ -519,20 +522,13 @@ the next session (C-010) validated the redesign with a zero-stall run.
 
 **What one day of this looks like (2026-07-07).** Five implementation
 streams plus a repo-wide test audit ran concurrently: statistical
-uncertainty (per-metric confidence intervals, re-derivable
-byte-for-byte from raw evidence), contamination detection, deep DVFS
-telemetry, campaign automation, and a KV-cache size model. All five
-merged the same day; the test suite grew 254 → 369; the layered review
-recorded thirteen attributed catches including three blockers that no
-single reviewer — human-style solo review included — would plausibly
-have found together (one blocker was caught only by running the real
-CLI against code whose own tests were green, because the tests encoded
-the same wrong assumption as the code). Roughly 6–7 million tokens of
-implementation and review work were delegated to the second model,
-about five times the volume the orchestrating side spent. The most
-satisfying data point: the new contamination gate's first live act was
-to correctly flag the lead agent's *own verification run* as
-contaminated — the instrument now audits its operators.
+uncertainty, contamination detection, deep DVFS telemetry, campaign
+automation, and a KV-cache size model. All five merged the same day;
+the test suite grew 254 → 369; the layered review recorded thirteen
+attributed catches including three blockers that no single reviewer
+would plausibly have found together. One blocker surfaced only when the
+real CLI was run against code whose own tests were green, because the
+tests encoded the same wrong assumption as the code.
 
 **How the scope grew.** The project began as an architecture sketch for
 "measure LLM inference energy on edge hardware." Contracts-first

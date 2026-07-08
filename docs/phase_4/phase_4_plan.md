@@ -171,7 +171,9 @@ Evidence: the index itself; spot-check three claims end-to-end (claim ->
 figure -> script -> bundles on disk).
 
 Acceptance: 100% of quantitative claims in the results draft have rows;
-spot-checks pass.
+every final-report claim carries its ladder level per
+`docs/contracts/claims_ladder.md`, and wording above its evidence level is a
+gate failure; spot-checks pass.
 
 Fallback: none - this is cheap bookkeeping with outsized defense value.
 

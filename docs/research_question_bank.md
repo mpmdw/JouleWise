@@ -134,10 +134,10 @@ The instrument already resolves this at CV 0.3-1.4% across repetitions.
 
 **Apple-Silicon unified memory is a clean window into the memory-bound
 decode regime.** The measured 1.5B vs 122B-MoE pair showed energy/token
-tracking ACTIVE parameters while decode power stayed nearly flat
-(~23.5 → ~27.5 W): the big model costs time, not watts. This is one data
-point, not a law (see C5-1.1) — but it demonstrates the instrument can
-see the SHAPE of the regime, which throughput benchmarks cannot.
+numerically aligning with the active-parameter ratio while decode power
+stayed nearly flat (~23.5 → ~27.5 W). That is hypothesis-generating, not
+a scaling result (see C5-1.1), but it demonstrates that the instrument can
+see the shape of the regime that throughput benchmarks cannot.
 
 **Negative results are structured data.** did-not-fit, throttle,
 contaminated-idle, and cap-hit outcomes produce complete `unsupported` or
