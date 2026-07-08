@@ -11,6 +11,8 @@ are provided for anyone who wants the full evidence trail.
   CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
   are complete; the two-model baseline matrix is the next Mac corpus step
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
+- Live status site: https://quiet-signal-6af8833395.lakebed.app (Lakebed
+  capsule; shows a drift banner when the repo has moved past the snapshot)
 
 ## This Update (as of 2026-07-08, all four streams merged) — 30-second read
 

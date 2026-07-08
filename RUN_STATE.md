@@ -1,7 +1,8 @@
 # JouleWise Run State
 
-Last updated: 2026-07-08 (site observatory: data-driven status frontend
-merged as PR #13; suite 576 after the new parser tests)
+Last updated: 2026-07-08 (site deployed as a Lakebed capsule with a live
+GitHub freshness layer — https://quiet-signal-6af8833395.lakebed.app;
+suite 596 after the pack_capsule parser tests; nav scroll-jank fix)
 
 ## Start Here For Every Big Run
 
@@ -40,6 +41,12 @@ At the end of substantial work:
    numbers cited in multiple places. Adopted 2026-07-07 (council log
    C-002) after a sweep caught drift in 6 files; prose status summaries
    must carry an as-of date and defer to matrix rows (D-023 extension).
+   After any session that changed front-facing docs, REGENERATE and
+   REDEPLOY the site so the public snapshot tracks the repo (C-012):
+   `python3 scripts/build_site.py && python3 scripts/pack_capsule.py &&
+   (cd site_capsule && npx lakebed deploy)`. The live site's freshness
+   layer will flag drift until this runs, but keeping the snapshot current
+   is part of closing a docs-touching session.
 9. Call out any dirty working-tree state that should not be accidentally
    committed.
 
@@ -54,8 +61,8 @@ PR #10 (DOC-007 docs/framing + merge-time reconciliation), PR #9
 Phase 3's central technical risk retired on current hardware), plus
 D-035/D-036 (the ratified spike promotions). **PR #11 (2K NVIDIA fixture-first
 stack, all pins PROVISIONAL) MERGED 2026-07-08 under Ed's standing
-merge-with-review authorization — ALL FOUR STREAMS LANDED.** Suite on
-main: 576 OK (skipped=10, ZERO expected failures — as of 2026-07-08 after PR #12/C-011); all 6 real corpus
+merge-with-review authorization — ALL FOUR STREAMS LANDED.** Suite: see
+Current Verification below (single authority); all 6 real corpus
 bundles pass `--strict` read-only. The 2M campaign (P2-006) is fully unblocked and
 is the next machine-state-compatible task.
 
@@ -83,6 +90,8 @@ preservation wording was fixed pre-commit. Details: addendum in
 Per the C-009 meta-review consensus, RUN_STATE no longer stacks
 previous-run narratives. Recent sessions, newest first:
 
+- 2026-07-08 Lakebed deploy (live capsule + GitHub freshness; C-013):
+  `docs/run_reports/2026-07-08-lakebed-deploy.md`
 - 2026-07-08 site observatory (PR #13; status/roadmap/record frontend,
   fail-closed parsers, P2-017 stamps):
   `docs/run_reports/2026-07-08-site-observatory.md`
@@ -106,9 +115,10 @@ previous-run narratives. Recent sessions, newest first:
 
 ## Current Verification
 
-- Merged main: `python3 -m unittest discover -s tests` → `Ran 576
+- Merged main: `python3 -m unittest discover -s tests` → `Ran 596
   tests, OK (skipped=10)` — ZERO expected failures (as of 2026-07-08,
-  after PRs #8/#9/#10/#11/#12/#13; 564 + 12 build_site parser tests).
+  after PRs #8..#13 + the Lakebed capsule stream; 564 + 12 build_site
+  + 20 pack_capsule parser tests).
 - `validate-bundle --strict` green over all 6 real corpus bundles,
   read-only, unrewritten (incl. the new raw-to-trace gate).
 - CI: mock e2e + suite on both matrix legs, green on every PR head.
