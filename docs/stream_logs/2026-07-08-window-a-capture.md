@@ -56,17 +56,31 @@ Binds: Phase consumers must pair phase events by name, not by a fixed prefill/de
 
 ### WAC-6 [5.5] [contract] Sudo-free display and clock probes
 
-Decision: Use `ioreg -r -c IOMobileFramebuffer` for display presence/counts and `pgrep -x timed` for clock-sync process evidence. Do not parse `systemsetup` output in sudo-free captures.
+Decision: Superseded for display counts by WAC-7. Use `pgrep -x timed` for clock-sync process evidence. Do not parse `systemsetup` output in sudo-free captures.
 
 Alternatives: Keep the fabricated `IODisplayConnect` fixture; parse `systemsetup` error banners; rely only on `system_profiler SPDisplaysDataType -json`.
 
-Why: `IODisplayConnect` is absent on the target Apple Silicon/macOS stack, while `IOMobileFramebuffer` returns real data quickly without sudo. `systemsetup` requires admin privileges and can exit with an error banner unsuitable for NTP-state parsing. `pgrep timed` provides a limited but honest sudo-free signal.
+Why: `IODisplayConnect` is absent on the target Apple Silicon/macOS stack. `systemsetup` requires admin privileges and can exit with an error banner unsuitable for NTP-state parsing. `pgrep timed` provides a limited but honest sudo-free signal.
 
 Evidence: Live target verification showed `ioreg -r -c IOMobileFramebuffer` returning framebuffer entries in about 20 ms. In the current sandbox, `pgrep -x timed` is sudo-free but process-list access returns `returncode_3`; the capture records that as limited evidence instead of fabricating NTP state.
 
 Confidence: Medium-high.
 
-Binds: Display captures must record `status: "probe_unavailable"` with a reason when the framebuffer probe cannot produce entries. Clock captures use `status: "limited_without_admin"` and `timed_running` only; admin-only `systemsetup` state is intentionally absent.
+Binds: Clock captures use `status: "limited_without_admin"` and `timed_running` only; admin-only `systemsetup` state is intentionally absent.
+
+### WAC-7 [5.5] [contract] Display semantics corrected after live repro
+
+Decision: Use `system_profiler SPDisplaysDataType -json` as the primary connected-display probe. Count only online display entries and classify built-in versus external from display connection/type fields. Preserve `ioreg -r -c IOMobileFramebuffer` only as secondary pipe-capability evidence under `framebuffer_pipes_total` and `framebuffer_pipes_external_capable`.
+
+Alternatives: Keep counting IOMobileFramebuffer nodes as active displays; drop framebuffer evidence entirely.
+
+Why: Live DUT reproduction showed IOMobileFramebuffer nodes are SoC display pipes, not connected displays. Their `"external" = Yes` property is static capability and produced four phantom externals with none attached. `system_profiler SPDisplaysDataType -json` is sudo-free and reports connected display state with acceptable prepare-end cost.
+
+Evidence: Live target `system_profiler SPDisplaysDataType -json` on 2026-07-08 returned only the Apple M3 Max GPU object and no display child entries, while the old framebuffer probe still exposed pipe nodes. Tests pin this machine's real JSON fixture and treat it as zero online displays.
+
+Confidence: High.
+
+Binds: `active_displays`, `built_in_display_count`, and `external_display_count` must represent connected online displays, never framebuffer pipe capacity. Framebuffer fields remain diagnostic and must not be used as display counts.
 
 ### WAC-5 [5.5] [contract] Powermetrics sampler provenance
 

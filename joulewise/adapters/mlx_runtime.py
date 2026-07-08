@@ -547,6 +547,7 @@ def _mlx_metal_memory(errors: dict[str, str]) -> dict[str, Any]:
         "cache_memory_bytes": None,
         "peak_memory_bytes": None,
     }
+    numeric_values = 0
     for attr, key in (
         ("get_active_memory", "active_memory_bytes"),
         ("get_cache_memory", "cache_memory_bytes"),
@@ -564,4 +565,9 @@ def _mlx_metal_memory(errors: dict[str, str]) -> dict[str, Any]:
             continue
         if isinstance(value, int | float) and not isinstance(value, bool):
             result[key] = int(value)
+            numeric_values += 1
+        else:
+            errors[f"mlx_metal.{attr}"] = "non_numeric"
+    if result["api_available"] and numeric_values == 0:
+        errors["mlx_metal"] = "getters_unavailable"
     return result

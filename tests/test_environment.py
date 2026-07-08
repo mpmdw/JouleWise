@@ -11,6 +11,21 @@ def completed(command: list[str], stdout: str = "", returncode: int = 0):
     return subprocess.CompletedProcess(command, returncode, stdout=stdout, stderr="")
 
 
+LIVE_SYSTEM_PROFILER_SP_DISPLAYS_JSON = """{
+  "SPDisplaysDataType" : [
+    {
+      "_name" : "Apple M3 Max",
+      "spdisplays_metal" : "spdisplays_supported",
+      "spdisplays_vendor" : "sppci_vendor_Apple",
+      "sppci_bus" : "spdisplays_builtin",
+      "sppci_cores" : "40",
+      "sppci_device_type" : "spdisplays_gpu",
+      "sppci_model" : "Apple M3 Max"
+    }
+  ]
+}"""
+
+
 SUCCESS_OUTPUTS = {
     ("pmset", "-g", "batt"): (
         "Now drawing from 'AC Power'\n"
@@ -28,6 +43,7 @@ SUCCESS_OUTPUTS = {
         "Pages stored in compressor:               500.\n"
     ),
     ("sysctl", "vm.swapusage"): "vm.swapusage: total = 1024.00M used = 128.00M free = 896.00M\n",
+    ("system_profiler", "SPDisplaysDataType", "-json"): LIVE_SYSTEM_PROFILER_SP_DISPLAYS_JSON,
     ("ioreg", "-r", "-c", "IOMobileFramebuffer"): (
         "+-o IOMobileFramebufferShim  <class IOMobileFramebufferShim, id 0x1, registered>\n"
         '  |   "IONameMatched" = "disp0,t603x"\n'
@@ -58,6 +74,9 @@ COMMAND_FIELDS = {
     "pmset_batt": ("power_source", "battery_percent", "battery_state"),
     "pmset": ("low_power_mode",),
     "pmset_assertions": ("display_sleep_prevented",),
+    "system_profiler_spdisplays": (
+        "display",
+    ),
     "uptime": ("load_average_1m", "load_average_5m", "load_average_15m"),
     "sw_vers": ("product_name", "product_version", "build_version"),
     "sysctl_host": ("hw_model", "logical_cpu_count", "cpu_brand"),
@@ -67,6 +86,7 @@ COMMANDS_BY_ERROR_KEY = {
     "pmset_batt": ("pmset", "-g", "batt"),
     "pmset": ("pmset", "-g"),
     "pmset_assertions": ("pmset", "-g", "assertions"),
+    "system_profiler_spdisplays": ("system_profiler", "SPDisplaysDataType", "-json"),
     "uptime": ("uptime",),
     "sw_vers": ("sw_vers",),
     "sysctl_host": ("sysctl", "-n", "hw.model", "hw.ncpu", "machdep.cpu.brand_string"),
@@ -124,11 +144,15 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["memory"]["pageins"], 2000)
         self.assertEqual(snapshot["memory"]["pageouts"], 30)
         self.assertEqual(snapshot["memory"]["compressor_bytes"], 400 * 4096)
-        self.assertEqual(snapshot["display"]["active_displays"], 2)
+        self.assertEqual(snapshot["memory"]["pages_occupied_by_compressor"], 400)
+        self.assertEqual(snapshot["memory"]["pages_stored_in_compressor"], 500)
+        self.assertEqual(snapshot["display"]["active_displays"], 0)
         self.assertEqual(snapshot["display"]["status"], "ok")
-        self.assertEqual(snapshot["display"]["probe"], "ioreg_iomobileframebuffer")
-        self.assertEqual(snapshot["display"]["built_in_display_count"], 1)
-        self.assertEqual(snapshot["display"]["external_display_count"], 1)
+        self.assertEqual(snapshot["display"]["probe"], "system_profiler_spdisplays")
+        self.assertEqual(snapshot["display"]["built_in_display_count"], 0)
+        self.assertEqual(snapshot["display"]["external_display_count"], 0)
+        self.assertEqual(snapshot["display"]["framebuffer_pipes_total"], 2)
+        self.assertEqual(snapshot["display"]["framebuffer_pipes_external_capable"], 1)
         self.assertEqual(snapshot["power"]["adapter_watts"], 96)
         self.assertEqual(snapshot["power"]["adapter_description"], "USB-C Power Adapter")
         self.assertTrue(snapshot["power"]["external_connected"])
@@ -137,10 +161,7 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["boot_time_s"], 1700000000)
         self.assertGreaterEqual(snapshot["uptime_s"], 0.0)
         self.assertEqual(snapshot["clock_sync"]["status"], "limited_without_admin")
-        self.assertEqual(snapshot["clock_sync"]["state"], "limited_without_admin")
         self.assertTrue(snapshot["clock_sync"]["timed_running"])
-        self.assertIsNone(snapshot["clock_sync"]["ntp_enabled"])
-        self.assertIsNone(snapshot["clock_sync"]["network_time_server"])
         self.assertEqual(snapshot["load_average_1m"], 1.25)
         self.assertEqual(snapshot["product_version"], "15.5")
         self.assertEqual(snapshot["build_version"], "24F74")
@@ -170,8 +191,10 @@ class EnvironmentSnapshotTests(unittest.TestCase):
                 return completed(command, "4096000\n")
             if key == ("sysctl", "vm.swapusage"):
                 return completed(command, returncode=1)
-            if key == ("ioreg", "-r", "-c", "IOMobileFramebuffer"):
+            if key == ("system_profiler", "SPDisplaysDataType", "-json"):
                 return completed(command, returncode=1)
+            if key == ("ioreg", "-r", "-c", "IOMobileFramebuffer"):
+                return completed(command, "no matching services\n")
             if key == ("ioreg", "-r", "-c", "AppleSmartBattery", "-d", "1"):
                 return completed(command, returncode=1)
             if key == ("sysctl", "-n", "kern.boottime"):
@@ -202,7 +225,8 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["errors"]["pmset_assertions"], "returncode_1")
         self.assertEqual(snapshot["errors"]["memory_pressure"], "timeout")
         self.assertEqual(snapshot["errors"]["sysctl_vm_swapusage"], "returncode_1")
-        self.assertEqual(snapshot["errors"]["ioreg_display"], "returncode_1")
+        self.assertEqual(snapshot["errors"]["system_profiler_spdisplays"], "returncode_1")
+        self.assertEqual(snapshot["errors"]["ioreg_framebuffer_pipes"], "parse")
         self.assertEqual(snapshot["display"]["status"], "probe_unavailable")
         self.assertEqual(snapshot["display"]["reason"], "returncode_1")
         self.assertEqual(snapshot["errors"]["ioreg_battery"], "returncode_1")
@@ -239,9 +263,10 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         self.assertNotIn("pmset", snapshot["errors"])
         self.assertNotIn("pmset_assertions", snapshot["errors"])
 
-    def test_display_probe_without_framebuffer_entries_records_unavailable_status(self) -> None:
+    def test_live_system_profiler_fixture_records_zero_online_displays(self) -> None:
         outputs = {
             **SUCCESS_OUTPUTS,
+            ("system_profiler", "SPDisplaysDataType", "-json"): LIVE_SYSTEM_PROFILER_SP_DISPLAYS_JSON,
             ("ioreg", "-r", "-c", "IOMobileFramebuffer"): "no matching services\n",
         }
 
@@ -251,11 +276,75 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         with patch("joulewise.environment.subprocess.run", side_effect=fake_run):
             snapshot = collect_environment_snapshot()
 
-        self.assertEqual(snapshot["errors"], {})
+        self.assertEqual(snapshot["errors"], {"ioreg_framebuffer_pipes": "parse"})
+        self.assertEqual(snapshot["display"]["status"], "ok")
+        self.assertEqual(snapshot["display"]["probe"], "system_profiler_spdisplays")
+        self.assertIsNone(snapshot["display"]["reason"])
+        self.assertEqual(snapshot["display"]["active_displays"], 0)
+        self.assertEqual(snapshot["display"]["built_in_display_count"], 0)
+        self.assertEqual(snapshot["display"]["external_display_count"], 0)
+        self.assertIsNone(snapshot["display"]["framebuffer_pipes_total"])
+
+    def test_system_profiler_display_probe_counts_only_online_displays(self) -> None:
+        outputs = {
+            **SUCCESS_OUTPUTS,
+            ("system_profiler", "SPDisplaysDataType", "-json"): """{
+              "SPDisplaysDataType": [
+                {
+                  "_name": "Apple GPU",
+                  "spdisplays_ndrvs": [
+                    {
+                      "_name": "Built-in Liquid Retina XDR Display",
+                      "spdisplays_online": "spdisplays_yes",
+                      "spdisplays_connection_type": "spdisplays_internal"
+                    },
+                    {
+                      "_name": "Studio Display",
+                      "spdisplays_online": "spdisplays_yes",
+                      "spdisplays_connection_type": "spdisplays_displayport"
+                    },
+                    {
+                      "_name": "Offline HDMI",
+                      "spdisplays_online": "spdisplays_no",
+                      "spdisplays_connection_type": "spdisplays_hdmi"
+                    }
+                  ]
+                }
+              ]
+            }""",
+        }
+
+        def fake_run(command, **kwargs):
+            return completed(command, outputs[tuple(command)])
+
+        with patch("joulewise.environment.subprocess.run", side_effect=fake_run):
+            snapshot = collect_environment_snapshot()
+
+        self.assertEqual(snapshot["display"]["status"], "ok")
+        self.assertEqual(snapshot["display"]["active_displays"], 2)
+        self.assertEqual(snapshot["display"]["built_in_display_count"], 1)
+        self.assertEqual(snapshot["display"]["external_display_count"], 1)
+
+    def test_system_profiler_display_probe_unavailable_is_fail_soft(self) -> None:
+        outputs = {
+            **SUCCESS_OUTPUTS,
+            ("system_profiler", "SPDisplaysDataType", "-json"): "",
+        }
+
+        def fake_run(command, **kwargs):
+            if tuple(command) == ("system_profiler", "SPDisplaysDataType", "-json"):
+                return completed(command, returncode=1)
+            return completed(command, outputs[tuple(command)])
+
+        with patch("joulewise.environment.subprocess.run", side_effect=fake_run):
+            snapshot = collect_environment_snapshot()
+
+        self.assertEqual(snapshot["errors"], {"system_profiler_spdisplays": "returncode_1"})
         self.assertEqual(snapshot["display"]["status"], "probe_unavailable")
-        self.assertEqual(snapshot["display"]["probe"], "ioreg_iomobileframebuffer")
-        self.assertEqual(snapshot["display"]["reason"], "no_framebuffer_entries")
+        self.assertEqual(snapshot["display"]["probe"], "system_profiler_spdisplays")
+        self.assertEqual(snapshot["display"]["reason"], "returncode_1")
         self.assertIsNone(snapshot["display"]["active_displays"])
+        self.assertEqual(snapshot["display"]["framebuffer_pipes_total"], 2)
 
     def test_each_primary_command_failure_is_isolated(self) -> None:
         cases = [
@@ -281,7 +370,10 @@ class EnvironmentSnapshotTests(unittest.TestCase):
 
                     self.assertEqual(snapshot["errors"], {error_key: expected_error})
                     for field in COMMAND_FIELDS[error_key]:
-                        self.assertIsNone(snapshot[field], field)
+                        if field == "display":
+                            self.assertIsNone(snapshot["display"]["active_displays"], field)
+                        else:
+                            self.assertIsNone(snapshot[field], field)
                     untouched_fields = [
                         field
                         for other_key, fields in COMMAND_FIELDS.items()
@@ -310,7 +402,10 @@ class EnvironmentSnapshotTests(unittest.TestCase):
 
                 self.assertEqual(snapshot["errors"], {error_key: "parse"})
                 for field in COMMAND_FIELDS[error_key]:
-                    self.assertIsNone(snapshot[field], field)
+                    if field == "display":
+                        self.assertIsNone(snapshot["display"]["active_displays"], field)
+                    else:
+                        self.assertIsNone(snapshot[field], field)
 
     def test_all_commands_failing_returns_full_none_snapshot_and_errors(self) -> None:
         def fake_run(command, **kwargs):
@@ -323,12 +418,9 @@ class EnvironmentSnapshotTests(unittest.TestCase):
             if key == "errors":
                 continue
             if key == "clock_sync":
-                self.assertEqual(value["state"], "limited_without_admin")
                 self.assertEqual(value["status"], "limited_without_admin")
                 self.assertFalse(value["timed_running"])
                 self.assertEqual(value["timed_probe_error"], "not_found")
-                self.assertIsNone(value["ntp_enabled"])
-                self.assertIsNone(value["network_time_server"])
                 continue
             if key == "display":
                 self.assertEqual(value["status"], "probe_unavailable")
@@ -349,7 +441,8 @@ class EnvironmentSnapshotTests(unittest.TestCase):
                 "vm_stat": "not_found",
                 "sysctl_hw_memsize": "not_found",
                 "sysctl_vm_swapusage": "not_found",
-                "ioreg_display": "not_found",
+                "system_profiler_spdisplays": "not_found",
+                "ioreg_framebuffer_pipes": "not_found",
                 "ioreg_battery": "not_found",
                 "sysctl_kern_boottime": "not_found",
                 "pgrep_timed": "not_found",
@@ -370,12 +463,9 @@ class EnvironmentSnapshotTests(unittest.TestCase):
             if key == "errors":
                 continue
             if key == "clock_sync":
-                self.assertEqual(value["state"], "limited_without_admin")
                 self.assertEqual(value["status"], "limited_without_admin")
                 self.assertFalse(value["timed_running"])
                 self.assertEqual(value["timed_probe_error"], "failed")
-                self.assertIsNone(value["ntp_enabled"])
-                self.assertIsNone(value["network_time_server"])
                 continue
             if key == "display":
                 self.assertEqual(value["status"], "probe_unavailable")
@@ -396,7 +486,8 @@ class EnvironmentSnapshotTests(unittest.TestCase):
                 "vm_stat": "failed",
                 "sysctl_hw_memsize": "failed",
                 "sysctl_vm_swapusage": "failed",
-                "ioreg_display": "failed",
+                "system_profiler_spdisplays": "failed",
+                "ioreg_framebuffer_pipes": "failed",
                 "ioreg_battery": "failed",
                 "sysctl_kern_boottime": "failed",
                 "pgrep_timed": "failed",

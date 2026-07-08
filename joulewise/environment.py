@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import subprocess
 import time
+import json
 from typing import Any
 
 COMMAND_TIMEOUT_S = 3.0
@@ -26,7 +27,7 @@ def empty_environment_snapshot() -> dict[str, Any]:
             "pages_free": None,
             "pageins": None,
             "pageouts": None,
-            "pages_compressed": None,
+            "pages_occupied_by_compressor": None,
             "pages_stored_in_compressor": None,
             "compressor_bytes": None,
         },
@@ -37,6 +38,8 @@ def empty_environment_snapshot() -> dict[str, Any]:
             "active_displays": None,
             "external_display_count": None,
             "built_in_display_count": None,
+            "framebuffer_pipes_total": None,
+            "framebuffer_pipes_external_capable": None,
         },
         "power": {
             "adapter_watts": None,
@@ -51,9 +54,6 @@ def empty_environment_snapshot() -> dict[str, Any]:
             "status": "unavailable",
             "timed_running": None,
             "timed_probe_error": None,
-            "state": "unavailable",
-            "ntp_enabled": None,
-            "network_time_server": None,
         },
         "load_average_1m": None,
         "load_average_5m": None,
@@ -145,19 +145,27 @@ def collect_environment_snapshot(timeout_s: float = COMMAND_TIMEOUT_S) -> dict[s
     display_ok = _apply_command(
         snapshot,
         errors,
-        "ioreg_display",
-        ["ioreg", "-r", "-c", "IOMobileFramebuffer"],
-        _parse_ioreg_display,
+        "system_profiler_spdisplays",
+        ["system_profiler", "SPDisplaysDataType", "-json"],
+        _parse_system_profiler_displays,
         timeout_s,
     )
     if not display_ok:
         snapshot["display"].update(
             {
                 "status": "probe_unavailable",
-                "probe": "ioreg_iomobileframebuffer",
-                "reason": errors.get("ioreg_display", "failed"),
+                "probe": "system_profiler_spdisplays",
+                "reason": errors.get("system_profiler_spdisplays", "failed"),
             }
         )
+    _apply_command(
+        snapshot,
+        errors,
+        "ioreg_framebuffer_pipes",
+        ["ioreg", "-r", "-c", "IOMobileFramebuffer"],
+        _parse_ioreg_framebuffer_pipes,
+        timeout_s,
+    )
     _apply_command(
         snapshot,
         errors,
@@ -324,10 +332,10 @@ def _apply_vm_stat_counters(snapshot: dict[str, Any], counters: dict[str, int]) 
     memory["pages_free"] = counters.get("Pages free")
     memory["pageins"] = counters.get("Pageins")
     memory["pageouts"] = counters.get("Pageouts")
-    memory["pages_compressed"] = counters.get("Pages occupied by compressor")
+    memory["pages_occupied_by_compressor"] = counters.get("Pages occupied by compressor")
     memory["pages_stored_in_compressor"] = counters.get("Pages stored in compressor")
-    if page_size is not None and memory["pages_compressed"] is not None:
-        memory["compressor_bytes"] = memory["pages_compressed"] * page_size
+    if page_size is not None and memory["pages_occupied_by_compressor"] is not None:
+        memory["compressor_bytes"] = memory["pages_occupied_by_compressor"] * page_size
 
 
 def _parse_swapusage(snapshot: dict[str, Any], text: str) -> None:
@@ -344,26 +352,87 @@ def _parse_swapusage(snapshot: dict[str, Any], text: str) -> None:
     }
 
 
-def _parse_ioreg_display(snapshot: dict[str, Any], text: str) -> None:
+def _parse_system_profiler_displays(snapshot: dict[str, Any], text: str) -> None:
+    payload = json.loads(text)
+    displays: list[dict[str, Any]] = []
+    for gpu in payload.get("SPDisplaysDataType", []):
+        if isinstance(gpu, dict):
+            displays.extend(_online_display_entries(gpu))
+    built_in = sum(1 for display in displays if _is_built_in_display(display))
+    active = len(displays)
+    display = snapshot["display"]
+    display["status"] = "ok"
+    display["probe"] = "system_profiler_spdisplays"
+    display["reason"] = None
+    display["active_displays"] = active
+    display["built_in_display_count"] = built_in
+    display["external_display_count"] = max(0, active - built_in)
+
+
+def _online_display_entries(value: Any) -> list[dict[str, Any]]:
+    if isinstance(value, dict):
+        entries: list[dict[str, Any]] = []
+        if _is_display_entry(value) and _is_online_display(value):
+            entries.append(value)
+        for child in value.values():
+            entries.extend(_online_display_entries(child))
+        return entries
+    if isinstance(value, list):
+        entries: list[dict[str, Any]] = []
+        for item in value:
+            entries.extend(_online_display_entries(item))
+        return entries
+    return []
+
+
+def _is_display_entry(value: dict[str, Any]) -> bool:
+    return any(
+        key in value
+        for key in (
+            "spdisplays_online",
+            "spdisplays_display_type",
+            "spdisplays_connection_type",
+            "spdisplays_resolution",
+        )
+    )
+
+
+def _is_online_display(value: dict[str, Any]) -> bool:
+    online = value.get("spdisplays_online")
+    if online is None:
+        return True
+    return online in {True, "spdisplays_yes", "yes", "Yes", "1", 1}
+
+
+def _is_built_in_display(value: dict[str, Any]) -> bool:
+    markers = {
+        str(value.get("spdisplays_display_type", "")),
+        str(value.get("spdisplays_connection_type", "")),
+    }
+    return bool(
+        markers
+        & {
+            "spdisplays_built-in",
+            "spdisplays_builtin",
+            "spdisplays_internal",
+            "Internal",
+            "Built-In",
+        }
+    )
+
+
+def _parse_ioreg_framebuffer_pipes(snapshot: dict[str, Any], text: str) -> None:
     entries = re.findall(
         r"^\+-o\s+\S+\s+<class IOMobileFramebuffer(?:Shim)?,",
         text,
         re.MULTILINE,
     )
-    display = snapshot["display"]
     if not entries:
-        display["status"] = "probe_unavailable"
-        display["probe"] = "ioreg_iomobileframebuffer"
-        display["reason"] = "no_framebuffer_entries"
-        return
+        raise ValueError("no framebuffer entries")
     external = len(re.findall(r'"external"\s+=\s+Yes', text))
-    active = len(entries)
-    display["status"] = "ok"
-    display["probe"] = "ioreg_iomobileframebuffer"
-    display["reason"] = None
-    display["active_displays"] = active
-    display["external_display_count"] = min(external, active)
-    display["built_in_display_count"] = max(0, active - min(external, active))
+    display = snapshot["display"]
+    display["framebuffer_pipes_total"] = len(entries)
+    display["framebuffer_pipes_external_capable"] = min(external, len(entries))
 
 
 def _parse_ioreg_battery(snapshot: dict[str, Any], text: str) -> None:
@@ -407,7 +476,6 @@ def _probe_clock_sync(
 ) -> None:
     clock_sync = snapshot["clock_sync"]
     clock_sync["status"] = "limited_without_admin"
-    clock_sync["state"] = "limited_without_admin"
     try:
         completed = subprocess.run(
             ["pgrep", "-x", "timed"],

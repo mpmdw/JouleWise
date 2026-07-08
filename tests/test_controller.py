@@ -100,7 +100,10 @@ class ExplodingRuntime:
         raise RuntimeError("injected workload explosion")
 
     def cleanup(self, config: BenchmarkConfig, context=None) -> AdapterResult:
-        return AdapterResult(ok=True)
+        return AdapterResult(
+            ok=True,
+            metadata={"memory_snapshots": [{"label": "cleanup_start", "sentinel": True}]},
+        )
 
 
 class ExplodingRegistry:
@@ -359,8 +362,23 @@ def fake_environment_run(command, **kwargs):
             "Pageins: 2000.\n"
             "Pageouts: 30.\n"
             "Pages occupied by compressor: 400.\n"
+            "Pages stored in compressor: 500.\n"
         ),
         ("sysctl", "vm.swapusage"): "vm.swapusage: total = 1.00G used = 0.00M free = 1.00G\n",
+        ("system_profiler", "SPDisplaysDataType", "-json"): """{
+          "SPDisplaysDataType": [
+            {
+              "_name": "Apple GPU",
+              "spdisplays_ndrvs": [
+                {
+                  "_name": "Built-in Display",
+                  "spdisplays_online": "spdisplays_yes",
+                  "spdisplays_connection_type": "spdisplays_internal"
+                }
+              ]
+            }
+          ]
+        }""",
         ("ioreg", "-r", "-c", "IOMobileFramebuffer"): (
             "+-o IOMobileFramebufferShim  <class IOMobileFramebufferShim, id 0x1, registered>\n"
             '  |   "IONameMatched" = "disp0,t603x"\n'
@@ -581,11 +599,15 @@ class HappyPathTests(ControllerTestCase):
         environment_calls = [
             call for call in run.call_args_list if call.args[0][0] != "git"
         ]
-        self.assertEqual(len(environment_calls), 13)
+        self.assertEqual(len(environment_calls), 14)
         self.assertEqual(environment["power_source"], "AC Power")
         self.assertEqual(environment["memory_free_percent"], 42.0)
         self.assertEqual(environment["memory"]["pageins"], 2000)
+        self.assertEqual(environment["memory"]["pages_occupied_by_compressor"], 400)
+        self.assertEqual(environment["memory"]["pages_stored_in_compressor"], 500)
         self.assertEqual(environment["display"]["active_displays"], 1)
+        self.assertEqual(environment["display"]["probe"], "system_profiler_spdisplays")
+        self.assertEqual(environment["display"]["framebuffer_pipes_total"], 1)
         self.assertEqual(environment["power"]["adapter_watts"], 96)
         self.assertEqual(environment["clock_sync"]["status"], "limited_without_admin")
         self.assertIs(environment["clock_sync"]["timed_running"], True)
@@ -734,6 +756,9 @@ class UnsupportedModelTests(ControllerTestCase):
         self.assertEqual(data["failure_reason"], "did_not_fit")
         # The failure preceded the measured window: no trace, no outputs.
         self.assertFalse((bundle_path / "power_trace.csv").exists())
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertEqual(metadata["environment"]["capture_scope"], "failure_fallback")
+        self.assertTrue(metadata["environment"]["capture_skipped"])
 
     def test_failure_event_in_prepare_phase(self) -> None:
         bundle_path, _ = self.run_unsupported()
@@ -804,6 +829,11 @@ class UnexpectedExceptionTests(ControllerTestCase):
         data = self.assert_summary_round_trips(bundle_path)
         self.assertEqual(data["status"], "failed")
         self.assertEqual(data["failure_reason"], "unknown_error")
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertEqual(
+            metadata["adapters"]["runtime"]["cleanup_metadata"]["memory_snapshots"],
+            [{"label": "cleanup_start", "sentinel": True}],
+        )
         events = self.read_events(bundle_path)
         failures = [event for event in events if event["event_type"] == "failure"]
         self.assertEqual(len(failures), 1)

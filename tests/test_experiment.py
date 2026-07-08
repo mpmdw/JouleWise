@@ -95,8 +95,23 @@ def fake_environment_run(command, **kwargs):
             "Pageins: 2000.\n"
             "Pageouts: 30.\n"
             "Pages occupied by compressor: 400.\n"
+            "Pages stored in compressor: 500.\n"
         ),
         ("sysctl", "vm.swapusage"): "vm.swapusage: total = 1.00G used = 0.00M free = 1.00G\n",
+        ("system_profiler", "SPDisplaysDataType", "-json"): """{
+          "SPDisplaysDataType": [
+            {
+              "_name": "Apple GPU",
+              "spdisplays_ndrvs": [
+                {
+                  "_name": "Built-in Display",
+                  "spdisplays_online": "spdisplays_yes",
+                  "spdisplays_connection_type": "spdisplays_internal"
+                }
+              ]
+            }
+          ]
+        }""",
         ("ioreg", "-r", "-c", "IOMobileFramebuffer"): (
             "+-o IOMobileFramebufferShim  <class IOMobileFramebufferShim, id 0x1, registered>\n"
             '  |   "IONameMatched" = "disp0,t603x"\n'
@@ -356,7 +371,7 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
         environment_calls = [
             call for call in run.call_args_list if call.args[0][0] != "git"
         ]
-        self.assertEqual(len(environment_calls), 13 * 4)
+        self.assertEqual(len(environment_calls), 14 * 4)
         environments = [
             json.loads((bundle / "metadata.json").read_text())["environment"]
             for bundle, _summary in members
@@ -371,6 +386,8 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
             self.assertIsInstance(environment["env_capture_duration_s"], (int, float))
             self.assertEqual(environment["settle_s"], 2.0)
             self.assertEqual(environment["power_source"], "AC Power")
+            self.assertEqual(environment["display"]["probe"], "system_profiler_spdisplays")
+            self.assertEqual(environment["display"]["active_displays"], 1)
             self.assertEqual(environment["power"]["adapter_watts"], 96)
             self.assertEqual(environment["clock_sync"]["status"], "limited_without_admin")
             self.assertIs(environment["clock_sync"]["timed_running"], True)

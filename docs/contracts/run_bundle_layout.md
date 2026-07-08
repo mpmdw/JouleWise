@@ -46,13 +46,26 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
   at the end of the prepare stage with `capture_scope: "run"`, then wait the
   recorded settle interval before starting the idle-baseline sample. Experiment
   runners may also pass a `capture_scope: "experiment"` fallback so failures
-  before prepare retain environment evidence. `FakeClock` runs mark capture
+  before prepare retain environment evidence. Single-run failures that occur
+  before prepare-end capture record a best-effort
+  `capture_scope: "failure_fallback"` snapshot. `FakeClock` runs mark capture
   skipped. The environment block may also include additive nested `memory`,
   `display`, `power`, and `clock_sync` objects plus nullable
-  `uptime_s`/`boot_time_s`. Probe failures are recorded in
-  `metadata.environment.errors` and leave the affected fields null, or set
-  explicit probe statuses such as `display.status: "probe_unavailable"` and
-  `clock_sync.status: "unavailable"`.
+  `uptime_s`/`boot_time_s`. Memory counter names mirror `vm_stat` semantics:
+  `pages_stored_in_compressor` records `Pages stored in compressor`, while
+  `pages_occupied_by_compressor` records `Pages occupied by compressor` and
+  drives `compressor_bytes`. Display connected-count fields
+  (`active_displays`, `built_in_display_count`, `external_display_count`) come
+  from online `system_profiler SPDisplaysDataType -json` display entries with
+  `display.probe: "system_profiler_spdisplays"`. IOMobileFramebuffer data is
+  secondary pipe-capability evidence only, recorded as
+  `framebuffer_pipes_total` and `framebuffer_pipes_external_capable`; those
+  fields are not connected-display counts. Clock sync is sudo-free evidence:
+  `clock_sync.status` and `timed_running`/`timed_probe_error` only. Probe
+  failures are recorded in `metadata.environment.errors` and leave the
+  affected fields null, or set explicit probe statuses such as
+  `display.status: "probe_unavailable"` and `clock_sync.status:
+  "unavailable"`.
 - `metadata.device.powermetrics`, when the powermetrics telemetry adapter is
   used, records `samplers_requested` as the exact sampler string requested
   from powermetrics and `samplers_available` as either the list confirmed by
@@ -202,10 +215,17 @@ records the sub-window idle baseline and rolling cooldown mean.
 MLX runtime adapters may record additive memory snapshots at prepare end and
 cleanup start. These snapshots include process RSS when available and guarded
 MLX Metal memory stats (`active_memory_bytes`, `cache_memory_bytes`,
-`peak_memory_bytes`) when the installed MLX version exposes them. The
-`cleanup_start` snapshot occurs outside the measured window and preserves MLX
-Metal peak fidelity because `get_peak_memory` is cumulative; adapters must not
-take a `run_end` memory snapshot inside the sampled workload window.
+`peak_memory_bytes`) when the installed MLX version exposes them. Runtime
+metadata mirrors prepare snapshots under
+`metadata.adapters.runtime.prepare_metadata` and cleanup snapshots under
+`metadata.adapters.runtime.cleanup_metadata`, including on failure paths when
+cleanup returns metadata. The `cleanup_start` snapshot occurs outside the
+measured window and preserves MLX Metal peak fidelity because
+`get_peak_memory` is cumulative; adapters must not take a `run_end` memory
+snapshot inside the sampled workload window. If MLX exposes a Metal API object
+but no getter produces a numeric value, the snapshot records
+`errors.mlx_metal: "getters_unavailable"` rather than presenting all-null
+memory values as a clean API result.
 
 ## Composite Split Bundles (Phase 3 Preview)
 

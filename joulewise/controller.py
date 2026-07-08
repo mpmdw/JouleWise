@@ -268,6 +268,7 @@ class _Execution:
             self._environment = None
         self._device_metadata: dict[str, Any] | None = None
         self._prepare_metadata: dict[str, Any] | None = None
+        self._runtime_cleanup_metadata: dict[str, Any] | None = None
         self._telemetry_metadata: dict[str, Any] | None = None
         self._runtime_alignments: list[dict[str, Any]] = []
         self._telemetry_alignments: list[dict[str, Any]] = []
@@ -485,6 +486,8 @@ class _Execution:
             )
             self._log(self._controller_log, traceback.format_exc())
         else:
+            if result.metadata:
+                self._runtime_cleanup_metadata = dict(result.metadata)
             if not result.ok:
                 metadata = {
                     "cleanup_ok": False,
@@ -535,6 +538,7 @@ class _Execution:
             self._log(self._controller_log, failure.traceback_text)
         self._stop_sampling_best_effort()
         self._cleanup_best_effort()
+        self._capture_failure_fallback_environment()
         # Preserve whatever partial evidence exists (D-002).
         self._write_outputs()
         self._write_trace()
@@ -582,6 +586,8 @@ class _Execution:
             )
             self._log(self._controller_log, traceback.format_exc())
         else:
+            if result.metadata:
+                self._runtime_cleanup_metadata = dict(result.metadata)
             if not result.ok:
                 self._log(
                     self._controller_log,
@@ -627,6 +633,10 @@ class _Execution:
             if self._runtime_result is not None and self._runtime_result.metadata:
                 _merge_adapter_metadata(
                     adapters["runtime"], self._runtime_result.metadata
+                )
+            if self._runtime_cleanup_metadata is not None:
+                adapters["runtime"]["cleanup_metadata"] = _jsonable(
+                    self._runtime_cleanup_metadata
                 )
             if self._runtime_alignments:
                 adapters["runtime"]["clock_alignments"] = _jsonable(self._runtime_alignments)
@@ -686,6 +696,18 @@ class _Execution:
         if not isinstance(self._environment_snapshot, dict):
             return False
         return self._environment_snapshot.get("capture_scope") == "experiment"
+
+    def _capture_failure_fallback_environment(self) -> None:
+        if self._environment is not None:
+            return
+        if self._environment_snapshot is not _ENVIRONMENT_UNSET:
+            return
+        self._environment = _capture_environment(
+            self._clock,
+            capture_scope="failure_fallback",
+            captured_for_rep=None,
+            settle_s=None,
+        )
 
     def _settle_before_idle(self) -> None:
         if not isinstance(self._environment, dict):

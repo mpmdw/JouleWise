@@ -316,6 +316,36 @@ class MemoryProbeHelperTests(unittest.TestCase):
                 sys.modules["mlx.core"] = previous
         self.assertEqual(errors, {})
 
+    def test_mlx_metal_memory_available_api_without_values_records_error(self) -> None:
+        errors: dict[str, str] = {}
+        fake_core = ModuleType("mlx.core")
+        fake_core.metal = SimpleNamespace(
+            get_active_memory=lambda: None,
+            get_cache_memory=lambda: "unknown",
+            get_peak_memory=lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+        )
+        previous = sys.modules.get("mlx.core")
+        sys.modules["mlx.core"] = fake_core
+        try:
+            self.assertEqual(
+                _mlx_metal_memory(errors),
+                {
+                    "api_available": True,
+                    "active_memory_bytes": None,
+                    "cache_memory_bytes": None,
+                    "peak_memory_bytes": None,
+                },
+            )
+        finally:
+            if previous is None:
+                sys.modules.pop("mlx.core", None)
+            else:
+                sys.modules["mlx.core"] = previous
+        self.assertEqual(errors["mlx_metal"], "getters_unavailable")
+        self.assertEqual(errors["mlx_metal.get_active_memory"], "non_numeric")
+        self.assertEqual(errors["mlx_metal.get_cache_memory"], "non_numeric")
+        self.assertIn("RuntimeError: boom", errors["mlx_metal.get_peak_memory"])
+
 
 if __name__ == "__main__":
     unittest.main()
