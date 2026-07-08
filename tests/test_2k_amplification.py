@@ -497,7 +497,9 @@ class FailureTaxonomyAmplificationTests(unittest.TestCase):
             )
             fake.chmod(0o755)
             old_path = os.environ.get("PATH", "")
-            os.environ["PATH"] = str(bin_dir)
+            os.environ["PATH"] = os.pathsep.join(
+                [str(bin_dir), str(Path(sys.executable).resolve().parent), old_path]
+            )
             try:
                 task = worker_task_base()
                 task["operation"] = "start_sampling"
@@ -513,6 +515,11 @@ class FailureTaxonomyAmplificationTests(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertEqual(status["status"], "unsupported")
             self.assertEqual(status["failure_reason"], "telemetry_unavailable")
+            self.assertIn("no numeric power.draw sample", status["message"])
+            self.assertNotIn("nvidia-smi unavailable", status["message"])
+            self.assertEqual(status["metadata"]["readiness"]["csv_rows_seen"], 1)
+            self.assertEqual(status["metadata"]["readiness"]["unsupported_power_rows"], 1)
+            self.assertEqual(status["metadata"]["readiness"]["numeric_power_rows"], 0)
 
     def test_worker_unknown_operation_is_unsupported_workload_while_bad_json_is_failed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

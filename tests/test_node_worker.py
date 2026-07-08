@@ -309,7 +309,15 @@ class NodeWorkerTests(unittest.TestCase):
                     start_status["artifacts"]["nvidia_smi_pidfile"],
                     "nvidia_smi.pid",
                 )
+                self.assertIn("node_utc_offset_s", start_status["metadata"])
+                self.assertIn("node_tzname", start_status["metadata"])
                 self.assertTrue((tmpdir / "state" / "nvidia_smi.pid").exists())
+                start_pid_payload = json.loads(
+                    (tmpdir / "state" / "nvidia_smi.pid").read_text(encoding="utf-8")
+                )
+                self.assertIn("node_utc_offset_s", start_pid_payload)
+                self.assertIn("node_tzname", start_pid_payload)
+                self.assertIn("ps_lstart", start_pid_payload)
                 self.assertTrue((tmpdir / "state" / "nvidia_smi.csv").exists())
                 self.assertFalse((start_artifacts / "nvidia_smi.csv").exists())
 
@@ -352,6 +360,8 @@ class NodeWorkerTests(unittest.TestCase):
                 status = self.read_status(artifacts_dir)
                 self.assertEqual(status["status"], "succeeded")
                 self.assertEqual(status["artifacts"]["nvidia_smi_idle_csv"], "nvidia_smi_idle.csv")
+                self.assertIn("node_utc_offset_s", status["metadata"])
+                self.assertIn("node_tzname", status["metadata"])
                 csv_text = (artifacts_dir / "nvidia_smi_idle.csv").read_text(encoding="utf-8")
                 self.assertIn("2026/07/07 12:00:00.000", csv_text)
             finally:
@@ -421,6 +431,7 @@ class NodeWorkerTests(unittest.TestCase):
                 pid_payload = json.loads(pidfile.read_text(encoding="utf-8"))
                 self.assertEqual(pid_payload["port"], port)
                 self.assertEqual(pid_payload["served_model_name"], "jw-3050-smoke")
+                self.assertIn("ps_lstart", pid_payload)
 
                 warmup_artifacts = tmpdir / "warmup-artifacts"
                 warmup_task = self.write_task(
@@ -716,6 +727,52 @@ class NodeWorkerTests(unittest.TestCase):
             self.assertFalse(pidfile.exists())
             self.assertEqual(calls, [])
 
+    def test_vllm_cleanup_same_argv_different_start_time_does_not_signal_reused_pid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            state_dir = tmpdir / "state"
+            state_dir.mkdir()
+            pidfile = state_dir / "vllm.pid"
+            pidfile.write_text(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "command": ["vllm", "serve", "model"],
+                        "ps_lstart": "Tue Jul  7 00:00:00 2026",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            old_kill = node_worker.os.kill
+            old_cmdline = node_worker._live_process_cmdline
+            old_lstart = node_worker._process_lstart
+            calls: list[tuple[int, int]] = []
+
+            def fake_kill(pid: int, sig: int) -> None:
+                calls.append((pid, sig))
+                raise AssertionError("stale pidfile should not signal")
+
+            node_worker.os.kill = fake_kill  # type: ignore[assignment]
+            node_worker._live_process_cmdline = lambda pid: ["vllm", "serve", "model"]  # type: ignore[assignment]
+            node_worker._process_lstart = lambda pid: "Tue Jul  7 00:01:00 2026"  # type: ignore[assignment]
+            try:
+                status, reason, message, artifacts, metadata = node_worker.handle_vllm_cleanup(
+                    valid_runtime_task(operation="cleanup", paths={"state_dir": str(state_dir)}),
+                    str(tmpdir / "artifacts"),
+                    lambda line: None,
+                )
+            finally:
+                node_worker.os.kill = old_kill  # type: ignore[assignment]
+                node_worker._live_process_cmdline = old_cmdline  # type: ignore[assignment]
+                node_worker._process_lstart = old_lstart  # type: ignore[assignment]
+
+            self.assertEqual(status, "succeeded")
+            self.assertIsNone(reason)
+            self.assertIn("stale", message)
+            self.assertEqual(metadata["pid_verification"], "start_time_mismatch")
+            self.assertFalse(pidfile.exists())
+            self.assertEqual(calls, [])
+
     def test_nvidia_smi_stop_stale_pidfile_does_not_signal_reused_pid(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmpdir = Path(tmp)
@@ -754,6 +811,69 @@ class NodeWorkerTests(unittest.TestCase):
             self.assertEqual(status, "failed")
             self.assertEqual(reason, "unknown_error")
             self.assertIn("stale", message)
+            self.assertNotIn("nvidia_smi_csv", artifacts)
+            self.assertFalse(pidfile.exists())
+            self.assertEqual(calls, [])
+
+    def test_nvidia_smi_stop_same_argv_different_start_time_does_not_signal_reused_pid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            state_dir = tmpdir / "state"
+            artifacts_dir = tmpdir / "artifacts"
+            state_dir.mkdir()
+            artifacts_dir.mkdir()
+            pidfile = state_dir / "nvidia_smi.pid"
+            pidfile.write_text(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "command": [
+                            "nvidia-smi",
+                            "--query-gpu=timestamp,power.draw,temperature.gpu",
+                            "--format=csv,noheader,nounits",
+                            "-lms",
+                            "100",
+                        ],
+                        "ps_lstart": "Tue Jul  7 00:00:00 2026",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            old_kill = node_worker.os.kill
+            old_cmdline = node_worker._live_process_cmdline
+            old_lstart = node_worker._process_lstart
+            calls: list[tuple[int, int]] = []
+
+            def fake_kill(pid: int, sig: int) -> None:
+                calls.append((pid, sig))
+                raise AssertionError("stale pidfile should not signal")
+
+            node_worker.os.kill = fake_kill  # type: ignore[assignment]
+            node_worker._live_process_cmdline = (  # type: ignore[assignment]
+                lambda pid: [
+                    "nvidia-smi",
+                    "--query-gpu=timestamp,power.draw,temperature.gpu",
+                    "--format=csv,noheader,nounits",
+                    "-lms",
+                    "100",
+                ]
+            )
+            node_worker._process_lstart = lambda pid: "Tue Jul  7 00:01:00 2026"  # type: ignore[assignment]
+            try:
+                status, reason, message, artifacts, metadata = node_worker.handle_nvidia_smi_stop_sampling(
+                    valid_task(operation="stop_sampling", paths={"state_dir": str(state_dir)}),
+                    str(artifacts_dir),
+                    lambda line: None,
+                )
+            finally:
+                node_worker.os.kill = old_kill  # type: ignore[assignment]
+                node_worker._live_process_cmdline = old_cmdline  # type: ignore[assignment]
+                node_worker._process_lstart = old_lstart  # type: ignore[assignment]
+
+            self.assertEqual(status, "failed")
+            self.assertEqual(reason, "unknown_error")
+            self.assertIn("stale", message)
+            self.assertEqual(metadata["pid_verification"], "start_time_mismatch")
             self.assertNotIn("nvidia_smi_csv", artifacts)
             self.assertFalse(pidfile.exists())
             self.assertEqual(calls, [])

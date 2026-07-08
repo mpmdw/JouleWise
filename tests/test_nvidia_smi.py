@@ -84,6 +84,7 @@ def success_result(
     *,
     offset: float = 7.0,
     metadata: dict[str, Any] | None = None,
+    worker_metadata: dict[str, Any] | None = None,
 ) -> NodeTaskResult:
     artifact_dir.mkdir(parents=True, exist_ok=True)
     (artifact_dir / artifact_name).write_text(text, encoding="utf-8")
@@ -91,7 +92,7 @@ def success_result(
         "status": "succeeded",
         "message": "ok",
         "artifacts": {artifact_key: artifact_name},
-        "metadata": {"worker": "fake"},
+        "metadata": {"worker": "fake", **(worker_metadata or {})},
     }
     return NodeTaskResult(
         ok=True,
@@ -233,6 +234,50 @@ class NvidiaSmiAdapterTests(unittest.TestCase):
             self.assertEqual(task["telemetry"]["rail_manifest"], ["gpu_board"])
             self.assertEqual(task["telemetry"]["idle_seconds"], 3.0)
 
+    def test_measure_idle_uses_worker_node_utc_offset_not_host_timezone(self) -> None:
+        old_tz = os.environ.get("TZ")
+        os.environ["TZ"] = "America/Los_Angeles"
+        if hasattr(time, "tzset"):
+            time.tzset()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                config = make_config()
+                context = make_context(config, root)
+                csv_text = (
+                    "2026/01/02 03:04:05.000, 21.0, 45\n"
+                    "2026/01/02 03:04:07.000, 23.0, 46\n"
+                )
+                client = FakeClient(
+                    [
+                        success_result(
+                            root / "artifacts",
+                            "nvidia_smi_idle_csv",
+                            RAW_IDLE_NAME,
+                            csv_text,
+                            offset=0.0,
+                            worker_metadata={
+                                "node_utc_offset_s": 5.5 * 3600,
+                                "node_tzname": "IST",
+                            },
+                        )
+                    ]
+                )
+                adapter = NvidiaSmiTelemetryAdapter(FakeClock(start=100.0), client)
+
+                baseline = adapter.measure_idle(config, context)
+                thermal = adapter.thermal_state(config)
+        finally:
+            if old_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old_tz
+            if hasattr(time, "tzset"):
+                time.tzset()
+
+        self.assertEqual(baseline.duration_s, 2.0)
+        self.assertEqual(thermal.timestamp_s, 1767303247.0)
+
     def test_measure_idle_failure_raises_adapter_failure(self) -> None:
         adapter = NvidiaSmiTelemetryAdapter(
             FakeClock(),
@@ -292,6 +337,50 @@ class NvidiaSmiAdapterTests(unittest.TestCase):
             thermal = adapter.thermal_state(config)
             self.assertEqual(thermal.temperature_c, 43.0)
             self.assertEqual(thermal.timestamp_s, rows[-1].node_timestamp_s - 7.0)
+
+    def test_stop_sampling_uses_worker_node_utc_offset_not_host_timezone(self) -> None:
+        old_tz = os.environ.get("TZ")
+        os.environ["TZ"] = "America/Los_Angeles"
+        if hasattr(time, "tzset"):
+            time.tzset()
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                config = make_config()
+                context = make_context(config, root)
+                csv_text = (
+                    "2026/01/02 03:04:05.000, 21.0, 45\n"
+                    "2026/01/02 03:04:07.000, 23.0, 46\n"
+                )
+                adapter = NvidiaSmiTelemetryAdapter(
+                    FakeClock(start=100.0),
+                    FakeClient(
+                        [
+                            success_result(
+                                root / "artifacts",
+                                "nvidia_smi_csv",
+                                RAW_SAMPLES_NAME,
+                                csv_text,
+                                offset=0.0,
+                                worker_metadata={
+                                    "node_utc_offset_s": 5.5 * 3600,
+                                    "node_tzname": "IST",
+                                },
+                            )
+                        ]
+                    ),
+                )
+
+                samples = adapter.stop_sampling(config, context)
+        finally:
+            if old_tz is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = old_tz
+            if hasattr(time, "tzset"):
+                time.tzset()
+
+        self.assertEqual([sample.timestamp_s for sample in samples], [1767303245.0, 1767303247.0])
 
     def test_stop_sampling_failure_raises_adapter_failure(self) -> None:
         adapter = NvidiaSmiTelemetryAdapter(

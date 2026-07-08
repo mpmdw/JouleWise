@@ -140,6 +140,7 @@ def handle_vllm_prepare(
                 stderr=stderr_handle,
                 stdin=subprocess.DEVNULL,
             )
+            ps_lstart = _process_lstart(process.pid)
         finally:
             stdout_handle.close()
             stderr_handle.close()
@@ -171,6 +172,7 @@ def handle_vllm_prepare(
         "stderr_path": stderr_path,
         "node_started_at_s": node_started_at_s,
         "node_monotonic_started_s": node_monotonic_started_s,
+        "ps_lstart": ps_lstart,
         "served_model_name": _vllm_served_model_name(runtime),
     }
     try:
@@ -532,6 +534,7 @@ def handle_nvidia_smi_start_sampling(
                 stderr=stderr_handle,
                 stdin=subprocess.DEVNULL,
             )
+            ps_lstart = _process_lstart(process.pid)
         finally:
             stdout_handle.close()
             stderr_handle.close()
@@ -559,6 +562,7 @@ def handle_nvidia_smi_start_sampling(
         "stderr_path": stderr_path,
         "node_started_at_s": node_started_at_s,
         "node_monotonic_started_s": node_monotonic_started_s,
+        "ps_lstart": ps_lstart,
         "interval_ms": interval_ms,
         "query_fields": telemetry.get("query_fields"),
         "rail_manifest": telemetry.get("rail_manifest"),
@@ -1104,20 +1108,30 @@ def _wait_for_nvidia_smi_csv(
                 "ready_bytes": os.path.getsize(raw_path),
             }
         if process.poll() is not None:
+            diagnostics = _nvidia_smi_csv_readiness_diagnostics(raw_path)
+            message = (
+                "nvidia-smi exited before producing a parseable CSV row "
+                "(returncode %s)" % process.returncode
+            )
+            if diagnostics.get("csv_rows_seen") and not diagnostics.get("numeric_power_rows"):
+                message = (
+                    "nvidia-smi exited after producing CSV rows but no numeric "
+                    "power.draw sample (returncode %s)" % process.returncode
+                )
             return {
                 "ok": False,
-                "message": (
-                    "nvidia-smi exited before producing a parseable CSV row "
-                    "(returncode %s)" % process.returncode
-                ),
+                "message": message,
+                **diagnostics,
             }
         time.sleep(NVIDIA_SMI_READINESS_POLL_S)
+    diagnostics = _nvidia_smi_csv_readiness_diagnostics(raw_path)
     return {
         "ok": False,
         "message": (
             "nvidia-smi did not produce a parseable CSV row within %.1f s"
             % NVIDIA_SMI_READINESS_TIMEOUT_S
         ),
+        **diagnostics,
     }
 
 
@@ -1141,6 +1155,38 @@ def _line_is_parseable_nvidia_smi_row(line: str) -> bool:
     except (TypeError, ValueError):
         return False
     return True
+
+
+def _nvidia_smi_csv_readiness_diagnostics(path: str) -> Dict[str, Any]:
+    diagnostics: Dict[str, Any] = {
+        "csv_rows_seen": 0,
+        "numeric_power_rows": 0,
+        "unsupported_power_rows": 0,
+    }
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            lines = handle.readlines()
+    except OSError:
+        return diagnostics
+    for line in lines:
+        parts = [part.strip() for part in line.strip().split(",")]
+        if len(parts) != 3:
+            continue
+        try:
+            datetime.datetime.strptime(parts[0], "%Y/%m/%d %H:%M:%S.%f")
+        except ValueError:
+            continue
+        diagnostics["csv_rows_seen"] += 1
+        power = parts[1].strip().strip("[]").strip().lower()
+        if power in {"n/a", "not supported", "na", ""}:
+            diagnostics["unsupported_power_rows"] += 1
+            continue
+        try:
+            float(parts[1])
+        except ValueError:
+            continue
+        diagnostics["numeric_power_rows"] += 1
+    return diagnostics
 
 
 def _write_json(path: str, payload: Dict[str, Any]) -> None:
@@ -1203,6 +1249,15 @@ def _pidfile_matches_live_process(
     if not _command_matches(expected_command, live_command):
         metadata["pid_verification"] = "cmdline_mismatch"
         return False
+
+    expected_ps_lstart = pid_payload.get("ps_lstart")
+    if isinstance(expected_ps_lstart, str) and expected_ps_lstart.strip():
+        live_ps_lstart = _process_lstart(pid)
+        metadata["live_ps_lstart"] = live_ps_lstart
+        metadata["expected_ps_lstart"] = expected_ps_lstart
+        if live_ps_lstart != expected_ps_lstart:
+            metadata["pid_verification"] = "start_time_mismatch"
+            return False
 
     expected_started_at = _float_or_none(pid_payload.get("node_started_at_s"))
     live_started_at = _linux_process_start_epoch_s(pid)
@@ -1290,6 +1345,23 @@ def _linux_process_start_epoch_s(pid: int) -> Optional[float]:
     if boot_time is None:
         return None
     return boot_time + start_ticks / ticks_per_second
+
+
+def _process_lstart(pid: int) -> Optional[str]:
+    try:
+        completed = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "lstart="],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if completed.returncode != 0:
+        return None
+    value = completed.stdout.strip()
+    return value or None
 
 
 def _float_or_none(value: Any) -> Optional[float]:
