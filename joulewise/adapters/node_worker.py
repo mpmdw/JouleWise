@@ -16,10 +16,13 @@ import json
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+import urllib.error
+import urllib.request
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 PROTOCOL_VERSION = 1
 
@@ -50,6 +53,33 @@ NVIDIA_SMI_READINESS_TIMEOUT_S = 10.0
 NVIDIA_SMI_READINESS_POLL_S = 0.05
 NVIDIA_SMI_STOP_TIMEOUT_S = 5.0
 NVIDIA_SMI_KILL_TIMEOUT_S = 2.0
+VLLM_BINARY = "vllm"
+VLLM_COMMAND_BASE = [VLLM_BINARY, "serve"]
+VLLM_HOST = "127.0.0.1"
+VLLM_HEALTH_PATH = "/health"
+VLLM_COMPLETIONS_PATH = "/v1/completions"
+VLLM_PIDFILE = "vllm.pid"
+VLLM_STDERR = "vllm.stderr"
+VLLM_STDOUT = "vllm.stdout"
+VLLM_READINESS_TIMEOUT_S = 30.0
+VLLM_READINESS_POLL_S = 0.1
+VLLM_REQUEST_TIMEOUT_S = 60.0
+VLLM_RUN_TIMEOUT_S = 600.0
+VLLM_STOP_TIMEOUT_S = 10.0
+VLLM_KILL_TIMEOUT_S = 3.0
+VLLM_EVENTS_JSONL = "events.jsonl"
+VLLM_RESPONSE_TXT = "response.txt"
+VLLM_TOKENS_JSONL = "tokens.jsonl"
+VLLM_WARMUP_PROMPT = "JouleWise warmup."
+VLLM_WARMUP_MAX_TOKENS = 1
+VLLM_OOM_PATTERNS = (
+    "cuda out of memory",
+    "outofmemoryerror",
+    "out of memory",
+    "cublas_status_alloc_failed",
+    "cuda error: memory allocation",
+    "vllm worker got oom",
+)
 
 TASK_BLOCK_KEYS = ("runtime", "workload", "telemetry")
 RUNTIME_OPERATIONS = ("prepare", "warmup", "run_workload", "cleanup")
@@ -60,10 +90,375 @@ Handler = Callable[
     Tuple[str, Optional[str], str, Dict[str, str], Dict[str, Any]],
 ]
 _DETACHED_NVIDIA_SMI_PROCESSES: Dict[int, subprocess.Popen[Any]] = {}
+_DETACHED_VLLM_PROCESSES: Dict[int, subprocess.Popen[Any]] = {}
 
 
 class WorkerValidationError(ValueError):
     """Raised when the task JSON violates protocol v1."""
+
+
+def handle_vllm_prepare(
+    task: Dict[str, Any],
+    artifacts_dir: str,
+    log: Callable[[str], None],
+) -> Tuple[str, Optional[str], str, Dict[str, str], Dict[str, Any]]:
+    runtime = task.get("runtime") if isinstance(task.get("runtime"), dict) else {}
+    state_dir = task["paths"]["state_dir"]
+    pid_path = os.path.join(state_dir, VLLM_PIDFILE)
+    stdout_path = os.path.join(state_dir, VLLM_STDOUT)
+    stderr_path = os.path.join(state_dir, VLLM_STDERR)
+    port = _vllm_port(runtime)
+    command = _vllm_serve_command(runtime, port)
+    metadata: Dict[str, Any] = {
+        "command": command,
+        "pidfile": pid_path,
+        "port": port,
+        "host": VLLM_HOST,
+        "health_endpoint": _vllm_url(port, VLLM_HEALTH_PATH),
+        "oom_patterns": list(VLLM_OOM_PATTERNS),
+    }
+
+    try:
+        _remove_if_exists(pid_path)
+        _remove_if_exists(stdout_path)
+        _remove_if_exists(stderr_path)
+        stdout_handle = open(stdout_path, "ab")
+        stderr_handle = open(stderr_path, "ab")
+        try:
+            node_started_at_s = time.time()
+            node_monotonic_started_s = time.monotonic()
+            process = subprocess.Popen(
+                command,
+                stdout=stdout_handle,
+                stderr=stderr_handle,
+                stdin=subprocess.DEVNULL,
+            )
+        finally:
+            stdout_handle.close()
+            stderr_handle.close()
+    except FileNotFoundError as exc:
+        return (
+            STATUS_UNSUPPORTED,
+            FAILURE_RUNTIME_UNAVAILABLE,
+            "vLLM launcher unavailable: %s" % exc,
+            {},
+            metadata,
+        )
+    except OSError as exc:
+        return (
+            STATUS_FAILED,
+            FAILURE_UNKNOWN_ERROR,
+            "could not start vLLM server: %s" % exc,
+            {},
+            metadata,
+        )
+
+    pid_payload = {
+        "pid": process.pid,
+        "command": command,
+        "host": VLLM_HOST,
+        "port": port,
+        "health_path": VLLM_HEALTH_PATH,
+        "completions_path": VLLM_COMPLETIONS_PATH,
+        "stdout_path": stdout_path,
+        "stderr_path": stderr_path,
+        "node_started_at_s": node_started_at_s,
+        "node_monotonic_started_s": node_monotonic_started_s,
+        "served_model_name": _vllm_served_model_name(runtime),
+    }
+    try:
+        _write_json(pid_path, pid_payload)
+    except OSError as exc:
+        _terminate_process_object_with_timeouts(process, VLLM_STOP_TIMEOUT_S)
+        return (
+            STATUS_FAILED,
+            FAILURE_UNKNOWN_ERROR,
+            "could not write vLLM pidfile: %s" % exc,
+            {},
+            metadata,
+        )
+
+    ready = _wait_for_vllm_health(process, port, stderr_path)
+    metadata["readiness"] = ready
+    metadata["pid"] = process.pid
+    metadata["stderr_tail"] = _read_tail(stderr_path)
+    artifacts = _copy_vllm_pidfile_artifact(pid_path, artifacts_dir)
+    if not ready.get("ok"):
+        _terminate_process_object_with_timeouts(process, VLLM_STOP_TIMEOUT_S)
+        if _text_has_vllm_oom(metadata.get("stderr_tail", "")):
+            return (
+                STATUS_UNSUPPORTED,
+                FAILURE_DID_NOT_FIT,
+                ready.get("message", "vLLM server failed with out-of-memory evidence"),
+                artifacts,
+                metadata,
+            )
+        return (
+            STATUS_FAILED,
+            FAILURE_UNKNOWN_ERROR,
+            ready.get("message", "vLLM server did not become ready"),
+            artifacts,
+            metadata,
+        )
+
+    _DETACHED_VLLM_PROCESSES[process.pid] = process
+    log("vLLM server ready pid=%s port=%s" % (process.pid, port))
+    return (
+        STATUS_SUCCEEDED,
+        None,
+        "vLLM server started",
+        artifacts,
+        metadata,
+    )
+
+
+def handle_vllm_warmup(
+    task: Dict[str, Any],
+    artifacts_dir: str,
+    log: Callable[[str], None],
+) -> Tuple[str, Optional[str], str, Dict[str, str], Dict[str, Any]]:
+    del artifacts_dir
+    runtime = task.get("runtime") if isinstance(task.get("runtime"), dict) else {}
+    server = _read_vllm_server(task["paths"]["state_dir"])
+    metadata: Dict[str, Any] = {
+        "pidfile": server.get("pidfile"),
+        "port": server.get("port"),
+        "request_path": VLLM_COMPLETIONS_PATH,
+        "warmup_max_tokens": VLLM_WARMUP_MAX_TOKENS,
+    }
+    request_payload = {
+        "model": server.get("served_model_name") or _vllm_served_model_name(runtime),
+        "prompt": VLLM_WARMUP_PROMPT,
+        "max_tokens": VLLM_WARMUP_MAX_TOKENS,
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "stream": False,
+    }
+    try:
+        _vllm_json_post(int(server["port"]), VLLM_COMPLETIONS_PATH, request_payload)
+    except Exception as exc:  # noqa: BLE001 - worker maps backend failures structurally.
+        stderr_tail = _read_tail(str(server.get("stderr_path", "")))
+        metadata["stderr_tail"] = stderr_tail
+        metadata["exception"] = "%s: %s" % (exc.__class__.__name__, exc)
+        if _text_has_vllm_oom(stderr_tail) or _text_has_vllm_oom(str(exc)):
+            return (
+                STATUS_UNSUPPORTED,
+                FAILURE_DID_NOT_FIT,
+                "vLLM warmup failed with out-of-memory evidence",
+                {},
+                metadata,
+            )
+        return (
+            STATUS_FAILED,
+            FAILURE_UNKNOWN_ERROR,
+            "vLLM warmup request failed: %s" % exc,
+            {},
+            metadata,
+        )
+    log("vLLM warmup completed")
+    return (
+        STATUS_SUCCEEDED,
+        None,
+        "vLLM warmup completed",
+        {},
+        metadata,
+    )
+
+
+def handle_vllm_run_workload(
+    task: Dict[str, Any],
+    artifacts_dir: str,
+    log: Callable[[str], None],
+) -> Tuple[str, Optional[str], str, Dict[str, str], Dict[str, Any]]:
+    workload = task.get("workload") if isinstance(task.get("workload"), dict) else {}
+    server = _read_vllm_server(task["paths"]["state_dir"])
+    response_path = os.path.join(artifacts_dir, VLLM_RESPONSE_TXT)
+    tokens_path = os.path.join(artifacts_dir, VLLM_TOKENS_JSONL)
+    events_path = os.path.join(artifacts_dir, VLLM_EVENTS_JSONL)
+    max_tokens = _positive_int_or_default(workload.get("output_tokens"), 1)
+    sampling_params = dict(workload.get("sampling_params") or {})
+    sampling_params["max_tokens"] = _positive_int_or_default(
+        sampling_params.get("max_tokens"),
+        max_tokens,
+    )
+    request_payload = {
+        "model": server.get("served_model_name"),
+        "prompt": _workload_prompt(workload),
+        "stream": True,
+    }
+    request_payload.update(sampling_params)
+    metadata: Dict[str, Any] = {
+        "pidfile": server.get("pidfile"),
+        "port": server.get("port"),
+        "request_path": VLLM_COMPLETIONS_PATH,
+        "sampling_params": sampling_params,
+        "requested_output_tokens": max_tokens,
+        "phase_boundary_method": "first_stream_chunk",
+    }
+    events: List[Dict[str, Any]] = []
+    token_count = 0
+    text_parts: List[str] = []
+
+    try:
+        _append_runtime_event(
+            events,
+            "phase_start",
+            "prefill",
+            "vLLM prefill started",
+            {
+                "phase_boundary_method": "first_stream_chunk",
+                "requested_output_tokens": max_tokens,
+                "sampling_params": sampling_params,
+            },
+        )
+        with open(tokens_path, "w", encoding="utf-8") as tokens_handle:
+            for piece in _vllm_stream_completion(
+                int(server["port"]),
+                VLLM_COMPLETIONS_PATH,
+                request_payload,
+                timeout_s=VLLM_RUN_TIMEOUT_S,
+            ):
+                timestamp_s = time.time()
+                if token_count == 0:
+                    _append_runtime_event(
+                        events,
+                        "phase_end",
+                        "prefill",
+                        "vLLM prefill completed",
+                        {"phase_boundary_method": "first_stream_chunk"},
+                        timestamp_s=timestamp_s,
+                    )
+                    _append_runtime_event(
+                        events,
+                        "phase_start",
+                        "decode",
+                        "vLLM decode started",
+                        {
+                            "phase_boundary_method": "first_stream_chunk",
+                            "requested_output_tokens": max_tokens,
+                        },
+                        timestamp_s=timestamp_s,
+                    )
+                text_parts.append(piece)
+                token_record = {
+                    "index": token_count,
+                    "timestamp_s": timestamp_s,
+                    "text": piece,
+                }
+                tokens_handle.write(json.dumps(token_record, sort_keys=True) + "\n")
+                token_count += 1
+        if token_count == 0:
+            timestamp_s = time.time()
+            _append_runtime_event(
+                events,
+                "phase_end",
+                "prefill",
+                "vLLM prefill completed without emitted tokens",
+                {"phase_boundary_method": "first_stream_chunk"},
+                timestamp_s=timestamp_s,
+            )
+            _append_runtime_event(
+                events,
+                "phase_start",
+                "decode",
+                "vLLM decode started without emitted tokens",
+                {
+                    "phase_boundary_method": "first_stream_chunk",
+                    "requested_output_tokens": max_tokens,
+                },
+                timestamp_s=timestamp_s,
+            )
+        _append_runtime_event(
+            events,
+            "phase_end",
+            "decode",
+            "vLLM decode completed",
+            {
+                "phase_boundary_method": "first_stream_chunk",
+                "emitted_tokens": token_count,
+                "requested_output_tokens": max_tokens,
+            },
+        )
+        with open(response_path, "w", encoding="utf-8") as response_handle:
+            response_handle.write("".join(text_parts))
+        _write_jsonl(events_path, events)
+    except Exception as exc:  # noqa: BLE001 - worker maps backend failures structurally.
+        stderr_tail = _read_tail(str(server.get("stderr_path", "")))
+        metadata["stderr_tail"] = stderr_tail
+        metadata["exception"] = "%s: %s" % (exc.__class__.__name__, exc)
+        if _text_has_vllm_oom(stderr_tail) or _text_has_vllm_oom(str(exc)):
+            return (
+                STATUS_UNSUPPORTED,
+                FAILURE_DID_NOT_FIT,
+                "vLLM workload failed with out-of-memory evidence",
+                _existing_runtime_artifacts(artifacts_dir),
+                metadata,
+            )
+        return (
+            STATUS_FAILED,
+            FAILURE_UNKNOWN_ERROR,
+            "vLLM workload request failed: %s" % exc,
+            _existing_runtime_artifacts(artifacts_dir),
+            metadata,
+        )
+
+    metadata["emitted_tokens"] = token_count
+    log("vLLM workload completed tokens=%s" % token_count)
+    return (
+        STATUS_SUCCEEDED,
+        None,
+        "vLLM workload completed",
+        {
+            "events_jsonl": VLLM_EVENTS_JSONL,
+            "response_txt": VLLM_RESPONSE_TXT,
+            "tokens_jsonl": VLLM_TOKENS_JSONL,
+        },
+        metadata,
+    )
+
+
+def handle_vllm_cleanup(
+    task: Dict[str, Any],
+    artifacts_dir: str,
+    log: Callable[[str], None],
+) -> Tuple[str, Optional[str], str, Dict[str, str], Dict[str, Any]]:
+    del artifacts_dir
+    state_dir = task["paths"]["state_dir"]
+    pid_path = os.path.join(state_dir, VLLM_PIDFILE)
+    metadata: Dict[str, Any] = {"pidfile": pid_path}
+    try:
+        pid_payload = _read_json(pid_path)
+        pid = int(pid_payload["pid"])
+    except FileNotFoundError:
+        metadata["termination"] = "no_pidfile"
+        return (
+            STATUS_SUCCEEDED,
+            None,
+            "vLLM server was not running",
+            {},
+            metadata,
+        )
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        return (
+            STATUS_FAILED,
+            FAILURE_UNKNOWN_ERROR,
+            "could not read vLLM pidfile: %s" % exc,
+            {},
+            metadata,
+        )
+
+    metadata["pid"] = pid
+    metadata["pidfile_payload"] = pid_payload
+    _terminate_vllm_pid(pid, metadata)
+    _remove_if_exists(pid_path)
+    log("vLLM cleanup requested pid=%s" % pid)
+    return (
+        STATUS_SUCCEEDED,
+        None,
+        "vLLM server stopped",
+        {},
+        metadata,
+    )
 
 
 def handle_nvidia_smi_start_sampling(
@@ -330,6 +725,291 @@ def _nvidia_smi_command(interval_ms: int) -> List[str]:
     ]
 
 
+def _vllm_serve_command(runtime: Dict[str, Any], port: int) -> List[str]:
+    model = runtime.get("model") if isinstance(runtime.get("model"), dict) else {}
+    quantization = runtime.get("quantization") if isinstance(runtime.get("quantization"), dict) else {}
+    options = runtime.get("options") if isinstance(runtime.get("options"), dict) else {}
+    model_arg = str(model.get("source") or model.get("name") or "")
+    command = list(VLLM_COMMAND_BASE)
+    if model_arg:
+        command.append(model_arg)
+    command.extend(["--host", VLLM_HOST, "--port", str(port)])
+
+    served_model_name = _vllm_served_model_name(runtime)
+    if served_model_name:
+        command.extend(["--served-model-name", served_model_name])
+    if model.get("revision"):
+        command.extend(["--revision", str(model["revision"])])
+    if quantization.get("name") and str(quantization.get("name")) != "none":
+        command.extend(["--quantization", str(quantization["name"])])
+
+    option_flags = {
+        "tensor_parallel_size": "--tensor-parallel-size",
+        "gpu_memory_utilization": "--gpu-memory-utilization",
+        "dtype": "--dtype",
+        "max_model_len": "--max-model-len",
+        "download_dir": "--download-dir",
+    }
+    for key, flag in option_flags.items():
+        value = options.get(key)
+        if value is not None:
+            command.extend([flag, str(value)])
+
+    extra_args = options.get("extra_args")
+    if isinstance(extra_args, list):
+        command.extend(str(item) for item in extra_args)
+    return command
+
+
+def _vllm_served_model_name(runtime: Dict[str, Any]) -> str:
+    options = runtime.get("options") if isinstance(runtime.get("options"), dict) else {}
+    model = runtime.get("model") if isinstance(runtime.get("model"), dict) else {}
+    return str(options.get("served_model_name") or model.get("name") or "joulewise-vllm")
+
+
+def _vllm_port(runtime: Dict[str, Any]) -> int:
+    options = runtime.get("options") if isinstance(runtime.get("options"), dict) else {}
+    value = options.get("port")
+    try:
+        port = int(value)
+    except (TypeError, ValueError):
+        port = _choose_free_local_port()
+    return max(1, min(65535, port))
+
+
+def _choose_free_local_port() -> int:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind((VLLM_HOST, 0))
+        return int(sock.getsockname()[1])
+    finally:
+        sock.close()
+
+
+def _vllm_url(port: int, path: str) -> str:
+    return "http://%s:%s%s" % (VLLM_HOST, port, path)
+
+
+def _wait_for_vllm_health(
+    process: subprocess.Popen[Any],
+    port: int,
+    stderr_path: str,
+) -> Dict[str, Any]:
+    deadline = time.monotonic() + VLLM_READINESS_TIMEOUT_S
+    last_error = ""
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            stderr_tail = _read_tail(stderr_path)
+            return {
+                "ok": False,
+                "message": "vLLM exited before readiness (returncode %s)" % process.returncode,
+                "stderr_tail": stderr_tail,
+            }
+        try:
+            request = urllib.request.Request(_vllm_url(port, VLLM_HEALTH_PATH), method="GET")
+            with urllib.request.urlopen(request, timeout=1.0) as response:
+                status = getattr(response, "status", response.getcode())
+                if 200 <= int(status) < 300:
+                    return {
+                        "ok": True,
+                        "ready_check": "http_get_health",
+                        "status": int(status),
+                    }
+                last_error = "HTTP %s" % status
+        except (OSError, urllib.error.URLError, ValueError) as exc:
+            last_error = str(exc)
+        time.sleep(VLLM_READINESS_POLL_S)
+    return {
+        "ok": False,
+        "message": (
+            "vLLM health endpoint did not become ready within %.1f s: %s"
+            % (VLLM_READINESS_TIMEOUT_S, last_error)
+        ),
+    }
+
+
+def _read_vllm_server(state_dir: str) -> Dict[str, Any]:
+    pid_path = os.path.join(state_dir, VLLM_PIDFILE)
+    payload = _read_json(pid_path)
+    payload["pidfile"] = pid_path
+    return payload
+
+
+def _vllm_json_post(port: int, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    data = json.dumps(payload, sort_keys=True).encode("utf-8")
+    request = urllib.request.Request(
+        _vllm_url(port, path),
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=VLLM_REQUEST_TIMEOUT_S) as response:
+        body = response.read().decode("utf-8", errors="replace")
+    if not body:
+        return {}
+    parsed = json.loads(body)
+    if not isinstance(parsed, dict):
+        raise ValueError("vLLM response JSON must be an object")
+    return parsed
+
+
+def _vllm_stream_completion(
+    port: int,
+    path: str,
+    payload: Dict[str, Any],
+    *,
+    timeout_s: float,
+) -> Iterator[str]:
+    data = json.dumps(payload, sort_keys=True).encode("utf-8")
+    request = urllib.request.Request(
+        _vllm_url(port, path),
+        data=data,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout_s) as response:
+        for raw_line in response:
+            line = raw_line.decode("utf-8", errors="replace").strip()
+            if not line:
+                continue
+            if line.startswith("data:"):
+                line = line[len("data:") :].strip()
+            if line == "[DONE]":
+                break
+            payload_obj = json.loads(line)
+            if not isinstance(payload_obj, dict):
+                continue
+            for piece in _completion_text_pieces(payload_obj):
+                if piece:
+                    yield piece
+
+
+def _completion_text_pieces(payload: Dict[str, Any]) -> Iterator[str]:
+    choices = payload.get("choices")
+    if not isinstance(choices, list):
+        return
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        if "text" in choice:
+            yield str(choice.get("text") or "")
+        elif isinstance(choice.get("delta"), dict):
+            yield str(choice["delta"].get("content") or "")
+
+
+def _workload_prompt(workload: Dict[str, Any]) -> str:
+    if workload.get("prompt_text") is not None:
+        return str(workload["prompt_text"])
+    if workload.get("dataset_ref") is not None:
+        return "Dataset reference: %s" % workload["dataset_ref"]
+    prompt_tokens = _positive_int_or_default(workload.get("prompt_tokens"), 1)
+    return " ".join("jw%d" % index for index in range(prompt_tokens))
+
+
+def _positive_int_or_default(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(1, parsed)
+
+
+def _append_runtime_event(
+    events: List[Dict[str, Any]],
+    event_type: str,
+    phase: str,
+    message: str,
+    metadata: Dict[str, Any],
+    *,
+    timestamp_s: Optional[float] = None,
+) -> None:
+    events.append(
+        {
+            "timestamp_s": time.time() if timestamp_s is None else timestamp_s,
+            "event_type": event_type,
+            "phase": phase,
+            "message": message,
+            "metadata": metadata,
+        }
+    )
+
+
+def _write_jsonl(path: str, records: List[Dict[str, Any]]) -> None:
+    with open(path, "w", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+def _text_has_vllm_oom(text: str) -> bool:
+    normalized = text.lower().replace("_", "")
+    return any(pattern.replace("_", "") in normalized for pattern in VLLM_OOM_PATTERNS)
+
+
+def _copy_vllm_pidfile_artifact(pid_path: str, artifacts_dir: str) -> Dict[str, str]:
+    try:
+        shutil.copy2(pid_path, os.path.join(artifacts_dir, VLLM_PIDFILE))
+    except OSError:
+        return {}
+    return {"vllm_pidfile": VLLM_PIDFILE}
+
+
+def _existing_runtime_artifacts(artifacts_dir: str) -> Dict[str, str]:
+    artifacts: Dict[str, str] = {}
+    for key, name in (
+        ("events_jsonl", VLLM_EVENTS_JSONL),
+        ("response_txt", VLLM_RESPONSE_TXT),
+        ("tokens_jsonl", VLLM_TOKENS_JSONL),
+    ):
+        if os.path.exists(os.path.join(artifacts_dir, name)):
+            artifacts[key] = name
+    return artifacts
+
+
+def _terminate_process_object_with_timeouts(
+    process: subprocess.Popen[Any],
+    stop_timeout_s: float,
+) -> None:
+    if process.poll() is None:
+        process.terminate()
+    try:
+        process.communicate(timeout=stop_timeout_s)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
+
+
+def _terminate_vllm_pid(pid: int, metadata: Dict[str, Any]) -> None:
+    cached_process = _DETACHED_VLLM_PROCESSES.pop(pid, None)
+    if cached_process is not None:
+        _terminate_process_object_with_timeouts(cached_process, VLLM_STOP_TIMEOUT_S)
+        metadata["termination"] = "cached_popen"
+        return
+
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        metadata["termination"] = "already_exited"
+        return
+    except OSError as exc:
+        metadata["termination_error"] = str(exc)
+        return
+
+    if _wait_for_pid_exit(pid, VLLM_STOP_TIMEOUT_S):
+        metadata["termination"] = "sigterm"
+        return
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        metadata["termination"] = "sigterm"
+        return
+    except OSError as exc:
+        metadata["termination_error"] = str(exc)
+        return
+    metadata["termination"] = "sigkill"
+    if not _wait_for_pid_exit(pid, VLLM_KILL_TIMEOUT_S):
+        metadata["termination_warning"] = "pid still visible after SIGKILL"
+
+
 def _wait_for_nvidia_smi_csv(
     process: subprocess.Popen[Any],
     raw_path: str,
@@ -491,6 +1171,10 @@ def _remove_if_exists(path: str) -> None:
 
 
 OPERATION_HANDLERS: Dict[Tuple[str, str], Handler] = {
+    ("runtime", "prepare"): handle_vllm_prepare,
+    ("runtime", "warmup"): handle_vllm_warmup,
+    ("runtime", "run_workload"): handle_vllm_run_workload,
+    ("runtime", "cleanup"): handle_vllm_cleanup,
     ("telemetry", "measure_idle"): handle_nvidia_smi_measure_idle,
     ("telemetry", "start_sampling"): handle_nvidia_smi_start_sampling,
     ("telemetry", "stop_sampling"): handle_nvidia_smi_stop_sampling,
@@ -721,7 +1405,7 @@ def write_log_line(artifacts_dir: str, line: str) -> None:
 
 
 def apply_task_identity_to_metadata(task: Dict[str, Any], metadata: Dict[str, Any]) -> None:
-    metadata["worker_build"] = "u1-protocol-harness"
+    metadata["worker_build"] = "u4-vllm-runtime"
 
 
 if __name__ == "__main__":

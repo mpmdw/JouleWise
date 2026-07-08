@@ -48,6 +48,59 @@ def valid_task(**overrides: Any) -> dict[str, Any]:
     return task
 
 
+def valid_runtime_task(**overrides: Any) -> dict[str, Any]:
+    task: dict[str, Any] = {
+        "protocol_version": 1,
+        "task_id": "task-runtime-prepare-001",
+        "run_id": "run-3050-smoke-001",
+        "task_type": "runtime",
+        "operation": "prepare",
+        "node_role": None,
+        "paths": {"state_dir": ""},
+        "runtime": {
+            "backend": "vllm",
+            "model": {
+                "name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                "revision": "main",
+                "weight_format": "safetensors",
+            },
+            "quantization": {"name": "none"},
+            "options": {
+                "tensor_parallel_size": 1,
+                "gpu_memory_utilization": 0.82,
+                "served_model_name": "jw-3050-smoke",
+            },
+        },
+    }
+    task.update(overrides)
+    return task
+
+
+def valid_workload_task(**overrides: Any) -> dict[str, Any]:
+    task: dict[str, Any] = {
+        "protocol_version": 1,
+        "task_id": "task-runtime-run-001",
+        "run_id": "run-3050-smoke-001",
+        "task_type": "runtime",
+        "operation": "run_workload",
+        "node_role": None,
+        "paths": {"state_dir": ""},
+        "workload": {
+            "prompt_text": "alpha beta",
+            "prompt_tokens": 2,
+            "output_tokens": 3,
+            "sampling_params": {
+                "max_tokens": 3,
+                "temperature": 0.0,
+                "top_p": 1.0,
+                "seed": 0,
+            },
+        },
+    }
+    task.update(overrides)
+    return task
+
+
 class NodeWorkerTests(unittest.TestCase):
     def write_task(self, tmpdir: Path, task: dict[str, Any]) -> Path:
         task.setdefault("paths", {})["state_dir"] = str(tmpdir / "state")
@@ -328,6 +381,197 @@ class NodeWorkerTests(unittest.TestCase):
             finally:
                 os.environ["PATH"] = old_path
 
+    def test_runtime_prepare_warmup_run_cleanup_with_fake_vllm(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            bin_dir = tmpdir / "bin"
+            self.write_fake_vllm(bin_dir)
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = str(bin_dir) + os.pathsep + old_path
+            old_wait = node_worker._wait_for_vllm_health
+            old_post = node_worker._vllm_json_post
+            old_stream = node_worker._vllm_stream_completion
+            node_worker._wait_for_vllm_health = lambda process, port, stderr_path: {  # type: ignore[assignment]
+                "ok": True,
+                "ready_check": "fake_http_health",
+                "status": 200,
+            }
+            node_worker._vllm_json_post = lambda port, path, payload: {"choices": [{"text": "W"}]}  # type: ignore[assignment]
+            node_worker._vllm_stream_completion = lambda port, path, payload, timeout_s: iter(["A", "B", "C"])  # type: ignore[assignment]
+            port = 32123
+            try:
+                runtime = valid_runtime_task()["runtime"]
+                runtime["options"] = {**runtime["options"], "port": port}
+                prepare_artifacts = tmpdir / "prepare-artifacts"
+                prepare_task = self.write_task(
+                    tmpdir,
+                    valid_runtime_task(task_id="task-prepare", runtime=runtime),
+                )
+
+                prepare_code = node_worker.main(
+                    ["--task", str(prepare_task), "--artifacts", str(prepare_artifacts)]
+                )
+
+                self.assertEqual(prepare_code, 0)
+                prepare_status = self.read_status(prepare_artifacts)
+                self.assertEqual(prepare_status["status"], "succeeded")
+                self.assertEqual(prepare_status["artifacts"]["vllm_pidfile"], "vllm.pid")
+                pidfile = tmpdir / "state" / "vllm.pid"
+                self.assertTrue(pidfile.exists())
+                pid_payload = json.loads(pidfile.read_text(encoding="utf-8"))
+                self.assertEqual(pid_payload["port"], port)
+                self.assertEqual(pid_payload["served_model_name"], "jw-3050-smoke")
+
+                warmup_artifacts = tmpdir / "warmup-artifacts"
+                warmup_task = self.write_task(
+                    tmpdir,
+                    valid_runtime_task(
+                        task_id="task-warmup",
+                        operation="warmup",
+                        runtime=runtime,
+                    ),
+                )
+                warmup_code = node_worker.main(
+                    ["--task", str(warmup_task), "--artifacts", str(warmup_artifacts)]
+                )
+                self.assertEqual(warmup_code, 0)
+                warmup_status = self.read_status(warmup_artifacts)
+                self.assertEqual(warmup_status["status"], "succeeded")
+
+                run_artifacts = tmpdir / "run-artifacts"
+                run_task = self.write_task(
+                    tmpdir,
+                    valid_workload_task(task_id="task-run"),
+                )
+                run_code = node_worker.main(
+                    ["--task", str(run_task), "--artifacts", str(run_artifacts)]
+                )
+                self.assertEqual(run_code, 0)
+                run_status = self.read_status(run_artifacts)
+                self.assertEqual(run_status["status"], "succeeded")
+                self.assertEqual(run_status["artifacts"]["events_jsonl"], "events.jsonl")
+                self.assertEqual(run_status["artifacts"]["response_txt"], "response.txt")
+                self.assertEqual(run_status["artifacts"]["tokens_jsonl"], "tokens.jsonl")
+                self.assertEqual((run_artifacts / "response.txt").read_text(encoding="utf-8"), "ABC")
+                tokens = [
+                    json.loads(line)
+                    for line in (run_artifacts / "tokens.jsonl").read_text(encoding="utf-8").splitlines()
+                ]
+                self.assertEqual([token["text"] for token in tokens], ["A", "B", "C"])
+                self.assertEqual([token["index"] for token in tokens], [0, 1, 2])
+                self.assertTrue(all(isinstance(token["timestamp_s"], float) for token in tokens))
+                events = [
+                    json.loads(line)
+                    for line in (run_artifacts / "events.jsonl").read_text(encoding="utf-8").splitlines()
+                ]
+                self.assertEqual(
+                    [(event["event_type"], event["phase"]) for event in events],
+                    [
+                        ("phase_start", "prefill"),
+                        ("phase_end", "prefill"),
+                        ("phase_start", "decode"),
+                        ("phase_end", "decode"),
+                    ],
+                )
+
+                cleanup_artifacts = tmpdir / "cleanup-artifacts"
+                cleanup_task = self.write_task(
+                    tmpdir,
+                    valid_runtime_task(
+                        task_id="task-cleanup",
+                        operation="cleanup",
+                        runtime=runtime,
+                    ),
+                )
+                cleanup_code = node_worker.main(
+                    ["--task", str(cleanup_task), "--artifacts", str(cleanup_artifacts)]
+                )
+                self.assertEqual(cleanup_code, 0)
+                cleanup_status = self.read_status(cleanup_artifacts)
+                self.assertEqual(cleanup_status["status"], "succeeded")
+                self.assertFalse(pidfile.exists())
+
+                cleanup_again_artifacts = tmpdir / "cleanup-again-artifacts"
+                cleanup_again_task = self.write_task(
+                    tmpdir,
+                    valid_runtime_task(
+                        task_id="task-cleanup-again",
+                        operation="cleanup",
+                        runtime=runtime,
+                    ),
+                )
+                cleanup_again_code = node_worker.main(
+                    ["--task", str(cleanup_again_task), "--artifacts", str(cleanup_again_artifacts)]
+                )
+                self.assertEqual(cleanup_again_code, 0)
+                cleanup_again_status = self.read_status(cleanup_again_artifacts)
+                self.assertEqual(cleanup_again_status["status"], "succeeded")
+                self.assertEqual(cleanup_again_status["metadata"]["termination"], "no_pidfile")
+            finally:
+                os.environ["PATH"] = old_path
+                node_worker._wait_for_vllm_health = old_wait
+                node_worker._vllm_json_post = old_post
+                node_worker._vllm_stream_completion = old_stream
+
+    def test_runtime_missing_vllm_launcher_is_runtime_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            bin_dir = tmpdir / "empty-bin"
+            bin_dir.mkdir()
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = str(bin_dir)
+            try:
+                artifacts_dir = tmpdir / "artifacts"
+                runtime = valid_runtime_task()["runtime"]
+                runtime["options"] = {**runtime["options"], "port": 32124}
+                task_path = self.write_task(
+                    tmpdir,
+                    valid_runtime_task(task_id="task-vllm-missing", runtime=runtime),
+                )
+
+                code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+
+                self.assertEqual(code, 1)
+                status = self.read_status(artifacts_dir)
+                self.assertEqual(status["status"], "unsupported")
+                self.assertEqual(status["failure_reason"], "runtime_unavailable")
+                self.assertIn("vLLM launcher unavailable", status["message"])
+            finally:
+                os.environ["PATH"] = old_path
+
+    def test_runtime_vllm_oom_during_prepare_is_did_not_fit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            bin_dir = tmpdir / "bin"
+            self.write_fake_vllm(bin_dir)
+            old_path = os.environ.get("PATH", "")
+            old_mode = os.environ.get("JW_FAKE_VLLM_MODE")
+            os.environ["PATH"] = str(bin_dir) + os.pathsep + old_path
+            os.environ["JW_FAKE_VLLM_MODE"] = "oom"
+            try:
+                artifacts_dir = tmpdir / "artifacts"
+                runtime = valid_runtime_task()["runtime"]
+                runtime["options"] = {**runtime["options"], "port": 32125}
+                task_path = self.write_task(
+                    tmpdir,
+                    valid_runtime_task(task_id="task-vllm-oom", runtime=runtime),
+                )
+
+                code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+
+                self.assertEqual(code, 1)
+                status = self.read_status(artifacts_dir)
+                self.assertEqual(status["status"], "unsupported")
+                self.assertEqual(status["failure_reason"], "did_not_fit")
+                self.assertIn("oom_patterns", status["metadata"])
+                self.assertIn("CUDA out of memory", status["metadata"]["stderr_tail"])
+            finally:
+                os.environ["PATH"] = old_path
+                if old_mode is None:
+                    os.environ.pop("JW_FAKE_VLLM_MODE", None)
+                else:
+                    os.environ["JW_FAKE_VLLM_MODE"] = old_mode
+
     def write_fake_nvidia_smi(self, bin_dir: Path) -> Path:
         bin_dir.mkdir()
         path = bin_dir / "nvidia-smi"
@@ -346,6 +590,37 @@ class NodeWorkerTests(unittest.TestCase):
                     "while running:",
                     "    print(f'2026/07/07 12:00:{i % 60:02d}.000, {10.0 + i:.2f}, {40 + i % 10}', flush=True)",
                     "    i += 1",
+                    "    time.sleep(0.05)",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+        path.chmod(0o755)
+        return path
+
+    def write_fake_vllm(self, bin_dir: Path) -> Path:
+        bin_dir.mkdir()
+        path = bin_dir / "vllm"
+        path.write_text(
+            "\n".join(
+                [
+                    "#!/usr/bin/env python3",
+                    "import json",
+                    "import os",
+                    "import signal",
+                    "import sys",
+                    "import time",
+                    "",
+                    "if os.environ.get('JW_FAKE_VLLM_MODE') == 'oom':",
+                    "    print('CUDA out of memory while loading fake model', file=sys.stderr, flush=True)",
+                    "    sys.exit(3)",
+                    "running = True",
+                    "def stop(signum, frame):",
+                    "    global running",
+                    "    running = False",
+                    "signal.signal(signal.SIGTERM, stop)",
+                    "while running:",
                     "    time.sleep(0.05)",
                     "",
                 ]
