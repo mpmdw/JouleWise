@@ -39,9 +39,19 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from joulewise.bundle import sanitize_id_component  # noqa: E402
+from joulewise.cli import validate_bundle  # noqa: E402
 
 
-STATUSES = ("ok", "failed", "skipped", "incomplete_existing", "config_error", "dry_run")
+STATUSES = (
+    "ok",
+    "failed",
+    "skipped",
+    "waived",
+    "incomplete_existing",
+    "config_error",
+    "dry_run",
+)
+ORDER_MANIFEST_NAME = "order_manifest.json"
 
 
 @dataclass(frozen=True)
@@ -69,6 +79,75 @@ class ExistingState:
     malformed_summaries: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class Waiver:
+    target: str
+    reason: str
+    approver: str
+    timestamp: str
+    scope: str
+
+
+@dataclass(frozen=True)
+class MemberEvaluation:
+    bundle_id: str
+    bundle_path: Path
+    config_name: str
+    status: str | None
+    strict_valid: bool
+    validation_problems: tuple[str, ...] = ()
+    quality_flags: tuple[str, ...] = ()
+    waiver: Waiver | None = None
+
+    @property
+    def usable(self) -> bool:
+        return (
+            self.status == "succeeded"
+            and self.strict_valid
+            and not self.quality_flags
+            and self.waiver is None
+        )
+
+    @property
+    def waived(self) -> bool:
+        return self.waiver is not None
+
+    @property
+    def failed(self) -> bool:
+        return not self.usable and self.waiver is None
+
+    def to_log(self) -> dict[str, Any]:
+        row: dict[str, Any] = {
+            "bundle_id": self.bundle_id,
+            "bundle_path": str(self.bundle_path),
+            "status": self.status,
+            "strict_valid": self.strict_valid,
+            "validation_problems": list(self.validation_problems),
+            "quality_flags": list(self.quality_flags),
+            "classification": (
+                "usable" if self.usable else "waived" if self.waived else "failed"
+            ),
+        }
+        if self.waiver is not None:
+            row["waiver"] = {
+                "reason": self.waiver.reason,
+                "approver": self.waiver.approver,
+                "timestamp": self.waiver.timestamp,
+                "scope": self.waiver.scope,
+            }
+        return row
+
+
+@dataclass(frozen=True)
+class OrderEntry:
+    index: int
+    config: str
+    run_id: str | None = None
+    model_tag: str | None = None
+    rep: int | None = None
+    workload: str | None = None
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config_dir", help="Directory containing generated JSON configs")
@@ -85,6 +164,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--cli-cmd",
         help="Command prefix replacing '<python> -m joulewise'; 'run <config> --runs-dir <dir>' is appended",
+    )
+    parser.add_argument(
+        "--waivers",
+        help="Optional JSON file listing campaign waivers; waivers are never written into bundles",
     )
     return parser.parse_args(argv)
 
@@ -183,7 +266,7 @@ def print_quiet_machine_warning() -> None:
 def discover_configs(config_dir: Path) -> list[Path]:
     if not config_dir.is_dir():
         raise ValueError(f"config_dir is not a directory: {config_dir}")
-    return sorted(config_dir.glob("*.json"))
+    return sorted(path for path in config_dir.glob("*.json") if path.name != ORDER_MANIFEST_NAME)
 
 
 def print_config_file_list(configs: list[Path]) -> None:
@@ -212,6 +295,126 @@ def backup_runs(runs_dir: Path, script: Path) -> None:
 
 def member_bundle_dirs(runs_dir: Path, run_id: str, repetitions: int) -> list[Path]:
     return [runs_dir / f"{run_id}__r{rep}" for rep in range(1, repetitions + 1)]
+
+
+def expected_member_dirs(info: ConfigInfo, runs_dir: Path) -> list[Path]:
+    if info.repetitions == 1:
+        return [runs_dir / info.run_id]
+    return member_bundle_dirs(runs_dir, info.run_id, info.repetitions)
+
+
+def load_waivers(path_text: str | None) -> dict[str, Waiver]:
+    if path_text is None:
+        return {}
+    path = Path(path_text)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ValueError(f"failed to read waiver file {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"waiver file is not valid JSON: {path}: {exc}") from exc
+    if not isinstance(raw, list):
+        raise ValueError(f"waiver file must be a JSON list: {path}")
+    waivers: dict[str, Waiver] = {}
+    for index, item in enumerate(raw, start=1):
+        if not isinstance(item, dict):
+            raise ValueError(f"waiver {index} must be an object")
+        target = item.get("bundle_id", item.get("config"))
+        if not isinstance(target, str) or not target.strip():
+            raise ValueError(f"waiver {index} requires bundle_id or config")
+        for key in ("reason", "approver", "timestamp", "scope"):
+            if not isinstance(item.get(key), str) or not item[key].strip():
+                raise ValueError(f"waiver {index} requires non-empty {key}")
+        waivers[target] = Waiver(
+            target=target,
+            reason=item["reason"],
+            approver=item["approver"],
+            timestamp=item["timestamp"],
+            scope=item["scope"],
+        )
+    return waivers
+
+
+def matching_waiver(
+    waivers: dict[str, Waiver],
+    *,
+    bundle_id: str,
+    config_name: str,
+    config_stem: str,
+    run_id: str,
+) -> Waiver | None:
+    for key in (bundle_id, config_name, config_stem, run_id):
+        waiver = waivers.get(key)
+        if waiver is not None:
+            return waiver
+    return None
+
+
+def quality_flags(summary: dict[str, Any] | None) -> tuple[str, ...]:
+    if not isinstance(summary, dict):
+        return ()
+    quality = summary.get("measurement_quality")
+    if not isinstance(quality, dict):
+        return ()
+    flags: list[str] = []
+    if quality.get("idle_window_suspect") is True:
+        flags.append("idle_window_suspect")
+    return tuple(flags)
+
+
+def evaluate_member(
+    bundle_dir: Path,
+    *,
+    info: ConfigInfo,
+    waivers: dict[str, Waiver],
+) -> MemberEvaluation:
+    status, malformed = summary_status(bundle_dir / "summary_metrics.json")
+    problems: list[str] = []
+    strict_valid = False
+    if bundle_dir.exists():
+        try:
+            problems = validate_bundle(bundle_dir, strict=True)
+        except Exception as exc:
+            problems = [f"strict validation raised {type(exc).__name__}: {exc}"]
+        strict_valid = not problems
+    else:
+        problems = ["bundle directory is missing"]
+    if malformed is not None:
+        problems = [malformed, *problems]
+    summary: dict[str, Any] | None = None
+    if (bundle_dir / "summary_metrics.json").is_file():
+        try:
+            parsed = json.loads((bundle_dir / "summary_metrics.json").read_text(encoding="utf-8"))
+            if isinstance(parsed, dict):
+                summary = parsed
+        except (OSError, json.JSONDecodeError):
+            summary = None
+    waiver = matching_waiver(
+        waivers,
+        bundle_id=bundle_dir.name,
+        config_name=info.path.name,
+        config_stem=info.path.stem,
+        run_id=info.run_id,
+    )
+    return MemberEvaluation(
+        bundle_id=bundle_dir.name,
+        bundle_path=bundle_dir,
+        config_name=info.path.name,
+        status=status,
+        strict_valid=strict_valid,
+        validation_problems=tuple(problems),
+        quality_flags=quality_flags(summary),
+        waiver=waiver,
+    )
+
+
+def evaluate_members(
+    info: ConfigInfo, runs_dir: Path, waivers: dict[str, Waiver]
+) -> list[MemberEvaluation]:
+    return [
+        evaluate_member(bundle_dir, info=info, waivers=waivers)
+        for bundle_dir in expected_member_dirs(info, runs_dir)
+    ]
 
 
 def summary_status(summary_path: Path) -> tuple[str | None, str | None]:
@@ -299,6 +502,82 @@ def read_config_infos(config_paths: list[Path]) -> list[ConfigInfo | ConfigError
     return items
 
 
+def load_order_entries(config_dir: Path) -> tuple[list[OrderEntry], str | None]:
+    path = config_dir / ORDER_MANIFEST_NAME
+    if not path.is_file():
+        return [], (
+            f"WARNING: no {ORDER_MANIFEST_NAME} found; falling back to sorted "
+            "config order. D-014 forbids silent sorted model blocks."
+        )
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise ValueError(f"failed to read order manifest {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"order manifest is not valid JSON: {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"order manifest must be a JSON object: {path}")
+    raw_order = data.get("executed_order")
+    if not isinstance(raw_order, list):
+        raise ValueError(f"order manifest missing executed_order list: {path}")
+    entries: list[OrderEntry] = []
+    for index, raw in enumerate(raw_order, start=1):
+        if not isinstance(raw, dict):
+            raise ValueError(f"order manifest entry {index} is not an object")
+        config = raw.get("config")
+        if not isinstance(config, str) or not config:
+            raise ValueError(f"order manifest entry {index} missing config")
+        raw_index = raw.get("index", index)
+        if isinstance(raw_index, bool) or not isinstance(raw_index, int):
+            raise ValueError(f"order manifest entry {index} has invalid index")
+        rep = raw.get("rep")
+        if rep is not None and (isinstance(rep, bool) or not isinstance(rep, int)):
+            raise ValueError(f"order manifest entry {index} has invalid rep")
+        entries.append(
+            OrderEntry(
+                index=raw_index,
+                config=config,
+                run_id=raw.get("run_id") if isinstance(raw.get("run_id"), str) else None,
+                model_tag=raw.get("model_tag") if isinstance(raw.get("model_tag"), str) else None,
+                rep=rep,
+                workload=raw.get("workload") if isinstance(raw.get("workload"), str) else None,
+            )
+        )
+    return entries, None
+
+
+def apply_order_manifest(
+    config_paths: list[Path],
+    order_entries: list[OrderEntry],
+) -> list[Path]:
+    if not order_entries:
+        return config_paths
+    by_name = {path.name: path for path in config_paths}
+    ordered: list[Path] = []
+    missing: list[str] = []
+    seen: set[str] = set()
+    for entry in order_entries:
+        path = by_name.get(entry.config)
+        if path is None:
+            missing.append(entry.config)
+            continue
+        ordered.append(path)
+        seen.add(entry.config)
+    extras = sorted(name for name in by_name if name not in seen)
+    if missing or extras:
+        parts: list[str] = []
+        if missing:
+            parts.append("manifest references missing config(s): " + ", ".join(missing))
+        if extras:
+            parts.append("config(s) absent from manifest: " + ", ".join(extras))
+        raise ValueError("; ".join(parts))
+    return ordered
+
+
+def order_entry_by_config(order_entries: list[OrderEntry]) -> dict[str, OrderEntry]:
+    return {entry.config: entry for entry in order_entries}
+
+
 def duplicate_run_id_error(items: list[ConfigInfo | ConfigError]) -> str | None:
     by_run_id: dict[str, list[Path]] = {}
     for item in items:
@@ -343,6 +622,89 @@ def skipped_log_extra(state: ExistingState) -> dict[str, Any] | None:
     }
 
 
+def classify_campaign_members(
+    evaluations: list[MemberEvaluation],
+    missing: list[str],
+) -> dict[str, list[str]]:
+    categories = {"usable": [], "waived": [], "failed": [], "missing": []}
+    for evaluation in evaluations:
+        if evaluation.usable:
+            categories["usable"].append(evaluation.bundle_id)
+        elif evaluation.waived:
+            categories["waived"].append(evaluation.bundle_id)
+        else:
+            categories["failed"].append(evaluation.bundle_id)
+    categories["missing"].extend(missing)
+    return categories
+
+
+def verdict_for(categories: dict[str, list[str]]) -> tuple[str, list[str]]:
+    usable = categories["usable"]
+    waived = categories["waived"]
+    failed = categories["failed"]
+    missing = categories["missing"]
+    reasons: list[str] = []
+    if missing:
+        reasons.append("missing member bundle(s): " + ", ".join(missing))
+    if failed:
+        reasons.append("invalid unwaived member bundle(s): " + ", ".join(failed))
+    if waived:
+        reasons.append("waived member bundle(s): " + ", ".join(waived))
+    if not usable and not waived and not failed and not missing:
+        return "invalid", ["no campaign members were evaluated"]
+    if missing:
+        return "blocked", reasons
+    if failed:
+        return "invalid", reasons
+    if usable and not waived:
+        return "publishable", ["all campaign members are usable"]
+    if usable and waived:
+        return "partial", reasons
+    if waived:
+        return "invalid", reasons + ["no usable unwaived members"]
+    return "invalid", reasons or ["no usable members"]
+
+
+def print_verdict(verdict: str, reasons: list[str], categories: dict[str, list[str]]) -> None:
+    print("VERDICT:")
+    print(f"  verdict: {verdict}")
+    for reason in reasons:
+        print(f"  reason: {reason}")
+    for key in ("usable", "waived", "failed", "missing"):
+        members = ", ".join(categories[key]) if categories[key] else "<none>"
+        print(f"  {key}: {members}")
+
+
+def append_verdict(
+    log_path: Path,
+    *,
+    verdict: str,
+    reasons: list[str],
+    categories: dict[str, list[str]],
+    warning: str | None,
+) -> None:
+    row: dict[str, Any] = {
+        "timestamp": utc_timestamp(),
+        "record_type": "campaign_verdict",
+        "status": "verdict",
+        "verdict": verdict,
+        "reasons": reasons,
+        "usable": categories["usable"],
+        "waived": categories["waived"],
+        "failed": categories["failed"],
+        "missing": categories["missing"],
+        "taxonomy": {
+            "publishable": "all members usable",
+            "partial": "at least one usable or waived member and no invalid unwaived or missing members",
+            "blocked": "one or more expected member bundles are missing",
+            "invalid": "one or more invalid unwaived members, or no members were evaluated",
+        },
+    }
+    if warning is not None:
+        row["block_order_warning"] = warning
+    append_log(log_path, row)
+
+
 def run_campaign(args: argparse.Namespace) -> int:
     config_dir = Path(args.config_dir)
     runs_dir = Path(args.runs_dir)
@@ -351,9 +713,14 @@ def run_campaign(args: argparse.Namespace) -> int:
     if args.max_failures < 1:
         raise ValueError("--max-failures must be >= 1")
 
-    configs = discover_configs(config_dir)
+    order_entries, order_warning = load_order_entries(config_dir)
+    if order_warning is not None:
+        print(order_warning, file=sys.stderr)
+    configs = apply_order_manifest(discover_configs(config_dir), order_entries)
+    order_by_config = order_entry_by_config(order_entries)
     print_config_file_list(configs)
     items = read_config_infos(configs)
+    waivers = load_waivers(args.waivers)
     config_errors = [item for item in items if isinstance(item, ConfigError)]
     if config_errors:
         for item in config_errors:
@@ -367,6 +734,9 @@ def run_campaign(args: argparse.Namespace) -> int:
     counts: Counter[str] = Counter()
     failures = 0
     lock_path: Path | None = None
+    all_evaluations: list[MemberEvaluation] = []
+    missing_members: list[str] = []
+    previous_model_tag: str | None = None
 
     print_quiet_machine_warning()
     if args.dry_run:
@@ -405,6 +775,29 @@ def run_campaign(args: argparse.Namespace) -> int:
 
             info = item
             config_path = info.path
+            order_entry = order_by_config.get(config_path.name)
+            model_boundary = (
+                order_entry is not None
+                and order_entry.model_tag is not None
+                and order_entry.model_tag != previous_model_tag
+            )
+            if order_entry is not None and order_entry.model_tag is not None:
+                previous_model_tag = order_entry.model_tag
+            order_extra: dict[str, Any] = {}
+            if order_entry is not None:
+                order_extra = {
+                    "run_index": order_entry.index,
+                    "executed_order": {
+                        "index": order_entry.index,
+                        "config": order_entry.config,
+                        "model_tag": order_entry.model_tag,
+                        "rep": order_entry.rep,
+                        "workload": order_entry.workload,
+                    },
+                    "model_load_boundary": model_boundary,
+                }
+            elif order_warning is not None:
+                order_extra = {"block_order_warning": order_warning}
             state = existing_state(info, runs_dir)
             command = command_for(config_path, runs_dir, args.cli_cmd)
 
@@ -414,22 +807,52 @@ def run_campaign(args: argparse.Namespace) -> int:
                 continue
 
             if state.action == "skip complete":
-                status = "skipped"
+                evaluations = evaluate_members(info, runs_dir, waivers)
+                all_evaluations.extend(evaluations)
+                failed = [evaluation for evaluation in evaluations if evaluation.failed]
+                if failed:
+                    failures += 1
+                    status = "failed"
+                    details = "; ".join(
+                        f"{evaluation.bundle_id}: status={evaluation.status!r}, "
+                        f"strict_valid={evaluation.strict_valid}, "
+                        f"quality_flags={list(evaluation.quality_flags)}, "
+                        f"validation_problems={list(evaluation.validation_problems)}"
+                        for evaluation in failed
+                    )
+                    print(
+                        f"failed {info.run_id}: existing bundle(s) are not skippable: "
+                        f"{details}; inspect or move those bundle(s), or provide an "
+                        "explicit campaign waiver",
+                        file=sys.stderr,
+                    )
+                else:
+                    status = (
+                        "waived"
+                        if any(evaluation.waived for evaluation in evaluations)
+                        else "skipped"
+                    )
                 exit_code = None
                 duration_s = None
-                if state.members_total is None:
+                if status != "failed" and state.members_total is None:
                     print(f"skipped {info.run_id}: complete bundle already exists")
-                else:
+                elif status != "failed":
                     print(
                         f"skipped {info.run_id}: complete experiment already exists "
                         f"({state.members_succeeded}/{state.members_total} members succeeded)"
                     )
-                    if state.non_succeeded_members:
+                    waived = [evaluation.bundle_id for evaluation in evaluations if evaluation.waived]
+                    if waived:
                         print(
-                            f"note: skipped experiment {info.run_id} contains non-succeeded "
-                            f"members; inspect: {', '.join(state.non_succeeded_members)}",
+                            f"note: skipped experiment {info.run_id} has waived member(s): "
+                            f"{', '.join(waived)}",
                             file=sys.stderr,
                         )
+                extra = {
+                    **(skipped_log_extra(state) or {}),
+                    **order_extra,
+                    "members": [evaluation.to_log() for evaluation in evaluations],
+                }
                 append_log(
                     log_path,
                     log_row(
@@ -438,10 +861,12 @@ def run_campaign(args: argparse.Namespace) -> int:
                         status=status,
                         exit_code=exit_code,
                         duration_s=duration_s,
-                        extra=skipped_log_extra(state),
+                        extra=extra,
                     ),
                 )
                 counts[status] += 1
+                if failures >= args.max_failures:
+                    break
                 continue
 
             if state.action == "incomplete existing":
@@ -449,6 +874,12 @@ def run_campaign(args: argparse.Namespace) -> int:
                 exit_code = None
                 duration_s = None
                 failures += 1
+                if state.inspect_members:
+                    missing_members.extend(
+                        member.name
+                        for member in expected_member_dirs(info, runs_dir)
+                        if not member.exists()
+                    )
                 inspect = ", ".join(state.inspect_members) if state.inspect_members else info.run_id
                 if state.malformed_summaries:
                     detail = "malformed summary_metrics.json: " + "; ".join(state.malformed_summaries)
@@ -469,6 +900,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                         status=status,
                         exit_code=exit_code,
                         duration_s=duration_s,
+                        extra=order_extra,
                     ),
                 )
                 counts[status] += 1
@@ -480,9 +912,46 @@ def run_campaign(args: argparse.Namespace) -> int:
             result = subprocess.run(command, check=False)
             duration_s = time.monotonic() - start
             exit_code = result.returncode
-            status = "ok" if exit_code == 0 else "failed"
+            evaluations = evaluate_members(info, runs_dir, waivers)
+            all_evaluations.extend(evaluations)
+            missing_after_run = [
+                evaluation.bundle_id
+                for evaluation in evaluations
+                if not evaluation.bundle_path.exists()
+            ]
+            missing_members.extend(missing_after_run)
+            failed_members = [evaluation for evaluation in evaluations if evaluation.failed]
+            if exit_code == 0 and not failed_members and not missing_after_run:
+                status = (
+                    "waived"
+                    if any(evaluation.waived for evaluation in evaluations)
+                    else "ok"
+                )
+            else:
+                status = "failed"
             if status == "failed":
                 failures += 1
+                if exit_code == 0:
+                    details = "; ".join(
+                        f"{evaluation.bundle_id}: status={evaluation.status!r}, "
+                        f"strict_valid={evaluation.strict_valid}, "
+                        f"quality_flags={list(evaluation.quality_flags)}, "
+                        f"validation_problems={list(evaluation.validation_problems)}"
+                        for evaluation in failed_members
+                    )
+                    if missing_after_run:
+                        details = (details + "; " if details else "") + (
+                            "missing: " + ", ".join(missing_after_run)
+                        )
+                    print(
+                        f"failed {info.run_id}: exit=0 but strict campaign validation "
+                        f"did not pass: {details}",
+                        file=sys.stderr,
+                    )
+            extra = {
+                **order_extra,
+                "members": [evaluation.to_log() for evaluation in evaluations],
+            }
             append_log(
                 log_path,
                 log_row(
@@ -491,6 +960,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     status=status,
                     exit_code=exit_code,
                     duration_s=duration_s,
+                    extra=extra,
                 ),
             )
             counts[status] += 1
@@ -512,7 +982,20 @@ def run_campaign(args: argparse.Namespace) -> int:
     for status in STATUSES:
         if counts[status]:
             print(f"  {status}: {counts[status]}")
-    return 1 if failures else 0
+    if args.dry_run:
+        return 0
+    categories = classify_campaign_members(all_evaluations, missing_members)
+    verdict, reasons = verdict_for(categories)
+    print_verdict(verdict, reasons, categories)
+    if not args.dry_run:
+        append_verdict(
+            log_path,
+            verdict=verdict,
+            reasons=reasons,
+            categories=categories,
+            warning=order_warning,
+        )
+    return 1 if failures or verdict in {"blocked", "invalid"} else 0
 
 
 def main(argv: list[str] | None = None) -> int:

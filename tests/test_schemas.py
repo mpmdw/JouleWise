@@ -122,6 +122,8 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertEqual(idle_props["idle_window_suspect"], {"type": ["boolean", "null"]})
         self.assertEqual(quality_schema["required"], ["requested_sampling_hz"])
         self.assertEqual(quality_props["idle_window_suspect"], {"type": ["boolean", "null"]})
+        self.assertEqual(quality_props["token_counts_source"], {"type": ["string", "null"]})
+        self.assertEqual(quality_props["phase_identifiability"], {"type": ["object", "null"]})
 
     def test_summary_metrics_emit_summary_provenance(self) -> None:
         payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()

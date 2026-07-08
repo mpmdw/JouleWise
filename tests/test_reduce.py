@@ -316,6 +316,14 @@ class PhaseAttributionTests(ReduceTestCase):
         self.assertAlmostEqual(summary.phase_energy_j["prefill"], 15.0, places=9)
         self.assertAlmostEqual(summary.phase_energy_j["decode"], 45.0, places=9)
         self.assertAlmostEqual(summary.phase_energy_j["serialize"], 0.0, places=9)
+        self.assertEqual(
+            summary.measurement_quality.phase_identifiability,
+            {
+                "prefill": "identifiable",
+                "decode": "identifiable",
+                "serialize": "identifiable",
+            },
+        )
 
     def test_repeated_phase_name_sums(self) -> None:
         # Two decode intervals [1,3] and [5,7] over a constant 2 W curve sum:
@@ -328,6 +336,24 @@ class PhaseAttributionTests(ReduceTestCase):
         builder.write_metadata(rail_manifest=["mock"])
         summary = reduce_module.reduce_bundle(builder.path)
         self.assertAlmostEqual(summary.phase_energy_j["decode"], 8.0, places=9)
+
+    def test_phase_identifiability_requires_three_samples_per_nonzero_interval(self) -> None:
+        builder = self.builder()
+        builder.measured_window(0.0, 10.0)
+        builder.add_phase("prefill", 0.0, 0.5)
+        builder.add_phase("decode", 0.0, 2.0)
+        builder.write_trace(constant_samples(0.0, 10.0, hz=1.0, power_w=2.0))
+        builder.write_metadata(rail_manifest=["mock"])
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(
+            summary.measurement_quality.phase_identifiability,
+            {
+                "prefill": "not_resolvable_sample_count",
+                "decode": "identifiable",
+            },
+        )
 
 
 class DegenerateTests(ReduceTestCase):
@@ -539,6 +565,20 @@ class TokenFallbackTests(ReduceTestCase):
         self.assertIsNone(summary.measurement_quality.token_count_source)
         # The per-output-token metric never needed prompt counts and is intact.
         self.assertAlmostEqual(summary.energy_output_token_j, 25.0 / 4.0, places=9)
+
+    def test_config_output_token_fallback_is_flagged_and_output_metrics_null(self) -> None:
+        builder = self.builder()
+        start_s, end_s = 100.0, 110.0
+        builder.measured_window(start_s, end_s)
+        builder.write_trace(constant_samples(start_s, end_s, hz=1.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"])
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNone(summary.energy_output_token_j)
+        self.assertIsNone(summary.energy_token_j)
+        self.assertEqual(summary.measurement_quality.token_counts_source, "config_fallback")
 
 
 class StructuredReadFailureTests(ReduceTestCase):

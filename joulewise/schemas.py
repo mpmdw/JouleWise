@@ -527,6 +527,16 @@ class MeasurementQuality:
     #: enough to make the baseline suspect. ``None`` means the telemetry did
     #: not expose GPU idle/frequency evidence.
     idle_window_suspect: bool | None = None
+    #: Output-token count provenance for output-token-denominator metrics:
+    #: ``"runtime_observed"`` when token events supplied the denominator,
+    #: ``"config_fallback"`` when the legacy config fallback would have been
+    #: used and those metrics were therefore nulled, and ``None`` when no
+    #: output denominator was available.
+    token_counts_source: str | None = None
+    #: Per-phase resolvability of phase attribution over the sampled summed
+    #: power curve. Values are ``"identifiable"`` or
+    #: ``"not_resolvable_sample_count"``.
+    phase_identifiability: dict[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -645,6 +655,8 @@ class SummaryMetrics:
                         "cooldown_cap_hit": nullable_bool,
                         "token_count_source": {"type": ["string", "null"]},
                         "idle_window_suspect": nullable_bool,
+                        "token_counts_source": {"type": ["string", "null"]},
+                        "phase_identifiability": {"type": ["object", "null"]},
                     },
                 },
                 "summary_provenance": {

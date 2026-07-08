@@ -276,6 +276,17 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     return problems
 
 
+_STRICT_ADDITIVE_ABSENT_TOLERANCE = {
+    "idle_baseline.gpu_idle_ratio_mean",
+    "idle_baseline.gpu_idle_ratio_min",
+    "idle_baseline.gpu_freq_hz_mean",
+    "idle_baseline.idle_window_suspect",
+    "measurement_quality.idle_window_suspect",
+    "measurement_quality.token_counts_source",
+    "measurement_quality.phase_identifiability",
+}
+
+
 def _strict_summary_differences(fresh: Any, stored: Any, path: str = "") -> list[str]:
     """Compare fresh vs stored summaries with legacy-additive null tolerance.
 
@@ -289,6 +300,8 @@ def _strict_summary_differences(fresh: Any, stored: Any, path: str = "") -> list
             child = f"{path}.{key}" if path else str(key)
             if key not in stored:
                 if child == "summary_provenance":
+                    continue
+                if child in _STRICT_ADDITIVE_ABSENT_TOLERANCE:
                     continue
                 if fresh[key] is not None:
                     differences.append(child)
