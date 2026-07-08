@@ -8,7 +8,7 @@ documented fallback execution. Companion plan: `docs/phase_3/phase_3_plan.md`.
 | Item | Kind | Status | Required Evidence | Where Recorded |
 |---|---|---|---|---|
 | 3.0.0 kv-size helper | required | pending | tool + tests matching hand calculations; actual-vs-predicted deltas recorded after spikes | test suite + `kv_feasibility.md` |
-| 3.0.1 mlx-lm replay verdict | required | pending | commands, file size vs predicted, greedy-diff result, verdict code | `docs/phase_3/kv_feasibility.md` |
+| 3.0.1 mlx-lm replay verdict | required | complete (2026-07-07; verdict `replay_supported`, lead-re-verified live) | commands, file size vs predicted, greedy-diff result, verdict code | `docs/phase_3/kv_feasibility.md` §3.0.1 + `docs/stream_logs/2026-07-07-kv-spike-301/` spike reports |
 | 3.0.2 llama.cpp replay verdict (same-machine) | required | pending | as 3.0.1 | `kv_feasibility.md` |
 | 3.0.2 llama.cpp cross-machine portability | required | pending | CUDA-save -> Metal-restore result with pinned versions and GGUF hash; explicit yes/no/partial | `kv_feasibility.md` |
 | 3.0.3 vLLM verdict | required (time-boxed) | pending | version, APIs surveyed, attempt log, verdict | `kv_feasibility.md` |

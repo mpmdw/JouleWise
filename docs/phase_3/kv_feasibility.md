@@ -76,6 +76,11 @@ process. Full reports: the `run` verb writes `spike_report.json` per run.
 Offsets observed: prefill saved at 1024 (2048); resume loaded 1024 (2048),
 post-trim 1023 (2047) — exactly as designed.
 
+Lead re-verification (2026-07-07 resume session, fresh run of the
+headline command from the stream worktree with the repo venv):
+`tokens_identical: true`, `verdict: replay_supported`, measured cache
++0.0182% vs prediction — matching the recorded results above.
+
 ### Verdict basis and caveats
 
 `replay_supported` is computed by the script from the measured data (token
