@@ -501,12 +501,17 @@ verification).
 only project publishing raw power data — MLPerf Power's public results
 repositories already do that for its covered system classes. The
 defensible version: JouleWise publishes *self-contained, re-reducible
-per-run bundles* — raw power trace, timestamped event log with phase
-labels, model output, device metadata including the rail manifest, and
-derived summary — such that any summary number can be re-derived from raw
-evidence with one command (`reduce`, D-028) and validated against a fresh
-re-reduction (`validate-bundle --strict`, D-030), on heterogeneous local
-device classes that MLPerf Power excludes, for a workload (split LLM
+per-run bundles* — raw telemetry evidence, recorded power trace,
+timestamped event log with phase labels, model output, device metadata
+including the rail manifest, and derived summary — such that the recorded
+evidence path can be checked with one command: for powermetrics bundles,
+`validate-bundle --strict` re-derives the power trace from raw plist
+evidence, re-derives the summary from the recorded trace and event log,
+checks the legacy additive summary comparison, and requires shape-valid
+provenance on new-era bundles (D-030 plus the 2026-07-07 P2-013/P2-014
+integrity pass). That is an audit of recorded evidence, not independent
+rerunning of the hardware session. JouleWise applies this to heterogeneous
+local device classes that MLPerf Power excludes, for a workload (split LLM
 inference) no surveyed source publishes raw measurement artifacts for. The
 chapter should explicitly acknowledge MLPerf Power's log publication and
 the Splitwise/Mooncake trace releases, and distinguish workload traces

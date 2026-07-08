@@ -5,12 +5,30 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-07 (fifth update)
+- Last updated: 2026-07-07 (merge-time reconciliation)
 - Project phase: Phase 1 closing; Phase 2 in progress - instrument
-  CAMPAIGN-READY; two-model baseline matrix is the next run
+  CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
+  are complete; the two-model baseline matrix is the next Mac corpus step
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 
-## This Update (2026-07-07, fifth update) — 30-second read
+## This Update (as of 2026-07-07, merge-time) — 30-second read
+
+**Merge-time reconciliation:** the reader-facing status below defers to
+the phase checklist matrix rows for per-item authority. Since this stream's
+first draft, the integrity stream closed P2-013 and P2-014: all 31 audit
+pins are fixed, the suite is 455 tests with 10 skips and zero expected
+failures, bundle provenance now records prompt/workload identities, and
+`validate-bundle --strict` includes the powermetrics raw-plist-to-trace
+gate plus the legacy additive-summary comparison. The six existing real
+corpus bundles pass strict read-only and unrewritten; strict proves
+re-derivation of the recorded evidence, not independent rerunning of the
+hardware session. New-era bundles must carry shape-valid provenance to pass.
+The post-docs KV spike has a lead-reverified Stage 3.0.1 verdict of
+`replay_supported` (tokens identical; cache size +0.018% vs prediction),
+and the post-docs 2K branch has a fixture-first NVIDIA implementation, but
+neither is claimed here as merged into this stream or live hardware-validated.
+
+## Previous Update (2026-07-07, fifth update) — 30-second read
 
 **The instrument grew four capabilities in one session and is now
 campaign-ready.** Five parallel work streams landed (PRs #2-#6):
@@ -29,8 +47,9 @@ planned two-model baseline matrix (4 workload shapes × 2 models × 5
 repetitions) runs unattended. A review council also produced a
 hardware-tiered research agenda: 16 questions answerable on current
 hardware alone, 10 more behind planned gates
-(`docs/research_question_bank.md`). Next run: the baseline matrix on a
-quiet machine.
+(`docs/research_question_bank.md`). The P2-013 evidence-integrity and
+P2-014 provenance fixes are now complete; next Mac corpus step is the
+baseline matrix on a quiet machine.
 
 ## Previous Update (2026-07-07, fourth update) — 30-second read
 
@@ -40,63 +59,25 @@ reasoning model) ran through the identical harness and workload on the
 M3 Max: **~304 J per 512-token request (~583 mJ/token) at 46 tokens/s,
 repeatable to 0.3% across repetitions** — alongside the earlier 1.5B
 model's ~47 J (~87 mJ/token at 257 tok/s). First cross-model finding:
-energy per token scaled almost exactly with ACTIVE parameter count
-(6.7× → 6.7×) while decode power barely moved (~23.5 → ~27.5 W) — the
-energy cost of the bigger model is time, not watts, exactly the
-structure research question Q4 (below) models. Also this update: the
+the two measured points differ in size, architecture, and quantization,
+so they are not a demonstrated scaling law. They are, however,
+consistent with the fixed-vs-marginal structure Q4 models: decode power
+barely moved (~23.5 → ~27.5 W), while the bigger model's cost showed up
+mostly as time. Also this update: the
 research agenda grew to six named questions (Q4-Q6) after a
 multi-model review council, with a curated question bank
 (`docs/research_question_bank.md`) and an instrument roadmap (richer
 telemetry parsing, a difficulty-graded scored workload suite, and
 implementing the statistical-uncertainty protocol) queued.
 
-## Previous Update (2026-07-06, third update) — 30-second read
+## Update Ledger
 
-**Progress: the flagship works — the project has its first real energy
-measurements.** The complete Mac vertical slice (MLX runtime +
-`powermetrics` power sampling + integration, slices 2G/2H/2I) landed in
-one day and produced three repetition bundles, all passing strict
-validation ("strict" = the bundle re-reduces from its raw power trace and
-event log to an identical summary): **~47 J per 512-token request
-(~77-88 mJ per generated token) on the M3 Max**, gross energy repeatable to 1.4% across reps,
-prefill/decode energy split resolved (0.03 J vs ~47 J), time-to-first-
-token ~94 ms at 257 tokens/s, real idle baselines and a real
-idle-recovery cooldown gate between repetitions. Two hardware realities
-were caught by the harness's own evidence trail and fixed same-day
-(powermetrics' ~1 s startup latency; idle-baseline contamination right
-after model load — now a protocol note for the statistics phase).
-Also landed today: the related-work survey draft (11 sources, verified
-citations), a backup protocol with a passed restore test, and the suite
-grew 226 → 254 checks. Homogeneous baselines (2M) and the Phase 3
-feasibility spikes are now unblocked and need no further inputs.
-
-**Earlier today:** the pre-hardware hardening slice (2N) from last
-week's external reviews was completed (raw evidence preserved verbatim,
-sampler start/stop cost excluded from the measured window, misaligned
-rail data detected, one-command re-derivation, one shared bundle read
-path) — 2G then plugged into those seams without touching controller or
-bundle internals, validating the design.
-
-**Context from previous updates:** the benchmark harness runs end to end
-— one command turns a typed experiment config into a complete, auditable
-energy + latency measurement bundle, proven on a deterministic software
-target before any hardware time is spent (2026-06-12). A planned break
-(June 13 – July 4) was followed by an external audit that defined the
-hardening slice now completed.
-
-**On track:** with the Mac slice measured, the next work is homogeneous
-baselines (2M, a workload matrix over the Mac target) and the Phase 3
-feasibility spikes — both fully specified and unblocked. NVIDIA/Jetson
-remain the only hardware-gated targets (device access).
-
-**What I need from you (sanity check, no longer blocking):** the short
-scope-confirmation — reusable harness as primary deliverable, split
-inference as the validating study — is still worth a meeting, but nothing
-waits on it anymore: the Mac measurements above used a provisional,
-config-swappable model choice, and all current work proceeds under the
-documented fallback (harness-shaped work valuable under any scope). Your
-confirmation finalizes model selection for the cross-target comparisons.
-Any other thoughts are welcome.
+| date | label | one-line outcome | run-report link |
+|---|---|---|---|
+| 2026-07-06 | third update / first real energy | Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements: ~47 J gross per 512-token request, ~77-88 mJ/output-token, TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz, with prefill energy ~0.03 J. | `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md` |
+| 2026-07-06 | third update / powermetrics telemetry | The powermetrics telemetry adapter and privileged sampling path were brought up, preserving raw plists and exposing the real sampling-rate constraints. | `docs/run_reports/2026-07-06-slice-2h-powermetrics.md` |
+| 2026-07-06 | third update / pre-hardware hardening | Slice 2N closed the evidence-path hardening before real hardware: raw evidence retention, measured-window markers, rail validation, shared bundle reading, and post-hoc reduction. | `docs/run_reports/2026-07-06-slice-2n-pre-hardware-hardening.md` |
+| 2026-06-12 | first/second updates / mock vertical slice | The mock-first harness reached an end-to-end auditable run path before hardware time: typed config to complete bundle, validation, reduction, and report. | `docs/run_reports/2026-06-12-phase-2-mock-vertical-slice.md` |
 
 ## Summary
 
@@ -106,6 +87,13 @@ nods to JouleSort and Splitwise: energy measurement is the spine of the
 system; disaggregated ("split") inference - running prefill and decode on
 different machines with the KV cache transferred between them - is the
 validating research study, not the whole architecture.
+
+The thesis now has two explicit claim tracks. The guaranteed capstone is
+auditable local LLM energy measurement: the harness plus the Apple-Silicon
+characterization it can already execute on the M3 Max. Split
+(disaggregated) inference remains the differentiating validating study;
+when Phase 3 hardware and feasibility gates land, it upgrades the thesis
+from local characterization to a split-energy crossover study.
 
 The first working slice runs on a MacBook (Apple Silicon) with MLX as the
 runtime and `powermetrics` as the power source, producing complete,
@@ -127,8 +115,10 @@ Research questions:
   each target/model/quantization follow — and can split-run energy be
   predicted compositionally from monolithic coefficients plus transfer
   measurements?
-- **Q5** (C-003): Do device efficiency rankings survive workload changes,
-  or under what prompt/output/quantization regimes do they flip?
+- **Q5** (C-003/C-007): On one machine, do workload/model/quantization
+  efficiency rankings stay stable as workload shape, model, and
+  quantization change, or where do they flip? A cross-device ranking
+  extension is hardware-gated.
 - **Q6** (C-003; gated on the wall meter): Does the measurement boundary
   (platform rails vs AC wall power) change the conclusions?
 
@@ -142,10 +132,21 @@ than a numbered question.
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation) — 2M baselines are fully tooled and NEXT; 2K/2L gated on device access |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation) — 2M baselines are fully tooled; 2K fixture-first implementation is complete on a later branch but remains unmerged here and not live hardware-validated; 2L gated on device access |
 | 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
+
+## Thesis Artifact Map
+
+| chapter/thesis-component | owning doc or deliverable | status | missing evidence |
+|---|---|---|---|
+| Background / related work | Phase 4 Stage 4.6, `docs/phase_4/related_work_draft.md` | drafted (11 verified sources) | background-chapter assembly and the Phase 4 exit pass |
+| Measurement methodology | `docs/contracts/measurement_methodology.md` | complete | Phase 4 ratification may amend statistical details against observed variance |
+| Harness / instrument | `joulewise/` | complete and campaign-ready | new-era bundles must carry shape-valid provenance to pass strict |
+| Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | unblocked after P2-013/P2-014 | needs the 2M baseline corpus |
+| Split-inference study | Phase 3 | planned | needs KV-feasibility spikes plus a real pairing, or the synthetic-transfer + analytical-composition floor |
+| Results / limitations + claims audit | Phase 4 Stages 4.3-4.5 | planned | needs the analysis dataset and detection-floor gate |
 
 Complete so far (all verifiable in the repository):
 
@@ -157,19 +158,23 @@ Complete so far (all verifiable in the repository):
   live on the Mac target. Bundle writer, controller
   lifecycle, reducer, static-HTML report generator, and CLI verbs `run` /
   `validate-bundle` / `reduce` (post-hoc re-derivation of summary metrics
-  from raw evidence) / `report`. All bundle consumers read through one
+  from the recorded power trace and events) / `report`. Strict validation
+  now also re-derives powermetrics traces from raw plist evidence, checks
+  legacy additive-summary compatibility, and requires shape-valid
+  provenance on new-era bundles. All bundle consumers read through one
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (415 tests, run in CI on every push,
-  including a mock end-to-end run + bundle validation); emitted configs
+  a CLI, plus a passing test suite (455 tests, 10 skipped, zero expected
+  failures, run in CI on every push, including a mock end-to-end run +
+  bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
   are pinned by test.
 - Adapter interface contracts (runtime / telemetry / transport), the run
   bundle artifact contract, and the measurement methodology (idle
   subtraction, measurement boundaries, clock synchronization, statistical
   protocol - highlights below).
-- Evidence-shaped plans for every phase, a design-decision log (31
+- Evidence-shaped plans for every phase, a design-decision log (34
   decisions, each with the alternatives considered), a risk register with
   an explicit descope ladder, and example configs for the Mac and mock
   targets.
@@ -185,10 +190,14 @@ Complete so far (all verifiable in the repository):
   backup protocol with a passed restore test.
 
 Not yet started: the remote real-hardware adapters — NVIDIA/vLLM +
-Jetson Orin (2K/2L, gated on device access). Code-level specs are in
-`docs/phase_2/hardware_slice_implementation_guide.md`. The mock-first core
-landed first by design, so measurement code is never debugging the harness
-and the instrument at the same time.
+Jetson Orin live validation (2K/2L, gated on device access). The 2K
+fixture-first implementation is complete on the later NVIDIA branch
+(protocol v1, SSH transport, `nvidia-smi` + vLLM adapters, registry wiring,
+495 CI-safe tests), but all protocol pins remain PROVISIONAL until live
+hardware contact; a P1-006 evidence checklist exists there. Code-level
+specs are in `docs/phase_2/hardware_slice_implementation_guide.md`. The
+mock-first core landed first by design, so measurement code is never
+debugging the harness and the instrument at the same time.
 
 Waiting on external input (none of it blocks the current work):
 
@@ -384,7 +393,8 @@ Top risks (full register with triggers and fallbacks in
 | No wall meter | within-target claims unaffected; cross-target claims carry the stated boundary caveat |
 | Advisor approval delay | all current work is harness-shaped and valuable under any scope |
 
-Minimum viable outcome (worst-case floor, already a complete capstone):
+Minimum viable outcome (worst-case floor; still a complete, defensible
+capstone if reached):
 the reusable harness + Mac vertical slice + homogeneous baselines +
 synthetic interconnect sweep + an analytical split-energy model - honest,
 measured, reproducible.
@@ -428,9 +438,9 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (415 tests, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (455 tests, 10 skipped, zero expected failures, CI-enforced) |
 
-## If You Want To Read More: How This Project Is Actually Built
+## Process Note
 
 This project is developed by a human researcher directing a multi-agent
 AI system he designed and iteratively engineered over the course of the
@@ -500,9 +510,11 @@ self-contained evidence bundles, a strict re-reduction validator. The
 mock vertical slice proved the math without hardware; the Mac slice
 produced the first real joules; the flagship run put a 122-billion-
 parameter mixture-of-experts model through the identical harness and
-yielded the first real finding (energy per token tracks ACTIVE
-parameters while decode power stays nearly flat — the big model costs
-time, not watts). This week the instrument gained the statistical and
+yielded the first real cross-model observation: two confounded points
+that differ in size, architecture, and quantization, with energy/token
+behavior consistent with the fixed-vs-marginal model while decode power
+stays nearly flat — the big model costs time, not watts. This week the
+instrument gained the statistical and
 forensic machinery above, and a steelmanned, devil's-advocated research
 agenda of 31 tiered questions — 16 answerable on the current hardware
 alone (`docs/research_question_bank.md`). The pattern throughout:
@@ -511,7 +523,7 @@ capability first, claims only when the instrument can defend them.
 **Where to look.** `docs/council_log.md` (C-001…C-006) is the
 deliberation record — C-006 is a full orchestration trace of the
 five-stream day, including what each review layer uniquely caught and
-what it cost. `docs/decision_log.md` holds the 31 binding design
+what it cost. `docs/decision_log.md` holds the 34 binding design
 decisions with alternatives considered. `docs/run_reports/` narrates
 each working session. The orchestration playbooks themselves live
 outside this repository as reusable skills (council, delegation,

@@ -115,11 +115,17 @@ Acceptance criteria:
 
 ### Phase 2: Harness, Mac Vertical Slice, And Homogeneous Baselines
 
-Status: in progress — all hardware-independent work (2A-2F, 2J, and 2N
-pre-hardware hardening, landed 2026-07-06) is complete and runnable; every
-remaining slice is hardware/decision-gated. Detail:
-`docs/phase_2/phase_2_plan.md`. Exit: `docs/phase_2/phase_2_exit_checklist.md`.
-Gated-slice specs: `docs/phase_2/hardware_slice_implementation_guide.md`.
+Status as of 2026-07-07: in progress — all hardware-independent work
+(2A-2F, 2J, and 2N pre-hardware hardening, landed 2026-07-06) is complete
+and runnable, the Mac vertical slice (2G/2H/2I) is complete, and P2-013 /
+P2-014 closed the integrity and provenance pins (455 tests, 10 skipped,
+zero expected failures). Remaining gated work is the 2M baseline corpus plus
+remote-target live validation. The 2K fixture-first NVIDIA implementation is
+complete on a later branch, but this stream does not claim it as merged or
+live hardware-validated; all 2K protocol pins remain PROVISIONAL until
+P1-006 evidence is captured. Detail: `docs/phase_2/phase_2_plan.md`. Exit:
+`docs/phase_2/phase_2_exit_checklist.md`. Gated-slice specs:
+`docs/phase_2/hardware_slice_implementation_guide.md`.
 
 Mock-first ordering (matches `TASK_QUEUE.md`; the real-hardware slices are
 gated on Phase 1 evidence); code-level specs for the gated slices live in
@@ -131,17 +137,20 @@ gated on Phase 1 evidence); code-level specs for the gated slices live in
 - [x] 2D Reducer v1 with closed-form tests.
 - [x] 2E One-command run + `validate-bundle` (mock end-to-end in CI).
 - [x] 2F Repetitions, experiment manifests, cooldown gate.
-- [ ] Model selection checkpoint (decision D-016) — gated on P1-001 scope.
-- [ ] 2G MLX runtime adapter (gated: D-016 + `[mac]` install).
-- [ ] 2H powermetrics telemetry adapter (gated on privileged-sample
-  evidence + D-004 sudoers).
-- [ ] 2I Mac vertical slice integration with variance (gated: 2F+2G+2H).
+- [ ] Model selection checkpoint (decision D-016) — provisional small-model
+  pick made 2026-07-06 with user go-ahead; full closure remains gated on
+  P1-001 scope.
+- [x] 2G MLX runtime adapter (complete 2026-07-06).
+- [x] 2H powermetrics telemetry adapter (complete 2026-07-06).
+- [x] 2I Mac vertical slice integration with variance (complete 2026-07-06).
 - [x] 2J Static report generator v1.
 - [x] 2N Pre-hardware hardening (landed 2026-07-06: RunContext seam,
   window markers, shared BundleReader, rail contract, reduce verb,
   schema round-trip, token fallback, v0.2 compatibility note;
   D-024..D-029).
-- [ ] 2K NVIDIA/vLLM + nvidia-smi + SSH transport (gated on P1-006).
+- [ ] 2K NVIDIA/vLLM + nvidia-smi + SSH transport (fixture-first branch
+  complete later in the merge queue; live validation remains gated on
+  P1-006, protocol pins PROVISIONAL).
 - [ ] 2L Orin adapter (gated on P1-006).
 - [ ] 2M Homogeneous baselines + prefill/decode qualitative reproduction.
 
@@ -166,7 +175,7 @@ guarantees a crossover dataset.
   microbenchmark with both-end energy.
 - [ ] 3.2 Offline split runs with per-stage decomposition
   (prefill/transfer/deserialize/decode).
-- [ ] 3.3 Live split (stretch; droppable).
+- [ ] 3.3 Live split (stretch beyond the required offline replay; droppable).
 - [ ] 3.4 Interconnect sweep + crossover dataset (1GbE, 2.5GbE, optional
   10GbE; 3080 Ti borrow window per runbook).
 
@@ -221,6 +230,9 @@ Acceptance criteria:
 ```bash
 python3 -m unittest discover -s tests
 ```
+
+Expected result as of 2026-07-07 after P2-013/P2-014: `Ran 455 tests, OK
+(skipped=10)` with zero expected failures.
 
 Useful commands:
 
