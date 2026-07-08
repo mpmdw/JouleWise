@@ -321,10 +321,19 @@ class BundleReader:
         return windows
 
     def token_timestamps(self) -> list[float]:
+        """Output/decode token timestamps only.
+
+        Token events on the prompt side are not a valid denominator for
+        output-token metrics. The event contract's discriminator is the
+        event's phase: current runtimes emit output tokens in ``decode``.
+        When decode phase windows are present, the timestamp must also land
+        inside one of those windows.
+        """
+        decode_windows = self.phase_windows().get("decode", [])
         return [
             float(event["timestamp_s"])
             for event in self.events()
-            if event.get("event_type") == "token"
+            if _is_decode_token_event(event, decode_windows)
         ]
 
     # ------------------------------------------------------------------
@@ -452,6 +461,19 @@ def _rail_manifest_from_metadata(metadata: dict[str, Any]) -> list[str]:
                 f"{index} is not a string: {rail!r}"
             )
     return manifest
+
+
+def _is_decode_token_event(
+    event: dict[str, Any], decode_windows: list[Window]
+) -> bool:
+    if event.get("event_type") != "token" or event.get("phase") != "decode":
+        return False
+    if not decode_windows:
+        return True
+    timestamp_s = float(event["timestamp_s"])
+    return any(
+        window.start_s <= timestamp_s <= window.end_s for window in decode_windows
+    )
 
 
 def _check_summary(summary: Any) -> list[str]:

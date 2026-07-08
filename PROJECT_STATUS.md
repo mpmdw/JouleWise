@@ -177,7 +177,7 @@ Complete so far (all verifiable in the repository):
   bundle artifact contract, and the measurement methodology (idle
   subtraction, measurement boundaries, clock synchronization, statistical
   protocol - highlights below).
-- Evidence-shaped plans for every phase, a design-decision log (36
+- Evidence-shaped plans for every phase, a design-decision log (37
   decisions, each with the alternatives considered), a risk register with
   an explicit descope ladder, and example configs for the Mac and mock
   targets.
@@ -501,9 +501,9 @@ who prevailed and why, and overridden dissents, so a future reader (or
 model) can reconstruct why any decision was made.
 
 **The paper trail (every claim auditable).** Each fact has one home:
-`docs/decision_log.md` — 36 binding design decisions, each with
+`docs/decision_log.md` — 37 binding design decisions, each with
 alternatives considered and revisit conditions; `docs/council_log.md`
-(C-001…C-010) — the deliberation record; `docs/stream_logs/` —
+(C-001…C-011) — the deliberation record; `docs/stream_logs/` —
 per-stream decision ledgers committed *with* the code they justify
 (wrong decisions are superseded in place, never erased);
 `docs/run_reports/` — one record per session with verification
@@ -562,10 +562,11 @@ suite went 415 → 546 tests with zero expected failures, and the lead
 never wrote implementation code and never skipped a gate.
 
 **Where to look.** `docs/orchestration.md` is the process description.
-`docs/council_log.md` (C-001…C-010) is the deliberation record — C-006
+`docs/council_log.md` (C-001…C-011) is the deliberation record — C-006
 is a full orchestration trace of the five-stream day; C-009/C-010 are
-the topology meta-review and its validation. `docs/decision_log.md`
-holds the 36 binding design decisions with alternatives considered.
+the topology meta-review and its validation; C-011 is the critique
+counter-review. `docs/decision_log.md` holds the 37 binding design
+decisions with alternatives considered.
 `docs/run_reports/` narrates each working session, with per-layer catch
 tables and the delegation-calibration ledger. The executable
 orchestration playbooks live outside this repository as reusable

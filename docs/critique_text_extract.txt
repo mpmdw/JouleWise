@@ -1,0 +1,720 @@
+
+  
+  
+  
+JouleWise Project Critique
+  
+  
+    
+      
+Independent project critique
+      
+JouleWise is a strong instrument, not yet a settled study.
+      
+A critic-forward review of the project goals, documents, architecture, tests, measurement methodology, stack choices, and research usefulness. Prepared from a local codebase review plus four focused parallel critiques.
+    
+  
+  
+    
+      
+Verdict
+      
+Research
+      
+Docs
+      
+Architecture
+      
+Tests
+      
+Methodology
+      
+Improve Rigor
+      
+Stack
+      
+Next Actions
+      
+Sources
+    
+  
+  
+    
+      
+        
+          
+Executive Verdict
+          
+JouleWise is useful and worth continuing. Its strongest current contribution is not a headline energy result; it is the auditable measurement instrument: typed configs, adapter boundaries, raw evidence bundles, reducer re-derivation, and explicit measurement boundaries.
+          
+The project should be judged harshly on claims. Today it can support a narrow statement: 
+auditable local LLM inference energy measurement on one Apple-Silicon stack is working and has produced real bundles.
+ It cannot yet support broad cross-device rankings, split-inference crossover claims, or general model-scaling laws.
+          
+            
+Main critical finding:
+ the project has built more measurement credibility than research evidence. The next decisive work is not more architecture prose; it is a quiet-machine baseline corpus, a detection-floor study, and campaign validation that fails closed.
+          
+        
+        
+          
+            
+546 tests pass
+            
+Local suite ran green with 10 skips and zero expected failures.
+          
+          
+            
+6 real bundles
+            
+Strict-valid Mac MLX + powermetrics evidence exists, but it is narrow.
+          
+          
+            
+1 measured hardware boundary
+            
+Apple SoC rails via powermetrics; cross-target science is still gated.
+          
+          
+            
+Pre-results study
+            
+The harness is real. The research matrix is still mostly ahead.
+          
+        
+      
+    
+    
+      
+Research Value
+      
+The project is trying to prove two related claims: first, that local LLM inference energy can be measured in an auditable way; second, that prefill/decode split inference can be studied as an energy tradeoff. The first claim is already partially substantiated. The second is still an aspiration with a sensible feasibility ladder.
+      
+        
+          
+Strongest Research Thread
+          
+Q4, the fixed-vs-marginal energy model
+, is the best centerpiece. A model such as 
+E = fixed + prefill(prompt_tokens) + decode(output_tokens)
+ is valuable even if live split inference never works. It gives the project a practical contribution for app builders and creates a bridge from benchmarking to energy budgeting.
+        
+        
+          
+Most Fragile Research Thread
+          
+Q1-Q3, split crossover and Pareto claims
+, are the most distinctive but least evidenced. They require second-target telemetry, network topology, transfer measurements, compatible KV replay, and real split or composition validation.
+        
+      
+      
+Useful Today
+      
+        
+Auditable Mac-local energy measurement for MLX workloads.
+        
+Bundle contract and validation machinery that can outlive this specific study.
+        
+Preliminary Apple-stack observations that generate hypotheses about fixed and marginal energy.
+        
+A credible fallback capstone: harness + Mac characterization + synthetic transfer + analytical split model.
+      
+      
+Not Yet Supported
+      
+        
+Broad active-parameter scaling claims from only two confounded model points.
+        
+Cross-device energy rankings before NVIDIA/Orin live validation and boundary calibration.
+        
+Fine-grained per-phase claims where phase windows are shorter than the sampler can resolve.
+        
+Split-inference energy crossover claims before Phase 3 produces measured or carefully composed evidence.
+      
+    
+    
+      
+Documentation Critique
+      
+The documentation is unusually rich. It records decisions, risks, phase gates, run reports, methodology, and process history. That is a strength, especially for a research instrument where provenance matters. The weakness is status drift and occasional triumphal tone.
+      
+        
+          
+What Works
+What Needs Restraint
+        
+        
+          
+            
+README and project status describe the architecture and the evidence-bundle philosophy clearly.
+            
+Some pages still lag recent merges or leave old gate states visible in ways that confuse the current status.
+          
+          
+            
+Risk register and descope ladder are honest about hardware, schedule, wall-meter, and split feasibility risks.
+            
+Risks such as Mac powermetrics and MLX availability appear open in places after the Mac slice is working.
+          
+          
+            
+Research question bank is stronger than most project idea lists because it kills or quarantines tempting overclaims.
+            
+The orchestration/process story is interesting, but it risks taking attention from the scientific artifact in advisor-facing prose.
+          
+        
+      
+      
+        The docs should keep one editorial rule: status pages may be enthusiastic about engineering progress, but research claims should sound provisional until the data matrix exists.
+      
+    
+    
+      
+Architecture Critique
+      
+The project has a strong spine: CLI to config, config to controller, controller to adapters, adapters to immutable bundle, bundle to reducer/report/validation. That shape matches the research goal. The most important architectural risk is policy accumulation in large modules.
+      
+        
+          
+Strong
+          
+Raw evidence first. 
+summary_metrics.json
+ is written last as a completion marker, and summaries are derived rather than trusted as source evidence.
+        
+        
+          
+Strong
+          
+BundleReader
+ centralizes interpretation policy for rail manifests, measured windows, trace validation, and completion.
+        
+        
+          
+Strong
+          
+Injected clocks and mock adapters make measurement logic testable without hardware or sleeps.
+        
+      
+      
+Architectural Pressure Points
+      
+        
+controller.py
+ owns lifecycle, failure recovery, buffered logging, metadata assembly, cooldown, and experiment manifests. It is becoming the project center of gravity.
+        
+Remote execution has two transport concepts: public transport adapters and node-worker transport/session behavior. A first-class 
+RemoteNodeSession
+ would reduce drift.
+        
+Strict raw-to-derived validation is strong for powermetrics but not yet generalized to every telemetry backend.
+        
+The remote node worker is pragmatic, but large. Protocol validation needs to become more mechanical so correctness does not depend on careful memory.
+        
+Run IDs are immutable and deterministic, which is good for tests, but normal reruns can collide too easily.
+      
+    
+    
+      
+Tests And Evidence
+      
+The test suite is a real asset. It covers schema edges, bundle writing and reading, reducer degenerates, CLI behavior, mock E2E, powermetrics parsing, MLX adapter shape, node worker/client behavior, campaign tooling, aggregation, and reports. The local verification command completed successfully: 
+Ran 546 tests in 9.529s OK (skipped=10)
+.
+      
+        
+Most actionable test/evidence risk:
+ 
+scripts/run_campaign.py
+ treats existing bundles as skippable when summaries exist, even if they failed or have not been strict-validated. A measurement campaign should not let "already present" masquerade as "usable evidence."
+      
+      
+False Confidence Risks
+      
+        
+Campaign 
+ok
+ currently means subprocess exit code 0, not post-run strict evidence validation.
+        
+Existing failed experiment members can be skipped with a note rather than forcing a failed campaign verdict.
+        
+The 2M config generator is deterministic and schema-valid, but it does not prove that four hardcoded profiles are representative.
+        
+The NVIDIA/vLLM path is fixture-first and honest about being provisional, but tests are still fake/stub dominated until live hardware contact.
+      
+      
+What The Current Evidence Actually Proves
+      
+The current real evidence proves the Mac evidence path: MLX runtime plus powermetrics telemetry can produce strict-valid bundles and plausible energy summaries. It does not yet prove stable model rankings, cross-device comparisons, split economics, or active-parameter scaling.
+    
+    
+      
+Measurement Methodology
+      
+The methodology is better than the average energy benchmark because it names measurement boundaries, keeps raw evidence, records idle baselines, and treats uncertainty as part of the artifact. The next step is to make several caveats mechanically binding.
+      
+        
+          
+Threat
+Why It Matters
+Recommended Control
+        
+        
+          
+            
+Detection floor unknown
+            
+Short phases such as prefill can be shorter than a 9 Hz sampler can resolve.
+            
+Run idle/no-op/window-duration ladder and add phase-identifiability flags.
+          
+          
+            
+Idle subtraction fragility
+            
+One contaminated idle baseline can materially alter idle-subtracted joules.
+            
+Fail closed or require explicit waiver when idle windows are suspect.
+          
+          
+            
+Sequential campaign ordering
+            
+Condition can be confounded with time, heat, and operator state.
+            
+Interleave by repetition or use ABBA/randomized profile order.
+          
+          
+            
+Boundary mismatch
+            
+Apple SoC rails, GPU board power, and wall power are not comparable by default.
+            
+Add wall-meter or USB-C PD calibration before cross-target claims.
+          
+          
+            
+Remote telemetry thinning
+            
+Skipping 
+[N/A]
+ nvidia-smi rows can bias windows if not surfaced.
+            
+Expose skipped-row counts and quality flags in summaries.
+          
+        
+      
+    
+    
+      
+How I'd Improve The Rigor
+      
+The project does not need a different soul. It needs a stricter conversion layer between promising engineering artifacts and publishable claims. I would improve rigor by making every result pass through explicit gates: can the instrument resolve the effect, can the campaign design separate the effect from drift, can the raw evidence be re-derived, and does the claim wording stay inside the measurement boundary?
+      
+        
+Rigor principle:
+ no result should become a headline because it is interesting. It becomes a headline only after it survives detection-floor, ordering, validation, boundary, and provenance checks.
+      
+      
+1. Create A Claims Ladder
+      
+Right now the project distinguishes engineering progress from research evidence in prose, but the distinction should become a formal ladder that every report uses. This would prevent the strongest language from arriving too early.
+      
+        
+          
+Level
+Allowed Claim
+Required Evidence
+Forbidden Language
+        
+        
+          
+            
+L0
+ Capability
+            
+The harness can execute this path and preserve evidence.
+            
+One complete bundle, strict validation, raw artifacts present.
+            
+Faster, cheaper, more efficient, scales, crossover.
+          
+          
+            
+L1
+ Instrument Result
+            
+On this exact stack and workload, this measured quantity was observed.
+            
+n >= 3, strict-valid bundles, no suspect quality flags unwaived.
+            
+General device ranking or model-family law.
+          
+          
+            
+L2
+ Comparative Result
+            
+Condition A differs from condition B within the same measurement boundary.
+            
+n >= 5, interleaved order, intervals reported, effect exceeds detection floor.
+            
+Cross-boundary comparisons unless calibrated.
+          
+          
+            
+L3
+ Model Fit
+            
+A fitted fixed/marginal model predicts held-out cells within stated error.
+            
+Designed matrix, holdout cells, residual analysis, sensitivity audit.
+            
+Law, universal, architecture-wide conclusion.
+          
+          
+            
+L4
+ Generalized Finding
+            
+The finding holds across stacks, units, or boundaries under stated limits.
+            
+Second target or second unit, independent boundary check, replicated runbook.
+            
+Unqualified claims outside tested hardware and workloads.
+          
+        
+      
+      
+2. Measure The Instrument Before Measuring Models
+      
+The most important missing experiment is a measurement-floor study. Before the 2M corpus is promoted into a baseline dataset, run a small calibration campaign whose only purpose is to characterize what the instrument can and cannot resolve.
+      
+        
+          
+Detection-Floor Campaign
+          
+            
+Run idle-only windows at the same sampling rate and duration as real runs.
+            
+Run no-op or tiny synthetic workloads that should be near the floor.
+            
+Run a duration ladder: 50 ms, 100 ms, 250 ms, 500 ms, 1 s, 5 s, 30 s measured windows.
+            
+Report the smallest energy delta resolvable with acceptable false-positive risk.
+            
+Store this as a versioned calibration bundle set, not as a paragraph in a report.
+          
+        
+        
+          
+Mechanical Outputs
+          
+            
+detection_floor_j
+ per target and telemetry backend.
+            
+minimum_identifiable_window_s
+ per sampling regime.
+            
+phase_identifiable
+ flags for prefill/decode/transfer windows.
+            
+quality_gate_status
+: pass, waived, or fail.
+            
+A calibration manifest hash referenced by every later report.
+          
+        
+      
+      
+3. Make Campaigns Fail Closed
+      
+The campaign runner should stop acting like an executor and become a research gatekeeper. A campaign should not call a run usable merely because a command exited successfully or a summary file exists.
+      
+        
+          
+Campaign Moment
+Current Risk
+Rigor Upgrade
+        
+        
+          
+            
+Before running
+            
+Machine quietness is mostly a warning.
+            
+Record a preflight snapshot and refuse if disallowed conditions are present, or require a waiver field.
+          
+          
+            
+After each run
+            
+Exit code can be treated as enough.
+            
+Immediately run strict validation and record the validation result in the campaign log.
+          
+          
+            
+On resume
+            
+Existing failed or malformed members can be skipped as complete enough.
+            
+Skip only if every expected member is strict-valid, succeeded, and quality-pass or waiver-approved.
+          
+          
+            
+At campaign end
+            
+The operator must infer whether evidence is publishable.
+            
+Write a campaign verdict: publishable, partial, blocked, or invalid, with reasons and bundle IDs.
+          
+        
+      
+      
+4. Deconfound Ordering
+      
+The baseline matrix should not be sorted and run as a neat block if the goal is comparative evidence. Sorted order is convenient for humans and dangerous for thermals. I would change the generator and runner to make execution order an explicit experimental design choice.
+      
+        
+Interleave by repetition:
+ run profile A rep 1, profile B rep 1, profile C rep 1, then loop, instead of A1-A5 then B1-B5.
+        
+Use ABBA for two-condition comparisons:
+ A, B, B, A reduces monotonic drift bias.
+        
+Seed randomization:
+ allow a deterministic random order recorded in the manifest, so reviewers can reproduce the order exactly.
+        
+Separate model-load cost from inference cost:
+ where reordering forces reloads, record that as either out-of-window overhead or a separate cold-start experiment.
+        
+Require order plots:
+ every aggregate should include metric vs run index so thermal or background drift is visible before conclusions are written.
+      
+      
+5. Tighten Claim Boundaries
+      
+Measurement boundaries should become part of every result label. The project already documents boundaries well; the rigor upgrade is to make boundary mistakes hard to write.
+      
+        
+          
+Label Every Chart
+          
+Use labels such as 
+M3 Max / MLX / powermetrics SoC rails
+ or 
+RTX / vLLM / nvidia-smi board power
+. The boundary belongs in titles, captions, CSV outputs, and claim tables.
+        
+        
+          
+Separate Three Claim Types
+          
+Within-boundary comparisons can be primary. Cross-boundary comparisons are descriptive unless calibrated. Wall-power or USB-C PD calibrated comparisons can become stronger, but only with the calibration bundle named.
+        
+      
+      
+6. Upgrade Provenance From Present To Sufficient
+      
+The project already records impressive provenance. The next question is whether the provenance is sufficient for the exact metric being claimed. Energy per token requires stronger token provenance than energy per request. Split economics requires stronger stage-window provenance than monolithic request energy.
+      
+        
+          
+Metric
+Minimum Provenance
+Publishable Gate
+        
+        
+          
+            
+Energy per request
+            
+Strict-valid power trace, measured window, idle baseline, boundary label.
+            
+Passes strict validation and quality gates.
+          
+          
+            
+Energy per output token
+            
+Runtime-observed emitted token count, stop reason, fixed output policy or natural-EOS policy label.
+            
+No approximate token fallback unless the claim is downgraded.
+          
+          
+            
+Prefill/decode energy
+            
+Phase windows with enough samples, or explicit unresolved flag.
+            
+Phase window exceeds detection floor and minimum sample count.
+          
+          
+            
+Split transfer energy
+            
+Both-end sampling, payload hash/size, link speed, clock offset bound.
+            
+Cross-node intervals longer than offset bound and independently re-derived.
+          
+        
+      
+      
+7. Build A Claims-To-Evidence Index Early
+      
+Phase 4 plans a claims index, but I would start it now. Every report line that sounds like a result should get an ID, claim level, evidence bundle list, scripts used, quality flags, and allowed wording. This turns the final report from an interpretive essay into a defensible chain of custody.
+      
+        
+Example downgrade:
+ "Energy per token scales almost exactly with active parameters" should become "In two strict-valid Mac/MLX/powermetrics points, energy per output token was consistent with active-parameter-driven scaling; this is a hypothesis pending bridge models and a fitted Q4 matrix."
+      
+      
+8. Sequence The Rigor Work
+      
+        
+Before 2M:
+ patch campaign fail-closed behavior and run the detection-floor calibration.
+        
+During 2M:
+ interleave order, strict-validate each member, record machine state, and produce a campaign verdict.
+        
+After 2M:
+ fit Q4 only inside one boundary, with raw points and interval separation rules.
+        
+Before cross-target claims:
+ de-provisionalize NVIDIA/Orin and calibrate at least one external power boundary.
+        
+Before final report:
+ freeze the dataset, generate a claim index, and rewrite every claim to the highest level its evidence actually supports.
+      
+    
+    
+      
+Stack Choices
+      
+The stack is conservative in a way that mostly serves the project: Python, stdlib core, JSON/JSONL/CSV bundles, optional matplotlib, MLX on Mac, powermetrics for Apple rails, SSH node worker for remote NVIDIA, and vLLM/nvidia-smi as fixture-first backends.
+      
+        
+          
+Good Choices
+          
+            
+Stdlib core keeps mock runs and CI simple.
+            
+JSON/JSONL/CSV are inspectable and easy to archive.
+            
+Optional extras keep analysis and Mac runtime dependencies out of the core path.
+            
+Adapter protocols match the natural measurement layers: runtime, telemetry, transport.
+            
+Static report generation is enough for a research bundle browser.
+          
+        
+        
+          
+Costs Of Those Choices
+          
+            
+Manual dataclass validation increases contract drift risk.
+            
+No console script entry point makes installed CLI ergonomics weaker.
+            
+The self-contained remote worker duplicates constants and policy.
+            
+Large adapter modules make measurement bugs harder to isolate.
+            
+CSV/JSON are readable, but schema enforcement must remain relentless.
+          
+        
+      
+    
+    
+      
+Recommended Next Actions
+      
+        
+Harden campaign validation before the 2M run.
+ Require strict validation after each run and before every skip; require all experiment members to have 
+status=succeeded
+.
+        
+Run a detection-floor study.
+ Use idle-only repeats, no-op/small workloads, and phase-window duration ladders. Add 
+phase_identifiable=false
+ or equivalent summary flags.
+        
+Interleave the baseline matrix.
+ Do not run all repetitions of one condition as a block unless the order is explicitly part of the experiment.
+        
+Fit Q4 narrowly first.
+ One stack, one model family where possible, prompt/output ladders, n >= 5, clear uncertainty intervals.
+        
+Demote active-parameter scaling language.
+ Treat the 1.5B vs 122B comparison as hypothesis-generating until bridge models exist.
+        
+De-provisionalize NVIDIA only with live artifacts.
+ Require SSH, vLLM, nvidia-smi, raw CSV, strict validation, and quality flags before cross-target charts.
+        
+Refactor for contract enforcement.
+ Extract controller responsibilities, introduce a remote node session, and add mechanical worker protocol validators.
+        
+Calibrate a second boundary.
+ Wall meter or USB-C PD measurements would greatly improve credibility of Apple rail results and cross-target comparisons.
+      
+    
+    
+      
+Review Sources
+      
+Selected local files and evidence paths used for this critique.
+      
+        
+README.md
+        
+PROJECT_STATUS.md
+        
+RUN_STATE.md
+        
+TASK_QUEUE.md
+        
+docs/research_question_bank.md
+        
+docs/risk_register.md
+        
+docs/contracts/measurement_methodology.md
+        
+docs/contracts/run_bundle_layout.md
+        
+docs/test_audit_2026-07-07.md
+        
+first real energy report
+        
+flagship model report
+        
+docs/phase_3/kv_feasibility.md
+        
+joulewise/controller.py
+        
+joulewise/bundle.py
+        
+joulewise/bundle_read.py
+        
+joulewise/reduce.py
+        
+joulewise/aggregate.py
+        
+joulewise/adapters/powermetrics.py
+        
+joulewise/adapters/nvidia_smi.py
+        
+joulewise/adapters/vllm_runtime.py
+        
+scripts/generate_matrix.py
+        
+scripts/run_campaign.py
+      
+    
+  

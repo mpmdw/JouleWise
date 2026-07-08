@@ -81,6 +81,7 @@ class ExistingState:
 
 @dataclass(frozen=True)
 class Waiver:
+    target_kind: str
     target: str
     reason: str
     approver: str
@@ -99,6 +100,15 @@ class MemberEvaluation:
     quality_flags: tuple[str, ...] = ()
     waiver: Waiver | None = None
 
+    def failure_classes(self) -> tuple[str, ...]:
+        classes: list[str] = []
+        if self.status is not None and self.status != "succeeded":
+            classes.append("status_failed")
+        if not self.strict_valid:
+            classes.append("strict_invalid")
+        classes.extend(self.quality_flags)
+        return tuple(dict.fromkeys(classes))
+
     @property
     def usable(self) -> bool:
         return (
@@ -110,11 +120,19 @@ class MemberEvaluation:
 
     @property
     def waived(self) -> bool:
-        return self.waiver is not None
+        if self.waiver is None:
+            return False
+        classes = self.failure_classes()
+        if not classes:
+            return False
+        if self.waiver.scope == "any":
+            return True
+        scopes = {part.strip() for part in self.waiver.scope.split(",") if part.strip()}
+        return all(failure_class in scopes for failure_class in classes)
 
     @property
     def failed(self) -> bool:
-        return not self.usable and self.waiver is None
+        return not self.usable and not self.waived
 
     def to_log(self) -> dict[str, Any]:
         row: dict[str, Any] = {
@@ -130,6 +148,8 @@ class MemberEvaluation:
         }
         if self.waiver is not None:
             row["waiver"] = {
+                "target_kind": self.waiver.target_kind,
+                "target": self.waiver.target,
                 "reason": self.waiver.reason,
                 "approver": self.waiver.approver,
                 "timestamp": self.waiver.timestamp,
@@ -303,7 +323,10 @@ def expected_member_dirs(info: ConfigInfo, runs_dir: Path) -> list[Path]:
     return member_bundle_dirs(runs_dir, info.run_id, info.repetitions)
 
 
-def load_waivers(path_text: str | None) -> dict[str, Waiver]:
+WaiverMap = dict[tuple[str, str], Waiver]
+
+
+def load_waivers(path_text: str | None) -> WaiverMap:
     if path_text is None:
         return {}
     path = Path(path_text)
@@ -315,36 +338,59 @@ def load_waivers(path_text: str | None) -> dict[str, Waiver]:
         raise ValueError(f"waiver file is not valid JSON: {path}: {exc}") from exc
     if not isinstance(raw, list):
         raise ValueError(f"waiver file must be a JSON list: {path}")
-    waivers: dict[str, Waiver] = {}
+    waivers: WaiverMap = {}
+    seen_targets: set[tuple[str, str]] = set()
     for index, item in enumerate(raw, start=1):
         if not isinstance(item, dict):
             raise ValueError(f"waiver {index} must be an object")
-        target = item.get("bundle_id", item.get("config"))
-        if not isinstance(target, str) or not target.strip():
-            raise ValueError(f"waiver {index} requires bundle_id or config")
+        target_fields = [field for field in ("bundle_id", "config", "run_id") if field in item]
+        if len(target_fields) != 1:
+            raise ValueError(
+                f"waiver {index} requires exactly one of bundle_id, config, or run_id"
+            )
+        target_kind = target_fields[0]
+        raw_target = item[target_kind]
+        if not isinstance(raw_target, str) or not raw_target.strip():
+            raise ValueError(f"waiver {index} requires non-empty {target_kind}")
+        target = raw_target.strip()
         for key in ("reason", "approver", "timestamp", "scope"):
             if not isinstance(item.get(key), str) or not item[key].strip():
                 raise ValueError(f"waiver {index} requires non-empty {key}")
-        waivers[target] = Waiver(
+        duplicate_key = (
+            target_kind,
+            Path(target).stem if target_kind == "config" else target,
+        )
+        if duplicate_key in seen_targets:
+            raise ValueError(f"duplicate waiver target: {target_kind}={target}")
+        seen_targets.add(duplicate_key)
+        key = (target_kind, target)
+        waivers[key] = Waiver(
+            target_kind=target_kind,
             target=target,
             reason=item["reason"],
             approver=item["approver"],
             timestamp=item["timestamp"],
-            scope=item["scope"],
+            scope=item["scope"].strip(),
         )
     return waivers
 
 
 def matching_waiver(
-    waivers: dict[str, Waiver],
+    waivers: WaiverMap,
     *,
     bundle_id: str,
     config_name: str,
     config_stem: str,
     run_id: str,
 ) -> Waiver | None:
-    for key in (bundle_id, config_name, config_stem, run_id):
-        waiver = waivers.get(key)
+    candidates = (
+        ("bundle_id", bundle_id),
+        ("config", config_name),
+        ("config", config_stem),
+        ("run_id", run_id),
+    )
+    for target_kind, target in candidates:
+        waiver = waivers.get((target_kind, target))
         if waiver is not None:
             return waiver
     return None
@@ -366,7 +412,7 @@ def evaluate_member(
     bundle_dir: Path,
     *,
     info: ConfigInfo,
-    waivers: dict[str, Waiver],
+    waivers: WaiverMap,
 ) -> MemberEvaluation:
     status, malformed = summary_status(bundle_dir / "summary_metrics.json")
     problems: list[str] = []
@@ -409,7 +455,7 @@ def evaluate_member(
 
 
 def evaluate_members(
-    info: ConfigInfo, runs_dir: Path, waivers: dict[str, Waiver]
+    info: ConfigInfo, runs_dir: Path, waivers: WaiverMap
 ) -> list[MemberEvaluation]:
     return [
         evaluate_member(bundle_dir, info=info, waivers=waivers)
@@ -521,6 +567,8 @@ def load_order_entries(config_dir: Path) -> tuple[list[OrderEntry], str | None]:
     if not isinstance(raw_order, list):
         raise ValueError(f"order manifest missing executed_order list: {path}")
     entries: list[OrderEntry] = []
+    seen_configs: set[str] = set()
+    seen_indexes: set[int] = set()
     for index, raw in enumerate(raw_order, start=1):
         if not isinstance(raw, dict):
             raise ValueError(f"order manifest entry {index} is not an object")
@@ -530,6 +578,12 @@ def load_order_entries(config_dir: Path) -> tuple[list[OrderEntry], str | None]:
         raw_index = raw.get("index", index)
         if isinstance(raw_index, bool) or not isinstance(raw_index, int):
             raise ValueError(f"order manifest entry {index} has invalid index")
+        if config in seen_configs:
+            raise ValueError(f"order manifest has duplicate config entry: {config}")
+        if raw_index in seen_indexes:
+            raise ValueError(f"order manifest has duplicate index: {raw_index}")
+        seen_configs.add(config)
+        seen_indexes.add(raw_index)
         rep = raw.get("rep")
         if rep is not None and (isinstance(rep, bool) or not isinstance(rep, int)):
             raise ValueError(f"order manifest entry {index} has invalid rep")
@@ -542,6 +596,12 @@ def load_order_entries(config_dir: Path) -> tuple[list[OrderEntry], str | None]:
                 rep=rep,
                 workload=raw.get("workload") if isinstance(raw.get("workload"), str) else None,
             )
+        )
+    expected_indexes = set(range(1, len(entries) + 1))
+    if seen_indexes != expected_indexes:
+        raise ValueError(
+            "order manifest indexes must be contiguous 1.."
+            f"{len(entries)} (found {sorted(seen_indexes)})"
         )
     return entries, None
 
@@ -695,7 +755,7 @@ def append_verdict(
         "missing": categories["missing"],
         "taxonomy": {
             "publishable": "all members usable",
-            "partial": "at least one usable or waived member and no invalid unwaived or missing members",
+            "partial": "at least one usable member and at least one waived or failed member; all-waived is invalid",
             "blocked": "one or more expected member bundles are missing",
             "invalid": "one or more invalid unwaived members, or no members were evaluated",
         },

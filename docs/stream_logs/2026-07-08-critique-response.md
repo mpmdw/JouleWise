@@ -90,3 +90,29 @@ cross-stream contracts, acceptance criteria, or future process.
   `test_config_output_token_fallback_is_flagged_and_output_metrics_null`.
 - **Confidence:** High.
 - **Binds:** Reducer output schema and strict validation of fresh summaries.
+
+### CR-6 [codex fix] [type: cross-stream-contract] Waiver v2, new-era honesty gates, output-token discriminator
+
+- **Decision:** Campaign waivers now use a typed exact-match target:
+  exactly one of `bundle_id`, `config`, or `run_id`. `config` matches only
+  config filenames/stems; duplicate targets fail closed. Waiver `scope`
+  names the failure classes it neutralizes (`idle_window_suspect`,
+  `strict_invalid`, `status_failed`, or `any`). Strict validation requires
+  `measurement_quality.token_counts_source` and
+  `measurement_quality.phase_identifiability` on new-era summaries carrying
+  `summary_provenance`, while legacy summaries keep additive tolerance.
+  Runtime output-token counts come only from decode-phase token events.
+- **Alternatives:** Keep CR-2's untyped waiver namespace; require the new
+  summary fields for every historical bundle; count all token events as
+  output-token evidence.
+- **Why:** The review found cross-namespace waiver collisions, overbroad
+  waiver scope, silent new-era honesty-field omission, and prompt-token event
+  leakage into output-token metrics. Each needed fail-closed behavior without
+  invalidating the six legacy Mac bundles.
+- **Evidence:** `scripts/run_campaign.py`, `joulewise/cli.py`,
+  `joulewise/bundle_read.py`, `joulewise/reduce.py`,
+  `tests/test_run_campaign.py`, `tests/test_cli_run.py`, and
+  `tests/test_reduce.py`.
+- **Confidence:** High.
+- **Binds:** Supersedes CR-2's waiver schema details; campaign publication
+  gates, strict validation, and reducer token provenance.

@@ -530,6 +530,7 @@ class TokenFallbackTests(ReduceTestCase):
         builder = self.builder(**overrides)
         start_s, end_s = 100.0, 110.0
         builder.measured_window(start_s, end_s)
+        builder.add_phase("decode", 101.0, 109.0)
         # 4 tokens inside the window so output_token_count comes from events.
         for index, t in enumerate((102.0, 104.0, 106.0, 108.0)):
             builder.add_token(index, t)
@@ -579,6 +580,30 @@ class TokenFallbackTests(ReduceTestCase):
         self.assertIsNone(summary.energy_output_token_j)
         self.assertIsNone(summary.energy_token_j)
         self.assertEqual(summary.measurement_quality.token_counts_source, "config_fallback")
+
+    def test_prompt_side_token_events_do_not_count_as_runtime_output_tokens(self) -> None:
+        builder = self.builder()
+        start_s, end_s = 100.0, 110.0
+        builder.measured_window(start_s, end_s)
+        builder.add_phase("prefill", 101.0, 103.0)
+        for index, t in enumerate((101.25, 101.5, 101.75)):
+            builder.add_event(
+                "token",
+                "prefill",
+                t,
+                message=f"prompt token {index}",
+                metadata={"index": index},
+            )
+        builder.write_trace(constant_samples(start_s, end_s, hz=1.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"], workload_observed={"token_count": 35})
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNone(summary.energy_output_token_j)
+        self.assertIsNone(summary.throughput_tokens_s)
+        self.assertEqual(summary.measurement_quality.token_counts_source, "config_fallback")
+        self.assertEqual(summary.measurement_quality.token_count_source, "runtime_observed")
 
 
 class StructuredReadFailureTests(ReduceTestCase):

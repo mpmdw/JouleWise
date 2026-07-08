@@ -282,18 +282,37 @@ _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
     "idle_baseline.gpu_freq_hz_mean",
     "idle_baseline.idle_window_suspect",
     "measurement_quality.idle_window_suspect",
+}
+
+_STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE = _STRICT_ADDITIVE_ABSENT_TOLERANCE | {
     "measurement_quality.token_counts_source",
     "measurement_quality.phase_identifiability",
 }
 
 
-def _strict_summary_differences(fresh: Any, stored: Any, path: str = "") -> list[str]:
+def _strict_summary_differences(
+    fresh: Any,
+    stored: Any,
+    path: str = "",
+    *,
+    absent_tolerance: set[str] | None = None,
+) -> list[str]:
     """Compare fresh vs stored summaries with legacy-additive null tolerance.
 
     A freshly emitted key that is absent from a legacy stored summary is
     tolerated only when the fresh value is ``None``. Stored keys, including
     stored extras, remain exact claims and must match the fresh reduction.
     """
+    if absent_tolerance is None:
+        stored_new_era = (
+            isinstance(stored, dict)
+            and isinstance(stored.get("summary_provenance"), dict)
+        )
+        absent_tolerance = (
+            _STRICT_ADDITIVE_ABSENT_TOLERANCE
+            if stored_new_era
+            else _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE
+        )
     if isinstance(fresh, dict) and isinstance(stored, dict):
         differences: list[str] = []
         for key in sorted(set(fresh) | set(stored)):
@@ -301,7 +320,7 @@ def _strict_summary_differences(fresh: Any, stored: Any, path: str = "") -> list
             if key not in stored:
                 if child == "summary_provenance":
                     continue
-                if child in _STRICT_ADDITIVE_ABSENT_TOLERANCE:
+                if child in absent_tolerance:
                     continue
                 if fresh[key] is not None:
                     differences.append(child)
@@ -309,7 +328,14 @@ def _strict_summary_differences(fresh: Any, stored: Any, path: str = "") -> list
             if key not in fresh:
                 differences.append(child)
                 continue
-            differences.extend(_strict_summary_differences(fresh[key], stored[key], child))
+            differences.extend(
+                _strict_summary_differences(
+                    fresh[key],
+                    stored[key],
+                    child,
+                    absent_tolerance=absent_tolerance,
+                )
+            )
         return differences
     if fresh != stored:
         return [path or "<summary>"]

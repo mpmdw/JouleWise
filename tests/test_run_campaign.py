@@ -553,7 +553,7 @@ class RunCampaignTests(unittest.TestCase):
                             "reason": "manual idle-window review accepted",
                             "approver": "council",
                             "timestamp": "2026-07-08T00:00:00Z",
-                            "scope": "campaign-only",
+                            "scope": "idle_window_suspect",
                         }
                     ]
                 )
@@ -580,6 +580,107 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(verdict["verdict"], "partial")
             self.assertEqual(verdict["usable"], ["good"])
             self.assertEqual(verdict["waived"], ["idle"])
+            self.assertIn("all-waived is invalid", verdict["taxonomy"]["partial"])
+
+    def test_waiver_target_namespace_is_exact_and_typed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            write_config(config_dir, "good.json", "bad")
+            write_single_bundle(runs_dir, "bad", idle_window_suspect=True)
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": "good",
+                            "reason": "wrong namespace must not match run_id or config",
+                            "approver": "council",
+                            "timestamp": "2026-07-08T00:00:00Z",
+                            "scope": "any",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                waivers=waivers,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("not skippable", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(rows[0]["status"], "failed")
+            self.assertIsNone(rows[0]["members"][0].get("waiver"))
+
+    def test_waiver_scope_must_cover_failure_classes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            write_config(config_dir, "idle.json", "idle")
+            write_single_bundle(runs_dir, "idle", idle_window_suspect=True)
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": "idle",
+                            "reason": "wrong failure class",
+                            "approver": "council",
+                            "timestamp": "2026-07-08T00:00:00Z",
+                            "scope": "status_failed",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                waivers=waivers,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(rows[0]["status"], "failed")
+            self.assertEqual(rows[0]["members"][0]["quality_flags"], ["idle_window_suspect"])
+
+    def test_duplicate_waiver_targets_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            write_config(config_dir, "good.json", "good")
+            entry = {
+                "config": "good.json",
+                "reason": "duplicate",
+                "approver": "council",
+                "timestamp": "2026-07-08T00:00:00Z",
+                "scope": "any",
+            }
+            duplicate = {**entry, "config": "good"}
+            waivers.write_text(json.dumps([entry, duplicate]) + "\n", encoding="utf-8")
+
+            result = run_campaign(config_dir, runs_dir, waivers=waivers)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("duplicate waiver target", result.stderr)
 
     def test_idle_suspect_existing_member_requires_waiver(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -598,6 +699,46 @@ class RunCampaignTests(unittest.TestCase):
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual(rows[0]["status"], "failed")
             self.assertEqual(rows[0]["members"][0]["quality_flags"], ["idle_window_suspect"])
+
+    def test_all_waived_campaign_is_invalid_not_partial(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            write_config(config_dir, "idle.json", "idle")
+            write_single_bundle(runs_dir, "idle", idle_window_suspect=True)
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": "idle",
+                            "reason": "all waived is not publishable evidence",
+                            "approver": "council",
+                            "timestamp": "2026-07-08T00:00:00Z",
+                            "scope": "idle_window_suspect",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                waivers=waivers,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            all_rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
+            verdict = all_rows[-1]
+            self.assertEqual(verdict["verdict"], "invalid")
+            self.assertEqual(verdict["waived"], ["idle"])
+            self.assertIn("all-waived is invalid", verdict["taxonomy"]["partial"])
 
     def test_verdict_block_content_for_publishable_campaign(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -755,6 +896,57 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(rows[0]["executed_order"]["model_tag"], "b")
             self.assertIs(rows[0]["model_load_boundary"], True)
             self.assertIs(rows[1]["model_load_boundary"], True)
+
+    def test_order_manifest_rejects_duplicate_and_non_contiguous_entries(self) -> None:
+        cases = [
+            (
+                "duplicate-config",
+                [
+                    {"index": 1, "config": "01-alpha.json"},
+                    {"index": 2, "config": "01-alpha.json"},
+                ],
+                "duplicate config",
+            ),
+            (
+                "duplicate-index",
+                [
+                    {"index": 1, "config": "01-alpha.json"},
+                    {"index": 1, "config": "02-beta.json"},
+                ],
+                "duplicate index",
+            ),
+            (
+                "gap-index",
+                [
+                    {"index": 1, "config": "01-alpha.json"},
+                    {"index": 3, "config": "02-beta.json"},
+                ],
+                "contiguous",
+            ),
+        ]
+        for label, executed_order, expected in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                config_dir = tmp_path / "configs"
+                runs_dir = tmp_path / "runs"
+                config_dir.mkdir()
+                write_config(config_dir, "01-alpha.json", "alpha")
+                write_config(config_dir, "02-beta.json", "beta")
+                (config_dir / "order_manifest.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "joulewise.order_manifest.v1",
+                            "executed_order": executed_order,
+                        }
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+
+                result = run_campaign(config_dir, runs_dir)
+
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(expected, result.stderr)
 
     def test_missing_order_manifest_records_loud_warning(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
