@@ -132,14 +132,12 @@ class BundleValidationBugPins(BundleAuditCase):
             BundleReader(bundle).summed_curve()
 
     # Rank 1: write_output() accepts traversal out of outputs/.
-    @unittest.expectedFailure
     def test_write_output_rejects_path_traversal_name(self) -> None:
         writer = RunBundleWriter.create(self.runs_root, load_config("audit-output-traversal"), self.clock)
         with self.assertRaisesRegex(BundleError, "plain file name"):
             writer.write_output("../escape.txt", "nope")
 
     # Rank 1: log_path() accepts traversal out of logs/.
-    @unittest.expectedFailure
     def test_log_path_rejects_path_traversal_name(self) -> None:
         writer = RunBundleWriter.create(self.runs_root, load_config("audit-log-traversal"), self.clock)
         with self.assertRaisesRegex(BundleError, "plain file name"):
@@ -176,13 +174,15 @@ class BundleValidationBugPins(BundleAuditCase):
         self.assertRegex(writer.run_id, r"^[a-z0-9_-]+$")
 
     # B8: write_raw() can leave a partial raw artifact that blocks retry.
-    @unittest.expectedFailure
     def test_write_raw_partial_failure_does_not_poison_retry(self) -> None:
         writer = RunBundleWriter.create(self.runs_root, load_config("audit-raw-retry"), self.clock)
         original_write_bytes = Path.write_bytes
+        failed_once = False
 
         def flaky_write_bytes(path: Path, data: bytes):
-            if path.name == "capture.bin":
+            nonlocal failed_once
+            if path.parent == writer.path / "raw" and path.name.startswith(".capture.bin.") and not failed_once:
+                failed_once = True
                 original_write_bytes(path, data[:2])
                 raise OSError("simulated crash during raw write")
             return original_write_bytes(path, data)

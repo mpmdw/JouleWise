@@ -29,6 +29,7 @@ import hashlib
 import json
 import platform
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -124,10 +125,23 @@ def _write_raw_file(raw_dir: Path, name: str, data: bytes | str) -> Path:
         raise BundleError(
             f"raw artifact already exists: {path} (raw evidence is immutable)"
         )
-    if isinstance(data, bytes):
-        path.write_bytes(data)
-    else:
-        path.write_text(data)
+    handle = tempfile.NamedTemporaryFile(
+        dir=raw_dir,
+        prefix=f".{name}.",
+        suffix=".tmp",
+        delete=False,
+    )
+    tmp_path = Path(handle.name)
+    handle.close()
+    try:
+        if isinstance(data, bytes):
+            tmp_path.write_bytes(data)
+        else:
+            tmp_path.write_text(data)
+        tmp_path.replace(path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
     return path
 
 
@@ -333,9 +347,7 @@ class RunBundleWriter:
     def write_output(self, name: str, text: str) -> Path:
         """Write ``outputs/<name>`` and return its path."""
         self._require_open(f"write output {name!r}")
-        outputs_dir = self._path / "outputs"
-        outputs_dir.mkdir(exist_ok=True)
-        path = outputs_dir / name
+        path = _validated_raw_path(self._path / "outputs", name)
         path.write_text(text)
         return path
 
@@ -362,9 +374,7 @@ class RunBundleWriter:
 
     def log_path(self, name: str) -> Path:
         """Return ``logs/<name>`` (ensuring ``logs/`` exists); writes nothing."""
-        logs_dir = self._path / "logs"
-        logs_dir.mkdir(exist_ok=True)
-        return logs_dir / name
+        return _validated_raw_path(self._path / "logs", name)
 
     def write_summary(self, summary: SummaryMetrics) -> None:
         """Stage the summary for :meth:`finalize` (write-order invariant D-011).
