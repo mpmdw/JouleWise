@@ -1,7 +1,7 @@
 # JouleWise Run State
 
-Last updated: 2026-07-08 (resume+merge session: checkpointed streams
-completed and landed under the C-009 topology)
+Last updated: 2026-07-08 (councils+critique session: site redesign,
+C-011 counter-review merged as PR #12)
 
 ## Start Here For Every Big Run
 
@@ -55,21 +55,28 @@ Phase 3's central technical risk retired on current hardware), plus
 D-035/D-036 (the ratified spike promotions). **PR #11 (2K NVIDIA fixture-first
 stack, all pins PROVISIONAL) MERGED 2026-07-08 under Ed's standing
 merge-with-review authorization — ALL FOUR STREAMS LANDED.** Suite on
-main: 546 OK (skipped=10, ZERO expected failures); all 6 real corpus
+main: 564 OK (skipped=10, ZERO expected failures — as of 2026-07-08 after PR #12/C-011); all 6 real corpus
 bundles pass `--strict` read-only. The 2M campaign (P2-006) is fully unblocked and
 is the next machine-state-compatible task.
 
-**RESTART HERE:** read
-`docs/run_reports/2026-07-07-resume-merge-session.md` (product
-outcomes, review-pipeline yield table, restart steps). Short version:
-quiet-machine 2M campaign (P2-006) under the C-009 T5 no-agent lock
-(all merges done; no worktrees remain).
+**Since then (same day): PR #12 MERGED (C-011)** — the independent-
+critique counter-review landed fail-closed campaigns, counterbalanced
+order manifests, reducer honesty flags, the claims ladder (D-037), and
+queue item P2-015; the docs/site is now a designed reading experience
+(consensus-gated). **RESTART HERE:** read
+`docs/run_reports/2026-07-08-councils-critique-session.md`. Short
+version: quiet-machine window running P2-015 (detection-floor
+calibration) FIRST, then P2-006 (2M) with the fail-closed runner, order
+manifest, and claims-ladder wording — under the C-009 T5 no-agent lock
+(no worktrees remain).
 
 ## Session History (pointers only — run reports own the narrative)
 
 Per the C-009 meta-review consensus, RUN_STATE no longer stacks
 previous-run narratives. Recent sessions, newest first:
 
+- 2026-07-08 councils+critique (site redesign; C-011 → PR #12):
+  `docs/run_reports/2026-07-08-councils-critique-session.md`
 - 2026-07-07/08 resume+merge (C-009 topology first full run; PRs
   #8/#9/#10/#11 all merged):
   `docs/run_reports/2026-07-07-resume-merge-session.md`
@@ -85,9 +92,9 @@ previous-run narratives. Recent sessions, newest first:
 
 ## Current Verification
 
-- Merged main: `python3 -m unittest discover -s tests` → `Ran 546
+- Merged main: `python3 -m unittest discover -s tests` → `Ran 564
   tests, OK (skipped=10)` — ZERO expected failures (as of 2026-07-08,
-  after PRs #8/#9/#10/#11).
+  after PRs #8/#9/#10/#11/#12).
 - `validate-bundle --strict` green over all 6 real corpus bundles,
   read-only, unrewritten (incl. the new raw-to-trace gate).
 - CI: mock e2e + suite on both matrix legs, green on every PR head.
@@ -104,10 +111,11 @@ previous-run narratives. Recent sessions, newest first:
 
 Follow `TASK_QUEUE.md` (lane-annotated). In order:
 
-1. **P2-006: the 2M two-model baseline campaign** [QUIET-MAC] — fully
-   unblocked; no-agent quiet lock per C-009 T5 (stop all fleets/Codex
-   load first); corpus born under the fixed validator with prompt
-   provenance.
+1. **P2-015 then P2-006 in ONE quiet window** [QUIET-MAC]:
+   detection-floor calibration first, then the 2M two-model baseline
+   campaign via the fail-closed runner + counterbalanced order manifest
+   (C-011), claim wording per the claims ladder (D-037); no-agent quiet
+   lock per C-009 T5; corpus backed up per R-016.
 2. **P2-010 → P2-012 workload program** [AGENT] per Slice 2O gates
    (D-034).
 3. **Ed's external one-pass** [ED-EXTERNAL]: calendar, device access,

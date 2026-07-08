@@ -58,9 +58,9 @@ needs 2M baselines:     M10 later pairing-feasibility matrix + split runs
    intake step.
 4. Check workspace state with `git status --short --branch`; inspect
    recent commits only when the handoff or mission needs them.
-5. `python3 -m unittest discover -s tests` — expect `Ran 546 tests, OK
-   (skipped=10)` with zero expected failures as of 2026-07-07 after
-   P2-013/P2-014. The skips are the `[analysis]`-extra chart tests plus one
+5. `python3 -m unittest discover -s tests` — expect `Ran 564 tests, OK
+   (skipped=10)` with zero expected failures as of 2026-07-08 after
+   P2-013/P2-014 and the C-011 rigor mechanics. The skips are the `[analysis]`-extra chart tests plus one
    optional-jsonschema test. A red suite is itself the mission: stop and fix
    or report.
 6. Review `docs/risk_register.md` at phase starts, before hardware tasks,

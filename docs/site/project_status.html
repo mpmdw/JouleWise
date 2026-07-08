@@ -22,7 +22,7 @@
 </header>
 <main>
 <div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>PROJECT_STATUS.md</code> · as of commit 6418084 (2026-07-08)</p>
+<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>PROJECT_STATUS.md</code> · as of commit bef8ab6 (2026-07-08)</p>
 <h1>JouleWise: Project Status, Plan, And Architecture</h1>
 <p>Audience: project advisor. This is the standalone monitoring document - it
 summarizes what the project is, how it is built, where it stands, and what
@@ -38,7 +38,7 @@ are complete; the two-model baseline matrix is the next Mac corpus step</li>
 <h2>This Update (as of 2026-07-08, all four streams merged) — 30-second read</h2>
 <p><strong>Everything landed.</strong> The multi-stream session merged as four PRs:
 P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
-546 tests with 10 skips and zero expected failures, bundle provenance
+564 tests with 10 skips and zero expected failures (564 as of 2026-07-08 incl. the C-011 rigor mechanics), bundle provenance
 now records prompt/workload identities, and <code>validate-bundle --strict</code>
 includes the powermetrics raw-plist-to-trace gate plus the legacy
 additive-summary comparison. The six existing real corpus bundles pass
@@ -268,7 +268,7 @@ provenance on new-era bundles. All bundle consumers read through one
 shared, tested read layer, so displayed numbers can never diverge from
 reported ones.</li>
 <li>Typed config and output schemas with validation, JSON-Schema export, and
-a CLI, plus a passing test suite (546 tests, 10 skipped, zero expected
+a CLI, plus a passing test suite (564 tests, 10 skipped, zero expected
 failures, run in CI on every push, including a mock end-to-end run +
 bundle validation); emitted configs
 round-trip their own published schema, and config hashes (run identity)
@@ -642,7 +642,7 @@ traceable to raw data.</li>
 </tr>
 <tr>
 <td><code>joulewise/</code>, <code>tests/</code></td>
-<td>the harness package + test suite (546 tests, 10 skipped, zero expected failures, CI-enforced)</td>
+<td>the harness package + test suite (564 tests, 10 skipped, zero expected failures, CI-enforced)</td>
 </tr>
 </tbody></table>
 <h2>Process Note</h2>
@@ -776,7 +776,7 @@ date above and the repository&#39;s run reports are the freshness check.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 6418084 (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>as of commit bef8ab6 (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
