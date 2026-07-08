@@ -70,8 +70,9 @@
       position: sticky;
       top: 0;
       z-index: 2;
-      background: rgba(251, 252, 253, 0.96);
-      backdrop-filter: blur(8px);
+      /* no backdrop-filter: it caused multi-second scroll hitches on the
+         main site's sticky nav (same pattern); near-opaque bg instead */
+      background: rgba(251, 252, 253, 0.985);
       border-bottom: 1px solid var(--line);
     }
 

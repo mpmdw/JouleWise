@@ -57,8 +57,10 @@ main, header.site, footer.site { position: relative; z-index: 1; }
 /* ---------- nav ---------- */
 header.site {
   position: sticky; top: 0; z-index: 50;
-  background: color-mix(in srgb, var(--bg-deep) 88%, transparent);
-  backdrop-filter: blur(10px);
+  /* No backdrop-filter: blur on a sticky nav forced full backdrop
+     re-rasterization and caused multi-second scroll hitches (measured
+     1.9s worst frame; ~20ms without it). Near-opaque bg instead. */
+  background: color-mix(in srgb, var(--bg-deep) 97%, transparent);
   border-bottom: 1px solid var(--line-soft);
 }
 .nav {
