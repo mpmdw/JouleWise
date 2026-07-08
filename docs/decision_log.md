@@ -2204,6 +2204,10 @@ adjudication section):
 
 1. Item loop lives runtime-side: new `SuiteRuntimeAdapter` protocol with
    `run_suite(config, manifest, context)`; `run_workload` untouched;
+   [AMENDED 2026-07-08, oversight round: the signature gained
+   keyword-only `order_seed` supplied by the controller so the seed is
+   never runtime-derived — `run_suite(config, manifest, context=None, *,
+   order_seed)`; see item 6 and adapter_contracts.md];
    controller dispatches when a suite manifest is present and fails fast
    pre-window (`UNSUPPORTED_WORKLOAD` when the runtime lacks the
    protocol; structured FAILED on unreadable/invalid manifest).
@@ -2314,6 +2318,14 @@ Decision:
    items (C-015 first default holds; the earlier "k=26 / 2-over" claim
    was an accounting error — sentinel executions are within-bundle
    repeats, not distinct items). B = 5 bundles, top-up 10.
+   AMENDED 2026-07-08 (AFF-1, review-driven, same session): the sentinel
+   is a DEDICATED derived item (`n_iter=1, item_index=8`, id
+   `affine_v1_sentinel`) so no ordinary level item carries the sentinel
+   tag — duplicating L01/i00 would have corrupted the
+   8-distinct-items-per-level denominator. Accounting is therefore
+   k = 25 distinct items / 26 executions; every level still has exactly
+   8 untagged distinct items. Ledger:
+   docs/stream_logs/2026-07-08-affine-ladder.md AFF-1.
 3. Gate statistics: under deterministic (greedy) decoding, repeated
    bundles replicate ENERGY only; all token/stop-reason/correctness
    denominators are the 8 DISTINCT items per level. E1's 5% threshold at

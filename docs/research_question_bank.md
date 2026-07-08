@@ -97,7 +97,7 @@ fit. Killed ideas stay recorded with their cause of death.
 - **P2-010 scored workload suite v1:** `affine_mod_ladder_v1` per the
   C-004 design (seed-deterministic SHA-256-derived modular recurrences;
   difficulty = iteration count with prompt shape and answer length fixed;
-  exact-integer scoring; levels 1..64 powers-of-two, 16 items/level;
+  exact-integer scoring; levels `{1, 2, 4, 8, 16, 32, 64}`, 16 items/level;
   suite-per-bundle with item/level marker events; level-window energy
   primary; per-item flagged unidentifiable below minimum samples;
   correctness lives in stdlib `joulewise/workloads.py`, scored by the
@@ -106,6 +106,8 @@ fit. Killed ideas stay recorded with their cause of death.
   "difficulty causes energy" claims. Amendment 2026-07-08 (C-014):
   P2-010 splits into P2-010a suite substrate and P2-010b smoke ladder;
   the full scored ladder remains deferred as above.
+  Amendment 2026-07-08 (D-047.1): the level set is the ratified
+  powers-of-two set above, not a linear 1..64 sweep.
 
 # Suite architecture v2, benchmark interop, and capability map (Council C-015, 2026-07-08)
 
@@ -251,6 +253,16 @@ outputs:
   per_item_stop_reason
   per_item_status
 ```
+
+Amendments 2026-07-08 (D-044/D-045/D-046): the sketch is historical and
+receives these additive pins. `outputs` gains `per_item_response_text`,
+with response text carried in `outputs/suite_items.jsonl` (D-045.8).
+`markers` and `outputs` are optional in authored manifests, materialized
+to pinned defaults, validated when present, and included in the canonical
+effective-manifest hash (D-044/D-045.3). Items gain an additive,
+mutually-exclusive `prompt_token_ids` source for ids-native sentinels,
+with per-item prompt identity using the D-033 token-ID hash
+(D-045.5/D-046).
 
 Deferred fields (C-015): `scoring.scorer_id`,
 `scoring.expected_answer_hash`, `scoring.correctness_quarantine`, import-
@@ -757,6 +769,10 @@ windows + identifiability flags; aggregation waits on P2-011. Out of
 scope stays out: no accuracy evals, no judges, no retries — correctness
 only as quarantined annotation. Category claims follow AP-4 in
 `docs/contracts/analysis_plans.md`.
+Amendment 2026-07-08 (D-046 and deferred-binding B6 disposition):
+`jw.multiling` synthetic is phase-1 control material, not a C5-W.4 FLORES
+replacement; the FLORES 6-vs-8 language count and token-matched
+substitution decision are deferred to the FLORES/source session.
 
 **Questions it unlocks (Tier 1):**
 

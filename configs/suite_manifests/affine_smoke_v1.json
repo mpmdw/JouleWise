@@ -1,0 +1,1021 @@
+{
+  "analysis_contract": {
+    "allowed_aggregation_levels": [
+      "level",
+      "suite"
+    ],
+    "independent_unit": "bundle",
+    "primary_window_class": "level_window"
+  },
+  "execution_policy": {
+    "cache_policy": "warm_cache",
+    "cooldown_policy": "bundle_only",
+    "default_output_policy": "natural_eos",
+    "order_policy": "manifest_order",
+    "warmup_policy": "adapter_default",
+    "within_bundle_repeats": 1
+  },
+  "generator": {
+    "name": "affine_mod_ladder_v1",
+    "parameters_hash": "2dd6347eb863a81b55f30378bf37ccce66296e093768a99af55001d479494847",
+    "version": "1.0.0"
+  },
+  "items": [
+    {
+      "category": "sentinel",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "1 iteration",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 1.0
+      },
+      "grouping": {
+        "block_id": "sentinel_start",
+        "condition_id": "sentinel_start",
+        "level_id": "sentinel_start",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_sentinel",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 474.\nAt each step, replace x with (75 * x + 75) mod 680.\nPerform exactly 1 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_sentinel",
+        "source_sha256": "9ee4905d6b6c81f668559f3d45b8c135668c318787555b1dc9e37a9f560fe3ac"
+      },
+      "status_policy": "none",
+      "tags": [
+        "sentinel"
+      ]
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "1 iteration",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 1.0
+      },
+      "grouping": {
+        "block_id": "L01",
+        "condition_id": "L01",
+        "level_id": "L01",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L01_i00",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 378.\nAt each step, replace x with (51 * x + 49) mod 959.\nPerform exactly 1 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L01_i00",
+        "source_sha256": "4d9518a7cff63163949e3d292998c86fbb9449202c8a545531f6fe500722dd6d"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "1 iteration",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 1.0
+      },
+      "grouping": {
+        "block_id": "L01",
+        "condition_id": "L01",
+        "level_id": "L01",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L01_i01",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 796.\nAt each step, replace x with (31 * x + 69) mod 402.\nPerform exactly 1 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L01_i01",
+        "source_sha256": "a66608c5debaacad1611f36a1ee248d5b075e675c8ddbea859a925ebbb0b437b"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "1 iteration",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 1.0
+      },
+      "grouping": {
+        "block_id": "L01",
+        "condition_id": "L01",
+        "level_id": "L01",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L01_i02",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 418.\nAt each step, replace x with (77 * x + 16) mod 487.\nPerform exactly 1 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L01_i02",
+        "source_sha256": "b6f009fecc7ff760082ea103e61f0d13b1c73bbb0f924f01d8da416620a1e522"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "1 iteration",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 1.0
+      },
+      "grouping": {
+        "block_id": "L01",
+        "condition_id": "L01",
+        "level_id": "L01",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L01_i03",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 709.\nAt each step, replace x with (78 * x + 89) mod 498.\nPerform exactly 1 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L01_i03",
+        "source_sha256": "2b556671ea50712ebd2b6895fcc6a9c457a81d795ccd2779e734942b8c62a674"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "1 iteration",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 1.0
+      },
+      "grouping": {
+        "block_id": "L01",
+        "condition_id": "L01",
+        "level_id": "L01",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L01_i04",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 467.\nAt each step, replace x with (76 * x + 83) mod 883.\nPerform exactly 1 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L01_i04",
+        "source_sha256": "f0f311260649ef326b2b320e569ef6b07a00464bb2c703dc264003dee0b8524b"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "1 iteration",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 1.0
+      },
+      "grouping": {
+        "block_id": "L01",
+        "condition_id": "L01",
+        "level_id": "L01",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L01_i05",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 264.\nAt each step, replace x with (57 * x + 94) mod 368.\nPerform exactly 1 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L01_i05",
+        "source_sha256": "f385e9bf4b1b67b1e372a6afddf9e2a8fe0cb8a947ecbbfb090b275af4b284dd"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "1 iteration",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 1.0
+      },
+      "grouping": {
+        "block_id": "L01",
+        "condition_id": "L01",
+        "level_id": "L01",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L01_i06",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 861.\nAt each step, replace x with (11 * x + 62) mod 156.\nPerform exactly 1 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L01_i06",
+        "source_sha256": "a1f4c9402e389c1d6aff4930e484efe35322d9033d5eabf9e71074d779c0f979"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "1 iteration",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 1.0
+      },
+      "grouping": {
+        "block_id": "L01",
+        "condition_id": "L01",
+        "level_id": "L01",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L01_i07",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 329.\nAt each step, replace x with (79 * x + 96) mod 736.\nPerform exactly 1 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L01_i07",
+        "source_sha256": "26afeec230f064df29f5c3130c1c9f654586640852705f561ca9212d88ec5f09"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "8 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 8.0
+      },
+      "grouping": {
+        "block_id": "L08",
+        "condition_id": "L08",
+        "level_id": "L08",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L08_i00",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 892.\nAt each step, replace x with (52 * x + 66) mod 187.\nPerform exactly 8 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L08_i00",
+        "source_sha256": "456996bfef3fdfd3f037504f512486cfdc7ea17d78d1350704a8ae3b94c8ba2f"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "8 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 8.0
+      },
+      "grouping": {
+        "block_id": "L08",
+        "condition_id": "L08",
+        "level_id": "L08",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L08_i01",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 973.\nAt each step, replace x with (45 * x + 61) mod 962.\nPerform exactly 8 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L08_i01",
+        "source_sha256": "0aacf7690d2c9aa7043481fde23918f952bc5252895f1ba77c4766613f913009"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "8 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 8.0
+      },
+      "grouping": {
+        "block_id": "L08",
+        "condition_id": "L08",
+        "level_id": "L08",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L08_i02",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 811.\nAt each step, replace x with (20 * x + 69) mod 205.\nPerform exactly 8 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L08_i02",
+        "source_sha256": "a3db8279651be4c005a538864f29257e32d8a20283830cc270e09a485734ea18"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "8 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 8.0
+      },
+      "grouping": {
+        "block_id": "L08",
+        "condition_id": "L08",
+        "level_id": "L08",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L08_i03",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 549.\nAt each step, replace x with (21 * x + 54) mod 608.\nPerform exactly 8 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L08_i03",
+        "source_sha256": "da13d5d8c5897e6be8bf8cf4a82ee0c608e295ae4d5e205e0a4c3ccb5cb4825e"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "8 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 8.0
+      },
+      "grouping": {
+        "block_id": "L08",
+        "condition_id": "L08",
+        "level_id": "L08",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L08_i04",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 490.\nAt each step, replace x with (50 * x + 92) mod 481.\nPerform exactly 8 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L08_i04",
+        "source_sha256": "9001e72b4d2abe23833032b697737daa45baad3b2327723aa6147e4fc5e0c27f"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "8 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 8.0
+      },
+      "grouping": {
+        "block_id": "L08",
+        "condition_id": "L08",
+        "level_id": "L08",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L08_i05",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 916.\nAt each step, replace x with (43 * x + 83) mod 858.\nPerform exactly 8 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L08_i05",
+        "source_sha256": "e40e00f2823c9a9aea84057e7348bb39ef0483b94d958316809dd41a255a9626"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "8 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 8.0
+      },
+      "grouping": {
+        "block_id": "L08",
+        "condition_id": "L08",
+        "level_id": "L08",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L08_i06",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 109.\nAt each step, replace x with (58 * x + 60) mod 726.\nPerform exactly 8 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L08_i06",
+        "source_sha256": "51bdbcc13af44a6ee034297cdb5f225896769559f14af2c5c04ab3dc1a381e30"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "8 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 8.0
+      },
+      "grouping": {
+        "block_id": "L08",
+        "condition_id": "L08",
+        "level_id": "L08",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L08_i07",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 618.\nAt each step, replace x with (16 * x + 15) mod 357.\nPerform exactly 8 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L08_i07",
+        "source_sha256": "75bde8e28a359492b331945ae5eddc6f64e44aeba01c0fbcfeade239e443625c"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "64 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 64.0
+      },
+      "grouping": {
+        "block_id": "L64",
+        "condition_id": "L64",
+        "level_id": "L64",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L64_i00",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 198.\nAt each step, replace x with (55 * x + 67) mod 565.\nPerform exactly 64 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L64_i00",
+        "source_sha256": "fe1bb64d8b7cae019368889c66373b49bf6652a76b12a288cb5af13b6b16765f"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "64 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 64.0
+      },
+      "grouping": {
+        "block_id": "L64",
+        "condition_id": "L64",
+        "level_id": "L64",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L64_i01",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 414.\nAt each step, replace x with (27 * x + 42) mod 612.\nPerform exactly 64 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L64_i01",
+        "source_sha256": "b2d6c95c2923ab2d68843fad09ed480156edaf257a867147a226e82190c671db"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "64 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 64.0
+      },
+      "grouping": {
+        "block_id": "L64",
+        "condition_id": "L64",
+        "level_id": "L64",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L64_i02",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 507.\nAt each step, replace x with (70 * x + 60) mod 601.\nPerform exactly 64 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L64_i02",
+        "source_sha256": "965d7732dbcc7db4dd7a1ea14970f16d26d4b5f7e3032f119fd1df8c5e4c5a10"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "64 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 64.0
+      },
+      "grouping": {
+        "block_id": "L64",
+        "condition_id": "L64",
+        "level_id": "L64",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L64_i03",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 258.\nAt each step, replace x with (28 * x + 68) mod 261.\nPerform exactly 64 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L64_i03",
+        "source_sha256": "207f633127a5cd5e1065ba8b690c14da920ed6fb4edb827ffe954433da02c5a4"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "64 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 64.0
+      },
+      "grouping": {
+        "block_id": "L64",
+        "condition_id": "L64",
+        "level_id": "L64",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L64_i04",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 179.\nAt each step, replace x with (20 * x + 98) mod 506.\nPerform exactly 64 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L64_i04",
+        "source_sha256": "41e58d33ad86cbf7848170fb898a95d229ea677fe6eec3bd442b2f8f19a6ff6e"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "64 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 64.0
+      },
+      "grouping": {
+        "block_id": "L64",
+        "condition_id": "L64",
+        "level_id": "L64",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L64_i05",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 155.\nAt each step, replace x with (36 * x + 48) mod 541.\nPerform exactly 64 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L64_i05",
+        "source_sha256": "183f8c0b654f687e81a1d38c04fec528f7b1eab89f37af0fe9e0070af502c00d"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "64 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 64.0
+      },
+      "grouping": {
+        "block_id": "L64",
+        "condition_id": "L64",
+        "level_id": "L64",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L64_i06",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 415.\nAt each step, replace x with (49 * x + 34) mod 741.\nPerform exactly 64 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L64_i06",
+        "source_sha256": "47889b4001e6c58ebea606bbe9a354ccf8746cba531ea73e0002627bf5bbde1f"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "affine_mod_ladder",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "64 iterations",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 64.0
+      },
+      "grouping": {
+        "block_id": "L64",
+        "condition_id": "L64",
+        "level_id": "L64",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_L64_i07",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 635.\nAt each step, replace x with (36 * x + 87) mod 387.\nPerform exactly 64 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_L64_i07",
+        "source_sha256": "9a99c86e2379713c63fb6baf725828132d4b29142a06204b4b539406e5810839"
+      },
+      "status_policy": "none",
+      "tags": []
+    },
+    {
+      "category": "sentinel",
+      "difficulty": {
+        "axis": "iteration_count",
+        "label": "1 iteration",
+        "quarantine_note": "C-004/C-015: designed effort proxy for stratified envelope analysis; licenses no 'difficulty causes energy' or intelligence-per-joule wording.",
+        "scale": "count",
+        "source": "generator_designed",
+        "value": 1.0
+      },
+      "grouping": {
+        "block_id": "sentinel_end",
+        "condition_id": "sentinel_end",
+        "level_id": "sentinel_end",
+        "prefix_group_id": null
+      },
+      "item_id": "affine_v1_sentinel",
+      "item_type": "prompt_text",
+      "output_policy": "natural_eos",
+      "shape": {
+        "decode_level": "answer_only_natural_eos_budget_16",
+        "planned_output_tokens": 16,
+        "planned_prompt_tokens": 80,
+        "prompt_level": "affine_fixed_text_raw_completion"
+      },
+      "source": {
+        "contamination_note": "seed-derived synthetic arithmetic item",
+        "license": "synthetic-internal",
+        "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+        "prompt_text": "Compute a modular recurrence.\nStart with x = 474.\nAt each step, replace x with (75 * x + 75) mod 680.\nPerform exactly 1 steps.\nAnswer with only the final value of x as a decimal integer. Output nothing except that integer.",
+        "prompt_token_ids": null,
+        "source_item_id": "affine_v1_sentinel",
+        "source_sha256": "9ee4905d6b6c81f668559f3d45b8c135668c318787555b1dc9e37a9f560fe3ac"
+      },
+      "status_policy": "none",
+      "tags": [
+        "sentinel"
+      ]
+    }
+  ],
+  "markers": {
+    "block_end_event": "block_end",
+    "block_start_event": "block_start",
+    "item_end_event": "item_end",
+    "item_start_event": "item_start",
+    "level_end_event": "level_end",
+    "level_start_event": "level_start",
+    "suite_end_event": "suite_end",
+    "suite_start_event": "suite_start"
+  },
+  "outputs": {
+    "per_item_response_hash": "response_sha256",
+    "per_item_status": "status",
+    "per_item_stop_reason": "stop_reason",
+    "per_item_token_count": "emitted_tokens"
+  },
+  "schema_version": "suite_manifest.v1",
+  "source_manifest": {
+    "contamination_note": "seed-derived synthetic arithmetic prompts",
+    "license": "synthetic-internal",
+    "revision": "1.0.0",
+    "source_id": "affine_mod_ladder_v1",
+    "source_kind": "synthetic",
+    "subset_id": "smoke_levels_1_8_64_x8",
+    "subset_sha256": "25d494ba3ae20d5cde6fb9bfed4a6a67865cf07367cd4fd1590a94d01f88c383"
+  },
+  "suite_id": "affine_smoke_v1",
+  "suite_profile": "affine_mod_ladder_v1_smoke",
+  "suite_revision": "2026-07-08.p2-010b-unit1",
+  "suite_seed": "affine-smoke-v1-2026-07-08"
+}

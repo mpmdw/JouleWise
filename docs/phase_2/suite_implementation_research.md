@@ -13,6 +13,10 @@ Session record: docs/run_reports/2026-07-08-suite-science-expansion.md.
 the execution report's amendment 2 calls for WAS recorded the same day
 as D-042 — the suite-BUILD lane is open; campaign-execution ordering and
 the interop lane's post-2M gate are unchanged.)
+(Amended 2026-07-08, D-044..D-047: the suite-build adjudication completed;
+the dispositions are recorded in the final section below. The original
+research and skeptic findings remain intact as historical input, but
+implementation is bound by D-044, D-045, D-046, and D-047 where they differ.)
 
 
 ---
@@ -718,3 +722,67 @@ Research date: 2026-07-08. All licenses verified against the live source pages t
 - [MicrosoftTranslator/NTREX — CC-BY-SA 4.0](https://github.com/MicrosoftTranslator/NTREX)
 - [google-research-datasets/mbpp — CC-BY-4.0](https://huggingface.co/datasets/google-research-datasets/mbpp)
 - [Creative Commons FAQ — collections vs. adaptations under ShareAlike](https://creativecommons.org/faq/)
+
+## Adjudication (2026-07-08 suite-build session)
+
+Provenance: dispositions were built from the Codex disposition draft, a fresh
+Codex adversarial counterreview, and lead calls. Two Explore fact checks
+verified the arithmetic defect in B1 and the committed doc state behind B10
+(Parts 6-7 present at HEAD; the skeptic had reviewed a stale draft). Report
+D's external license claims were NOT re-verified this session (no network);
+they re-verify at P2-023+ before any third-party data is committed. Counterreview amended two decisions materially:
+`suite_manifest_sha256` is the canonical effective-manifest hash, not a raw
+source-file hash (D-044), and AP-6 must use an additive ids-native token-ID
+prompt source for all five sentinel conditions (D-046).
+
+Lead-call outcomes:
+
+- A1: preserve existing config identity by omitting only the new suite manifest fields when absent; bind to D-044.
+- A3: put manifest content in run identity with a required effective-manifest hash beside the ref; bind to D-044.
+- A5: fixed-budget underrun is `malformed` with `status_reason="fixed_budget_underrun"` plus a succeeded-validation guard; bind to D-045.4.
+- A6: `markers:` and `outputs:` are optional authored blocks, materialized to pinned defaults and validated inside the hashed effective manifest; bind to D-044/D-045.3.
+- B5: all five AP-6 conditions are ids-native BOS-less at literal equal shape; no AP-4 text-path generalization without AP-6b; bind to D-046.
+- C section 0 / C6: level set is powers of two and response text is ratified in `outputs/suite_items.jsonl`; bind to D-047.1/D-045.8.
+- B6/D5: `jw.multiling` synthetic is phase-1 control material, not a C5-W.4 FLORES replacement; FLORES 6-vs-8 and token-matched design defer.
+- C3: smoke stays 8 items/level; E5 is advisory and expected `not_evaluable`; bind to D-047.4.
+
+| ID | Disposition | Grounds | Binding pointer |
+|---|---|---|---|
+| A1 | accept-amended | Preserve pre-suite config hashes by omission-serializing both suite manifest fields when absent. | D-044 |
+| A2 | moot | D-042 reopened the suite-build lane while leaving campaign execution gated. | moot |
+| A3 | accept-amended | Manifest bytes enter run identity through required canonical effective-manifest hash with the ref. | D-044 |
+| A4 | accept | Per-item prompt identity uses D-033 domain-separated token-ID hashes. | D-045.5 |
+| A5 | accept-amended | Fixed-budget underrun fails closed as malformed and cannot validate as succeeded. | D-045.4 |
+| A6 | accept-amended | Marker/output defaults are materialized and validated inside the effective manifest. | D-044/D-045.3 |
+| A7 | accept | The floor seam must carry both absolute and comparison floor provenance. | D-045 |
+| A8 | accept | `order_seed` is derived deterministically from suite seed, order policy, and rep index. | D-045.6 |
+| A9 | accept | Wording fixes align summary tolerance, reducer version, and top-level suite metadata. | D-045 |
+| B1 | accept | The worked arithmetic example is impossible under any reading. | docs fix |
+| B2 | accept | Budget sketches must use derived remainders, not stale fixed token counts. | docs fix |
+| B3 | accept | Parameters must be declared fixed or DRBG-drawn with exact distributions. | docs fix |
+| B4 | accept | Common-stratum claims cannot lean on short-prefill phase energy. | AP-4/D-014 |
+| B5 | accept-amended | AP-6 is ids-native, BOS-less, literal equal shape across all five conditions. | D-046 |
+| B6 | accept-amended | Synthetic multilingual is phase-1 control material; FLORES design is deferred. | deferred-binding |
+| B7 | accept | Tokenizer identity uses a per-file `(filename, sha256)` manifest. | docs/code obligation |
+| B8 | accept | Expected-vs-realized hash assertions run after the measured window. | D-013/D-045 |
+| B9 | accept | Sampler provenance must be pinned before manifest claims `greedy`. | D-047.5 |
+| B10 | moot | Part 6 and Part 7 were present at committed HEAD; stale-draft finding. | moot |
+| C-§0 | ratified | Affine levels are `{1,2,4,8,16,32,64}`, not a linear 1..64 sweep. | D-047.1 |
+| C1 | accept | Deterministic bundles replicate energy only, not token/stop/correctness samples. | D-047.3 |
+| C2 | accept | E1's 5% gate at 8 distinct items means zero tolerated failures per level. | D-047.3 |
+| C3 | accept-amended | E5 is advisory and expected `not_evaluable` at smoke sizing. | D-047.4 |
+| C4 | accept | E2/E3 are empirical guards, not by-construction invariants. | D-047 |
+| C5 | accept | Smoke is k=24 distinct items; full ladder k=112 plus sentinels needs campaign ratification. | D-047.2 |
+| C6 | accept-amended | Response text is ratified in `outputs/suite_items.jsonl`; no raw-file spray. | D-045.8 |
+| C7 | accept | Threshold defense re-anchors on the first smoke bundle's measured level-window energy. | D-047.7 |
+| C8 | accept | AP-5 predeclares malformed-as-incorrect in scored-campaign accuracy. | D-047.6 |
+| C9 | accept | Energy-per-correct uncertainty is energy-only across bundles; correctness uses distinct items. | D-047.3 |
+| D1 | accept, deferred-binding | Future realistic subsets must pin tokenizer, truncation, and realized counts. | deferred-binding |
+| D2 | accept, deferred-binding | P2-012 builds synthetic controls for all six categories; current generator scope already conforms. | deferred-binding |
+| D3 | accept, deferred-binding | Future selectors need exact algorithms and source/item hash manifests. | deferred-binding |
+| D4 | accept-amended, deferred-binding | JSON phase-1 grounding changes need explicit decision-log adoption before use. | deferred-binding |
+| D5 | accept-amended, deferred-binding | FLORES language count, chat source swap, and JSON grounding need adoption decisions. | deferred-binding |
+| D6 | accept, deferred-binding | FLORES semantic leg needs target-language source rendering, not English-only prompts. | deferred-binding |
+| D7 | accept, deferred-binding | Separate frozen source-pool size from suite item count and bundle repetitions. | deferred-binding |
+| D8 | accept, deferred-binding | P2-023 HumanEval must use the full benchmark-import manifest and pinned sequencing. | deferred-binding |
+| D9 | accept, deferred-binding | State the public-domain rule separately from any stricter safety cutoff. | deferred-binding |

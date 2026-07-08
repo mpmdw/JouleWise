@@ -1,0 +1,305 @@
+{
+  "annotations": [
+    {
+      "execution_index": 0,
+      "expected_answer": 265,
+      "expected_answer_sha256": "b1d447ad875ac9ecebd59a87dd4257a664fe72242c4ce4dbdf2d837716599bf1",
+      "item_id": "affine_v1_sentinel",
+      "item_index": 8,
+      "n_iter": 1,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "9ee4905d6b6c81f668559f3d45b8c135668c318787555b1dc9e37a9f560fe3ac",
+      "tags": [
+        "sentinel"
+      ]
+    },
+    {
+      "execution_index": 1,
+      "expected_answer": 147,
+      "expected_answer_sha256": "17415d395ba899c93d20477636bcc1874fb3510ad85e3f634977aa552c789076",
+      "item_id": "affine_v1_L01_i00",
+      "item_index": 0,
+      "n_iter": 1,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "4d9518a7cff63163949e3d292998c86fbb9449202c8a545531f6fe500722dd6d",
+      "tags": []
+    },
+    {
+      "execution_index": 2,
+      "expected_answer": 223,
+      "expected_answer_sha256": "9ee2d1ce640ee7d5bbf508d79c41868aa8bf529acb2f2a4ed772829964bb4c5f",
+      "item_id": "affine_v1_L01_i01",
+      "item_index": 1,
+      "n_iter": 1,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "a66608c5debaacad1611f36a1ee248d5b075e675c8ddbea859a925ebbb0b437b",
+      "tags": []
+    },
+    {
+      "execution_index": 3,
+      "expected_answer": 60,
+      "expected_answer_sha256": "b417b4abfc4802d417c24b0495bde149e120ff6de341381fcfc9ad3d494c1734",
+      "item_id": "affine_v1_L01_i02",
+      "item_index": 2,
+      "n_iter": 1,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "b6f009fecc7ff760082ea103e61f0d13b1c73bbb0f924f01d8da416620a1e522",
+      "tags": []
+    },
+    {
+      "execution_index": 4,
+      "expected_answer": 113,
+      "expected_answer_sha256": "069634ea758988371ba87f82270f14c23ab3ecd51b58bae243ca8723964f6115",
+      "item_id": "affine_v1_L01_i03",
+      "item_index": 3,
+      "n_iter": 1,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "2b556671ea50712ebd2b6895fcc6a9c457a81d795ccd2779e734942b8c62a674",
+      "tags": []
+    },
+    {
+      "execution_index": 5,
+      "expected_answer": 255,
+      "expected_answer_sha256": "c0d357916b1252bd163c560b8642b70c383f78750a21fec8d0063db40597706b",
+      "item_id": "affine_v1_L01_i04",
+      "item_index": 4,
+      "n_iter": 1,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "f0f311260649ef326b2b320e569ef6b07a00464bb2c703dc264003dee0b8524b",
+      "tags": []
+    },
+    {
+      "execution_index": 6,
+      "expected_answer": 54,
+      "expected_answer_sha256": "7b2067bc5c1dcebdf7059c9e39c1384bee97b4ade50c36716f5f213954641c3f",
+      "item_id": "affine_v1_L01_i05",
+      "item_index": 5,
+      "n_iter": 1,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "f385e9bf4b1b67b1e372a6afddf9e2a8fe0cb8a947ecbbfb090b275af4b284dd",
+      "tags": []
+    },
+    {
+      "execution_index": 7,
+      "expected_answer": 17,
+      "expected_answer_sha256": "fdc5776b4cc08c46da2361dc869c9269946534938d375172d6594d0208e050a7",
+      "item_id": "affine_v1_L01_i06",
+      "item_index": 6,
+      "n_iter": 1,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "a1f4c9402e389c1d6aff4930e484efe35322d9033d5eabf9e71074d779c0f979",
+      "tags": []
+    },
+    {
+      "execution_index": 8,
+      "expected_answer": 327,
+      "expected_answer_sha256": "6895ec425ffdb1e5465fcf5842e434a174e412ba904816264a4d5dc14d2ffd8f",
+      "item_id": "affine_v1_L01_i07",
+      "item_index": 7,
+      "n_iter": 1,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "26afeec230f064df29f5c3130c1c9f654586640852705f561ca9212d88ec5f09",
+      "tags": []
+    },
+    {
+      "execution_index": 9,
+      "expected_answer": 60,
+      "expected_answer_sha256": "a1594b5b5112d3b1713edd77f55db311b3322bdeb7bb9bf018b746620eabfa5b",
+      "item_id": "affine_v1_L08_i00",
+      "item_index": 0,
+      "n_iter": 8,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "456996bfef3fdfd3f037504f512486cfdc7ea17d78d1350704a8ae3b94c8ba2f",
+      "tags": []
+    },
+    {
+      "execution_index": 10,
+      "expected_answer": 125,
+      "expected_answer_sha256": "26cf83ee23883b1285e60a63b47f1a9ddbac7237f3dcdb3dc975ea836027f8f9",
+      "item_id": "affine_v1_L08_i01",
+      "item_index": 1,
+      "n_iter": 8,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "0aacf7690d2c9aa7043481fde23918f952bc5252895f1ba77c4766613f913009",
+      "tags": []
+    },
+    {
+      "execution_index": 11,
+      "expected_answer": 184,
+      "expected_answer_sha256": "6068a770cd16a0ecab5e3e7991300d5f70c3a1ab1534cdb7510cb0aed1e15fcb",
+      "item_id": "affine_v1_L08_i02",
+      "item_index": 2,
+      "n_iter": 8,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "a3db8279651be4c005a538864f29257e32d8a20283830cc270e09a485734ea18",
+      "tags": []
+    },
+    {
+      "execution_index": 12,
+      "expected_answer": 53,
+      "expected_answer_sha256": "79bf3a12a0217419e1242e97cbc492d47cc2d85a9963fccd8ddd0a9111bd13d2",
+      "item_id": "affine_v1_L08_i03",
+      "item_index": 3,
+      "n_iter": 8,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "da13d5d8c5897e6be8bf8cf4a82ee0c608e295ae4d5e205e0a4c3ccb5cb4825e",
+      "tags": []
+    },
+    {
+      "execution_index": 13,
+      "expected_answer": 204,
+      "expected_answer_sha256": "f412cd5a1fb34bf1516652531332041c52096eb2f7a0ace40422694558b3caae",
+      "item_id": "affine_v1_L08_i04",
+      "item_index": 4,
+      "n_iter": 8,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "9001e72b4d2abe23833032b697737daa45baad3b2327723aa6147e4fc5e0c27f",
+      "tags": []
+    },
+    {
+      "execution_index": 14,
+      "expected_answer": 212,
+      "expected_answer_sha256": "a364531fed8e3ab3024e4048d9f1f7191bb4de909462fa2be19b541cedb7313d",
+      "item_id": "affine_v1_L08_i05",
+      "item_index": 5,
+      "n_iter": 8,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "e40e00f2823c9a9aea84057e7348bb39ef0483b94d958316809dd41a255a9626",
+      "tags": []
+    },
+    {
+      "execution_index": 15,
+      "expected_answer": 676,
+      "expected_answer_sha256": "2410331f907185380272134e50f0d4f33ebc08742662f2d8d423df48964ebe60",
+      "item_id": "affine_v1_L08_i06",
+      "item_index": 6,
+      "n_iter": 8,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "51bdbcc13af44a6ee034297cdb5f225896769559f14af2c5c04ab3dc1a381e30",
+      "tags": []
+    },
+    {
+      "execution_index": 16,
+      "expected_answer": 312,
+      "expected_answer_sha256": "6a0970826194d0670654a7e0ed9acae52de1b70cec2de657db8a26225ea1c15f",
+      "item_id": "affine_v1_L08_i07",
+      "item_index": 7,
+      "n_iter": 8,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "75bde8e28a359492b331945ae5eddc6f64e44aeba01c0fbcfeade239e443625c",
+      "tags": []
+    },
+    {
+      "execution_index": 17,
+      "expected_answer": 472,
+      "expected_answer_sha256": "137d31b03a69046755f3bf75f18febfc1c9b157af7d82e799d1df17e75f342b2",
+      "item_id": "affine_v1_L64_i00",
+      "item_index": 0,
+      "n_iter": 64,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "fe1bb64d8b7cae019368889c66373b49bf6652a76b12a288cb5af13b6b16765f",
+      "tags": []
+    },
+    {
+      "execution_index": 18,
+      "expected_answer": 6,
+      "expected_answer_sha256": "7b724b60922338ecc68ab2796fb24fcc1f4935a808b11e932d30c904d49fd731",
+      "item_id": "affine_v1_L64_i01",
+      "item_index": 1,
+      "n_iter": 64,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "b2d6c95c2923ab2d68843fad09ed480156edaf257a867147a226e82190c671db",
+      "tags": []
+    },
+    {
+      "execution_index": 19,
+      "expected_answer": 123,
+      "expected_answer_sha256": "761ce92fe9dbdc3e74213cf9bfef55fd63af26965cdb94259b93790312095cd8",
+      "item_id": "affine_v1_L64_i02",
+      "item_index": 2,
+      "n_iter": 64,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "965d7732dbcc7db4dd7a1ea14970f16d26d4b5f7e3032f119fd1df8c5e4c5a10",
+      "tags": []
+    },
+    {
+      "execution_index": 20,
+      "expected_answer": 200,
+      "expected_answer_sha256": "2b1d12ba8b8425f0a7d2ea1bc8190acad0894bf4abb9f7675341bfd33155d4c2",
+      "item_id": "affine_v1_L64_i03",
+      "item_index": 3,
+      "n_iter": 64,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "207f633127a5cd5e1065ba8b690c14da920ed6fb4edb827ffe954433da02c5a4",
+      "tags": []
+    },
+    {
+      "execution_index": 21,
+      "expected_answer": 218,
+      "expected_answer_sha256": "c6215fd4cfd0a24dc5655cf6d4c323913b26f6e18d44a353e3c754cc4bcb9ed0",
+      "item_id": "affine_v1_L64_i04",
+      "item_index": 4,
+      "n_iter": 64,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "41e58d33ad86cbf7848170fb898a95d229ea677fe6eec3bd442b2f8f19a6ff6e",
+      "tags": []
+    },
+    {
+      "execution_index": 22,
+      "expected_answer": 413,
+      "expected_answer_sha256": "8cc8b3f697bcdf26d027ad56b6ceba12421d028355b876da5dbf5d583db3658f",
+      "item_id": "affine_v1_L64_i05",
+      "item_index": 5,
+      "n_iter": 64,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "183f8c0b654f687e81a1d38c04fec528f7b1eab89f37af0fe9e0070af502c00d",
+      "tags": []
+    },
+    {
+      "execution_index": 23,
+      "expected_answer": 305,
+      "expected_answer_sha256": "f585a6fbdfbb8d5c5735afcdc6b7dfc20404c9aaf5ff32fb25f8c397f7640063",
+      "item_id": "affine_v1_L64_i06",
+      "item_index": 6,
+      "n_iter": 64,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "47889b4001e6c58ebea606bbe9a354ccf8746cba531ea73e0002627bf5bbde1f",
+      "tags": []
+    },
+    {
+      "execution_index": 24,
+      "expected_answer": 114,
+      "expected_answer_sha256": "df359c3434519d26a4c80078beb7cca82bc39d09cf91624415ceac45b8673363",
+      "item_id": "affine_v1_L64_i07",
+      "item_index": 7,
+      "n_iter": 64,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "9a99c86e2379713c63fb6baf725828132d4b29142a06204b4b539406e5810839",
+      "tags": []
+    },
+    {
+      "execution_index": 25,
+      "expected_answer": 265,
+      "expected_answer_sha256": "b1d447ad875ac9ecebd59a87dd4257a664fe72242c4ce4dbdf2d837716599bf1",
+      "item_id": "affine_v1_sentinel",
+      "item_index": 8,
+      "n_iter": 1,
+      "scorer_id": "affine_mod_ladder_v1/score_v1",
+      "source_sha256": "9ee4905d6b6c81f668559f3d45b8c135668c318787555b1dc9e37a9f560fe3ac",
+      "tags": [
+        "sentinel"
+      ]
+    }
+  ],
+  "consumer_note": "Use this sidecar as the affine_mod_ladder_v1 scorer input; the suite manifest intentionally contains no expected answers or scoring fields.",
+  "manifest_sha256": "24fb008b7c38484b6a7cb36a4fef1fce4c47a669e3db23131bce06088340f7a9",
+  "quarantine": "expected answers are scorer inputs, not manifest fields",
+  "schema_version": "affine_smoke_annotations.v1",
+  "scorer": {
+    "answer_hash_domain": "joulewise.affine_answer.v1",
+    "prompt_template_id": "affine_mod_ladder_v1/raw_completion_v1",
+    "scorer_id": "affine_mod_ladder_v1/score_v1"
+  },
+  "suite_id": "affine_smoke_v1",
+  "suite_seed": "affine-smoke-v1-2026-07-08"
+}
