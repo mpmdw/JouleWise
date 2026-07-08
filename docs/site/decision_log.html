@@ -1,0 +1,1349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decision Log — JouleWise</title>
+<style>
+:root {
+  --bg: #fdfdfc; --fg: #1a1d21; --muted: #5b6470; --accent: #7050c8;
+  --border: #e3e2de; --code-bg: #f3f2ef; --nav-bg: #f8f7f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d; --fg: #dfe2e8; --muted: #98a1ad; --accent: #a795e8;
+    --border: #2c3038; --code-bg: #20242b; --nav-bg: #1b1e24;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.65 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+.layout { display: flex; min-height: 100vh; }
+nav {
+  width: 250px; flex-shrink: 0; background: var(--nav-bg);
+  border-right: 1px solid var(--border); padding: 1.4rem 1rem;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+nav h2 { font-size: 1rem; margin: 0 0 .8rem; color: var(--accent); }
+nav a {
+  display: block; padding: .35rem .6rem; border-radius: 6px;
+  color: var(--fg); text-decoration: none; font-size: .92rem;
+}
+nav a:hover { background: var(--code-bg); }
+nav a.active { background: var(--accent); color: #fff; }
+main { flex: 1; min-width: 0; padding: 2.2rem 3rem 4rem; }
+article { max-width: 52rem; margin: 0 auto; }
+h1, h2, h3 { line-height: 1.25; }
+h1 { font-size: 1.75rem; border-bottom: 2px solid var(--border); padding-bottom: .4rem; }
+h2 { font-size: 1.3rem; margin-top: 2.2rem; border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
+h3 { font-size: 1.08rem; margin-top: 1.6rem; }
+a { color: var(--accent); }
+code {
+  background: var(--code-bg); padding: .12em .35em; border-radius: 4px;
+  font: .88em ui-monospace, "SF Mono", Menlo, monospace;
+}
+pre { background: var(--code-bg); padding: .9rem 1rem; border-radius: 8px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+blockquote { margin: 1rem 0; padding: .1rem 1rem; border-left: 3px solid var(--accent); color: var(--muted); }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; display: block; overflow-x: auto; }
+th, td { border: 1px solid var(--border); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); }
+tr:nth-child(even) td { background: color-mix(in srgb, var(--code-bg) 45%, transparent); }
+hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+.pagemeta { color: var(--muted); font-size: .85rem; margin-bottom: 1.5rem; }
+@media (max-width: 800px) {
+  .layout { flex-direction: column; }
+  nav { width: 100%; height: auto; position: static; display: flex; flex-wrap: wrap; gap: .2rem; }
+  nav h2 { width: 100%; }
+  main { padding: 1.2rem; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+<h2>JouleWise</h2>
+<a href="index.html">Index</a>
+<a href="readme.html">README</a>
+<a href="project_status.html">Project Status (advisor)</a>
+<a href="orchestration.html">Orchestration Process</a>
+<a href="agent_plan.html">Agent Plan</a>
+<a href="run_state.html">Run State</a>
+<a href="task_queue.html">Task Queue</a>
+<a href="decision_log.html" class="active">Decision Log</a>
+<a href="council_log.html">Council Log</a>
+<a href="milestones.html">Milestones</a>
+<a href="risk_register.html">Risk Register</a>
+<a href="latest_run_report.html">Latest Run Report</a>
+</nav>
+<main><article>
+<p class="pagemeta">Rendered from <code>docs/decision_log.md</code> · as of commit 7cc8efe (2026-07-07)</p>
+<h1>Decision Log</h1>
+<p>This is the canonical record of design decisions for JouleWise. Every decision
+that binds later work, trades off real alternatives, or would otherwise need to
+be re-derived by a future agent gets an entry here.</p>
+<h2>How To Use This Log</h2>
+<ul>
+<li>Before implementing anything non-trivial, check whether a decision here
+already covers it. Do not silently re-decide settled questions.</li>
+<li>When you make a new decision of this kind during a run, add an entry, link it
+from the run report, and reference its ID (<code>D-NNN</code>) in the code review or doc
+that applies it.</li>
+<li>Statuses: <code>accepted</code> (binding until revisited), <code>open</code> (criteria defined,
+evidence pending), <code>superseded by D-NNN</code>.</li>
+<li>Every entry must include Options Considered and Considerations. A decision
+without recorded alternatives is not auditable.</li>
+<li>Revisit triggers are part of the contract: when a trigger fires, the decision
+must be re-examined, not quietly worked around.</li>
+</ul>
+<h2>Index</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Title</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>D-001</td>
+<td>Run bundles store normalized <code>config.json</code>, not YAML</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-002</td>
+<td>Telemetry sampling via subprocess + file, no controller threading</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-003</td>
+<td>Timestamp and clock-alignment policy</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-004</td>
+<td><code>powermetrics</code> privilege workflow</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-005</td>
+<td>One bundle per repetition, grouped by experiment manifest</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-006</td>
+<td>Dashboard v1 is a static HTML report generator</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-007</td>
+<td>YAML config input is deferred</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-008</td>
+<td>Split runs arrive via schema v0.2 (<code>run_kind</code> + <code>split_plan</code>)</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-009</td>
+<td>Dependency policy: stdlib core, optional extras</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-010</td>
+<td>Run ID scheme</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-011</td>
+<td><code>summary_metrics.json</code> is the bundle completion marker</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-012</td>
+<td>Failure-reason to run-status mapping</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-013</td>
+<td>Controller-as-DUT mitigation for Mac-local runs</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-014</td>
+<td>Statistical protocol for repeated runs</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-015</td>
+<td>Split-mechanism priority and same-runtime rule</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-016</td>
+<td>Benchmark model selection</td>
+<td>open (provisional small-model pick 2026-07-06; opens 2G only)</td>
+</tr>
+<tr>
+<td>D-017</td>
+<td>CI scope</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-018</td>
+<td>Per-backend <code>power_w</code> definition and rail policy</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-019</td>
+<td>Mock adapters use simulated time via an injectable clock</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-020</td>
+<td>CLI binds <code>FakeClock</code> for all-mock runs, <code>SystemClock</code> otherwise</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-021</td>
+<td>Controller flushes <code>events.jsonl</code> before the reduce stage</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-022</td>
+<td>Auto-generated run-ID suffix is config-hash-derived, not random</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-023</td>
+<td>Per-item phase status lives solely in the exit checklists</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-024</td>
+<td>Adapters receive a <code>RunContext</code>, not piecemeal parameters</td>
+<td>accepted; implemented (2N.1, 2026-07-06)</td>
+</tr>
+<tr>
+<td>D-025</td>
+<td>One shared bundle read layer for reducer, report, validation, and aggregation</td>
+<td>accepted; implemented (2N.8, 2026-07-06)</td>
+</tr>
+<tr>
+<td>D-026</td>
+<td>Measured window is bounded by sampling-active marker events</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-027</td>
+<td>Per-rail rows must share per-sample timestamps; misalignment is a structured failure</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-028</td>
+<td><code>reduce</code> verb rewrites <code>summary_metrics.json</code> in place (the one sanctioned post-finalize mutation)</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-029</td>
+<td>Config schema declares nullable optionals; serialization (and config hashes) unchanged</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-030</td>
+<td><code>validate-bundle</code> stays structural by default; <code>--strict</code> adds raw-evidence checks</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-031</td>
+<td>Multi-model council review; PR convention for multi-commit sessions; D-023 extension + end-of-session consistency sweep</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-032</td>
+<td><code>phase_energy_j</code> is gross-only in summary v0.1</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-033</td>
+<td>Prompt-content provenance is recorded per run bundle</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-034</td>
+<td>Slice 2O owns the workload program after 2M and 3.0.1</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-035</td>
+<td>Replay claims require fresh-process (subprocess-per-stage) isolation</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-036</td>
+<td>Spike verdict codes derive from measured data, never hardcoded</td>
+<td>accepted</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>D-001: Run bundles store normalized <code>config.json</code>, not YAML</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2+</li>
+</ul>
+<p>Context: <code>docs/contracts/run_bundle_layout.md</code> originally specified <code>config.yaml</code>
+as the normalized config artifact, but the package is intentionally
+zero-dependency and the stdlib has no YAML parser. The Phase 1 CLI already
+rejects non-JSON configs.</p>
+<p>Options considered:</p>
+<ol>
+<li>Keep <code>config.yaml</code> in the bundle and add PyYAML as a core dependency.
+Pro: human-friendly artifact. Con: breaks the zero-dependency core for a
+cosmetic gain; the bundle copy is machine-written anyway.</li>
+<li>Store both <code>config.yaml</code> (if input was YAML) and <code>config.json</code>. Pro:
+preserves the authored artifact. Con: two sources of truth in the bundle;
+normalization questions; still needs the dependency.</li>
+<li>Store normalized <code>config.json</code> only. Pro: stdlib <code>json</code> round-trips it; the
+bundle copy is for machines and reducers, not for authoring; deterministic
+key ordering enables config hashing. Con: marginally less pleasant to read.</li>
+</ol>
+<p>Decision: option 3. The bundle stores <code>config.json</code>, written with sorted keys
+and a recorded SHA-256 hash in <code>metadata.json</code>.</p>
+<p>Considerations: the bundle&#39;s job is auditability and reduction, not authoring
+ergonomics. Sorted-key JSON gives us a stable config hash for free, which
+Phase 4 aggregation uses to group runs. Human authoring comfort is a separate
+question handled by D-007.</p>
+<p>Consequences: <code>run_bundle_layout.md</code> updated; the bundle writer (Slice 2A)
+writes JSON; config hashing is defined as SHA-256 over the sorted-key,
+2-space-indented JSON encoding.</p>
+<p>Revisit when: D-007 introduces YAML input, or a downstream consumer needs the
+originally-authored file preserved.</p>
+<hr>
+<h2>D-002: Telemetry sampling via subprocess + file, no controller threading</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2+</li>
+</ul>
+<p>Context: power sampling must run concurrently with the workload. The
+<code>TelemetryAdapter</code> contract already has <code>start_sampling</code>/<code>stop_sampling</code>, but
+nothing specified the concurrency mechanism.</p>
+<p>Options considered:</p>
+<ol>
+<li>Python threads inside the controller polling the telemetry source. Pro:
+single process. Con: GIL interaction with an in-process runtime (MLX
+generation) can distort sample timing; threading bugs are the classic
+source of flaky harnesses; the controller would be doing work during the
+measured window (see D-013).</li>
+<li><code>asyncio</code> event loop. Pro: no threads. Con: forces async contracts onto all
+adapters for one use case; same in-process timing concern.</li>
+<li>Each telemetry adapter spawns its native sampler as a subprocess that
+writes to a file in the bundle; <code>start_sampling</code> launches it,
+<code>stop_sampling</code> terminates it and parses the file. Mock telemetry simply
+synthesizes samples. Pro: real backends (<code>powermetrics</code>, <code>nvidia-smi -lms</code>) are already long-running sample-emitting processes, so this matches
+their grain; the controller sleeps during the measured window; the raw
+backend output is preserved verbatim in the bundle as source of truth.
+Con: process lifecycle management per backend; parsing happens after the
+fact.</li>
+</ol>
+<p>Decision: option 3.</p>
+<p>Considerations: the deciding factors are measurement integrity (controller
+does nothing during the measured window) and auditability (the raw sampler
+output lands in <code>raw/</code> untouched, and <code>power_trace.csv</code> is derived from it,
+so a parsing bug can be fixed and re-reduced without re-running hardware).
+This also keeps the v1 controller single-threaded and therefore simple to
+reason about and test.</p>
+<p>Consequences: every real telemetry adapter defines: spawn command, raw output
+path under <code>raw/</code>, stop mechanism, and a parser raw -&gt; <code>PowerSample</code> rows.
+The controller never reads samples mid-run; live progress display is out of
+scope for v1.</p>
+<p>Revisit when: a backend appears that cannot run as a file-writing subprocess,
+or sub-second live feedback becomes a requirement.</p>
+<hr>
+<h2>D-003: Timestamp and clock-alignment policy</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2 (single node), 3 (multi node)</li>
+</ul>
+<p>Context: every event and power sample carries <code>timestamp_s</code>. Reducers join
+events to traces by time. Phase 3 joins traces across two machines, so clock
+error becomes energy-attribution error.</p>
+<p>Options considered:</p>
+<ol>
+<li>Monotonic clock only. Pro: immune to wall-clock steps. Con: meaningless
+across processes and machines; cannot align controller, sampler subprocess,
+and remote nodes.</li>
+<li>Wall clock (epoch UTC) only. Pro: universal meaning. Con: NTP steps/slew
+can distort intervals mid-run.</li>
+<li>Epoch UTC (<code>time.time()</code>) as the canonical <code>timestamp_s</code> everywhere, with
+per-process monotonic-vs-wall offset recorded in metadata, NTP sync state
+recorded per node, and controller-mediated marker events bounding
+cross-node offset for split runs.</li>
+</ol>
+<p>Decision: option 3.</p>
+<p>Considerations: at our sampling rates (~1-10 Hz) the precision we need is
+tens of milliseconds; LAN NTP holds well under that. The marker procedure
+(controller timestamps a no-op command on the remote node immediately before
+and after each remote stage; round-trip halving bounds the offset) gives a
+recorded, per-run error bound rather than an assumption. Monotonic-only would
+make multi-process correlation impossible, and our samplers are separate
+processes by D-002.</p>
+<p>Consequences: <code>metadata.json</code> gains <code>clock</code> fields (ntp_synced, estimated
+offset bound, method). The methodology doc gets a Clock Synchronization
+section (done in the same change as this entry). Reducers must treat
+cross-node intervals shorter than the recorded offset bound as unreliable and
+flag them in measurement quality.</p>
+<p>Revisit when: sampling moves to &gt;=100 Hz (wall meters with fast export) or a
+target cannot run NTP.</p>
+<hr>
+<h2>D-004: <code>powermetrics</code> privilege workflow</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2</li>
+</ul>
+<p>Context: Phase 1 evidence shows <code>/usr/bin/powermetrics</code> exists and &quot;must be
+invoked as the superuser&quot;. Automated benchmark runs need a non-interactive,
+auditable way to obtain that privilege. Hard rule inherited from Phase 1:
+document the privilege workflow, never bypass it in code.</p>
+<p>Options considered:</p>
+<ol>
+<li>Run the whole controller as root. Pro: simple. Con: massively
+over-privileged; everything the harness writes becomes root-owned; worst
+auditability.</li>
+<li>Interactive <code>sudo</code> prompt at run start. Pro: zero configuration. Con:
+breaks unattended/repeated runs (sudo timeout mid-experiment), and an
+agent cannot answer the prompt.</li>
+<li>A <code>sudoers</code> rule scoped to exactly <code>/usr/bin/powermetrics</code> (NOPASSWD) for
+the benchmark user, installed once by the user, documented in the
+Phase 1 exit checklist&#39;s instrumentation section. Controller pre-checks
+capability with
+<code>sudo -n /usr/bin/powermetrics -n 1 -i 100</code> style probe and fails with
+structured <code>permission_denied</code> if absent.</li>
+<li>A setuid wrapper binary. Con: writing setuid programs to avoid a sudoers
+line is strictly worse on every axis.</li>
+</ol>
+<p>Decision: option 3, with option 2 documented as the manual fallback for
+one-off runs.</p>
+<p>Considerations: the scoped sudoers rule grants exactly one binary, owned by
+Apple, that only reads telemetry. The pre-check converts a mid-run privilege
+failure into an up-front structured failure, which the Phase 1 contract
+(structured outcomes, not crashes) requires. Passwords never appear in code,
+configs, or logs.</p>
+<p>Consequences: the powermetrics adapter (Slice 2H) always invokes via
+<code>sudo -n</code>; the Phase 1 exit checklist&#39;s instrumentation section gains the
+exact sudoers line for the user to install during the 2026-06-10 auth
+session; <code>permission_denied</code> failures tell the operator precisely what to
+add.</p>
+<p>Revisit when: macOS changes powermetrics privilege requirements, or the
+measurement machine is shared and the owner declines the sudoers rule (then
+runs become operator-attended, option 2).</p>
+<hr>
+<h2>D-005: One bundle per repetition, grouped by experiment manifest</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2+</li>
+</ul>
+<p>Context: <code>workload_profile.repetitions</code> exists in the config schema but
+nothing defined whether N repetitions produce one bundle or N bundles.</p>
+<p>Options considered:</p>
+<ol>
+<li>One bundle containing N sub-runs. Pro: one directory per experiment. Con:
+every artifact (trace, events, summary) needs an internal rep dimension;
+the &quot;bundle = one measured run&quot; invariant breaks; partial failure of rep 3
+of 5 makes bundle status ambiguous; reducers get conditional logic
+everywhere.</li>
+<li>One bundle per repetition, plus an experiment manifest
+(<code>runs/experiments/&lt;experiment_id&gt;.json</code>) listing member bundle IDs, the
+shared config hash, and creation time. Pro: bundle invariant stays &quot;one
+bundle = one measured run = one status&quot;; per-rep failure is naturally
+isolated; Phase 4 aggregation walks manifests. Con: more directories; the
+manifest is one more artifact to maintain.</li>
+</ol>
+<p>Decision: option 2. Bundle IDs of members are <code>&lt;experiment_id&gt;__r&lt;N&gt;</code>.</p>
+<p>Considerations: the strongest argument is statistical hygiene in Phase 4 -
+each repetition is an independent observation with its own quality fields
+(thermal drift, dropped samples), and forcing that independence into the
+directory structure prevents accidental cross-rep contamination in reducers.
+Partial experiments (3 of 5 reps succeeded) stay representable without a
+special bundle state.</p>
+<p>Consequences: controller gains an experiment loop (Slice 2F); cooldown gates
+between reps live at the experiment level; <code>run_bundle_layout.md</code> documents
+the manifest.</p>
+<p>Revisit when: never expected; this is structural.</p>
+<hr>
+<h2>D-006: Dashboard v1 is a static HTML report generator</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2 (v1), 4 (figures)</li>
+</ul>
+<p>Context: the original Phase 2 checklist said &quot;dashboard v1 as a read-only run
+browser&quot; with no definition. Any web stack is a large dependency and
+maintenance surface for a single-user research artifact.</p>
+<p>Options considered:</p>
+<ol>
+<li>Flask/FastAPI web app. Pro: interactive. Con: server process, dependency
+tree, session management for zero concurrent users; classic capstone time
+sink; violates &quot;polish after vertical slice&quot; rule in spirit.</li>
+<li>Jupyter notebooks only. Pro: flexible. Con: not a &quot;run browser&quot;; execution
+state is not reproducible evidence; poor handoff artifact.</li>
+<li><code>python3 -m joulewise report runs/ --output report/</code> generating static
+HTML: an index table of runs plus a per-run page with metadata, summary
+metrics, and a power-trace chart with phase shading. Charts rendered by
+matplotlib (Agg) to PNG/SVG. No JavaScript build, no server; open the
+files in a browser.</li>
+</ol>
+<p>Decision: option 3. Matplotlib becomes the first real dependency, isolated in
+the <code>[analysis]</code> extra (D-009), which Phase 4 needs regardless.</p>
+<p>Considerations: the dashboard&#39;s actual job in this project is (a) sanity-check
+runs during data collection and (b) show the supervisor progress. Static
+generation serves both, is testable (assert files exist and contain expected
+strings), and produces committable artifacts. Interactivity has no identified
+user.</p>
+<p>Consequences: Slice 2J implements it; <code>report</code> fails with a helpful message
+if matplotlib is missing; notebooks remain available for exploration but are
+never the source of report figures (see Phase 4 plan).</p>
+<p>Revisit when: a real interactive need appears (e.g., live monitoring of long
+sweeps in Phase 3) - and then prefer extending the generator before adopting
+a server.</p>
+<hr>
+<h2>D-007: YAML config input is deferred</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2+</li>
+</ul>
+<p>Context: the CLI is JSON-only; one doc claimed YAML preference. Related to,
+but distinct from, D-001 (bundle artifact format).</p>
+<p>Options considered:</p>
+<ol>
+<li>Add PyYAML now. Con: first core dependency, motivated by zero observed
+pain; example configs are short.</li>
+<li>Defer: JSON-only input until a human actually authors enough configs for
+YAML comments/anchors to matter; then add PyYAML behind a <code>[yaml]</code> extra
+with YAML accepted at the CLI boundary only (immediately normalized to the
+JSON-backed schema).</li>
+</ol>
+<p>Decision: option 2.</p>
+<p>Considerations: Phase 2-3 configs will mostly be generated (sweeps), not
+hand-authored. The cost of adding YAML later is one loader function; the cost
+of adding it now is a permanent dependency and a second on-disk dialect to
+test.</p>
+<p>Consequences: CLI error message keeps stating the position (&quot;YAML planned&quot;);
+docs stop calling YAML &quot;preferred&quot;.</p>
+<p>Revisit when: the Phase 3 experiment matrix produces hand-edited config
+sprawl that JSON makes painful.</p>
+<hr>
+<h2>D-008: Split runs arrive via schema v0.2 (<code>run_kind</code> + <code>split_plan</code>)</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted (design), implementation in Phase 3 Stage 3.1</li>
+<li>Phase: 3</li>
+</ul>
+<p>Context: <code>BenchmarkConfig</code> v0.1 has exactly one <code>hardware_target</code>, so a
+disaggregated run (prefill node + decode node + interconnect) is currently
+inexpressible. Discovering this mid-Phase-3 would force a rushed schema
+change after data collection had started.</p>
+<p>Options considered:</p>
+<ol>
+<li>Generalize <code>hardware_target</code> to a list of targets with role tags. Pro:
+maximally general (N-way splits someday). Con: validation becomes
+conditional on role combinations; every consumer must handle lists; we
+have no N&gt;2 use case.</li>
+<li>Add optional <code>run_kind: monolithic | transfer_bench | split_offline | split_live</code> (default <code>monolithic</code>) plus an optional <code>split_plan</code> object
+with named roles: <code>prefill_target</code>, <code>decode_target</code> (full HardwareTarget
+objects), and a <code>transfer</code> block (method: <code>file_scp</code> | <code>tcp_stream</code>,
+staging dir, link label). <code>transfer_bench</code> runs get a <code>transfer_bench</code>
+block (payload sizes, port) and reuse the two-target shape. Validation
+rules are explicit per run_kind (e.g., <code>hardware_target</code> required for
+monolithic, forbidden when <code>split_plan</code> present).</li>
+<li>Separate config schema/file type for split runs. Con: two schemas to
+version, validate, and document; shared fields drift.</li>
+</ol>
+<p>Decision: option 2, as schema_version 0.2, designed and implemented at the
+start of Phase 3 (Stage 3.1) before any split data is collected. v0.1
+configs remain valid: absent <code>run_kind</code> means <code>monolithic</code>.</p>
+<p>Considerations: named roles match the experiment&#39;s fixed two-stage structure
+and keep validation rules enumerable and testable. Backward compatibility by
+defaulting preserves all Phase 2 configs and bundles. Designing now but
+implementing at Phase 3 start avoids speculative code while eliminating the
+mid-phase surprise.</p>
+<p>Consequences: phase labels gain <code>deserialize</code>; the composite bundle layout
+(nodes/prefill, nodes/decode) accompanies it; reducers learn per-stage
+decomposition. All documented in the Phase 3 plan.</p>
+<p>Revisit when: an N&gt;2 pipeline experiment is actually proposed.</p>
+<hr>
+<h2>D-009: Dependency policy: stdlib core, optional extras</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: all</li>
+</ul>
+<p>Context: the repo is zero-dependency by design (&quot;Phase 1 can run without
+dependency installation&quot;). Phases 2-4 need MLX (Mac runtime), matplotlib
+(reports/figures), and likely pandas (aggregation).</p>
+<p>Options considered:</p>
+<ol>
+<li>Add dependencies to core as needed. Con: <code>python3 -m joulewise run</code> on a
+bare machine stops working; CI and the mock path inherit heavy installs;
+the Phase 5 &quot;new user runs one local benchmark from the README&quot; promise
+gets harder.</li>
+<li>Keep core stdlib-only forever. Con: re-implementing plotting/dataframes is
+absurd.</li>
+<li>Stdlib-only core (schemas, controller, mock adapters, bundle writer,
+reducer v1, CLI), with extras: <code>[mac]</code> = mlx, mlx-lm; <code>[analysis]</code> =
+matplotlib (+ pandas when Phase 4 lands); <code>[yaml]</code> = pyyaml (when D-007
+triggers). Adapters import their backend lazily and return structured
+<code>runtime_unavailable</code> / <code>telemetry_unavailable</code> failures when the extra
+is absent.</li>
+</ol>
+<p>Decision: option 3.</p>
+<p>Considerations: the mock vertical slice is the project&#39;s portability proof
+and CI substrate; keeping it dependency-free keeps it fast and unbreakable.
+Lazy imports turn missing extras into the structured failures the contract
+already requires, which doubles as a test of the failure paths.</p>
+<p>Consequences: <code>pyproject.toml</code> gains <code>[project.optional-dependencies]</code>; CI
+(D-017) installs nothing; docs state which extra each command needs.</p>
+<p>Revisit when: a stdlib-only requirement becomes the bottleneck for core
+correctness (not convenience).</p>
+<hr>
+<h2>D-010: Run ID scheme</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2+</li>
+</ul>
+<p>Context: bundle directories need unique, sortable, informative names. The
+config has an optional <code>run_id</code> field.</p>
+<p>Options considered:</p>
+<ol>
+<li>UUID4. Pro: unique. Con: opaque; directory listings become unreadable;
+sorting is meaningless.</li>
+<li>Monotonic counter. Con: requires global state; collides across machines.</li>
+<li><code>&lt;UTC timestamp&gt;__&lt;target_id&gt;__&lt;workload_name&gt;__&lt;4 hex chars&gt;</code>, e.g.
+<code>20260610T142233Z__macbook_m3_max__smoke_short__a1b2</code>. Components
+sanitized to <code>[a-z0-9_-]</code>. If the config supplies <code>run_id</code>, it is used
+verbatim after sanitization, with a collision check that fails the run
+rather than overwriting (bundles are immutable evidence). Repetition
+members append <code>__r&lt;N&gt;</code> (D-005).</li>
+</ol>
+<p>Decision: option 3.</p>
+<p>Considerations: timestamp prefix makes <code>ls runs/</code> chronological; embedded
+target/workload makes manual triage possible without opening files; the hex
+suffix prevents same-second collisions; refusing to overwrite enforces the
+&quot;bundles are evidence&quot; rule mechanically.</p>
+<p>Consequences: bundle writer owns ID generation and sanitization; tests cover
+collision behavior.</p>
+<p>Revisit when: never expected.</p>
+<hr>
+<h2>D-011: <code>summary_metrics.json</code> is the bundle completion marker</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2+</li>
+</ul>
+<p>Context: a crashed or killed run must be distinguishable from a completed one
+by artifact inspection alone.</p>
+<p>Options considered:</p>
+<ol>
+<li>Write into <code>runs/&lt;id&gt;.partial/</code> and rename on completion. Pro: atomic.
+Con: a crash leaves <code>.partial</code> dirs whose artifacts (events up to the
+crash) are exactly what you want to inspect, but tooling now needs to know
+two names; rename breaks any open file handles on some platforms.</li>
+<li>A <code>_COMPLETE</code> sentinel file. Pro: explicit. Con: one more artifact that
+says nothing else.</li>
+<li>Define the writing order so <code>summary_metrics.json</code> is always written last,
+after all other artifacts are flushed, and define &quot;complete bundle&quot; as
+&quot;directory containing a schema-valid <code>summary_metrics.json</code>&quot;. The final
+event in <code>events.jsonl</code> is <code>run_finalized</code>.</li>
+</ol>
+<p>Decision: option 3.</p>
+<p>Considerations: the summary is already mandatory and already last in data-flow
+order (it is derived from everything else), so the invariant costs nothing.
+<code>validate-bundle</code> (Slice 2E) checks it; aggregation (Phase 4) skips
+directories without it and logs them as incomplete. Failed runs still get a
+summary (status=failed) per D-012, so &quot;incomplete&quot; specifically means
+&quot;harness died&quot;, which is the signal we want.</p>
+<p>Consequences: bundle writer enforces write order; reducers never run on
+incomplete bundles.</p>
+<p>Revisit when: never expected.</p>
+<p>Amendment (2026-07-07, P2-013 group 4, C-007 resolution 2): &quot;schema-valid
+<code>summary_metrics.json</code>&quot; is now enforced by ONE shared summary validator
+used by both <code>BundleReader.is_complete()</code> and default validation
+(<code>_check_summary</code>), with required keys per status: a <code>succeeded</code> summary
+must carry the headline energy fields present AND finite (audit finding
+B1 showed a status-only succeeded summary previously counted as complete
+and valid, hiding truncated metrics); token-derived and idle-subtracted
+metrics stay nullable; failed/unsupported summaries keep their looser
+per-status requirements. &quot;Complete&quot; therefore means &quot;contains a summary
+that satisfies the per-status contract&quot;, not merely &quot;parseable JSON
+object&quot;. Historical bundles are unaffected: real corpus summaries
+already carry the full field set.</p>
+<hr>
+<h2>D-012: Failure-reason to run-status mapping</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2+</li>
+</ul>
+<p>Context: <code>RunStatus</code> has <code>succeeded | failed | unsupported</code> and
+<code>FailureReason</code> has eight codes, but nothing defined which reasons produce
+which status. The distinction matters: <code>unsupported</code> is a <em>finding</em> the
+capstone reports (hardware applicability results); <code>failed</code> is a <em>defect or
+environment problem</em> to fix.</p>
+<p>Options considered:</p>
+<ol>
+<li>Let each adapter pick the status. Con: inconsistent semantics across
+backends; the same condition becomes a finding on one target and a bug on
+another.</li>
+<li>A fixed mapping table owned by the controller:<ul>
+<li><code>unsupported</code>: <code>did_not_fit</code>, <code>format_unavailable</code>,
+<code>unsupported_workload</code>, <code>runtime_unavailable</code>, <code>telemetry_unavailable</code>
+(structural incompatibility of the hardware/runtime/model/workload
+combination).</li>
+<li><code>failed</code>: <code>permission_denied</code>, <code>transport_unavailable</code>, <code>unknown_error</code>
+(operational problems that a configuration or environment change should
+fix).</li>
+</ul>
+</li>
+</ol>
+<p>Decision: option 2.</p>
+<p>Considerations: the dividing principle is &quot;would we publish this outcome as a
+result?&quot; A model that does not fit in 8 GB VRAM is a result; a missing
+sudoers line is not. <code>permission_denied</code> is deliberately <code>failed</code> because it
+is always fixable per D-004. <code>runtime_unavailable</code> is deliberately
+<code>unsupported</code> because by D-009 it means &quot;this target composition lacks this
+backend&quot;, which is an applicability statement; if it occurs because an extra
+simply was not installed on a machine that supports it, the run report should
+say so and the run be repeated - the controller cannot distinguish these, so
+the human/agent in the loop must.</p>
+<p>Consequences: controller implements the table; tests pin it; the known
+ambiguity on <code>runtime_unavailable</code> is documented in the Phase 2 plan and
+flagged in run reports when it occurs.</p>
+<p>Revisit when: a reason code appears that the table misclassifies in practice;
+amend the table and this entry rather than special-casing in adapters.</p>
+<hr>
+<h2>D-013: Controller-as-DUT mitigation for Mac-local runs</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2</li>
+</ul>
+<p>Context: in the Mac vertical slice the controller process runs on the same
+machine that <code>powermetrics</code> measures. Controller activity during the measured
+window pollutes the power trace; this is a measurement-validity threat no
+checklist previously named.</p>
+<p>Options considered:</p>
+<ol>
+<li>Ignore it. Con: silently biases the flagship measurements.</li>
+<li>Run the controller from a second machine over SSH even for the Mac. Pro:
+clean separation. Con: requires the SSH transport before the first real
+vertical slice, inverting the planned order; the Mac is the only always
+available device.</li>
+<li>Co-residency protocol: (a) idle baseline is measured with the controller
+resident and quiescent, so the controller&#39;s floor load is inside the
+baseline that gets subtracted; (b) during the measured window the
+controller does nothing but a blocking wait on the runtime (no logging, no
+polling - log records are buffered in memory and flushed after
+<code>stop_sampling</code>); (c) the runtime adapter for local runs executes in the
+same process by design, so its cost <em>is</em> the workload; (d) document
+residual risk: controller wake-ups are zero by construction, and any OS
+background activity affects idle and load windows alike.</li>
+</ol>
+<p>Decision: option 3 for Phase 2, with option 2 recorded as the upgrade path
+once the SSH transport exists (re-run a subset and compare).</p>
+<p>Considerations: idle subtraction already exists in the methodology; making
+the controller part of the measured system&#39;s <em>idle</em> state is the cheapest way
+to cancel its first-order effect. Deferred logging is essential - a single
+log line during a 1 Hz window is a visible artifact.</p>
+<p>Consequences: controller gains an explicit quiescent-wait mode and deferred
+log flush; methodology doc gains a Controller Co-Residency section; the
+comparison run is queued as a Phase 3-era validation task.</p>
+<p>Revisit when: the SSH-based comparison shows a measurable delta, in which
+case Mac headline numbers move to remote-controlled runs.</p>
+<hr>
+<h2>D-014: Statistical protocol for repeated runs</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted (draft to be ratified against real variance data at Phase 4
+Stage 4.0)</li>
+<li>Phase: 2 (collection), 4 (analysis)</li>
+</ul>
+<p>Context: acceptance criteria say &quot;repeated runs report variance&quot; and
+&quot;uncertainty intervals&quot; with no method defined. Choosing after seeing data
+invites motivated choices; choosing now and ratifying with documented
+reasoning is auditable.</p>
+<p>Options considered (per element):</p>
+<ul>
+<li>Repetitions: n=3 (cheap, wide CIs) vs n=5 (headline-defensible, ~2.8x t
+multiplier instead of ~4.3x at 95%) vs n&gt;=10 (hardware time we may not
+have). Chosen: n&gt;=5 for headline comparisons, n&gt;=3 minimum elsewhere,
+recorded per experiment.</li>
+<li>Interval: normal z (wrong at small n) vs Student t (standard at small n,
+assumes rough normality) vs bootstrap percentile (assumption-light but
+unstable at n=5). Chosen: report mean, sample stddev, and 95% t-interval;
+run a bootstrap sensitivity check in Phase 4 and report both where they
+disagree materially.</li>
+<li>Outliers: silent removal (never), keep-all (can bury a real artifact), flag
+via modified z-score on MAD &gt; 3.5 and <em>report with and without, with the
+physical cause investigated and documented</em>. Chosen: the latter; a flagged
+point with no identified cause is kept in headline numbers.</li>
+<li>Ordering: condition blocks (thermal drift confounds with condition) vs
+round-robin interleaving (decorrelates slow drift; more model reloads).
+Chosen: round-robin across conditions where reload cost permits, with the
+executed order recorded in the experiment manifest; where blocks are
+operationally forced, that is recorded too.</li>
+<li>Thermal equilibrium between reps: fixed sleep (blind) vs temperature
+threshold (sensor availability varies by target) vs idle-power recovery
+gate. Chosen: idle-power recovery - wait until a rolling 30 s idle-power
+mean returns to within 10% of the run&#39;s recorded idle baseline, with a
+5-minute cap (cap hit =&gt; recorded in measurement quality).</li>
+</ul>
+<p>Decision: as chosen above; figures always show raw points alongside
+aggregates.</p>
+<p>Considerations: every element was picked to survive a hostile question in a
+capstone defense: &quot;why n=5&quot;, &quot;why t&quot;, &quot;did you drop points&quot;, &quot;did thermal
+state drift&quot;. The idle-power gate was chosen over temperature because it uses
+the instrument we always have (the power meter itself) and directly measures
+the quantity whose drift would bias us.</p>
+<p>Consequences: methodology doc gains the Statistical Protocol section;
+controller implements the cooldown gate (Slice 2F); Phase 4 Stage 4.0
+ratifies or amends with observed variance, updating this entry&#39;s status.</p>
+<p>Revisit when: Phase 4 Stage 4.0, mandatorily.</p>
+<hr>
+<h2>D-015: Split-mechanism priority and same-runtime rule</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 3</li>
+</ul>
+<p>Context: the headline experiment splits prefill and decode across machines,
+which requires moving KV-cache state. KV tensors are runtime-specific
+(layout, dtype, quantization, RoPE handling), and not every runtime can
+export or import them. This is the project&#39;s largest feasibility risk
+(R-004, R-005).</p>
+<p>Options considered:</p>
+<ol>
+<li>Live KV streaming between runtimes first (Splitwise-style). Pro: closest
+to the inspiration paper. Con: hardest variant of the riskiest component;
+no public stable path in vLLM, none at all across heterogeneous runtimes;
+a failure here late in the schedule sinks the phase.</li>
+<li>Cross-runtime transfer via a translation layer (e.g., vLLM prefill -&gt;
+MLX decode). Con: deep model-internals work, research-grade in itself,
+out of scope for a measurement capstone.</li>
+<li>Feasibility-ordered ladder with a guaranteed floor:
+a. <em>Synthetic transfer microbenchmark</em> (always feasible): move
+   KV-sized payloads between nodes with both-end power sampling. Yields
+   transfer energy/time vs payload size vs link speed regardless of any
+   runtime&#39;s cooperation.
+b. <em>Offline replay</em> (primary mechanism): same runtime family on both
+   ends; prefill on node A, persist the prompt cache to a file, transfer
+   it, resume decode from it on node B. Candidate paths: mlx-lm prompt
+   cache save/load; llama.cpp <code>--prompt-cache</code> session files; vLLM
+   expected unsupported for file replay (spike confirms).
+c. <em>Live split</em> (stretch): socket streaming during a run, only attempted
+   after (b) produces publishable data.
+Rule: same runtime (and pinned version) on both ends of any real KV
+transfer; cross-runtime KV portability is explicitly out of scope, and
+heterogeneous <em>hardware</em> pairs are achieved with a portable runtime
+(llama.cpp) where its backends allow.</li>
+</ol>
+<p>Decision: option 3.</p>
+<p>Considerations: the ladder converts an existential risk into a bounded one:
+even if every runtime spike fails, (a) plus Phase 2 homogeneous baselines
+still supports an analytical split-energy model (prefill energy measured on
+A, decode energy measured on B via replay-or-monolithic decomposition,
+transfer energy measured synthetically), which is an honest, defensible
+capstone result. Each rung up improves directness of measurement. The
+same-runtime rule eliminates the one problem (tensor portability across
+engines) that no amount of harness engineering can fix on schedule.
+Open question carried into the spikes: llama.cpp session-file portability
+across <em>backends/platforms</em> (CUDA-save -&gt; Metal-load) is unverified and gets
+its own spike with an explicit verdict.</p>
+<p>Consequences: Phase 3 plan is structured around the ladder (Stage 3.0
+spikes before any hardware scheduling); the KV-size analytical model feeds
+payload sizes for (a); verdict codes per runtime are recorded in
+<code>docs/phase_3/kv_feasibility.md</code>.</p>
+<p>Revisit when: a spike contradicts an assumption (then the ladder re-ranks,
+documented), or vLLM&#39;s disaggregation API stabilizes early enough to matter.</p>
+<hr>
+<h2>D-016: Benchmark model selection</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: open (criteria fixed now; closure requires Phase 1 supervisor scope
+plus Phase 2 install evidence)</li>
+<li>Phase: 2+</li>
+</ul>
+<p>Context: every cross-target comparison needs identical model(s). The example
+config&#39;s <code>qwen-placeholder</code> must become a real decision before Slice 2G.</p>
+<p>Selection criteria (fixed now):</p>
+<ol>
+<li>Must run on all primary targets: MLX-format weights available (or
+convertible) for Mac; GGUF available for llama.cpp paths; vLLM-loadable
+for the CUDA path.</li>
+<li>Must fit the smallest VRAM targets at the chosen quantization: 8 GB
+(RTX 3050, Orin Nano) with headroom for KV at experiment prompt lengths.</li>
+<li>KV-per-token small enough that transfer payloads span an interesting
+range (see Phase 3 KV table) but large enough to exercise the
+interconnect.</li>
+<li>Open weights with a license permitting academic benchmarking and local
+mirroring (R-014: mirror weights locally once chosen).</li>
+<li>Prefer one small + one mid model from the same family to separate
+model-size effects from family effects.</li>
+</ol>
+<p>Candidate set (to be narrowed with evidence): Qwen2.5-1.5B-Instruct,
+Qwen2.5-7B-Instruct, Llama-3.2-1B-Instruct, Llama-3.2-3B-Instruct,
+Llama-3.1-8B-Instruct.</p>
+<p>Options considered (shape of the decision): single model (cleanest matrix,
+no size axis) vs small+mid pair (size axis, double hardware time) vs per-
+target best model (incomparable - rejected outright).</p>
+<p>Decision pending; leaning small+mid pair from one family, final call
+recorded here with per-runtime artifact paths and exact revisions when
+closed.</p>
+<p><strong>Provisional pick recorded (2026-07-06, user-directed build-out session;
+gate = explicit user go-ahead, recorded in the run report):</strong>
+Qwen2.5-1.5B-Instruct as the small model, MLX 4-bit artifact
+<code>mlx-community/Qwen2.5-1.5B-Instruct-4bit</code>, revision
+<code>8b403126fc14f14cfc99bb4cfa72ecbc129ea677</code>, mirrored locally (R-014) at
+<code>/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit</code> (839 MB).
+Evidence: HF repo verified via API 2026-07-06; loaded and generated on
+the M3 Max via Slice 2G (bundle <code>example-mac-mlx-mock-telemetry</code>,
+265.8 tok/s decode); KV row verified against the mirrored config.json
+(28,672 B/token fp16, matches the Phase 3 table). This opens the 2G gate
+(&quot;closed or provisional&quot;) ONLY. Full closure still requires: P1-001
+supervisor scope, the mid-model pick (leaning Qwen2.5-7B-Instruct, same
+family per criterion 5), a CUDA-target load, and GGUF artifact paths.
+The provisional pick is reversible at config level (one model stanza +
+pinned hash update).</p>
+<p>Closure evidence required: supervisor scope notes (P1-001); successful load
+on Mac MLX (Slice 2G) and one CUDA target; recorded weight artifact
+paths/revisions; KV-size table row computed for the chosen models.</p>
+<p>Revisit when: a chosen model&#39;s weights become unavailable or a target cannot
+load it (then the recorded fallback candidate is promoted).</p>
+<hr>
+<h2>D-017: CI scope</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: all</li>
+</ul>
+<p>Context: the GitHub remote has no CI; agents benefit from remote green-check
+evidence, and Phase 5 promises a reproducible mock path.</p>
+<p>Options considered:</p>
+<ol>
+<li>No CI. Con: &quot;tests pass&quot; claims rest on local runs in handoff notes.</li>
+<li>Full matrix with extras (mlx cannot install on Linux runners; GPU absent).
+Con: impossible or meaningless for hardware paths.</li>
+<li>Core-only CI: ubuntu runner, Python 3.11 and 3.14 (oldest supported per
+<code>pyproject.toml</code>, plus the version observed in local development),
+<code>python -m unittest discover -s tests</code> plus CLI smoke
+(<code>validate-config</code> on both example configs). Later phases extend it with
+the mock-bundle end-to-end run and <code>validate-bundle</code> once those exist.</li>
+</ol>
+<p>Decision: option 3.</p>
+<p>Considerations: the stdlib-only core (D-009) is exactly the testable surface
+on a hosted runner; hardware adapters are validated by run bundles, not CI.
+Two Python versions catch the realistic compat risks (3.11 floor vs 3.14
+local) at trivial cost.</p>
+<p>Consequences: <code>.github/workflows/ci.yml</code> added; Phase 2 Slice 2E adds the
+mock end-to-end step to it; README badges optional, not required.</p>
+<p>Revisit when: a self-hosted runner with GPU/Mac hardware ever materializes
+(unlikely; not planned).</p>
+<hr>
+<h2>D-018: Per-backend <code>power_w</code> definition and rail policy</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2+</li>
+</ul>
+<p>Context: <code>power_trace.csv</code> has <code>power_w</code>, <code>source</code>, and optional <code>rail</code>
+columns, but &quot;power&quot; means different physical boundaries on different
+backends (SoC subsystems vs GPU board vs module input vs wall AC). Without a
+fixed definition, cross-target comparisons silently compare different
+quantities.</p>
+<p>Options considered:</p>
+<ol>
+<li>One <code>power_w</code> row per sample, backend decides what it means. Con: loses
+per-rail information; the meaning varies invisibly.</li>
+<li>Per-rail rows only, reducers sum everything. Con: &quot;everything&quot; differs by
+backend; accidental double counting (e.g., a backend reporting both
+package and per-subsystem rails).</li>
+<li>Per-rail rows preserved as reported, plus a per-backend <em>rail manifest</em>
+that names exactly which rails sum to the backend&#39;s canonical <code>power_w</code>
+for reduction, and a methodology table stating each backend&#39;s physical
+measurement boundary. powermetrics: cpu_power + gpu_power + ane_power
+(SoC subsystem proxy; excludes display, storage, PSU losses). nvidia-smi:
+board power as reported (GPU board only; excludes host). jetson_rails:
+VDD_IN preferred (module input) with the actually-used rail recorded.
+wall_meter: AC wall power (full system).</li>
+</ol>
+<p>Decision: option 3.</p>
+<p>Considerations: per-rail rows keep raw fidelity (Apple&#39;s per-subsystem split
+is itself interesting data); the manifest makes the summation auditable and
+fixable post hoc; the boundary table converts an implicit comparability
+problem into an explicit, reportable limitation - cross-target absolute
+comparisons must state boundaries, and wall-meter deltas (when the meter
+exists, P1-003) calibrate the gap.</p>
+<p>Consequences: telemetry adapters declare their rail manifest in
+<code>device_metadata</code>; reducer sums per the manifest; methodology gains the
+Measurement Boundaries section; the limitations section of the final report
+inherits the boundary table.</p>
+<p>Revisit when: a backend exposes a strictly better boundary (e.g., macOS adds
+package-level wall-equivalent reporting).</p>
+<hr>
+<h2>D-019: Mock adapters use simulated time via an injectable clock</h2>
+<ul>
+<li>Date: 2026-06-09</li>
+<li>Status: accepted</li>
+<li>Phase: 2</li>
+</ul>
+<p>Context: reducer correctness tests need traces and events whose expected
+energy is computable in closed form; the controller needs real time for real
+runs. If mocks sleep through real seconds, tests get slow and flaky; if the
+controller special-cases mocks, the lifecycle under test diverges from the
+real one.</p>
+<p>Options considered:</p>
+<ol>
+<li>Mocks sleep in real time. Con: a 30 s idle window makes the test suite
+unusable; timestamp jitter breaks exact assertions.</li>
+<li>Controller branches on mock backends. Con: the code path being tested is
+no longer the production path.</li>
+<li>A minimal <code>Clock</code> protocol (<code>now() -&gt; float</code>, <code>sleep(seconds)</code>) injected
+into the controller; <code>SystemClock</code> for real runs, <code>FakeClock</code> that
+advances instantly for tests and mock runs. Mock adapters compute
+deterministic timestamps/samples from the config and the injected clock;
+the controller code path is identical in both modes.</li>
+</ol>
+<p>Decision: option 3.</p>
+<p>Considerations: this is the standard seam for time-dependent systems; it
+keeps the mock vertical slice fast (CI, D-017), exact (reducer tests assert
+energy to the float), and honest (same controller code). The mock telemetry
+trace is specified in Slice 2B as piecewise-constant power levels per
+lifecycle stage so trapezoidal integration has a closed-form expectation.</p>
+<p>Consequences: controller and adapters take a clock parameter; no module ever
+calls <code>time.time()</code>/<code>time.sleep()</code> directly except <code>SystemClock</code>.</p>
+<p>Revisit when: never expected.</p>
+<hr>
+<h2>D-020: CLI binds <code>FakeClock</code> for all-mock runs, <code>SystemClock</code> otherwise</h2>
+<ul>
+<li>Date: 2026-06-12</li>
+<li>Status: accepted</li>
+<li>Phase: 2</li>
+</ul>
+<p>Context: D-019 created the clock seam but left open which clock the
+<code>run</code> verb binds. With <code>SystemClock</code>, a mock end-to-end run sleeps
+through real idle/warmup seconds and produces nondeterministic
+timestamps; the mock path&#39;s whole value (fast CI substrate, exact
+closed-form expectations, byte-identical reruns) depends on simulated
+time.</p>
+<p>Options considered:</p>
+<ol>
+<li>Always <code>SystemClock</code>. Pro: one rule. Con: mock e2e takes wall-clock
+seconds in CI for no measurement benefit; timestamps differ per run,
+so determinism can only be asserted in unit tests, never on real CLI
+artifacts.</li>
+<li>An explicit <code>--fake-clock</code> flag. Pro: caller control. Con: the flag
+would be mandatory-in-practice for mock runs and dangerous-if-misused
+for real runs (simulated timestamps in a hardware bundle would corrupt
+evidence silently).</li>
+<li>Selection by composition at the CLI boundary: <code>FakeClock</code> if and only
+if both <code>runtime_backend</code> and <code>telemetry_backend</code> are <code>mock</code>,
+<code>SystemClock</code> otherwise. The clock kind is recorded in
+<code>metadata.json</code> (<code>clock.kind</code>), so every bundle states which time base
+produced it.</li>
+</ol>
+<p>Decision: option 3.</p>
+<p>Considerations: this is not the controller-branches-on-mocks anti-pattern
+D-019 rejected - the controller code path is identical; only the injected
+dependency differs, chosen at the outermost boundary. Mixed compositions
+(e.g. Slice 2G&#39;s real MLX runtime + mock telemetry) correctly get
+<code>SystemClock</code>, because real workload execution needs real time even when
+power is synthetic. Library callers of <code>run_benchmark</code> always pass their
+own clock explicitly; the rule binds only the CLI default.</p>
+<p>Consequences: <code>cli.py</code>&#39;s <code>run</code> verb implements the rule with a comment
+citing this entry; the CI mock end-to-end step is effectively instant;
+<code>metadata.json</code> discloses the time base per bundle.</p>
+<p>Revisit when: a mixed mock/real composition needs simulated time, or a
+test needs to drive the CLI with a seeded clock (then add the explicit
+flag from option 2 with a refuse-on-real-telemetry guard).</p>
+<hr>
+<h2>D-021: Controller flushes <code>events.jsonl</code> before the reduce stage</h2>
+<ul>
+<li>Date: 2026-06-12</li>
+<li>Status: accepted</li>
+<li>Phase: 2</li>
+</ul>
+<p>Context: the controller buffers all events in memory and flushes them
+only at <code>_finish()</code> (D-013 deferred logging keeps the measured window
+quiescent). Slice 2D&#39;s reducer is a pure function over the on-disk bundle
+artifacts (D-002), including <code>events.jsonl</code>, and the controller calls it
+during the reduce stage - which originally ran <em>before</em> the buffered
+events were written. The reducer would have read an empty <code>events.jsonl</code>
+(no measured-run window, no token events). The 2C author flagged this for
+2D.</p>
+<p>Options considered:</p>
+<ol>
+<li>Pass the in-memory events to the reducer directly. Con: breaks the
+D-002 contract that <code>reduce_bundle(path)</code> is pure over on-disk
+artifacts - the same function is reused by <code>validate-bundle</code> and the
+report generator, which only have the files; two code paths would
+diverge.</li>
+<li>Flush <code>events.jsonl</code> once, before the reducer runs in the reduce
+stage, and have <code>_finish()</code> (the failure paths included) flush only if
+not already flushed. <code>finalize()</code> still appends <code>run_finalized</code> last
+and writes <code>summary_metrics.json</code> last (D-011 unchanged).</li>
+</ol>
+<p>Decision: option 2. The flush is a delta flush keyed on a flushed-count,
+not a strict one-shot: the reduce stage&#39;s own <code>stage_completed</code> event is
+buffered <em>after</em> the in-reduce flush, so a strict one-shot would drop it
+and break the event-sequence contract. Each <code>_flush_events</code> call appends
+only events buffered since the previous flush, stable-sorted within the
+batch; later batches are strictly later in time, so global order holds.</p>
+<p>Considerations: this keeps the reducer honest (pure over files, so a
+reducer bug is fixed by re-reducing the bundle, never by re-running
+hardware) while preserving D-011 (summary still last) and D-013 (the
+flush happens in the reduce stage, well after <code>stop_sampling</code>).</p>
+<p>Consequences: <code>events.jsonl</code> exists and is complete (minus the trailing
+<code>run_finalized</code>) at reduce time; failure paths, which never reach reduce,
+still flush their buffered events exactly once in <code>_finish()</code>.</p>
+<p>Revisit when: events grow large enough that buffering the whole run in
+memory is a problem (then stream to a temp file and swap on finalize).</p>
+<hr>
+<h2>D-022: Auto-generated run-ID suffix is config-hash-derived, not random</h2>
+<ul>
+<li>Date: 2026-06-12</li>
+<li>Status: accepted (refines D-010)</li>
+<li>Phase: 2</li>
+</ul>
+<p>Context: D-010 specified the auto-generated run ID as
+<code>&lt;ts&gt;__&lt;target&gt;__&lt;workload&gt;__&lt;4 hex&gt;</code> with the 4-hex suffix from
+<code>secrets.token_hex(2)</code> to prevent same-second collisions. A random suffix
+makes the run ID - which is embedded in the <code>run_started</code> event and in
+<code>metadata.json</code> - differ across otherwise-identical runs, violating the
+Slice 2B acceptance criterion &quot;identical config + clock seed =&gt;
+byte-identical events&quot; for any valid config that omits <code>run_id</code> (the
+adversarial review confirmed this empirically).</p>
+<p>Options considered:</p>
+<ol>
+<li>Keep <code>secrets.token_hex(2)</code>. Con: breaks the determinism criterion for
+the no-<code>run_id</code> case; the byte-identity guarantee then silently
+depends on the operator always supplying a <code>run_id</code>.</li>
+<li>Drop the suffix entirely. Con: loses cross-config disambiguation when
+two different configs share a target/workload/second.</li>
+<li>Derive the 4-hex suffix from the config&#39;s content hash (first 4 hex of
+the SHA-256 over the canonical config bytes, the same bytes that feed
+<code>config_sha256</code>). Deterministic per config; different configs get
+different suffixes; identical configs get identical IDs.</li>
+</ol>
+<p>Decision: option 3. The suffix is <code>config_sha256[:4]</code>.</p>
+<p>Considerations: this satisfies the determinism criterion (identical
+config + clock =&gt; byte-identical run ID, events, and metadata) while
+keeping cross-config disambiguation. The residual collision case -
+identical config, same UTC second, same runs dir - now produces the same
+ID and is refused by the immutable-evidence rule (D-010: never overwrite
+a bundle), which is the correct response to &quot;you are about to write a
+second bundle for the identical config in the same second&quot;. Repetitions
+never collide: the experiment runner assigns distinct <code>__rN</code> run IDs
+(D-005/D-010), each a supplied <code>run_id</code> that bypasses the generated form.</p>
+<p>Consequences: <code>generate_run_id</code> computes the suffix from the config hash;
+<code>metadata.run_id</code> and the <code>run_started</code> event are now deterministic for a
+fixed config; a run-benchmark-level determinism regression test pins it.</p>
+<p>Revisit when: a use case genuinely needs two same-config same-second
+bundles in one directory without the experiment runner (then reintroduce
+a disambiguator, e.g. a monotonic counter rather than randomness, to keep
+determinism).</p>
+<hr>
+<h2>D-023: Per-item phase status lives solely in the exit checklists</h2>
+<ul>
+<li>Date: 2026-07-05</li>
+<li>Status: accepted</li>
+<li>Phase: all</li>
+</ul>
+<p>Context: project status was being recorded on six surfaces (phase plan
+headers and per-step lines, exit checklists, <code>AGENT_PLAN.md</code> checkboxes,
+<code>TASK_QUEUE.md</code>, <code>RUN_STATE.md</code>, <code>PROJECT_STATUS.md</code>). The 2026-07-05
+planning audit found same-day drift from the 2026-06-12 run:
+<code>phase_1_plan.md</code> still marked the Hailo verdict and readiness review
+&quot;open&quot; after the checklist closed them, and <code>phase_2_plan.md</code>&#39;s header
+still read &quot;planned&quot; with 7 of 13 slices complete. The replication
+exceeded one operator&#39;s update discipline on the project&#39;s busiest day,
+which is exactly when drift is most misleading.</p>
+<p>Options considered:</p>
+<ol>
+<li>Keep all six surfaces and try harder. Con: already failed empirically;
+discipline does not scale with excitement or fatigue.</li>
+<li>Exit checklists become the single per-item status authority; phase
+plan files carry no status (header points at the checklist; per-step
+status lines removed); <code>AGENT_PLAN.md</code> keeps a coarse checkbox mirror
+updated at slice/phase closes; <code>TASK_QUEUE.md</code>/<code>RUN_STATE.md</code> remain
+work-selection and handoff views (different content, not duplicated
+status); <code>PROJECT_STATUS.md</code> remains the derived advisor summary.</li>
+<li>Generate a status dashboard from one machine-readable source. Con:
+tooling investment the project does not need yet; a script is its own
+maintenance surface.</li>
+</ol>
+<p>Decision: option 2. The evidence matrix in
+<code>docs/phase_N/phase_N_exit_checklist.md</code> is the only place a per-item
+status is asserted; every other document either points there or mirrors
+coarsely and says so.</p>
+<p>Considerations: plans stay useful as timeless specs (objectives, gates,
+design, acceptance) that do not rot when work completes; the checklist
+was already the evidence dossier, so status naturally colocates with the
+evidence that justifies it; the coarse <code>AGENT_PLAN.md</code> mirror is retained
+because it is the cross-phase index agents read first, and its checkbox
+grain (one line per slice) is cheap to keep honest. The same audit drove
+a companion dedup: <code>phase_2_plan.md</code> owns each gated slice&#39;s
+what/when/done while the hardware guide owns the how, replacing the
+previous near-verbatim duplication.</p>
+<p>Consequences: all five plan headers now read &quot;Status: tracked in the
+exit checklist&quot;; <code>phase_1_plan.md</code> per-step status lines removed; the
+source-of-truth map in <code>AGENT_PLAN.md</code> updated to name the checklists as
+status authority; plan/guide duplication for slices 2G-2M cut to
+pointers.</p>
+<p>Revisit when: the <code>AGENT_PLAN.md</code> coarse mirror is found drifted again -
+then replace the mirror with a generated table (option 3) rather than
+adding discipline.</p>
+<hr>
+<h2>D-024: Adapters receive a <code>RunContext</code>, not piecemeal parameters</h2>
+<ul>
+<li>Date: 2026-07-06</li>
+<li>Status: accepted; implemented in Slice 2N.1 (2026-07-06)</li>
+<li>Phase: 2</li>
+</ul>
+<p>Context: mock adapters get by on <code>config</code> (plus <code>clock</code> at construction),
+but real adapters need more: a place to write raw telemetry evidence
+(D-002; powermetrics plist), log/output paths, the run ID, and - in
+Phase 3 - the node&#39;s role in a split run. Slice 2N.1 originally left the
+delivery mechanism open (new parameter vs writer injection vs context
+object). An external architecture review (Codex, 2026-07-06) recommended
+deciding now, before any real adapter is written against a narrower
+seam.</p>
+<p>Options considered:</p>
+<ol>
+<li>Add parameters piecemeal as needs appear (e.g.
+<code>start_sampling(raw_dir=...)</code>). Con: every future need is another
+signature break across all adapters and their tests; Phase 3 alone
+would force two more rounds.</li>
+<li>Inject the <code>RunBundleWriter</code> into adapters. Con: hands adapters the
+power to write summaries/finalize - far more authority than they
+need; couples every adapter to the writer&#39;s full API.</li>
+<li>A small immutable <code>RunContext</code> dataclass passed to adapter lifecycle
+methods: <code>config</code>, <code>clock</code>, <code>run_id</code>, <code>bundle_path</code>, <code>raw_dir</code>,
+<code>logs_dir</code>, <code>outputs_dir</code>, and optional <code>node_role</code> (None for
+single-node runs; used by Phase 3 split orchestration).</li>
+</ol>
+<p>Decision: option 3. One additive seam that covers the known Phase 2
+needs (raw evidence, logs) and the foreseen Phase 3 needs (node role,
+composite bundles) without granting adapters bundle-lifecycle authority.</p>
+<p>Considerations: the context is data, not capability - adapters get paths
+and identity, not the writer; write-order/immutability invariants stay
+with the controller and writer. <code>node_role</code> rides along as an optional
+field now precisely so the v0.2 compatibility check (2N.9) can exercise
+it without any schema change (R-015 intact). Mocks accept the context
+and ignore what they do not need, keeping one lifecycle code path.</p>
+<p>Consequences: <code>interfaces.py</code> adapter protocols take a context in their
+lifecycle methods (exact placement pinned during 2N.1);
+<code>adapter_contracts.md</code> updated in the same run; the controller
+constructs the context after bundle creation.</p>
+<p>Revisit when: a need appears that is per-call rather than per-run (then
+a per-call argument is correct, not a context field), or Phase 3&#39;s
+composite-bundle design (D-008) demands fields that would make the
+context mutable - mutability is the line not to cross.</p>
+<p>Amendment (2026-07-06, 2N.1 implementation): placement is pinned as a
+trailing optional per-method parameter (<code>context: RunContext | None = None</code>) on every adapter lifecycle method, not construction-time
+injection. Rationale: the D-014 cooldown gate invokes <code>measure_idle</code>
+between repetitions when no bundle is open, and direct adapter tests
+call methods outside any run; optionality keeps one lifecycle code path
+while the controller always supplies the context. Adapters must produce
+no raw output when the context is absent. The writer-side counterpart is
+<code>RunBundleWriter.raw_path</code>/<code>write_raw</code> (validated plain file names,
+collision-checked, closed by <code>finalize()</code>); adapters never receive the
+writer - they write into <code>context.raw_dir</code> directly.</p>
+<hr>
+<h2>D-025: One shared bundle read layer for all bundle consumers</h2>
+<ul>
+<li>Date: 2026-07-06</li>
+<li>Status: accepted; implemented in Slice 2N.8 (2026-07-06, <code>joulewise/bundle_read.py</code>)</li>
+<li>Phase: 2</li>
+</ul>
+<p>Context: three code paths already parse bundles independently -
+<code>reduce.py</code> (trace/events/manifest for metrics), <code>report.py</code> (the same
+for charts), and <code>cli.py</code> <code>validate-bundle</code> (structural checks) - and
+they have already diverged once: the report sums all rails when the
+manifest matches nothing while the reducer excludes/fails (2N.7
+finding). Phase 4&#39;s <code>aggregate</code> verb would be a fourth parser. An
+external architecture review (2026-07-06) recommended a shared read
+layer before the divergence class grows.</p>
+<p>Options considered:</p>
+<ol>
+<li>Keep per-consumer parsing, fix mismatches as found. Con: the 2N.7
+bug recurs in new forms; every policy (rail manifest, measured
+window, completeness) must be kept aligned by vigilance across four
+files.</li>
+<li>A shared <code>BundleReader</code> (in <code>joulewise/bundle.py</code> or a new
+<code>bundle_read.py</code>): loads config, metadata, events, power trace, rail
+manifest, measured/phase windows, completion state, and structural
+problems - one implementation of every bundle-interpretation policy;
+consumers apply presentation/reduction on top.</li>
+<li>Full ORM/database layer now. Con: heavyweight; Phase 4&#39;s CSV plan
+plus a possible stdlib-sqlite cache (Stage 4.1 note) already covers
+querying needs.</li>
+</ol>
+<p>Decision: option 2. Reducer, report, <code>validate-bundle</code>, and (later)
+<code>aggregate</code> all consume the shared reader; policy questions like &quot;which
+rails sum to <code>power_w</code>&quot; are answered in exactly one place.</p>
+<p>Considerations: this is the code-level analogue of D-023&#39;s one-fact-one-
+home rule; the reducer&#39;s math (<code>_integrate</code>, idle subtraction) stays in
+<code>reduce.py</code> - the reader owns parsing and policy, not metrics. The 2N.7
+report/reducer alignment must be implemented BY building on the reader,
+not as a spot fix, or the divergence just reappears at the next
+consumer.</p>
+<p>Consequences: Slice 2N gains item 2N.8; 2N.7 is implemented on top of
+it; Phase 4 Stage 4.1&#39;s aggregate verb builds on the reader (noted in
+the Phase 4 plan).</p>
+<p>Revisit when: bundle schema v0.2 lands (the reader is where composite-
+bundle reading concentrates), or a consumer needs streaming reads that
+the whole-bundle reader cannot serve.</p>
+<hr>
+<h2>D-026: Measured window is bounded by sampling-active marker events</h2>
+<ul>
+<li>Date: 2026-07-06</li>
+<li>Status: accepted (Slice 2N.2)</li>
+<li>Phase: 2</li>
+</ul>
+<p>Context: the reducer integrated energy between the <code>measured_run</code>
+<code>stage_started</code> and <code>stage_completed</code> events. <code>stage_started</code> is stamped
+before <code>thermal_state</code> and <code>start_sampling</code>, and <code>stage_completed</code> after
+<code>stop_sampling</code>, <code>thermal_state</code>, and the outputs/trace writes - so under
+<code>SystemClock</code>, real sampler spawn latency (sudo probe, process start,
+first sample) and wind-down cost (process stop, plist parsing) land
+inside the integrated window, inflating gross energy, the
+idle-subtraction duration, and TTFT. <code>FakeClock</code> collapses these
+intervals to zero, so the mock suite could never catch it.</p>
+<p>Options considered:</p>
+<ol>
+<li>Reorder the stage boundary: stamp <code>stage_started(measured_run)</code> only
+after <code>start_sampling</code> confirms. Con: a <code>start_sampling</code> failure would
+then be attributed to a stage that never started, breaking the event
+invariant that a failing stage has a <code>stage_started</code>; and the stage
+end would still include post-window artifact writes.</li>
+<li>Explicit <code>sampling_started</code>/<code>sampling_stopped</code> marker events on the
+<code>measured_run</code> phase; the reducer integrates between markers, falling
+back to stage boundaries for pre-2N bundles.</li>
+</ol>
+<p>Decision: option 2. <code>sampling_started</code> is stamped only after
+<code>start_sampling</code> returns ok (sampling confirmed active);
+<code>sampling_stopped</code> is stamped before <code>stop_sampling</code> is invoked (the
+wind-down happens after the window closes). TTFT is measured from
+<code>sampling_started</c
+</article></main>
+</div>
+</body>
+</html>

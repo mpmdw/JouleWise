@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Project Status (advisor) — JouleWise</title>
+<style>
+:root {
+  --bg: #fdfdfc; --fg: #1a1d21; --muted: #5b6470; --accent: #7050c8;
+  --border: #e3e2de; --code-bg: #f3f2ef; --nav-bg: #f8f7f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d; --fg: #dfe2e8; --muted: #98a1ad; --accent: #a795e8;
+    --border: #2c3038; --code-bg: #20242b; --nav-bg: #1b1e24;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.65 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+.layout { display: flex; min-height: 100vh; }
+nav {
+  width: 250px; flex-shrink: 0; background: var(--nav-bg);
+  border-right: 1px solid var(--border); padding: 1.4rem 1rem;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+nav h2 { font-size: 1rem; margin: 0 0 .8rem; color: var(--accent); }
+nav a {
+  display: block; padding: .35rem .6rem; border-radius: 6px;
+  color: var(--fg); text-decoration: none; font-size: .92rem;
+}
+nav a:hover { background: var(--code-bg); }
+nav a.active { background: var(--accent); color: #fff; }
+main { flex: 1; min-width: 0; padding: 2.2rem 3rem 4rem; }
+article { max-width: 52rem; margin: 0 auto; }
+h1, h2, h3 { line-height: 1.25; }
+h1 { font-size: 1.75rem; border-bottom: 2px solid var(--border); padding-bottom: .4rem; }
+h2 { font-size: 1.3rem; margin-top: 2.2rem; border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
+h3 { font-size: 1.08rem; margin-top: 1.6rem; }
+a { color: var(--accent); }
+code {
+  background: var(--code-bg); padding: .12em .35em; border-radius: 4px;
+  font: .88em ui-monospace, "SF Mono", Menlo, monospace;
+}
+pre { background: var(--code-bg); padding: .9rem 1rem; border-radius: 8px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+blockquote { margin: 1rem 0; padding: .1rem 1rem; border-left: 3px solid var(--accent); color: var(--muted); }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; display: block; overflow-x: auto; }
+th, td { border: 1px solid var(--border); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); }
+tr:nth-child(even) td { background: color-mix(in srgb, var(--code-bg) 45%, transparent); }
+hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+.pagemeta { color: var(--muted); font-size: .85rem; margin-bottom: 1.5rem; }
+@media (max-width: 800px) {
+  .layout { flex-direction: column; }
+  nav { width: 100%; height: auto; position: static; display: flex; flex-wrap: wrap; gap: .2rem; }
+  nav h2 { width: 100%; }
+  main { padding: 1.2rem; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+<h2>JouleWise</h2>
+<a href="index.html">Index</a>
+<a href="readme.html">README</a>
+<a href="project_status.html" class="active">Project Status (advisor)</a>
+<a href="orchestration.html">Orchestration Process</a>
+<a href="agent_plan.html">Agent Plan</a>
+<a href="run_state.html">Run State</a>
+<a href="task_queue.html">Task Queue</a>
+<a href="decision_log.html">Decision Log</a>
+<a href="council_log.html">Council Log</a>
+<a href="milestones.html">Milestones</a>
+<a href="risk_register.html">Risk Register</a>
+<a href="latest_run_report.html">Latest Run Report</a>
+</nav>
+<main><article>
+<p class="pagemeta">Rendered from <code>PROJECT_STATUS.md</code> · as of commit 7cc8efe (2026-07-07)</p>
+<h1>JouleWise: Project Status, Plan, And Architecture</h1>
+<p>Audience: project advisor. This is the standalone monitoring document - it
+summarizes what the project is, how it is built, where it stands, and what
+it needs, without requiring any other file. Pointers into the repository
+are provided for anyone who wants the full evidence trail.</p>
+<ul>
+<li>Last updated: 2026-07-08 (all four streams merged; meta-process section + docs/orchestration.md added)</li>
+<li>Project phase: Phase 1 closing; Phase 2 in progress - instrument
+CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
+are complete; the two-model baseline matrix is the next Mac corpus step</li>
+<li>Repository: <code>github.com/mpmdw/JouleWise</code> (branch <code>main</code>)</li>
+</ul>
+<h2>This Update (as of 2026-07-08, all four streams merged) — 30-second read</h2>
+<p><strong>Everything landed.</strong> The multi-stream session merged as four PRs:
+P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
+546 tests with 10 skips and zero expected failures, bundle provenance
+now records prompt/workload identities, and <code>validate-bundle --strict</code>
+includes the powermetrics raw-plist-to-trace gate plus the legacy
+additive-summary comparison. The six existing real corpus bundles pass
+strict read-only and unrewritten; strict proves re-derivation of the
+recorded evidence, not independent rerunning of the hardware session.
+New-era bundles must carry shape-valid provenance to pass. The Stage
+3.0.1 KV spike is merged with a lead-reverified verdict of
+<code>replay_supported</code> (tokens identical; cache size +0.018% vs prediction)
+— Phase 3&#39;s central technical risk is retired on current hardware. The
+fixture-first 2K NVIDIA stack is merged; ALL its protocol pins remain
+PROVISIONAL until first live hardware contact (the live-verification
+checklist is ready). Next: the 2M two-model baseline campaign on a
+quiet machine. Reader-facing status below defers to the phase checklist
+matrix rows for per-item authority.</p>
+<h2>Previous Update (2026-07-07, fifth update) — 30-second read</h2>
+<p><strong>The instrument grew four capabilities in one session and is now
+campaign-ready.</strong> Five parallel work streams landed (PRs #2-#6):
+(1) <strong>statistical uncertainty</strong> — every multi-repetition experiment now
+carries per-metric 95% confidence intervals with outlier detection and
+explicit below-protocol flags, re-derivable byte-identically from the
+raw evidence bundles (verified on a live 3-repetition run:
+99.19 ± 1.36 mJ/output-token); (2) <strong>contamination detection</strong> — an
+idle-window quality gate that mechanically flags runs taken on a
+non-quiet machine (it caught its first real contamination during
+verification); (3) <strong>deep telemetry</strong> — per-sample GPU/CPU-cluster
+frequency and residency forensics plus a machine-state snapshot in
+every bundle; (4) <strong>campaign automation</strong> — a deterministic
+config-matrix generator and a resumable sequential runner, so the
+planned two-model baseline matrix (4 workload shapes × 2 models × 5
+repetitions) runs unattended. A review council also produced a
+hardware-tiered research agenda: 16 questions answerable on current
+hardware alone, 10 more behind planned gates
+(<code>docs/research_question_bank.md</code>). The P2-013 evidence-integrity and
+P2-014 provenance fixes are now complete; next Mac corpus step is the
+baseline matrix on a quiet machine.</p>
+<h2>Previous Update (2026-07-07, fourth update) — 30-second read</h2>
+<p><strong>A flagship-class model is now benchmarked.</strong> Qwen3.5-122B (Feb 2026
+generation, 122B-parameter mixture-of-experts with 10B active, a
+reasoning model) ran through the identical harness and workload on the
+M3 Max: <strong>~304 J per 512-token request (~583 mJ/token) at 46 tokens/s,
+repeatable to 0.3% across repetitions</strong> — alongside the earlier 1.5B
+model&#39;s ~47 J (~87 mJ/token at 257 tok/s). First cross-model finding:
+the two measured points differ in size, architecture, and quantization,
+so they are not a demonstrated scaling law. They are, however,
+consistent with the fixed-vs-marginal structure Q4 models: decode power
+barely moved (~23.5 → ~27.5 W), while the bigger model&#39;s cost showed up
+mostly as time. Also this update: the
+research agenda grew to six named questions (Q4-Q6) after a
+multi-model review council, with a curated question bank
+(<code>docs/research_question_bank.md</code>) and an instrument roadmap (richer
+telemetry parsing, a difficulty-graded scored workload suite, and
+implementing the statistical-uncertainty protocol) queued.</p>
+<h2>Update Ledger</h2>
+<table>
+<thead>
+<tr>
+<th>date</th>
+<th>label</th>
+<th>one-line outcome</th>
+<th>run-report link</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>2026-07-06</td>
+<td>third update / first real energy</td>
+<td>Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements: ~47 J gross per 512-token request, ~77-88 mJ/output-token, TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz, with prefill energy ~0.03 J.</td>
+<td><code>docs/run_reports/2026-07-06-slice-2i-first-real-energy.md</code></td>
+</tr>
+<tr>
+<td>2026-07-06</td>
+<td>third update / powermetrics telemetry</td>
+<td>The powermetrics telemetry adapter and privileged sampling path were brought up, preserving raw plists and exposing the real sampling-rate constraints.</td>
+<td><code>docs/run_reports/2026-07-06-slice-2h-powermetrics.md</code></td>
+</tr>
+<tr>
+<td>2026-07-06</td>
+<td>third update / pre-hardware hardening</td>
+<td>Slice 2N closed the evidence-path hardening before real hardware: raw evidence retention, measured-window markers, rail validation, shared bundle reading, and post-hoc reduction.</td>
+<td><code>docs/run_reports/2026-07-06-slice-2n-pre-hardware-hardening.md</code></td>
+</tr>
+<tr>
+<td>2026-06-12</td>
+<td>first/second updates / mock vertical slice</td>
+<td>The mock-first harness reached an end-to-end auditable run path before hardware time: typed config to complete bundle, validation, reduction, and report.</td>
+<td><code>docs/run_reports/2026-06-12-phase-2-mock-vertical-slice.md</code></td>
+</tr>
+</tbody></table>
+<h2>Summary</h2>
+<p>JouleWise is a reusable, typed, extensible benchmark harness for measuring
+the energy of LLM inference across heterogeneous local hardware. The name
+nods to JouleSort and Splitwise: energy measurement is the spine of the
+system; disaggregated (&quot;split&quot;) inference - running prefill and decode on
+different machines with the KV cache transferred between them - is the
+validating research study, not the whole architecture.</p>
+<p>The thesis now has two explicit claim tracks. The guaranteed capstone is
+auditable local LLM energy measurement: the harness plus the Apple-Silicon
+characterization it can already execute on the M3 Max. Split
+(disaggregated) inference remains the differentiating validating study;
+when Phase 3 hardware and feasibility gates land, it upgrades the thesis
+from local characterization to a split-energy crossover study.</p>
+<p>The first working slice runs on a MacBook (Apple Silicon) with MLX as the
+runtime and <code>powermetrics</code> as the power source, producing complete,
+auditable run bundles. Further backends (NVIDIA + vLLM/llama.cpp, Jetson
+Orin, Raspberry Pi + Hailo as a feasibility finding) plug into the same
+adapter interfaces.</p>
+<p>Research questions:</p>
+<ul>
+<li><strong>Q1</strong>: Under what conditions (model size, prompt length, link speed,
+device pair) does splitting inference reduce total energy versus running
+monolithically on either device?</li>
+<li><strong>Q2</strong>: How sensitive is the split&#39;s energy cost to interconnect
+bandwidth (1GbE vs 2.5GbE vs optional 10GbE) - where is the crossover?</li>
+<li><strong>Q3</strong>: When splitting saves energy, what latency does it cost, and vice
+versa (energy-latency Pareto frontier)?</li>
+<li><strong>Q4</strong> (added 2026-07-07, council C-003): What fixed-vs-marginal energy
+model <code>E = fixed + prefill(prompt_tokens) + decode(output_tokens)</code> does
+each target/model/quantization follow — and can split-run energy be
+predicted compositionally from monolithic coefficients plus transfer
+measurements?</li>
+<li><strong>Q5</strong> (C-003/C-007): On one machine, do workload/model/quantization
+efficiency rankings stay stable as workload shape, model, and
+quantization change, or where do they flip? A cross-device ranking
+extension is hardware-gated.</li>
+<li><strong>Q6</strong> (C-003; gated on the wall meter): Does the measurement boundary
+(platform rails vs AC wall power) change the conclusions?</li>
+</ul>
+<p>A curated bank of further candidate questions (and deliberately killed
+ones) lives in <code>docs/research_question_bank.md</code>; the measurement noise
+floor / detection limit is treated as the methodology centerpiece rather
+than a numbered question.</p>
+<h2>Status At A Glance</h2>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Scope</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1. Approval, feasibility, measurement design</td>
+<td>contracts, methodology, hardware feasibility evidence</td>
+<td><strong>in progress</strong> - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open</td>
+</tr>
+<tr>
+<td>2. Harness, Mac vertical slice, homogeneous baselines</td>
+<td>runnable harness, first real measurements, per-target baselines</td>
+<td><strong>in progress</strong> - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation) — 2M baselines are fully tooled; 2K fixture-first implementation is MERGED (2026-07-08) with ALL protocol pins PROVISIONAL pending live hardware validation; 2L gated on device access</td>
+</tr>
+<tr>
+<td>3. Disaggregation, KV replay, interconnect sweep</td>
+<td>split-energy decomposition, crossover dataset</td>
+<td>planned (feasibility-first)</td>
+</tr>
+<tr>
+<td>4. Characterization and analysis</td>
+<td>statistics, figures, claims audit</td>
+<td>planned</td>
+</tr>
+<tr>
+<td>5. Presentation and submission</td>
+<td>report, colloquium, reproducible release</td>
+<td>planned</td>
+</tr>
+</tbody></table>
+<h2>Thesis Artifact Map</h2>
+<table>
+<thead>
+<tr>
+<th>chapter/thesis-component</th>
+<th>owning doc or deliverable</th>
+<th>status</th>
+<th>missing evidence</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Background / related work</td>
+<td>Phase 4 Stage 4.6, <code>docs/phase_4/related_work_draft.md</code></td>
+<td>drafted (11 verified sources)</td>
+<td>background-chapter assembly and the Phase 4 exit pass</td>
+</tr>
+<tr>
+<td>Measurement methodology</td>
+<td><code>docs/contracts/measurement_methodology.md</code></td>
+<td>complete</td>
+<td>Phase 4 ratification may amend statistical details against observed variance</td>
+</tr>
+<tr>
+<td>Harness / instrument</td>
+<td><code>joulewise/</code></td>
+<td>complete and campaign-ready</td>
+<td>new-era bundles must carry shape-valid provenance to pass strict</td>
+</tr>
+<tr>
+<td>Apple-Silicon characterization / homogeneous baselines</td>
+<td>Phase 2 Slice 2M, <code>docs/phase_2/baseline_results.md</code></td>
+<td>unblocked after P2-013/P2-014</td>
+<td>needs the 2M baseline corpus</td>
+</tr>
+<tr>
+<td>Split-inference study</td>
+<td>Phase 3</td>
+<td>planned</td>
+<td>needs KV-feasibility spikes plus a real pairing, or the synthetic-transfer + analytical-composition floor</td>
+</tr>
+<tr>
+<td>Results / limitations + claims audit</td>
+<td>Phase 4 Stages 4.3-4.5</td>
+<td>planned</td>
+<td>needs the analysis dataset and detection-floor gate</td>
+</tr>
+</tbody></table>
+<p>Complete so far (all verifiable in the repository):</p>
+<ul>
+<li>A runnable harness: from a typed config, one command
+(<code>python3 -m joulewise run ...</code>) produces a complete, schema-valid,
+auditable run bundle and reduces it to energy/latency summary metrics -
+proven first on deterministic mock adapters (controller, bundle
+contract, and reducer math verified without hardware) and now running
+live on the Mac target. Bundle writer, controller
+lifecycle, reducer, static-HTML report generator, and CLI verbs <code>run</code> /
+<code>validate-bundle</code> / <code>reduce</code> (post-hoc re-derivation of summary metrics
+from the recorded power trace and events) / <code>report</code>. Strict validation
+now also re-derives powermetrics traces from raw plist evidence, checks
+legacy additive-summary compatibility, and requires shape-valid
+provenance on new-era bundles. All bundle consumers read through one
+shared, tested read layer, so displayed numbers can never diverge from
+reported ones.</li>
+<li>Typed config and output schemas with validation, JSON-Schema export, and
+a CLI, plus a passing test suite (546 tests, 10 skipped, zero expected
+failures, run in CI on every push, including a mock end-to-end run +
+bundle validation); emitted configs
+round-trip their own published schema, and config hashes (run identity)
+are pinned by test.</li>
+<li>Adapter interface contracts (runtime / telemetry / transport), the run
+bundle artifact contract, and the measurement methodology (idle
+subtraction, measurement boundaries, clock synchronization, statistical
+protocol - highlights below).</li>
+<li>Evidence-shaped plans for every phase, a design-decision log (36
+decisions, each with the alternatives considered), a risk register with
+an explicit descope ladder, and example configs for the Mac and mock
+targets.</li>
+<li>The complete Mac vertical slice: the MLX runtime adapter (2G), the
+<code>powermetrics</code> telemetry adapter (2H, parser pinned to a captured
+privileged sample, raw plists preserved verbatim in every bundle), and
+the flagship integration (2I) — three strict-valid repetition bundles
+of real energy measurements on the M3 Max (~47 J gross per 512-token
+request, ~77-88 mJ/generated token, TTFT ~94 ms at 257 tokens/s,
+provisional model Qwen2.5-1.5B-Instruct-4bit mirrored locally).</li>
+<li>The report&#39;s related-work survey draft (11 sources with verified
+citations and an honest positioning audit) and a measurement-data
+backup protocol with a passed restore test.</li>
+</ul>
+<p>Not yet started: the remote real-hardware adapters — NVIDIA/vLLM +
+Jetson Orin live validation (2K/2L, gated on device access). The 2K
+fixture-first implementation is MERGED (PR #11, 2026-07-08: protocol v1,
+SSH transport, <code>nvidia-smi</code> + vLLM adapters, registry wiring), but all
+protocol pins remain PROVISIONAL until live
+hardware contact; a P1-006 evidence checklist exists there. Code-level
+specs are in <code>docs/phase_2/hardware_slice_implementation_guide.md</code>. The
+mock-first core landed first by design, so measurement code is never
+debugging the harness and the instrument at the same time.</p>
+<p>Waiting on external input (none of it blocks the current work):</p>
+<ol>
+<li>NVIDIA / Jetson Orin device access evidence — the one hard gate left,
+for the remote-target slices 2K/2L. (The <code>nvidia_3050</code> in the
+architecture table is the owned always-available NVIDIA target; the
+3080 Ti is a separate, borrowed card used only for Phase 3&#39;s
+interconnect sweep.)</li>
+<li>Calendar anchors: colloquium date, report deadline, and the 3080 Ti
+borrow window, to derive phase target dates.</li>
+<li>Advisor scope confirmation (see the sanity-check note above) —
+finalizes model selection; deliberately deprioritized while all work
+remains harness-shaped and valuable under any scope.</li>
+</ol>
+<p>Closed since the last revision: the Mac privileged-telemetry gate — the
+<code>powermetrics</code> sample was captured and the scoped sudo rule installed
+(2026-07-06), which is what enabled the vertical slice above.</p>
+<h2>Architecture</h2>
+<pre><code class="language-text">typed config
+  -&gt; controller
+    -&gt; transport adapter: local | ssh
+    -&gt; runtime adapter:   mock | mlx | vllm | llama.cpp | hailo-if-viable
+    -&gt; telemetry adapter: mock | powermetrics | nvidia-smi | jetson rails | wall meter
+  -&gt; run bundle (self-contained, on-disk source of truth)
+    -&gt; reducers (energy integration, idle subtraction, per-phase attribution)
+    -&gt; static report / notebooks / paper figures
+</code></pre>
+<p>Key elements:</p>
+<ul>
+<li><p><strong>Single controller, flexible transports.</strong> <code>local</code> for one-machine
+runs; <code>ssh</code> for remote NVIDIA/Orin targets and split experiments.</p>
+</li>
+<li><p><strong>Two adapter layers.</strong> Runtime adapters answer how a model workload
+executes; telemetry adapters answer how power and thermal state are
+measured. They are independent, so any runtime can pair with any
+telemetry source.</p>
+</li>
+<li><p><strong>A target is a composition</strong> of transport + runtime + telemetry:</p>
+<table>
+<thead>
+<tr>
+<th>Target</th>
+<th>Transport</th>
+<th>Runtime</th>
+<th>Telemetry</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>macbook_m3_max</td>
+<td>local</td>
+<td>mlx</td>
+<td>powermetrics</td>
+</tr>
+<tr>
+<td>nvidia_3050</td>
+<td>ssh</td>
+<td>vllm (llama.cpp-CUDA fallback)</td>
+<td>nvidia-smi</td>
+</tr>
+<tr>
+<td>orin_nano</td>
+<td>ssh</td>
+<td>tbd</td>
+<td>board rails (INA3221)</td>
+</tr>
+<tr>
+<td>pi5_hailo</td>
+<td>ssh</td>
+<td>hailo - unsupported (verdict 2026-06-12)</td>
+<td>wall meter</td>
+</tr>
+</tbody></table>
+</li>
+<li><p><strong>Every run writes a self-contained run bundle</strong>: normalized config,
+device/environment metadata, timestamped event log (lifecycle + phase +
+token events), raw power trace, backend-native raw telemetry preserved
+verbatim, logs, model outputs, and reduced summary metrics. Summary
+numbers are always derived, re-derivable artifacts; the raw bundle is
+the source of truth.</p>
+</li>
+<li><p><strong>Typed schemas</strong> (Python dataclasses, standard library only in the
+core) validate configs and outputs and emit JSON Schema documentation.</p>
+</li>
+<li><p><strong>Unsupported is a result, not a crash.</strong> Infeasible
+hardware/model/runtime combinations return structured failure codes
+(<code>did_not_fit</code>, <code>runtime_unavailable</code>, <code>telemetry_unavailable</code>, ...)
+and still produce complete bundles - hardware applicability is itself
+reportable data (this is how a negative Hailo verdict stays a finding).</p>
+</li>
+<li><p><strong>Dashboard v1 is a read-only run browser</strong>, generated as static HTML
+from bundles (run table, per-run pages, power traces with phase
+shading). It has no orchestration role.</p>
+</li>
+</ul>
+<h2>Measurement Methodology Highlights</h2>
+<ul>
+<li><strong>Idle subtraction.</strong> Every run measures an idle baseline; energy
+metrics report gross and idle-subtracted values, with idle variance
+recorded.</li>
+<li><strong>Measurement boundaries are named, not assumed.</strong> Each telemetry
+backend measures a different physical boundary - powermetrics: Apple
+SoC subsystems (CPU+GPU+ANE); nvidia-smi: GPU board only; Jetson rails:
+module input; wall meter: full system AC. Within-target comparisons are
+the primary claim type; cross-target comparisons always state the
+boundary difference, calibrated against the wall meter where available.</li>
+<li><strong>Uncertainty is quantified.</strong> Headline comparisons use n&gt;=5
+repetitions with mean, standard deviation, and 95% t-intervals;
+outliers are flagged (never silently dropped); raw points appear in
+every figure; differences are claimed only where intervals separate.
+Thermal state is controlled with an idle-power-recovery gate between
+repetitions.</li>
+<li><strong>Multi-node clock discipline.</strong> For split runs, per-node clock offset
+is bounded with controller-mediated marker events and recorded;
+cross-node intervals shorter than the bound are flagged rather than
+trusted.</li>
+<li><strong>Measurement quality is first-class data</strong>: requested vs observed
+sampling rate, dropped samples, idle variance, thermal drift, telemetry
+source - all in every summary.</li>
+</ul>
+<h2>Experiment Plan</h2>
+<p><strong>Homogeneous baselines (Phase 2).</strong> Per target and model: a workload
+matrix spanning prefill-heavy, decode-heavy, and balanced profiles
+(prompt 128-4096 tokens x decode 64-512), n=5, producing energy/token and
+energy/request with intervals - and reproducing the qualitative
+prefill/decode power asymmetry that motivates disaggregation.</p>
+<p><strong>Disaggregation (Phase 3), feasibility-first.</strong> KV-cache portability is
+the project&#39;s central technical risk, so the phase is a ladder where each
+rung is publishable even if the next fails:</p>
+<ol>
+<li><em>Synthetic transfer microbenchmark</em> (guaranteed): move KV-sized
+payloads between nodes with both-end power sampling - transfer energy
+and time vs payload size vs link speed, independent of any LLM
+runtime&#39;s cooperation.</li>
+<li><em>Offline replay</em> (primary): persist the prompt cache on the prefill
+node, transfer the file, resume decode on the decode node - same
+pinned runtime on both ends. Per-runtime feasibility spikes (mlx-lm,
+llama.cpp including cross-machine portability, vLLM time-boxed) run
+before any borrowed-hardware scheduling.</li>
+<li><em>Live split</em> (stretch): streamed KV during the run; explicitly
+droppable without harming the study.</li>
+</ol>
+<p>Payload sizes are analytically predictable (2 x layers x kv_heads x
+head_dim x 2 bytes per token, fp16), which drives experiment design - for
+a 2048-token prompt: a 1.5B-class model ~56 MiB (~0.5 s at 1GbE), an
+8B-class model ~256 MiB (~2.3 s at 1GbE). At 1GbE, mid-size-model
+transfer time is the same order as prefill time on weaker devices -
+exactly the regime where an energy crossover can exist; the sweep spans
+prompt lengths and link speeds accordingly.</p>
+<p><strong>Analysis (Phase 4).</strong> Aggregation over validated bundles with an
+exclusion log (no silent data drops); a deterministic figure pipeline
+(every report figure regenerates from a script); a claims-to-evidence
+index (every quantitative claim traces to figure -&gt; script -&gt; raw
+bundles); a sensitivity audit checking that headline effects exceed their
+confidence intervals.</p>
+<h2>Phase Plan Detail</h2>
+<p>Each phase has a step-by-step plan and an evidence-gated exit checklist
+in the repository; a phase closes only when every required item has
+recorded evidence or a documented blocker.</p>
+<ul>
+<li><strong>Phase 1</strong> - <code>docs/phase_1/</code>: lock contracts and methodology (done);
+gather feasibility evidence: advisor scope, Mac telemetry permissions,
+wall-meter decision, network topology for the sweep, Hailo verdict,
+NVIDIA/Orin access, calendar mapping.</li>
+<li><strong>Phase 2</strong> - <code>docs/phase_2/</code>: bundle writer -&gt; mock adapters -&gt;
+controller -&gt; reducer -&gt; one-command run (all hardware-independent,
+exact-arithmetic tests) -&gt; then the real Mac slice (MLX + powermetrics,
+repeated with variance) -&gt; remote targets as access permits -&gt;
+homogeneous baselines.</li>
+<li><strong>Phase 3</strong> - <code>docs/phase_3/</code>: feasibility spikes -&gt; split-run config
+schema -&gt; transfer microbenchmark -&gt; offline-replay splits with
+per-stage energy decomposition (prefill / transfer / deserialize /
+decode) -&gt; interconnect sweep -&gt; crossover dataset.</li>
+<li><strong>Phase 4</strong> - <code>docs/phase_4/</code>: statistics ratification, aggregation,
+figures F1-F8 (baselines, traces, phase asymmetry, split decomposition,
+crossover curves, Pareto frontier, interconnect costs, measurement
+quality), claims index, results + limitations draft, background /
+related-work draft (new stage 4.6 — the report&#39;s background chapter now
+has an owner).</li>
+<li><strong>Phase 5</strong> - <code>docs/phase_5/</code>: verified README quickstart, backend
+extension guide (verified by a shipped tutorial adapter), sample
+bundles, dataset freeze with hash manifest and release tag, colloquium
+slides, final report.</li>
+</ul>
+<h2>Evolution From The Original Architecture Sketch</h2>
+<p>The project began from the &quot;Energy Benchmark Architecture And Expanded
+Plan&quot; sketch. Its architecture survives intact; implementation thinking
+has been refined in documented ways (full rationale in
+<code>docs/decision_log.md</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Original sketch</th>
+<th>Current position</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Configs YAML/JSON; bundle stores <code>config.yaml</code></td>
+<td>JSON now; bundle stores normalized <code>config.json</code>; YAML deferred until authoring pain is real</td>
+<td>zero-dependency core; sorted-key JSON gives stable config hashing for aggregation (D-001, D-007)</td>
+</tr>
+<tr>
+<td>&quot;Likely Python + Pydantic&quot; schemas</td>
+<td>stdlib dataclasses with the same contract; Pydantic port possible later</td>
+<td>Phase 1 runs with no installs; semantics unchanged (D-009)</td>
+</tr>
+<tr>
+<td>Mac MLX slice implemented first</td>
+<td>mock vertical slice first, Mac immediately after</td>
+<td>the harness is proven with exact-arithmetic tests before real telemetry can confound it; Mac remains the first real backend (Phase 2 plan)</td>
+</tr>
+<tr>
+<td>Dashboard file-backed; &quot;DuckDB/SQLite if browsing gets slow&quot;</td>
+<td>static HTML generator; analysis aggregation via CSV + pandas in Phase 4; no DB planned</td>
+<td>smallest sustainable tool that serves the two real uses: sanity-checking runs and showing progress (D-006)</td>
+</tr>
+<tr>
+<td>Offline KV replay before live disaggregation</td>
+<td>same, hardened into a three-rung feasibility ladder with per-runtime spikes and a same-runtime rule</td>
+<td>KV tensors are not portable across engines; cross-runtime transfer (e.g. vLLM-prefill -&gt; MLX-decode) is out of scope; heterogeneous <em>hardware</em> pairs use a portable runtime where its backends allow, pending an explicit portability spike (D-015)</td>
+</tr>
+<tr>
+<td>GPU-to-Apple split experiments listed directly</td>
+<td>pairings are planned only after spike verdicts; synthetic transfer sweep guarantees the crossover dataset either way</td>
+<td>converts the project&#39;s largest feasibility risk into a bounded one (R-004, R-005)</td>
+</tr>
+<tr>
+<td>(not covered)</td>
+<td>measurement boundaries, multi-node clock discipline, controller co-residency mitigation, statistical protocol</td>
+<td>added rigor required for defensible cross-device energy claims (D-003, D-013, D-014, D-018)</td>
+</tr>
+</tbody></table>
+<p>Verdict from the 2026-06-09 audit: the sketch remains coherent; nothing
+in it has been contradicted - the changes above are refinements with
+recorded rationale, and the repository&#39;s plans are the maintained,
+authoritative version of it.</p>
+<h2>Risks And Minimum Viable Outcome</h2>
+<p>Top risks (full register with triggers and fallbacks in
+<code>docs/risk_register.md</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Posture</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>KV persist/resume unsupported in a runtime (esp. vLLM)</td>
+<td>spikes before hardware scheduling; llama.cpp fallback; synthetic-transfer floor + analytical composition keeps the study publishable</td>
+</tr>
+<tr>
+<td>Cache files not portable across machines/backends</td>
+<td>explicit cross-machine spike; fallback to same-platform pairs; portability finding is itself reportable</td>
+</tr>
+<tr>
+<td>Schedule vs fixed academic deadlines</td>
+<td>every phase has a hardware-independent floor; explicit descope ladder</td>
+</tr>
+<tr>
+<td>3080 Ti borrow window slips</td>
+<td>borrow time is execution-only against a rehearsed runbook; pairing droppable</td>
+</tr>
+<tr>
+<td>No wall meter</td>
+<td>within-target claims unaffected; cross-target claims carry the stated boundary caveat</td>
+</tr>
+<tr>
+<td>Advisor approval delay</td>
+<td>all current work is harness-shaped and valuable under any scope</td>
+</tr>
+</tbody></table>
+<p>Minimum viable outcome (worst-case floor; still a complete, defensible
+capstone if reached):
+the reusable harness + Mac vertical slice + homogeneous baselines +
+synthetic interconnect sweep + an analytical split-energy model - honest,
+measured, reproducible.</p>
+<h2>Timeline</h2>
+<p>Dates pending (this is an explicit ask): colloquium date, report
+deadline, borrow window. Once known they anchor <code>docs/milestones.md</code> and
+phase target dates are derived backwards (slides want frozen figures &gt;=1
+week ahead; the report wants its claims audit &gt;=1 week ahead). Until
+then, the dependency structure is the schedule: Phase 4 is deskwork and
+serves as the buffer; hardware-gated steps are scheduled around access
+windows with desk work filling gaps.</p>
+<p>Known: the Mac authorization gate closed 2026-07-06 (privileged sample
+captured, scoped sudo rule installed); remote-device access (NVIDIA,
+Orin) is the remaining hardware gate. Work paused 2026-06-13 to
+2026-07-04 (planned break, recorded in <code>docs/milestones.md</code>).</p>
+<h2>Deliverables At Completion</h2>
+<ul>
+<li>The JouleWise repository: harness, adapters, tests, CI, extension
+guide, README quickstart that a new user can run in minutes.</li>
+<li>The dataset: raw run bundles + hash manifest, frozen and tagged, with
+every figure regenerable by script.</li>
+<li>The study: where splitting wins, loses, and why - with uncertainty,
+limitations, and hardware-applicability findings (including negative
+verdicts).</li>
+<li>Final report and colloquium presentation, every quantitative claim
+traceable to raw data.</li>
+</ul>
+<h2>Repository Map (for verification)</h2>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>What</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>README.md</code></td>
+<td>entry point and quickstart (grows in Phase 5)</td>
+</tr>
+<tr>
+<td><code>AGENT_PLAN.md</code></td>
+<td>phase index and acceptance criteria</td>
+</tr>
+<tr>
+<td><code>docs/phase_N/phase_N_plan.md</code> + <code>_exit_checklist.md</code></td>
+<td>per-phase steps and evidence gates</td>
+</tr>
+<tr>
+<td><code>docs/contracts/</code></td>
+<td>measurement methodology, run-bundle layout, adapter contracts</td>
+</tr>
+<tr>
+<td><code>docs/decision_log.md</code></td>
+<td>every design decision with alternatives considered</td>
+</tr>
+<tr>
+<td><code>docs/risk_register.md</code></td>
+<td>risks, triggers, mitigations, descope ladder</td>
+</tr>
+<tr>
+<td><code>docs/milestones.md</code></td>
+<td>calendar map</td>
+</tr>
+<tr>
+<td><code>docs/run_reports/</code></td>
+<td>dated work logs with commands and outcomes</td>
+</tr>
+<tr>
+<td><code>joulewise/</code>, <code>tests/</code></td>
+<td>the harness package + test suite (546 tests, 10 skipped, zero expected failures, CI-enforced)</td>
+</tr>
+</tbody></table>
+<h2>Process Note</h2>
+<p>This project is developed by a human researcher directing a multi-agent
+AI system he designed and iteratively engineered over the course of the
+project — the orchestration itself is a second, deliberate piece of
+engineering alongside the benchmark, and by now it is interesting in its
+own right.</p>
+<p>The full description lives in <code>docs/orchestration.md</code> (the loop, the
+roles, the artifact system, and how the topology itself evolved under
+its own review machinery); this section is the summary.</p>
+<p><strong>The division of labor.</strong> Ed sets the research direction, the
+methodology standards (the decision log&#39;s non-negotiables: raw-evidence
+bundles, idle subtraction, named measurement boundaries, no
+unauditable claims), the hardware and access decisions, and — the part
+that is easy to underrate — the <em>process policy</em>: every rule below
+exists because he observed a failure or an opportunity and issued a
+standing instruction. The AI staff executes: a lead agent (Claude,
+Anthropic&#39;s Fable-class model) is the apex — decomposition, design
+adjudication, every final diff gate, all live verification, merges,
+bookkeeping — and a second, independent model (OpenAI Codex gpt-5.5)
+does the volume: implementation against pinned specs, adversarial
+review lenses, test writing, and fresh-instance test auditing. A third
+tier (Claude Opus) serves as specialist sweeper. Cross-model review is
+load-bearing by design: the attributed catch record shows the two
+models and the different review layers consistently catching different
+classes of defect.</p>
+<p><strong>The machinery, briefly.</strong> Independent tasks run as parallel git
+worktrees, the lead driving each stream&#39;s Codex pipeline directly (a
+topology that is itself the product of a signed cross-model
+meta-review, then validated by a full session with zero coordination
+stalls — the evolution is traced in <code>docs/orchestration.md</code>). Every
+implementation passes through a layered pipeline: a design argument
+round (the implementer must argue trade-offs before coding),
+fresh-instance counterreview lenses with lead-triaged dispositions, a
+test-amplification round, a writer-never-reviews-its-own-tests audit,
+the lead&#39;s diff gate, and lead-side live verification on real hardware
+— the one layer never delegated, because it has repeatedly caught
+blockers whose own tests were green (the tests encoded the same wrong
+assumption as the code). Merges add their own gate: a
+pre-merge oversight pass by fresh reviewers with distinct angles, and a
+standing <em>final-head rule</em> — any commit landing after the last review
+round gets one more fresh review before merge (its first application
+caught a crash path in a &quot;trivial&quot; late fix). After parallel streams
+merge, a dedicated integration review hunts the cross-stream defects no
+per-stream review can see (two interaction defects on its first outing, two more on its second). An
+event-driven review council convenes for contract-bearing work, and —
+per Ed&#39;s instruction — its <em>deliberations</em> are recorded, not just its
+verdicts: the council log preserves positions, the reasoning exchanged,
+who prevailed and why, and overridden dissents, so a future reader (or
+model) can reconstruct why any decision was made.</p>
+<p><strong>The paper trail (every claim auditable).</strong> Each fact has one home:
+<code>docs/decision_log.md</code> — 36 binding design decisions, each with
+alternatives considered and revisit conditions; <code>docs/council_log.md</code>
+(C-001…C-010) — the deliberation record; <code>docs/stream_logs/</code> —
+per-stream decision ledgers committed <em>with</em> the code they justify
+(wrong decisions are superseded in place, never erased);
+<code>docs/run_reports/</code> — one record per session with verification
+evidence, a per-review-layer catch table, and a delegation-calibration
+ledger (outcomes assigned by the lead after the gate, never
+self-reported; prompt-defects separated from model-defects). The whole
+loop is self-instrumenting: every review layer&#39;s unique catches are
+attributed and tallied, and a layer that stops earning its keep is
+dropped by its own evidence rule (one already has been). Delegation
+boundaries move on calibration evidence, not intuition. Lessons are
+folded into the process playbooks the same session they are learned —
+measurably: one failure mode recurred five times before its fix was
+distilled, and zero times after. The loop even reviews itself: a
+meta-review consensus (C-009) redesigned the coordination topology, and
+the next session (C-010) validated the redesign with a zero-stall run.</p>
+<p><strong>What one day of this looks like (2026-07-07).</strong> Five implementation
+streams plus a repo-wide test audit ran concurrently: statistical
+uncertainty (per-metric confidence intervals, re-derivable
+byte-for-byte from raw evidence), contamination detection, deep DVFS
+telemetry, campaign automation, and a KV-cache size model. All five
+merged the same day; the test suite grew 254 → 369; the layered review
+recorded thirteen attributed catches including three blockers that no
+single reviewer — human-style solo review included — would plausibly
+have found together (one blocker was caught only by running the real
+CLI against code whose own tests were green, because the tests encoded
+the same wrong assumption as the code). Roughly 6–7 million tokens of
+implementation and review work were delegated to the second model,
+about five times the volume the orchestrating side spent. The most
+satisfying data point: the new contamination gate&#39;s first live act was
+to correctly flag the lead agent&#39;s <em>own verification run</em> as
+contaminated — the instrument now audits its operators.</p>
+<p><strong>How the scope grew.</strong> The project began as an architecture sketch for
+&quot;measure LLM inference energy on edge hardware.&quot; Contracts-first
+engineering turned that into an auditable instrument: typed configs,
+self-contained evidence bundles, a strict re-reduction validator. The
+mock vertical slice proved the math without hardware; the Mac slice
+produced the first real joules; the flagship run put a 122-billion-
+parameter mixture-of-experts model through the identical harness and
+yielded the first real cross-model observation: two confounded points
+that differ in size, architecture, and quantization, with energy/token
+behavior consistent with the fixed-vs-marginal model while decode power
+stays nearly flat — the big model costs time, not watts. This week the
+instrument gained the statistical and
+forensic machinery above, and a steelmanned, devil&#39;s-advocated research
+agenda of 31 tiered questions — 16 answerable on the current hardware
+alone (<code>docs/research_question_bank.md</code>). The pattern throughout:
+capability first, claims only when the instrument can defend them.</p>
+<p><strong>And the most recent day (2026-07-07/08).</strong> Four checkpointed streams
+were resumed, completed, and merged in one session: the integrity/
+provenance overhaul (all 31 audit-pinned defects fixed; strict
+validation now re-derives the power trace from raw evidence), the docs
+package, the KV-cache replay feasibility verdict, and the complete
+fixture-first NVIDIA stack. The layered review recorded ~30 attributed
+catches, including two blockers no implementer&#39;s tests could see (a
+provenance hash that did not prove the actual generation input; a
+validation-gate bypass via mutable metadata), two pinned wire contracts
+overturned by review before they could ever touch hardware, and one
+fabricated-evidence defect caught only at the lead&#39;s diff gate. The
+suite went 415 → 546 tests with zero expected failures, and the lead
+never wrote implementation code and never skipped a gate.</p>
+<p><strong>Where to look.</strong> <code>docs/orchestration.md</code> is the process description.
+<code>docs/council_log.md</code> (C-001…C-010) is the deliberation record — C-006
+is a full orchestration trace of the five-stream day; C-009/C-010 are
+the topology meta-review and its validation. <code>docs/decision_log.md</code>
+holds the 36 binding design decisions with alternatives considered.
+<code>docs/run_reports/</code> narrates each working session, with per-layer catch
+tables and the delegation-calibration ledger. The executable
+orchestration playbooks live outside this repository as reusable
+skills (council, delegation, multi-stream worktrees, adversarial
+review, and a top-level operation-loop that sequences them), so the
+machinery survives this project and transfers to the next one.</p>
+<h2>Maintenance Of This Document</h2>
+<p>Updated at phase transitions and whenever advisor-visible state changes
+(a gate closes, a verdict lands, the schedule moves). The &quot;Last updated&quot;
+date above and the repository&#39;s run reports are the freshness check.</p>
+
+
+</article></main>
+</div>
+</body>
+</html>

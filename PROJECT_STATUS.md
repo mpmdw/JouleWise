@@ -5,28 +5,31 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-07 (merge-time reconciliation)
+- Last updated: 2026-07-08 (all four streams merged; meta-process section + docs/orchestration.md added)
 - Project phase: Phase 1 closing; Phase 2 in progress - instrument
   CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
   are complete; the two-model baseline matrix is the next Mac corpus step
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 
-## This Update (as of 2026-07-07, merge-time) — 30-second read
+## This Update (as of 2026-07-08, all four streams merged) — 30-second read
 
-**Merge-time reconciliation:** the reader-facing status below defers to
-the phase checklist matrix rows for per-item authority. Since this stream's
-first draft, the integrity stream closed P2-013 and P2-014: all 31 audit
-pins are fixed, the suite is 546 tests (as of 2026-07-08, incl. the merged fixture-first 2K stack) with 10 skips and zero expected
-failures, bundle provenance now records prompt/workload identities, and
-`validate-bundle --strict` includes the powermetrics raw-plist-to-trace
-gate plus the legacy additive-summary comparison. The six existing real
-corpus bundles pass strict read-only and unrewritten; strict proves
-re-derivation of the recorded evidence, not independent rerunning of the
-hardware session. New-era bundles must carry shape-valid provenance to pass.
-The post-docs KV spike has a lead-reverified Stage 3.0.1 verdict of
-`replay_supported` (tokens identical; cache size +0.018% vs prediction),
-and the post-docs 2K branch has a fixture-first NVIDIA implementation, but
-neither is claimed here as merged into this stream or live hardware-validated.
+**Everything landed.** The multi-stream session merged as four PRs:
+P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
+546 tests with 10 skips and zero expected failures, bundle provenance
+now records prompt/workload identities, and `validate-bundle --strict`
+includes the powermetrics raw-plist-to-trace gate plus the legacy
+additive-summary comparison. The six existing real corpus bundles pass
+strict read-only and unrewritten; strict proves re-derivation of the
+recorded evidence, not independent rerunning of the hardware session.
+New-era bundles must carry shape-valid provenance to pass. The Stage
+3.0.1 KV spike is merged with a lead-reverified verdict of
+`replay_supported` (tokens identical; cache size +0.018% vs prediction)
+— Phase 3's central technical risk is retired on current hardware. The
+fixture-first 2K NVIDIA stack is merged; ALL its protocol pins remain
+PROVISIONAL until first live hardware contact (the live-verification
+checklist is ready). Next: the 2M two-model baseline campaign on a
+quiet machine. Reader-facing status below defers to the phase checklist
+matrix rows for per-item authority.
 
 ## Previous Update (2026-07-07, fifth update) — 30-second read
 
@@ -132,7 +135,7 @@ than a numbered question.
 | Phase | Scope | Status |
 |---|---|---|
 | 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation) — 2M baselines are fully tooled; 2K fixture-first implementation is complete on a later branch but remains unmerged here and not live hardware-validated; 2L gated on device access |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation) — 2M baselines are fully tooled; 2K fixture-first implementation is MERGED (2026-07-08) with ALL protocol pins PROVISIONAL pending live hardware validation; 2L gated on device access |
 | 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
@@ -448,6 +451,10 @@ project — the orchestration itself is a second, deliberate piece of
 engineering alongside the benchmark, and by now it is interesting in its
 own right.
 
+The full description lives in `docs/orchestration.md` (the loop, the
+roles, the artifact system, and how the topology itself evolved under
+its own review machinery); this section is the summary.
+
 **The division of labor.** Ed sets the research direction, the
 methodology standards (the decision log's non-negotiables: raw-evidence
 bundles, idle subtraction, named measurement boundaries, no
@@ -455,36 +462,60 @@ unauditable claims), the hardware and access decisions, and — the part
 that is easy to underrate — the *process policy*: every rule below
 exists because he observed a failure or an opportunity and issued a
 standing instruction. The AI staff executes: a lead agent (Claude,
-Anthropic's Fable-class model) orchestrates, reviews, verifies on real
-hardware, and keeps the books; per-stream orchestrator agents (also
-Fable) own one work stream each; and a second, independent model
-(OpenAI Codex gpt-5.5) does the volume — implementation, adversarial
-code review, test writing, and test review. Cross-model review is
-load-bearing by design: different models have uncorrelated blind spots,
-and the catch record proves it.
+Anthropic's Fable-class model) is the apex — decomposition, design
+adjudication, every final diff gate, all live verification, merges,
+bookkeeping — and a second, independent model (OpenAI Codex gpt-5.5)
+does the volume: implementation against pinned specs, adversarial
+review lenses, test writing, and fresh-instance test auditing. A third
+tier (Claude Opus) serves as specialist sweeper. Cross-model review is
+load-bearing by design: the attributed catch record shows the two
+models and the different review layers consistently catching different
+classes of defect.
 
 **The machinery, briefly.** Independent tasks run as parallel git
-worktrees, each with its own orchestrator driving its own Codex thread.
-Every implementation passes through a layered pipeline: a design
-argument round (the implementer must argue trade-offs before coding),
-fresh-instance counterreview lenses, a test-amplification round, a
-writer-never-reviews-its-own-tests audit, an orchestrator diff gate,
-and finally lead-side live verification on real hardware — the one
-layer that is never delegated, because it has caught every
-hardware-integration bug to date. After parallel streams merge, a
-dedicated integration review hunts the cross-stream defects no
-per-stream review can see (it found two on its first outing). An
+worktrees, the lead driving each stream's Codex pipeline directly (a
+topology that is itself the product of a signed cross-model
+meta-review, then validated by a full session with zero coordination
+stalls — the evolution is traced in `docs/orchestration.md`). Every
+implementation passes through a layered pipeline: a design argument
+round (the implementer must argue trade-offs before coding),
+fresh-instance counterreview lenses with lead-triaged dispositions, a
+test-amplification round, a writer-never-reviews-its-own-tests audit,
+the lead's diff gate, and lead-side live verification on real hardware
+— the one layer never delegated, because it has repeatedly caught
+blockers whose own tests were green (the tests encoded the same wrong
+assumption as the code). Merges add their own gate: a
+pre-merge oversight pass by fresh reviewers with distinct angles, and a
+standing *final-head rule* — any commit landing after the last review
+round gets one more fresh review before merge (its first application
+caught a crash path in a "trivial" late fix). After parallel streams
+merge, a dedicated integration review hunts the cross-stream defects no
+per-stream review can see (two interaction defects on its first outing, two more on its second). An
 event-driven review council convenes for contract-bearing work, and —
 per Ed's instruction — its *deliberations* are recorded, not just its
 verdicts: the council log preserves positions, the reasoning exchanged,
 who prevailed and why, and overridden dissents, so a future reader (or
-model) can reconstruct why any decision was made. The whole loop is
-self-instrumenting: every review layer's unique catches are attributed
-and tallied, and a layer that stops earning its keep is dropped by its
-own evidence rule (one already has been). Lessons are folded into the
-process documentation the same session they are learned — measurably:
-one failure mode recurred five times before its fix was distilled, and
-zero times after.
+model) can reconstruct why any decision was made.
+
+**The paper trail (every claim auditable).** Each fact has one home:
+`docs/decision_log.md` — 36 binding design decisions, each with
+alternatives considered and revisit conditions; `docs/council_log.md`
+(C-001…C-010) — the deliberation record; `docs/stream_logs/` —
+per-stream decision ledgers committed *with* the code they justify
+(wrong decisions are superseded in place, never erased);
+`docs/run_reports/` — one record per session with verification
+evidence, a per-review-layer catch table, and a delegation-calibration
+ledger (outcomes assigned by the lead after the gate, never
+self-reported; prompt-defects separated from model-defects). The whole
+loop is self-instrumenting: every review layer's unique catches are
+attributed and tallied, and a layer that stops earning its keep is
+dropped by its own evidence rule (one already has been). Delegation
+boundaries move on calibration evidence, not intuition. Lessons are
+folded into the process playbooks the same session they are learned —
+measurably: one failure mode recurred five times before its fix was
+distilled, and zero times after. The loop even reviews itself: a
+meta-review consensus (C-009) redesigned the coordination topology, and
+the next session (C-010) validated the redesign with a zero-stall run.
 
 **What one day of this looks like (2026-07-07).** Five implementation
 streams plus a repo-wide test audit ran concurrently: statistical
@@ -520,16 +551,31 @@ agenda of 31 tiered questions — 16 answerable on the current hardware
 alone (`docs/research_question_bank.md`). The pattern throughout:
 capability first, claims only when the instrument can defend them.
 
-**Where to look.** `docs/council_log.md` (C-001…C-006) is the
-deliberation record — C-006 is a full orchestration trace of the
-five-stream day, including what each review layer uniquely caught and
-what it cost. `docs/decision_log.md` holds the 36 binding design
-decisions with alternatives considered. `docs/run_reports/` narrates
-each working session. The orchestration playbooks themselves live
-outside this repository as reusable skills (council, delegation,
-multi-stream worktrees, adversarial review, and a top-level
-operation-loop that sequences them), so the machinery survives this
-project and transfers to the next one.
+**And the most recent day (2026-07-07/08).** Four checkpointed streams
+were resumed, completed, and merged in one session: the integrity/
+provenance overhaul (all 31 audit-pinned defects fixed; strict
+validation now re-derives the power trace from raw evidence), the docs
+package, the KV-cache replay feasibility verdict, and the complete
+fixture-first NVIDIA stack. The layered review recorded ~30 attributed
+catches, including two blockers no implementer's tests could see (a
+provenance hash that did not prove the actual generation input; a
+validation-gate bypass via mutable metadata), two pinned wire contracts
+overturned by review before they could ever touch hardware, and one
+fabricated-evidence defect caught only at the lead's diff gate. The
+suite went 415 → 546 tests with zero expected failures, and the lead
+never wrote implementation code and never skipped a gate.
+
+**Where to look.** `docs/orchestration.md` is the process description.
+`docs/council_log.md` (C-001…C-010) is the deliberation record — C-006
+is a full orchestration trace of the five-stream day; C-009/C-010 are
+the topology meta-review and its validation. `docs/decision_log.md`
+holds the 36 binding design decisions with alternatives considered.
+`docs/run_reports/` narrates each working session, with per-layer catch
+tables and the delegation-calibration ledger. The executable
+orchestration playbooks live outside this repository as reusable
+skills (council, delegation, multi-stream worktrees, adversarial
+review, and a top-level operation-loop that sequences them), so the
+machinery survives this project and transfers to the next one.
 
 ## Maintenance Of This Document
 

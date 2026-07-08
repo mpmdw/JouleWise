@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>README — JouleWise</title>
+<style>
+:root {
+  --bg: #fdfdfc; --fg: #1a1d21; --muted: #5b6470; --accent: #7050c8;
+  --border: #e3e2de; --code-bg: #f3f2ef; --nav-bg: #f8f7f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d; --fg: #dfe2e8; --muted: #98a1ad; --accent: #a795e8;
+    --border: #2c3038; --code-bg: #20242b; --nav-bg: #1b1e24;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.65 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+.layout { display: flex; min-height: 100vh; }
+nav {
+  width: 250px; flex-shrink: 0; background: var(--nav-bg);
+  border-right: 1px solid var(--border); padding: 1.4rem 1rem;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+nav h2 { font-size: 1rem; margin: 0 0 .8rem; color: var(--accent); }
+nav a {
+  display: block; padding: .35rem .6rem; border-radius: 6px;
+  color: var(--fg); text-decoration: none; font-size: .92rem;
+}
+nav a:hover { background: var(--code-bg); }
+nav a.active { background: var(--accent); color: #fff; }
+main { flex: 1; min-width: 0; padding: 2.2rem 3rem 4rem; }
+article { max-width: 52rem; margin: 0 auto; }
+h1, h2, h3 { line-height: 1.25; }
+h1 { font-size: 1.75rem; border-bottom: 2px solid var(--border); padding-bottom: .4rem; }
+h2 { font-size: 1.3rem; margin-top: 2.2rem; border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
+h3 { font-size: 1.08rem; margin-top: 1.6rem; }
+a { color: var(--accent); }
+code {
+  background: var(--code-bg); padding: .12em .35em; border-radius: 4px;
+  font: .88em ui-monospace, "SF Mono", Menlo, monospace;
+}
+pre { background: var(--code-bg); padding: .9rem 1rem; border-radius: 8px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+blockquote { margin: 1rem 0; padding: .1rem 1rem; border-left: 3px solid var(--accent); color: var(--muted); }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; display: block; overflow-x: auto; }
+th, td { border: 1px solid var(--border); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); }
+tr:nth-child(even) td { background: color-mix(in srgb, var(--code-bg) 45%, transparent); }
+hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+.pagemeta { color: var(--muted); font-size: .85rem; margin-bottom: 1.5rem; }
+@media (max-width: 800px) {
+  .layout { flex-direction: column; }
+  nav { width: 100%; height: auto; position: static; display: flex; flex-wrap: wrap; gap: .2rem; }
+  nav h2 { width: 100%; }
+  main { padding: 1.2rem; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+<h2>JouleWise</h2>
+<a href="index.html">Index</a>
+<a href="readme.html" class="active">README</a>
+<a href="project_status.html">Project Status (advisor)</a>
+<a href="orchestration.html">Orchestration Process</a>
+<a href="agent_plan.html">Agent Plan</a>
+<a href="run_state.html">Run State</a>
+<a href="task_queue.html">Task Queue</a>
+<a href="decision_log.html">Decision Log</a>
+<a href="council_log.html">Council Log</a>
+<a href="milestones.html">Milestones</a>
+<a href="risk_register.html">Risk Register</a>
+<a href="latest_run_report.html">Latest Run Report</a>
+</nav>
+<main><article>
+<p class="pagemeta">Rendered from <code>README.md</code> · as of commit 7cc8efe (2026-07-07)</p>
+<h1>JouleWise</h1>
+<p>JouleWise is an extensible benchmark for energy-wise LLM inference across
+heterogeneous local hardware. The name is a deliberate nod to JouleSort and
+Splitwise: energy measurement as the spine, split inference as the first major
+research application.</p>
+<p>The benchmark is designed around three stable ideas:</p>
+<ul>
+<li>Typed experiment configs define what should run.</li>
+<li>Runtime and telemetry adapters define how each hardware target is exercised
+and measured.</li>
+<li>Run bundles preserve raw traces, events, metadata, logs, and summary metrics
+for later audit and analysis.</li>
+</ul>
+<p><strong>Status:</strong> research prototype. The measurement harness is campaign-ready on
+Mac (Apple M3 Max); as of 2026-07-07, P2-013/P2-014 integrity and
+provenance fixes are complete; the verified end-user quickstart is a Phase
+5 deliverable.</p>
+<h2>Current State</h2>
+<p>Phase 1 is in its final stretch; <strong>Phase 2&#39;s Mac vertical slice is complete
+and the project has its first real energy measurements</strong> (2026-07-06). From a
+typed config, one command produces a complete, schema-valid, auditable run
+bundle and reduces it to energy/latency summary metrics — proven first on
+deterministic mock adapters, and now live on real hardware: the MLX runtime +
+<code>powermetrics</code> telemetry adapters measured Qwen2.5-1.5B-Instruct (4-bit) on an
+Apple M3 Max at ~47 J per 512-token request (~77-88 mJ per generated token,
+257 tok/s). The six real corpus bundles pass <code>validate-bundle --strict</code>
+read-only and unrewritten: strict re-derives the recorded powermetrics power
+trace from raw plist evidence, re-derives summary metrics from the recorded
+trace and event log, checks the legacy additive summary comparison, and
+requires shape-valid provenance for new-era bundles. This validates the
+recorded evidence path; it does not independently rerun the hardware session.
+Remaining backends plug into the same adapter interfaces: the
+fixture-first 2K NVIDIA stack (SSH transport, node worker, nvidia-smi +
+vLLM adapters) is merged with ALL protocol pins PROVISIONAL pending
+first live hardware contact; Jetson Orin (2L) remains gated on device
+access.</p>
+<p>The repository currently contains:</p>
+<ul>
+<li>Typed config and output schemas with JSON-Schema export and validation.</li>
+<li>Runtime, telemetry, and transport interface contracts, with shipped mock
+adapters and a backend registry.</li>
+<li>The runnable harness: bundle writer, controller lifecycle, reducer, a
+shared bundle read layer, static HTML report generator, and a CLI
+(<code>run</code>, <code>validate-bundle</code>, <code>reduce</code>, <code>report</code>).</li>
+<li>Example Mac-local and mock-local configs.</li>
+<li>Phase 1 methodology, feasibility, and measurement-design docs.</li>
+<li>A test suite (546 tests, 10 skipped, zero expected failures) run in CI on
+every push, including a mock end-to-end run + bundle validation.</li>
+</ul>
+<h2>Verify</h2>
+<pre><code class="language-bash">python3 -m unittest discover -s tests
+</code></pre>
+<p>(9 tests skip unless the <code>[analysis]</code> extra is installed — the
+report-generator chart tests; 1 more skips unless <code>jsonschema</code> happens to
+be installed. As of 2026-07-07 after P2-013, all 31 audit pins are fixed and
+the suite carries zero expected failures.)</p>
+<h2>Run The Harness (mock target — no hardware or extras needed)</h2>
+<pre><code class="language-bash"># Produce a complete run bundle from the mock target (deterministic):
+python3 -m joulewise run configs/examples/mock_local.json --runs-dir runs
+
+# Structurally verify any bundle:
+python3 -m joulewise validate-bundle runs/example-mock-local
+
+# Re-derive summary metrics from a bundle&#39;s recorded trace/events (post-hoc):
+python3 -m joulewise reduce runs/example-mock-local
+
+# Render a static HTML run browser (needs: pip install &#39;joulewise[analysis]&#39;):
+python3 -m joulewise report runs --output report
+</code></pre>
+<p>A run bundle (<code>runs/&lt;run_id&gt;/</code>) contains the normalized <code>config.json</code>,
+<code>metadata.json</code>, the <code>events.jsonl</code> lifecycle/phase/token log, the raw
+<code>power_trace.csv</code>, model outputs, per-component logs, and the reduced
+<code>summary_metrics.json</code> (written last; its presence marks a complete bundle).</p>
+<p>Bundles are immutable evidence: re-running the same config into the same
+<code>--runs-dir</code> fails by design with a run-ID collision (delete the old
+bundle directory, change <code>run_id</code>, or use a fresh runs dir).</p>
+<h2>Config And Schema Verbs</h2>
+<pre><code class="language-bash">python3 -m joulewise validate-config configs/examples/mock_local.json
+python3 -m joulewise print-config-schema
+python3 -m joulewise print-output-schema
+</code></pre>
+<h2>Documentation Map</h2>
+<p><strong>Advisor / high-level view:</strong> <code>PROJECT_STATUS.md</code> is the standalone status,
+plan, and architecture document - start there for a monitoring view of the
+project.</p>
+<p>See <code>AGENT_PLAN.md</code> for the phase index; each phase has a detailed plan and
+an evidence-based exit checklist under <code>docs/phase_N/</code> — the exit checklist
+is the per-item status authority (D-023). See <code>RUN_STATE.md</code> before starting
+substantial work; it is the current handoff note for what was done and what
+should happen next. Future phase starts should use
+<code>docs/planning_reflection_protocol.md</code> to audit whether each step has evidence
+and acceptance criteria before implementation begins.</p>
+<p><strong>Agents executing &quot;the next step&quot; start with <code>docs/agent_playbook.md</code></strong> —
+self-contained, ordered mission guides (read-first lists, code-level routes,
+verification commands, handoff checklists) for every remaining step of the
+project.</p>
+<p>Use <code>TASK_QUEUE.md</code> to triage new tasks against the current repo state, recent
+handoffs, recent commits, and active phase gates. Design decisions (with the
+options and considerations behind them) live in <code>docs/decision_log.md</code>; risks,
+triggers, and the descope ladder live in <code>docs/risk_register.md</code>; calendar
+constraints live in <code>docs/milestones.md</code>; cross-model review sessions
+(implementer/reviewer positions, votes, resolutions - see D-031) live in
+<code>docs/council_log.md</code>.</p>
+
+
+</article></main>
+</div>
+</body>
+</html>

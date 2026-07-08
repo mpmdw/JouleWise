@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Run State — JouleWise</title>
+<style>
+:root {
+  --bg: #fdfdfc; --fg: #1a1d21; --muted: #5b6470; --accent: #7050c8;
+  --border: #e3e2de; --code-bg: #f3f2ef; --nav-bg: #f8f7f5;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #16181d; --fg: #dfe2e8; --muted: #98a1ad; --accent: #a795e8;
+    --border: #2c3038; --code-bg: #20242b; --nav-bg: #1b1e24;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.65 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+.layout { display: flex; min-height: 100vh; }
+nav {
+  width: 250px; flex-shrink: 0; background: var(--nav-bg);
+  border-right: 1px solid var(--border); padding: 1.4rem 1rem;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+nav h2 { font-size: 1rem; margin: 0 0 .8rem; color: var(--accent); }
+nav a {
+  display: block; padding: .35rem .6rem; border-radius: 6px;
+  color: var(--fg); text-decoration: none; font-size: .92rem;
+}
+nav a:hover { background: var(--code-bg); }
+nav a.active { background: var(--accent); color: #fff; }
+main { flex: 1; min-width: 0; padding: 2.2rem 3rem 4rem; }
+article { max-width: 52rem; margin: 0 auto; }
+h1, h2, h3 { line-height: 1.25; }
+h1 { font-size: 1.75rem; border-bottom: 2px solid var(--border); padding-bottom: .4rem; }
+h2 { font-size: 1.3rem; margin-top: 2.2rem; border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
+h3 { font-size: 1.08rem; margin-top: 1.6rem; }
+a { color: var(--accent); }
+code {
+  background: var(--code-bg); padding: .12em .35em; border-radius: 4px;
+  font: .88em ui-monospace, "SF Mono", Menlo, monospace;
+}
+pre { background: var(--code-bg); padding: .9rem 1rem; border-radius: 8px; overflow-x: auto; }
+pre code { background: none; padding: 0; }
+blockquote { margin: 1rem 0; padding: .1rem 1rem; border-left: 3px solid var(--accent); color: var(--muted); }
+table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .92rem; display: block; overflow-x: auto; }
+th, td { border: 1px solid var(--border); padding: .45rem .6rem; text-align: left; vertical-align: top; }
+th { background: var(--code-bg); }
+tr:nth-child(even) td { background: color-mix(in srgb, var(--code-bg) 45%, transparent); }
+hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+.pagemeta { color: var(--muted); font-size: .85rem; margin-bottom: 1.5rem; }
+@media (max-width: 800px) {
+  .layout { flex-direction: column; }
+  nav { width: 100%; height: auto; position: static; display: flex; flex-wrap: wrap; gap: .2rem; }
+  nav h2 { width: 100%; }
+  main { padding: 1.2rem; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+<nav>
+<h2>JouleWise</h2>
+<a href="index.html">Index</a>
+<a href="readme.html">README</a>
+<a href="project_status.html">Project Status (advisor)</a>
+<a href="orchestration.html">Orchestration Process</a>
+<a href="agent_plan.html">Agent Plan</a>
+<a href="run_state.html" class="active">Run State</a>
+<a href="task_queue.html">Task Queue</a>
+<a href="decision_log.html">Decision Log</a>
+<a href="council_log.html">Council Log</a>
+<a href="milestones.html">Milestones</a>
+<a href="risk_register.html">Risk Register</a>
+<a href="latest_run_report.html">Latest Run Report</a>
+</nav>
+<main><article>
+<p class="pagemeta">Rendered from <code>RUN_STATE.md</code> · as of commit 7cc8efe (2026-07-07)</p>
+<h1>JouleWise Run State</h1>
+<p>Last updated: 2026-07-08 (resume+merge session: checkpointed streams
+completed and landed under the C-009 topology)</p>
+<h2>Start Here For Every Big Run</h2>
+<p>Before starting substantial work:</p>
+<ol>
+<li>Read this file.</li>
+<li>Read <code>TASK_QUEUE.md</code>.</li>
+<li>Read <code>AGENT_PLAN.md</code> (phase index) and the active phase&#39;s plan doc under
+<code>docs/phase_N/</code>; per-item status lives in the phase exit checklist
+(D-023).</li>
+<li>Read <code>docs/planning_reflection_protocol.md</code>.</li>
+<li>Check <code>docs/decision_log.md</code> before re-deciding anything; check
+<code>docs/risk_register.md</code> if starting a phase or a hardware-dependent task.</li>
+<li>Check the last 2-3 commits with <code>git log --oneline --decorate -3</code>.</li>
+<li>Check <code>git status --short --branch</code>.</li>
+<li>Run <code>python3 -m unittest discover -s tests</code> unless the task is docs-only.</li>
+<li>Do not commit local deletions or unrelated changes unless the user asks.</li>
+<li>Heartbeat rule (<code>docs/milestones.md</code>): if &gt;14 days passed with no run
+report and no recorded break, start with a milestones + risk review.</li>
+</ol>
+<p>At the end of substantial work:</p>
+<ol>
+<li>Update this file with what changed.</li>
+<li>Update <code>TASK_QUEUE.md</code> with completed, added, or re-ranked tasks.</li>
+<li>Add or update a detailed report in <code>docs/run_reports/</code>.</li>
+<li>Record tests, commands, blockers, and the next best task.</li>
+<li>Record new decision-log entries and any risk-register status changes.</li>
+<li>Refresh <code>PROJECT_STATUS.md</code> if advisor-visible state changed.</li>
+<li>Push green commits promptly (small doc/bookkeeping commits straight
+to main; multi-commit code series as branch + PR per D-031). Do not
+accumulate unpushed local state — the remote and the high-level docs
+(README, PROJECT_STATUS) are the user&#39;s and advisor&#39;s view.</li>
+<li>Run a docs-consistency sweep before the final bookkeeping commit
+(delegate to a fast subagent): stale test counts, gate-state
+contradictions between prose summaries and checklist matrix rows,
+numbers cited in multiple places. Adopted 2026-07-07 (council log
+C-002) after a sweep caught drift in 6 files; prose status summaries
+must carry an as-of date and defer to matrix rows (D-023 extension).</li>
+<li>Call out any dirty working-tree state that should not be accidentally
+committed.</li>
+</ol>
+<h2>Current Project Status</h2>
+<p><strong>P2-013 and P2-014 are COMPLETE and MERGED (2026-07-08).</strong> The
+checkpointed multi-stream session resumed under the C-009 topology and
+landed: PR #8 (all 31 audit pins fixed; strict raw-to-trace gate +
+legacy-additive compare; summary/workload provenance; D-032..D-034),
+PR #10 (DOC-007 docs/framing + merge-time reconciliation), PR #9
+(Stage 3.0.1 verdict <strong><code>replay_supported</code></strong>, lead-re-verified live —
+Phase 3&#39;s central technical risk retired on current hardware), plus
+D-035/D-036 (the ratified spike promotions). <strong>PR #11 (2K NVIDIA fixture-first
+stack, all pins PROVISIONAL) MERGED 2026-07-08 under Ed&#39;s standing
+merge-with-review authorization — ALL FOUR STREAMS LANDED.</strong> Suite on
+main: 546 OK (skipped=10, ZERO expected failures); all 6 real corpus
+bundles pass <code>--strict</code> read-only. The 2M campaign (P2-006) is fully unblocked and
+is the next machine-state-compatible task.</p>
+<p><strong>RESTART HERE:</strong> read
+<code>docs/run_reports/2026-07-07-resume-merge-session.md</code> (product
+outcomes, review-pipeline yield table, restart steps). Short version:
+quiet-machine 2M campaign (P2-006) under the C-009 T5 no-agent lock
+(all merges done; no worktrees remain).</p>
+<h2>Session History (pointers only — run reports own the narrative)</h2>
+<p>Per the C-009 meta-review consensus, RUN_STATE no longer stacks
+previous-run narratives. Recent sessions, newest first:</p>
+<ul>
+<li>2026-07-07/08 resume+merge (C-009 topology first full run; PRs
+#8/#9/#10/#11 all merged):
+<code>docs/run_reports/2026-07-07-resume-merge-session.md</code></li>
+<li>2026-07-07 PM checkpoint (multi-stream, C-008/C-009 + consensus):
+<code>docs/run_reports/2026-07-07-checkpoint-multistream-session.md</code></li>
+<li>2026-07-07 whole-project design council (C-007):
+<code>docs/run_reports/2026-07-07-whole-project-design-council.md</code></li>
+<li>2026-07-07 five-stream parallel session (C-005/C-006):
+<code>docs/run_reports/2026-07-07-parallel-streams-session.md</code></li>
+<li>2026-07-07 flagship benchmark:
+<code>docs/run_reports/2026-07-07-flagship-qwen35-122b.md</code></li>
+<li>Older: see <code>docs/run_reports/</code> (dated files).</li>
+</ul>
+<h2>Current Verification</h2>
+<ul>
+<li>Merged main: <code>python3 -m unittest discover -s tests</code> → <code>Ran 546 tests, OK (skipped=10)</code> — ZERO expected failures (as of 2026-07-08,
+after PRs #8/#9/#10/#11).</li>
+<li><code>validate-bundle --strict</code> green over all 6 real corpus bundles,
+read-only, unrewritten (incl. the new raw-to-trace gate).</li>
+<li>CI: mock e2e + suite on both matrix legs, green on every PR head.</li>
+<li>The merged 2K stack includes fake-e2e strict validation of a
+provenance-carrying synthetic 2K bundle.</li>
+</ul>
+<h2>Known Workspace State</h2>
+<ul>
+<li><code>main</code> is pushed and current (through this session&#39;s bookkeeping).</li>
+<li>No worktrees remain (all four removed after their PRs merged).</li>
+<li><code>/tmp/jw-lead-verify/</code> holds disposable lead-verification artifacts.</li>
+</ul>
+<h2>What Is Next</h2>
+<p>Follow <code>TASK_QUEUE.md</code> (lane-annotated). In order:</p>
+<ol>
+<li><strong>P2-006: the 2M two-model baseline campaign</strong> [QUIET-MAC] — fully
+unblocked; no-agent quiet lock per C-009 T5 (stop all fleets/Codex
+load first); corpus born under the fixed validator with prompt
+provenance.</li>
+<li><strong>P2-010 → P2-012 workload program</strong> [AGENT] per Slice 2O gates
+(D-034).</li>
+<li><strong>Ed&#39;s external one-pass</strong> [ED-EXTERNAL]: calendar, device access,
+borrow window, wall meter, backup destination (P0-003).</li>
+<li><strong>3.0.2 llama.cpp spike</strong> [AGENT after R-003 approval]: reuses the
+3.0.1 harness shape (D-035/D-036) + its two deferred hardening fixes.</li>
+</ol>
+<p>Hardware-gated (unchanged): 2K/2L (P1-006), wall meter (P1-003),
+topology (P1-004), calendar mapping (P1-008).</p>
+<h2>Open Decisions And Blockers</h2>
+<ul>
+<li>Supervisor approval and scope pending (P1-001, R-001 — trigger fired
+2026-06-12, mitigation holding); gates FULL D-016 closure (a
+provisional small-model pick opened 2G on 2026-07-06).</li>
+<li>Real backup destination pending (P0-003; interim same-disk location
+active, R-016 mitigated-interim).</li>
+<li>Calendar dates pending (P1-008, R-012).</li>
+<li>Wall-meter decision pending (P1-003, R-007).</li>
+<li>Physical network topology pending (P1-004, R-011).</li>
+<li>NVIDIA/Orin access evidence pending (P1-006; gates 2K/2L).</li>
+<li>Git author identity on this machine auto-selected as
+<code>Ed R &lt;edr@Eds-MacBook-Pro.local&gt;</code>. Amend future commits if a
+different identity is needed.</li>
+</ul>
+
+
+</article></main>
+</div>
+</body>
+</html>

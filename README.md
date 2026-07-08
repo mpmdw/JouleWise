@@ -33,10 +33,11 @@ trace from raw plist evidence, re-derives summary metrics from the recorded
 trace and event log, checks the legacy additive summary comparison, and
 requires shape-valid provenance for new-era bundles. This validates the
 recorded evidence path; it does not independently rerun the hardware session.
-Remaining backends (NVIDIA/vLLM, Jetson Orin) plug into the same adapter
-interfaces and remain gated on live device access. A fixture-first 2K NVIDIA
-branch exists for later merge, but it is not claimed here as merged or
-live-validated.
+Remaining backends plug into the same adapter interfaces: the
+fixture-first 2K NVIDIA stack (SSH transport, node worker, nvidia-smi +
+vLLM adapters) is merged with ALL protocol pins PROVISIONAL pending
+first live hardware contact; Jetson Orin (2L) remains gated on device
+access.
 
 The repository currently contains:
 
