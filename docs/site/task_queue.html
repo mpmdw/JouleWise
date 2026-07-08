@@ -22,7 +22,7 @@
 </header>
 <main>
 <div class="doc-wrap">
-<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>TASK_QUEUE.md</code> · as of commit 07332e6 (2026-07-08)</p>
+<p class="doc-meta"><a href="library.html">← library</a> · rendered from <code>TASK_QUEUE.md</code> · as of commit 443a31f (2026-07-08)</p>
 <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -211,6 +211,14 @@ purchases, destinations.</li>
 <td>NEW (C-011 deferred batch; post-2M / with-2K-live) [AGENT]</td>
 <td>Critique-adjudicated queue batch: (a) post-2M controller split (experiment loop/cooldown/env capture out of controller.py); (b) node-worker protocol parity tests + table-driven validation (with 2K live); (c) NVIDIA [N/A]-row skip counts surfaced into measurement quality (with 2K live); (d) per-backend raw-to-trace strict generalization (with 2K live); (e) claims-to-evidence index seeded once 2M corpus exists; (f) schema v0.2 loader/export parity acceptance rule; (g) boundary labels propagated into report index/chart titles before any cross-boundary claims</td>
 <td>Each item lands with its named gate; dispositions + rejected items (RemoteNodeSession per B-1, run-ID randomization per D-010/D-022, console script pre-2M) recorded in C-011</td>
+</tr>
+<tr>
+<td align="right">13</td>
+<td>P2-017</td>
+<td>P2 Next Slice</td>
+<td>NEW (2026-07-08 final-gate 5.5 review of the critique-record session) [AGENT]</td>
+<td>Make <code>scripts/build_site.py</code> provenance stamps honest: pages are stamped <code>git log -1</code> at build time, so a dirty-tree regen labels uncommitted content with the previous commit&#39;s hash. Fix: stamp the source file&#39;s own last-commit hash and append a <code>+ uncommitted</code> marker when the source is dirty at build time</td>
+<td>Regen on a dirty tree marks affected pages as such; regen on a clean tree stamps the commit that actually contains the rendered source; interim convention until fixed: commit sources first, regen, commit site second (adopted this session)</td>
 </tr>
 </tbody></table>
 <h2>Completed Queue Items</h2>
@@ -457,7 +465,7 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>as of commit 07332e6 (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>as of commit 443a31f (2026-07-08) · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
