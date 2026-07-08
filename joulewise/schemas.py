@@ -12,6 +12,8 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
 
+from joulewise.validation import finite_float
+
 
 class SchemaError(ValueError):
     """Raised when a benchmark schema cannot be validated."""
@@ -78,7 +80,10 @@ def _optional_float(value: Any, field_name: str, *, minimum: float | None = None
         return None
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise SchemaError(f"{field_name} must be a number")
-    result = float(value)
+    try:
+        result = finite_float(value, field_name)
+    except ValueError as exc:
+        raise SchemaError(f"{field_name} must be a finite number") from exc
     if minimum is not None and result < minimum:
         raise SchemaError(f"{field_name} must be >= {minimum}")
     return result

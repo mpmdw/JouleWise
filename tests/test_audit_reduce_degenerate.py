@@ -82,7 +82,6 @@ class ReduceDegenerateBugPins(ReduceAuditCase):
         self.assertIn("idle_baseline", summary.failure_message or "")
 
     # R3: idle_baseline.power_w_mean=NaN yields a succeeded summary with NaN metrics.
-    @unittest.expectedFailure
     def test_nan_idle_baseline_fails_instead_of_nan_success(self) -> None:
         writer = self.make_writer()
         self.add_window(writer, 0.0, 2.0)
@@ -100,7 +99,6 @@ class ReduceDegenerateBugPins(ReduceAuditCase):
         self.assertFalse(math.isnan(summary.energy_request_j or 0.0))
 
     # R4: in-window power_trace NaN reduces to succeeded with NaN gross energy.
-    @unittest.expectedFailure
     def test_nan_power_trace_fails_instead_of_nan_success(self) -> None:
         writer = self.make_writer()
         self.add_window(writer, 0.0, 2.0)

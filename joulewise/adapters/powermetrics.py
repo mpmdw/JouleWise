@@ -32,6 +32,7 @@ from joulewise.interfaces import (
     ThermalState,
 )
 from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline, TelemetryBackend
+from joulewise.validation import finite_float
 
 POWER_METRICS = "/usr/bin/powermetrics"
 RAW_SAMPLES_NAME = "powermetrics.plist"
@@ -861,9 +862,9 @@ def _required_int(mapping: dict[str, Any], key: str, document_index: int) -> int
 def _required_float(mapping: dict[str, Any], key: str, document_index: int) -> float:
     value = _required(mapping, key, document_index)
     try:
-        return float(value)
-    except (TypeError, ValueError) as exc:
+        return finite_float(value, f"powermetrics document {document_index} key {key!r}")
+    except ValueError as exc:
         raise ValueError(
-            f"powermetrics document {document_index} key {key!r} is not a number: "
+            f"powermetrics document {document_index} key {key!r} is not a finite number: "
             f"{value!r}"
         ) from exc

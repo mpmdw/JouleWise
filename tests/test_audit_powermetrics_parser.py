@@ -38,7 +38,6 @@ class PowermetricsParserBugPins(unittest.TestCase):
         self.assertEqual(len(records), 1)
 
     # A5: rail power values can parse to NaN and contaminate downstream power samples.
-    @unittest.expectedFailure
     def test_parser_rejects_non_finite_power_values(self) -> None:
         with self.assertRaisesRegex(ValueError, "finite"):
             parse_powermetrics_records(plist_document(cpu_power=math.nan))

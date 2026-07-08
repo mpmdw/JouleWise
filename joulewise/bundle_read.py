@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import csv
 import json
-import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -43,6 +42,7 @@ from joulewise.schemas import (
     RunStatus,
     SchemaError,
 )
+from joulewise.validation import finite_float, is_finite_number
 
 __all__ = [
     "BundleReadError",
@@ -63,15 +63,6 @@ _JSON_ARTIFACTS = ("config.json", "metadata.json", "summary_metrics.json")
 
 class BundleReadError(Exception):
     """A structured, non-crashing bundle read/interpretation failure."""
-
-
-def _is_finite_number(value: Any) -> bool:
-    """True for a real, finite number (bool is JSON true/false, not a time)."""
-    return (
-        not isinstance(value, bool)
-        and isinstance(value, (int, float))
-        and math.isfinite(value)
-    )
 
 
 @dataclass(frozen=True)
@@ -164,7 +155,7 @@ class BundleReader:
                     raise BundleReadError(
                         f"events.jsonl line {index + 1} is not a JSON object"
                     )
-                if not _is_finite_number(record.get("timestamp_s")):
+                if not is_finite_number(record.get("timestamp_s")):
                     raise BundleReadError(
                         f"events.jsonl line {index + 1} timestamp_s is not a "
                         f"finite number: {record.get('timestamp_s')!r}"
@@ -208,11 +199,17 @@ class BundleReader:
             if rail not in manifest:
                 continue
             try:
-                timestamp_s = float(row["timestamp_s"])
-                power_w = float(row["power_w"])
+                timestamp_s = finite_float(
+                    row["timestamp_s"],
+                    f"power_trace.csv row {index + 2} timestamp_s",
+                )
+                power_w = finite_float(
+                    row["power_w"],
+                    f"power_trace.csv row {index + 2} power_w",
+                )
             except (KeyError, TypeError, ValueError) as exc:
                 raise BundleReadError(
-                    f"power_trace.csv row {index + 2} is not numeric "
+                    f"power_trace.csv row {index + 2} is not finite numeric "
                     f"(timestamp_s={row.get('timestamp_s')!r}, "
                     f"power_w={row.get('power_w')!r})"
                 ) from exc
@@ -464,7 +461,7 @@ def _check_events(events_path: Path) -> list[str]:
                 f"{sorted(record)}, expected {sorted(EVENT_KEYS)}"
             )
             continue
-        if not _is_finite_number(record["timestamp_s"]):
+        if not is_finite_number(record["timestamp_s"]):
             problems.append(
                 f"events.jsonl line {index + 1} timestamp_s is not a finite "
                 f"number: {record['timestamp_s']!r}"
@@ -508,4 +505,16 @@ def _check_power_trace(path: Path, summary: Any) -> list[str]:
             "power_trace.csv header is "
             f"{','.join(header)!r}, expected {POWER_TRACE_HEADER!r}"
         ]
-    return []
+    problems: list[str] = []
+    try:
+        with trace_path.open(newline="") as handle:
+            reader = csv.DictReader(handle)
+            for index, row in enumerate(reader, start=2):
+                for field in ("timestamp_s", "power_w"):
+                    try:
+                        finite_float(row.get(field), f"power_trace.csv row {index} {field}")
+                    except ValueError as exc:
+                        problems.append(str(exc))
+    except OSError as exc:
+        return [f"power_trace.csv cannot be read: {exc}"]
+    return problems

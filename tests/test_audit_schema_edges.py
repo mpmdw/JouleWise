@@ -80,7 +80,6 @@ class SchemaBugPins(unittest.TestCase):
             BenchmarkConfig.from_mapping(data)
 
     # S4: _optional_float accepts NaN/Infinity from Python's JSON parser.
-    @unittest.expectedFailure
     def test_sampling_rejects_non_finite_numbers(self) -> None:
         data = example_data()
         data["sampling"] = {"power_hz": float("nan")}

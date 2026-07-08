@@ -55,6 +55,7 @@ from joulewise.schemas import (
     SummaryMetrics,
     TelemetryBackend,
 )
+from joulewise.validation import finite_float
 
 __all__ = ["reduce_bundle"]
 
@@ -117,9 +118,9 @@ def _idle_baseline(metadata: dict[str, Any]) -> IdleBaseline | None:
     if not isinstance(raw, dict):
         return None
     return IdleBaseline(
-        power_w_mean=float(raw["power_w_mean"]),
-        power_w_stddev=float(raw["power_w_stddev"]),
-        duration_s=float(raw["duration_s"]),
+        power_w_mean=_idle_baseline_float(raw, "power_w_mean"),
+        power_w_stddev=_idle_baseline_float(raw, "power_w_stddev"),
+        duration_s=_idle_baseline_float(raw, "duration_s"),
         sample_count=int(raw["sample_count"]),
         telemetry_backend=TelemetryBackend(raw["telemetry_backend"]),
         gpu_idle_ratio_mean=_optional_float(raw.get("gpu_idle_ratio_mean")),
@@ -129,11 +130,21 @@ def _idle_baseline(metadata: dict[str, Any]) -> IdleBaseline | None:
     )
 
 
+def _idle_baseline_float(raw: dict[str, Any], key: str) -> float:
+    try:
+        return finite_float(raw[key], f"idle_baseline.{key}")
+    except ValueError as exc:
+        raise _ReduceError(str(exc)) from exc
+
+
 def _optional_float(value: Any) -> float | None:
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, int | float):
-        return float(value)
+        try:
+            return finite_float(value, "idle_baseline optional numeric metadata")
+        except ValueError as exc:
+            raise _ReduceError(str(exc)) from exc
     return None
 
 
@@ -282,8 +293,9 @@ def reduce_bundle(path: Path) -> SummaryMetrics:
             failure_message=str(exc),
         )
 
-    idle_baseline = _idle_baseline(metadata)
+    idle_baseline: IdleBaseline | None = None
     try:
+        idle_baseline = _idle_baseline(metadata)
         return _reduce(reader, config, metadata, idle_baseline)
     except (_ReduceError, BundleReadError) as exc:
         return SummaryMetrics(

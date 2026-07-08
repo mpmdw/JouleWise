@@ -92,7 +92,6 @@ class BundleValidationBugPins(BundleAuditCase):
         self.assertIn("metadata.json is not a JSON object", problems)
 
     # B4/ranks 2-3: power_trace.csv NaN/Infinity rows parse as floats and are not rejected.
-    @unittest.expectedFailure
     def test_summed_curve_rejects_non_finite_trace_numbers(self) -> None:
         bundle = self.make_complete_bundle("audit-nan-curve")
         (bundle / "power_trace.csv").write_text(
@@ -105,7 +104,6 @@ class BundleValidationBugPins(BundleAuditCase):
             BundleReader(bundle).summed_curve()
 
     # B4/ranks 2-3: validate-bundle only checks the power trace header, not row values.
-    @unittest.expectedFailure
     def test_validate_bundle_rejects_non_finite_trace_rows(self) -> None:
         bundle = self.make_complete_bundle("audit-nan-validate")
         (bundle / "power_trace.csv").write_text(
