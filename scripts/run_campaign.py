@@ -168,6 +168,14 @@ class OrderEntry:
     workload: str | None = None
 
 
+VALID_WAIVER_SCOPES = {
+    "any",
+    "status_failed",
+    "strict_invalid",
+    "idle_window_suspect",
+}
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config_dir", help="Directory containing generated JSON configs")
@@ -356,6 +364,18 @@ def load_waivers(path_text: str | None) -> WaiverMap:
         for key in ("reason", "approver", "timestamp", "scope"):
             if not isinstance(item.get(key), str) or not item[key].strip():
                 raise ValueError(f"waiver {index} requires non-empty {key}")
+        scope_value = item["scope"].strip()
+        scope_tokens = (
+            {"any"}
+            if scope_value == "any"
+            else {part.strip() for part in scope_value.split(",") if part.strip()}
+        )
+        unknown_scopes = scope_tokens - VALID_WAIVER_SCOPES
+        if unknown_scopes:
+            raise ValueError(
+                f"waiver {index} has unknown scope class(es) "
+                f"{sorted(unknown_scopes)}; valid: {sorted(VALID_WAIVER_SCOPES)}"
+            )
         duplicate_key = (
             target_kind,
             Path(target).stem if target_kind == "config" else target,

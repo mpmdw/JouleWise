@@ -621,6 +621,38 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(rows[0]["status"], "failed")
             self.assertIsNone(rows[0]["members"][0].get("waiver"))
 
+    def test_waiver_unknown_scope_class_fails_at_load(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            write_config(config_dir, "idle.json", "idle")
+            write_single_bundle(runs_dir, "idle", idle_window_suspect=True)
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": "idle",
+                            "reason": "typo scope must fail closed",
+                            "approver": "council",
+                            "timestamp": "2026-07-08T00:00:00Z",
+                            "scope": "idle_window_suspect,not_a_real_class",
+                        }
+                    ]
+                )
+            )
+            fake_cli = make_fake_cli(tmp_path)
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                waivers=waivers,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("unknown scope class", result.stdout + result.stderr)
+
     def test_waiver_scope_must_cover_failure_classes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
