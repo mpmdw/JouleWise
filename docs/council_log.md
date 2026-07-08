@@ -829,6 +829,13 @@ and adjudications in the trace appendix.
   two fleet-wide stalls; the calibration ledger's design-freedom signal;
   the docs audit falsifying a claim in the lead's own run report
   (missing D-CHECKPOINT).
+- USER RATIFICATION CONDITION (Ed, same day, binding): Fable is the
+  APEX and final say on all high-level processes — the smartest model
+  on the team; every other model's role exists to save Fable tokens,
+  never because its judgment is preferred; "lead" in all topology
+  tables means the Fable main loop; adjudication of any challenge to a
+  Fable decision is itself Fable's. Encoded in operation-loop §3 +
+  multi-stream topology preamble.
 - Consensus text: run report §"Meta-review consensus"; durable homes =
   the operation-loop + multi-stream-worktrees + codex-delegation skills
   (rewritten same-session). Migration executed same-session: trace
