@@ -2204,6 +2204,10 @@ adjudication section):
 
 1. Item loop lives runtime-side: new `SuiteRuntimeAdapter` protocol with
    `run_suite(config, manifest, context)`; `run_workload` untouched;
+   [AMENDED 2026-07-08, oversight round: the signature gained
+   keyword-only `order_seed` supplied by the controller so the seed is
+   never runtime-derived — `run_suite(config, manifest, context=None, *,
+   order_seed)`; see item 6 and adapter_contracts.md];
    controller dispatches when a suite manifest is present and fails fast
    pre-window (`UNSUPPORTED_WORKLOAD` when the runtime lacks the
    protocol; structured FAILED on unreadable/invalid manifest).
