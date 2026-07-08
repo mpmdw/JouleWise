@@ -39,28 +39,34 @@ needs auth session:     M6 (2H powermetrics)
 needs M5+M6:            M7 (2I Mac slice — the flagship)
 needs P1-006 evidence:  M8 (2K/2L remote targets)
 needs M7:               M9 (2M baselines)
-needs M7 (+M9 for its pairings): M10 (Phase 3 Stage 3.0 spikes)
+needs 2G/2I + chosen model: M10 Stage 3.0.1 mlx-lm prompt-cache spike
+needs 2M baselines:     M10 later pairing-feasibility matrix + split runs
 ```
 
 ---
 
 ## Mission M0: Preflight (every session)
 
-1. Read `RUN_STATE.md` top to bottom. It names the repo path, the last
-   run's outcome, dirty-tree warnings, and the next task.
+1. Read only the targeted `RUN_STATE.md` sections: "Current Project
+   Status", "Known Workspace State", and "What Is Next".
 2. Read `TASK_QUEUE.md`'s Current Queue and Do-Not-Do-Yet list.
-3. `git log --oneline -3` and `git status --short --branch`.
-4. `python3 -m unittest discover -s tests` — expect `Ran 415 tests, OK
+3. Read the selected mission's own read-first list. Read `AGENT_PLAN.md`
+   only at phase starts or when the project structure changes. Consult
+   `docs/decision_log.md` by targeted decision ID, not as a whole-file
+   intake step.
+4. Check workspace state with `git status --short --branch`; inspect
+   recent commits only when the handoff or mission needs them.
+5. `python3 -m unittest discover -s tests` — expect `Ran 415 tests, OK
    (skipped=10, expected failures=31)` (count grows as slices land; the
    skips are the `[analysis]`-extra chart tests plus one
    optional-jsonschema test; the expected failures are the Stream F
    audit pins that flip to passing as P2-013 lands — expect that number
    to shrink to 0). A
    red suite is itself the mission: stop and fix or report.
-5. Heartbeat: if >14 days passed since the last run report with no break
-   recorded in `docs/milestones.md`, review milestones + risk register
-   first.
-6. At session end, always: update `RUN_STATE.md`, update `TASK_QUEUE.md`,
+6. Review `docs/risk_register.md` at phase starts, before hardware tasks,
+   when a trigger fires, or if >14 days passed since the last run report
+   with no break recorded in `docs/milestones.md`.
+7. At session end, always: update `RUN_STATE.md`, update `TASK_QUEUE.md`,
    write a dated run report in `docs/run_reports/`, update the phase exit
    checklist for anything that closed, and `PROJECT_STATUS.md` if
    advisor-visible state changed. Commit when the user asks or has

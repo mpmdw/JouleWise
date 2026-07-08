@@ -13,30 +13,8 @@ The benchmark is designed around three stable ideas:
 - Run bundles preserve raw traces, events, metadata, logs, and summary metrics
   for later audit and analysis.
 
-**Advisor / high-level view:** `PROJECT_STATUS.md` is the standalone status,
-plan, and architecture document - start there for a monitoring view of the
-project.
-
-See `AGENT_PLAN.md` for the phase index; each phase has a detailed plan and
-an evidence-based exit checklist under `docs/phase_N/` — the exit checklist
-is the per-item status authority (D-023). See
-`RUN_STATE.md` before starting substantial work; it is the current handoff note
-for what was done and what should happen next. Future phase starts should use
-`docs/planning_reflection_protocol.md` to audit whether each step has evidence
-and acceptance criteria before implementation begins.
-
-**Agents executing "the next step" start with `docs/agent_playbook.md`** —
-self-contained, ordered mission guides (read-first lists, code-level
-routes, verification commands, handoff checklists) for every remaining
-step of the project.
-
-Use `TASK_QUEUE.md` to triage new tasks against the current repo state, recent
-handoffs, recent commits, and active phase gates. Design decisions (with the
-options and considerations behind them) live in `docs/decision_log.md`; risks,
-triggers, and the descope ladder live in `docs/risk_register.md`; calendar
-constraints live in `docs/milestones.md`; cross-model review sessions
-(implementer/reviewer positions, votes, resolutions - see D-031) live in
-`docs/council_log.md`.
+**Status:** research prototype. The measurement harness is campaign-ready on
+Mac (Apple M3 Max); the verified end-user quickstart is a Phase 5 deliverable.
 
 ## Current State
 
@@ -47,10 +25,11 @@ bundle and reduces it to energy/latency summary metrics — proven first on
 deterministic mock adapters, and now live on real hardware: the MLX runtime +
 `powermetrics` telemetry adapters measured Qwen2.5-1.5B-Instruct (4-bit) on an
 Apple M3 Max at ~47 J per 512-token request (~77-88 mJ per generated token,
-257 tok/s), across 3 repetitions that all pass strict validation (the bundle
-re-reduces from its raw evidence to an identical summary). Remaining backends
+257 tok/s), across 3 repetitions that all pass strict validation (the summary
+re-derives identically from the bundle's power trace and event log; the
+raw-plist-to-trace check lands with P2-013). Remaining backends
 (NVIDIA/vLLM, Jetson Orin) plug into the same adapter interfaces and are
-gated only on device access.
+gated on device access.
 
 The repository currently contains:
 
@@ -62,8 +41,9 @@ The repository currently contains:
   (`run`, `validate-bundle`, `reduce`, `report`).
 - Example Mac-local and mock-local configs.
 - Phase 1 methodology, feasibility, and measurement-design docs.
-- A test suite (415 tests) run in CI on every push, including a mock
-  end-to-end run + bundle validation.
+- A test suite (415 tests, 10 skipped, 31 expected failures pending P2-013)
+  run in CI on every push, including a mock end-to-end run + bundle
+  validation.
 
 ## Verify
 
@@ -73,7 +53,8 @@ python3 -m unittest discover -s tests
 
 (9 tests skip unless the `[analysis]` extra is installed — the
 report-generator chart tests; 1 more skips unless `jsonschema` happens to
-be installed.)
+be installed. The suite currently carries 31 expected failures for Stream F
+audit pins that flip to passing as P2-013 lands.)
 
 ## Run The Harness (mock target — no hardware or extras needed)
 
@@ -107,3 +88,30 @@ python3 -m joulewise validate-config configs/examples/mock_local.json
 python3 -m joulewise print-config-schema
 python3 -m joulewise print-output-schema
 ```
+
+## Documentation Map
+
+**Advisor / high-level view:** `PROJECT_STATUS.md` is the standalone status,
+plan, and architecture document - start there for a monitoring view of the
+project.
+
+See `AGENT_PLAN.md` for the phase index; each phase has a detailed plan and
+an evidence-based exit checklist under `docs/phase_N/` — the exit checklist
+is the per-item status authority (D-023). See `RUN_STATE.md` before starting
+substantial work; it is the current handoff note for what was done and what
+should happen next. Future phase starts should use
+`docs/planning_reflection_protocol.md` to audit whether each step has evidence
+and acceptance criteria before implementation begins.
+
+**Agents executing "the next step" start with `docs/agent_playbook.md`** —
+self-contained, ordered mission guides (read-first lists, code-level routes,
+verification commands, handoff checklists) for every remaining step of the
+project.
+
+Use `TASK_QUEUE.md` to triage new tasks against the current repo state, recent
+handoffs, recent commits, and active phase gates. Design decisions (with the
+options and considerations behind them) live in `docs/decision_log.md`; risks,
+triggers, and the descope ladder live in `docs/risk_register.md`; calendar
+constraints live in `docs/milestones.md`; cross-model review sessions
+(implementer/reviewer positions, votes, resolutions - see D-031) live in
+`docs/council_log.md`.

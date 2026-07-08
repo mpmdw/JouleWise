@@ -32,17 +32,26 @@ Phase 2/3 data, *before* computing headline results.
 Actions: compute per-condition coefficient of variation across the baseline
 dataset; check normality plausibility at n=5 (normal-quantile plots on a
 sample of conditions); run the planned bootstrap-vs-t sensitivity
-comparison; decide whether any element of D-014 changes (e.g., if CV is
+comparison; compute a per-target / per-backend / per-metric measurement
+floor for the headline metrics (the smallest energy, power, or time
+difference the instrument can resolve, derived from sampling rate, idle
+variance, and quantization); pin a minimum-sample rule for phase attribution
+before any phase-level claims are made. A ~9 Hz sampler (the observed
+8.8-8.9 Hz powermetrics rate) cannot resolve a ~94 ms prefill window as a
+standalone claim because fewer than ~1 sample lands in the window; phase
+attribution below the minimum sample count is reported as not-resolvable,
+not as a number. Decide whether any element of D-014 changes (e.g., if CV is
 large, more reps for headline conditions); update D-014's status and the
 methodology section with findings.
 
 Evidence: a short analysis note (`docs/phase_4/protocol_ratification.md`)
-with the numbers and the decision.
+with the numbers, the measurement-floor table, the minimum-sample rule, and
+the decision.
 
 Acceptance: D-014 status updated with observed-variance justification; any
 amendment applied before Stage 4.2 figures are produced (auditable order:
 the ratification note is dated before the figure scripts' first results
-commit).
+commit); measurement floors are recorded before headline claims are drafted.
 
 Fallback: if data volume is too thin to ratify (heavy descoping happened),
 record that the protocol stands on its a-priori reasoning and flag wider
@@ -144,7 +153,10 @@ Design: `docs/phase_4/claims_index.md` - a table: claim ID, claim text
 bundle/manifest IDs, status (`supported` / `weak` / `refuted` /
 `out-of-data`). Rule: no quantitative claim appears in the report or slides
 without a row here; a claim whose status is not `supported` appears only
-with its caveat.
+with its caveat. Routing rule: every quantitative claim must first pass the
+Stage 4.0 / 4.5 detection-floor gate before it can enter this index as
+`supported`; below-floor claims enter only as caveated `weak` /
+`out-of-data` findings with "not resolvable" language.
 
 Actions: create with the first claims as figures land; review pass at the
 end of the stage walking every report-draft claim back to a row.
@@ -168,8 +180,10 @@ Required content:
   bandwidth vs compute time, idle floor of the second node, transfer
   energy share).
 - Effect-size honesty (Stage 4.5 feeds this): differences are claimed only
-  where CIs separate; "no measurable difference" is a stated result
-  category.
+  where CIs separate and the effect clears the measurement floor. "No
+  measurable difference" is a stated result category only when the effect is
+  above the floor but inside the confidence interval; when the effect is
+  below the floor, the result is "not resolvable", never "no difference".
 - Limitations inherited by construction (each pre-seeded from earlier
   decisions): measurement-boundary differences across targets (D-018
   table); consumer-hardware sample of one per target; controller
@@ -188,20 +202,27 @@ Fallback: none needed.
 
 ### Stage 4.5: Uncertainty And Sensitivity Audit
 
-Objective: verify the headline effects survive their error bars.
+Objective: verify the headline effects survive their error bars and clear the
+instrument's detection floor.
 
 Actions: for each headline comparison (split vs monolithic per pairing;
-link-speed deltas): compare effect size against CI widths; run the
-bootstrap sensitivity (4.0); audit thermal drift across reps in the
-underlying experiments (manifest order vs metric trend - a correlation
-means contamination); check clock-offset bounds vs shortest attributed
-windows in split runs.
+link-speed deltas): compare effect size against CI widths and the Stage 4.0
+measurement floor; produce an effect-size-vs-floor table for every headline
+claim (effect size, CI width, measurement floor, verdict); run the bootstrap
+sensitivity (4.0); audit thermal drift across reps in the underlying
+experiments (manifest order vs metric trend - a correlation means
+contamination); check clock-offset bounds vs shortest attributed windows in
+split runs. Below-floor claims read "not resolvable", never "no difference"
+or "no measurable difference".
 
 Evidence: sensitivity appendix in `results_draft.md` with a
-pass/concern/fail table per headline claim.
+pass/concern/fail table per headline claim, including the
+effect-size-vs-floor columns.
 
 Acceptance: every headline claim is marked effect>CI or explicitly
-downgraded in the claims index; no unexplained order-correlated trends.
+downgraded in the claims index; every quantitative claim has passed through
+the detection-floor gate before entering the claims-to-evidence index as
+supported; no unexplained order-correlated trends.
 
 Fallback: claims that fail are downgraded or dropped - that is the stage
 working as designed, not a failure of the stage.
