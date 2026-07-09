@@ -244,6 +244,33 @@ class BundlePackTests(unittest.TestCase):
             problems,
         )
 
+    def test_verify_pack_accepts_readme_with_non_default_bundles_dir(self) -> None:
+        source_bundle = self.make_bundle("pack-custom-bundles-dir")
+        pack_dir = self.tmp / "pack-custom-bundles-dir"
+        package_bundle_pack.package_bundles([source_bundle], pack_dir)
+
+        custom_bundles_dir = "published-bundles"
+        shutil.move(str(pack_dir / "bundles"), str(pack_dir / custom_bundles_dir))
+        manifest_path = pack_dir / "MANIFEST.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["bundles_dir"] = custom_bundles_dir
+        readme = package_bundle_pack._readme(package_bundle_pack._readme_manifest(manifest))
+        (pack_dir / "README.md").write_text(readme, encoding="utf-8")
+        manifest["readme_sha256"] = _sha256(pack_dir / "README.md")
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+        self.assertIn("published-bundles/pack-custom-bundles-dir", readme)
+        self.assertIn(
+            "/path/to/this-pack/published-bundles/pack-custom-bundles-dir",
+            readme,
+        )
+        self.assertNotIn("`bundles/pack-custom-bundles-dir`", readme)
+        self.assertNotIn(
+            "/path/to/this-pack/bundles/pack-custom-bundles-dir",
+            readme,
+        )
+        self.assertEqual(package_bundle_pack.verify_pack(pack_dir), [])
+
     def test_existing_output_dir_is_refused_and_preserved(self) -> None:
         source_bundle = self.make_bundle("pack-existing-output")
         pack_dir = self.tmp / "preexisting"

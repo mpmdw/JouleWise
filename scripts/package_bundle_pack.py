@@ -204,17 +204,18 @@ def _file_entry_set(entry: dict[str, Any]) -> set[tuple[str, str, int]]:
 
 def _readme(manifest: dict[str, Any]) -> str:
     commit = manifest["project_commit"]
+    bundles_dir_name = manifest.get("bundles_dir", "bundles")
     bundle_list = "\n".join(
-        f"- `bundles/{entry['bundle_id']}`: status `{entry['summary_status']}`, "
+        f"- `{bundles_dir_name}/{entry['bundle_id']}`: status `{entry['summary_status']}`, "
         f"config `{entry['config_sha256']}`"
         for entry in manifest["bundles"]
     )
     if not bundle_list:
         bundle_list = "- No bundles."
     first_bundle = (
-        f"bundles/{manifest['bundles'][0]['bundle_id']}"
+        f"{bundles_dir_name}/{manifest['bundles'][0]['bundle_id']}"
         if manifest["bundles"]
-        else "bundles/<bundle-id>"
+        else f"{bundles_dir_name}/<bundle-id>"
     )
     tree_state = manifest.get("project_tree_state")
     clean_provenance = commit != "unknown" and tree_state == TREE_STATE_CLEAN
@@ -310,8 +311,6 @@ def package_bundles(bundle_dirs: list[Path], output_dir: Path) -> dict[str, Any]
     if not bundle_dirs:
         raise BundlePackError("at least one bundle directory is required")
     output_dir = Path(output_dir)
-    if output_dir.exists():
-        raise BundlePackError(f"output directory already exists: {output_dir}")
 
     entries = [_preflight_bundle(Path(bundle)) for bundle in bundle_dirs]
     seen: set[str] = set()
@@ -325,10 +324,14 @@ def package_bundles(bundle_dirs: list[Path], output_dir: Path) -> dict[str, Any]
         raise BundlePackError(f"duplicate bundle id(s): {', '.join(sorted(duplicates))}")
 
     provenance = _git_provenance()
+    try:
+        output_dir.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as exc:
+        raise BundlePackError(f"output directory already exists: {output_dir}") from exc
 
     try:
         bundles_dir = output_dir / "bundles"
-        bundles_dir.mkdir(parents=True)
+        bundles_dir.mkdir()
         copied_entries: list[dict[str, Any]] = []
         for entry in entries:
             destination = bundles_dir / entry["bundle_id"]
