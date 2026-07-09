@@ -21,9 +21,9 @@ every phase start.
 Every external gate needs a hard evidence-by date with an automatic cut
 rule: if the gate is not proven by its date, the project moves
 permanently to the Mac + synthetic-transfer/analytical-composition
-floor for that dependency. Dates to be filled with P1-008; the CUT RULE
-stands regardless, so late dates force recorded descoping instead of
-uncontrolled slippage.
+floor for that dependency. Dates to be filled with P1-008. The automatic cut rule TAKES EFFECT
+only if/when Ed ratifies D-060 (currently PROPOSED); it is recorded
+now so the schedule risk and the intended mechanism are visible.
 
 ## Phase Targets
 
@@ -32,7 +32,7 @@ then, the dependency structure is the schedule.
 
 | Phase | Depends on | Hardware-critical window | Target end |
 |---|---|---|---|
-| 1: Approval, feasibility, measurement design | supervisor + device access | local auth session (to reschedule); lab answers | TBD |
+| 1: Approval, feasibility, measurement design | supervisor + device access | local auth session CLOSED 2026-07-06; lab answers | TBD |
 | 2: Harness + Mac slice + baselines | Phase 1 readiness gate | Mac sessions; remote-node access | TBD |
 | 3: Disaggregation + interconnect sweep | Phase 2 readiness gate | borrow window; network hardware | TBD |
 | 4: Analysis | dataset frozen | none (desk work) | TBD |

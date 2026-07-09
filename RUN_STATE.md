@@ -106,13 +106,16 @@ queue owns ordering (C-027):**
      (reducer/gate fixes incl. zero-window strict), P2-038 (production
      uncertainty evidence path), P2-039 (frozen floor artifact +
      guard factor), then RPT-001 (report skeleton + vertical slice),
-     P2-042 (frozen analysis manifest) and only then P2-037
-     (contrast/claim engine, which consumes it — required before any
-     P2-006 interpretation). P2-022/P2-023 remain BLOCKED post-2M per D-041 —
+     P2-042 (frozen analysis manifest), P2-041 (campaign verdict
+     split), and only then P2-037 (contrast/claim engine, which
+     consumes the manifest — required before any P2-006
+     interpretation). P2-022/P2-023 remain BLOCKED post-2M per D-041 —
      do not start them.
    - [QUIET-MAC] Window A (C-019 shakedown → P2-015-SMOKE → P2-015
-     floors → P2-006) proceeds only after P2-038 + P2-039 land and the
-     P0-003 backup gate is satisfied.
+     floors → P2-006) proceeds only after P2-040 + P2-038 + P2-039
+     land and the P0-003 backup gate is satisfied (P2-040 is
+     pre-Window-A: strict must reject zero-length windows before any
+     collection).
 3. Rotation (D-056), uncertainty gates (D-057), and the campaign packs
    are live for Window-A execution once the above gates clear.
 

@@ -181,7 +181,7 @@ that was checked.
    (queue is the only ordering authority; current [AGENT] state named
    honestly: at review time no row was unambiguously READY; the same
    session's queue repair then established the explicit order P2-040 ->
-   P2-038 -> P2-039 -> RPT-001 -> P2-042 -> P2-037).
+   P2-038 -> P2-039 -> RPT-001 -> P2-042 -> P2-041 -> P2-037).
 8. Append-only addendum to `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md`
    correcting the historical table's denominator labeling.
 9. Hailo `if-viable` remnants relabeled; milestones auth-gate row closed
@@ -279,7 +279,7 @@ decision entry.
 | TOP-4 | "Campaign-ready" outruns gates | ACC | SESSION |
 | TOP-5 | Stale exit-checklist rows vs D-023 | ACC | DOC-009 |
 | TOP-6 | D-058 stack-identity table absent from claims | ACC | SESSION (pointer) + RPT-001 (full table) |
-| TOP-7 | 170 vs 180 bundle count vs D-054 | ACC | MET-001 (D-054 amendment) |
+| TOP-7 | 170 vs 180 bundle count vs D-054 | ACC | DONE (amendment applied in the C-027 close-out sweep commit) |
 | TOP-8 | Milestones auth gate stale | ACC | SESSION |
 | TOP-9 | Decision-count overclaim | ACC | SESSION |
 | TOP-10 | Indefensible absolutes | ACC | SESSION |
