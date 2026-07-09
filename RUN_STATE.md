@@ -56,6 +56,54 @@ At the end of substantial work:
 
 ## ACTIVE_STOP_CARD
 
+Status: **ACTIVE (2026-07-09 late, C-027 spec-wave checkpoint).** Ed
+paused the session mid-spec-wave. This card is the resume authority.
+
+**State at checkpoint:**
+
+- PR #40 (C-027 council review) is MERGED; main also carries the site
+  regen commit. SITE DEPLOY IS PENDING (permission-gated): run
+  `cd site_capsule && npx lakebed deploy` (content already packed).
+- Branch `c027-spec-wave` (pushed) holds the C-027 spec sheets — all
+  headers say DRAFT pending lead adjudication. Landed so far: MET-001/
+  RETRO-001, NV-GATE-2, SPLIT-AP/AP-EDIT, DOC-009/REPRO-001 (Fable
+  batch), P2-038 (Sol). NO PR opened yet for this branch.
+- FIVE Sol (gpt-5.6-sol xhigh) spec sessions were still RUNNING at
+  checkpoint, writing to the session scratchpad
+  `/private/tmp/claude-501/-Users-edr-code-JouleWise/e48cf22e-209a-4355-bb28-9b6a37636b34/scratchpad/`:
+  spec-p2040.md (P2-040), spec-p2039.md (P2-039), spec-engine.md
+  (P2-042/P2-041/P2-037 trio), spec-rpt001.md (RPT-001), spec-doc008.md
+  (DOC-008). Each has a `.status` sentinel (OK/TIMEOUT/FAILED;
+  watchdog-bounded, they always exit).
+
+**Resume procedure (in order):**
+
+1. Deploy the site (above) if Ed hasn't.
+2. Harvest surviving Sol specs: for each scratchpad spec-*.md with
+   status OK, strip any pre-title preamble, copy to the target path
+   named inside it (docs/specs/c027/p2-040_reducer_gate_correctness.md,
+   p2-039_floor_artifact.md, analysis_engine_trio.md,
+   rpt-001_report_vertical_slice.md, doc-008_state_kernel.md), commit
+   to `c027-spec-wave`. If a session FAILED/TIMED OUT or the scratchpad
+   is gone, RELAUNCH from the queue row + C-027 review §7 + the
+   matching docs/reviews/c027/ lens findings (the prompts' substance is
+   reconstructable from those three sources; prompt skeletons are in
+   this session's observer index `~/.codex/claude-spawned/index.jsonl`
+   run_keys 20260709T21*-spec-*).
+3. LEAD ADJUDICATION of every spec (they are DRAFTs; known items: the
+   MET-001 spec re-includes the already-applied D-054 amendment —
+   strike it; check each spec's DEVIATIONS/OPEN QUESTIONS section and
+   decide each point). Then open the `c027-spec-wave` PR, review, merge
+   per the D-031 gate, and point each queue row's authority pointer at
+   its merged spec.
+4. Then implementation per the RESTART block below (P2-040 first).
+
+Until steps 2-3 complete, do NOT start implementation of the C-027
+rows — the specs are the pinned authorities the implementation prompts
+must cite.
+
+## Superseded stop card (CP-5)
+
 Status: **CLEARED 2026-07-09** by the CP-5 resume session. Every
 clearance criterion was met: all three worktree diffs lead-gated
 (envgate live-gated against the real affine mock bundle) and merged as
