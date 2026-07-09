@@ -36,7 +36,7 @@
 <a href="#where-to-read-the-evidence">Where to read the evidence</a></aside>
   <div class="doc-wrap doc-source-docs-orchestration-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/orchestration.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/orchestration.md · commit 4e644da"><span class="source-file">docs/<wbr>orchestration.md</span><span class="source-commit">commit 4e644da</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/orchestration.md · commit c0f8f48"><span class="source-file">docs/<wbr>orchestration.md</span><span class="source-commit">commit c0f8f48</span></span></div>
     <h1>The Orchestration Process</h1>
 <p>How this project is actually built: a human researcher directing a
 multi-model AI system whose workflow is itself a deliberate, versioned,
@@ -237,9 +237,17 @@ rank-0 queue row. That is enough to prevent accidental bypass.</p>
 <p>Instrumentation ledgers close the loop on the process itself:</p>
 <ul>
 <li><strong>Per-layer yield:</strong> every review layer&#39;s unique catches are
-attributed and tallied per session. A layer with zero unique catches
-over two sessions is dropped by its own evidence rule — one (a
-default Opus review lens) already has been.</li>
+attributed and tallied per session under D-061 (C-027; replaces the
+earlier two-zero-sessions auto-drop, which the integration-review
+zero/zero/five sequence falsified): applicability is decided by
+PRE-DECLARED mechanical predicates; outcomes are classified
+accepted-unique-defect / duplicate / clean-verification /
+false-positive-suppression (suppression is not a catch); severity
+weights are fixed before the session; three applicable exposures
+TRIGGER an expected-loss review decision, never automatic deletion;
+safety/final-head/integration layers are never auto-dropped on
+zero-defect streaks. (One layer, the default Opus review lens, was
+dropped under the old rule before D-061.)</li>
 <li><strong>Delegation calibration:</strong> every delegated unit gets a row — task
 altitude (pinned-spec / design-freedom / judgment-call), outcome
 (assigned by the lead after the gate, never self-labeled), catches,
@@ -362,7 +370,7 @@ design council; C-009 topology consensus; C-010 validation).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/orchestration.md · commit 4e644da · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/orchestration.md · commit c0f8f48 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

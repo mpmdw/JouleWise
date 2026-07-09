@@ -33,7 +33,7 @@
 <a href="#documentation-map">Documentation Map</a></aside>
   <div class="doc-wrap doc-source-readme-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>README.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="README.md · commit a835c73"><span class="source-file">README.md</span><span class="source-commit">commit a835c73</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="README.md · commit a7d1319"><span class="source-file">README.md</span><span class="source-commit">commit a7d1319</span></span></div>
     <h1>JouleWise</h1>
 <p>JouleWise is an extensible benchmark for energy-wise LLM inference across
 heterogeneous local hardware. The name is a deliberate nod to JouleSort and
@@ -47,10 +47,12 @@ and measured.</li>
 <li>Run bundles preserve raw traces, events, metadata, logs, and summary metrics
 for later audit and analysis.</li>
 </ul>
-<p><strong>Status:</strong> research prototype. The measurement harness is campaign-ready on
-Mac (Apple M3 Max); as of 2026-07-07, P2-013/P2-014 integrity and
-provenance fixes are complete; the verified end-user quickstart is a Phase
-5 deliverable.</p>
+<p><strong>Status:</strong> research prototype. The Mac (Apple M3 Max) measurement harness
+has cleared its pre-campaign software review; campaign execution remains
+gated on a production-shaped shakedown, detection-floor calibration, a
+quiet machine, and an external backup destination. As of 2026-07-07,
+P2-013/P2-014 integrity and provenance fixes are complete; the verified
+end-user quickstart is a Phase 5 deliverable.</p>
 <h2 id="current-state">Current State</h2>
 <p>Phase 1 is in its final stretch; <strong>Phase 2&#39;s Mac vertical slice is complete
 and the project has its first real energy measurements</strong> (2026-07-06). From a
@@ -58,8 +60,12 @@ typed config, one command produces a complete, schema-valid, auditable run
 bundle and reduces it to energy/latency summary metrics — proven first on
 deterministic mock adapters, and now live on real hardware: the MLX runtime +
 <code>powermetrics</code> telemetry adapters measured Qwen2.5-1.5B-Instruct (4-bit) on an
-Apple M3 Max at ~47 J per 512-token request (~77-88 mJ per generated token,
-257 tok/s). The six real corpus bundles pass <code>validate-bundle --strict</code>
+Apple M3 Max at ~47.2 J gross rail energy per 512-token request (~44.4 J
+idle-subtracted; ~79-90 mJ per generated output token on the idle-subtracted
+basis, mean 86.8 mJ; 257 tok/s). These are legacy L1 preliminary
+observations (pre-2M, manual review) under
+<code>docs/contracts/claims_ladder.md</code>; metric bases per
+<code>docs/contracts/token_normalization.md</code>. The six real corpus bundles pass <code>validate-bundle --strict</code>
 read-only and unrewritten: strict re-derives the recorded powermetrics power
 trace from raw plist evidence, re-derives summary metrics from the recorded
 trace and event log, checks the legacy additive summary comparison, and
@@ -146,7 +152,7 @@ constraints live in <code>docs/milestones.md</code>; cross-model review sessions
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>README.md · commit a835c73 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>README.md · commit a7d1319 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

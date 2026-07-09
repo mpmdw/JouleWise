@@ -36,13 +36,15 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 489b25c"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 489b25c</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 0a5c5e6"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 0a5c5e6</span></span></div>
     <h1>JouleWise Run State</h1>
-<p>Last updated: 2026-07-09 (P2-034 broad campaign packs C-026: PR #39
-merged — six packs, pack lint clean; pre-hardware campaign surface
-COMPLETE. Earlier same day: C-025 wave 2 (PRs #33..#38, D-056..D-059),
-C-024 wave 1 (PRs #29..#32, D-052..D-055), C-023 rigor review, C-022
-CP-5 clearance; suite 877)</p>
+<p>Last updated: 2026-07-09 (C-027 whole-project council review with
+gpt-5.6-sol: claim-surface corrections in README/PROJECT_STATUS/this
+file, 14 new queue rows plus NV-GATE-2 additions to P2-005, D-060 proposed +
+D-061..D-063 accepted; record in
+<code>docs/reviews/2026-07-09-c027-whole-project-review.md</code>. Earlier same
+day: Codex MCP bridge hardening; P2-034/C-026, C-025 wave 2, C-024
+wave 1, C-023 rigor review, C-022 CP-5 clearance; suite 877)</p>
 <h2 id="start-here-for-every-big-run">Start Here For Every Big Run</h2>
 <p>Before starting substantial work:</p>
 <ol>
@@ -110,7 +112,9 @@ dispositions). Live-verified on real MLX at three code states; three
 live-only defects caught and fixed at the lead gate. Post-merge
 integration review: zero cross-stream defects.</p>
 <p><strong>CP-5 RESUMED AND CLEARED (2026-07-09): pre-campaign review COMPLETE;
-Window A is GO behind two queued campaign-time steps.</strong> Seven PRs merged
+Window A is GO in the CP-5 software sense — C-027 additionally
+conditions execution on P0-003 backup, P2-038, P2-039, and
+P2-015-SMOKE.</strong> Seven PRs merged
 (#22..#28): D-033 strict legacy-bypass close, envelope-gate script,
 campaign-runner prompt-hash check, bundle-pack tooling, tokenizer
 identity widening + manifest regen, capture hardening (output token IDs,
@@ -118,23 +122,44 @@ fail-closed sampler pin, model weight hashing, hash-domain
 realized-vs-manifest closure), advisor status site + suite_next draft
 specs (D-051). Suite 822 OK. Ed&#39;s four-part answer + Window-A go/no-go:
 <code>docs/run_reports/2026-07-09-cp5-resume.md</code>.</p>
-<p><strong>RESTART HERE (next agent):</strong></p>
+<p><strong>RESTART HERE (next agent) — this is the ONLY next-action block; the
+queue owns ordering (C-027):</strong></p>
 <ol>
-<li>Read <code>docs/run_reports/2026-07-09-p2034-broad-packs.md</code> (latest) and
+<li>Read <code>docs/reviews/2026-07-09-c027-whole-project-review.md</code> (latest —
+whole-project council review, adjudicated follow-ups) and
 <code>docs/run_reports/2026-07-09-cp5-resume.md</code> (Window-A go/no-go).</li>
-<li>The pre-Window-A AGENT blockers are clear. Next work is
-machine-state dependent: [QUIET-MAC] quiet Window A (P2-015-SMOKE
-preflight row, then P2-015 floors → P2-006) is the top item; [AGENT]
-lane next is P2-022 shim spike / P2-023 HumanEval import (C-015
-post-2M sequencing — revisit after Window A; they are now the interop
-execution gates) and P2-035 (after floors); [ED-EXTERNAL]: P0-003
-backup destination is REQUIRED before Window-A data accumulates
-(C-026 escalation), plus P1-008 calendar/acceptance-bar.</li>
+<li>Lane state after C-027:<ul>
+<li>[ED-EXTERNAL] P0-003 external backup destination is a HARD GATE
+before any new irreplaceable Window-A evidence is retained; plus
+P1-008 rubric/calendar (provisional-contract fallback per proposed
+D-060).</li>
+<li>[AGENT]: the C-027 correctness rows, in queue order — P2-040
+(reducer/gate fixes incl. zero-window strict), P2-038 (production
+uncertainty evidence path), P2-039 (frozen floor artifact +
+guard factor), then RPT-001 (report skeleton + vertical slice),
+P2-042 (frozen analysis manifest), P2-041 (campaign verdict
+split), and only then P2-037 (contrast/claim engine, which
+consumes the manifest — required before any P2-006
+interpretation). P2-022/P2-023 remain BLOCKED post-2M per D-041 —
+do not start them.</li>
+<li>[QUIET-MAC] Window A (C-019 shakedown → P2-015-SMOKE → P2-015
+floors → P2-006) proceeds only after P2-040 + P2-038 + P2-039
+land and the P0-003 backup gate is satisfied (P2-040 is
+pre-Window-A: strict must reject zero-length windows before any
+collection).</li>
+</ul>
+</li>
 <li>Rotation (D-056), uncertainty gates (D-057), and the campaign packs
-are live for Window-A execution.</li>
+are live for Window-A execution once the above gates clear.</li>
 </ol>
 <h2 id="session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</h2>
 <ul>
+<li>2026-07-09 C-027 whole-project council review (7 gpt-5.6-sol lenses +
+counterreview + independent final examiner):
+<code>docs/reviews/2026-07-09-c027-whole-project-review.md</code> (compact run
+report: <code>docs/run_reports/2026-07-09-c027-council-review.md</code>)</li>
+<li>2026-07-09 Claude Code → Codex MCP bridge hardening and live smoke:
+<code>docs/run_reports/2026-07-09-claude-codex-mcp-bridge.md</code></li>
 <li>2026-07-09 P2-034 broad campaign packs (C-026; PR #39):
 <code>docs/run_reports/2026-07-09-p2034-broad-packs.md</code></li>
 <li>2026-07-09 spec-fleshing wave 2, ultracode (C-025; PRs #33..#38;
@@ -170,7 +195,16 @@ D-038..D-042): <code>docs/run_reports/2026-07-08-suite-science-expansion.md</cod
 </ul>
 <h2 id="current-verification">Current Verification</h2>
 <ul>
-<li>Main c095c83 (post PR #39; docs-only): suite <code>OK (skipped=10)</code> and
+<li>Claude Code 2.1.205 approved the project <code>codex</code> MCP server; Codex CLI
+0.144.0 protocol handshake exposed <code>codex</code> + <code>codex-reply</code> with the
+expected full-session controls. A real Claude → Codex read-only call
+read <code>AGENTS.md</code>/<code>RUN_STATE.md</code>, and the same thread continued through
+<code>codex-reply</code> (<code>JOULEWISE_CODEX_MCP_OK</code> /
+<code>JOULEWISE_CODEX_REPLY_OK</code>). <code>scripts/check-codex-mcp.mjs</code> passes;
+canonical suite <code>Ran 877 tests, OK (skipped=10)</code>.</li>
+<li>Last code-bearing verified head c095c83 (post PR #39; note: 36d5641
+later changed <code>scripts/build_site.py</code> on main without a recorded
+verification — flagged by C-027, covered by RETRO-001): suite <code>OK (skipped=10)</code> and
 repo lint errors=0, lead-run; pack lint errors=0 warnings=0.</li>
 <li>Prior: main after wave-2 integration fixes: <code>python3 -m unittest discover -s tests</code> → <code>Ran 877 tests, OK (skipped=10)</code>, lead-run; repo lint
 errors=0; CI green on all six PR heads (#33..#38); combined-ref
@@ -205,8 +239,12 @@ the new era rule (PR #22 live gate: 6/6 valid, tamper fails named).</li>
 </ul>
 <h2 id="known-workspace-state">Known Workspace State</h2>
 <ul>
-<li><code>main</code> pushed and current through this session&#39;s bookkeeping. No open
-PRs; no stream worktrees remain (all seven merged and removed).</li>
+<li><code>main</code> and <code>origin/main</code> contain the user-directed Claude Code → Codex
+bridge hardening from commit <code>1d7c415</code> (pushed direct as a bounded
+tooling change, closeout <code>ef34cc9</code>). Branch <code>c027-council-review</code>
+(PR #40) carries the C-027 review record, claim-surface corrections,
+and sweep fixes, and has merged main back in; the worktree is
+otherwise clean.</li>
 <li>Codex&#39;s own worktree <code>/Users/edr/.codex/worktrees/7fe2/JouleWise</code>
 still holds the ORIGINAL advisor-site commits (bf9ffc5..e6cf431);
 their content landed via PR #28 (D-051 renumber applied). Safe to
@@ -215,25 +253,12 @@ leave or remove; do not re-land.</li>
 lead-verification artifacts (live-runs bundles are not corpus).</li>
 </ul>
 <h2 id="what-is-next">What Is Next</h2>
-<p>Follow <code>TASK_QUEUE.md</code> (lane-annotated). In order:</p>
-<ol>
-<li><strong>Wave 2 [AGENT]</strong> (queue ranks 0a-0d; C-024 handoff): P2-029
-reducer/aggregator uncertainty propagation, P2-030 ordering
-executability (pre-campaign blocker for suite claims), P2-031
-token-normalization contract + stack-identity table, P2-032
-pre-hardware campaign packs. (P2-015-PREP is DONE — the design landed
-as <code>docs/phase_2/detection_floor.md</code> with the false-effect guard
-floor, D-054.)</li>
-<li><strong>Quiet Window A</strong> [QUIET-MAC]: C-019 shakedown first, then P2-015
-floors, then P2-006 2M baselines; AP-6 sentinel pilot may ride the
-window tail (manifests are ready).</li>
-<li><strong>Ed&#39;s external one-pass</strong> [ED-EXTERNAL]: calendar, device access,
-borrow window, wall meter, backup destination (P0-003); plus P2-027
-external re-reduction party selection.</li>
-<li><strong>3.0.2 llama.cpp spike</strong> [AGENT after R-003 approval].</li>
-</ol>
-<p>Hardware-gated (unchanged): 2K/2L (P1-006), wall meter (P1-003),
-topology (P1-004), calendar mapping (P1-008).</p>
+<p>See <strong>RESTART HERE</strong> above — that block and <code>TASK_QUEUE.md</code> are the only
+next-action authorities. (C-027 removed the duplicated ranking that
+previously lived here after it drifted stale against the queue.)</p>
+<p>Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
+C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),
+calendar mapping (P1-008).</p>
 <h2 id="open-decisions-and-blockers">Open Decisions And Blockers</h2>
 <ul>
 <li>Supervisor approval and scope pending (P1-001, R-001 — mitigation
@@ -255,7 +280,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit 489b25c · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit 0a5c5e6 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

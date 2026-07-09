@@ -35,7 +35,7 @@
 <a href="#task-queue-protocol">Task Queue Protocol</a></aside>
   <div class="doc-wrap doc-source-agent-plan-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>AGENT_PLAN.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="AGENT_PLAN.md · commit 4d582fe"><span class="source-file">AGENT_PLAN.md</span><span class="source-commit">commit 4d582fe</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="AGENT_PLAN.md · commit a7d1319"><span class="source-file">AGENT_PLAN.md</span><span class="source-commit">commit a7d1319</span></span></div>
     <h1>Agent Implementation Plan</h1>
 <p>This repository implements JouleWise, an extensible energy-characterization
 benchmark for LLM inference across heterogeneous local hardware. The name is a
@@ -138,7 +138,7 @@ report.</p>
 <pre><code class="language-text">typed config
   -&gt; controller
     -&gt; transport adapter: local or ssh
-    -&gt; runtime adapter: mlx, vllm, llama.cpp, hailo-if-viable
+    -&gt; runtime adapter: mlx, vllm, llama.cpp (hailo: unsupported_workload — feasibility finding only)
     -&gt; telemetry adapter: powermetrics, nvidia-smi, jetson rails, wall meter
   -&gt; run bundle
     -&gt; reducers
@@ -348,7 +348,7 @@ the current top queued task.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>AGENT_PLAN.md · commit 4d582fe · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>AGENT_PLAN.md · commit a7d1319 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

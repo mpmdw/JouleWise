@@ -43,10 +43,11 @@
 <a href="#r-014-model-weights-become-unavailable-or-gated">R-014: Model weights become unavailable or gated</a>
 <a href="#r-015-schema-changes-after-data-collection-starts">R-015: Schema changes after data collection starts</a>
 <a href="#r-016-measurement-corpus-loss-runs-has-no-backup-path">R-016: Measurement-corpus loss (runs/ has no backup path)</a>
-<a href="#r-017-repo-lives-on-icloud-synced-desktop-eperm-lock-recurrence">R-017: Repo lives on iCloud-synced Desktop (EPERM lock recurrence)</a></aside>
+<a href="#r-017-repo-lives-on-icloud-synced-desktop-eperm-lock-recurrence">R-017: Repo lives on iCloud-synced Desktop (EPERM lock recurrence)</a>
+<a href="#r-018-the-agent-loop-itself-as-a-schedule-and-scope-risk">R-018: The agent loop itself as a schedule and scope risk</a></aside>
   <div class="doc-wrap doc-source-docs-risk-register-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/risk_register.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/risk_register.md · commit 1581cd2"><span class="source-file">docs/<wbr>risk_register.md</span><span class="source-commit">commit 1581cd2</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/risk_register.md · commit a7d1319"><span class="source-file">docs/<wbr>risk_register.md</span><span class="source-commit">commit a7d1319</span></span></div>
     <h1>Risk Register</h1>
 <p>Living register of risks that could sink, delay, or weaken the capstone.
 Review at the start of every phase and whenever a trigger fires; update
@@ -208,6 +209,14 @@ repo work.</li>
 <td>low</td>
 <td>medium</td>
 <td>mitigated (repo moved 2026-07-05; residual: session launch paths)</td>
+</tr>
+<tr>
+<td>R-018</td>
+<td>Agent-loop self-expansion consumes calendar without grader-facing output</td>
+<td>all</td>
+<td>medium</td>
+<td>high</td>
+<td>open (C-027; D-060 stop line proposed as mitigation)</td>
 </tr>
 </tbody></table></div>
 <h2 id="r-001-supervisor-approval-delayed-or-scope-shifts">R-001: Supervisor approval delayed or scope shifts</h2>
@@ -485,9 +494,11 @@ unrecoverable gap honestly in the exclusion log.</li>
 <li>Phase: all. Likelihood: low (mitigated; was high while on Desktop).
 Impact: medium (blocks work sessions mid-run; small integrity risk
 around eviction during writes).</li>
-<li>Status: <strong>mitigated 2026-07-05</strong> - the repo moved to
-<code>~/code/CapstoneRivoire/Capstone</code> (P0-001 complete; git + suite
-verified green at the new path). Residual exposure: agent sessions
+<li>Status: <strong>mitigated 2026-07-05</strong> - the repo moved off the synced
+Desktop (current canonical path: <code>~/code/JouleWise</code>; the interim
+<code>~/code/CapstoneRivoire/Capstone</code> path recorded here was itself later
+renamed - corrected 2026-07-09, C-027). P0-001 complete; git + suite
+verified green at the new path. Residual exposure: agent sessions
 launched from the stale Desktop path (delete the leftover
 <code>~/Desktop/CapstoneRivoire</code> husk after relaunching from the new
 path), and any future placement of repo or <code>runs/</code> data under an
@@ -505,6 +516,23 @@ incidents did), then re-verify with the test suite before continuing;
 the remote (<code>origin/main</code>) bounds code loss to the working tree.</li>
 <li>Owner: user (launch paths), agent (post-lock verification discipline).</li>
 </ul>
+<h2 id="r-018-the-agent-loop-itself-as-a-schedule-and-scope-risk">R-018: The agent loop itself as a schedule and scope risk</h2>
+<ul>
+<li>Phase: all. Likelihood: medium. Impact: high (capstones fail by
+calendar, R-012).</li>
+<li>Registered by C-027 (NEGSPACE lens finding accepted in council): the
+multi-agent workflow can remain locally productive - packs, registries,
+meta-process, site work - while the graded deliverable path (rubric,
+report source, backup, real corpus, figures) stays starved. Same-day
+evidence at registration: ~6M tokens of breadth work vs six real
+corpus bundles, no report source, same-disk backup.</li>
+<li>Trigger: an agent-heavy work block that produces neither a new real
+evidence bundle nor a report/figure increment.</li>
+<li>Mitigation: proposed D-060 depth-before-breadth stop line (awaiting
+Ed); RPT-001 vertical slice; the C-027 correctness rows ranked ahead
+of all breadth work.</li>
+<li>Owner: lead (queue discipline), Ed (D-060 ratification).</li>
+</ul>
 
 
   </div>
@@ -513,7 +541,7 @@ the remote (<code>origin/main</code>) bounds code loss to the working tree.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/risk_register.md · commit 1581cd2 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/risk_register.md · commit a7d1319 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

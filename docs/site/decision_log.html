@@ -28,15 +28,15 @@
 <div class="doc-layout">
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#how-to-use-this-log">How To Use This Log</a>
 <a href="#index">Index</a>
-<a href="#d-054-false-effect-guard-floor-and-unknown-term-claim-ceiling-policy">D-054: False-effect guard floor and unknown-term claim-ceiling policy</a>
-<a href="#d-055-research-question-registry-is-the-canonical-live-index">D-055: Research-question registry is the canonical live index</a>
-<a href="#d-056-suite-order-policies-and-order-row-provenance">D-056: Suite order policies and order_row provenance</a>
-<a href="#d-057-uncertainty-terms-drift-is-a-bound-claim-gate-reason-codes-are-stable-vocabulary">D-057: Uncertainty terms — drift is a bound; claim-gate reason codes are stable vocabulary</a>
 <a href="#d-058-token-normalization-and-stack-identity-contract-adopted">D-058: Token-normalization and stack-identity contract adopted</a>
-<a href="#d-059-claims-lint-mechanical-enforcement-in-ci">D-059: Claims-lint mechanical enforcement in CI</a></aside>
+<a href="#d-059-claims-lint-mechanical-enforcement-in-ci">D-059: Claims-lint mechanical enforcement in CI</a>
+<a href="#d-060-depth-before-breadth-stop-line-proposed-awaiting-ed-s-ratification">D-060: Depth-before-breadth stop line (PROPOSED — awaiting Ed&#x27;s ratification)</a>
+<a href="#d-061-review-layer-evaluation-rule-v2-replaces-the-two-zero-sessions-drop-rule">D-061: Review-layer evaluation rule v2 (replaces the two-zero-sessions drop rule)</a>
+<a href="#d-062-confirmatory-sampling-policy-fixed-n-explicit-demotion-no-silent-top-ups">D-062: Confirmatory sampling policy — fixed n, explicit demotion, no silent top-ups</a>
+<a href="#d-063-process-architecture-v2-machine-readable-state-kernel-first">D-063: Process architecture v2 — machine-readable state kernel first</a></aside>
   <div class="doc-wrap doc-source-docs-decision-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/decision_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit a835c73"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit a835c73</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit c0f8f48"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit c0f8f48</span></span></div>
     <h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
@@ -49,7 +49,8 @@ already covers it. Do not silently re-decide settled questions.</li>
 from the run report, and reference its ID (<code>D-NNN</code>) in the code review or doc
 that applies it.</li>
 <li>Statuses: <code>accepted</code> (binding until revisited), <code>open</code> (criteria defined,
-evidence pending), <code>superseded by D-NNN</code>.</li>
+evidence pending), <code>proposed</code> (recorded, awaiting Ed&#39;s ratification),
+<code>superseded by D-NNN</code>.</li>
 <li>Every entry must include Options Considered and Considerations. A decision
 without recorded alternatives is not auditable.</li>
 <li>Revisit triggers are part of the contract: when a trigger fires, the decision
@@ -359,104 +360,31 @@ must be re-examined, not quietly worked around.</li>
 <td>Claims-lint mechanical enforcement in CI</td>
 <td>accepted</td>
 </tr>
+<tr>
+<td>D-060</td>
+<td>Depth-before-breadth stop line</td>
+<td>proposed</td>
+</tr>
+<tr>
+<td>D-061</td>
+<td>Review-layer evaluation rule v2</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-062</td>
+<td>Confirmatory sampling policy (fixed n, demotion)</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-063</td>
+<td>Process architecture v2 (state kernel first)</td>
+<td>accepted</td>
+</tr>
 </tbody></table></div>
 <hr>
 <blockquote>
-<p><strong>Site view:</strong> the complete entry index appears above; the 53 older full entries are omitted from this page for capsule size. The complete log is the repository file <a href="https://github.com/mpmdw/JouleWise/blob/main/docs/decision_log.md"><code>docs/decision_log.md</code></a>.</p>
+<p><strong>Site view:</strong> the complete entry index appears above; the 57 older full entries are omitted from this page for capsule size. The complete log is the repository file <a href="https://github.com/mpmdw/JouleWise/blob/main/docs/decision_log.md"><code>docs/decision_log.md</code></a>.</p>
 </blockquote>
-<h2 id="d-054-false-effect-guard-floor-and-unknown-term-claim-ceiling-policy">D-054: False-effect guard floor and unknown-term claim-ceiling policy</h2>
-<ul>
-<li>Date: 2026-07-09</li>
-<li>Status: accepted (promotes stream-ledger P15-7)</li>
-<li>Phase: 2 / measurement</li>
-</ul>
-<p>Context: C-023 finding B1 (no metrological error budget); counterreview R2
-killed the drafted percentile-UCB floor (unidentifiable at n=10: the sample
-maximum exceeds the true 95th percentile only 40.1% of the time; a
-nonparametric 95/95 bound needs n=59). Stream ledger:
-<code>docs/stream_logs/2026-07-09-p2015.md</code> (P15-7; P15-2/P15-6 superseded).</p>
-<p>Decision (PR #31): <code>docs/phase_2/detection_floor.md</code> is the P2-015 design.
-Floors are FALSE-EFFECT GUARD FLOORS — max(largest observed absolute
-residual/contrast, Student-t prediction bound for one new observation) —
-with bootstrap as sensitivity only and a pre-registered small-sample guard
-factor at 5&lt;=n&lt;10. Error-budget terms are enumerated per
-backend x metric x window class; UNKNOWN terms cap claim level (they do not
-block L0/L1 operation). Variance and deterministic bounds propagate
-separately (drift is a bound unless a distributional model is justified).
-Wall/USB-C PD calibration runbooks are pre-registered as bridge-model fits
-(slope/intercept over workload-induced deltas), not absolute-delta
-acceptance. Window-B revalidation: stale floors cap affected claims until
-topped up.</p>
-<p>Consequences: P2-015 campaign sizing is derivable from the economics table
-(170-340 bundles); claim tooling must consume floor rows + error-budget
-fields per the analysis registry (D-053).</p>
-<h2 id="d-055-research-question-registry-is-the-canonical-live-index">D-055: Research-question registry is the canonical live index</h2>
-<ul>
-<li>Date: 2026-07-09</li>
-<li>Status: accepted (promotes stream-ledger RQ-1)</li>
-<li>Phase: cross-phase / research bookkeeping</li>
-</ul>
-<p>Context: C-023 finding B3 — the same question existed as promoted Q, banked
-item, capability-map row, and C5 tier row with no alias normalization.
-Stream ledger: <code>docs/stream_logs/2026-07-09-rqreg.md</code>.</p>
-<p>Decision (PR #32): <code>docs/research_question_registry.md</code> is the canonical
-LIVE index of question status, aliases, type, claim ceiling, forbidden
-upgrade, AP/campaign owners, gate class, and pre-hardware preparability
-(75 rows). <code>docs/research_question_bank.md</code> remains the historical and
-deliberative record — single-writer split. The registry indexes ratified
-council decisions; it never re-decides them. C-023 coverage gaps enter as
-<code>candidate (C-023)</code> rows.</p>
-<p>Consequences: promotion/status changes edit the registry (with the bank
-still holding deliberation); front-facing docs point at the registry for
-current state; the future claims-index linter consumes registry columns.</p>
-<h2 id="d-056-suite-order-policies-and-order-row-provenance">D-056: Suite order policies and order_row provenance</h2>
-<ul>
-<li>Date: 2026-07-09</li>
-<li>Status: accepted (promotes stream-ledger P30-1..P30-3; additive amendment to D-045.6)</li>
-<li>Phase: 2 / suite execution</li>
-</ul>
-<p>Context: C-015 promised round-robin/Latin-square rotation; the sequencing
-spec executed manifest_order (C-023 M2, pre-campaign blocker). Design round
-ratified in <code>docs/stream_logs/2026-07-09-p2030.md</code> before implementation.</p>
-<p>Decision (PR #34): <code>execution_policy.order_policy</code> names an operational
-policy from the closed set {manifest_order, block_round_robin_v1,
-block_latin_square_v1 (Williams row-balanced)}; realized order is the pure
-function realized_order(manifest, policy, order_row); order_row is
-controller-derived (suite rep index), recorded in metadata.suite alongside
-order_seed = sha256(suite_seed, policy, order_row) — the D-045.6 hash
-surface gains order_row as a companion, additively. Rotation unit is the
-contiguous block run; all-sentinel blocks are position-anchored;
-item_index stays manifest identity, position is the realized ordinal.
-Strict validation recomputes the expected permutation AND the order_seed
-fail-closed when order_row is present; legacy bundles without order_row
-stay valid. Pinned generated manifests keep manifest_order byte-identical.
-Reports/tooling surface manifest_order wording when rotation is absent.
-Within-block item rotation is a named deferred revisit.</p>
-<p>Consequences: suite campaigns can execute the C-015 rotation promises with
-auditable order provenance; campaign-level config ordering remains
-order_manifest.json (a distinct mechanism — see the campaign-packs README
-operator note).</p>
-<h2 id="d-057-uncertainty-terms-drift-is-a-bound-claim-gate-reason-codes-are-stable-vocabulary">D-057: Uncertainty terms — drift is a bound; claim-gate reason codes are stable vocabulary</h2>
-<ul>
-<li>Date: 2026-07-09</li>
-<li>Status: accepted (promotes stream-ledger P29-2/P29-3)</li>
-<li>Phase: 2 / measurement</li>
-</ul>
-<p>Context: P2-029 (PR #33) implemented detection_floor.md §3 (D-054).</p>
-<p>Decision: (a) idle drift enters uncertainty accounting ONLY as a
-deterministic bound (E_drift_bound_j in energy_bound_terms_j, from the
-single documented evidence key idle_drift_bound_w) — never as a variance
-term unless a distributional model is explicitly justified; no drift
-magnitude is ever invented from cooldown flags (cap-hits add
-claim-ineligibility reasons instead). (b) The claim_eligibility reason
-codes (insufficient_in_window_samples, cadence_ratio_unrecorded/below,
-clock_bound_unrecorded/exceeds_quarter_window, drift_term_unknown,
-interpolation_bound_unrecorded/exceeds_floor, ...) are STABLE machine
-vocabulary: consumers may match on them; changes require a decision-log
-amendment. Single bundles are not_estimable; unknown gate inputs fail
-machine-readably, never silently pass.</p>
-<p>Consequences: claim tooling and the analysis registry consume these codes;
-P2-015 floor artifacts plug into the same gate fields.</p>
 <h2 id="d-058-token-normalization-and-stack-identity-contract-adopted">D-058: Token-normalization and stack-identity contract adopted</h2>
 <ul>
 <li>Date: 2026-07-09</li>
@@ -496,6 +424,117 @@ satisfies the C-023 cut-line condition for structural claim checks; the
 Phase 4 claims-index mode extends this tool rather than a new one.</p>
 <p>Consequences: the D-053 freeze discipline and D-055 registry are now
 machine-checked.</p>
+<h2 id="d-060-depth-before-breadth-stop-line-proposed-awaiting-ed-s-ratification">D-060: Depth-before-breadth stop line (PROPOSED — awaiting Ed&#39;s ratification)</h2>
+<ul>
+<li>Date: 2026-07-09</li>
+<li>Status: <strong>proposed</strong> (C-027 council recommendation; allocates
+Ed-facing work, so Ed ratifies or amends)</li>
+<li>Phase: cross-phase / project management</li>
+</ul>
+<p>Proposal (C-027; amends D-041/D-052 sequencing and extends R-012/R-018):
+no NEW breadth — new campaign packs, registry expansion, site features,
+meta-process growth — until four gates pass:</p>
+<ol>
+<li>Grading rubric + calendar captured by a hard date; if the program
+stays silent past it, adopt and RECORD a provisional grading contract
+with conservative internal deadlines (external silence triggers scope
+fallback, never indefinite paralysis).</li>
+<li>Off-machine backup with a restore proof, before any NEW irreplaceable
+campaign evidence is retained (P0-003). Does not block report
+drafting, analysis tooling, or correctness fixes.</li>
+<li>Window A complete in the C-027 sense: smoke, frozen sampling rule and
+guard factor (P2-039), production uncertainty evidence (P2-038),
+versioned floor artifact, floors, baselines — with the executable
+contrast/claim path (P2-037) before any L2 interpretation.</li>
+<li>One end-to-end vertical slice: report source skeleton + reproducible
+bundle→analysis→figure→claims-row→report-page path (RPT-001).</li>
+</ol>
+<p>Work that CLOSES these gates, correctness defects, report writing, and
+already-obligated hardware preparation are always permitted.</p>
+<p>Alternatives considered: status quo (rejected — C-027/NEGSPACE evidence:
+six real bundles vs ~6M tokens of same-day breadth work); a blanket
+freeze including correctness work (rejected — would block the gates&#39;
+own prerequisites).</p>
+<h2 id="d-061-review-layer-evaluation-rule-v2-replaces-the-two-zero-sessions-drop-rule">D-061: Review-layer evaluation rule v2 (replaces the two-zero-sessions drop rule)</h2>
+<ul>
+<li>Date: 2026-07-09</li>
+<li>Status: accepted (C-027; process-layer, within council authority)</li>
+<li>Phase: cross-phase / process instrumentation</li>
+</ul>
+<p>Context: the &quot;drop a layer after two zero-catch sessions&quot; rule was
+falsified by its own record — integration review returned zero unique
+catches twice (C-017, CP-5) and then caught five real cross-stream seams
+(C-024). Mechanical application would have deleted the layer immediately
+before its highest-value session.</p>
+<p>Decision: layer evaluation uses (a) applicability decided by
+PRE-DECLARED mechanical predicates (e.g. integration review counts only
+when 2+ independently developed streams merge touching a shared
+contract/consumer/generated artifact), never post-hoc judgment; (b) an
+outcome taxonomy separating accepted-unique-defect / duplicate /
+clean-verification / false-positive-suppression — suppression is
+valuable but is not a catch; (c) fixed severity weights declared before
+the session; (d) three applicable exposures TRIGGER an expected-loss
+review decision, never automatic deletion; (e) safety, final-head, and
+integration layers are never auto-dropped on zero-defect streaks —
+they are judged by expected-loss reduction.</p>
+<p>Alternatives considered: keep the two-zero rule (falsified); &quot;three
+applicable sessions, severity-weighted&quot; as free-text judgment (rejected
+in council — reintroduces the discretion that made the old rule
+unfalsifiable).</p>
+<h2 id="d-062-confirmatory-sampling-policy-fixed-n-explicit-demotion-no-silent-top-ups">D-062: Confirmatory sampling policy — fixed n, explicit demotion, no silent top-ups</h2>
+<ul>
+<li>Date: 2026-07-09</li>
+<li>Status: accepted (C-027; scientific protocol, ratifies the RIGOR/STATS
+adjudication; amends the top-up language in
+<code>docs/contracts/analysis_plans.md</code> — AP-EDIT applies the text)</li>
+<li>Phase: cross-phase / statistical protocol</li>
+</ul>
+<p>Context: the analysis plans repeatedly started at n=5 and added
+repetitions when an observed CI was near-floor or unsatisfactory, then
+reported ordinary 95% CIs. Outcome-dependent sample growth invalidates
+nominal coverage (C-027 RIGOR finding, adjudicated with the peer&#39;s
+counterreview).</p>
+<p>Decision: (a) confirmatory contrasts use n FROZEN before observing that
+pack&#39;s effects, sized from Window-A variance/MDE evidence — nearer 10
+than 5 for near-floor comparisons; (b) predeclare replacement rules for
+technically invalid runs (they are not top-ups); (c) any
+outcome-dependent top-up permanently DEMOTES that contrast to
+exploratory: the original fixed-n analysis is reported regardless of
+direction, pooled estimates are never presented as retaining nominal
+confirmatory coverage, and no later convenience re-promotes the claim;
+(d) a pre-registered two-look alpha-spending design (frozen max n, look
+boundaries, spending function) is PERMITTED for a specifically justified
+expensive campaign, never the default.</p>
+<p>Alternatives considered: full group-sequential machinery as default
+(rejected — avoidable defense surface for a capstone); status quo
+(rejected — statistically invalid).</p>
+<h2 id="d-063-process-architecture-v2-machine-readable-state-kernel-first">D-063: Process architecture v2 — machine-readable state kernel first</h2>
+<ul>
+<li>Date: 2026-07-09</li>
+<li>Status: accepted (C-027; process-layer)</li>
+<li>Phase: cross-phase / process architecture</li>
+</ul>
+<p>Context: five core process files grew 3,106 → 4,893 lines with ~9.5k net
+process/history lines since orchestration landed; the same-day RUN_STATE
+dual next-action drift (C-027 B3) is the demonstrated failure mode of
+hand-maintained state mirrors.</p>
+<p>Decision (staged; big-bang migration rejected by both council sides):
+Stage 1 (DOC-008) = a thin machine-readable state kernel (task id, lane,
+status, dependencies, authority pointer, acceptance pointer, stop-card
+pointer) from which the RUN_STATE restart block and the live queue view
+are GENERATED; PROJECT_STATUS compaction with a status-history archive;
+retire <code>docs/planning_reflection_protocol.md</code> as standalone intake
+(zero credited catches across four recent sessions — its useful fields
+fold into queue rows); the two-writer rule and credential-boundary push
+procedure move into <code>docs/orchestration.md</code>. Stage 2 = per-session
+findings/invocations ledgers making &quot;unique catch&quot; a query (extends
+D-050). Policy-doc generation comes LAST — supersession requires
+semantic judgment (council position, adopted from the peer&#39;s argument
+over the lead&#39;s original ordering).</p>
+<p>Alternatives considered: defer the kernel and generate
+current_policy.md first (the lead&#39;s draft position — REVERSED in
+council: it leaves the demonstrated drift mode active); full big-bang
+migration (rejected: risks the drift it cures).</p>
 
 
   </div>
@@ -504,7 +543,7 @@ machine-checked.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/decision_log.md · commit a835c73 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/decision_log.md · commit c0f8f48 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

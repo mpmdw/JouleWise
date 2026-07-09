@@ -26,58 +26,52 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#what-landed">What landed</a>
-<a href="#process-trace-appendix">Process trace appendix</a>
-<a href="#next-actions">Next actions</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-09-p2034-broad-packs-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-09-p2034-broad-packs.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-09-p2034-broad-packs.md · commit a346449"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-09-p2034-broad-packs.md</span><span class="source-commit">commit a346449</span></span></div>
-    <h1>Run Report — P2-034 Broad Campaign Packs (2026-07-09, C-026)</h1>
-<p><strong>Primary deliverable (user ask):</strong> P2-034 via the same pipeline, worktrees
-at lead judgment. <strong>SHIPPED:</strong> PR #39 merged on green CI; suite OK and
-repo lint errors=0 on merged main <code>c095c83</code>.</p>
-<h2 id="what-landed">What landed</h2>
-<p>Six packs completing the pre-hardware campaign surface
-(docs/campaign_packs/): C5-2.7 device perf/W rankings; C5-2.8 placement
-optimality (explicitly a derived-analysis pack — prediction freeze before
-validation cells, gated on AP-1/Q4); C5-3.1+3.5 replication runbook with
-an external-lab cold-start preflight; C5-I.1/I.2/I.5 import family
-(HumanEval-first, unnamed second-family placeholder, metadata-only BH,
-C-015 kill list enforced); C5-I.3 FLORES fertility (both legs required,
-language set deferred per D-046/B6); C5-I.4 harness overhead (real
-P2-022 contract structure, all verdict branches). All draft AP rows pass
-<code>claims_lint --mode pack</code> (errors=0, warnings=0). With P2-032, every
-<code>pre_hardware_preparable=fully</code> registry row now has a pack.</p>
-<h2 id="process-trace-appendix">Process trace appendix</h2>
-<p><strong>Shape:</strong> single stream, one worktree (all files in one dir — parallel
-writers would collide). Design-round-FIRST (operation-loop §4a
-strengthened rule, second validated use): 5.5&#39;s scoping memo argued the
-6-file grouping and per-pack now-vs-gated splits; lead ratified with 3
-pins (second-family placeholder unnamed; runtime-held-constant =
-revision/build-family; C5-3.5 starts with smallest method-transfer
-suite); zero design rework followed. Pipeline: implement → dual lenses
-(executability/gating-honesty incl. cold-start test; compliance incl.
-char-level ceiling checks) → 8/8-accepted fix round → lead gate (suite +
-pack lint on lead shell) → final-head CLEAN → PR #39 → CI → merge.
-Integration review skipped per §6 (single stream).</p>
-<p><strong>Catches by layer:</strong> compliance lens — 1 blocker (char-level registry
-wording drift the linter structurally cannot see: code-span nesting),
-P2-022 contract-structure flattening, a scorer-leak in C5-I.2&#39;s
-multiplicity wording, caption compliance missing on later figures;
-executability lens — external-lab cold-start gap (a never-seen-JouleWise
-lab could not have rerun the campaign), missing validation-execution
-command in C5-2.8. Final-head: CLEAN (verified all 8 fixes + 18 caption
-insertions independently). FIX-N one-shot record now 23/23.</p>
-<p><strong>Yield/spend:</strong> ~5 codex sessions (design, implement, 2 lenses, fix,
-final-head) ≈ 600k tokens.</p>
-<h2 id="next-actions">Next actions</h2>
-<ol>
-<li>Quiet Window A [QUIET-MAC]: C-019 shakedown → P2-015 floors → P2-006.</li>
-<li>P2-035 (RQ-ENERGY-VARIANCE prerequisites) after floors.</li>
-<li>P2-022 shim spike / P2-023 HumanEval import are now the gating items
-for executing the interop packs (queue ranks 8/9, post-2M).</li>
-<li>Ed: Lakebed redeploy when convenient.</li>
-</ol>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#what-happened">What happened</a>
+<a href="#session-mechanics-evidence">Session mechanics / evidence</a>
+<a href="#next-best-task">Next best task</a></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-09-c027-council-review-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-09-c027-council-review.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-09-c027-council-review.md · commit c0f8f48"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-09-c027-council-review.md</span><span class="source-commit">commit c0f8f48</span></span></div>
+    <h1>Run Report: C-027 Whole-Project Council Review (2026-07-09)</h1>
+<p>Compact session record. The adjudicated substance — verdict, blockers,
+per-finding disposition table, deliberation traces, calibration record —
+lives in ONE place: <code>docs/reviews/2026-07-09-c027-whole-project-review.md</code>
+(raw lens/counterreview/examiner outputs under <code>docs/reviews/c027/</code>).
+This report intentionally does not restate it (C-027 itself adjudicated
+against duplicated session narrative).</p>
+<h2 id="what-happened">What happened</h2>
+<ul>
+<li>Ed directed a thorough whole-project council review with the new Codex
+model (gpt-5.6-sol, xhigh). The old CLI (0.143.0) rejected the model;
+upgraded to 0.144.0; smoke test confirmed model + effort in the
+session header.</li>
+<li>7 parallel read-only Sol lenses (topdocs, rigor-examiner, stats, meta,
+reverse-orchestration, arch, negspace) → lead verification of every
+blocker-class claim → Sol counterreview of the lead synthesis + 4
+design questions → independent Fable-tier final examiner
+(PASS-conditional; all conditions applied).</li>
+<li>Outcome: 8 confirmed blocker clusters; claim-surface corrections
+landed same session (README, PROJECT_STATUS, RUN_STATE, milestones,
+AGENT_PLAN, risk register, 2026-07-06 addendum); 14 follow-up queue rows (+ NV-GATE-2 additions to P2-005); D-060 PROPOSED (awaiting Ed) + D-061/D-062/D-063 accepted;
+R-018 registered.</li>
+</ul>
+<h2 id="session-mechanics-evidence">Session mechanics / evidence</h2>
+<ul>
+<li>10 Codex invocations via codex-run (1 failed pre-upgrade smoke, 9 OK),
+appended to <code>.codex-bridge/invocation_manifest.jsonl</code> with archived
+output paths — the first D-050-compliant rows; 1 Fable-tier examiner
+subagent.</li>
+<li>Tests: docs-only session; suite not run (no code touched). Site
+regenerated + redeployed at close-out.</li>
+<li>Landed as branch <code>c027-council-review</code> + PR (multi-commit series per
+D-031 — a rule this very review found the lead breaching; the branch
+also carries the previously uncommitted user-directed CODEX-BRIDGE
+unit as its own labeled commit).</li>
+</ul>
+<h2 id="next-best-task">Next best task</h2>
+<p>Per the corrected RUN_STATE restart block: [ED-EXTERNAL] P0-003 backup
+destination (hard pre-Window-A gate) + P1-008 rubric/calendar;
+[AGENT] P2-040 → P2-038 → P2-039 → RPT-001 → P2-037.</p>
 
 
   </div>
@@ -86,7 +80,7 @@ for executing the interop packs (queue ranks 8/9, post-2M).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-09-p2034-broad-packs.md · commit a346449 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-09-c027-council-review.md · commit c0f8f48 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

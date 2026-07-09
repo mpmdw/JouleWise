@@ -27,11 +27,12 @@
 <main>
 <div class="doc-layout">
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#known-date-constraints">Known Date Constraints</a>
+<a href="#evidence-by-dates-c-027-proposed-d-060">Evidence-By Dates (C-027 / proposed D-060)</a>
 <a href="#phase-targets">Phase Targets</a>
 <a href="#scheduling-rules">Scheduling Rules</a></aside>
   <div class="doc-wrap doc-source-docs-milestones-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/milestones.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/milestones.md · commit ae48abe"><span class="source-file">docs/<wbr>milestones.md</span><span class="source-commit">commit ae48abe</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/milestones.md · commit 0a5c5e6"><span class="source-file">docs/<wbr>milestones.md</span><span class="source-commit">commit 0a5c5e6</span></span></div>
     <h1>Milestones And Calendar Map</h1>
 <p>Status: skeleton - real dates pending user input (task P1-008). Capstones
 fail by calendar, not by code (R-012); this file exists so schedule risk is
@@ -48,8 +49,8 @@ every phase start.</p>
 </thead>
 <tbody><tr>
 <td>Mac local-machine auth session (unblocks privileged powermetrics sample)</td>
-<td>to reschedule (the planned 2026-06-10 slot passed with no session/evidence recorded)</td>
-<td>user; updated 2026-07-05</td>
+<td>CLOSED 2026-07-06 - privileged sample captured and sudoers rule recorded (C-027 correction: this row had stayed &quot;to reschedule&quot; after the gate closed; the missed 2026-06-10 slot remains a historical note)</td>
+<td>user; updated 2026-07-09</td>
 </tr>
 <tr>
 <td>Project pause (vacation)</td>
@@ -77,6 +78,13 @@ every phase start.</p>
 <td>user/program</td>
 </tr>
 </tbody></table></div>
+<h2 id="evidence-by-dates-c-027-proposed-d-060">Evidence-By Dates (C-027 / proposed D-060)</h2>
+<p>Every external gate needs a hard evidence-by date with an automatic cut
+rule: if the gate is not proven by its date, the project moves
+permanently to the Mac + synthetic-transfer/analytical-composition
+floor for that dependency. Dates to be filled with P1-008. The automatic cut rule TAKES EFFECT
+only if/when Ed ratifies D-060 (currently PROPOSED); it is recorded
+now so the schedule risk and the intended mechanism are visible.</p>
 <h2 id="phase-targets">Phase Targets</h2>
 <p>Fill &quot;Target end&quot; from the real deadlines backwards once known. Until
 then, the dependency structure is the schedule.</p>
@@ -92,7 +100,7 @@ then, the dependency structure is the schedule.</p>
 <tbody><tr>
 <td>1: Approval, feasibility, measurement design</td>
 <td>supervisor + device access</td>
-<td>local auth session (to reschedule); lab answers</td>
+<td>local auth session CLOSED 2026-07-06; lab answers</td>
 <td>TBD</td>
 </tr>
 <tr>
@@ -150,7 +158,7 @@ trip this rule.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/milestones.md · commit ae48abe · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/milestones.md · commit 0a5c5e6 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

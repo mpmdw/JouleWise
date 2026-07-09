@@ -26,7 +26,8 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#this-update-as-of-2026-07-09-advisor-status-cockpit-30-second-read">This Update (as of 2026-07-09, advisor status cockpit) — 30-second read</a>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#this-update-as-of-2026-07-09-c-027-whole-project-council-review-30-second-read">This Update (as of 2026-07-09, C-027 whole-project council review) — 30-second read</a>
+<a href="#previous-update-as-of-2026-07-09-advisor-status-cockpit-30-second-read">Previous Update (as of 2026-07-09, advisor status cockpit) — 30-second read</a>
 <a href="#previous-update-as-of-2026-07-08-all-four-streams-merged-30-second-read">Previous Update (as of 2026-07-08, all four streams merged) — 30-second read</a>
 <a href="#previous-update-2026-07-07-fifth-update-30-second-read">Previous Update (2026-07-07, fifth update) — 30-second read</a>
 <a href="#previous-update-2026-07-07-fourth-update-30-second-read">Previous Update (2026-07-07, fourth update) — 30-second read</a>
@@ -47,24 +48,28 @@
 <a href="#maintenance-of-this-document">Maintenance Of This Document</a></aside>
   <div class="doc-wrap doc-source-project-status-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>PROJECT_STATUS.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit 489b25c"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 489b25c</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit c0f8f48"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit c0f8f48</span></span></div>
     <h1>JouleWise: Project Status, Plan, And Architecture</h1>
 <p>Audience: project advisor. This is the standalone monitoring document - it
 summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.</p>
 <ul>
-<li>Last updated: 2026-07-09 (spec-fleshing waves 1+2, C-024/C-025:
-capstone scope contract, contrast-level statistics + analysis
-registry, P2-015 detection-floor design, canonical question registry
-(PRs #29..#32, D-052..D-055); then uncertainty propagation + claim
-gates, suite order policies, token-normalization contract, campaign
-packs, claims-lint CI enforcement (PRs #33..#38, D-056..D-059). Then
-P2-034 broad campaign packs (PR #39, C-026) completed the pre-hardware
-campaign surface. Next QUIET-MAC work: C-019 shakedown + P2-015
-calibration; AGENT lanes: P2-022/P2-023 (C-015 post-2M sequencing, revisit after Window A), P2-035 post-floors)</li>
+<li>Last updated: 2026-07-09 (C-027 whole-project council review with the
+new Codex model gpt-5.6-sol: claim-surface corrections landed —
+token-metric bases, D-053 wording, single-session CV framing — plus
+fourteen adjudicated follow-up queue rows (plus NV-GATE-2 additions to P2-005) and four decisions
+(D-060 proposed, D-061..D-063 accepted); full record in
+<code>docs/reviews/2026-07-09-c027-whole-project-review.md</code>. Earlier same
+day: spec-fleshing waves 1+2 (C-024/C-025, PRs #29..#38, D-052..D-059),
+P2-034 broad campaign packs (PR #39, C-026). Next QUIET-MAC work:
+C-019 shakedown + P2-015 calibration, now additionally gated on
+P2-038/P2-039 (production uncertainty evidence + frozen floor
+artifact); [AGENT] lane: the C-027 correctness rows (P2-040 first))</li>
 <li>Project phase: Phase 1 closing; Phase 2 in progress - instrument
-CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
+pre-campaign software review CLEARED (campaign execution remains gated
+on shakedown, detection-floor calibration, a quiet machine, and an
+external backup destination); P2-013 evidence-integrity and P2-014 provenance fixes
 are complete; workload-suite build is merged; CP-5 pre-campaign review is
 COMPLETE and CLEARED (2026-07-09, PRs #22..#28; see
 <code>docs/run_reports/2026-07-09-cp5-resume.md</code>); the P2-015 design doc is
@@ -74,7 +79,23 @@ merged; next is C-019 shakedown plus P2-015 quiet calibration (Window A)</li>
 capsule; <code>/status.html</code> is the advisor cockpit and shows live overlays
 plus a drift banner when the repo has moved past the snapshot)</li>
 </ul>
-<h2 id="this-update-as-of-2026-07-09-advisor-status-cockpit-30-second-read">This Update (as of 2026-07-09, advisor status cockpit) — 30-second read</h2>
+<h2 id="this-update-as-of-2026-07-09-c-027-whole-project-council-review-30-second-read">This Update (as of 2026-07-09, C-027 whole-project council review) — 30-second read</h2>
+<p><strong>The project put itself in front of a hostile examiner and corrected
+its own front page.</strong> A seven-lens cross-model review (new Codex model,
+extra-high reasoning) plus an independent final examiner audited the
+docs, the scientific claims, the statistics implementation, the
+architecture, and the operating loop itself. Verdict: the evidence
+discipline and instrument core are sound, but reader-facing claims had
+drifted from the evidence (the 1.5B per-token headline used the wrong
+denominator — now corrected to ~79-90 mJ per generated output token,
+idle-subtracted), the D-053 contrast-CI machinery exists as binding
+specs but not yet as code (now owned as queue rows P2-037..P2-042 and
+gating Window-A interpretation), and the loop&#39;s own audit trail and the
+capstone-critical path (grading rubric, report skeleton, off-machine
+backup, one data-to-figure slice) need attention before any new breadth.
+All measured values above remain legacy L1 preliminary observations.
+Full adjudicated record: <code>docs/reviews/2026-07-09-c027-whole-project-review.md</code>.</p>
+<h2 id="previous-update-as-of-2026-07-09-advisor-status-cockpit-30-second-read">Previous Update (as of 2026-07-09, advisor status cockpit) — 30-second read</h2>
 <p><strong>The public preview is being upgraded for live advisor observation.</strong>
 The project-status page remains generated from repository evidence, but
 Lakebed now has a narrow fail-soft live overlay contract: freshness from
@@ -113,7 +134,9 @@ campaign on a quiet machine. Reader-facing status below defers to the
 phase checklist matrix rows for per-item authority.</p>
 <h2 id="previous-update-2026-07-07-fifth-update-30-second-read">Previous Update (2026-07-07, fifth update) — 30-second read</h2>
 <p><strong>The instrument grew four capabilities in one session and is now
-campaign-ready.</strong> Five parallel work streams landed (PRs #2-#6):
+campaign-ready.</strong> <em>(Historical claim; C-027 (2026-07-09) supersedes the
+gating: execution is conditioned on P0-003 backup, P2-038, P2-039, and
+P2-015-SMOKE.)</em> Five parallel work streams landed (PRs #2-#6):
 (1) <strong>statistical uncertainty</strong> — every multi-repetition experiment now
 carries per-metric 95% confidence intervals with outlier detection and
 explicit below-protocol flags, re-derivable byte-identically from the
@@ -136,9 +159,13 @@ baseline matrix on a quiet machine.</p>
 <p><strong>A flagship-class model is now benchmarked.</strong> Qwen3.5-122B (Feb 2026
 generation, 122B-parameter mixture-of-experts with 10B active, a
 reasoning model) ran through the identical harness and workload on the
-M3 Max: <strong>~304 J per 512-token request (~583 mJ/token) at 46 tokens/s,
-repeatable to 0.3% across repetitions</strong> — alongside the earlier 1.5B
-model&#39;s ~47 J (~87 mJ/token at 257 tok/s). First cross-model finding:
+M3 Max: <strong>~304.0 J gross per 512-token request (~298.7 J
+idle-subtracted; ~583 mJ per generated output token, idle-subtracted
+basis) at 46 tokens/s, with a gross-energy
+sample CV of 0.3% across three sequential repetitions in one warm-cache
+session</strong> — alongside the earlier 1.5B model&#39;s ~47.2 J gross (~87
+mJ/output-token idle-subtracted at 257 tok/s). <em>(Metric bases and CV
+wording corrected 2026-07-09, C-027.)</em> First cross-model finding:
 the two measured points differ in size, architecture, and quantization,
 so they are not a demonstrated scaling law. They are, however,
 consistent with the fixed-vs-marginal structure Q4 models: decode power
@@ -162,7 +189,7 @@ implementing the statistical-uncertainty protocol) queued.</p>
 <tbody><tr>
 <td>2026-07-06</td>
 <td>third update / first real energy</td>
-<td>Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements: ~47 J gross per 512-token request, ~77-88 mJ/output-token, TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz, with prefill energy ~0.03 J.</td>
+<td>Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements: ~47.2 J gross per 512-token request, ~79-90 mJ/generated-output-token (idle-subtracted; the originally reported 77-88 range used the prompt+output denominator — corrected 2026-07-09, C-027), TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz; short prefill energy is below the current detection capability and is not a quantitative result (D-055).</td>
 <td><code>docs/run_reports/2026-07-06-slice-2i-first-real-energy.md</code></td>
 </tr>
 <tr>
@@ -297,7 +324,7 @@ recorded in the Phase 2 plan.</p>
 <tr>
 <td>Harness / instrument</td>
 <td><code>joulewise/</code></td>
-<td>complete and campaign-ready</td>
+<td>complete; pre-campaign software review cleared (execution gated on shakedown, calibration, quiet machine, backup)</td>
 <td>new-era bundles must carry shape-valid provenance to pass strict</td>
 </tr>
 <tr>
@@ -333,8 +360,8 @@ from the recorded power trace and events) / <code>report</code>. Strict validati
 now also re-derives powermetrics traces from raw plist evidence, checks
 legacy additive-summary compatibility, and requires shape-valid
 provenance on new-era bundles. All bundle consumers read through one
-shared, tested read layer, so displayed numbers can never diverge from
-reported ones.</li>
+shared, tested read layer, which sharply reduces the risk of displayed
+numbers diverging from reported ones.</li>
 <li>Typed config and output schemas with validation, JSON-Schema export, and
 a CLI, plus a passing test suite (current count and skips live in
 RUN_STATE.md Current Verification; run in CI on every push, including a
@@ -345,17 +372,21 @@ are pinned by test.</li>
 bundle artifact contract, and the measurement methodology (idle
 subtraction, measurement boundaries, clock synchronization, statistical
 protocol - highlights below).</li>
-<li>Evidence-shaped plans for every phase, a design-decision log (37
-decisions, each with the alternatives considered), a risk register with
+<li>Evidence-shaped plans for every phase, a design-decision log (D-001
+through D-063 to date - D-060 proposed, the rest accepted; the log
+itself is the count authority, and most entries record the
+alternatives considered), a risk register with
 an explicit descope ladder, and example configs for the Mac and mock
 targets.</li>
 <li>The complete Mac vertical slice: the MLX runtime adapter (2G), the
 <code>powermetrics</code> telemetry adapter (2H, parser pinned to a captured
 privileged sample, raw plists preserved verbatim in every bundle), and
 the flagship integration (2I) — three strict-valid repetition bundles
-of real energy measurements on the M3 Max (~47 J gross per 512-token
-request, ~77-88 mJ/generated token, TTFT ~94 ms at 257 tokens/s,
-provisional model Qwen2.5-1.5B-Instruct-4bit mirrored locally).</li>
+of real energy measurements on the M3 Max (~47.2 J gross per 512-token
+request, ~44.4 J idle-subtracted, ~79-90 mJ per generated output token
+on the idle-subtracted basis, TTFT ~94 ms at 257 tokens/s; legacy L1
+preliminary observations, provisional model Qwen2.5-1.5B-Instruct-4bit
+mirrored locally).</li>
 <li>The report&#39;s related-work survey draft (11 sources with verified
 citations and an honest positioning audit) and a measurement-data
 backup protocol with a passed restore test.</li>
@@ -369,7 +400,10 @@ hardware contact; a P1-006 evidence checklist exists there. Code-level
 specs are in <code>docs/phase_2/hardware_slice_implementation_guide.md</code>. The
 mock-first core landed first by design, so measurement code is never
 debugging the harness and the instrument at the same time.</p>
-<p>Waiting on external input (none of it blocks the current work):</p>
+<p>Waiting on external input (most of it does not block current software
+work, but the external backup destination (P0-003) is REQUIRED before
+Window-A data accumulates, and the grading rubric/calendar (P1-008) now
+carries a provisional-contract fallback under proposed D-060):</p>
 <ol>
 <li>NVIDIA / Jetson Orin device access evidence — the one hard gate left,
 for the remote-target slices 2K/2L. (The <code>nvidia_3050</code> in the
@@ -389,7 +423,7 @@ remains harness-shaped and valuable under any scope.</li>
 <pre><code class="language-text">typed config
   -&gt; controller
     -&gt; transport adapter: local | ssh
-    -&gt; runtime adapter:   mock | mlx | vllm | llama.cpp | hailo-if-viable
+    -&gt; runtime adapter:   mock | mlx | vllm | llama.cpp (hailo: unsupported_workload — feasibility finding only)
     -&gt; telemetry adapter: mock | powermetrics | nvidia-smi | jetson rails | wall meter
   -&gt; run bundle (self-contained, on-disk source of truth)
     -&gt; reducers (energy integration, idle subtraction, per-phase attribution)
@@ -476,7 +510,11 @@ boundary difference, calibrated against the wall meter where available.</li>
 <li><strong>Uncertainty is quantified.</strong> Headline comparisons use n&gt;=5
 repetitions with mean, standard deviation, and 95% t-intervals;
 outliers are flagged (never silently dropped); raw points appear in
-every figure; differences are claimed only where intervals separate.
+every figure. Differences are claimed only from the confidence
+interval of the predeclared paired/block difference or named model
+contrast — never from marginal-interval separation — with the D-053
+three-way wording rule (below-floor: not resolvable; above-floor
+non-directional: unresolved; equivalence only via a predeclared gate).
 Thermal state is controlled with an idle-power-recovery gate between
 repetitions.</li>
 <li><strong>Multi-node clock discipline.</strong> For split runs, per-node clock offset
@@ -764,8 +802,9 @@ per Ed&#39;s instruction — its <em>deliberations</em> are recorded, not just i
 verdicts: the council log preserves positions, the reasoning exchanged,
 who prevailed and why, and overridden dissents, so a future reader (or
 model) can reconstruct why any decision was made.</p>
-<p><strong>The paper trail (every claim auditable).</strong> Each fact has one home:
-<code>docs/decision_log.md</code> — the binding design decisions (the log is the count authority), each with
+<p><strong>The paper trail (each claim traceable to its evidence home; the
+external re-reduction demonstration is still pending).</strong> Each fact has one home:
+<code>docs/decision_log.md</code> — the binding design decisions (the log is the count authority), most recording
 alternatives considered and revisit conditions; <code>docs/council_log.md</code>
 — the deliberation record; <code>docs/stream_logs/</code> —
 per-stream decision ledgers committed <em>with</em> the code they justify
@@ -845,7 +884,7 @@ date above and the repository&#39;s run reports are the freshness check.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>PROJECT_STATUS.md · commit 489b25c · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>PROJECT_STATUS.md · commit c0f8f48 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
