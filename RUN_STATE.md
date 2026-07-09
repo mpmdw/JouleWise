@@ -62,11 +62,18 @@ dispositions). Live-verified on real MLX at three code states; three
 live-only defects caught and fixed at the lead gate. Post-merge
 integration review: zero cross-stream defects.
 
-**IN-FLIGHT SESSION (2026-07-08, pre-campaign review):** a live
-multi-agent review of the workload suite / methodology / capture
-completeness is running; its checkpoint ledger (with workflow resume
-IDs) is `docs/stream_logs/2026-07-08-precampaign-review.md` — resume
-from there, not from scratch.
+**PAUSED AT STABLE CHECKPOINT CP-5 (2026-07-08, pre-campaign
+review session — RESUME THIS FIRST on "start again"):** the workload/
+methodology review and four pre-campaign implementation streams are
+complete-but-ungated: three worktrees hold applied-but-uncommitted fix
+rounds (jw-wt-envgate/hashcheck/bundlepack), PR #22 is open/CI-green/
+unmerged, and the finished methodology synthesis (determinism verdict,
+pre-campaign changes, askable-question list) is UNREAD and
+unadjudicated. THE resume authority with the exact step sequence is
+`docs/stream_logs/2026-07-08-precampaign-review.md` (CP-5, bottom);
+durable artifacts: `~/.claude/projects/-Users-edr-code-JouleWise/
+ae807c57-7163-4f10-8532-42e8cfacdaff/checkpoint-2026-07-08/`.
+Do not start other queue work until CP-5's sequence is finished.
 
 **RESTART HERE (next agent):**
 1. Read `docs/run_reports/2026-07-08-suite-build.md` (session record +
