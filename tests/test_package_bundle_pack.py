@@ -223,6 +223,27 @@ class BundlePackTests(unittest.TestCase):
             problems,
         )
 
+    def test_verify_pack_catches_readme_that_does_not_match_manifest(self) -> None:
+        first = self.make_bundle("pack-readme-a")
+        second = self.make_bundle("pack-readme-b")
+        pack_dir = self.tmp / "pack-readme"
+        package_bundle_pack.package_bundles([first, second], pack_dir)
+
+        manifest_path = pack_dir / "MANIFEST.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["bundles"] = manifest["bundles"][:1]
+        manifest["bundle_count"] = 1
+        manifest["readme_sha256"] = _sha256(pack_dir / "README.md")
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+        shutil.rmtree(pack_dir / "bundles" / "pack-readme-b")
+
+        problems = package_bundle_pack.verify_pack(pack_dir)
+
+        self.assertTrue(
+            any("README.md does not match manifest-derived contents" in problem for problem in problems),
+            problems,
+        )
+
     def test_existing_output_dir_is_refused_and_preserved(self) -> None:
         source_bundle = self.make_bundle("pack-existing-output")
         pack_dir = self.tmp / "preexisting"
@@ -310,6 +331,21 @@ class BundlePackTests(unittest.TestCase):
             package_bundle_pack.package_bundles([first, invalid], invalid_out)
         self.assertFalse(invalid_out.exists())
 
+    def test_post_preflight_copy_divergence_is_refused_and_cleaned_up(self) -> None:
+        source_bundle = self.make_bundle("pack-copy-divergence")
+        pack_dir = self.tmp / "divergent-pack"
+        original_copy = package_bundle_pack._copy_bundle
+
+        def mutate_then_copy(source: Path, destination: Path) -> None:
+            (source / "post_preflight_extra.txt").write_text("late mutation", encoding="utf-8")
+            original_copy(source, destination)
+
+        with patch.object(package_bundle_pack, "_copy_bundle", side_effect=mutate_then_copy):
+            with self.assertRaisesRegex(package_bundle_pack.BundlePackError, "diverged"):
+                package_bundle_pack.package_bundles([source_bundle], pack_dir)
+
+        self.assertFalse(pack_dir.exists())
+
     def test_non_succeeded_bundle_is_refused_even_when_strict_valid(self) -> None:
         source_bundle = self.make_bundle("pack-failed-status")
         summary_path = source_bundle / "summary_metrics.json"
@@ -389,6 +425,42 @@ class BundlePackTests(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("invalid pack:", stdout)
         self.assertEqual(stderr, "")
+
+    def test_verify_pack_rejects_duplicate_bundle_ids_and_file_paths(self) -> None:
+        source_bundle = self.make_bundle("pack-duplicate-manifest")
+        pack_dir = self.tmp / "duplicate-manifest-pack"
+        package_bundle_pack.package_bundles([source_bundle], pack_dir)
+
+        manifest_path = pack_dir / "MANIFEST.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["bundles"].append(json.loads(json.dumps(manifest["bundles"][0])))
+        manifest["bundle_count"] = 2
+        readme = package_bundle_pack._readme(package_bundle_pack._readme_manifest(manifest))
+        (pack_dir / "README.md").write_text(readme, encoding="utf-8")
+        manifest["readme_sha256"] = _sha256(pack_dir / "README.md")
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+        problems = package_bundle_pack.verify_pack(pack_dir)
+
+        self.assertTrue(
+            any("duplicate manifest bundle_id: pack-duplicate-manifest" in problem for problem in problems),
+            problems,
+        )
+
+        manifest["bundles"] = manifest["bundles"][:1]
+        manifest["bundle_count"] = 1
+        manifest["bundles"][0]["files"].append(json.loads(json.dumps(manifest["bundles"][0]["files"][0])))
+        readme = package_bundle_pack._readme(package_bundle_pack._readme_manifest(manifest))
+        (pack_dir / "README.md").write_text(readme, encoding="utf-8")
+        manifest["readme_sha256"] = _sha256(pack_dir / "README.md")
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+        problems = package_bundle_pack.verify_pack(pack_dir)
+
+        self.assertTrue(
+            any("duplicate manifest file path" in problem for problem in problems),
+            problems,
+        )
 
     def test_verify_pack_catches_pack_root_extras_and_injected_symlinks(self) -> None:
         source_bundle = self.make_bundle("pack-root-extra")

@@ -195,7 +195,15 @@ def _copy_bundle(source: Path, destination: Path) -> None:
     shutil.copytree(source, destination, symlinks=False)
 
 
-def _readme(commit: str, manifest: dict[str, Any]) -> str:
+def _file_entry_set(entry: dict[str, Any]) -> set[tuple[str, str, int]]:
+    return {
+        (item["path"], item["sha256"], item["size_bytes"])
+        for item in entry["files"]
+    }
+
+
+def _readme(manifest: dict[str, Any]) -> str:
+    commit = manifest["project_commit"]
     bundle_list = "\n".join(
         f"- `bundles/{entry['bundle_id']}`: status `{entry['summary_status']}`, "
         f"config `{entry['config_sha256']}`"
@@ -318,9 +326,9 @@ def package_bundles(bundle_dirs: list[Path], output_dir: Path) -> dict[str, Any]
 
     provenance = _git_provenance()
 
-    bundles_dir = output_dir / "bundles"
-    bundles_dir.mkdir(parents=True)
     try:
+        bundles_dir = output_dir / "bundles"
+        bundles_dir.mkdir(parents=True)
         copied_entries: list[dict[str, Any]] = []
         for entry in entries:
             destination = bundles_dir / entry["bundle_id"]
@@ -331,10 +339,15 @@ def package_bundles(bundle_dirs: list[Path], output_dir: Path) -> dict[str, Any]
                     f"copied bundle id changed during packaging: "
                     f"{entry['bundle_id']} -> {copied_entry['bundle_id']}"
                 )
+            if _file_entry_set(copied_entry) != _file_entry_set(entry):
+                raise BundlePackError(
+                    f"copied bundle files diverged from preflight manifest: "
+                    f"{entry['bundle_id']}"
+                )
             copied_entry["source_path"] = entry["source_path"]
             copied_entries.append(copied_entry)
         manifest_without_readme = build_manifest(copied_entries, provenance)
-        readme = _readme(provenance["project_commit"], manifest_without_readme)
+        readme = _readme(manifest_without_readme)
         readme_sha256 = hashlib.sha256(readme.encode("utf-8")).hexdigest()
         manifest = build_manifest(copied_entries, provenance, readme_sha256)
         (output_dir / MANIFEST_NAME).write_text(
@@ -367,10 +380,21 @@ def _manifest_file_map(entry: dict[str, Any]) -> tuple[dict[str, dict[str, Any]]
             and isinstance(size_bytes, int)
             and size_bytes >= 0
         ):
+            if rel in result:
+                problems.append(f"duplicate manifest file path: {rel}")
+                continue
             result[rel] = {"sha256": digest, "size_bytes": size_bytes}
         else:
             problems.append(f"manifest file entry {index} is malformed")
     return result, problems
+
+
+def _readme_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in manifest.items()
+        if key != "readme_sha256"
+    }
 
 
 def verify_pack(pack_dir: Path) -> list[str]:
@@ -396,16 +420,28 @@ def verify_pack(pack_dir: Path) -> list[str]:
     if not readme_path.is_file() or readme_path.is_symlink():
         problems.append(f"missing {README_NAME}: {readme_path}")
     else:
+        try:
+            actual_readme = readme_path.read_bytes()
+        except OSError as exc:
+            problems.append(f"{README_NAME} is not readable: {exc}")
+            actual_readme = None
         expected_readme_sha256 = manifest.get("readme_sha256")
         if not isinstance(expected_readme_sha256, str):
             problems.append("manifest.readme_sha256 is missing or not a string")
-        else:
-            actual_readme_sha256 = sha256_file(readme_path)
+        elif actual_readme is not None:
+            actual_readme_sha256 = hashlib.sha256(actual_readme).hexdigest()
             if actual_readme_sha256 != expected_readme_sha256:
                 problems.append(
                     f"{README_NAME} hash mismatch: manifest has "
                     f"{expected_readme_sha256}, file hashes to {actual_readme_sha256}"
                 )
+        try:
+            expected_readme = _readme(_readme_manifest(manifest)).encode("utf-8")
+        except (KeyError, TypeError, IndexError) as exc:
+            problems.append(f"{README_NAME} cannot be regenerated from manifest fields: {exc}")
+        else:
+            if actual_readme is not None and actual_readme != expected_readme:
+                problems.append(f"{README_NAME} does not match manifest-derived contents")
     for child in pack_dir.iterdir():
         if child.is_symlink():
             problems.append(f"unexpected symlink at pack root: {child.name}")
@@ -418,6 +454,7 @@ def verify_pack(pack_dir: Path) -> list[str]:
         return problems + ["manifest.bundles is not a list"]
     bundles_dir = pack_dir / bundles_dir_name
     expected_bundle_ids: set[str] = set()
+    seen_bundle_ids: set[str] = set()
     for index, entry in enumerate(bundles):
         if not isinstance(entry, dict):
             problems.append(f"manifest.bundles[{index}] is not an object")
@@ -431,6 +468,9 @@ def verify_pack(pack_dir: Path) -> list[str]:
         except BundlePackError as exc:
             problems.append(str(exc))
             continue
+        if bundle_id in seen_bundle_ids:
+            problems.append(f"duplicate manifest bundle_id: {bundle_id}")
+        seen_bundle_ids.add(bundle_id)
         expected_bundle_ids.add(bundle_id)
         bundle_path = bundles_dir / bundle_id
         expected, file_entry_problems = _manifest_file_map(entry)
