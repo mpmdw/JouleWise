@@ -1118,6 +1118,14 @@ round 4 (effective-hash identity gap the standout); integration 0
 (retarget missed); recovered same session via promotion PR #20; lesson
 folded into multi-stream-worktrees skill.
 
+Addendum (2026-07-09, C-027 review, MET-001 / REV-4): the PR #18 merge
+fdcf800 landed into suite-substrate, not main, and required promotion
+PR #20 (84a70ca) to recover. Reclassified from operational "slip" to a
+MERGE-GATE BREACH: D-031 requires PRs to land to main, and the merge
+gate requires sibling merge-order simulation, which would have caught
+the wrong base. Code outcome was fully recovered; the gate failure
+stands as recorded. No history rewrite.
+
 ## C-018: D-013 alignment-capture window fix (2026-07-08)
 
 Shape: background-chip session for the C-017 oversight spin-off
