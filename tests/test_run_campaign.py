@@ -899,6 +899,92 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(check["sidecar_path"], str(sidecar))
             self.assertEqual(check["checked_items"], 1)
 
+    def test_malformed_inferred_prompt_hash_sidecar_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            manifest = tmp_path / "mock_suite_manifest.json"
+            sidecar = tmp_path / "mock_suite_manifest_annotations.json"
+            config_dir.mkdir()
+            manifest.write_text(
+                (ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json").read_text(
+                    encoding="utf-8"
+                ),
+                encoding="utf-8",
+            )
+            sidecar.write_text("{not-json\n", encoding="utf-8")
+            write_suite_config(
+                config_dir, "suite.json", "suite-inferred-malformed", suite_manifest=manifest
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("prompt_hash_check_error", result.stderr)
+            self.assertIn(str(sidecar), result.stderr)
+            self.assertIn("not valid JSON", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check["status"], "error")
+            self.assertEqual(check["sidecar_path"], str(sidecar))
+            self.assertIn("not valid JSON", check["problems"][0])
+
+    def test_empty_object_inferred_prompt_hash_sidecar_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            manifest = tmp_path / "mock_suite_manifest.json"
+            sidecar = tmp_path / "mock_suite_manifest_annotations.json"
+            config_dir.mkdir()
+            manifest.write_text(
+                (ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json").read_text(
+                    encoding="utf-8"
+                ),
+                encoding="utf-8",
+            )
+            sidecar.write_text("{}\n", encoding="utf-8")
+            write_suite_config(
+                config_dir, "suite.json", "suite-inferred-empty", suite_manifest=manifest
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("prompt_hash_check_error", result.stderr)
+            self.assertIn(str(sidecar), result.stderr)
+            self.assertIn("items is not an object", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check["status"], "error")
+            self.assertEqual(check["sidecar_path"], str(sidecar))
+            self.assertEqual(check["problems"], ["generator sidecar items is not an object"])
+
+    def test_absent_inferred_prompt_hash_sidecar_is_not_applicable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            manifest = tmp_path / "mock_suite_manifest.json"
+            config_dir.mkdir()
+            manifest.write_text(
+                (ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json").read_text(
+                    encoding="utf-8"
+                ),
+                encoding="utf-8",
+            )
+            write_suite_config(
+                config_dir, "suite.json", "suite-inferred-absent", suite_manifest=manifest
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check, {"status": "not_applicable", "checked_items": 0})
+
     def test_prompt_hash_sidecar_top_level_alias_resolves_relative_to_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -1002,6 +1088,35 @@ class RunCampaignTests(unittest.TestCase):
             check = rows[0]["members"][0]["prompt_hash_check"]
             self.assertEqual(check["status"], "error")
             self.assertEqual(check["checked_items"], 1)
+
+    def test_prompt_hash_sidecar_missing_source_manifest_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            sidecar = tmp_path / "mixed.annotations.json"
+            config_dir.mkdir()
+            write_prompt_sidecar(
+                sidecar,
+                item_003_hash="059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10",
+            )
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+            del payload["source_manifest"]
+            sidecar.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            write_suite_config(
+                config_dir, "suite.json", "suite-missing-source-manifest", sidecar=sidecar
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("prompt_hash_check_error", result.stderr)
+            self.assertIn("source_manifest is missing", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check["status"], "error")
+            self.assertEqual(check["checked_items"], 1)
+            self.assertIn("generator sidecar source_manifest is missing", check["problems"])
 
     def test_prompt_hash_error_can_be_waived_to_partial(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

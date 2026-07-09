@@ -555,17 +555,12 @@ def resolve_config_ref_path(config_path: Path, ref: str | None) -> Path | None:
     return root_relative
 
 
-def _is_prompt_hash_sidecar(path: Path) -> bool:
-    raw, problem = _load_json_object(path, "generator sidecar")
-    return problem is None and isinstance(raw, dict) and isinstance(raw.get("items"), dict)
-
-
 def inferred_prompt_sidecar_path(config_path: Path, suite_manifest_ref: str | None) -> Path | None:
     manifest_path = resolve_config_ref_path(config_path, suite_manifest_ref)
     if manifest_path is None:
         return None
     candidate = manifest_path.with_name(f"{manifest_path.stem}_annotations.json")
-    if candidate.is_file() and _is_prompt_hash_sidecar(candidate):
+    if candidate.is_file():
         return candidate
     return None
 
@@ -658,7 +653,7 @@ def _sidecar_manifest_pairing_problems(
 ) -> list[str]:
     sidecar_source = sidecar.get("source_manifest")
     if sidecar_source is None:
-        return []
+        return ["generator sidecar source_manifest is missing"]
     if not isinstance(sidecar_source, dict):
         return ["generator sidecar source_manifest is not an object"]
     manifest_source = manifest.get("source_manifest")
