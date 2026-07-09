@@ -59,7 +59,8 @@ ML.ENERGY, and Zeus, confirms no prior dataset covers this specific
 combination of local LLM workloads, named local stacks, explicit
 measurement-boundary labels, and re-reducible bundles, the filled matrix may
 be presented as a scoped empirical coverage contribution. Ladder levels
-attach to claims drawn from it: cells are L1, qualifying same-boundary
+attach to claims drawn from it: instrument cells may reach L1 when their
+ladder evidence rule is met, qualifying same-boundary
 contrasts are L2, and fitted fixed/marginal models with holdouts may be L3.
 
 **Rung 3: specific scientific findings from the matrix.** Crossovers,
