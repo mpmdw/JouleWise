@@ -185,9 +185,10 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 
 ## Known Workspace State
 
-- `main` remains at the pushed post-PR-39 head. This user-directed bridge
-  hardening is an uncommitted working-tree change; no PR was opened and no
-  research stream worktree was created.
+- `main` and `origin/main` contain the user-directed Claude Code → Codex
+  bridge hardening from commit `1d7c415`; no PR or research stream worktree
+  was used for that bounded tooling change. The unrelated C-027 council-review
+  workspace remains separate and was excluded from the bridge push.
 - Codex's own worktree `/Users/edr/.codex/worktrees/7fe2/JouleWise`
   still holds the ORIGINAL advisor-site commits (bf9ffc5..e6cf431);
   their content landed via PR #28 (D-051 renumber applied). Safe to

@@ -124,12 +124,20 @@ End-to-end interactive smoke:
   - not_promoted_reason: n/a.
 - Council/debate scorecard, if any: none; this was ordinary process tooling,
   not a methodology/schema/claim/hardware decision.
-- Stop state at end: no active stop card; intended changes remain uncommitted
+- Stop state at initial end: no active stop card; changes were left uncommitted
   pending user direction.
+
+## Follow-Up Push
+
+The user subsequently directed that all Codex-invocation files be pushed to
+`main`. Commit `1d7c415` isolated the nine bridge/process files and was
+fast-forwarded to `origin/main`. Concurrent C-027 council-review changes in the
+working tree were explicitly excluded and left untouched.
 
 ## Next
 
 Claude Code can now use the tracked `codex` subagent or `/codex` command in
 this directory. Normal project work remains governed by the unchanged queue
 and machine-state lanes. No site regeneration/deployment was performed because
-this did not change advisor-visible research state and no commit was requested.
+this did not change advisor-visible research state; the follow-up request was
+limited to committing and pushing the Codex invocation surface.
