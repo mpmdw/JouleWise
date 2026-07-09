@@ -429,7 +429,24 @@ def _outlier_entries(points: list[tuple[str, float]]) -> tuple[list[dict[str, An
     deviations = [abs(value - median) for value in values]
     mad = statistics.median(deviations)
     if mad == 0:
-        return [], "mad_zero_not_computable"
+        # P2-040 FIX-5 (STA-8, D-014): MAD zero does not justify an invented
+        # modified z-score, but off-median points must not be hidden. Flag
+        # each off-median value for review with modified_z=null; every point
+        # stays in the headline aggregate.
+        review_flags = [
+            {
+                "member": member,
+                "value": value,
+                "modified_z": None,
+                "flag_basis": "mad_zero_off_median_review",
+                "review_only": True,
+            }
+            for member, value in points
+            if value != median
+        ]
+        if not review_flags:
+            return [], "mad_zero_all_equal"
+        return review_flags, "mad_zero_fallback_applied"
 
     outliers: list[dict[str, Any]] = []
     for member, value in points:
