@@ -1,7 +1,8 @@
 # JouleWise Run State
 
-Last updated: 2026-07-08 (suite BUILD session close; adjudication
-D-044..D-047 + PRs #17/#18/#20/#19 merged; suite 732; C-017)
+Last updated: 2026-07-08 (suite BUILD close + alignment fix PR #21 +
+meta-reassessment; adjudication D-044..D-047; PRs #17..#21 merged;
+suite 734; C-017/C-018/C-019)
 
 ## Start Here For Every Big Run
 
@@ -94,8 +95,9 @@ integration review: zero cross-stream defects.
 
 ## Current Verification
 
-- Merged main (c752c30): `python3 -m unittest discover -s tests` →
-  `Ran 732 tests, OK (skipped=10)` (post PRs #17/#18/#20/#19).
+- Merged main (49c5b66 + reassessment batch): `python3 -m unittest
+  discover -s tests` → `Ran 734 tests, OK (skipped=10)` (post PRs
+  #17..#21; #21 = D-013 alignment-capture window fix, C-018).
 - Live lead gates on merged main: real MLX (1.5B, mock telemetry) suite
   bundle strict-valid + reduced (sampler pinned via sample_utils; honest
   per-item identifiability); mock affine smoke 26/26 strict-valid.

@@ -190,3 +190,26 @@ standalone value at the adapter-refactor tier, worth one deliberate
 A/B in a future session before any standing role change; (f)
 derivability: the stacked-PR lesson and outage pattern are folded where
 a fresh agent will find them (multi-stream skill; skill-usage log).
+
+## Addendum — post-suite-build meta-reassessment (same day, C-019)
+
+Ran after PR #21 (alignment fix, parallel session) landed, per Ed's
+directive. Shape: 4 Codex analyst lanes (5.5-direction study over the
+session's 43 invocations; calibration longitudinal C-010→C-017; project
+status + value-ranked next work; supersession/disposition closure) + a
+completeness critic; lead synthesis and folds. Full dispositions:
+council log C-019.
+
+Landed by this batch: direction doctrine folded into
+`~/.claude/skills/codex-delegation/SKILL.md` (§Direction doctrine —
+precedence/autonomy/FIX-N/lens-angle/production-gate/checks-performed
+clauses + model-version scoping with sealed-A/B re-baselining before
+the 2026-07-09 Codex upgrade moves any delegation boundary); D-013
+prose + controller docstrings back-annotated to marker-bounded window
+wording; C-018 index row + commit hashes; RUN_STATE at 734/PR #21;
+bank affine-queued line amended; queue: P2-015 gains the post-merge
+shakedown gate, P2-025 gains the adjacency pin, P1-008 elevated with
+the evaluator acceptance-bar ask. Watch items for next sessions:
+integration-layer marginal yield after clean oversight; the
+Opus-vs-Codex sealed A/B (≥2 trials before roster change); calibration
+quality-denominator instrumentation.

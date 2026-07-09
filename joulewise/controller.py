@@ -15,8 +15,10 @@ manifests arrive with the experiment runner in Slice 2F) and applies:
 - D-012: the controller (never the adapters) maps ``FailureReason`` to
   ``RunStatus`` via the module-level :data:`STATUS_BY_REASON` table.
 - D-013: controller-as-DUT mitigation - all events and log records buffer in
-  memory and flush only after ``stop_sampling``; between ``start_sampling``
-  and ``stop_sampling`` the controller does nothing but block on the runtime
+  memory and flush only after ``stop_sampling``; inside the MARKER-bounded
+  measured window (``sampling_started`` stamp to ``sampling_stopped`` stamp)
+  the controller does nothing but block on the runtime; alignment capture and
+  ``stop_sampling`` wind-down happen after the stop stamp, outside the window
   (no file writes, no disk event appends, no logging; the two in-memory
   ``sampling_started``/``sampling_stopped`` marker appends of D-026 are the
   sole - and negligible - buffer touches inside the window).
@@ -449,9 +451,10 @@ class _Execution:
         self._buffer_event(
             "sampling_started", "measured_run", "telemetry sampling confirmed active"
         )
-        # D-013 quiescent window: between start_sampling and stop_sampling the
-        # controller only blocks on the runtime - no file writes, no disk event
-        # appends, no logging (buffers flush after the window).
+        # D-013 quiescent window: between the sampling_started stamp and the
+        # sampling_stopped stamp the controller only blocks on the runtime -
+        # no file writes, no disk event appends, no logging (buffers flush
+        # after the window; alignment capture runs after the stop stamp).
         if self._suite_manifest is not None:
             assert self._suite_order_seed is not None
             runtime_result = self._runtime.run_suite(  # type: ignore[attr-defined]

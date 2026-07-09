@@ -613,6 +613,13 @@ Options considered:
    same process by design, so its cost *is* the workload; (d) document
    residual risk: controller wake-ups are zero by construction, and any OS
    background activity affects idle and load windows alike.
+   AMENDED 2026-07-08 (PR #21, `255a7e6`): the quiescent window is
+   MARKER-bounded, not call-bounded — the `sampling_stopped` timestamp is
+   stamped immediately after the runtime returns, BEFORE adapter alignment
+   capture and `stop_sampling` wind-down, so that controller/adapter
+   bookkeeping is outside the reducer's measured window. Item (b)'s
+   "until stop_sampling" phrasing predates this and reads call-bounded;
+   the stamp is the boundary.
 
 Decision: option 3 for Phase 2, with option 2 recorded as the upgrade path
 once the SSH transport exists (re-run a subset and compare).

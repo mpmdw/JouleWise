@@ -51,6 +51,8 @@ standing instructions.
 | C-014 | 2026-07-08 | Workload-suite science hardening (full entry below) — lead audit + scout + 3 design lenses + invited peer counterreview | Q4-at-L3 gap closed via `q4_l3_shape_grid_v1` (4x3 + holdouts); P2-015 expanded to comparative MDE floors; jw_mixed common-shape stratum (C-W.1 was unfalsifiable); P2-010 split substrate/smoke, scored ladder deferred; two-quiet-window plan; analysis-plans contract (D-038); program restructure (D-039); two lead designs overturned by invited peer |
 | C-015 | 2026-07-08 | Benchmark expansion council (full entry below) — reach lenses R1/R2 + design lenses E1/E2 + peer counterreview | Suite architecture v2 (D-040: B×k bundles, one generic mechanism, per-item status model); interop direction (D-041: HumanEval-first imports, marker-shim energy layer, kill list); capability map landed in bank; R2 collect-now set spawned the window-a-capture stream; capstone stop-line + D-034 gate restated |
 | C-016 | 2026-07-08 | Post-large-workload meta-reassessment (pointer entry; records: D-043, `~/.claude/skills/skill-usage-log.md`, run report addendum) — 4 analysts (council/decision/skill mining + cold-start derivability) + completeness critic, Workflow-orchestrated | Supersession drift named as THE recurring unfolded failure mode (~70% of doc defects) → D-043 write-time + sweep-time discipline; operative merge-authority contradiction fixed; 5 skill divergences fixed; codex-delegation rewritten procedure-first; clean-machine derivability closed (scripts/codex-run committed + orchestration.md pointer map); §10 post-large-workload trigger now standing |
+| C-019 | 2026-07-08 | Post-suite-build meta-reassessment (full entry below) — 4 analyst lanes (5.5-direction study over 43 invocations; calibration longitudinal; project status/value ranking; closure) + completeness critic | Direction doctrine folded into codex-delegation skill (precedence/autonomy/FIX-N/production-gate clauses; model-version scoping rule pre-upgrade); D-013 prose back-annotated marker-bounded; shakedown gate added to P2-015; P2-025 adjacency + P1-008 elevation (incl. examiner acceptance-bar ask); pre-#21 corpus validity noted (dict-read-scale overhead, no re-reduction); watch items: integration-after-oversight, Opus A/B |
+| C-018 | 2026-07-08 | D-013 alignment-capture window fix (parallel session; full entry below) | sampling_stopped stamped before alignment capture (PR #21: `255a7e6`, bookkeeping `c2e51b2`, merge `49c5b66`); suite 734; D-013 prose back-annotated to marker-bounded wording in the reassessment batch |
 | C-017 | 2026-07-08 | Suite-build adjudication + implementation gates (full entry below) — Codex disposition draft + fresh adversarial round + lead calls; 11 unit lenses + 1 Opus outage substitute + 7-reviewer oversight + 3 final-head + integration | 37 amendments dispositioned → D-044..D-047; substrate/ladder/generators BUILT and merged (PRs #17/#18/#20/#19, suite 732); 3 lead live-only catches (refs, strict rollup, sampler namespace); oversight caught 2 validation holes pre-merge; PR #18 base-retarget slip recovered via #20 |
 
 ---
@@ -1127,3 +1129,52 @@ cost) and re-ran the full suite (734 green); Codex review returned
 approve with zero findings (it independently re-checked
 `measured_window()` in bundle_read and the failure-path stop helper).
 Landed: PR #21.
+
+
+## C-019: Post-suite-build meta-reassessment (2026-07-08)
+
+Standing §10 trigger (multi-PR session; Ed directed the full run after the
+parallel alignment-fix session landed as PR #21). Shape: 4 parallel Codex
+analyst lanes + completeness critic; lead synthesis. Lane outputs
+preserved in the session scratchpad; conclusions and dispositions here
+and in the run-report addendum.
+
+Lane findings adopted:
+- 5.5-DIRECTION STUDY (priority lane, 43 invocations deep-sampled):
+  direction doctrine distilled and FOLDED into the codex-delegation
+  skill — precedence sentence, autonomy clause, FIX-N fix contracts
+  (7/7 one-shot), angle-named lenses, production-shaped gate
+  requirement, checks-performed line for CLEAN verdicts, stack-context
+  for reviewers; RELAX list (invariants not structure; shorter reads
+  when facts embedded; early design-freedom). Post-upgrade expansion
+  candidates recorded with safety gates; calibration labels declared
+  MODEL-VERSION-SCOPED with a sealed-A/B re-baselining rule before any
+  boundary move (critic item 1).
+- CALIBRATION LONGITUDINAL: design-freedom-runs-hot confirmed across
+  C-010/C-014-15/C-017 (high judgment yield, gates still mandatory); no
+  active layer at two consecutive zero-catch sessions; WATCH items:
+  integration-after-clean-oversight (one zero at C-017, C-010 contra),
+  Opus-vs-Codex fresh-eyes A/B (sealed same-packet protocol defined; ≥2
+  trials before roster change). Prompt-defect class active (~2/large
+  session, lead-side); quality denominator (false-positive burden,
+  severity mix, triage cost) noted as missing instrumentation (critic 7).
+- PROJECT STATUS: the guaranteed capstone hinges on the 2M corpus; the
+  critical path is P2-015 floors → P2-006 2M → baseline_results.md →
+  Phase-4 claims scaffolding. P1-008 calendar mapping ELEVATED to
+  ED-EXTERNAL rank 1 and extended with the evaluator acceptance-bar ask
+  (critic 8). P2-025 re-ranked adjacent to the real-tokenizer manifest
+  work. R-012 schedule risk named the biggest active management risk;
+  R-016 interim backup becomes serious before 2M.
+- CLOSURE: D-013 prose/docstrings back-annotated to marker-bounded
+  wording (this batch); C-018 index row added with commit hashes;
+  RUN_STATE 734; bank affine-queued line amended. Derivability clean.
+- CRITIC dispositions: (1) sealed A/B re-baselining ADOPTED (skill);
+  (2) pre-#21 bundle validity — alignment-capture overhead is
+  dict-read-scale, corpus remains claim-usable, recorded here, no
+  re-reduction; (3) quiet-window/upgrade-exploration conflict — upgrade
+  experimentation is [AGENT]-lane, never in quiet windows (C-009 T5
+  extends); (4) post-merge SHAKEDOWN GATE adopted into P2-015 row (one
+  tiny production-shaped campaign-runner run before Window-A data);
+  (5) skill folds listed with paths in the run-report addendum;
+  (6) site regen rides this batch; (7) noted above; (8) adopted into
+  P1-008.

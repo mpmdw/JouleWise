@@ -706,7 +706,8 @@ cheap.
 ## Workload/query-set expansion (first-class topic, Tier 1 hardware)
 
 Today's workloads are single-prompt fixed-shape grids plus the queued
-affine ladder. The council's workload lens designed the expansion; the
+affine ladder. (Amendment 2026-07-08: the affine ladder CORE is landed,
+PRs #17-#20; the envelope-gate script and smoke campaign remain queued.) The council's workload lens designed the expansion; the
 examiner frame was applied up front: at fixed token shape, most category
 differences may collapse into token counts — that null is itself a
 publishable result, named here the **Token-Shape Sufficiency Null**.
