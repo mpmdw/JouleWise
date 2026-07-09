@@ -26,7 +26,8 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#this-update-as-of-2026-07-08-all-four-streams-merged-30-second-read">This Update (as of 2026-07-08, all four streams merged) — 30-second read</a>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#this-update-as-of-2026-07-09-advisor-status-cockpit-30-second-read">This Update (as of 2026-07-09, advisor status cockpit) — 30-second read</a>
+<a href="#previous-update-as-of-2026-07-08-all-four-streams-merged-30-second-read">Previous Update (as of 2026-07-08, all four streams merged) — 30-second read</a>
 <a href="#previous-update-2026-07-07-fifth-update-30-second-read">Previous Update (2026-07-07, fifth update) — 30-second read</a>
 <a href="#previous-update-2026-07-07-fourth-update-30-second-read">Previous Update (2026-07-07, fourth update) — 30-second read</a>
 <a href="#update-ledger">Update Ledger</a>
@@ -46,28 +47,43 @@
 <a href="#maintenance-of-this-document">Maintenance Of This Document</a></aside>
   <div class="doc-wrap doc-source-project-status-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>PROJECT_STATUS.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit 6b1f73a"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 6b1f73a</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit 6b1f73a + uncommitted"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 6b1f73a + uncommitted</span></span></div>
     <h1>JouleWise: Project Status, Plan, And Architecture</h1>
 <p>Audience: project advisor. This is the standalone monitoring document - it
 summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.</p>
 <ul>
-<li>Last updated: 2026-07-08 (workload suite BUILT and merged: generic
-suite substrate + affine smoke ladder + jw_mixed/sentinel generator
-engine, PRs #17-#20, suite 732 tests; adjudicated decisions
-D-044..D-047; live-verified on real MLX)</li>
+<li>Last updated: 2026-07-09 (advisor status-site live-depth refresh:
+Lakebed preview gains fail-soft live status overlays, deeper advisor
+cockpit panels, and stale-count cleanup; source-of-truth policy D-051)</li>
 <li>Project phase: Phase 1 closing; Phase 2 in progress - instrument
 CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
-are complete; the two-model baseline matrix is the next Mac corpus step</li>
+are complete; workload-suite build is merged; current restart authority
+is CP-5 in <code>RUN_STATE.md</code> before any new campaign work</li>
 <li>Repository: <code>github.com/mpmdw/JouleWise</code> (branch <code>main</code>)</li>
 <li>Live status site: <a href="https://quiet-signal-6af8833395.lakebed.app">https://quiet-signal-6af8833395.lakebed.app</a> (Lakebed
-capsule; shows a drift banner when the repo has moved past the snapshot)</li>
+capsule; <code>/status.html</code> is the advisor cockpit and shows live overlays
+plus a drift banner when the repo has moved past the snapshot)</li>
 </ul>
-<h2 id="this-update-as-of-2026-07-08-all-four-streams-merged-30-second-read">This Update (as of 2026-07-08, all four streams merged) — 30-second read</h2>
+<h2 id="this-update-as-of-2026-07-09-advisor-status-cockpit-30-second-read">This Update (as of 2026-07-09, advisor status cockpit) — 30-second read</h2>
+<p><strong>The public preview is being upgraded for live advisor observation.</strong>
+The project-status page remains generated from repository evidence, but
+Lakebed now has a narrow fail-soft live overlay contract: freshness from
+GitHub commit checks plus parsed current fields from <code>PROJECT_STATUS.md</code>,
+<code>RUN_STATE.md</code>, <code>TASK_QUEUE.md</code>, and the risk register. The advisor
+cockpit adds live snapshot state, attention items, campaign readiness,
+evidence cards, and claim-ceiling panels; the Story page drops
+hand-authored volatile counts. The operational policy is D-051: repo
+markdown remains the source of truth and Lakebed never hides static
+provenance. Current work should still resume at CP-5 before starting new
+queue items.</p>
+<h2 id="previous-update-as-of-2026-07-08-all-four-streams-merged-30-second-read">Previous Update (as of 2026-07-08, all four streams merged) — 30-second read</h2>
 <p><strong>Everything landed.</strong> The multi-stream session merged as four PRs:
-P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
-732 tests with 10 skips and zero expected failures (as of 2026-07-08; current-count authority is RUN_STATE.md Current Verification), bundle provenance
+P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite passed
+with zero expected failures (current count authority is RUN_STATE.md
+Current Verification; the suite-build merge was 732 tests and the
+post-alignment state is 734), bundle provenance
 now records prompt/workload identities, and <code>validate-bundle --strict</code>
 includes the powermetrics raw-plist-to-trace gate plus the legacy
 additive-summary comparison. The six existing real corpus bundles pass
@@ -305,9 +321,9 @@ provenance on new-era bundles. All bundle consumers read through one
 shared, tested read layer, so displayed numbers can never diverge from
 reported ones.</li>
 <li>Typed config and output schemas with validation, JSON-Schema export, and
-a CLI, plus a passing test suite (732 tests, 10 skipped, zero expected
-failures, run in CI on every push, including a mock end-to-end run +
-bundle validation); emitted configs
+a CLI, plus a passing test suite (current count and skips live in
+RUN_STATE.md Current Verification; run in CI on every push, including a
+mock end-to-end run + bundle validation); emitted configs
 round-trip their own published schema, and config hashes (run identity)
 are pinned by test.</li>
 <li>Adapter interface contracts (runtime / telemetry / transport), the run
@@ -679,7 +695,7 @@ traceable to raw data.</li>
 </tr>
 <tr>
 <td><code>joulewise/</code>, <code>tests/</code></td>
-<td>the harness package + test suite (732 tests, 10 skipped, zero expected failures, CI-enforced)</td>
+<td>the harness package + test suite (current count and skips in RUN_STATE.md; zero expected failures, CI-enforced)</td>
 </tr>
 </tbody></table></div>
 <h2 id="process-note">Process Note</h2>
@@ -736,7 +752,7 @@ model) can reconstruct why any decision was made.</p>
 <p><strong>The paper trail (every claim auditable).</strong> Each fact has one home:
 <code>docs/decision_log.md</code> — the binding design decisions (the log is the count authority), each with
 alternatives considered and revisit conditions; <code>docs/council_log.md</code>
-(C-001…C-015) — the deliberation record; <code>docs/stream_logs/</code> —
+— the deliberation record; <code>docs/stream_logs/</code> —
 per-stream decision ledgers committed <em>with</em> the code they justify
 (wrong decisions are superseded in place, never erased);
 <code>docs/run_reports/</code> — one record per session with verification
@@ -791,7 +807,7 @@ fabricated-evidence defect caught only at the lead&#39;s diff gate. The
 suite went 415 → 546 tests with zero expected failures, and the lead
 never wrote implementation code and never skipped a gate.</p>
 <p><strong>Where to look.</strong> <code>docs/orchestration.md</code> is the process description.
-<code>docs/council_log.md</code> (C-001…C-015) is the deliberation record — C-006
+<code>docs/council_log.md</code> is the deliberation record — C-006
 is a full orchestration trace of the five-stream day; C-009/C-010 are
 the topology meta-review and its validation; C-011 is the critique
 counter-review. <code>docs/decision_log.md</code> holds the binding design
@@ -814,7 +830,7 @@ date above and the repository&#39;s run reports are the freshness check.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>PROJECT_STATUS.md · commit 6b1f73a · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>PROJECT_STATUS.md · commit 6b1f73a + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

@@ -143,6 +143,9 @@ NAV_ORDER = [
     ("library.html", "Sources"),
 ]
 
+MARKED_UNAVAILABLE = False
+MARKED_FALLBACK_WARNED = False
+
 
 def fail(component: str, source: str, expected: str) -> None:
     raise SiteBuildError(f"{component}: {source}: expected {expected}")
@@ -397,18 +400,203 @@ def parse_council_index(md: str, source: str = "docs/council_log.md") -> list[Co
 
 
 def render_markdown(path: Path, no_marked: bool = False) -> str:
+    global MARKED_UNAVAILABLE
     text = path.read_text(encoding="utf-8")
     if no_marked:
         return '<pre class="markdown-placeholder">' + html.escape(text) + "</pre>"
-    result = subprocess.run(
-        ["npx", "--yes", "marked", "--gfm"],
-        input=text,
-        capture_output=True,
-        text=True,
-        check=True,
-        cwd=ROOT,
-    )
-    return wrap_tables(result.stdout)
+    if MARKED_UNAVAILABLE:
+        return render_offline_fallback(text)
+    try:
+        result = subprocess.run(
+            ["npx", "--yes", "marked", "--gfm"],
+            input=text,
+            capture_output=True,
+            text=True,
+            check=True,
+            cwd=ROOT,
+            timeout=12,
+        )
+        return wrap_tables(result.stdout)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        raw_stderr = exc.stderr or ""
+        stderr = raw_stderr.decode("utf-8", "replace") if isinstance(raw_stderr, bytes) else str(raw_stderr)
+        npm_network_error = (
+            isinstance(exc, subprocess.TimeoutExpired)
+            or "ENOTFOUND" in stderr
+            or "EAI_AGAIN" in stderr
+            or "network" in stderr.lower()
+        )
+        if not npm_network_error:
+            raise
+        MARKED_UNAVAILABLE = True
+        return render_offline_fallback(text)
+
+
+def render_offline_fallback(text: str) -> str:
+    global MARKED_FALLBACK_WARNED
+    if not MARKED_FALLBACK_WARNED:
+        print(
+            "build_site.py: WARNING: npx marked is unavailable; using offline fallback markdown renderer.",
+            file=sys.stderr,
+        )
+        MARKED_FALLBACK_WARNED = True
+    return "<!-- rendered: offline-fallback -->\n" + render_basic_markdown(text)
+
+
+def is_table_separator(line: str) -> bool:
+    cells = parse_pipe_row(line)
+    return bool(cells) and all(re.fullmatch(r":?-{3,}:?", cell.strip()) for cell in cells)
+
+
+def render_table(lines: list[str]) -> str:
+    headers = parse_pipe_row(lines[0])
+    rows = [parse_pipe_row(line) for line in lines[2:]]
+    head = "".join(f"<th>{inline_md(cell)}</th>" for cell in headers)
+    body_rows = []
+    for row in rows:
+        padded = row + [""] * max(0, len(headers) - len(row))
+        body_rows.append("<tr>" + "".join(f"<td>{inline_md(cell)}</td>" for cell in padded[: len(headers)]) + "</tr>")
+    return '<div class="table-scroll"><table><thead><tr>' + head + "</tr></thead><tbody>" + "".join(body_rows) + "</tbody></table></div>"
+
+
+def render_unordered_list(lines: list[str], start: int) -> tuple[str, int]:
+    root: dict[str, object] = {"children": []}
+    stack: list[tuple[int, dict[str, object]]] = []
+    index = start
+
+    while index < len(lines):
+        line = lines[index]
+        if not line.strip():
+            break
+        bullet = re.match(r"^(?P<indent>\s*)[-*]\s+(?P<text>.*)$", line)
+        if bullet:
+            indent = len(bullet.group("indent").replace("\t", "    "))
+            node: dict[str, object] = {"text": [bullet.group("text").strip()], "children": []}
+            while stack and indent <= stack[-1][0]:
+                stack.pop()
+            parent = stack[-1][1] if stack else root
+            parent_children = parent["children"]
+            assert isinstance(parent_children, list)
+            parent_children.append(node)
+            stack.append((indent, node))
+            index += 1
+            continue
+        if stack and line.startswith((" ", "\t")) and line.strip():
+            text_parts = stack[-1][1]["text"]
+            assert isinstance(text_parts, list)
+            text_parts.append(line.strip())
+            index += 1
+            continue
+        break
+
+    def render_nodes(nodes: list[dict[str, object]]) -> str:
+        items = []
+        for node in nodes:
+            text_parts = node["text"]
+            children = node["children"]
+            assert isinstance(text_parts, list)
+            assert isinstance(children, list)
+            item = "<li>" + inline_md(" ".join(str(part) for part in text_parts))
+            if children:
+                item += render_nodes(children)
+            item += "</li>"
+            items.append(item)
+        return "<ul>" + "".join(items) + "</ul>"
+
+    children = root["children"]
+    assert isinstance(children, list)
+    return render_nodes(children), index
+
+
+def render_basic_markdown(text: str) -> str:
+    """Small offline renderer for the site docs when npx cannot resolve marked."""
+    lines = text.splitlines()
+    blocks: list[str] = []
+    paragraph: list[str] = []
+
+    def flush_paragraph() -> None:
+        if paragraph:
+            blocks.append("<p>" + inline_md(" ".join(line.strip() for line in paragraph)) + "</p>")
+            paragraph.clear()
+
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+        if not stripped:
+            flush_paragraph()
+            index += 1
+            continue
+        if stripped.startswith("```"):
+            flush_paragraph()
+            code: list[str] = []
+            index += 1
+            while index < len(lines) and not lines[index].strip().startswith("```"):
+                code.append(lines[index])
+                index += 1
+            if index < len(lines):
+                index += 1
+            blocks.append("<pre><code>" + html.escape("\n".join(code)) + "</code></pre>")
+            continue
+        if index + 1 < len(lines) and stripped.startswith("|") and is_table_separator(lines[index + 1]):
+            flush_paragraph()
+            table_lines = [line, lines[index + 1]]
+            index += 2
+            while index < len(lines) and lines[index].strip().startswith("|"):
+                table_lines.append(lines[index])
+                index += 1
+            blocks.append(render_table(table_lines))
+            continue
+        heading = re.match(r"^(#{1,6})\s+(.+?)\s*$", line)
+        if heading:
+            flush_paragraph()
+            level = len(heading.group(1))
+            blocks.append(f"<h{level}>{inline_md(heading.group(2))}</h{level}>")
+            index += 1
+            continue
+        if re.fullmatch(r"-{3,}", stripped):
+            flush_paragraph()
+            blocks.append("<hr>")
+            index += 1
+            continue
+        if re.match(r"^\s*[-*]\s+", line):
+            flush_paragraph()
+            rendered_list, index = render_unordered_list(lines, index)
+            blocks.append(rendered_list)
+            continue
+        if re.match(r"^\s*\d+\.\s+", line):
+            flush_paragraph()
+            items = []
+            current = re.sub(r"^\s*\d+\.\s+", "", line).strip()
+            index += 1
+            while index < len(lines):
+                next_line = lines[index]
+                if re.match(r"^\s*\d+\.\s+", next_line):
+                    items.append(current)
+                    current = re.sub(r"^\s*\d+\.\s+", "", next_line).strip()
+                    index += 1
+                    continue
+                if next_line.startswith("  ") and next_line.strip():
+                    current += " " + next_line.strip()
+                    index += 1
+                    continue
+                break
+            items.append(current)
+            blocks.append("<ol>" + "".join(f"<li>{inline_md(item)}</li>" for item in items) + "</ol>")
+            continue
+        if stripped.startswith(">"):
+            flush_paragraph()
+            quote_lines = []
+            while index < len(lines) and lines[index].strip().startswith(">"):
+                quote_lines.append(lines[index].strip().lstrip(">").strip())
+                index += 1
+            blocks.append("<blockquote><p>" + inline_md(" ".join(quote_lines)) + "</p></blockquote>")
+            continue
+        paragraph.append(line)
+        index += 1
+
+    flush_paragraph()
+    return "\n".join(blocks)
 
 
 def wrap_tables(rendered: str) -> str:
@@ -483,6 +671,87 @@ def next_two_queue_sentence(queue: list[QueueItem]) -> str:
     first, second = queue[0], queue[1]
     shared_window = " in the same quiet-machine window" if first.lane == second.lane == "QUIET-MAC" else ""
     return f"{first.task_id} runs first, then {second.task_id}{shared_window}."
+
+
+def queue_by_id(queue: list[QueueItem], task_id: str) -> QueueItem | None:
+    for item in queue:
+        if item.task_id == task_id:
+            return item
+    return None
+
+
+def attention_items(queue: list[QueueItem], risks: list[RiskRow]) -> list[tuple[str, str, str]]:
+    items: list[tuple[str, str, str]] = []
+    for item in queue:
+        if item.lane == "ED-EXTERNAL" or "waiting-user" in item.status:
+            label = f"{item.task_id} · {item.priority}"
+            items.append((label, item.task, item.acceptance))
+        if len(items) >= 5:
+            break
+    for risk in risks:
+        if risk.status.startswith("open") and risk.impact == "high" and len(items) < 6:
+            items.append((risk.risk_id, risk.risk, f"Risk status: {risk.status}"))
+    if not items:
+        fail("Advisor attention", "TASK_QUEUE.md/docs/risk_register.md", "ED-EXTERNAL, waiting-user, or high-impact open items")
+    return items
+
+
+def campaign_readiness_rows(queue: list[QueueItem]) -> list[tuple[str, str, str, str]]:
+    definitions = [
+        ("CP-5 resume", "RESUME-CP5", "Finish paused pre-campaign review before other queue work."),
+        ("Detection floors", "P2-015", "Quiet Mac calibration gate for request, phase, item, and level windows."),
+        ("2M baseline corpus", "P2-006", "Runs after floors; produces the first controlled two-model corpus."),
+        ("Affine envelope gate", "P2-010", "Agent-lane script, then quiet-window smoke campaign tail."),
+        ("Real-tokenizer suites", "P2-012", "Manifests exist; campaign work waits on hash guard and Window B."),
+        ("Text-path hash guard", "P2-025", "Fail-closed expected-vs-realized token-hash check before scale."),
+        ("Publishable bundle pack", "P2-027", "External re-reduction pack for auditability demonstration."),
+    ]
+    rows: list[tuple[str, str, str, str]] = []
+    for label, task_id, fallback in definitions:
+        item = queue_by_id(queue, task_id)
+        if item is None:
+            rows.append((label, "not in active queue", fallback, task_id))
+            continue
+        status_label, status_note = queue_status_view(item.status)
+        blocker = item.acceptance if item.acceptance else fallback
+        rows.append((label, f"{task_id} · {status_label}", blocker, task_id))
+    return rows
+
+
+def evidence_cards(bundle_count: int, verification: Verification, sessions: list[SessionPointer]) -> list[tuple[str, str, str, str]]:
+    latest = sessions[0]
+    return [
+        (
+            "Harness integrity",
+            f"{verification.tests} tests, strict validation, and shared bundle reading.",
+            "L0/L1 instrument capability",
+            "run_state.html",
+        ),
+        (
+            "Real corpus auditability",
+            f"{bundle_count} real corpus bundles pass strict validation without rewriting.",
+            "L0 auditability until external re-reduction lands",
+            "project_status.html",
+        ),
+        (
+            "Suite substrate",
+            "Generic suite markers, per-item outputs, strict rollup provenance, mock and MLX gates.",
+            "Pre-campaign evidence; not yet campaign-backed claims",
+            "latest_run_report.html",
+        ),
+        (
+            "First energy numbers",
+            "M3 Max MLX runs and flagship 122B run establish measured local inference baselines.",
+            "Descriptive L1 unless AP rows/floors support more",
+            "results.html",
+        ),
+        (
+            "Process record",
+            f"Latest report: {latest.date} {latest.title}.",
+            "Review provenance, not scientific evidence by itself",
+            "record.html",
+        ),
+    ]
 
 
 def lane_chip(lane: str | None) -> str:
@@ -593,16 +862,40 @@ def render_status_page(
         <span>{inline_md(item.task)}</span></li>"""
         for item in top_three
     )
+    attention_cards = "\n".join(
+        f"""<article class="advisor-card"><span class="mono">{html.escape(label)}</span><h3>{inline_md(task)}</h3><p>{inline_md(acceptance)}</p></article>"""
+        for label, task, acceptance in attention_items(queue, risks)
+    )
+    readiness_rows = "\n".join(
+        f"""<tr><td>{html.escape(label)}</td><td>{html.escape(state)}</td><td>{inline_md(blocker)}</td><td><a href="task_queue.html">{html.escape(source)}</a></td></tr>"""
+        for label, state, blocker, source in campaign_readiness_rows(queue)
+    )
+    evidence_html = "\n".join(
+        f"""<article class="evidence-card"><div class="card-label">{html.escape(ceiling)}</div><h3>{html.escape(title)}</h3><p>{html.escape(body_text)}</p><a href="{attr_escape(href)}">Open evidence</a></article>"""
+        for title, body_text, ceiling, href in evidence_cards(bundle_count, verification, sessions)
+    )
     body = f"""<section class="observatory-hero">
   <div class="kicker">Status observatory</div>
   <h1>The project state, read from the instruments.</h1>
+  <p class="lede">This page is built from repository source documents and then checks the live GitHub state while you read. Static source stamps remain visible so stale snapshots are obvious.</p>
+</section>
+<section class="live-snapshot" data-live-panel>
+  <div>
+    <span class="card-label">Live snapshot</span>
+    <strong data-live-field="snapshot-state">Checking GitHub...</strong>
+    <p data-live-field="snapshot-detail">Static fallback is shown until the live status endpoint responds.</p>
+  </div>
+  <div class="live-meta">
+    <span>Built <span class="mono" data-live-field="build">{html.escape(stamps["RUN_STATE.md"].commit)}</span></span>
+    <span>Live check <span class="mono" data-live-field="checked-at">pending</span></span>
+  </div>
 </section>
 <section class="console-strip">
   <div class="status-summary">
-    <div><span class="card-label">Current phase</span><strong>{html.escape(current_phase_summary(phases))}</strong></div>
-    <div><span class="card-label">Next</span><strong class="mono">{html.escape(queue[0].task_id)}</strong></div>
-    <div><span class="card-label">Verification</span><strong class="mono">{verification.tests} tests</strong></div>
-    <div><span class="card-label">Corpus</span><strong class="mono">{bundle_count} bundles</strong></div>
+    <div><span class="card-label">Current phase</span><strong data-live-field="phase">{html.escape(current_phase_summary(phases))}</strong></div>
+    <div><span class="card-label">Next</span><strong class="mono" data-live-field="next">{html.escape(queue[0].task_id)}</strong></div>
+    <div><span class="card-label">Verification</span><strong class="mono" data-live-field="verification">{verification.tests} tests</strong></div>
+    <div><span class="card-label">Corpus</span><strong class="mono" data-live-field="corpus">{bundle_count} bundles</strong></div>
   </div>
   <div class="console-detail">
     <div class="phase-rail">{''.join(lamps)}</div>
@@ -616,7 +909,7 @@ def render_status_page(
 <section class="flight-recorder">
   <article class="station reveal-stagger" style="--delay:0ms">
     <div class="station-num">01</div><div><h2>What is true now</h2>
-    <p>{inline_md(now.phase_line)}</p><p>{inline_md(now.first_status_sentence)} <a href="run_state.html">RUN_STATE.md</a></p>{source_chip(stamps["PROJECT_STATUS.md"])} {source_chip(stamps["RUN_STATE.md"])}</div>
+    <p data-live-field="phase-line">{inline_md(now.phase_line)}</p><p><span data-live-field="status-line">{inline_md(now.first_status_sentence)}</span> <a href="run_state.html">RUN_STATE.md</a></p>{source_chip(stamps["PROJECT_STATUS.md"])} {source_chip(stamps["RUN_STATE.md"])}</div>
   </article>
   <article class="station reveal-stagger" style="--delay:90ms">
     <div class="station-num">02</div><div><h2>What changed</h2>
@@ -636,7 +929,101 @@ def render_status_page(
     <div class="station-num">05</div><div><h2>Where the evidence lives</h2>
     <p><span class="mono">{bundle_count}</span> real corpus bundles pass strict validation. Start from <a href="library.html">Sources</a>, <a href="risk_register.html">Risk Register</a>, and <a href="../project_critique_review.html">Independent critique · second-passed</a>.</p>{source_chip(stamps["RUN_STATE.md"])}</div>
   </article>
-</section>"""
+</section>
+<section class="advisor-depth-grid">
+  <article class="advisor-panel advisor-attention">
+    <div class="card-label">Advisor attention</div>
+    <h2>What could use an external decision?</h2>
+    <div class="advisor-card-grid">{attention_cards}</div>
+    {source_chip(stamps["TASK_QUEUE.md"])} {source_chip(stamps["docs/risk_register.md"])}
+  </article>
+  <article class="advisor-panel">
+    <div class="card-label">Campaign readiness</div>
+    <h2>What must be true before data collection?</h2>
+    <div class="table-scroll"><table class="ledger readiness-table"><tr><th>Item</th><th>State</th><th>Blocking condition</th><th>Source</th></tr>{readiness_rows}</table></div>
+    {source_chip(stamps["TASK_QUEUE.md"])}
+  </article>
+  <article class="advisor-panel">
+    <div class="card-label">Evidence board</div>
+    <h2>Most load-bearing evidence</h2>
+    <div class="evidence-grid">{evidence_html}</div>
+    {source_chip(stamps["RUN_STATE.md"])} {source_chip(stamps[latest_report_source])}
+  </article>
+  <article class="advisor-panel claim-guard">
+    <div class="card-label">Claims allowed today</div>
+    <h2>What the project can honestly say</h2>
+    <div class="claim-grid">
+      <div><span class="status-chip">L0/L1</span><p>Instrument capability, strict validation, and descriptive measured results are supported where bundles and reports exist.</p></div>
+      <div><span class="status-chip amber">Waiting</span><p>L2/L3 comparisons wait on P2-015 floor artifacts, filled analysis-plan rows, and campaign-sized repetitions.</p></div>
+      <div><span class="status-chip danger">Forbidden</span><p>No split-energy, cross-device ranking, or broad content-neutrality claim before the named hardware and analysis gates land.</p></div>
+    </div>
+    {source_chip(stamps["docs/risk_register.md"])} {source_chip(stamps["docs/contracts/claims_ladder.md"])}
+  </article>
+</section>
+<script>
+(function () {{
+  var panel = document.querySelector("[data-live-panel]");
+  var repo = "https://github.com/mpmdw/JouleWise";
+  function setField(name, value) {{
+    document.querySelectorAll('[data-live-field="' + name + '"]').forEach(function (node) {{
+      node.textContent = value == null || value === "" ? "unknown" : String(value);
+    }});
+  }}
+  function relativeTime(iso) {{
+    if (!iso) return "unknown";
+    var ms = Date.now() - Date.parse(iso);
+    if (!isFinite(ms) || ms < 0) return iso;
+    var min = Math.floor(ms / 60000);
+    if (min < 1) return "just now";
+    if (min < 60) return min + " min ago";
+    return Math.floor(min / 60) + " hr ago";
+  }}
+  function renderFreshness(data) {{
+    if (!data || !Array.isArray(data.sources)) return;
+    var moved = data.sources.filter(function (item) {{ return item && item.checked && item.moved; }});
+    var planningMoved = moved.some(function (item) {{ return item.source === "RUN_STATE.md" || item.source === "TASK_QUEUE.md"; }});
+    setField("build", data.build && data.build.commit ? data.build.commit : "unknown");
+    setField("checked-at", relativeTime(data.checkedAt));
+    if (data.unavailable) {{
+      setField("snapshot-state", "Live freshness unavailable");
+      setField("snapshot-detail", "The baked snapshot is visible, but Lakebed could not check GitHub freshness.");
+      panel && panel.setAttribute("data-state", "warn");
+    }} else if (moved.length) {{
+      setField("snapshot-state", planningMoved ? "Planning snapshot stale" : "Snapshot stale");
+      setField("snapshot-detail", moved.length + " source document" + (moved.length === 1 ? "" : "s") + " moved on GitHub since this deploy. The live fields below update from GitHub when available.");
+      panel && panel.setAttribute("data-state", "stale");
+    }} else {{
+      setField("snapshot-state", "Snapshot fresh");
+      setField("snapshot-detail", "Baked source commits match GitHub main for the tracked documents.");
+      panel && panel.setAttribute("data-state", "fresh");
+    }}
+  }}
+  function renderLiveStatus(data) {{
+    if (!data) return;
+    if (data.unavailable || !data.current) {{
+      setField("snapshot-state", "Live status unavailable");
+      var reason = data.parseErrors && data.parseErrors.length ? " Parser drift: " + data.parseErrors.join(", ") + "." : "";
+      setField("snapshot-detail", "The baked status remains visible, but Lakebed could not parse every live advisor field." + reason);
+      panel && panel.setAttribute("data-state", "warn");
+      return;
+    }}
+    var current = data.current;
+    if (current.phase) setField("phase-line", current.phase);
+    if (current.status) setField("status-line", current.status);
+    if (current.next && current.next.id) setField("next", current.next.id);
+    if (current.verification && current.verification.tests) setField("verification", current.verification.tests + " tests");
+    if (current.bundleCount) setField("corpus", current.bundleCount + " bundles");
+    if (current.phase) setField("phase", current.phase.indexOf("Phase 2") >= 0 ? "Phase 2 in progress" : current.phase);
+    setField("checked-at", relativeTime(data.checkedAt));
+  }}
+  function update() {{
+    window.fetch("/api/freshness").then(function (response) {{ return response.json(); }}).then(renderFreshness).catch(function () {{}});
+    window.fetch("/api/live-status").then(function (response) {{ return response.json(); }}).then(renderLiveStatus).catch(function () {{}});
+  }}
+  update();
+  window.setInterval(update, 60000);
+}}());
+</script>"""
     return page_shell("Status", "Status", body, page_footer([stamps["PROJECT_STATUS.md"], stamps["RUN_STATE.md"], stamps["TASK_QUEUE.md"], stamps["docs/risk_register.md"]]))
 
 
@@ -832,8 +1219,20 @@ def markdown_h2_toc(md: str) -> list[tuple[str, str]]:
 
 def inject_heading_ids(body: str, toc: list[tuple[str, str]]) -> str:
     for text, slug in toc:
-        pattern = re.compile(rf"<h2>{re.escape(text)}</h2>", re.IGNORECASE)
-        body = pattern.sub(f'<h2 id="{attr_escape(slug)}">{html.escape(text)}</h2>', body, count=1)
+        pattern = re.compile(r"<h2(?P<attrs>[^>]*)>(?P<inner>.*?)</h2>", re.IGNORECASE | re.DOTALL)
+        expected = html.unescape(re.sub(r"<[^>]+>", "", text)).strip()
+        replacement_done = False
+
+        def replace(match: re.Match[str]) -> str:
+            nonlocal replacement_done
+            inner_text = html.unescape(re.sub(r"<[^>]+>", "", match.group("inner"))).strip()
+            if replacement_done or inner_text != expected:
+                return match.group(0)
+            replacement_done = True
+            attrs = re.sub(r'\s+id="[^"]*"', "", match.group("attrs"))
+            return f'<h2{attrs} id="{attr_escape(slug)}">{match.group("inner")}</h2>'
+
+        body = pattern.sub(replace, body)
     return body
 
 

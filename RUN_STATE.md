@@ -117,6 +117,9 @@ review session — RESUME THIS FIRST on "start again"):** see
 - 2026-07-09 meta-process stop-card + codex-bridge audit cleanup
   (D-050; CP-5 preserved untouched):
   `docs/run_reports/2026-07-09-meta-process-stop-card-cleanup.md`
+- 2026-07-09 advisor status-site live-depth refresh (D-051/C-021;
+  subordinate to the active CP-5 stop card):
+  `docs/run_reports/2026-07-09-advisor-status-site.md`
 - 2026-07-08 suite build (C-017; adjudication + PRs #17/#18/#20/#19;
   D-044..D-047): `docs/run_reports/2026-07-08-suite-build.md`
 - 2026-07-08 suite-science + expansion (C-014/C-015; PRs #14/#15/#16;
@@ -137,6 +140,14 @@ review session — RESUME THIS FIRST on "start again"):** see
   scripts/codex-bridge` green; `CODEX_BIN=/bin/echo
   scripts/codex-bridge new audit smoke prompt` wrote a manifest row with
   prompt/output/log hashes; Python test suite not run.
+- Advisor status-site refresh authored in the landing worktree
+  (2026-07-09; D-051/C-021): `python3 -m py_compile
+  scripts/build_site.py` OK; targeted site/capsule tests
+  (`tests/test_build_site_parsers.py`, `tests/test_pack_capsule.py`) →
+  32 tests OK; `python3 scripts/build_site.py` rebuilt generated pages;
+  `python3 scripts/pack_capsule.py` packed 0.29 MiB capsule content;
+  `npx lakebed build` passed; full suite `python3 -m unittest discover
+  -s tests` → `Ran 734 tests, OK (skipped=10)`.
 - Merged main (49c5b66 + reassessment batch): `python3 -m unittest
   discover -s tests` → `Ran 734 tests, OK (skipped=10)` (post PRs
   #17..#21; #21 = D-013 alignment-capture window fix, C-018).

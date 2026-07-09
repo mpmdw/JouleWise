@@ -29,6 +29,7 @@
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#intake-rule-for-new-tasks">Intake Rule For New Tasks</a>
 <a href="#priority-scale">Priority Scale</a>
 <a href="#ranking-factors">Ranking Factors</a>
+<a href="#ready-shelf-rule">Ready/Shelf Rule</a>
 <a href="#machine-state-lanes-adopted-c-007-2026-07-07">Machine-State Lanes (adopted C-007, 2026-07-07)</a>
 <a href="#current-queue">Current Queue</a>
 <a href="#completed-queue-items">Completed Queue Items</a>
@@ -36,7 +37,7 @@
 <a href="#queue-maintenance">Queue Maintenance</a></aside>
   <div class="doc-wrap doc-source-task-queue-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 036913e"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 036913e</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 4e644da"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4e644da</span></span></div>
     <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -48,6 +49,9 @@ triage it here instead of assuming it should happen immediately.</p>
 <li>Check <code>git status --short --branch</code>.</li>
 <li>Review the last 2-3 commits with <code>git log --oneline --decorate -3</code>.</li>
 <li>Check relevant handoffs in <code>docs/run_reports/</code>.</li>
+<li>If <code>RUN_STATE.md</code> contains an ACTIVE <code>ACTIVE_STOP_CARD</code>, that card
+outranks this queue. Execute or preserve the card&#39;s resume/cleanup
+instructions before considering any lower-ranked work.</li>
 <li>Decide whether the task is:<ul>
 <li>urgent workspace hygiene,</li>
 <li>Phase 1 evidence work,</li>
@@ -91,6 +95,19 @@ presentation work.</li>
 <li>Adds polish before a runnable vertical slice exists.</li>
 <li>Produces code without a clear run-bundle or test artifact.</li>
 </ul>
+<h2 id="ready-shelf-rule">Ready/Shelf Rule</h2>
+<p>A partially built or proposed task is <strong>READY</strong> only when it has:</p>
+<ul>
+<li>one authority document or stream-log pointer,</li>
+<li>bounded files/modules or a bounded artifact target,</li>
+<li>explicit acceptance evidence or a verification command,</li>
+<li>no hidden hardware/user/token-budget dependency, and</li>
+<li>a named lane (<code>[AGENT]</code>, <code>[QUIET-MAC]</code>, or <code>[ED-EXTERNAL]</code>).</li>
+</ul>
+<p>If any of those are missing, keep the item as a shelved concept or
+planning note instead of letting it compete with executable queue work.
+Half-finished work should be resumed only through its authority pointer
+and stop-card/checkpoint state, not by inference from prose summaries.</p>
 <h2 id="machine-state-lanes-adopted-c-007-2026-07-07">Machine-State Lanes (adopted C-007, 2026-07-07)</h2>
 <p>Every task carries a lane; a session picks the top task COMPATIBLE with
 its machine state, not the top task absolutely:</p>
@@ -103,6 +120,9 @@ sessions.</li>
 purchases, destinations.</li>
 </ul>
 <h2 id="current-queue">Current Queue</h2>
+<p><code>RUN_STATE.md</code> currently has an ACTIVE <code>ACTIVE_STOP_CARD</code>. Until it is
+cleared, rank 0 is the only executable queue item unless Ed explicitly
+asks for unrelated docs/meta work that does not touch CP-5 artifacts.</p>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -115,6 +135,14 @@ purchases, destinations.</li>
 </tr>
 </thead>
 <tbody><tr>
+<td align="right">0</td>
+<td>RESUME-CP5</td>
+<td>P0 Safety</td>
+<td>PAUSED at stable checkpoint 2026-07-08 (Ed: &quot;start again&quot; resumes THIS row first)</td>
+<td>Finish the pre-campaign review session from CP-5: gate 3 worktree fix-round diffs (envgate live-gated vs real affine bundle) -&gt; 3 PRs; merge PRs #22+new after fresh final-head passes + CI; post-merge integration review; adjudicate the methodology synthesis; land accepted pre-campaign changes (hash-domain-aware validity check expected); deliver Ed&#39;s four-part answer + Window-A go/no-go</td>
+<td>Full sequence + artifact paths: <code>docs/stream_logs/2026-07-08-precampaign-review.md</code> CP-5; Fable directs, Codex executes</td>
+</tr>
+<tr>
 <td align="right">1</td>
 <td>P2-015</td>
 <td>P2 Next Slice</td>
@@ -565,7 +593,7 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit 036913e · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit 4e644da · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
