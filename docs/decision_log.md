@@ -1625,6 +1625,33 @@ mirrored per R-014.
 self-merge-with-review authority, recorded in C-010; the gate shape
 lives in the resume-merge run report and `docs/orchestration.md`.)
 
+Breach addendum (2026-07-09, C-027 whole-project review, MET-001):
+
+Four commits landed directly on main in violation of this decision's PR
+convention (only single-commit bookkeeping may bypass a PR):
+
+- a05e54d — campaign scripts + tests (code+tests; 108 insertions).
+- 8856c04 — controller/environment implementation + tests (code+tests;
+  158 test lines).
+- a835c73 — claims linter + 38 test lines inside a 26-file
+  "bookkeeping + integration fixes" commit (code+tests mixed into
+  bookkeeping).
+- 36d5641 — 33-line scripts/build_site.py behavior change, NO tests,
+  mixed with deployment output; postdates the then-recorded
+  verification head c095c83, so main carried unverified code.
+
+Content classes: three code+tests commits, one untested site-script
+change (counterreview corrected the lead's earlier "all four contain
+code+tests" overstatement — see review §6 item 2).
+
+Remediation: retroactive independent review queued as RETRO-001
+(result file: `docs/reviews/c027/retro_b6_review.md`, pending at the
+time of this addendum). Recoverability evidence table:
+`docs/reviews/c027/invocation_recoverability_audit.md`. Rule going
+forward: integration fixes and site-script behavior changes require
+their own PR; this addendum does not amend D-031's text, it records
+its breach. History is not rewritten; the commits stand.
+
 ---
 
 ## D-032: `phase_energy_j` is gross-only in summary v0.1
