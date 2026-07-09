@@ -27,6 +27,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
 import platform
 import subprocess
 import tempfile
@@ -95,6 +96,12 @@ def write_experiment_manifest(runs_root: Path, manifest: dict) -> Path:
     The manifest must contain an ``experiment_id`` key; the ID is sanitized
     for the filename only. Unlike bundles, manifests are extended
     incrementally, so overwriting an existing manifest file is allowed.
+
+    The replacement is atomic (P2-040 FIX-6/ARC-5): the serialized bytes are
+    written to a unique temporary file in the same ``experiments/`` directory,
+    fsynced, and moved over the destination with ``os.replace``. A failure
+    before the replace leaves any existing destination untouched; the
+    temporary file is unlinked best-effort and the original error propagates.
     """
     experiment_id = manifest.get("experiment_id")
     if not isinstance(experiment_id, str) or not experiment_id:
@@ -102,7 +109,35 @@ def write_experiment_manifest(runs_root: Path, manifest: dict) -> Path:
     experiments_dir = Path(runs_root) / "experiments"
     experiments_dir.mkdir(parents=True, exist_ok=True)
     path = experiments_dir / f"{sanitize_id_component(experiment_id)}.json"
-    path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    payload = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.", suffix=".tmp", dir=str(experiments_dir)
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp_name, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+    # Best-effort directory fsync so the rename itself is durable; platforms
+    # that refuse O_RDONLY directory fds (e.g. Windows) simply skip it.
+    try:
+        dir_fd = os.open(str(experiments_dir), os.O_RDONLY)
+    except OSError:
+        pass
+    else:
+        try:
+            os.fsync(dir_fd)
+        except OSError:
+            pass
+        finally:
+            os.close(dir_fd)
     return path
 
 
