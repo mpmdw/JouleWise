@@ -275,22 +275,15 @@ def _observed_total_tokens(metadata: dict[str, Any]) -> int | None:
     return None
 
 
-def _total_tokens(
-    config: BenchmarkConfig,
-    metadata: dict[str, Any],
-    output_token_count: int | None,
-) -> tuple[int | None, str | None]:
-    """``(total token count, source)`` for ``energy_token_j`` (Slice 2N.3).
+def _total_tokens(metadata: dict[str, Any]) -> tuple[int | None, str | None]:
+    """``(total token count, source)`` for ``energy_token_j``.
 
-    Config-supplied counts win: when ``workload_profile.prompt_tokens`` is set
-    (and an output count exists) the total is ``prompt + output`` with source
-    ``"config"`` - the pre-2N behavior. Otherwise the runtime's observed total
-    from metadata is used with source ``"runtime_observed"``. Neither present
-    yields ``(None, None)`` and the metric stays ``None``.
+    D-058 (P2-040 FIX-4): the runtime-observed total is the only governed
+    denominator and wins over configured counts. Without a positive
+    runtime-observed total the reducer fails closed - no total is fabricated
+    from configured prompt tokens plus output events - and the metric stays
+    ``None`` with source ``None``. Configured counts remain workload intent.
     """
-    prompt_tokens = _config_prompt_tokens(config)
-    if prompt_tokens is not None and output_token_count is not None:
-        return prompt_tokens + output_token_count, "config"
     observed = _observed_total_tokens(metadata)
     if observed is not None:
         return observed, "runtime_observed"
@@ -821,7 +814,7 @@ def _reduce(
 
     token_timestamps = reader.token_timestamps()
     output_token_count, token_counts_source = _output_token_count(config, token_timestamps)
-    total_tokens, token_count_source = _total_tokens(config, metadata, output_token_count)
+    total_tokens, token_count_source = _total_tokens(metadata)
 
     energy_token_j = _energy_token_j(energy_request_j, total_tokens)
     energy_output_token_j = _energy_output_token_j(energy_request_j, output_token_count)

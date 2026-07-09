@@ -571,7 +571,9 @@ class TokenFallbackTests(ReduceTestCase):
         builder.write_metadata(rail_manifest=["mock"], workload_observed=workload_observed)
         return reduce_module.reduce_bundle(builder.path)
 
-    def test_prompt_text_only_falls_back_to_observed_counts(self) -> None:
+    def test_prompt_text_only_uses_runtime_observed_total(self) -> None:
+        # D-058: runtime observation is the authoritative denominator, not a
+        # fallback.
         summary = self.build(
             workload_profile=self.PROMPT_TEXT_PROFILE,
             workload_observed={"token_count": 20, "output_token_count": 4},
@@ -583,14 +585,29 @@ class TokenFallbackTests(ReduceTestCase):
             summary.measurement_quality.token_count_source, "runtime_observed"
         )
 
-    def test_config_supplied_counts_still_win(self) -> None:
-        # The example config pins prompt_tokens=32; 4 token events observed.
+    def test_runtime_observed_total_wins_over_configured_counts(self) -> None:
+        # D-058 (P2-040 FIX-4): the example config pins prompt_tokens=32 and 4
+        # token events are observed, but the runtime-observed total (999) is
+        # the only governed denominator.
         summary = self.build(
             workload_observed={"token_count": 999, "output_token_count": 4},
         )
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-        self.assertAlmostEqual(summary.energy_token_j, 25.0 / (32 + 4), places=9)
-        self.assertEqual(summary.measurement_quality.token_count_source, "config")
+        self.assertAlmostEqual(summary.energy_token_j, 25.0 / 999.0, places=9)
+        self.assertEqual(
+            summary.measurement_quality.token_count_source, "runtime_observed"
+        )
+
+    def test_config_plus_output_events_does_not_fabricate_total_denominator(self) -> None:
+        # P2-040 FIX-4 mutation test: configured prompt count plus output
+        # events must not fabricate a governed total without a
+        # runtime-observed total.
+        summary = self.build()
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNone(summary.energy_token_j)
+        self.assertIsNone(summary.measurement_quality.token_count_source)
+        # The per-output-token metric keeps its runtime-observed denominator.
+        self.assertAlmostEqual(summary.energy_output_token_j, 25.0 / 4.0, places=9)
 
     def test_neither_source_yields_none_unchanged(self) -> None:
         summary = self.build(workload_profile=self.PROMPT_TEXT_PROFILE)
