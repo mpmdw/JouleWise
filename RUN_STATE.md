@@ -206,11 +206,12 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
-- `main` remains at the pushed post-PR-39 head `529bffa`. Branch
-  `c027-council-review` carries the session's commits: the previously
-  uncommitted user-directed bridge hardening (1d7c415) plus the C-027
-  review record and corrections; the worktree is otherwise clean. PR
-  pending at write time.
+- `main` and `origin/main` contain the user-directed Claude Code → Codex
+  bridge hardening from commit `1d7c415` (pushed direct as a bounded
+  tooling change, closeout `ef34cc9`). Branch `c027-council-review`
+  (PR #40) carries the C-027 review record, claim-surface corrections,
+  and sweep fixes, and has merged main back in; the worktree is
+  otherwise clean.
 - Codex's own worktree `/Users/edr/.codex/worktrees/7fe2/JouleWise`
   still holds the ORIGINAL advisor-site commits (bf9ffc5..e6cf431);
   their content landed via PR #28 (D-051 renumber applied). Safe to
