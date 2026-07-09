@@ -59,7 +59,7 @@ report.
 typed config
   -> controller
     -> transport adapter: local or ssh
-    -> runtime adapter: mlx, vllm, llama.cpp, hailo-if-viable
+    -> runtime adapter: mlx, vllm, llama.cpp (hailo: unsupported_workload — feasibility finding only)
     -> telemetry adapter: powermetrics, nvidia-smi, jetson rails, wall meter
   -> run bundle
     -> reducers

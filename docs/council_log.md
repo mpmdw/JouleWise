@@ -61,6 +61,7 @@ standing instructions.
 | C-024 | 2026-07-09 | Spec-fleshing wave 1 (pointer entry; run report `2026-07-09-spec-fleshing-wave1.md`) — 4 worktree streams (5.5 implement), 4 counterreview lenses, 3 fix rounds, 4 final-head + 1 tail-verification pass, integration review | PRs #29..#32 merged (D-052..D-055 ratified: scope contract, contrast-level stats + registry, false-effect guard floor, RQ registry); R2's estimator kill (percentile-UCB unidentifiable at n=10) was the session's decisive catch; integration review caught 5 cross-stream seam drifts (S1/S2 written against pre-S3 contract text); P2-015-PREP (queue rank 0) closed; checkpoint-push cadence adopted mid-session (Ed) |
 | C-025 | 2026-07-09 | Wave 2 — ultracode workflow build (pointer entry; run report `2026-07-09-spec-fleshing-wave2.md`) — 46-agent workflow (4 impl streams, 8 lenses, severity-tiered refuters) + 2 lead-driven reinforcement streams + 6 final-heads + tail verification + combined-ref check + integration review | PRs #33..#38 merged (D-056..D-059 ratified: order policies + order_row, drift-is-a-bound + stable reason codes, token-normalization contract, claims-lint CI enforcement); refuter layer killed 10 findings pre-triage; final-heads caught 2 live-path defects (MLX position under rotation; linter false-negative regression); mutation testing debuted in the test-audit lens; combined-ref suite check validated the p2029 x p2030 strict-surface interaction pre-merge; suite 877 |
 | C-026 | 2026-07-09 | P2-034 broad campaign packs (pointer entry; run report `2026-07-09-p2034-broad-packs.md`) — design-round-first (memo ratified w/ 3 pins), single worktree stream, dual lenses, final-head CLEAN | PR #39 merged; six packs, pack lint errors=0; compliance lens caught a char-level registry drift the linter cannot see (code-span nesting) + a scorer-leak + P2-022 structure flattening; executability lens caught the external-lab cold-start gap; pre-hardware campaign surface COMPLETE (every pre_hardware_preparable=fully row packed) |
+| C-027 | 2026-07-09 | Whole-project council review with gpt-5.6-sol xhigh (first production session; 7 lenses: topdocs/rigor/stats/meta/reverse/arch/negspace + counterreview + independent Fable-tier final examiner; full record `docs/reviews/2026-07-09-c027-whole-project-review.md`) | 8 blocker clusters confirmed (token-denominator mislabel, superseded D-053 prose, RUN_STATE dual next-action, claim machinery unimplemented+unowned, empty D-050 manifest, four D-031 direct-to-main commits, evidence-integrity trio, protocol blockers); claim surfaces corrected same session; 14 follow-up queue rows + NV-GATE-2 additions to P2-005; D-060 proposed + D-061..D-063 accepted; counterreview reversed the lead twice (legacy-gate framing, restructure staging) |
 
 ---
 
@@ -1414,3 +1415,59 @@ ratified with three lead pins (unnamed second-family placeholder;
 runtime-held-constant = revision/build-family; smallest
 method-transfer suite first for C5-3.5); no new decision-log entries
 (pack content rides ratified contracts). Dissents: none.
+
+## C-027: Whole-project council review with gpt-5.6-sol (2026-07-09)
+
+Full record: `docs/reviews/2026-07-09-c027-whole-project-review.md`
+(disposition table for all ~80 lens findings, per-blocker verification
+lines, deliberation traces). Raw lens/counterreview/examiner outputs
+archived under `docs/reviews/c027/`. This entry records only the
+genuine deliberation.
+
+Participants: Fable 5 lead; Codex gpt-5.6-sol xhigh (FIRST production
+session of the new model; CLI upgraded 0.143.0→0.144.0 mid-session
+after the old CLI rejected the model) — 7 read-only lenses + 1
+counterreview; 1 fresh-context Fable-tier final examiner. Scope
+declaration: all peer passes were STATIC-ONLY and single-model-family —
+execution behavior, SSH-path security, and licensing were reviewed by
+nobody and are recorded as open debts, not clean.
+
+Positions → resolutions (design-bearing only):
+
+- Legacy-gates framing: lead draft said the six real bundles "failed
+  the advertised gates"; counterreview showed D-037 binds from 2M
+  onward, so the correct frame is legacy L1 + manual waivers —
+  counterreview PREVAILED (the lead's framing would have manufactured
+  an ex-post-protocol defense problem).
+- Process-restructure staging: lead deferred the machine-readable state
+  kernel; counterreview argued deferral leaves the demonstrated drift
+  mode active and that policy generation is the harder half —
+  counterreview PREVAILED; kernel is Stage 1 (D-063 records the
+  reversal).
+- Layer-drop rule: lead's "3 applicable sessions, severity-weighted"
+  was attacked as reintroducing post-hoc discretion; adopted WITH the
+  peer's mechanical-predicate construction (D-061).
+- ARCH severity: undifferentiated blocker trio split into immediate
+  (zero-window, P2-040) vs NVIDIA-gated (NV-GATE-2) per counterreview.
+- Sequential sampling: fixed-n + explicit demotion adopted over both
+  status quo and default alpha-spending (D-062); peer confirmed the
+  demotion rule is coherent only with its four explicit clauses.
+
+Layer yields (C-027): lenses 8 confirmed blocker clusters + ~60
+accepted findings, 0 verified false positives (blocker tier; lower
+tiers unaudited); counterreview 3 synthesis blockers (2 were LEAD
+errors — the only confirmed review errors this session were the
+lead's); final examiner 8 dropped/under-tiered findings + the
+validity-threats section, all adopted. Reverse-review layer indicted
+the lead's own conduct (empty D-050 manifest, four D-031 direct-to-main
+commits) — accepted in full, remedies in MET-001/RETRO-001.
+
+Dissents overridden: none unresolved. Lead notes for the record: ARC-1/2
+remain hard acceptance gates at NVIDIA live promotion despite the
+severity downgrade.
+
+Calibration (model-version scoping): one promising 5.6-sol batch —
+9/9 OK exits, ~28 verified file:line claims all accurate, unprompted
+premise correction (5 instances), the counterreview out-argued the lead
+twice. NOT a promotion; the pre-registered sealed A/B remains the gate
+before delegation-boundary changes.

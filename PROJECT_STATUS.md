@@ -5,17 +5,21 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-09 (spec-fleshing waves 1+2, C-024/C-025:
-  capstone scope contract, contrast-level statistics + analysis
-  registry, P2-015 detection-floor design, canonical question registry
-  (PRs #29..#32, D-052..D-055); then uncertainty propagation + claim
-  gates, suite order policies, token-normalization contract, campaign
-  packs, claims-lint CI enforcement (PRs #33..#38, D-056..D-059). Then
-  P2-034 broad campaign packs (PR #39, C-026) completed the pre-hardware
-  campaign surface. Next QUIET-MAC work: C-019 shakedown + P2-015
-  calibration; AGENT lanes: P2-022/P2-023 (C-015 post-2M sequencing, revisit after Window A), P2-035 post-floors)
+- Last updated: 2026-07-09 (C-027 whole-project council review with the
+  new Codex model gpt-5.6-sol: claim-surface corrections landed —
+  token-metric bases, D-053 wording, single-session CV framing — plus
+  fourteen adjudicated follow-up queue rows (plus NV-GATE-2 additions to P2-005) and four decisions
+  (D-060 proposed, D-061..D-063 accepted); full record in
+  `docs/reviews/2026-07-09-c027-whole-project-review.md`. Earlier same
+  day: spec-fleshing waves 1+2 (C-024/C-025, PRs #29..#38, D-052..D-059),
+  P2-034 broad campaign packs (PR #39, C-026). Next QUIET-MAC work:
+  C-019 shakedown + P2-015 calibration, now additionally gated on
+  P2-038/P2-039 (production uncertainty evidence + frozen floor
+  artifact); [AGENT] lane: the C-027 correctness rows (P2-040 first))
 - Project phase: Phase 1 closing; Phase 2 in progress - instrument
-  CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
+  pre-campaign software review CLEARED (campaign execution remains gated
+  on shakedown, detection-floor calibration, a quiet machine, and an
+  external backup destination); P2-013 evidence-integrity and P2-014 provenance fixes
   are complete; workload-suite build is merged; CP-5 pre-campaign review is
   COMPLETE and CLEARED (2026-07-09, PRs #22..#28; see
   `docs/run_reports/2026-07-09-cp5-resume.md`); the P2-015 design doc is
@@ -25,7 +29,25 @@ are provided for anyone who wants the full evidence trail.
   capsule; `/status.html` is the advisor cockpit and shows live overlays
   plus a drift banner when the repo has moved past the snapshot)
 
-## This Update (as of 2026-07-09, advisor status cockpit) — 30-second read
+## This Update (as of 2026-07-09, C-027 whole-project council review) — 30-second read
+
+**The project put itself in front of a hostile examiner and corrected
+its own front page.** A seven-lens cross-model review (new Codex model,
+extra-high reasoning) plus an independent final examiner audited the
+docs, the scientific claims, the statistics implementation, the
+architecture, and the operating loop itself. Verdict: the evidence
+discipline and instrument core are sound, but reader-facing claims had
+drifted from the evidence (the 1.5B per-token headline used the wrong
+denominator — now corrected to ~79-90 mJ per generated output token,
+idle-subtracted), the D-053 contrast-CI machinery exists as binding
+specs but not yet as code (now owned as queue rows P2-037..P2-042 and
+gating Window-A interpretation), and the loop's own audit trail and the
+capstone-critical path (grading rubric, report skeleton, off-machine
+backup, one data-to-figure slice) need attention before any new breadth.
+All measured values above remain legacy L1 preliminary observations.
+Full adjudicated record: `docs/reviews/2026-07-09-c027-whole-project-review.md`.
+
+## Previous Update (as of 2026-07-09, advisor status cockpit) — 30-second read
 
 **The public preview is being upgraded for live advisor observation.**
 The project-status page remains generated from repository evidence, but
@@ -69,7 +91,9 @@ phase checklist matrix rows for per-item authority.
 ## Previous Update (2026-07-07, fifth update) — 30-second read
 
 **The instrument grew four capabilities in one session and is now
-campaign-ready.** Five parallel work streams landed (PRs #2-#6):
+campaign-ready.** *(Historical claim; C-027 (2026-07-09) supersedes the
+gating: execution is conditioned on P0-003 backup, P2-038, P2-039, and
+P2-015-SMOKE.)* Five parallel work streams landed (PRs #2-#6):
 (1) **statistical uncertainty** — every multi-repetition experiment now
 carries per-metric 95% confidence intervals with outlier detection and
 explicit below-protocol flags, re-derivable byte-identically from the
@@ -94,9 +118,13 @@ baseline matrix on a quiet machine.
 **A flagship-class model is now benchmarked.** Qwen3.5-122B (Feb 2026
 generation, 122B-parameter mixture-of-experts with 10B active, a
 reasoning model) ran through the identical harness and workload on the
-M3 Max: **~304 J per 512-token request (~583 mJ/token) at 46 tokens/s,
-repeatable to 0.3% across repetitions** — alongside the earlier 1.5B
-model's ~47 J (~87 mJ/token at 257 tok/s). First cross-model finding:
+M3 Max: **~304.0 J gross per 512-token request (~298.7 J
+idle-subtracted; ~583 mJ per generated output token, idle-subtracted
+basis) at 46 tokens/s, with a gross-energy
+sample CV of 0.3% across three sequential repetitions in one warm-cache
+session** — alongside the earlier 1.5B model's ~47.2 J gross (~87
+mJ/output-token idle-subtracted at 257 tok/s). *(Metric bases and CV
+wording corrected 2026-07-09, C-027.)* First cross-model finding:
 the two measured points differ in size, architecture, and quantization,
 so they are not a demonstrated scaling law. They are, however,
 consistent with the fixed-vs-marginal structure Q4 models: decode power
@@ -112,7 +140,7 @@ implementing the statistical-uncertainty protocol) queued.
 
 | date | label | one-line outcome | run-report link |
 |---|---|---|---|
-| 2026-07-06 | third update / first real energy | Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements: ~47 J gross per 512-token request, ~77-88 mJ/output-token, TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz, with prefill energy ~0.03 J. | `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md` |
+| 2026-07-06 | third update / first real energy | Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements: ~47.2 J gross per 512-token request, ~79-90 mJ/generated-output-token (idle-subtracted; the originally reported 77-88 range used the prompt+output denominator — corrected 2026-07-09, C-027), TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz; short prefill energy is below the current detection capability and is not a quantitative result (D-055). | `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md` |
 | 2026-07-06 | third update / powermetrics telemetry | The powermetrics telemetry adapter and privileged sampling path were brought up, preserving raw plists and exposing the real sampling-rate constraints. | `docs/run_reports/2026-07-06-slice-2h-powermetrics.md` |
 | 2026-07-06 | third update / pre-hardware hardening | Slice 2N closed the evidence-path hardening before real hardware: raw evidence retention, measured-window markers, rail validation, shared bundle reading, and post-hoc reduction. | `docs/run_reports/2026-07-06-slice-2n-pre-hardware-hardening.md` |
 | 2026-06-12 | first/second updates / mock vertical slice | The mock-first harness reached an end-to-end auditable run path before hardware time: typed config to complete bundle, validation, reduction, and report. | `docs/run_reports/2026-06-12-phase-2-mock-vertical-slice.md` |
@@ -193,7 +221,7 @@ recorded in the Phase 2 plan.
 |---|---|---|---|
 | Background / related work | Phase 4 Stage 4.6, `docs/phase_4/related_work_draft.md` | drafted (11 verified sources) | background-chapter assembly and the Phase 4 exit pass |
 | Measurement methodology | `docs/contracts/measurement_methodology.md` | complete | Phase 4 ratification may amend statistical details against observed variance |
-| Harness / instrument | `joulewise/` | complete and campaign-ready | new-era bundles must carry shape-valid provenance to pass strict |
+| Harness / instrument | `joulewise/` | complete; pre-campaign software review cleared (execution gated on shakedown, calibration, quiet machine, backup) | new-era bundles must carry shape-valid provenance to pass strict |
 | Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | unblocked after P2-013/P2-014 | needs the 2M baseline corpus |
 | Split-inference study | Phase 3 | planned | needs KV-feasibility spikes plus a real pairing, or the synthetic-transfer + analytical-composition floor |
 | Results / limitations + claims audit | Phase 4 Stages 4.3-4.5 | planned | needs the analysis dataset and detection-floor gate |
@@ -212,8 +240,8 @@ Complete so far (all verifiable in the repository):
   now also re-derives powermetrics traces from raw plist evidence, checks
   legacy additive-summary compatibility, and requires shape-valid
   provenance on new-era bundles. All bundle consumers read through one
-  shared, tested read layer, so displayed numbers can never diverge from
-  reported ones.
+  shared, tested read layer, which sharply reduces the risk of displayed
+  numbers diverging from reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
   a CLI, plus a passing test suite (current count and skips live in
   RUN_STATE.md Current Verification; run in CI on every push, including a
@@ -224,17 +252,21 @@ Complete so far (all verifiable in the repository):
   bundle artifact contract, and the measurement methodology (idle
   subtraction, measurement boundaries, clock synchronization, statistical
   protocol - highlights below).
-- Evidence-shaped plans for every phase, a design-decision log (37
-  decisions, each with the alternatives considered), a risk register with
+- Evidence-shaped plans for every phase, a design-decision log (D-001
+  through D-063 to date - D-060 proposed, the rest accepted; the log
+  itself is the count authority, and most entries record the
+  alternatives considered), a risk register with
   an explicit descope ladder, and example configs for the Mac and mock
   targets.
 - The complete Mac vertical slice: the MLX runtime adapter (2G), the
   `powermetrics` telemetry adapter (2H, parser pinned to a captured
   privileged sample, raw plists preserved verbatim in every bundle), and
   the flagship integration (2I) — three strict-valid repetition bundles
-  of real energy measurements on the M3 Max (~47 J gross per 512-token
-  request, ~77-88 mJ/generated token, TTFT ~94 ms at 257 tokens/s,
-  provisional model Qwen2.5-1.5B-Instruct-4bit mirrored locally).
+  of real energy measurements on the M3 Max (~47.2 J gross per 512-token
+  request, ~44.4 J idle-subtracted, ~79-90 mJ per generated output token
+  on the idle-subtracted basis, TTFT ~94 ms at 257 tokens/s; legacy L1
+  preliminary observations, provisional model Qwen2.5-1.5B-Instruct-4bit
+  mirrored locally).
 - The report's related-work survey draft (11 sources with verified
   citations and an honest positioning audit) and a measurement-data
   backup protocol with a passed restore test.
@@ -249,7 +281,10 @@ specs are in `docs/phase_2/hardware_slice_implementation_guide.md`. The
 mock-first core landed first by design, so measurement code is never
 debugging the harness and the instrument at the same time.
 
-Waiting on external input (none of it blocks the current work):
+Waiting on external input (most of it does not block current software
+work, but the external backup destination (P0-003) is REQUIRED before
+Window-A data accumulates, and the grading rubric/calendar (P1-008) now
+carries a provisional-contract fallback under proposed D-060):
 
 1. NVIDIA / Jetson Orin device access evidence — the one hard gate left,
    for the remote-target slices 2K/2L. (The `nvidia_3050` in the
@@ -272,7 +307,7 @@ Closed since the last revision: the Mac privileged-telemetry gate — the
 typed config
   -> controller
     -> transport adapter: local | ssh
-    -> runtime adapter:   mock | mlx | vllm | llama.cpp | hailo-if-viable
+    -> runtime adapter:   mock | mlx | vllm | llama.cpp (hailo: unsupported_workload — feasibility finding only)
     -> telemetry adapter: mock | powermetrics | nvidia-smi | jetson rails | wall meter
   -> run bundle (self-contained, on-disk source of truth)
     -> reducers (energy integration, idle subtraction, per-phase attribution)
@@ -327,7 +362,11 @@ Key elements:
 - **Uncertainty is quantified.** Headline comparisons use n>=5
   repetitions with mean, standard deviation, and 95% t-intervals;
   outliers are flagged (never silently dropped); raw points appear in
-  every figure; differences are claimed only where intervals separate.
+  every figure. Differences are claimed only from the confidence
+  interval of the predeclared paired/block difference or named model
+  contrast — never from marginal-interval separation — with the D-053
+  three-way wording rule (below-floor: not resolvable; above-floor
+  non-directional: unresolved; equivalence only via a predeclared gate).
   Thermal state is controlled with an idle-power-recovery gate between
   repetitions.
 - **Multi-node clock discipline.** For split runs, per-node clock offset
@@ -547,8 +586,9 @@ verdicts: the council log preserves positions, the reasoning exchanged,
 who prevailed and why, and overridden dissents, so a future reader (or
 model) can reconstruct why any decision was made.
 
-**The paper trail (every claim auditable).** Each fact has one home:
-`docs/decision_log.md` — the binding design decisions (the log is the count authority), each with
+**The paper trail (each claim traceable to its evidence home; the
+external re-reduction demonstration is still pending).** Each fact has one home:
+`docs/decision_log.md` — the binding design decisions (the log is the count authority), most recording
 alternatives considered and revisit conditions; `docs/council_log.md`
 — the deliberation record; `docs/stream_logs/` —
 per-stream decision ledgers committed *with* the code they justify
