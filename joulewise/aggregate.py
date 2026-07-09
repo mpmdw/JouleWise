@@ -361,7 +361,9 @@ def _idle_subtracted_request_propagation(
             interpolation_bounds.append(None)
 
     gross_variance = (
-        statistics.variance(gross_values) if len(gross_values) >= 2 else None
+        _sample_variance_or_none(gross_values)
+        if len(gross_values) == len(points)
+        else None
     )
     idle_mean_variance = (
         statistics.mean(idle_terms)
@@ -393,6 +395,16 @@ def _idle_subtracted_request_propagation(
         "energy_variance_terms_j2": variance_terms_out,
         "energy_bound_terms_j": bound_terms_out,
     }
+
+
+def _sample_variance_or_none(values: list[float]) -> float | None:
+    if len(values) < 2:
+        return None
+    try:
+        variance = statistics.variance(values)
+    except OverflowError:
+        return None
+    return variance if _is_finite_number(variance) else None
 
 
 def _max_bound_or_unknown(

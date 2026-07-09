@@ -365,28 +365,12 @@ def _energy_bound_terms_j(
 def _idle_drift_power_bound_w(metadata: dict[str, Any]) -> float | None:
     """Return a recorded idle-drift power bound, never a modeled variance.
 
-    Current bundles have no universal drift-bound field, so this accepts the
-    additive spellings used by calibration/drift evidence without inventing a
-    magnitude from cooldown flags.
+    The accepted bundle spelling is ``idle_drift_bound_w`` at top level, with
+    ``metadata.extra.idle_drift_bound_w`` accepted for ``extra_metadata`` parity.
     """
     direct = _optional_nonnegative_number(metadata.get("idle_drift_bound_w"))
     if direct is not None:
         return direct
-
-    for container_name in ("idle_drift", "drift", "calibration"):
-        container = metadata.get(container_name)
-        if not isinstance(container, dict):
-            continue
-        for key in (
-            "idle_drift_bound_w",
-            "power_w_abs_bound",
-            "power_w_bound",
-            "abs_power_w_bound",
-            "idle_power_w_abs_bound",
-        ):
-            value = _optional_nonnegative_number(container.get(key))
-            if value is not None:
-                return value
 
     extra = metadata.get("extra")
     if isinstance(extra, dict):
@@ -414,39 +398,20 @@ def _interpolation_edge_bound_j(
         return None
     if window.duration_s == 0.0:
         return 0.0
-    start_span = _edge_power_span_w(curve, window.start_s)
-    end_span = _edge_power_span_w(curve, window.end_s)
-    if start_span is None or end_span is None:
+    start_gap = _bracketing_gap_s(curve, window.start_s)
+    end_gap = _bracketing_gap_s(curve, window.end_s)
+    if start_gap is None or end_gap is None:
         return None
-    start_width = _first_segment_width_s(curve, window)
-    end_width = _last_segment_width_s(curve, window)
-    return 0.5 * start_width * start_span + 0.5 * end_width * end_span
-
-
-def _edge_power_span_w(curve: list[TracePoint], t: float) -> float | None:
-    if t < curve[0].t or t > curve[-1].t:
-        return None
-    for point in curve:
-        if point.t == t:
-            return 0.0
-    for left, right in zip(curve, curve[1:]):
-        if left.t < t < right.t:
-            return abs(right.power_w - left.power_w)
-    return None
-
-
-def _first_segment_width_s(curve: list[TracePoint], window: Window) -> float:
-    for point in curve:
-        if window.start_s < point.t < window.end_s:
-            return point.t - window.start_s
-    return window.duration_s
-
-
-def _last_segment_width_s(curve: list[TracePoint], window: Window) -> float:
-    for point in reversed(curve):
-        if window.start_s < point.t < window.end_s:
-            return window.end_s - point.t
-    return window.duration_s
+    base = _integrate(curve, window.start_s, window.end_s)
+    start_delta = 0.5 * start_gap
+    end_delta = 0.5 * end_gap
+    perturbed = (
+        _integrate(curve, window.start_s - start_delta, window.end_s),
+        _integrate(curve, window.start_s + start_delta, window.end_s),
+        _integrate(curve, window.start_s, window.end_s - end_delta),
+        _integrate(curve, window.start_s, window.end_s + end_delta),
+    )
+    return max(abs(value - base) for value in perturbed)
 
 
 def _claim_eligibility(
@@ -656,18 +621,17 @@ def _window_gap_stats(
         if window.start_s <= left.t and right.t <= window.end_s
     ]
     window_p95 = _p95(window_gaps)
-    bracketing_gaps = [
-        gap
-        for gap in (
-            _bracketing_gap_s(curve, window.start_s),
-            _bracketing_gap_s(curve, window.end_s),
-        )
-        if gap is not None
-    ]
-    bracketing_max = max(bracketing_gaps) if bracketing_gaps else None
-    denominator = max(
-        [value for value in (window_p95, bracketing_max) if value is not None],
-        default=None,
+    start_bracketing_gap = _bracketing_gap_s(curve, window.start_s)
+    end_bracketing_gap = _bracketing_gap_s(curve, window.end_s)
+    bracketing_max = (
+        max(start_bracketing_gap, end_bracketing_gap)
+        if start_bracketing_gap is not None and end_bracketing_gap is not None
+        else None
+    )
+    denominator = (
+        max(window_p95, bracketing_max)
+        if window_p95 is not None and bracketing_max is not None
+        else None
     )
     cadence_ratio = None
     if denominator is not None and denominator > 0.0:

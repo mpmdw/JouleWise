@@ -82,6 +82,26 @@ class BundleBuilder:
         self.add_event("phase_start", phase, start_s)
         self.add_event("phase_end", phase, end_s)
 
+    def item_window(
+        self, item_id: str, item_index: int, start_s: float, end_s: float
+    ) -> None:
+        self.add_event(
+            "item_start",
+            "suite",
+            start_s,
+            metadata={"item_id": item_id, "item_index": item_index},
+        )
+        self.add_event(
+            "item_end",
+            "suite",
+            end_s,
+            metadata={
+                "item_id": item_id,
+                "item_index": item_index,
+                "status": "succeeded",
+            },
+        )
+
     def write_trace(self, samples: list[PowerSample]) -> None:
         self.writer.write_power_trace(samples)
 
@@ -91,6 +111,8 @@ class BundleBuilder:
         idle: dict[str, Any] | None = DEFAULT_IDLE,
         clock_anchor_bound_s: float | None = 0.0,
         idle_drift_bound_w: float | None = None,
+        extra_idle_drift_bound_w: float | None = None,
+        calibration_power_w_bound: float | None = None,
     ) -> None:
         metadata: dict[str, Any] = {
             "device": {"telemetry": "mock", "rail_manifest": ["mock"]},
@@ -102,6 +124,10 @@ class BundleBuilder:
             metadata["clock_anchor_bound_s"] = clock_anchor_bound_s
         if idle_drift_bound_w is not None:
             metadata["idle_drift_bound_w"] = idle_drift_bound_w
+        if extra_idle_drift_bound_w is not None:
+            metadata["extra"] = {"idle_drift_bound_w": extra_idle_drift_bound_w}
+        if calibration_power_w_bound is not None:
+            metadata["calibration"] = {"power_w_bound": calibration_power_w_bound}
         self.writer.write_metadata(metadata)
 
 
@@ -132,7 +158,9 @@ class ReducerPropagationTests(ReducerUncertaintyTestCase):
         self.assertAlmostEqual(summary.energy_request_j or 0.0, 25.0, places=9)
         self.assertIsNotNone(summary.measurement_quality)
         self.assertIsNotNone(summary.energy_variance_terms_j2)
-        self.assertIn("E_gross_repetition_j2", summary.energy_variance_terms_j2)
+        self.assertIsNone(
+            summary.energy_variance_terms_j2["E_gross_repetition_j2"]
+        )
 
     def test_idle_mean_variance_term_uses_duration_squared(self) -> None:
         builder = self.builder()
@@ -166,8 +194,41 @@ class ReducerPropagationTests(ReducerUncertaintyTestCase):
             "E_drift_bound_j", summary.energy_variance_terms_j2 or {}
         )
 
+    def test_drift_bound_accepts_only_documented_key_paths(self) -> None:
+        builder = self.builder()
+        builder.measured_window(0.0, 8.0)
+        builder.write_trace(constant_samples(0.0, 8.0, hz=1.0, power_w=7.5))
+        builder.write_metadata(
+            extra_idle_drift_bound_w=0.25, calibration_power_w_bound=99.0
+        )
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNotNone(summary.energy_bound_terms_j)
+        self.assertAlmostEqual(
+            summary.energy_bound_terms_j["E_drift_bound_j"], 2.0, places=12
+        )
+
 
 class ClaimGateTests(ReducerUncertaintyTestCase):
+    def test_request_window_at_cadence_and_clock_boundaries_is_eligible(self) -> None:
+        builder = self.builder()
+        builder.measured_window(0.0, 4.0)
+        builder.write_trace(constant_samples(0.0, 4.0, hz=1.0, power_w=8.0))
+        builder.write_metadata(clock_anchor_bound_s=1.0, idle_drift_bound_w=0.1)
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        request = (summary.claim_eligibility or {})["request"]
+        self.assertTrue(request["eligible"])
+        self.assertEqual(request["reasons"], [])
+        self.assertEqual(request["cadence_ratio"], 4.0)
+        self.assertEqual(request["cadence_ratio_min"], 4.0)
+        self.assertNotIn(
+            "clock_bound_exceeds_quarter_window", request["reasons"]
+        )
+
     def test_under_resolved_phase_is_claim_ineligible_for_sample_count(self) -> None:
         builder = self.builder()
         builder.measured_window(0.0, 4.0)
@@ -265,7 +326,23 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
         phase = (summary.claim_eligibility or {})["phase"]["interpolated"][
             "windows"
         ][0]
-        self.assertAlmostEqual(phase["interpolation_edge_bound_j"], 4.0, places=12)
+        self.assertAlmostEqual(phase["interpolation_edge_bound_j"], 13.0, places=12)
+
+    def test_interpolation_edge_bound_uses_edge_perturbation_recipe(self) -> None:
+        builder = self.builder()
+        builder.measured_window(2.5, 6.5)
+        builder.write_trace(constant_samples(0.0, 9.0, hz=1.0, power_w=8.0))
+        builder.write_metadata(idle_drift_bound_w=0.1)
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNotNone(summary.energy_bound_terms_j)
+        self.assertAlmostEqual(
+            summary.energy_bound_terms_j["E_interpolation_edge_bound_j"],
+            4.0,
+            places=12,
+        )
 
     def test_request_without_drift_evidence_is_ineligible(self) -> None:
         builder = self.builder()
@@ -277,8 +354,41 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         request = (summary.claim_eligibility or {})["request"]
         self.assertFalse(request["eligible"])
-        self.assertIn("drift_term_unknown", request["reasons"])
+        self.assertEqual(request["reasons"], ["drift_term_unknown"])
         self.assertIsNone((summary.energy_bound_terms_j or {})["E_drift_bound_j"])
+
+    def test_missing_bracketing_gap_records_no_cadence_ratio(self) -> None:
+        builder = self.builder()
+        builder.measured_window(0.0, 4.0)
+        builder.write_trace(constant_samples(1.0, 4.0, hz=1.0, power_w=8.0))
+        builder.write_metadata(idle_drift_bound_w=0.1)
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        request = (summary.claim_eligibility or {})["request"]
+        self.assertIsNone(request["observed_bracketing_max_sample_gap_s"])
+        self.assertIsNone(request["cadence_ratio"])
+        self.assertIn("cadence_ratio_unrecorded", request["reasons"])
+
+    def test_item_claim_gate_uses_short_window_threshold_and_sample_count(self) -> None:
+        builder = self.builder()
+        builder.measured_window(0.0, 4.0)
+        builder.item_window("item_ok", 0, 0.0, 2.0)
+        builder.item_window("item_short", 1, 2.0, 3.0)
+        builder.write_trace(constant_samples(0.0, 4.0, hz=1.0, power_w=8.0))
+        builder.write_metadata(idle_drift_bound_w=0.1)
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        item_gates = (summary.claim_eligibility or {})["item"]
+        eligible = item_gates["0:item_ok"]
+        self.assertTrue(eligible["eligible"])
+        self.assertEqual(eligible["reasons"], [])
+        self.assertEqual(eligible["cadence_ratio"], 2.0)
+        self.assertEqual(eligible["cadence_ratio_min"], 2.0)
+        short = item_gates["1:item_short"]
+        self.assertFalse(short["eligible"])
+        self.assertIn("insufficient_in_window_samples", short["reasons"])
 
 
 def _write_summary(runs_root: Path, member: str, summary: dict[str, Any]) -> None:
@@ -299,7 +409,7 @@ class AggregatorPropagationTests(unittest.TestCase):
     def test_request_uncertainty_propagates_gross_and_idle_variance_terms(self) -> None:
         members = []
         for index, (gross, request, idle_var) in enumerate(
-            [(10.0, 5.0, 1.0), (12.0, 7.0, 4.0), (14.0, 9.0, 9.0)],
+            [(10.0, 5.0, 1.0), (13.0, 7.0, 4.0), (14.0, 9.0, 9.0)],
             start=1,
         ):
             member = f"r{index}"
@@ -323,7 +433,7 @@ class AggregatorPropagationTests(unittest.TestCase):
         aggregate = aggregate_experiment(self.runs_root, {"members": members})
         metric = aggregate["metrics"]["energy_request_j"]
 
-        expected_gross_variance = 4.0
+        expected_gross_variance = 13.0 / 3.0
         expected_idle_variance = (1.0 + 4.0 + 9.0) / 3.0
         self.assertAlmostEqual(
             metric["energy_variance_terms_j2"]["E_gross_repetition_j2"],
@@ -347,6 +457,86 @@ class AggregatorPropagationTests(unittest.TestCase):
                 metric["energy_bound_terms_j"]["E_interpolation_edge_bound_j"], 0.3
             )
         )
+
+    def test_request_uncertainty_is_not_estimable_without_all_idle_terms(self) -> None:
+        members = []
+        for index in range(1, 3):
+            member = f"r{index}"
+            members.append(member)
+            summary: dict[str, Any] = {
+                "status": "succeeded",
+                "energy_request_j": float(index),
+                "idle_subtracted_energy_j": float(index),
+                "gross_energy_j": float(index + 10),
+                "energy_bound_terms_j": {
+                    "E_drift_bound_j": 0.5,
+                    "E_interpolation_edge_bound_j": 0.1,
+                },
+            }
+            if index == 1:
+                summary["energy_variance_terms_j2"] = {"E_idle_mean_j2": 1.0}
+            _write_summary(self.runs_root, member, summary)
+
+        aggregate = aggregate_experiment(self.runs_root, {"members": members})
+        metric = aggregate["metrics"]["energy_request_j"]
+
+        self.assertEqual(metric["energy_uncertainty_status"], "not_estimable")
+        self.assertIsNone(metric["energy_variance_terms_j2"]["E_idle_mean_j2"])
+        self.assertIsNone(metric["energy_variance_terms_j2"]["E_idle_sub_total_j2"])
+
+    def test_gross_repetition_variance_requires_all_point_members(self) -> None:
+        members = []
+        for index in range(1, 4):
+            member = f"r{index}"
+            members.append(member)
+            summary: dict[str, Any] = {
+                "status": "succeeded",
+                "energy_request_j": float(index),
+                "idle_subtracted_energy_j": float(index),
+                "energy_variance_terms_j2": {"E_idle_mean_j2": 1.0},
+                "energy_bound_terms_j": {
+                    "E_drift_bound_j": 0.5,
+                    "E_interpolation_edge_bound_j": 0.1,
+                },
+            }
+            if index != 3:
+                summary["gross_energy_j"] = float(index + 10)
+            _write_summary(self.runs_root, member, summary)
+
+        aggregate = aggregate_experiment(self.runs_root, {"members": members})
+        metric = aggregate["metrics"]["energy_request_j"]
+
+        self.assertEqual(metric["energy_uncertainty_status"], "not_estimable")
+        self.assertIsNone(metric["energy_variance_terms_j2"]["E_gross_repetition_j2"])
+        self.assertIsNone(metric["energy_variance_terms_j2"]["E_idle_sub_total_j2"])
+
+    def test_gross_repetition_variance_overflow_degrades_to_not_estimable(self) -> None:
+        members = []
+        for index, gross in enumerate((-1e308, 1e308), start=1):
+            member = f"r{index}"
+            members.append(member)
+            _write_summary(
+                self.runs_root,
+                member,
+                {
+                    "status": "succeeded",
+                    "energy_request_j": float(index),
+                    "idle_subtracted_energy_j": float(index),
+                    "gross_energy_j": gross,
+                    "energy_variance_terms_j2": {"E_idle_mean_j2": 1.0},
+                    "energy_bound_terms_j": {
+                        "E_drift_bound_j": 0.5,
+                        "E_interpolation_edge_bound_j": 0.1,
+                    },
+                },
+            )
+
+        aggregate = aggregate_experiment(self.runs_root, {"members": members})
+        metric = aggregate["metrics"]["energy_request_j"]
+
+        self.assertEqual(metric["energy_uncertainty_status"], "not_estimable")
+        self.assertIsNone(metric["energy_variance_terms_j2"]["E_gross_repetition_j2"])
+        self.assertIsNone(metric["energy_variance_terms_j2"]["E_idle_sub_total_j2"])
 
 
 if __name__ == "__main__":
