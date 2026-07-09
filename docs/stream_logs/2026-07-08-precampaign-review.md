@@ -144,3 +144,42 @@ ones = fresh codex final-head passes + CI; then adjudicate the
 methodology synthesis (dispositions as CP entries), land accepted
 pre-campaign changes, and write Ed's four-part answer (queue fit /
 determinism verdict / capture changes / askable questions).
+
+### CP-5 — STABLE STOP (Ed directive: checkpoint, do not finish)
+All four resumed Codex sessions COMPLETED and wrote final reports;
+nothing has been gated, committed from worktrees, merged, or
+adjudicated since — that is deliberately the resume work.
+
+State at stop:
+- Worktree diffs (uncommitted, fix rounds APPLIED, suites reported
+  green by the implementers — NOT lead-verified): jw-wt-envgate
+  (3 files), jw-wt-hashcheck (4), jw-wt-bundlepack (2). jw-wt-strictfix
+  is clean (its work is committed on branch strict-era-fix, PR #22
+  OPEN, CI green, live-gated 6/6 corpus + tamper-fails — unmerged).
+- Codex reports (per-finding dispositions + test lines) and the
+  COMPLETED METHODOLOGY SYNTHESIS (5 sections: determinism verdict,
+  pre-campaign changes, cheap window additions, askable-question list,
+  queue fit — UNREAD by the lead, unadjudicated):
+  durable copies in ~/.claude/projects/-Users-edr-code-JouleWise/
+  ae807c57-7163-4f10-8532-42e8cfacdaff/checkpoint-2026-07-08/codex/
+  ({envgate-fix,hashcheck-fix,bundlepack-fix,methodology-synthesis}.md)
+  + scratchpad originals. Lens findings + methodology partials:
+  same checkpoint dir, checkpoint/*.json.
+- Main is pushed through CP-4 (6a558ad) + this CP-5 commit; manifests
+  committed ec5224e; LICENSE 9095b51.
+
+EXACT RESUME SEQUENCE (Fable directs, Codex executes):
+1. Lead-gate each worktree diff (read diff; envgate additionally gets a
+   live run against a real affine mock bundle incl. wrong-profile and
+   malformed-evidence cases); fix rounds via codex-run if gates find
+   issues; commit per worktree; small PRs base=main.
+2. Merge gate for PR #22 + the three new PRs: fresh codex final-head
+   pass each + CI green; merge; post-merge integration codex review
+   (4 streams touch validation/runner/CLI surfaces).
+3. Read + adjudicate methodology-synthesis.md (dispositions as CP
+   entries here); land accepted pre-campaign changes (note: the
+   hash-domain-aware realized-vs-manifest check is expected among them
+   — verify the fix shape against the narrowed finding in
+   checkpoint/methodology-review-results.json before implementing).
+4. Then Ed's four-part answer (queue fit / determinism verdict /
+   capture changes / askable questions) + Window-A go/no-go checklist.
