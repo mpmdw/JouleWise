@@ -14,6 +14,7 @@ from joulewise.clock import FakeClock
 from joulewise.controller import run_benchmark
 from joulewise.envelope_gate import (
     EXPECTED_LEVEL_IDS,
+    REASON_DENOMINATOR_NOT_8,
     REASON_DISTINCT_ITEM_EVIDENCE_CONFLICT,
     REASON_BUNDLE_NOT_STRICT_VALID,
     REASON_E1,
@@ -394,6 +395,73 @@ class EnvelopeGateTests(unittest.TestCase):
                 self.assertEqual(result["verdict"], VERDICT_REFUSED)
                 self.assertIn(REASON_ITEM_EVIDENCE_MALFORMED, result["reason_codes"])
                 self.assertIn(field_name, result["refusal_message"])
+
+    def test_negative_token_counts_are_malformed_item_evidence(self) -> None:
+        for field_name in ("prompt_tokens", "emitted_tokens"):
+            with self.subTest(field_name=field_name):
+                def mutate(metadata: dict, output: dict | None) -> None:
+                    self.normalize_pass(metadata, output)
+                    if metadata["item_id"] == "affine_v1_L01_i00":
+                        metadata[field_name] = -1
+
+                bundle = self.make_bundle(mutate)
+                self.assertEqual(validate_bundle(bundle, strict=True), [])
+                result = self.verdict(bundle)
+                self.assertEqual(result["verdict"], VERDICT_REFUSED)
+                self.assertIn(REASON_ITEM_EVIDENCE_MALFORMED, result["reason_codes"])
+                self.assertIn(field_name, result["refusal_message"])
+
+    def test_bool_token_counts_are_malformed_item_evidence(self) -> None:
+        for field_name in ("prompt_tokens", "emitted_tokens"):
+            with self.subTest(field_name=field_name):
+                def mutate(metadata: dict, output: dict | None) -> None:
+                    self.normalize_pass(metadata, output)
+                    if metadata["item_id"] == "affine_v1_L01_i00":
+                        metadata[field_name] = True
+
+                bundle = self.make_bundle(mutate)
+                self.assertEqual(validate_bundle(bundle, strict=True), [])
+                result = self.verdict(bundle)
+                self.assertEqual(result["verdict"], VERDICT_REFUSED)
+                self.assertIn(REASON_ITEM_EVIDENCE_MALFORMED, result["reason_codes"])
+                self.assertIn(field_name, result["refusal_message"])
+
+    def test_zero_token_counts_are_accepted_as_item_evidence(self) -> None:
+        def mutate(metadata: dict, output: dict | None) -> None:
+            self.normalize_pass(metadata, output)
+            if metadata["item_id"] == "affine_v1_L01_i00":
+                metadata["prompt_tokens"] = 0
+                metadata["emitted_tokens"] = 0
+
+        result = self.verdict(self.make_bundle(mutate))
+        self.assertNotEqual(result["verdict"], VERDICT_REFUSED)
+        self.assertNotIn(REASON_ITEM_EVIDENCE_MALFORMED, result["reason_codes"])
+
+    def test_denominator_not_8_reason_code(self) -> None:
+        bundle = self.make_bundle(self.normalize_pass)
+        def tag_first_l01(manifest: dict) -> None:
+            for item in manifest["items"]:
+                if item["grouping"]["level_id"] == "L01" and "sentinel" not in item["tags"]:
+                    item["tags"].append("sentinel")
+                    return
+
+        self.rewrite_suite_manifest(
+            bundle,
+            tag_first_l01,
+        )
+        summary = reduce_bundle(bundle).to_dict()
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+        result = self.verdict(bundle)
+        self.assertEqual(result["verdict"], VERDICT_FAILED)
+        self.assertIn(REASON_DENOMINATOR_NOT_8, result["reason_codes"])
+        self.assertEqual(
+            result["denominators"]["observed_distinct_non_sentinel_items_per_level"],
+            {"L01": 7, "L08": 8, "L64": 8},
+        )
 
     def test_malformed_item_evidence_cli_writes_json_not_traceback(self) -> None:
         def mutate(metadata: dict, output: dict | None) -> None:

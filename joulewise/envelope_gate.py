@@ -378,8 +378,10 @@ def _item_evidence(window: Any, level_id: str, outputs: dict[int, dict[str, Any]
 
 
 def _required_int(value: Any, field_name: str) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise BundleReadError(f"item evidence {field_name} is not an integer: {value!r}")
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise BundleReadError(
+            f"item evidence {field_name} is not a non-negative integer: {value!r}"
+        )
     return value
 
 
