@@ -19,6 +19,7 @@ from joulewise.adapters.mlx_runtime import (
     _process_rss_bytes,
     model_artifact_identity,
 )
+from joulewise.adapters.mock_runtime import MockRuntimeAdapter
 from joulewise.clock import FakeClock
 from joulewise.interfaces import AdapterFailure
 from joulewise.provenance import (
@@ -213,7 +214,11 @@ def suite_item(
     }
 
 
-def make_suite_manifest(items: list[dict[str, Any]] | None = None) -> SuiteManifest:
+def make_suite_manifest(
+    items: list[dict[str, Any]] | None = None,
+    *,
+    order_policy: str = "manifest_order",
+) -> SuiteManifest:
     return SuiteManifest.from_mapping(
         {
             "schema_version": "suite_manifest.v1",
@@ -232,7 +237,7 @@ def make_suite_manifest(items: list[dict[str, Any]] | None = None) -> SuiteManif
                 "allowed_aggregation_levels": ["suite", "block", "level"],
             },
             "execution_policy": {
-                "order_policy": "manifest_order",
+                "order_policy": order_policy,
                 "within_bundle_repeats": 1,
                 "cooldown_policy": "bundle_only",
                 "cache_policy": "warm_cache",
@@ -619,6 +624,39 @@ class MlxRuntimeTests(unittest.TestCase):
                 "stop_condition": "suite_completed",
             },
         )
+
+    def test_mock_and_mlx_suite_realized_plans_match_under_rotation(self) -> None:
+        items = [
+            suite_item("a", prompt_tokens=3, output_tokens=1, block_id="A", level_id="A"),
+            suite_item("b", prompt_tokens=3, output_tokens=1, block_id="B", level_id="B"),
+            suite_item("c", prompt_tokens=3, output_tokens=1, block_id="C", level_id="C"),
+        ]
+        manifest = make_suite_manifest(items, order_policy="block_latin_square_v1")
+        config = make_config()
+        mlx_adapter, _ = self.prepared_adapter(["A", "B", "C"])
+        mock_adapter = MockRuntimeAdapter(FakeClock(start=1000.0))
+
+        mlx_result = mlx_adapter.run_suite(
+            config,
+            manifest,
+            order_seed="seed",
+            order_row=2,
+        )
+        mock_result = mock_adapter.run_suite(
+            config,
+            manifest,
+            order_seed="seed",
+            order_row=2,
+        )
+
+        def item_start_indices(result) -> list[int]:
+            return [
+                event.metadata["item_index"]
+                for event in result.events
+                if event.event_type == ITEM_START
+            ]
+
+        self.assertEqual(item_start_indices(mlx_result), item_start_indices(mock_result))
 
     def test_suite_per_item_generation_exception_runtime_failed_and_continues(self) -> None:
         adapter = MlxRuntimeAdapter(FakeClock(start=1000.0))

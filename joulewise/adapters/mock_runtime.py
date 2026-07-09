@@ -54,6 +54,7 @@ from joulewise.suite import (
     ItemStatus,
     SuiteItem,
     SuiteManifest,
+    realized_order,
     suite_manifest_sha256,
 )
 
@@ -198,21 +199,26 @@ class MockRuntimeAdapter:
         context: RunContext | None = None,
         *,
         order_seed: str,
+        order_row: int | None = None,
     ) -> RuntimeResult:
         manifest_sha256 = suite_manifest_sha256(manifest.to_dict())
+        suite_start_metadata: dict[str, Any] = {
+            "suite_id": manifest.suite_id,
+            "suite_profile": manifest.suite_profile,
+            "suite_revision": manifest.suite_revision,
+            "suite_manifest_sha256": manifest_sha256,
+            "item_count": len(manifest.items),
+            "order_policy": manifest.execution_policy.order_policy,
+            "order_seed": order_seed,
+        }
+        if order_row is not None:
+            suite_start_metadata["order_row"] = order_row
         events: list[RuntimeEvent] = [
             self._event(
                 SUITE_START,
                 SUITE_PHASE,
                 "mock suite started",
-                {
-                    "suite_id": manifest.suite_id,
-                    "suite_profile": manifest.suite_profile,
-                    "suite_revision": manifest.suite_revision,
-                    "suite_manifest_sha256": manifest_sha256,
-                    "item_count": len(manifest.items),
-                    "order_seed": order_seed,
-                },
+                suite_start_metadata,
             )
         ]
         output_lines: list[str] = []
@@ -227,7 +233,10 @@ class MockRuntimeAdapter:
         block_indices: dict[str, int] = {}
         level_indices: dict[tuple[str, str], int] = {}
 
-        for item_index, item in enumerate(manifest.items):
+        for realized in realized_order(manifest, order_row=order_row):
+            item = realized.item
+            item_index = realized.item_index
+            position = realized.position
             block_id = item.grouping.block_id
             level_id = item.grouping.level_id
             if block_id != current_block:
@@ -294,6 +303,7 @@ class MockRuntimeAdapter:
             item_result = self._run_suite_item(
                 item,
                 item_index,
+                position,
                 previous_item_id,
                 events,
                 suite_identity=_suite_identity(manifest),
@@ -351,7 +361,9 @@ class MockRuntimeAdapter:
                     "suite_id": manifest.suite_id,
                     "manifest_sha256": manifest_sha256,
                     "item_count": len(manifest.items),
+                    "order_policy": manifest.execution_policy.order_policy,
                     "order_seed": order_seed,
+                    "order_row": order_row,
                 },
                 "generator": {
                     "name": "mock_runtime",
@@ -387,6 +399,7 @@ class MockRuntimeAdapter:
         self,
         item: SuiteItem,
         item_index: int,
+        position: int,
         previous_item_id: str | None,
         events: list[RuntimeEvent],
         *,
@@ -402,7 +415,7 @@ class MockRuntimeAdapter:
                 {
                     "item_id": item.item_id,
                     "item_index": item_index,
-                    "position": item_index,
+                    "position": position,
                     "block_id": item.grouping.block_id,
                     "level_id": item.grouping.level_id,
                     "condition_id": item.grouping.condition_id,
@@ -447,7 +460,11 @@ class MockRuntimeAdapter:
         else:
             if prompt_problem is not None:
                 annotations.append(prompt_problem)
-            item_phase_metadata = {"item_id": item.item_id, "item_index": item_index}
+            item_phase_metadata = {
+                "item_id": item.item_id,
+                "item_index": item_index,
+                "position": position,
+            }
             events.append(
                 self._event(
                     "phase_start",
@@ -486,7 +503,12 @@ class MockRuntimeAdapter:
                         event_type="token",
                         phase="decode",
                         message=f"mock suite item {item.item_id} token {index}",
-                        metadata={"item_id": item.item_id, "item_index": item_index, "index": index},
+                        metadata={
+                            "item_id": item.item_id,
+                            "item_index": item_index,
+                            "position": position,
+                            "index": index,
+                        },
                     )
                 )
                 token_records.append(
@@ -518,6 +540,7 @@ class MockRuntimeAdapter:
         end_metadata = {
             "item_id": item.item_id,
             "item_index": item_index,
+            "position": position,
             "status": status,
             "prompt_tokens": len(prompt_token_ids),
             "emitted_tokens": emitted_tokens,
@@ -537,6 +560,7 @@ class MockRuntimeAdapter:
         output = {
             "item_id": item.item_id,
             "item_index": item_index,
+            "position": position,
             "status": status,
             "prompt_source": _suite_item_prompt_source(item),
             "bos_present": item.source.prompt_text is not None,

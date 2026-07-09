@@ -97,6 +97,36 @@ condition-balancing across repeated suite bundles must be implemented as one of:
 
 Until one of those is implemented, specs and reports must say `manifest_order`.
 
+### 2026-07-09 (P2-030): operational suite order policies
+
+`execution_policy.order_policy` is now a closed operational policy name:
+
+- `manifest_order`: execute manifest item order exactly. This is the
+  back-compatible default and the required wording when rotation is absent.
+- `block_round_robin_v1`: rotate the non-sentinel contiguous block runs by
+  `order_row`.
+- `block_latin_square_v1`: use the Williams row-balanced order over the
+  non-sentinel contiguous block runs; even block counts complete in `N` rows,
+  odd block counts use the standard `2N` paired rows.
+
+The rotation unit is the contiguous block run. Blocks whose items all carry the
+`sentinel` tag are anchored in their manifest positions and never rotate. Blocks
+and levels therefore remain contiguous by construction. Within-block item
+rotation is deferred; if needed, it must be a new named policy and revisit this
+spec.
+
+`order_row` is controller-derived: `0` for single runs and the one-based `__rN`
+suffix for experiment members. The row used is `order_row mod n_rows`.
+`order_seed` derivation and recording are unchanged and remain audit material;
+the runtime never chooses either value. Non-`manifest_order` bundles must record
+`order_row` in `suite_start` metadata and `metadata.suite`; strict validation
+must recompute the expected permutation and fail closed on mismatch.
+
+`item_index` means manifest index everywhere. `position` means realized
+execution ordinal. `prev_item` is the previous realized item ID, or `null` for
+the first realized item. `outputs/suite_items.jsonl` remains keyed by
+`item_index`, preserving expected-vs-realized prompt-hash checks.
+
 Blocks and levels must be contiguous runs. Naive interleaving such as
 `L01, L08, L01` inside a single block is invalid under the current validator.
 If future analysis needs interleaving, it should use block boundaries that keep
@@ -164,4 +194,3 @@ Rejected alternatives:
 - A real non-`manifest_order` suite execution policy is implemented.
 - Full affine ladder or benchmark imports need fields that sidecars cannot
   carry honestly.
-

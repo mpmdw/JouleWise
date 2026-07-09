@@ -1319,6 +1319,7 @@ class SuiteControllerTests(ControllerTestCase):
                 metadata["suite"]["order_seed"],
                 order_seed("mock-suite-seed", "manifest_order", rep),
             )
+            self.assertEqual(metadata["suite"]["order_row"], rep)
 
 
 if __name__ == "__main__":

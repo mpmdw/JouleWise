@@ -137,6 +137,9 @@ class MemberEvaluation:
     prompt_hash_check: PromptHashCheck = field(
         default_factory=lambda: PromptHashCheck("not_applicable")
     )
+    suite_order_policy: str | None = None
+    suite_order_row: int | None = None
+    suite_order_seed: str | None = None
     waiver: Waiver | None = None
 
     def failure_classes(self) -> tuple[str, ...]:
@@ -195,6 +198,12 @@ class MemberEvaluation:
                 "timestamp": self.waiver.timestamp,
                 "scope": self.waiver.scope,
             }
+        if self.suite_order_policy is not None:
+            row["suite_order_policy"] = self.suite_order_policy
+        if self.suite_order_row is not None:
+            row["suite_order_row"] = self.suite_order_row
+        if self.suite_order_seed is not None:
+            row["suite_order_seed"] = self.suite_order_seed
         return row
 
 
@@ -843,6 +852,32 @@ def quality_flags(summary: dict[str, Any] | None) -> tuple[str, ...]:
     return tuple(flags)
 
 
+def suite_order_evidence(bundle_dir: Path) -> tuple[str | None, int | None, str | None]:
+    policy: str | None = None
+    row: int | None = None
+    seed: str | None = None
+    manifest, _ = _load_json_object(bundle_dir / "suite_manifest.json", "suite_manifest.json")
+    if manifest is not None:
+        execution_policy = manifest.get("execution_policy")
+        if isinstance(execution_policy, dict) and isinstance(
+            execution_policy.get("order_policy"), str
+        ):
+            policy = execution_policy["order_policy"]
+    metadata, _ = _load_json_object(bundle_dir / "metadata.json", "metadata.json")
+    if metadata is not None:
+        suite = metadata.get("suite")
+        if isinstance(suite, dict):
+            if policy is None and isinstance(suite.get("order_policy"), str):
+                policy = suite["order_policy"]
+            if isinstance(suite.get("order_row"), int) and not isinstance(
+                suite.get("order_row"), bool
+            ):
+                row = suite["order_row"]
+            if isinstance(suite.get("order_seed"), str):
+                seed = suite["order_seed"]
+    return policy, row, seed
+
+
 def evaluate_member(
     bundle_dir: Path,
     *,
@@ -871,6 +906,7 @@ def evaluate_member(
         except (OSError, json.JSONDecodeError):
             summary = None
     prompt_hash_check = check_prompt_hashes_for_config_bundle(bundle_dir, info)
+    suite_order_policy, suite_order_row, suite_order_seed = suite_order_evidence(bundle_dir)
     waiver = matching_waiver(
         waivers,
         bundle_id=bundle_dir.name,
@@ -889,6 +925,9 @@ def evaluate_member(
             dict.fromkeys([*quality_flags(summary), *prompt_hash_check.quality_flags()])
         ),
         prompt_hash_check=prompt_hash_check,
+        suite_order_policy=suite_order_policy,
+        suite_order_row=suite_order_row,
+        suite_order_seed=suite_order_seed,
         waiver=waiver,
     )
 

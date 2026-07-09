@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Protocol, TypeAlias
 
 from joulewise.provenance import prompt_token_ids_sha256, sha256_hex
-from joulewise.suite import SUITE_SCHEMA_VERSION, SuiteManifest
+from joulewise.suite import ORDER_POLICY_MANIFEST, SUITE_SCHEMA_VERSION, SuiteManifest
 
 GENERATOR_VERSION = "1.0.0"
 DRBG_VERSION = "sha256-ctr-v1"
@@ -1412,6 +1412,7 @@ def _manifest_shell(
     tokenizer_manifest_hash: str,
     parameters: dict[str, Any],
     items: list[dict[str, Any]],
+    order_policy: str = ORDER_POLICY_MANIFEST,
 ) -> dict[str, Any]:
     params_hash = hashlib.sha256(
         json.dumps(parameters, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -1442,7 +1443,7 @@ def _manifest_shell(
             "allowed_aggregation_levels": ["suite", "block", "level"],
         },
         "execution_policy": {
-            "order_policy": "manifest_order",
+            "order_policy": order_policy,
             "within_bundle_repeats": 1,
             "cooldown_policy": "bundle_only",
             "cache_policy": "cold_between_bundles",
@@ -1494,6 +1495,7 @@ def _build_jw_mixed_suite(
     output_budget: int = 256,
     tokenizer_manifest: Sequence[TokenizerManifestRow] | None = None,
     tokenizer_id: str | None = None,
+    order_policy: str = ORDER_POLICY_MANIFEST,
 ) -> ManifestBuild:
     tok_id, tokenizer_rows, tokenizer_files_hash = _tokenizer_audit(
         tokenizer_manifest,
@@ -1542,6 +1544,8 @@ def _build_jw_mixed_suite(
         "tokenizer_id": tok_id,
         "bank_hash": BANK_HASH,
     }
+    if order_policy != ORDER_POLICY_MANIFEST:
+        parameters["order_policy"] = order_policy
     suite_profile = f"jw_mixed_v1_common_{prompt_budget}_{output_budget}"
     manifest = _manifest_shell(
         suite_id="jw_mixed_v1",
@@ -1551,6 +1555,7 @@ def _build_jw_mixed_suite(
         tokenizer_manifest_hash=tokenizer_files_hash,
         parameters=parameters,
         items=items,
+        order_policy=order_policy,
     )
     annotations["source_manifest"] = {
         "source_id": manifest["source_manifest"]["source_id"],
@@ -1590,6 +1595,7 @@ def _build_sentinel_suite(
     output_budget: int = 256,
     tokenizer_manifest: Sequence[TokenizerManifestRow] | None = None,
     tokenizer_id: str | None = None,
+    order_policy: str = ORDER_POLICY_MANIFEST,
 ) -> ManifestBuild:
     tok_id, tokenizer_rows, tokenizer_files_hash = _tokenizer_audit(
         tokenizer_manifest,
@@ -1630,6 +1636,8 @@ def _build_sentinel_suite(
         "tokenizer_id": tok_id,
         "bank_hash": BANK_HASH,
     }
+    if order_policy != ORDER_POLICY_MANIFEST:
+        parameters["order_policy"] = order_policy
     suite_profile = f"jw_mixed_v1_sentinel_{prompt_budget}_{output_budget}"
     manifest = _manifest_shell(
         suite_id="jw_mixed_v1_sentinel",
@@ -1639,6 +1647,7 @@ def _build_sentinel_suite(
         tokenizer_manifest_hash=tokenizer_files_hash,
         parameters=parameters,
         items=items,
+        order_policy=order_policy,
     )
     annotations["source_manifest"] = {
         "source_id": manifest["source_manifest"]["source_id"],

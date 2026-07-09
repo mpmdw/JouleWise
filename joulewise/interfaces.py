@@ -147,6 +147,7 @@ class SuiteRuntimeAdapter(RuntimeAdapter, Protocol):
         context: RunContext | None = None,
         *,
         order_seed: str,
+        order_row: int | None = None,
     ) -> RuntimeResult:
         """Run every suite item inside one measured adapter call."""
 

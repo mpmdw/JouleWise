@@ -29,6 +29,16 @@ SUITE_SCHEMA_VERSION = "suite_manifest.v1"
 
 OUTPUT_POLICIES: frozenset[str] = frozenset({"fixed_budget_exact", "natural_eos"})
 STATUS_POLICIES: frozenset[str] = frozenset({"none"})
+ORDER_POLICY_MANIFEST = "manifest_order"
+ORDER_POLICY_BLOCK_ROUND_ROBIN_V1 = "block_round_robin_v1"
+ORDER_POLICY_BLOCK_LATIN_SQUARE_V1 = "block_latin_square_v1"
+ORDER_POLICIES: frozenset[str] = frozenset(
+    {
+        ORDER_POLICY_MANIFEST,
+        ORDER_POLICY_BLOCK_ROUND_ROBIN_V1,
+        ORDER_POLICY_BLOCK_LATIN_SQUARE_V1,
+    }
+)
 
 MARKER_DEFAULTS: dict[str, str] = {
     "suite_start_event": SUITE_START,
@@ -291,8 +301,10 @@ class ExecutionPolicy:
             "execution_policy",
         )
         return cls(
-            order_policy=_require_string(
-                data.get("order_policy"), "execution_policy.order_policy"
+            order_policy=_require_choice(
+                data.get("order_policy"),
+                "execution_policy.order_policy",
+                ORDER_POLICIES,
             ),
             within_bundle_repeats=_positive_int(
                 data.get("within_bundle_repeats"),
@@ -763,6 +775,141 @@ class SuiteManifest:
 
     def to_dict(self) -> dict[str, Any]:
         return _plain_dataclass_dict(asdict(self))
+
+
+@dataclass(frozen=True)
+class RealizedSuiteItem:
+    """One suite item in realized execution order."""
+
+    item: SuiteItem
+    item_index: int
+    position: int
+
+
+@dataclass(frozen=True)
+class _BlockRun:
+    block_id: str
+    entries: tuple[tuple[int, SuiteItem], ...]
+
+    @property
+    def anchored(self) -> bool:
+        return all("sentinel" in item.tags for _, item in self.entries)
+
+
+def realized_order(
+    manifest: SuiteManifest,
+    order_policy: str | None = None,
+    order_row: int | None = None,
+) -> list[RealizedSuiteItem]:
+    """Return the controller-selected realized item order for a suite run.
+
+    The stable ``item_index`` is always the manifest index. ``position`` is the
+    realized execution ordinal. Sentinel-only blocks are position-anchored.
+    """
+
+    policy = manifest.execution_policy.order_policy if order_policy is None else order_policy
+    if policy not in ORDER_POLICIES:
+        expected = ", ".join(sorted(ORDER_POLICIES))
+        raise SchemaError(f"execution_policy.order_policy must be one of: {expected}; got {policy!r}")
+    if policy == ORDER_POLICY_MANIFEST:
+        block_order = _block_runs(manifest)
+    else:
+        if order_row is None:
+            raise SchemaError(f"order_row is required for order_policy {policy!r}")
+        if isinstance(order_row, bool) or not isinstance(order_row, int) or order_row < 0:
+            raise SchemaError("order_row must be an integer >= 0")
+        block_order = _realized_block_runs(manifest, policy, order_row)
+
+    realized: list[RealizedSuiteItem] = []
+    for block in block_order:
+        for item_index, item in block.entries:
+            realized.append(
+                RealizedSuiteItem(
+                    item=item,
+                    item_index=item_index,
+                    position=len(realized),
+                )
+            )
+    return realized
+
+
+def policy_row_count(manifest: SuiteManifest, order_policy: str | None = None) -> int:
+    """Return the number of rows in the suite order policy's cycle."""
+
+    policy = manifest.execution_policy.order_policy if order_policy is None else order_policy
+    if policy == ORDER_POLICY_MANIFEST:
+        return 1
+    rotatable_count = len([block for block in _block_runs(manifest) if not block.anchored])
+    if rotatable_count <= 1:
+        return 1
+    if policy == ORDER_POLICY_BLOCK_ROUND_ROBIN_V1:
+        return rotatable_count
+    if policy == ORDER_POLICY_BLOCK_LATIN_SQUARE_V1:
+        return rotatable_count if rotatable_count % 2 == 0 else rotatable_count * 2
+    expected = ", ".join(sorted(ORDER_POLICIES))
+    raise SchemaError(f"execution_policy.order_policy must be one of: {expected}; got {policy!r}")
+
+
+def _block_runs(manifest: SuiteManifest) -> list[_BlockRun]:
+    blocks: list[_BlockRun] = []
+    current_block_id: str | None = None
+    current_entries: list[tuple[int, SuiteItem]] = []
+    for item_index, item in enumerate(manifest.items):
+        block_id = item.grouping.block_id
+        if current_block_id is None:
+            current_block_id = block_id
+        if block_id != current_block_id:
+            blocks.append(_BlockRun(current_block_id, tuple(current_entries)))
+            current_block_id = block_id
+            current_entries = []
+        current_entries.append((item_index, item))
+    if current_block_id is not None:
+        blocks.append(_BlockRun(current_block_id, tuple(current_entries)))
+    return blocks
+
+
+def _realized_block_runs(
+    manifest: SuiteManifest,
+    order_policy: str,
+    order_row: int,
+) -> list[_BlockRun]:
+    blocks = _block_runs(manifest)
+    rotatable = [block for block in blocks if not block.anchored]
+    if len(rotatable) <= 1:
+        return blocks
+    if order_policy == ORDER_POLICY_BLOCK_ROUND_ROBIN_V1:
+        row = order_row % len(rotatable)
+        rotated = rotatable[row:] + rotatable[:row]
+    elif order_policy == ORDER_POLICY_BLOCK_LATIN_SQUARE_V1:
+        rows = _williams_rows(len(rotatable))
+        rotated = [rotatable[index] for index in rows[order_row % len(rows)]]
+    else:
+        expected = ", ".join(sorted(ORDER_POLICIES))
+        raise SchemaError(f"execution_policy.order_policy must be one of: {expected}; got {order_policy!r}")
+
+    rotated_iter = iter(rotated)
+    realized: list[_BlockRun] = []
+    for block in blocks:
+        realized.append(block if block.anchored else next(rotated_iter))
+    return realized
+
+
+def _williams_rows(count: int) -> list[list[int]]:
+    if count <= 0:
+        return [[]]
+    base: list[int] = []
+    low = 0
+    high = count - 1
+    while low <= high:
+        base.append(low)
+        if low != high:
+            base.append(high)
+        low += 1
+        high -= 1
+    rows = [[(value + row) % count for value in base] for row in range(count)]
+    if count % 2 == 1 and count > 1:
+        rows.extend([list(reversed(row)) for row in rows])
+    return rows
 
 
 def canonical_effective_manifest(mapping: dict[str, Any]) -> dict[str, Any]:

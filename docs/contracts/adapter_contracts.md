@@ -179,18 +179,29 @@ Candidate runtimes:
 ## Suite Runtime Adapter (D-045/D-046/D-047.5)
 
 A runtime that can execute a materialized suite manifest implements
-`SuiteRuntimeAdapter.run_suite(config, manifest, context, *, order_seed)`. The controller
-dispatches to this method only when `workload_profile.suite_manifest_ref` is
-set and validation has loaded the manifest. `run_workload` remains the
-single-prompt contract. `order_seed` is controller-derived (D-045.6), never
-runtime-chosen; adapters must use the supplied value in suite markers and
-workload provenance rather than deriving a seed from `run_id`.
+`SuiteRuntimeAdapter.run_suite(config, manifest, context, *, order_seed,
+order_row=None)`. The controller dispatches to this method only when
+`workload_profile.suite_manifest_ref` is set and validation has loaded the
+manifest. `run_workload` remains the single-prompt contract. `order_seed` is
+controller-derived (D-045.6), never runtime-chosen; adapters must use the
+supplied value in suite markers and workload provenance rather than deriving a
+seed from `run_id`.
+
+2026-07-09 (P2-030): `order_row` is the controller-derived companion to
+`order_seed` for operational suite order policies. It is `0` for single runs
+and the one-based `__rN` repetition index for experiment members. Runtimes
+execute the pure realized order defined by `joulewise.suite.realized_order`
+from the manifest policy and `order_row`; they do not choose or randomize the
+row.
 
 `run_suite` obligations:
 
-- Iterate `manifest.items` in manifest order and emit suite, block, level,
-  and item markers with the vocabulary and required metadata keys pinned in
-  `joulewise/suite.py`.
+- Iterate the realized suite order and emit suite, block, level, and item
+  markers with the vocabulary and required metadata keys pinned in
+  `joulewise/suite.py`. For `manifest_order` the realized order is manifest
+  order. For rotated policies, `item_index` remains the manifest index,
+  `position` is the realized execution ordinal, and `prev_item` is execution
+  honest.
 - Contain per-item generation exceptions: the item receives `item_end` with
   `status: "runtime_failed"` and a diagnostic `status_reason`, then the loop
   continues. Suite-level machinery failures may still raise out of
