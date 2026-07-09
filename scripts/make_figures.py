@@ -346,7 +346,9 @@ def render_figure(stacks: dict) -> str:
             m = stacks[stack_id]["metrics"]
             xc = x0 + span * (i + 0.5) / len(stack_ids)
             label_y = ay1 + 16
-            e.append(f'<text x="{_fmt(xc)}" y="{_fmt(label_y)}" text-anchor="middle" font-size="11">{stack_id}</text>')
+            # Panel B is narrow; use the unambiguous suffix (full IDs in Panel A, footer, S1).
+            label = stack_id if panel == "A" else stack_id.replace("LEGACY-M3MAX-", "")
+            e.append(f'<text x="{_fmt(xc)}" y="{_fmt(label_y)}" text-anchor="middle" font-size="11">{label}</text>')
             e.append(f'<text x="{_fmt(xc)}" y="{_fmt(label_y + 14)}" text-anchor="middle" font-size="10" fill="#444">n=3</text>')
             if panel == "A":
                 s_idle = m["energy_request_j"]

@@ -58,14 +58,14 @@
 <circle cx="477.00" cy="101.50" r="4" fill="white" stroke="#1f6f8b" stroke-width="1.5"/>
 <circle cx="485.00" cy="101.56" r="4" fill="white" stroke="#1f6f8b" stroke-width="1.5"/>
 <circle cx="493.00" cy="100.00" r="4" fill="white" stroke="#1f6f8b" stroke-width="1.5"/>
-<text x="722.50" y="416.00" text-anchor="middle" font-size="11">LEGACY-M3MAX-QWEN25-15B-MLX</text>
+<text x="722.50" y="416.00" text-anchor="middle" font-size="11">QWEN25-15B-MLX</text>
 <text x="722.50" y="430.00" text-anchor="middle" font-size="10" fill="#444">n=3</text>
 <line x1="722.50" y1="359.25" x2="722.50" y2="353.57" stroke="#555" stroke-width="1.5"/>
 <line x1="710.50" y1="355.47" x2="734.50" y2="355.47" stroke="black" stroke-width="2.5"/>
 <circle cx="714.50" cy="359.25" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
 <circle cx="722.50" cy="353.57" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
 <circle cx="730.50" cy="353.58" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
-<text x="847.50" y="416.00" text-anchor="middle" font-size="11">LEGACY-M3MAX-QWEN35-122B-A10B-MLX</text>
+<text x="847.50" y="416.00" text-anchor="middle" font-size="11">QWEN35-122B-A10B-MLX</text>
 <text x="847.50" y="430.00" text-anchor="middle" font-size="10" fill="#444">n=3</text>
 <line x1="847.50" y1="101.19" x2="847.50" y2="100.00" stroke="#555" stroke-width="1.5"/>
 <line x1="835.50" y1="100.59" x2="859.50" y2="100.59" stroke="black" stroke-width="2.5"/>

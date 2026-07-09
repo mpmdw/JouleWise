@@ -14,7 +14,7 @@
     "example-mac-mlx-qwen35-122b-512t": "dae8e7435ba27489d13dd1890fa77098450319c9cf228d4ccc3c18903ccce962"
   },
   "generator_sha256": {
-    "scripts/make_figures.py": "ea0606bfbdaa17a74d3276415667cf61b348d832a2285d2a54a08b067459b247"
+    "scripts/make_figures.py": "7e683ce60603347e3904bda78c82700ab280398fd53b0088808f7f7f1cde4724"
   },
   "input_manifest_sha256": "cf016eed5434a228e50c8b95591ff10408a6d90b025bb1ea0a857f1bd01b9805",
   "outputs": {
@@ -25,7 +25,7 @@
     "analysis/rpt001-v1/tables/S1_legacy_stack_identity.md": "70b656ca645ba0ad272c936e94a509f7ae82542366636d41bd985dab43baf93a",
     "analysis/rpt001-v1/tables/T1_legacy_l1_results.csv": "4d8151ddcead5c0154de500b5c046f7cf9084aca07c27b0a774d897dccf86433",
     "analysis/rpt001-v1/tables/T1_legacy_l1_results.md": "9d9615eb4411f8534f3b9d740868e11f5ffa493875f29e430af8848c0268945b",
-    "figures/rpt001-v1/F1_legacy_l1_instrument_results.svg": "2989a74d9bc9490920012c473a69c608bd10c55f8b8afce785a1bf94bfc54da9"
+    "figures/rpt001-v1/F1_legacy_l1_instrument_results.svg": "606528d71911dead8616a44eac5c40f195ef0d4c0de8e4a179ad2fec7372b96b"
   },
   "schema": "joulewise.report_artifact_manifest.v1"
 }
