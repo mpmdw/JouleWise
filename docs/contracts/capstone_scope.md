@@ -136,6 +136,9 @@ Cut triggers:
 
 ## Single-Unit Limitation Language
 
+Stack-identity fields for captions and result tables follow
+`docs/contracts/token_normalization.md` (2026-07-09).
+
 Use this language, adapted with the concrete stack fields, in final-report
 figure captions and result tables:
 
