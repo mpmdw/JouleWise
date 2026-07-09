@@ -1,12 +1,10 @@
 # JouleWise Run State
 
-Last updated: 2026-07-09 (spec-fleshing wave 2 C-025, ultracode: PRs
-#33..#38 merged — uncertainty propagation + claim gates, ordering
-executability (pre-campaign blocker closed), token-normalization
-contract, campaign packs, claims-lint CI enforcement, RQ-ENERGY-VARIANCE
-candidate design; D-056..D-059; integration fixes; suite 877
-lead-verified. Earlier same day: C-024 wave 1 (PRs #29..#32), C-023
-rigor review, C-022 CP-5 clearance)
+Last updated: 2026-07-09 (P2-034 broad campaign packs C-026: PR #39
+merged — six packs, pack lint clean; pre-hardware campaign surface
+COMPLETE. Earlier same day: C-025 wave 2 (PRs #33..#38, D-056..D-059),
+C-024 wave 1 (PRs #29..#32, D-052..D-055), C-023 rigor review, C-022
+CP-5 clearance; suite 877)
 
 ## Start Here For Every Big Run
 
@@ -91,20 +89,20 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 `docs/run_reports/2026-07-09-cp5-resume.md`.
 
 **RESTART HERE (next agent):**
-1. Read `docs/run_reports/2026-07-09-spec-fleshing-wave2.md` (latest
-   session record) and `docs/run_reports/2026-07-09-cp5-resume.md`
-   (Window-A go/no-go).
-2. Next AGENT work per `TASK_QUEUE.md`: P2-034 broad campaign packs
-   (linter cut-line satisfied); P2-035 (RQ-ENERGY-VARIANCE
-   prerequisites) waits for floors.
-3. Quiet Window A [QUIET-MAC] unchanged and now fully unblocked on the
-   software side: C-019 shakedown → P2-015 floors (per merged
-   `docs/phase_2/detection_floor.md`) → P2-006; rotation policies
-   (D-056) and uncertainty claim gates (D-057) are live for campaign
-   bundles.
+1. Read `docs/run_reports/2026-07-09-p2034-broad-packs.md` (latest) and
+   `docs/run_reports/2026-07-09-cp5-resume.md` (Window-A go/no-go).
+2. The pre-window AGENT backlog is CLEAR. Next work is machine-state
+   dependent: [QUIET-MAC] quiet Window A (C-019 shakedown → P2-015
+   floors → P2-006) is the top item; [AGENT] lanes next are P2-022 shim
+   spike / P2-023 HumanEval import (post-2M gates — check queue) and
+   P2-035 (after floors); [ED-EXTERNAL] items per queue.
+3. Rotation (D-056), uncertainty gates (D-057), and the campaign packs
+   are live for Window-A execution.
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-09 P2-034 broad campaign packs (C-026; PR #39):
+  `docs/run_reports/2026-07-09-p2034-broad-packs.md`
 - 2026-07-09 spec-fleshing wave 2, ultracode (C-025; PRs #33..#38;
   D-056..D-059): `docs/run_reports/2026-07-09-spec-fleshing-wave2.md`
 - 2026-07-09 spec-fleshing wave 1 (C-024; PRs #29..#32; D-052..D-055):
@@ -138,7 +136,9 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 
 ## Current Verification
 
-- Main after wave-2 integration fixes: `python3 -m unittest discover -s
+- Main c095c83 (post PR #39; docs-only): suite `OK (skipped=10)` and
+  repo lint errors=0, lead-run; pack lint errors=0 warnings=0.
+- Prior: main after wave-2 integration fixes: `python3 -m unittest discover -s
   tests` → `Ran 877 tests, OK (skipped=10)`, lead-run; repo lint
   errors=0; CI green on all six PR heads (#33..#38); combined-ref
   pre-merge suite check green; live rotated mock campaign strict-valid

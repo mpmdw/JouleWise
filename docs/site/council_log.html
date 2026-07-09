@@ -51,10 +51,11 @@
 <a href="#c-021-advisor-status-site-live-depth-refresh-2026-07-09">C-021: Advisor status-site live-depth refresh (2026-07-09)</a>
 <a href="#c-023-scientific-rigor-review-suite-benchmark-question-bank-2026-07-09">C-023: Scientific-rigor review — suite, benchmark, question bank (2026-07-09)</a>
 <a href="#c-024-spec-fleshing-wave-1-no-hardware-artifact-build-2026-07-09">C-024: Spec-fleshing wave 1 — no-hardware artifact build (2026-07-09)</a>
-<a href="#c-025-wave-2-ultracode-workflow-build-2026-07-09">C-025: Wave 2 — ultracode workflow build (2026-07-09)</a></aside>
+<a href="#c-025-wave-2-ultracode-workflow-build-2026-07-09">C-025: Wave 2 — ultracode workflow build (2026-07-09)</a>
+<a href="#c-026-p2-034-broad-campaign-packs-2026-07-09">C-026: P2-034 broad campaign packs (2026-07-09)</a></aside>
   <div class="doc-wrap doc-source-docs-council-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/council_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/council_log.md · commit 556b69e + uncommitted"><span class="source-file">docs/<wbr>council_log.md</span><span class="source-commit">commit 556b69e + uncommitted</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/council_log.md · commit a835c73 + uncommitted"><span class="source-file">docs/<wbr>council_log.md</span><span class="source-commit">commit a835c73 + uncommitted</span></span></div>
     <h1>Council Log</h1>
 <p>Chronicle of multi-model review councils: sessions where more than one
 model reviews, counterreviews, or votes on JouleWise work before it
@@ -243,6 +244,12 @@ standing instructions.</p>
 <td>2026-07-09</td>
 <td>Wave 2 — ultracode workflow build (pointer entry; run report <code>2026-07-09-spec-fleshing-wave2.md</code>) — 46-agent workflow (4 impl streams, 8 lenses, severity-tiered refuters) + 2 lead-driven reinforcement streams + 6 final-heads + tail verification + combined-ref check + integration review</td>
 <td>PRs #33..#38 merged (D-056..D-059 ratified: order policies + order_row, drift-is-a-bound + stable reason codes, token-normalization contract, claims-lint CI enforcement); refuter layer killed 10 findings pre-triage; final-heads caught 2 live-path defects (MLX position under rotation; linter false-negative regression); mutation testing debuted in the test-audit lens; combined-ref suite check validated the p2029 x p2030 strict-surface interaction pre-merge; suite 877</td>
+</tr>
+<tr>
+<td>C-026</td>
+<td>2026-07-09</td>
+<td>P2-034 broad campaign packs (pointer entry; run report <code>2026-07-09-p2034-broad-packs.md</code>) — design-round-first (memo ratified w/ 3 pins), single worktree stream, dual lenses, final-head CLEAN</td>
+<td>PR #39 merged; six packs, pack lint errors=0; compliance lens caught a char-level registry drift the linter cannot see (code-span nesting) + a scorer-leak + P2-022 structure flattening; executability lens caught the external-lab cold-start gap; pre-hardware campaign surface COMPLETE (every pre_hardware_preparable=fully row packed)</td>
 </tr>
 </tbody></table></div>
 <hr>
@@ -1138,24 +1145,14 @@ layers: none — every lens landed at least one consensus-shaping catch.</p>
 bookkeeping superset), P2-014 created, lanes annotated, Do-Not-Do-Yet
 wording fix — this session.</li>
 <li>Decision-log entries land WITH the P2-013/P2-014 implementation (D-011,
-D-027, D-030 amendments; phase_energy_j; provenance; lanes convention).</li>
-<li>Docs maintenance queued as its own task (item 16), not done inline.</li>
-<li>PROJECT_STATUS refresh + two-track framing: with the docs task.</li>
-</ul>
-<hr>
-<h2 id="c-008-multi-stream-session-checkpointed-2026-07-07-pm">C-008: Multi-stream session, checkpointed (2026-07-07 PM)</h2>
-<p>Session entry (format v2), kept slim because the full Shape / Catches /
-Deliberations / Interventions / Spend record was preserved VERBATIM as
-<code>docs/run_reports/2026-07-07-checkpoint-session-trace.md</code>, and the
-product state + restart instructions live in
-<code>docs/run_reports/2026-07-07-checkpoint-multistream-session.md</code
+D-027, D-030 amendments; phase_energy_j; prov
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/council_log.md · commit 556b69e + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/council_log.md · commit a835c73 + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

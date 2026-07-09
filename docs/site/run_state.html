@@ -36,15 +36,13 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 556b69e + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 556b69e + uncommitted</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit a835c73 + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit a835c73 + uncommitted</span></span></div>
     <h1>JouleWise Run State</h1>
-<p>Last updated: 2026-07-09 (spec-fleshing wave 2 C-025, ultracode: PRs
-#33..#38 merged — uncertainty propagation + claim gates, ordering
-executability (pre-campaign blocker closed), token-normalization
-contract, campaign packs, claims-lint CI enforcement, RQ-ENERGY-VARIANCE
-candidate design; D-056..D-059; integration fixes; suite 877
-lead-verified. Earlier same day: C-024 wave 1 (PRs #29..#32), C-023
-rigor review, C-022 CP-5 clearance)</p>
+<p>Last updated: 2026-07-09 (P2-034 broad campaign packs C-026: PR #39
+merged — six packs, pack lint clean; pre-hardware campaign surface
+COMPLETE. Earlier same day: C-025 wave 2 (PRs #33..#38, D-056..D-059),
+C-024 wave 1 (PRs #29..#32, D-052..D-055), C-023 rigor review, C-022
+CP-5 clearance; suite 877)</p>
 <h2 id="start-here-for-every-big-run">Start Here For Every Big Run</h2>
 <p>Before starting substantial work:</p>
 <ol>
@@ -122,20 +120,20 @@ specs (D-051). Suite 822 OK. Ed&#39;s four-part answer + Window-A go/no-go:
 <code>docs/run_reports/2026-07-09-cp5-resume.md</code>.</p>
 <p><strong>RESTART HERE (next agent):</strong></p>
 <ol>
-<li>Read <code>docs/run_reports/2026-07-09-spec-fleshing-wave2.md</code> (latest
-session record) and <code>docs/run_reports/2026-07-09-cp5-resume.md</code>
-(Window-A go/no-go).</li>
-<li>Next AGENT work per <code>TASK_QUEUE.md</code>: P2-034 broad campaign packs
-(linter cut-line satisfied); P2-035 (RQ-ENERGY-VARIANCE
-prerequisites) waits for floors.</li>
-<li>Quiet Window A [QUIET-MAC] unchanged and now fully unblocked on the
-software side: C-019 shakedown → P2-015 floors (per merged
-<code>docs/phase_2/detection_floor.md</code>) → P2-006; rotation policies
-(D-056) and uncertainty claim gates (D-057) are live for campaign
-bundles.</li>
+<li>Read <code>docs/run_reports/2026-07-09-p2034-broad-packs.md</code> (latest) and
+<code>docs/run_reports/2026-07-09-cp5-resume.md</code> (Window-A go/no-go).</li>
+<li>The pre-window AGENT backlog is CLEAR. Next work is machine-state
+dependent: [QUIET-MAC] quiet Window A (C-019 shakedown → P2-015
+floors → P2-006) is the top item; [AGENT] lanes next are P2-022 shim
+spike / P2-023 HumanEval import (post-2M gates — check queue) and
+P2-035 (after floors); [ED-EXTERNAL] items per queue.</li>
+<li>Rotation (D-056), uncertainty gates (D-057), and the campaign packs
+are live for Window-A execution.</li>
 </ol>
 <h2 id="session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</h2>
 <ul>
+<li>2026-07-09 P2-034 broad campaign packs (C-026; PR #39):
+<code>docs/run_reports/2026-07-09-p2034-broad-packs.md</code></li>
 <li>2026-07-09 spec-fleshing wave 2, ultracode (C-025; PRs #33..#38;
 D-056..D-059): <code>docs/run_reports/2026-07-09-spec-fleshing-wave2.md</code></li>
 <li>2026-07-09 spec-fleshing wave 1 (C-024; PRs #29..#32; D-052..D-055):
@@ -169,7 +167,9 @@ D-038..D-042): <code>docs/run_reports/2026-07-08-suite-science-expansion.md</cod
 </ul>
 <h2 id="current-verification">Current Verification</h2>
 <ul>
-<li>Main after wave-2 integration fixes: <code>python3 -m unittest discover -s tests</code> → <code>Ran 877 tests, OK (skipped=10)</code>, lead-run; repo lint
+<li>Main c095c83 (post PR #39; docs-only): suite <code>OK (skipped=10)</code> and
+repo lint errors=0, lead-run; pack lint errors=0 warnings=0.</li>
+<li>Prior: main after wave-2 integration fixes: <code>python3 -m unittest discover -s tests</code> → <code>Ran 877 tests, OK (skipped=10)</code>, lead-run; repo lint
 errors=0; CI green on all six PR heads (#33..#38); combined-ref
 pre-merge suite check green; live rotated mock campaign strict-valid
 with order provenance (lead-validated); mock e2e emits uncertainty
@@ -252,7 +252,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit 556b69e + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit a835c73 + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

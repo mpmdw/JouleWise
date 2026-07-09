@@ -10,9 +10,10 @@ are provided for anyone who wants the full evidence trail.
   registry, P2-015 detection-floor design, canonical question registry
   (PRs #29..#32, D-052..D-055); then uncertainty propagation + claim
   gates, suite order policies, token-normalization contract, campaign
-  packs, claims-lint CI enforcement (PRs #33..#38, D-056..D-059). Next
-  AGENT work: P2-034 broad packs; next QUIET-MAC work: C-019 shakedown +
-  P2-015 calibration)
+  packs, claims-lint CI enforcement (PRs #33..#38, D-056..D-059). Then
+  P2-034 broad campaign packs (PR #39, C-026) completed the pre-hardware
+  campaign surface. Next QUIET-MAC work: C-019 shakedown + P2-015
+  calibration; AGENT lanes: P2-022/P2-023 post-2M, P2-035 post-floors)
 - Project phase: Phase 1 closing; Phase 2 in progress - instrument
   CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
   are complete; workload-suite build is merged; CP-5 pre-campaign review is
