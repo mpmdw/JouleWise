@@ -288,6 +288,21 @@ spoofing a legacy identity is detectable by content divergence from the
 published corpus (`bundle-pack` manifest hashes). Within a single local
 `validate-bundle` invocation, that is the accepted limit.
 
+Additive summary fields landing with implementation (2026-07-09, P2-029):
+
+| Field | Location | Contract |
+|---|---|---|
+| `energy_uncertainty_status` | `summary_metrics.json` top level | One of `not_estimable`, `estimated`, or `bounded`. Single-bundle reducer output is `not_estimable` unless every relevant uncertainty term has an external calibrated bound; point estimates and quality fields are still emitted. |
+| `energy_variance_terms_j2` | `summary_metrics.json` top level and aggregate metric entries | Object of named stochastic variance terms in J^2. The reducer emits `E_gross_repetition_j2: null` for single bundles and `E_idle_mean_j2 = duration_s^2 * idle_power_w_stddev^2 / idle_sample_count` when idle-baseline evidence exists. Aggregates add repeated-gross variance and total idle-subtracted variance terms. |
+| `energy_bound_terms_j` | `summary_metrics.json` top level and aggregate metric entries | Object of named deterministic bounds in J. Drift is recorded as `E_drift_bound_j` and remains a bound, never a variance term, unless a future analysis explicitly names a distributional model. Missing drift evidence is represented as `null`. Interpolation edge sensitivity is recorded as `E_interpolation_edge_bound_j` when bracketing evidence exists. |
+| `claim_eligibility` | `summary_metrics.json` top level | Machine-readable claim gates by window class (`request`, and `phase`/`item`/`block`/`level` when applicable). Each gate entry includes `eligible`, stable `reasons`, window duration, sample count, local-gap observations, cadence ratio, clock/anchor bound, and interpolation bound. |
+
+Stable P2-029 `claim_eligibility.reasons` values include
+`insufficient_in_window_samples`, `cadence_ratio_unrecorded`,
+`cadence_ratio_below_threshold`, `clock_bound_unrecorded`,
+`clock_bound_exceeds_quarter_window`, `interpolation_bound_unrecorded`,
+`drift_term_unknown`, and `cooldown_cap_hit`.
+
 ## Experiment Manifests
 
 Repetitions produce one bundle per repetition (decision D-005), grouped by
