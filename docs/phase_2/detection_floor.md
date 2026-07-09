@@ -115,7 +115,7 @@ cells and cannot unlock suite-window L2/L3 claims.
 | DF-SU-ITEM | `suite_metrics.items[*].gross_energy_j` | item window | tiny production-shaped suite with repeated same-shape items | 10 if shakedown passed, else 5 | `floor_abs_j` and expected `below_floor` rate |
 | DF-SU-LEVEL | `suite_metrics.levels[*].gross_energy_j` | level window | same suite, level windows aggregated across repeated same-shape items | 10 if shakedown passed, else 5 | `floor_abs_j` |
 | DF-CMP-ABBA-RQ | `gross_energy_j`, `energy_request_j` | request windows | ABBA labels A/B/B/A over identical config and payload; A and B are aliases, not different conditions | 10 blocks | `floor_cmp_j` |
-| DF-CMP-ABBA-PH | `phase_energy_j.prefill`, `phase_energy_j.decode` | phase windows | ABBA aliases over the phase calibration profiles | 10 blocks | `floor_cmp_j` |
+| DF-CMP-ABBA-PH | `phase_energy_j.prefill`, `phase_energy_j.decode` | phase windows | ABBA aliases over exact phase calibration profiles; required profile counts are 10 blocks for DF-PH-PREFILL and 10 blocks for DF-PH-DECODE, with a separate optional 10-block DF-PH-SHORT-PREFILL stress ABBA if short-prefill comparative L2/L3 claims are needed | 20 required blocks, plus 10 optional short-prefill stress blocks | `floor_cmp_j` |
 | DF-CMP-ABBA-SU | suite item/level gross energy | item and level windows | ABBA aliases over the tiny production-shaped suite | 10 blocks if feasible | `floor_cmp_j` |
 | DF-TELEM-ONOFF | gross and idle-sub request; latency companion | request windows | ABBA telemetry perturbation: normal telemetry versus normal telemetry plus extra task sampler; with wall/PD later, true telemetry-on/off also runs | 10 blocks | perturbation floor or `unknown` |
 | DF-WB-REVAL | request gross, idle-sub request, primary phase windows | same-config revalidation | Window-B-start rerun of DF-RQ-GROSS-MID, DF-RQ-IDLE-MID, and one primary phase profile | 5 minimum, 10 if time permits | stale-floor verdict |
@@ -141,7 +141,8 @@ promise that cooldown gates will stay open.
 | Short request repeat | DF-RQ-GROSS-SHORT, DF-RQ-IDLE-SHORT | yes | 10 | idle-sub floor reuses gross request bundles | 0.33 h | 0.13 h |
 | Primary phase repeats | DF-PH-PREFILL, DF-PH-DECODE, DF-PH-SHORT-PREFILL | yes | 30 | one 10-bundle repeat cell per phase stress profile | 1.00 h | 0.40 h |
 | Request ABBA | DF-CMP-ABBA-RQ | yes | 40 | 10 ABBA blocks x 4 bundles | 1.33 h | 0.53 h |
-| Phase ABBA | DF-CMP-ABBA-PH | yes | 40 | 10 ABBA blocks x 4 bundles across phase calibration profiles | 1.33 h | 0.53 h |
+| Phase ABBA | DF-CMP-ABBA-PH for DF-PH-PREFILL and DF-PH-DECODE profiles | yes | 80 | 2 phase profiles x 10 ABBA blocks/profile x 4 bundles; A/B are aliases of one exact profile, not pooled across profiles | 2.67 h | 1.07 h |
+| Short-prefill phase ABBA | DF-CMP-ABBA-PH for DF-PH-SHORT-PREFILL profile | optional | 40 | 10 ABBA blocks x 4 bundles; omit only if short-prefill stress is limited to absolute-floor/identifiability evidence and no short-prefill comparative L2/L3 claim is made | 1.33 h | 0.53 h |
 | Extra-sampler perturbation | DF-TELEM-ONOFF | yes if extra sampler enabled | 40 | 10 ABBA blocks x 4 bundles; otherwise optional | 1.33 h | 0.53 h |
 | Suite absolute | DF-SU-ITEM, DF-SU-LEVEL | conditional | 10 | shared tiny-suite bundles; primary only for suite-window L2/L3 claims | 0.33 h | 0.13 h |
 | Suite ABBA | DF-CMP-ABBA-SU | conditional | 40 | 10 ABBA blocks x 4 bundles; primary only for suite-window L2/L3 claims | 1.33 h | 0.53 h |
@@ -150,15 +151,20 @@ promise that cooldown gates will stay open.
 | Window-B sentinel minimum | DF-WB-REVAL | yes before Window B | 10 | 5 mid request bundles plus 5 primary phase-profile bundles | 0.33 h | 0.13 h |
 | Window-B sentinel full | DF-WB-REVAL | time-permitting | 20 | 10 mid request bundles plus 10 primary phase-profile bundles | 0.67 h | 0.27 h |
 
-Window-A primary request/phase sizing is 170 bundles when the extra sampler is
-enabled, or 130 bundles when it is not. Adding suite-window claim coverage makes
-Window A 220 bundles with the extra sampler enabled, or 180 bundles without it.
-The optional AP-2 long-prompt and long-decode request floors add 20 bundles.
-Window-B adds 10 bundles for the required stale-floor sentinel, or 20 bundles
-when topped up to full `n = 10` repeats. Therefore total Window-A plus Window-B
-sizing ranges from 140 bundles for request/phase without extra sampler and
-minimum Window-B, to 260 bundles for suite coverage, optional long request
-floors, extra sampler, and full Window-B revalidation.
+Window-A primary request/phase sizing is 210 bundles when the extra sampler is
+enabled, or 170 bundles when it is not. These totals include the two required
+phase ABBA profiles but exclude the optional short-prefill phase ABBA. Adding
+suite-window claim coverage makes Window A 260 bundles with the extra sampler
+enabled, or 220 bundles without it. The optional AP-2 long-prompt and
+long-decode request floors add 20 bundles. The optional short-prefill phase
+ABBA adds 40 bundles and is required only for short-prefill comparative L2/L3
+claims. Window-B adds 10 bundles for the required stale-floor sentinel, or 20
+bundles when topped up to full `n = 10` repeats. Therefore total Window-A plus
+Window-B sizing ranges from 180 bundles, 6.00 h at 30/hour or 2.40 h at
+75/hour, for request/phase without extra sampler and minimum Window-B, to 340
+bundles, 11.33 h at 30/hour or 4.53 h at 75/hour, for suite coverage, optional
+long request floors, optional short-prefill phase ABBA, extra sampler, and full
+Window-B revalidation.
 
 Cooldown assumptions: the runtime columns assume the normal cooldown gate clears
 without repeatedly hitting the configured cap. If a bundle or ABBA member hits
