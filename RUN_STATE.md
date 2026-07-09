@@ -56,51 +56,84 @@ At the end of substantial work:
 
 ## ACTIVE_STOP_CARD
 
-Status: **ACTIVE (2026-07-09 late, C-027 spec-wave checkpoint).** Ed
-paused the session mid-spec-wave. This card is the resume authority.
+Status: **ACTIVE (2026-07-09 evening, C-027 implementation-blitz
+checkpoint).** Ed paused after the spec wave COMPLETED and the
+implementation fan-out ran. This card is the resume authority.
 
-**State at checkpoint:**
+**Completed this arc:**
 
-- PR #40 (C-027 council review) is MERGED; main also carries the site
-  regen commit. SITE DEPLOY IS PENDING (permission-gated): run
-  `cd site_capsule && npx lakebed deploy` (content already packed).
-- Branch `c027-spec-wave` (pushed) holds the C-027 spec sheets — all
-  headers say DRAFT pending lead adjudication. Landed so far: MET-001/
-  RETRO-001, NV-GATE-2, SPLIT-AP/AP-EDIT, DOC-009/REPRO-001 (Fable
-  batch), P2-038 (Sol). NO PR opened yet for this branch.
-- FIVE Sol (gpt-5.6-sol xhigh) spec sessions were still RUNNING at
-  checkpoint, writing to the session scratchpad
-  `/private/tmp/claude-501/-Users-edr-code-JouleWise/e48cf22e-209a-4355-bb28-9b6a37636b34/scratchpad/`:
-  spec-p2040.md (P2-040), spec-p2039.md (P2-039), spec-engine.md
-  (P2-042/P2-041/P2-037 trio), spec-rpt001.md (RPT-001), spec-doc008.md
-  (DOC-008). Each has a `.status` sentinel (OK/TIMEOUT/FAILED;
-  watchdog-bounded, they always exit).
+- PR #40 (C-027 council review) MERGED to main; site regenerated and
+  committed; SITE DEPLOY still pending (permission-gated):
+  `cd site_capsule && npx lakebed deploy`.
+- SPEC WAVE COMPLETE: branch `c027-spec-wave` (pushed, NO PR yet) holds
+  all TEN C-027 spec sheets under `docs/specs/c027/` (~345 KB): P2-040,
+  P2-038, P2-039, analysis_engine_trio (P2-042/041/037), RPT-001,
+  DOC-008 kernel, NV-GATE-2, MET-001/RETRO-001, SPLIT-AP/AP-EDIT,
+  DOC-009/REPRO-001. ALL headers say DRAFT pending lead adjudication.
+- IMPLEMENTATION BLITZ (Ed-directed override of the earlier
+  specs-merge-first line; override recorded in the D-050 addendum on
+  impl/met001): nine worktrees under `../JouleWise-wt/<name>`, branches
+  `impl/*` all PUSHED, all branched from c027-spec-wave@f7f866d:
+  - impl/doc009 — DONE (4 commits): checklist reconciliation + queue
+    closure rule. 2 flagged follow-ups: queue evidence-cell cross-refs,
+    decision-log line for the convention.
+  - impl/repro001 — DONE: env/ lockfiles (analysis + mac-measurement),
+    README, lock test, 3-bundle ~52 MiB pack selection doc.
+  - impl/ap-edit — DONE (7 commits): all SPLIT-1..3 + AP-1..6 text
+    amendments, lint clean; 1 adaptation beyond spec text (residual
+    better-monolithic phrases) flagged.
+  - impl/met001 — DONE (5 commits): MET-1/2/3/6 addenda + the
+    recoverability AUDIT (headline: 103/106 observer-index rows have
+    surviving artifacts covering ~all claimed DIRECT invocations; only
+    the 46 C-025 Workflow agents unattributable from that index).
+    MET-4 (D-050 adjudication) deliberately left for the lead.
+  - impl/p2040-io-nv2 — DONE: atomic manifest writes + NVIDIA
+    cooldown-context fix (failing-first proven; suite 880 OK there).
+    ARC-6 cleanup-into-quality SKIPPED (fence conflict) — route to
+    integration or the p2040-core owner.
+  - impl/p2040-core — IN FLIGHT at checkpoint; pushed commits: FIX-1
+    zero-window fail-closed, FIX-2 metric-specific gates, FIX-4 D-058
+    token precedence. Agent may have added FIX-5 (zero-MAD) / others
+    after the push.
+  - impl/rpt001 — IN FLIGHT; pushed: figure/table/claims pipeline over
+    the shared read layer (stdlib SVG, byte-stable). Skeleton may
+    follow.
+  - impl/p2039 — IN FLIGHT; pushed: floor calculator + artifact
+    emit/validate + transport refusal (new files only).
+  - impl/doc008-kernel — IN FLIGHT; pushed: state kernel (39 tasks
+    migrated) + generator with --check/--stdout.
 
 **Resume procedure (in order):**
 
-1. Deploy the site (above) if Ed hasn't.
-2. Harvest surviving Sol specs: for each scratchpad spec-*.md with
-   status OK, strip any pre-title preamble, copy to the target path
-   named inside it (docs/specs/c027/p2-040_reducer_gate_correctness.md,
-   p2-039_floor_artifact.md, analysis_engine_trio.md,
-   rpt-001_report_vertical_slice.md, doc-008_state_kernel.md), commit
-   to `c027-spec-wave`. If a session FAILED/TIMED OUT or the scratchpad
-   is gone, RELAUNCH from the queue row + C-027 review §7 + the
-   matching docs/reviews/c027/ lens findings (the prompts' substance is
-   reconstructable from those three sources; prompt skeletons are in
-   this session's observer index `~/.codex/claude-spawned/index.jsonl`
-   run_keys 20260709T21*-spec-*).
-3. LEAD ADJUDICATION of every spec (they are DRAFTs; known items: the
-   MET-001 spec re-includes the already-applied D-054 amendment —
-   strike it; check each spec's DEVIATIONS/OPEN QUESTIONS section and
-   decide each point). Then open the `c027-spec-wave` PR, review, merge
-   per the D-031 gate, and point each queue row's authority pointer at
-   its merged spec.
-4. Then implementation per the RESTART block below (P2-040 first).
+1. Deploy the site if Ed hasn't (command above).
+2. For EACH of the four in-flight worktrees: `git -C
+   ../JouleWise-wt/<name> log origin/impl/<name>..HEAD` — push any
+   commits the agents landed after the checkpoint push; read their
+   final reports if present (the agents' return notes did not all
+   arrive before pause; their commits are self-describing).
+3. LEAD ADJUDICATION of the ten DRAFT specs (known strikes: MET-001
+   spec's D-054 amendment item is already applied; each spec has a
+   DEVIATIONS/OPEN QUESTIONS section needing decisions — notably
+   P2-039's proposed guard factor and the engine trio's campaign-level
+   cooldown fail-closed unit). Open the c027-spec-wave PR; adjudication
+   edits ride it; merge per the D-031 gate.
+4. INTEGRATION of impl/* per multi-stream-worktrees: rebase/merge each
+   onto the merged spec base, full C-027-style review per stream
+   (lenses + lead gate + final-head), suite green (main baseline 877;
+   +new tests per stream), then PRs. Cross-stream check: p2040-core
+   vs p2040-io-nv2 both touch controller-adjacent seams; ARC-6 needs
+   an owner; the AP-EDIT amendments and the specs must agree post-
+   adjudication.
+5. Then continue the queue order: finish P2-040 remainder → P2-038 →
+   P2-039 integration hooks → RPT-001 skeleton → P2-042 → P2-041 →
+   P2-037 (specs are the pinned authorities).
+6. Bookkeeping debt for the next session: C-028 council entry (spec
+   wave + blitz), run report, MET-4/D-050 adjudication, RETRO-001
+   execution, queue row status updates for everything the impl
+   branches completed, consistency sweep, site regen.
 
-Until steps 2-3 complete, do NOT start implementation of the C-027
-rows — the specs are the pinned authorities the implementation prompts
-must cite.
+Worktree cleanup: do NOT `git worktree remove` until each branch's
+work is merged or explicitly abandoned.
 
 ## Superseded stop card (CP-5)
 
