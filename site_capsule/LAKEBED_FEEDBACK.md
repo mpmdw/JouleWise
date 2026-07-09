@@ -172,3 +172,28 @@ Capsule deploy ID: `dep_2I04CG6tQ4t0mzY7`. Live app:
 - Suggestion for the maintainer: make owner-authenticated logs easy to
   access from the deployed capsule directory, and consider an owner-only
   response-debug mode for endpoint exceptions.
+
+## 2026-07-09 — Artifact size cap hit by organic content growth; error lacks diagnostics
+
+- Command / action: `npx lakebed deploy` from `site_capsule/` after a day
+  of documentation growth (decision/council logs gained ~8 entries).
+- Expected: deploy, or an error saying which component exceeded the limit
+  and by how much.
+- Observed (verbatim): `"error": "Artifact exceeds 1048576 bytes."` with a
+  stack trace from `deploy-api.js:58`. No breakdown (server bundle vs
+  client vs pages), no overshoot amount, no local pre-check.
+- Diagnosis required manual work: `npx lakebed build`, then JSON-inspect
+  `.lakebed/artifacts/*.anonymous.json` to learn the server source bundle
+  was 1,060,132 bytes base64 (795,099 raw JS) — 1.7% over. Also learned
+  the bundle carries ~490KB of injected runtime on top of ~300KB app
+  payload, which the app author cannot see or shrink.
+- Workaround: trimmed our two largest embedded pages (site generator now
+  serves log indexes + recent entries with a GitHub pointer), bringing the
+  artifact to 927,682 bytes.
+- Severity for a production user: major — every growing site hits this
+  wall eventually, and the error gives no actionable direction.
+- Suggestions: (1) `lakebed build` should print the artifact size and its
+  component breakdown vs the limit every run (a burn-down number);
+  (2) the deploy error should include actual size, limit, and top-3
+  largest embedded modules; (3) document the runtime overhead budget so
+  authors know their real payload allowance (~550KB, not 1 MiB).

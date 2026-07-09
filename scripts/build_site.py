@@ -399,9 +399,10 @@ def parse_council_index(md: str, source: str = "docs/council_log.md") -> list[Co
     return sorted(councils, key=lambda row: row.council_id)
 
 
-def render_markdown(path: Path, no_marked: bool = False) -> str:
+def render_markdown(path: Path, no_marked: bool = False, text: str | None = None) -> str:
     global MARKED_UNAVAILABLE
-    text = path.read_text(encoding="utf-8")
+    if text is None:
+        text = path.read_text(encoding="utf-8")
     if no_marked:
         return '<pre class="markdown-placeholder">' + html.escape(text) + "</pre>"
     if MARKED_UNAVAILABLE:
@@ -1236,10 +1237,36 @@ def inject_heading_ids(body: str, toc: list[tuple[str, str]]) -> str:
     return body
 
 
+LOG_TRIM_DOCS = {
+    # Advisor-site size control (capsule 1 MiB cap): log pages keep the full
+    # index tables (in the preamble) plus the most recent entries; the repo
+    # remains the complete record (D-051 source-of-truth policy).
+    "docs/decision_log.md": (re.compile(r"(?m)^## D-\d"), 6),
+    "docs/council_log.md": (re.compile(r"(?m)^## C-\d"), 6),
+}
+
+
+def trim_log_markdown(md: str, heading_re: re.Pattern[str], keep: int, source: str) -> str:
+    starts = [m.start() for m in heading_re.finditer(md)]
+    if len(starts) <= keep:
+        return md
+    omitted = len(starts) - keep
+    note = (
+        f"\n> **Site view:** the complete entry index appears above; the "
+        f"{omitted} older full entries are omitted from this page for capsule "
+        f"size. The complete log is the repository file "
+        f"[`{source}`](https://github.com/mpmdw/JouleWise/blob/main/{source}).\n\n"
+    )
+    return md[: starts[0]] + note + md[starts[-keep] :]
+
+
 def render_doc_page(doc: DocPage, no_marked: bool, stamp: SourceStamp) -> str:
     path = ROOT / doc.source
     md = path.read_text(encoding="utf-8")
-    body = render_markdown(path, no_marked=no_marked)
+    if doc.source in LOG_TRIM_DOCS:
+        heading_re, keep = LOG_TRIM_DOCS[doc.source]
+        md = trim_log_markdown(md, heading_re, keep, doc.source)
+    body = render_markdown(path, no_marked=no_marked, text=md)
     toc = markdown_h2_toc(md)
     if not no_marked:
         body = inject_heading_ids(body, toc)
