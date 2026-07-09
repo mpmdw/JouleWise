@@ -62,6 +62,12 @@ dispositions). Live-verified on real MLX at three code states; three
 live-only defects caught and fixed at the lead gate. Post-merge
 integration review: zero cross-stream defects.
 
+**IN-FLIGHT SESSION (2026-07-08, pre-campaign review):** a live
+multi-agent review of the workload suite / methodology / capture
+completeness is running; its checkpoint ledger (with workflow resume
+IDs) is `docs/stream_logs/2026-07-08-precampaign-review.md` — resume
+from there, not from scratch.
+
 **RESTART HERE (next agent):**
 1. Read `docs/run_reports/2026-07-08-suite-build.md` (session record +
    restart detail).
