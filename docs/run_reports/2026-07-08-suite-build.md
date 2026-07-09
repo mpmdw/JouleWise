@@ -108,7 +108,8 @@ mock flows, post-merge integration review clean.
    quiet-window tail after P2-015.
 3. Window B: P2-019 q4 grid + P2-020 sentinel campaign, n sized from A.
 4. Background chip pending: alignment-capture-outside-window fix
-   (pre-existing D-013 concern, spun off).
+   (pre-existing D-013 concern, spun off). DONE same day — PR #21
+   (council log C-018).
 
 ## Process trace appendix
 
