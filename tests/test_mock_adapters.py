@@ -198,8 +198,26 @@ class MockRuntimeTests(unittest.TestCase):
     def test_prepare_reports_adapter_metadata(self) -> None:
         result = self.runtime.prepare(self.config)
         self.assertTrue(result.ok)
+        self.assertEqual(result.metadata["adapter"], "mock_runtime")
+        self.assertEqual(result.metadata["version"], __version__)
+        marker = {
+            "adapter": "mock_runtime",
+            "model_name": self.config.model.name,
+            "model_source": self.config.model.source,
+            "model_revision": self.config.model.revision,
+        }
+        expected_sha = sha256_hex(
+            json.dumps(marker, separators=(",", ":"), sort_keys=True)
+        )
         self.assertEqual(
-            result.metadata, {"adapter": "mock_runtime", "version": __version__}
+            result.metadata["model_artifact_identity"],
+            {
+                "status": "ok",
+                "kind": "mock_marker",
+                "algorithm": "sha256",
+                "sha256": expected_sha,
+                "marker": marker,
+            },
         )
 
     def test_prepare_mock_unsupported_returns_did_not_fit(self) -> None:
@@ -261,9 +279,14 @@ class MockRuntimeTests(unittest.TestCase):
         token_events = [e for e in result.events if e.event_type == "token"]
         for index, line in enumerate(lines):
             record = json.loads(line)
-            self.assertEqual(set(record), {"index", "timestamp_s"})
+            self.assertEqual(set(record), {"index", "timestamp_s", "token_id"})
             self.assertEqual(record["index"], index)
+            self.assertEqual(record["token_id"], index + 1)
             self.assertEqual(record["timestamp_s"], token_events[index].timestamp_s)
+        self.assertEqual(
+            result.workload_provenance["response"]["emitted_token_ids"],
+            list(range(1, 9)),
+        )
 
     def test_prompt_tokens_fall_back_to_prompt_text_word_count(self) -> None:
         config = make_config(
@@ -329,7 +352,9 @@ class MockRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(records[0]["prompt_tokens"], 3)
         self.assertEqual(records[0]["emitted_tokens"], 2)
+        self.assertEqual(records[0]["emitted_token_ids"], [1, 2])
         self.assertEqual(len(records[0]["tokens"]), 2)
+        self.assertEqual([token["token_id"] for token in records[0]["tokens"]], [1, 2])
         self.assertIn("token_ids_sha256", records[0]["prompt"])
         self.assertEqual(records[1]["status_reason"], "mock-malformed")
         self.assertEqual(records[2]["status_reason"], "mock-runtime-failed")
@@ -450,9 +475,9 @@ class MockRuntimeTests(unittest.TestCase):
         }
         for record in records:
             expected_keys = (
-                base_keys
+                base_keys | {"emitted_token_ids"}
                 if record["status"] == "succeeded"
-                else base_keys | {"status_reason"}
+                else base_keys | {"emitted_token_ids", "status_reason"}
             )
             self.assertEqual(set(record), expected_keys)
             self.assertEqual(record["response_sha256"], sha256_hex(record["response_text"]))
@@ -467,12 +492,65 @@ class MockRuntimeTests(unittest.TestCase):
         self.assertEqual(
             records[0]["tokens"],
             [
-                {"index": 0, "timestamp_s": 1000.013},
-                {"index": 1, "timestamp_s": 1000.023},
+                {"index": 0, "timestamp_s": 1000.013, "token_id": 1},
+                {"index": 1, "timestamp_s": 1000.023, "token_id": 2},
             ],
         )
         self.assertEqual(records[1]["tokens"], [])
         self.assertEqual(records[2]["tokens"], [])
+
+    def test_text_source_sha_mismatch_is_malformed(self) -> None:
+        data = make_suite_manifest().to_dict()
+        data["items"] = [
+            _suite_item("bad_text_hash", "block_a", "level_1", 2, 1, [])
+        ]
+        data["items"][0]["source"]["prompt_text"] = "one two"
+        data["items"][0]["source"]["source_sha256"] = ("0" * 64).upper()
+        manifest = SuiteManifest.from_mapping(data)
+
+        result = self.runtime.run_suite(self.config, manifest, order_seed="controller-seed")
+        record = json.loads(result.output_artifacts["suite_items.jsonl"])
+
+        self.assertEqual(record["status"], "malformed")
+        self.assertEqual(record["status_reason"], "prompt_ids_mismatch")
+        self.assertEqual(record["emitted_tokens"], 0)
+
+    def test_jw_mixed_text_prompt_token_count_mismatch_is_malformed(self) -> None:
+        data = make_suite_manifest().to_dict()
+        data["suite_id"] = "jw_mixed_v1"
+        data["suite_profile"] = "jw_mixed_v1_common_512_256"
+        data["source_manifest"]["source_id"] = "jw_mixed_v1:test"
+        data["items"] = [
+            _suite_item("budgeted_text", "block_a", "level_1", 5, 1, [])
+        ]
+        data["items"][0]["source"]["prompt_text"] = "one two"
+        data["items"][0]["source"]["source_sha256"] = sha256_hex("one two")
+        manifest = SuiteManifest.from_mapping(data)
+
+        result = self.runtime.run_suite(self.config, manifest, order_seed="controller-seed")
+        record = json.loads(result.output_artifacts["suite_items.jsonl"])
+
+        self.assertEqual(record["status"], "malformed")
+        self.assertEqual(record["status_reason"], "planned_prompt_tokens_mismatch")
+        self.assertEqual(record["annotations"][0]["severity"], "fatal")
+
+    def test_affine_text_prompt_token_count_mismatch_is_advisory(self) -> None:
+        data = make_suite_manifest().to_dict()
+        data["suite_id"] = "affine_smoke_v1"
+        data["suite_profile"] = "affine_mod_ladder_v1_smoke"
+        data["source_manifest"]["source_id"] = "affine_mod_ladder_v1"
+        data["items"] = [
+            _suite_item("affine_text", "block_a", "level_1", 5, 1, [])
+        ]
+        data["items"][0]["source"]["prompt_text"] = "one two"
+        data["items"][0]["source"]["source_sha256"] = sha256_hex("one two")
+        manifest = SuiteManifest.from_mapping(data)
+
+        result = self.runtime.run_suite(self.config, manifest, order_seed="controller-seed")
+        record = json.loads(result.output_artifacts["suite_items.jsonl"])
+
+        self.assertEqual(record["status"], "succeeded")
+        self.assertEqual(record["annotations"][0]["severity"], "advisory")
 
     def test_run_suite_natural_eos_assigns_capped(self) -> None:
         data = make_suite_manifest().to_dict()

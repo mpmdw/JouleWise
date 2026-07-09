@@ -46,7 +46,7 @@ from joulewise.schemas import (
     RunStatus,
     SchemaError,
 )
-from joulewise.provenance import prompt_token_ids_sha256
+from joulewise.provenance import normalized_sha256_hex, prompt_token_ids_sha256, sha256_hex
 from joulewise.suite import (
     BLOCK_END,
     BLOCK_START,
@@ -837,25 +837,40 @@ def _suite_problems(
                 continue
             records_by_index[item_index] = record
         for item_index, item in enumerate(manifest.items):
-            if item.source.prompt_token_ids is None:
+            if item.source.prompt_token_ids is None and item.source.prompt_text is None:
                 continue
             record = records_by_index.get(item_index)
             if record is None:
                 problems.append(
                     "outputs/suite_items.jsonl is missing item_index "
-                    f"{item_index} for ids-native prompt validation"
+                    f"{item_index} for prompt source validation"
                 )
                 continue
             prompt = record.get("prompt")
             actual = prompt.get("token_ids_sha256") if isinstance(prompt, dict) else None
-            expected_hash = prompt_token_ids_sha256(item.source.prompt_token_ids)
-            if actual != expected_hash:
-                problems.append(
-                    "outputs/suite_items.jsonl item_index "
-                    f"{item_index} prompt.token_ids_sha256 mismatch for ids-native "
-                    f"manifest prompt_token_ids: expected {expected_hash!r}, "
-                    f"actual {actual!r}"
-                )
+            if item.source.prompt_token_ids is not None:
+                expected_hash = prompt_token_ids_sha256(item.source.prompt_token_ids)
+                if actual != expected_hash:
+                    problems.append(
+                        "outputs/suite_items.jsonl item_index "
+                        f"{item_index} prompt.token_ids_sha256 mismatch for ids-native "
+                        f"manifest prompt_token_ids: expected {expected_hash!r}, "
+                        f"actual {actual!r}"
+                    )
+            else:
+                source_hash = normalized_sha256_hex(item.source.source_sha256)
+                if source_hash is None:
+                    continue
+                text_hash = sha256_hex(item.source.prompt_text or "")
+                if actual != source_hash and text_hash != source_hash:
+                    problems.append(
+                        "outputs/suite_items.jsonl item_index "
+                        f"{item_index} prompt.token_ids_sha256 mismatch for text "
+                        "manifest prompt source: source_sha256 is neither realized "
+                        "prompt token-ID hash nor prompt text hash; "
+                        f"source_sha256 {source_hash!r}, "
+                        f"actual {actual!r}, text_sha256 {text_hash!r}"
+                    )
 
     if isinstance(suite_metadata, dict):
         suite_start_metadata = _first_marker_metadata(events, SUITE_START)

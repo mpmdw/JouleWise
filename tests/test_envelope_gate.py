@@ -96,8 +96,32 @@ class EnvelopeGateTests(unittest.TestCase):
             metadata = event["metadata"]
             output = outputs_by_index.get(metadata["item_index"])
             mutator(metadata, output)
+            if output is not None:
+                self._reconcile_output_emitted_token_ids(output)
         _write_jsonl(events_path, events)
         _write_jsonl(outputs_path, output_records)
+
+    def _reconcile_output_emitted_token_ids(self, output: dict) -> None:
+        emitted_tokens = output.get("emitted_tokens")
+        if (
+            isinstance(emitted_tokens, bool)
+            or not isinstance(emitted_tokens, int)
+            or emitted_tokens < 0
+        ):
+            return
+        token_ids = output.get("emitted_token_ids")
+        if not isinstance(token_ids, list):
+            return
+        if len(token_ids) >= emitted_tokens:
+            output["emitted_token_ids"] = token_ids[:emitted_tokens]
+        else:
+            next_id = max(
+                (token for token in token_ids if isinstance(token, int)),
+                default=0,
+            ) + 1
+            output["emitted_token_ids"] = token_ids + list(
+                range(next_id, next_id + emitted_tokens - len(token_ids))
+            )
 
     def normalize_pass(self, metadata: dict, output: dict | None) -> None:
         if metadata["item_id"] == "affine_v1_sentinel":

@@ -201,11 +201,11 @@ workload provenance rather than deriving a seed from `run_id`.
   text/hash, stop reason, prompt/output token counts, and token timestamps
   (D-045.8/AP-6). Suites do not emit `response.txt`.
 - Preserve workload provenance for suite identity, generator, tokenizer,
-  model, and sampler. MLX adapters must attempt to pin greedy/temp-0 by
-  constructing the installed `mlx_lm` sampler and passing it to
-  `stream_generate` when the API supports it; otherwise they record
-  `pinned: false` with an unavailable-API reason and proceed with the
-  library default (D-047.5).
+  model, and sampler. MLX adapters must pin greedy/temp-0 by constructing the
+  installed `mlx_lm` sampler and passing it to `stream_generate`; if the
+  sampler cannot be constructed or verified, measured single-prompt and suite
+  generation fail closed with the named adapter error
+  `sampler_pin_unverified`.
 
 Runtime status assignment:
 
@@ -234,6 +234,15 @@ with no BOS added; this is required for D-046 sentinel conditions.
 Absent text and ids use a synthetic prompt with
 `shape.planned_prompt_tokens`. Any field named `prompt_sha256` means the
 domain-separated token-ID hash, not a text hash.
+
+For prompt-text items with a SHA-256-shaped `source.source_sha256`, runtimes
+compare the realized prompt token-ID hash against `source_sha256`; if it does
+not match, they may accept `sha256(prompt_text)` as a text-domain manifest.
+Any other value fails the item closed as `malformed` with
+`status_reason: "prompt_ids_mismatch"`. For planned prompt token counts,
+`jw_mixed_v1` prompt-text items are budgeted and a realized/planned mismatch
+is fatal; affine ladder prompt-text items are nominal and receive an advisory
+annotation instead.
 
 `suite_items.jsonl.prompt_source` is one of `prompt_text`, `token_ids`, or
 `synthetic`. `bos_present` records whether BOS is present in the realized

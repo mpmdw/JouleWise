@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from dataclasses import asdict
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import Any
 from unittest.mock import patch
@@ -15,8 +17,10 @@ from joulewise.adapters.mlx_runtime import (
     MlxRuntimeAdapter,
     _mlx_metal_memory,
     _process_rss_bytes,
+    model_artifact_identity,
 )
 from joulewise.clock import FakeClock
+from joulewise.interfaces import AdapterFailure
 from joulewise.provenance import (
     prompt_token_ids_sha256,
     sha256_hex,
@@ -95,6 +99,11 @@ class FakeMlxLm:
         self.pieces = pieces
         self.calls: list[dict[str, Any]] = []
         self.fail_call_indices = fail_call_indices or set()
+        self.samplers_built: list[dict[str, Any]] = []
+
+    def make_sampler(self, **kwargs):
+        self.samplers_built.append(kwargs)
+        return {"sampler": kwargs}
 
     def stream_generate(
         self,
@@ -102,6 +111,7 @@ class FakeMlxLm:
         tokenizer: FakeTokenizer,
         prompt: str | list[int],
         max_tokens: int = 256,
+        sampler: object | None = None,
     ):
         call_index = len(self.calls)
         self.calls.append(
@@ -110,6 +120,7 @@ class FakeMlxLm:
                 "tokenizer": tokenizer,
                 "prompt": prompt,
                 "max_tokens": max_tokens,
+                "sampler": sampler,
                 "eos_token_ids_during_call": set(tokenizer.eos_token_ids),
             }
         )
@@ -123,10 +134,6 @@ class FakeMlxLmWithSampler(FakeMlxLm):
     def __init__(self, pieces: list[str]) -> None:
         super().__init__(pieces)
         self.samplers_built: list[dict[str, Any]] = []
-
-    def make_sampler(self, **kwargs):
-        self.samplers_built.append(kwargs)
-        return {"sampler": kwargs}
 
     def stream_generate(
         self,
@@ -355,8 +362,13 @@ class MlxRuntimeTests(unittest.TestCase):
         self.assertEqual(len(lines), 3)
         records = [json.loads(line) for line in lines]
         self.assertEqual([record["index"] for record in records], [0, 1, 2])
+        self.assertEqual([record["token_id"] for record in records], [0, 1, 2])
         self.assertEqual([record["timestamp_s"] for record in records], [1000.0] * 3)
         self.assertEqual(result.output_token_count, 3)
+        self.assertEqual(
+            result.workload_provenance["response"]["emitted_token_ids"],
+            [0, 1, 2],
+        )
 
     def test_run_workload_event_stream_is_byte_identical_after_generate_refactor(self) -> None:
         adapter, _ = self.prepared_adapter(["A", "B", "C"])
@@ -500,6 +512,29 @@ class MlxRuntimeTests(unittest.TestCase):
             cleanup.metadata["memory_snapshots"][0]["label"], "cleanup_start"
         )
 
+    def test_model_artifact_identity_hashes_weight_file_set(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "model.safetensors").write_bytes(b"abc")
+            (root / "ignore.json").write_text("{}", encoding="utf-8")
+
+            identity = model_artifact_identity(str(root))
+
+        self.assertEqual(identity["status"], "ok")
+        self.assertEqual(identity["kind"], "file_set")
+        self.assertEqual(
+            identity["files"],
+            {
+                "model.safetensors": (
+                    "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+                )
+            },
+        )
+        self.assertEqual(
+            identity["folded_sha256"],
+            "9b3acfda60512c060fbf440d17a47bac3ff9cbd1afb8e8ff2c1bcedbf58b4bc7",
+        )
+
     def test_text_prompt_provenance_hashes_exact_generation_token_ids(self) -> None:
         adapter, fake_mlx = self.prepared_adapter(["A"])
         result = adapter.run_workload(make_config())
@@ -559,6 +594,8 @@ class MlxRuntimeTests(unittest.TestCase):
         self.assertEqual(records[2]["prompt_tokens"], 4)
         self.assertEqual(records[1]["stop_reason"], "length")
         self.assertEqual(records[1]["response_sha256"], sha256_hex("AB"))
+        self.assertEqual(records[0]["emitted_token_ids"], [0, 1])
+        self.assertEqual([token["token_id"] for token in records[0]["tokens"]], [0, 1])
         self.assertEqual(fake_mlx.calls[0]["prompt"], [7, 8, 9])
         self.assertEqual(fake_mlx.calls[1]["prompt"], [1, 10, 11])
         self.assertEqual(len(fake_mlx.calls[2]["prompt"]), 4)
@@ -643,26 +680,167 @@ class MlxRuntimeTests(unittest.TestCase):
         self.assertEqual(record["stop_reason"], "length")
         self.assertEqual(result.events[-1].metadata["status_counts"], {"capped": 1})
 
-    def test_sampler_provenance_api_absent_for_workload_and_suite(self) -> None:
+    def test_jw_mixed_text_prompt_token_count_mismatch_is_malformed(self) -> None:
         adapter, _ = self.prepared_adapter(["A"])
-
-        workload = adapter.run_workload(make_config(workload_profile={"output_tokens": 1}))
-        suite = adapter.run_suite(
-            make_config(),
-            make_suite_manifest([suite_item("one", prompt_tokens=2, output_tokens=1)]),
-            order_seed="controller-seed",
+        manifest = make_suite_manifest(
+            [
+                suite_item(
+                    "budgeted_text",
+                    prompt_tokens=5,
+                    output_tokens=1,
+                    prompt_text="one two",
+                )
+            ]
         )
+        data = manifest.to_dict()
+        data["suite_id"] = "jw_mixed_v1"
+        data["suite_profile"] = "jw_mixed_v1_common_512_256"
+        data["source_manifest"]["source_id"] = "jw_mixed_v1:test"
+        data["items"][0]["source"]["source_sha256"] = sha256_hex("one two")
+        manifest = SuiteManifest.from_mapping(data)
 
+        result = adapter.run_suite(make_config(), manifest, order_seed="controller-seed")
+        record = json.loads(result.output_artifacts["suite_items.jsonl"])
+
+        self.assertEqual(record["status"], "malformed")
+        self.assertEqual(record["status_reason"], "planned_prompt_tokens_mismatch")
+        self.assertEqual(record["annotations"][0]["code"], "planned_prompt_tokens_mismatch")
+        self.assertEqual(record["annotations"][0]["planned_prompt_tokens"], 5)
+        self.assertEqual(record["annotations"][0]["realized_prompt_tokens"], 3)
+        self.assertEqual(record["annotations"][0]["severity"], "fatal")
+
+    def test_affine_text_prompt_token_count_mismatch_is_advisory(self) -> None:
+        adapter, _ = self.prepared_adapter(["A"])
+        manifest = make_suite_manifest(
+            [
+                suite_item(
+                    "affine_text",
+                    prompt_tokens=5,
+                    output_tokens=1,
+                    prompt_text="one two",
+                )
+            ]
+        )
+        data = manifest.to_dict()
+        data["suite_id"] = "affine_smoke_v1"
+        data["suite_profile"] = "affine_mod_ladder_v1_smoke"
+        data["source_manifest"]["source_id"] = "affine_mod_ladder_v1"
+        data["items"][0]["source"]["source_sha256"] = sha256_hex("one two")
+        manifest = SuiteManifest.from_mapping(data)
+
+        result = adapter.run_suite(make_config(), manifest, order_seed="controller-seed")
+        record = json.loads(result.output_artifacts["suite_items.jsonl"])
+
+        self.assertEqual(record["status"], "succeeded")
+        self.assertNotIn("status_reason", record)
+        self.assertEqual(record["annotations"][0]["code"], "planned_prompt_tokens_mismatch")
+        self.assertEqual(record["annotations"][0]["planned_prompt_tokens"], 5)
+        self.assertEqual(record["annotations"][0]["realized_prompt_tokens"], 3)
+        self.assertEqual(record["annotations"][0]["severity"], "advisory")
+
+    def test_sampler_provenance_api_absent_refuses_workload_and_suite(self) -> None:
+        class NoSamplerMlx(FakeMlxLm):
+            make_sampler = None  # type: ignore[assignment]
+
+            def stream_generate(
+                self,
+                model: object,
+                tokenizer: FakeTokenizer,
+                prompt: str | list[int],
+                max_tokens: int = 256,
+            ):
+                yield from ()
+
+        adapter = MlxRuntimeAdapter(FakeClock(start=1000.0))
+        adapter._mlx_lm = NoSamplerMlx(["A"])
+        adapter._model = object()
+        adapter._tokenizer = FakeTokenizer()
+
+        with self.assertRaisesRegex(Exception, "sampler_pin_unverified"):
+            adapter.run_workload(make_config(workload_profile={"output_tokens": 1}))
+        with self.assertRaisesRegex(Exception, "sampler_pin_unverified"):
+            adapter.run_suite(
+                make_config(),
+                make_suite_manifest([suite_item("one", prompt_tokens=2, output_tokens=1)]),
+                order_seed="controller-seed",
+            )
+
+    def test_sampler_pin_refuses_missing_top_level_and_sample_utils_api(self) -> None:
+        adapter = MlxRuntimeAdapter(FakeClock(start=1000.0))
+        fake_mlx = FakeMlxLm(["A"])
+        fake_mlx.make_sampler = None  # type: ignore[assignment]
+        adapter._mlx_lm = fake_mlx
+        adapter._model = object()
+        adapter._tokenizer = FakeTokenizer()
+
+        with self.assertRaises(AdapterFailure) as ctx:
+            adapter.run_workload(make_config(workload_profile={"output_tokens": 1}))
+
+        self.assertEqual(ctx.exception.failure_reason, FailureReason.RUNTIME_UNAVAILABLE)
         self.assertEqual(
-            workload.workload_provenance["sampler"],
+            ctx.exception.metadata,
             {
+                "error": "sampler_pin_unverified",
                 "kind": "greedy",
                 "temperature": 0.0,
                 "pinned": False,
                 "reason": "mlx_lm sampler API unavailable",
             },
         )
-        self.assertEqual(workload.workload_provenance["sampler"], suite.workload_provenance["sampler"])
+
+    def test_sampler_pin_refuses_missing_sample_utils_make_sampler(self) -> None:
+        adapter = MlxRuntimeAdapter(FakeClock(start=1000.0))
+        fake_mlx = FakeMlxLm(["A"])
+        fake_mlx.make_sampler = None  # type: ignore[assignment]
+        fake_mlx.sample_utils = SimpleNamespace(make_sampler=None)
+        adapter._mlx_lm = fake_mlx
+        adapter._model = object()
+        adapter._tokenizer = FakeTokenizer()
+
+        with self.assertRaises(AdapterFailure) as ctx:
+            adapter.run_workload(make_config(workload_profile={"output_tokens": 1}))
+
+        self.assertEqual(ctx.exception.failure_reason, FailureReason.RUNTIME_UNAVAILABLE)
+        self.assertEqual(
+            ctx.exception.metadata,
+            {
+                "error": "sampler_pin_unverified",
+                "kind": "greedy",
+                "temperature": 0.0,
+                "pinned": False,
+                "reason": "mlx_lm sampler API unavailable",
+            },
+        )
+
+    def test_sampler_pin_refuses_when_all_constructor_forms_fail(self) -> None:
+        class BadSamplerMlx(FakeMlxLm):
+            def make_sampler(self, *args, **kwargs):
+                raise TypeError("unsupported sampler form")
+
+        adapter = MlxRuntimeAdapter(FakeClock(start=1000.0))
+        adapter._mlx_lm = BadSamplerMlx(["A"])
+        adapter._model = object()
+        adapter._tokenizer = FakeTokenizer()
+
+        with self.assertRaises(AdapterFailure) as ctx:
+            adapter.run_workload(make_config(workload_profile={"output_tokens": 1}))
+
+        self.assertEqual(ctx.exception.failure_reason, FailureReason.RUNTIME_UNAVAILABLE)
+        self.assertEqual(
+            ctx.exception.metadata,
+            {
+                "error": "sampler_pin_unverified",
+                "kind": "greedy",
+                "temperature": 0.0,
+                "pinned": False,
+                "reason": "mlx_lm sampler API unavailable",
+                "errors": [
+                    "temp: unsupported sampler form",
+                    "temperature: unsupported sampler form",
+                    "positional_temp: unsupported sampler form",
+                ],
+            },
+        )
 
     def test_sampler_provenance_api_present_for_workload_and_suite(self) -> None:
         adapter = MlxRuntimeAdapter(FakeClock(start=1000.0))
@@ -682,7 +860,10 @@ class MlxRuntimeTests(unittest.TestCase):
         self.assertEqual(workload.workload_provenance["sampler"]["kind"], "greedy")
         self.assertEqual(workload.workload_provenance["sampler"]["temperature"], 0.0)
         self.assertEqual(suite.workload_provenance["sampler"]["pinned"], True)
-        self.assertEqual(fake_mlx.samplers_built, [{"temp": 0.0}, {"temp": 0.0}])
+        self.assertEqual(
+            fake_mlx.samplers_built,
+            [{"temp": 0.0}, {"temp": 0.0}, {"temp": 0.0}],
+        )
         self.assertIsNotNone(fake_mlx.calls[0]["sampler"])
         self.assertIsNotNone(fake_mlx.calls[1]["sampler"])
 

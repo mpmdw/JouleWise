@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.metadata
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -98,6 +99,52 @@ def successful_fake_run(command, **kwargs):
 
 
 class EnvironmentSnapshotTests(unittest.TestCase):
+    def test_collect_environment_snapshot_records_present_and_absent_package_versions(self) -> None:
+        def fake_version(distribution: str) -> str:
+            if distribution == "mlx":
+                return "1.2.3"
+            raise importlib.metadata.PackageNotFoundError(distribution)
+
+        with patch("joulewise.environment.subprocess.run", side_effect=successful_fake_run):
+            with patch("joulewise.environment.importlib_metadata.version", side_effect=fake_version):
+                snapshot = collect_environment_snapshot()
+
+        self.assertEqual(
+            snapshot["python_packages"]["mlx"],
+            {"present": True, "version": "1.2.3"},
+        )
+        self.assertEqual(
+            snapshot["python_packages"]["mlx-lm"],
+            {"present": False, "version": None},
+        )
+        self.assertEqual(
+            snapshot["python_packages"]["transformers"],
+            {"present": False, "version": None},
+        )
+
+    def test_package_records_survive_subprocess_failure_paths(self) -> None:
+        def fake_version(distribution: str) -> str:
+            if distribution == "mlx":
+                return "1.2.3"
+            raise importlib.metadata.PackageNotFoundError(distribution)
+
+        def fake_run(command, **kwargs):
+            return completed(command, returncode=1)
+
+        with patch("joulewise.environment.subprocess.run", side_effect=fake_run):
+            with patch("joulewise.environment.importlib_metadata.version", side_effect=fake_version):
+                snapshot = collect_environment_snapshot()
+
+        self.assertEqual(
+            snapshot["python_packages"],
+            {
+                "mlx": {"present": True, "version": "1.2.3"},
+                "mlx-lm": {"present": False, "version": None},
+                "transformers": {"present": False, "version": None},
+            },
+        )
+        self.assertTrue(snapshot["errors"])
+
     def test_collect_environment_snapshot_parses_successful_commands(self) -> None:
         outputs = {
             **SUCCESS_OUTPUTS,
@@ -137,6 +184,13 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         self.assertIs(snapshot["display_sleep_prevented"], True)
         self.assertEqual(snapshot["memory_free_percent"], 42.0)
         self.assertEqual(snapshot["memory_pressure_percent"], 58.0)
+        self.assertEqual(
+            set(snapshot["python_packages"]),
+            {"mlx", "mlx-lm", "transformers"},
+        )
+        for record in snapshot["python_packages"].values():
+            self.assertIn("present", record)
+            self.assertIn("version", record)
         self.assertEqual(
             snapshot["memory"]["swap_usage"],
             {"total": "1024.00M", "used": "128.00M", "free": "896.00M"},
@@ -426,6 +480,9 @@ class EnvironmentSnapshotTests(unittest.TestCase):
                 self.assertEqual(value["status"], "probe_unavailable")
                 self.assertEqual(value["reason"], "not_found")
                 continue
+            if key == "python_packages":
+                self.assertEqual(set(value), {"mlx", "mlx-lm", "transformers"})
+                continue
             if isinstance(value, dict):
                 for nested_value in value.values():
                     self.assertIsNone(nested_value, key)
@@ -470,6 +527,9 @@ class EnvironmentSnapshotTests(unittest.TestCase):
             if key == "display":
                 self.assertEqual(value["status"], "probe_unavailable")
                 self.assertEqual(value["reason"], "failed")
+                continue
+            if key == "python_packages":
+                self.assertEqual(set(value), {"mlx", "mlx-lm", "transformers"})
                 continue
             if isinstance(value, dict):
                 for nested_value in value.values():

@@ -9,13 +9,18 @@ same way the reducer suite builds its bundles.
 from __future__ import annotations
 
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
 
 from joulewise.bundle import RunBundleWriter
 from joulewise.bundle_read import BundleReader, BundleReadError, _marker_pair_problems
-from joulewise.cli import validate_bundle
+from joulewise.cli import (
+    _strict_budgeted_suite_prompt_count_problems,
+    _strict_emitted_token_ids_problems,
+    validate_bundle,
+)
 from joulewise.clock import FakeClock
 from joulewise.interfaces import PowerSample, RuntimeEvent
 from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus
@@ -30,7 +35,7 @@ from joulewise.suite import (
     suite_manifest_sha256,
 )
 from joulewise.adapters.mock_runtime import MockRuntimeAdapter
-from joulewise.provenance import prompt_token_ids_sha256
+from joulewise.provenance import prompt_token_ids_sha256, sha256_hex
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
@@ -60,6 +65,27 @@ def read_jsonl(path: Path) -> list[dict]:
 
 def write_jsonl(path: Path, records: list[dict]) -> None:
     path.write_text("".join(json.dumps(record, sort_keys=True) + "\n" for record in records))
+
+
+def rewrite_suite_manifest_and_hashes(writer: RunBundleWriter, raw_manifest: dict) -> None:
+    effective = canonical_effective_manifest(raw_manifest)
+    manifest_hash = suite_manifest_sha256(effective)
+    (writer.path / "suite_manifest.json").write_text(
+        json.dumps(effective, indent=2, sort_keys=True) + "\n"
+    )
+    config = json.loads((writer.path / "config.json").read_text())
+    config["workload_profile"]["suite_manifest_sha256"] = manifest_hash
+    (writer.path / "config.json").write_text(
+        json.dumps(config, indent=2, sort_keys=True) + "\n"
+    )
+    metadata = json.loads((writer.path / "metadata.json").read_text())
+    metadata["config_sha256"] = hashlib.sha256(
+        (writer.path / "config.json").read_bytes()
+    ).hexdigest()
+    metadata["suite"]["manifest_sha256"] = manifest_hash
+    (writer.path / "metadata.json").write_text(
+        json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+    )
 
 
 def suite_related(problems: list[str]) -> list[str]:
@@ -778,6 +804,159 @@ class SuiteReaderTests(ReaderTestCase):
                 for p in problems
             ),
             problems,
+        )
+
+    def test_text_suite_item_token_domain_hash_mismatch_is_validation_error(self) -> None:
+        writer = self.make_suite_bundle("suite-text-token-domain-mismatch")
+        manifest_path = writer.path / "suite_manifest.json"
+        raw_manifest = json.loads(manifest_path.read_text())
+        for item in raw_manifest["items"]:
+            if item["item_id"] == "mock_item_003":
+                item["source"]["source_sha256"] = sha256_hex("unrelated source")
+                break
+        rewrite_suite_manifest_and_hashes(writer, raw_manifest)
+
+        problems = BundleReader(writer.path).problems()
+
+        self.assertTrue(
+            any("prompt.token_ids_sha256 mismatch for text manifest" in p for p in problems),
+            problems,
+        )
+
+    def test_text_suite_item_token_domain_hash_match_validates(self) -> None:
+        writer = self.make_suite_bundle("suite-text-token-domain-valid")
+        output_records = read_jsonl(writer.path / "outputs" / "suite_items.jsonl")
+        token_hash = next(
+            record["prompt"]["token_ids_sha256"]
+            for record in output_records
+            if record["item_id"] == "mock_item_003"
+        )
+        manifest_path = writer.path / "suite_manifest.json"
+        raw_manifest = json.loads(manifest_path.read_text())
+        for item in raw_manifest["items"]:
+            if item["item_id"] == "mock_item_003":
+                item["source"]["source_sha256"] = token_hash
+                break
+        rewrite_suite_manifest_and_hashes(writer, raw_manifest)
+
+        self.assertEqual(BundleReader(writer.path).problems(), [])
+
+    def test_text_suite_item_text_domain_hash_validates(self) -> None:
+        writer = self.make_suite_bundle("suite-text-domain-valid")
+        manifest_path = writer.path / "suite_manifest.json"
+        raw_manifest = json.loads(manifest_path.read_text())
+        for item in raw_manifest["items"]:
+            if item["item_id"] == "mock_item_003":
+                item["source"]["source_sha256"] = sha256_hex(
+                    item["source"]["prompt_text"]
+                )
+                break
+        rewrite_suite_manifest_and_hashes(writer, raw_manifest)
+
+        self.assertEqual(BundleReader(writer.path).problems(), [])
+
+    def test_uppercase_text_source_sha_still_checks_prompt_closure(self) -> None:
+        writer = self.make_suite_bundle("suite-text-uppercase-hash-mismatch")
+        manifest_path = writer.path / "suite_manifest.json"
+        raw_manifest = json.loads(manifest_path.read_text())
+        for item in raw_manifest["items"]:
+            if item["item_id"] == "mock_item_003":
+                item["source"]["source_sha256"] = sha256_hex("unrelated source").upper()
+                break
+        rewrite_suite_manifest_and_hashes(writer, raw_manifest)
+
+        problems = BundleReader(writer.path).problems()
+
+        self.assertTrue(
+            any("prompt.token_ids_sha256 mismatch for text manifest" in p for p in problems),
+            problems,
+        )
+
+    def test_strict_suite_emitted_token_ids_length_mismatch_is_problem(self) -> None:
+        writer = self.make_suite_bundle("suite-emitted-token-ids-mismatch")
+        output_path = writer.path / "outputs" / "suite_items.jsonl"
+        records = read_jsonl(output_path)
+        records[0]["emitted_token_ids"] = [1]
+        write_jsonl(output_path, records)
+
+        problems = _strict_emitted_token_ids_problems(BundleReader(writer.path))
+
+        self.assertTrue(
+            any("emitted_token_ids length 1 does not equal emitted_tokens 3" in p for p in problems),
+            problems,
+        )
+
+    def test_strict_suite_without_emitted_token_ids_is_unchanged(self) -> None:
+        writer = self.make_suite_bundle("suite-no-emitted-token-ids")
+        output_path = writer.path / "outputs" / "suite_items.jsonl"
+        records = read_jsonl(output_path)
+        for record in records:
+            record.pop("emitted_token_ids", None)
+        write_jsonl(output_path, records)
+
+        self.assertEqual(_strict_emitted_token_ids_problems(BundleReader(writer.path)), [])
+
+    def test_strict_single_prompt_emitted_token_ids_length_mismatch_is_problem(self) -> None:
+        writer = self.make_bundle("single-emitted-token-ids-mismatch")
+        writer.write_metadata(
+            {
+                "workload_provenance": {
+                    "response": {"emitted_token_ids": [1, 2]},
+                    "output_policy": {"emitted_tokens": 3},
+                }
+            }
+        )
+
+        problems = _strict_emitted_token_ids_problems(BundleReader(writer.path))
+
+        self.assertTrue(
+            any("metadata.workload_provenance.response.emitted_token_ids length 2" in p for p in problems),
+            problems,
+        )
+
+    def test_strict_budgeted_text_prompt_count_mismatch_is_problem(self) -> None:
+        writer = self.make_suite_bundle("suite-budgeted-prompt-mismatch")
+        manifest_path = writer.path / "suite_manifest.json"
+        raw_manifest = json.loads(manifest_path.read_text())
+        raw_manifest["suite_id"] = "jw_mixed_v1"
+        raw_manifest["suite_profile"] = "jw_mixed_v1_common_512_256"
+        raw_manifest["source_manifest"]["source_id"] = "jw_mixed_v1:test"
+        for item in raw_manifest["items"]:
+            if item["item_id"] == "mock_item_003":
+                item["shape"]["planned_prompt_tokens"] = 99
+                item["source"]["source_sha256"] = sha256_hex(item["source"]["prompt_text"])
+                break
+        rewrite_suite_manifest_and_hashes(writer, raw_manifest)
+
+        problems = _strict_budgeted_suite_prompt_count_problems(BundleReader(writer.path))
+
+        self.assertTrue(
+            any(
+                "planned_prompt_tokens_mismatch" in problem
+                and "planned_prompt_tokens 99" in problem
+                and "realized_prompt_tokens 5" in problem
+                for problem in problems
+            ),
+            problems,
+        )
+
+    def test_strict_affine_text_prompt_count_mismatch_is_ignored(self) -> None:
+        writer = self.make_suite_bundle("suite-affine-prompt-mismatch")
+        manifest_path = writer.path / "suite_manifest.json"
+        raw_manifest = json.loads(manifest_path.read_text())
+        raw_manifest["suite_id"] = "affine_smoke_v1"
+        raw_manifest["suite_profile"] = "affine_mod_ladder_v1_smoke"
+        raw_manifest["source_manifest"]["source_id"] = "affine_mod_ladder_v1"
+        for item in raw_manifest["items"]:
+            if item["item_id"] == "mock_item_003":
+                item["shape"]["planned_prompt_tokens"] = 99
+                item["source"]["source_sha256"] = sha256_hex(item["source"]["prompt_text"])
+                break
+        rewrite_suite_manifest_and_hashes(writer, raw_manifest)
+
+        self.assertEqual(
+            _strict_budgeted_suite_prompt_count_problems(BundleReader(writer.path)),
+            [],
         )
 
     def test_suite_hash_mismatches_are_validation_errors(self) -> None:
