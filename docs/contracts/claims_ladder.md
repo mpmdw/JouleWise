@@ -30,6 +30,9 @@ but later reader-facing summaries must use the current level.
   the runtime stop reason, and the output policy label. If the denominator
   comes from config fallback rather than runtime observation, the claim
   downgrades to L0 capability language.
+- (2026-07-09) Token-denominated metrics and cross-tokenizer comparison
+  language follow `docs/contracts/token_normalization.md`, including its
+  stack-identity table, across all surfaces this ladder governs.
 
 ## Ladder
 

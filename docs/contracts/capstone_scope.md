@@ -136,6 +136,13 @@ Cut triggers:
 
 ## Single-Unit Limitation Language
 
+Stack-identity fields for captions and result tables follow
+`docs/contracts/token_normalization.md` (2026-07-09).
+
+2026-07-09 pointer: this caption template composes with the full
+`docs/contracts/token_normalization.md` stack-identity field table; do not
+treat the bracketed slots below as a shorter replacement for that table.
+
 Use this language, adapted with the concrete stack fields, in final-report
 figure captions and result tables:
 
