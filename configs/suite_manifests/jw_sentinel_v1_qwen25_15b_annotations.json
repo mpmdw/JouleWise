@@ -1,49 +1,6 @@
 {
   "items": {
-    "4d4805cc1d8bc2030500415fc4b31f4a349a9df790d398653aa2d2d90f6b55f8": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "bos_present": false,
-      "coarse_units": 24,
-      "condition_id": "code_like",
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 35,
-      "generator_id": "jw.sentinel.code_like",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "indent": {
-          "source": "pinned",
-          "value": "    "
-        },
-        "n_complete_functions": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "n_imports": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 2
-        }
-      },
-      "prompt_source": "token_ids",
-      "realized_token_count": 512,
-      "seed": 11507449710495719214,
-      "text_sha256": null,
-      "token_accounting": "encode_add_special_false",
-      "token_ids_sha256": "1ed32d811a0fc6c557d3aa6c4a13234df25ac98f674810e07a6e8d62d0de6b2a",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "6177e1c5923aa21c2e9fa3f5cbdba6ed7312bb8287db71498a817bbcf9385aae": {
+    "4b8d2d162be852b30dc0b0f50867ee3457c97465f93db0223b8d3fb5c7f2e659": {
       "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
       "bos_present": false,
       "chars_per_token": 1.369140625,
@@ -74,9 +31,9 @@
       "text_sha256": null,
       "token_accounting": "encode_add_special_false",
       "token_ids_sha256": "4219b12b97d979933800acfa0b88fbe03e6353389fddae20c57b9689c622d259",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     },
-    "801e08027f07018c75a850c27637f075ed8d96332cebf02de06c24d6f12865fa": {
+    "4dc943b03590247ba5744d2ab0bdc4a8bcd424d03393cde760f7d978705843f6": {
       "bos_present": false,
       "condition_id": "random_token",
       "drbg": "sha256-ctr-v1",
@@ -103,9 +60,9 @@
       "seed": 8091458837222928171,
       "text_sha256": null,
       "token_ids_sha256": "849f769fc250e2c304c84e71c5480f0d8bcfefbadb533b8aeef81cb0563bfc5f",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     },
-    "81a91b809dde9bebe202c845ea307e2dbdb0de086091d7e521313778e9bd2180": {
+    "559b21d7be2749d8e0330a9a47879fdbcc43765fefaa4c1a449dc26e09238d74": {
       "bos_present": false,
       "condition_id": "repeated_seed",
       "drbg": "sha256-ctr-v1",
@@ -116,9 +73,9 @@
       "seed": 13547963404057522519,
       "text_sha256": null,
       "token_ids_sha256": "a551a0d85cebf6a486c88b3c4c39dcdd98323e690443443749bd8ef077e39868",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     },
-    "8d879e0b6a812a35b46d108ebfe0aa33c9963e9a202839129e246d9aa3cb9ac3": {
+    "e805e12c5601e7f3e833cddc78e1ed685ffa89b55dd5739c033996751df7e17c": {
       "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
       "bos_present": false,
       "coarse_units": 24,
@@ -160,25 +117,92 @@
       "text_sha256": null,
       "token_accounting": "encode_add_special_false",
       "token_ids_sha256": "2eb294dfaaddeab0ef017fcbc57d4a066a1ec02092b05188fcb9234d7311e174",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "ea71ac0bc32958a1d08c48155eac92f4197070b09ec23d4b19b15688ef703fa4": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "bos_present": false,
+      "coarse_units": 24,
+      "condition_id": "code_like",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 35,
+      "generator_id": "jw.sentinel.code_like",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "indent": {
+          "source": "pinned",
+          "value": "    "
+        },
+        "n_complete_functions": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "n_imports": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        }
+      },
+      "prompt_source": "token_ids",
+      "realized_token_count": 512,
+      "seed": 11507449710495719214,
+      "text_sha256": null,
+      "token_accounting": "encode_add_special_false",
+      "token_ids_sha256": "1ed32d811a0fc6c557d3aa6c4a13234df25ac98f674810e07a6e8d62d0de6b2a",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     }
   },
   "source_manifest": {
-    "source_id": "jw_mixed_v1:tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c",
-    "subset_sha256": "da94e82a5cb4f94a83b487b968f5c1b0dced3ecf8f9c71f23951d1702b16feb9",
-    "tokenizer_files_sha256": "18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c",
-    "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+    "source_id": "jw_mixed_v1:tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6",
+    "subset_sha256": "85b8e80cd29e2bd949ffb4c3ae2a3e54cae78f3df1e05f9ada9a65636e5bf19d",
+    "tokenizer_files_sha256": "7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6",
+    "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
   },
   "suite": "jw_mixed_v1_sentinel",
   "tokenizer": {
     "files": [
       {
+        "filename": "added_tokens.json",
+        "sha256": "58b54bbe36fc752f79a24a271ef66a0a0830054b4dfad94bde757d851968060b"
+      },
+      {
+        "filename": "chat_template.jinja",
+        "status": "absent"
+      },
+      {
+        "filename": "chat_template.json",
+        "status": "absent"
+      },
+      {
         "filename": "merges.txt",
         "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
       },
       {
+        "filename": "special_tokens_map.json",
+        "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd"
+      },
+      {
+        "filename": "spiece.model",
+        "status": "absent"
+      },
+      {
         "filename": "tokenizer.json",
         "sha256": "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf"
+      },
+      {
+        "filename": "tokenizer.model",
+        "status": "absent"
       },
       {
         "filename": "tokenizer_config.json",
@@ -189,7 +213,7 @@
         "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
       }
     ],
-    "files_sha256": "18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c",
-    "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+    "files_sha256": "7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6",
+    "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
   }
 }

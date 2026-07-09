@@ -14,10 +14,10 @@ import hashlib
 import itertools
 import json
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeAlias
 
 from joulewise.provenance import prompt_token_ids_sha256, sha256_hex
 from joulewise.suite import SUITE_SCHEMA_VERSION, SuiteManifest
@@ -178,25 +178,53 @@ def _assert_bank_hash() -> None:
         raise AssertionError(f"jw_mixed_v1 BANK_HASH constant is stale ({BANK_HASH} != {actual})")
 
 
-def canonical_tokenizer_manifest(files: Sequence[tuple[str, str]]) -> list[dict[str, str]]:
-    rows = [{"filename": name, "sha256": digest} for name, digest in sorted(files)]
+TokenizerManifestRow: TypeAlias = Mapping[str, str] | tuple[str, str]
+
+
+def _canonical_tokenizer_row(row: TokenizerManifestRow) -> dict[str, str]:
+    if isinstance(row, Mapping):
+        name = row.get("filename")
+        status = row.get("status")
+        digest = row.get("sha256")
+    else:
+        name, digest = row
+        status = None
+    if not name:
+        raise ValueError("tokenizer_manifest rows require filename")
+    if status is None:
+        status = "present"
+    if status == "absent":
+        if digest is not None:
+            raise ValueError("tokenizer_manifest absent rows must not include sha256")
+        return {"filename": name, "status": "absent"}
+    if status != "present":
+        raise ValueError("tokenizer_manifest status must be present or absent")
+    if digest is None:
+        raise ValueError("tokenizer_manifest present rows require sha256")
+    if len(digest) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in digest):
+        raise ValueError("tokenizer_manifest sha256 values must be 64 hex characters")
+    return {"filename": name, "sha256": digest.lower()}
+
+
+def canonical_tokenizer_manifest(files: Sequence[TokenizerManifestRow]) -> list[dict[str, str]]:
+    rows = sorted(
+        (_canonical_tokenizer_row(row) for row in files),
+        key=lambda row: row["filename"],
+    )
     if not rows:
         raise ValueError("tokenizer_manifest must contain at least one file row")
-    for row in rows:
-        digest = row["sha256"]
-        if len(digest) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in digest):
-            raise ValueError("tokenizer_manifest sha256 values must be 64 hex characters")
-        row["sha256"] = digest.lower()
+    if not any("sha256" in row for row in rows):
+        raise ValueError("tokenizer_manifest must contain at least one present file row")
     return rows
 
 
-def tokenizer_manifest_sha256(files: Sequence[tuple[str, str]]) -> str:
+def tokenizer_manifest_sha256(files: Sequence[TokenizerManifestRow]) -> str:
     rows = canonical_tokenizer_manifest(files)
     payload = json.dumps(rows, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def tokenizer_id_from_manifest(files: Sequence[tuple[str, str]]) -> str:
+def tokenizer_id_from_manifest(files: Sequence[TokenizerManifestRow]) -> str:
     """Return the B7 canonical tokenizer id from per-file sha256 entries."""
 
     return "tokfiles_" + tokenizer_manifest_sha256(files)
@@ -210,7 +238,7 @@ FAKE_TOKENIZER_ID = tokenizer_id_from_manifest(FAKE_TOKENIZER_MANIFEST)
 
 
 def tokenizer_id_for(
-    tokenizer_manifest: Sequence[tuple[str, str]] | None = None,
+    tokenizer_manifest: Sequence[TokenizerManifestRow] | None = None,
     tokenizer_id: str | None = None,
 ) -> str:
     if tokenizer_manifest is None:
@@ -1444,7 +1472,7 @@ def _write_sidecar(path: str | Path, annotations: dict[str, Any]) -> None:
 
 
 def _tokenizer_audit(
-    tokenizer_manifest: Sequence[tuple[str, str]] | None,
+    tokenizer_manifest: Sequence[TokenizerManifestRow] | None,
     tokenizer_id: str | None,
 ) -> tuple[str, list[dict[str, str]], str]:
     if tokenizer_manifest is None:
@@ -1464,7 +1492,7 @@ def _build_jw_mixed_suite(
     items_per_category: int = 6,
     prompt_budget: int = 512,
     output_budget: int = 256,
-    tokenizer_manifest: Sequence[tuple[str, str]] | None = None,
+    tokenizer_manifest: Sequence[TokenizerManifestRow] | None = None,
     tokenizer_id: str | None = None,
 ) -> ManifestBuild:
     tok_id, tokenizer_rows, tokenizer_files_hash = _tokenizer_audit(
@@ -1560,7 +1588,7 @@ def _build_sentinel_suite(
     *,
     prompt_budget: int = 512,
     output_budget: int = 256,
-    tokenizer_manifest: Sequence[tuple[str, str]] | None = None,
+    tokenizer_manifest: Sequence[TokenizerManifestRow] | None = None,
     tokenizer_id: str | None = None,
 ) -> ManifestBuild:
     tok_id, tokenizer_rows, tokenizer_files_hash = _tokenizer_audit(
