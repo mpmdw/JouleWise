@@ -20,8 +20,7 @@ against duplicated session narrative).
   (PASS-conditional; all conditions applied).
 - Outcome: 8 confirmed blocker clusters; claim-surface corrections
   landed same session (README, PROJECT_STATUS, RUN_STATE, milestones,
-  AGENT_PLAN, risk register, 2026-07-06 addendum); 15 follow-up queue
-  rows; D-060 PROPOSED (awaiting Ed) + D-061/D-062/D-063 accepted;
+  AGENT_PLAN, risk register, 2026-07-06 addendum); 14 follow-up queue rows (+ NV-GATE-2 additions to P2-005); D-060 PROPOSED (awaiting Ed) + D-061/D-062/D-063 accepted;
   R-018 registered.
 
 ## Session mechanics / evidence

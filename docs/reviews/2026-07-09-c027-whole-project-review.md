@@ -179,8 +179,10 @@ that was checked.
    "every claim auditable"; decision-count claim de-volatilized).
 7. RUN_STATE: both next-action blocks replaced by one restart pointer
    (queue is the only ordering authority; current [AGENT] state named
-   honestly: no unambiguously READY row pending queue repair).
-8. Append-only addendum to `docs/run_reports/2026-07-06_first_real_mlx_run.md`
+   honestly: at review time no row was unambiguously READY; the same
+   session's queue repair then established the explicit order P2-040 ->
+   P2-038 -> P2-039 -> RPT-001 -> P2-042 -> P2-037).
+8. Append-only addendum to `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md`
    correcting the historical table's denominator labeling.
 9. Hailo `if-viable` remnants relabeled; milestones auth-gate row closed
    as of 2026-07-06; R-017 stale path fixed; RUN_STATE head-pointer

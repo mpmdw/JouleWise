@@ -12,7 +12,8 @@ be re-derived by a future agent gets an entry here.
   from the run report, and reference its ID (`D-NNN`) in the code review or doc
   that applies it.
 - Statuses: `accepted` (binding until revisited), `open` (criteria defined,
-  evidence pending), `superseded by D-NNN`.
+  evidence pending), `proposed` (recorded, awaiting Ed's ratification),
+  `superseded by D-NNN`.
 - Every entry must include Options Considered and Considerations. A decision
   without recorded alternatives is not auditable.
 - Revisit triggers are part of the contract: when a trigger fires, the decision
@@ -81,6 +82,10 @@ be re-derived by a future agent gets an entry here.
 | D-057 | Uncertainty terms: drift is a bound; stable claim-gate reason codes | accepted |
 | D-058 | Token-normalization and stack-identity contract adopted | accepted |
 | D-059 | Claims-lint mechanical enforcement in CI | accepted |
+| D-060 | Depth-before-breadth stop line | proposed |
+| D-061 | Review-layer evaluation rule v2 | accepted |
+| D-062 | Confirmatory sampling policy (fixed n, demotion) | accepted |
+| D-063 | Process architecture v2 (state kernel first) | accepted |
 
 ---
 
@@ -2649,6 +2654,12 @@ topped up.
 Consequences: P2-015 campaign sizing is derivable from the economics table
 (170-340 bundles); claim tooling must consume floor rows + error-budget
 fields per the analysis registry (D-053).
+
+Amendment (2026-07-09, C-027 sweep adjudication): 170 bundles is the
+minimum Window-A request/phase subset; 180-340 is the total campaign
+including the required Window-B revalidation cell (economics table,
+`docs/phase_2/detection_floor.md`). Prose citing either number must name
+which scope it means.
 
 ## D-055: Research-question registry is the canonical live index
 

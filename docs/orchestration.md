@@ -155,9 +155,17 @@ Each fact has exactly one home; everything else points at it:
 Instrumentation ledgers close the loop on the process itself:
 
 - **Per-layer yield:** every review layer's unique catches are
-  attributed and tallied per session. A layer with zero unique catches
-  over two sessions is dropped by its own evidence rule — one (a
-  default Opus review lens) already has been.
+  attributed and tallied per session under D-061 (C-027; replaces the
+  earlier two-zero-sessions auto-drop, which the integration-review
+  zero/zero/five sequence falsified): applicability is decided by
+  PRE-DECLARED mechanical predicates; outcomes are classified
+  accepted-unique-defect / duplicate / clean-verification /
+  false-positive-suppression (suppression is not a catch); severity
+  weights are fixed before the session; three applicable exposures
+  TRIGGER an expected-loss review decision, never automatic deletion;
+  safety/final-head/integration layers are never auto-dropped on
+  zero-defect streaks. (One layer, the default Opus review lens, was
+  dropped under the old rule before D-061.)
 - **Delegation calibration:** every delegated unit gets a row — task
   altitude (pinned-spec / design-freedom / judgment-call), outcome
   (assigned by the lead after the gate, never self-labeled), catches,

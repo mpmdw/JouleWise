@@ -8,7 +8,7 @@ are provided for anyone who wants the full evidence trail.
 - Last updated: 2026-07-09 (C-027 whole-project council review with the
   new Codex model gpt-5.6-sol: claim-surface corrections landed —
   token-metric bases, D-053 wording, single-session CV framing — plus
-  fifteen adjudicated follow-up queue rows and four decisions
+  fourteen adjudicated follow-up queue rows (plus NV-GATE-2 additions to P2-005) and four decisions
   (D-060 proposed, D-061..D-063 accepted); full record in
   `docs/reviews/2026-07-09-c027-whole-project-review.md`. Earlier same
   day: spec-fleshing waves 1+2 (C-024/C-025, PRs #29..#38, D-052..D-059),
@@ -91,7 +91,9 @@ phase checklist matrix rows for per-item authority.
 ## Previous Update (2026-07-07, fifth update) — 30-second read
 
 **The instrument grew four capabilities in one session and is now
-campaign-ready.** Five parallel work streams landed (PRs #2-#6):
+campaign-ready.** *(Historical claim; C-027 (2026-07-09) supersedes the
+gating: execution is conditioned on P0-003 backup, P2-038, P2-039, and
+P2-015-SMOKE.)* Five parallel work streams landed (PRs #2-#6):
 (1) **statistical uncertainty** — every multi-repetition experiment now
 carries per-metric 95% confidence intervals with outlier detection and
 explicit below-protocol flags, re-derivable byte-identically from the
@@ -116,8 +118,9 @@ baseline matrix on a quiet machine.
 **A flagship-class model is now benchmarked.** Qwen3.5-122B (Feb 2026
 generation, 122B-parameter mixture-of-experts with 10B active, a
 reasoning model) ran through the identical harness and workload on the
-M3 Max: **~304 J gross per 512-token request (~583 mJ per generated
-output token, idle-subtracted basis) at 46 tokens/s, with a gross-energy
+M3 Max: **~304.0 J gross per 512-token request (~298.7 J
+idle-subtracted; ~583 mJ per generated output token, idle-subtracted
+basis) at 46 tokens/s, with a gross-energy
 sample CV of 0.3% across three sequential repetitions in one warm-cache
 session** — alongside the earlier 1.5B model's ~47.2 J gross (~87
 mJ/output-token idle-subtracted at 257 tok/s). *(Metric bases and CV
@@ -250,8 +253,9 @@ Complete so far (all verifiable in the repository):
   subtraction, measurement boundaries, clock synchronization, statistical
   protocol - highlights below).
 - Evidence-shaped plans for every phase, a design-decision log (D-001
-  through D-059 to date; the log itself is the count authority, and most
-  entries record the alternatives considered), a risk register with
+  through D-063 to date - D-060 proposed, the rest accepted; the log
+  itself is the count authority, and most entries record the
+  alternatives considered), a risk register with
   an explicit descope ladder, and example configs for the Mac and mock
   targets.
 - The complete Mac vertical slice: the MLX runtime adapter (2G), the
@@ -584,7 +588,7 @@ model) can reconstruct why any decision was made.
 
 **The paper trail (each claim traceable to its evidence home; the
 external re-reduction demonstration is still pending).** Each fact has one home:
-`docs/decision_log.md` — the binding design decisions (the log is the count authority), each with
+`docs/decision_log.md` — the binding design decisions (the log is the count authority), most recording
 alternatives considered and revisit conditions; `docs/council_log.md`
 — the deliberation record; `docs/stream_logs/` —
 per-stream decision ledgers committed *with* the code they justify

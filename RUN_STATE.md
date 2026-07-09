@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-09 (C-027 whole-project council review with
 gpt-5.6-sol: claim-surface corrections in README/PROJECT_STATUS/this
-file, 15 adjudicated follow-up queue rows, D-060 proposed +
+file, 14 new queue rows plus NV-GATE-2 additions to P2-005, D-060 proposed +
 D-061..D-063 accepted; record in
 `docs/reviews/2026-07-09-c027-whole-project-review.md`. Earlier same
 day: Codex MCP bridge hardening; P2-034/C-026, C-025 wave 2, C-024
@@ -81,7 +81,9 @@ live-only defects caught and fixed at the lead gate. Post-merge
 integration review: zero cross-stream defects.
 
 **CP-5 RESUMED AND CLEARED (2026-07-09): pre-campaign review COMPLETE;
-Window A is GO behind two queued campaign-time steps.** Seven PRs merged
+Window A is GO in the CP-5 software sense — C-027 additionally
+conditions execution on P0-003 backup, P2-038, P2-039, and
+P2-015-SMOKE.** Seven PRs merged
 (#22..#28): D-033 strict legacy-bypass close, envelope-gate script,
 campaign-runner prompt-hash check, bundle-pack tooling, tokenizer
 identity widening + manifest regen, capture hardening (output token IDs,
@@ -104,8 +106,9 @@ queue owns ordering (C-027):**
      (reducer/gate fixes incl. zero-window strict), P2-038 (production
      uncertainty evidence path), P2-039 (frozen floor artifact +
      guard factor), then RPT-001 (report skeleton + vertical slice),
-     P2-037 (contrast/claim engine — required before any P2-006
-     interpretation). P2-022/P2-023 remain BLOCKED post-2M per D-041 —
+     P2-042 (frozen analysis manifest) and only then P2-037
+     (contrast/claim engine, which consumes it — required before any
+     P2-006 interpretation). P2-022/P2-023 remain BLOCKED post-2M per D-041 —
      do not start them.
    - [QUIET-MAC] Window A (C-019 shakedown → P2-015-SMOKE → P2-015
      floors → P2-006) proceeds only after P2-038 + P2-039 land and the
@@ -203,9 +206,11 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
-- `main` remains at the pushed post-PR-39 head. This user-directed bridge
-  hardening is an uncommitted working-tree change; no PR was opened and no
-  research stream worktree was created.
+- `main` remains at the pushed post-PR-39 head `529bffa`. Branch
+  `c027-council-review` carries the session's commits: the previously
+  uncommitted user-directed bridge hardening (1d7c415) plus the C-027
+  review record and corrections; the worktree is otherwise clean. PR
+  pending at write time.
 - Codex's own worktree `/Users/edr/.codex/worktrees/7fe2/JouleWise`
   still holds the ORIGINAL advisor-site commits (bf9ffc5..e6cf431);
   their content landed via PR #28 (D-051 renumber applied). Safe to
