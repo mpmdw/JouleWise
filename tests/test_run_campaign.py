@@ -930,6 +930,48 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(check["sidecar_path"], str(sidecar))
             self.assertIn("not valid JSON", check["problems"][0])
 
+    def test_affine_scorer_shaped_inferred_sidecar_is_not_applicable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            manifest = tmp_path / "affine_smoke_v1.json"
+            sidecar = tmp_path / "affine_smoke_v1_annotations.json"
+            config_dir.mkdir()
+            manifest.write_text(
+                (ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json").read_text(
+                    encoding="utf-8"
+                ),
+                encoding="utf-8",
+            )
+            sidecar.write_text(
+                json.dumps(
+                    {
+                        "annotations": [
+                            {
+                                "item_id": "affine_v1_L01_i00",
+                                "scorer_id": "affine_mod_ladder_v1/score_v1",
+                            }
+                        ],
+                        "schema_version": "affine_smoke_annotations.v1",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            write_suite_config(
+                config_dir, "suite.json", "suite-inferred-affine", suite_manifest=manifest
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check["status"], "not_applicable")
+            self.assertEqual(check["sidecar_path"], str(sidecar))
+            self.assertEqual(check["checked_items"], 0)
+
     def test_empty_object_inferred_prompt_hash_sidecar_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -954,12 +996,18 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("prompt_hash_check_error", result.stderr)
             self.assertIn(str(sidecar), result.stderr)
-            self.assertIn("items is not an object", result.stderr)
+            self.assertIn("ambiguous", result.stderr)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             check = rows[0]["members"][0]["prompt_hash_check"]
             self.assertEqual(check["status"], "error")
             self.assertEqual(check["sidecar_path"], str(sidecar))
-            self.assertEqual(check["problems"], ["generator sidecar items is not an object"])
+            self.assertEqual(
+                check["problems"],
+                [
+                    "inferred generator sidecar is ambiguous: "
+                    "missing prompt-hash items and no recognized other-type marker"
+                ],
+            )
 
     def test_absent_inferred_prompt_hash_sidecar_is_not_applicable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1064,6 +1112,43 @@ class RunCampaignTests(unittest.TestCase):
             check = member["prompt_hash_check"]
             self.assertEqual(check["status"], "error")
             self.assertEqual(check["checked_items"], 0)
+
+    def test_explicit_scorer_shaped_sidecar_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            sidecar = tmp_path / "affine_smoke_v1_annotations.json"
+            config_dir.mkdir()
+            sidecar.write_text(
+                json.dumps(
+                    {
+                        "annotations": [
+                            {
+                                "item_id": "affine_v1_L01_i00",
+                                "scorer_id": "affine_mod_ladder_v1/score_v1",
+                            }
+                        ],
+                        "schema_version": "affine_smoke_annotations.v1",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            write_suite_config(
+                config_dir, "suite.json", "suite-explicit-affine-sidecar", sidecar=sidecar
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("prompt_hash_check_error", result.stderr)
+            self.assertIn("generator sidecar items is not an object", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check["status"], "error")
+            self.assertEqual(check["sidecar_path"], str(sidecar))
+            self.assertEqual(check["problems"], ["generator sidecar items is not an object"])
 
     def test_prompt_hash_sidecar_pairing_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

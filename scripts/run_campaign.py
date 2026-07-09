@@ -52,6 +52,14 @@ STATUSES = (
     "dry_run",
 )
 ORDER_MANIFEST_NAME = "order_manifest.json"
+PROMPT_HASH_SIDECAR_SCHEMAS = frozenset(
+    {
+        "joulewise.prompt_hash_sidecar.v1",
+        "jw.prompt_hash_sidecar.v1",
+        "jw_prompt_hash_sidecar.v1",
+        "prompt_hash_sidecar.v1",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -565,11 +573,45 @@ def inferred_prompt_sidecar_path(config_path: Path, suite_manifest_ref: str | No
     return None
 
 
-def prompt_sidecar_path_for_config(info: ConfigInfo) -> Path | None:
-    explicit = resolve_sidecar_path(info.path, info.generator_sidecar_ref)
-    if explicit is not None:
-        return explicit
-    return inferred_prompt_sidecar_path(info.path, info.suite_manifest_ref)
+def _sidecar_schema_string(sidecar: dict[str, Any]) -> str | None:
+    for key in ("schema", "schema_version"):
+        value = sidecar.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _is_recognizable_other_sidecar(sidecar: dict[str, Any]) -> bool:
+    if "annotations" in sidecar:
+        return True
+    schema = _sidecar_schema_string(sidecar)
+    return schema is not None and schema not in PROMPT_HASH_SIDECAR_SCHEMAS
+
+
+def _classify_inferred_prompt_sidecar(sidecar_path: Path) -> PromptHashCheck | None:
+    sidecar_label = str(sidecar_path)
+    sidecar, sidecar_problem = _load_json_object(sidecar_path, "inferred generator sidecar")
+    if sidecar_problem is not None:
+        return PromptHashCheck("error", sidecar_label, problems=(sidecar_problem,))
+    assert sidecar is not None
+    if isinstance(sidecar.get("items"), dict):
+        return None
+    if "items" in sidecar:
+        return PromptHashCheck(
+            "error",
+            sidecar_label,
+            problems=("inferred generator sidecar items is not an object",),
+        )
+    if _is_recognizable_other_sidecar(sidecar):
+        return PromptHashCheck("not_applicable", sidecar_label)
+    return PromptHashCheck(
+        "error",
+        sidecar_label,
+        problems=(
+            "inferred generator sidecar is ambiguous: "
+            "missing prompt-hash items and no recognized other-type marker",
+        ),
+    )
 
 
 def _load_json_object(path: Path, label: str) -> tuple[dict[str, Any] | None, str | None]:
@@ -779,6 +821,19 @@ def check_prompt_hashes_for_bundle(bundle_dir: Path, sidecar_path: Path | None) 
     )
 
 
+def check_prompt_hashes_for_config_bundle(bundle_dir: Path, info: ConfigInfo) -> PromptHashCheck:
+    explicit = resolve_sidecar_path(info.path, info.generator_sidecar_ref)
+    if explicit is not None:
+        return check_prompt_hashes_for_bundle(bundle_dir, explicit)
+    inferred = inferred_prompt_sidecar_path(info.path, info.suite_manifest_ref)
+    if inferred is None:
+        return PromptHashCheck("not_applicable")
+    inferred_classification = _classify_inferred_prompt_sidecar(inferred)
+    if inferred_classification is not None:
+        return inferred_classification
+    return check_prompt_hashes_for_bundle(bundle_dir, inferred)
+
+
 def quality_flags(summary: dict[str, Any] | None) -> tuple[str, ...]:
     if not isinstance(summary, dict):
         return ()
@@ -818,10 +873,7 @@ def evaluate_member(
                 summary = parsed
         except (OSError, json.JSONDecodeError):
             summary = None
-    prompt_hash_check = check_prompt_hashes_for_bundle(
-        bundle_dir,
-        prompt_sidecar_path_for_config(info),
-    )
+    prompt_hash_check = check_prompt_hashes_for_config_bundle(bundle_dir, info)
     waiver = matching_waiver(
         waivers,
         bundle_id=bundle_dir.name,
