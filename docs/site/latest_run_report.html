@@ -26,218 +26,39 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#deliverable-check-0">Deliverable check (§0)</a>
-<a href="#what-landed-7-prs-all-merged">What landed (7 PRs, all merged)</a>
-<a href="#verification-evidence-lead-gates-none-delegated">Verification evidence (lead gates — none delegated)</a>
-<a href="#ed-s-four-part-answer">Ed&#x27;s four-part answer</a>
-<a href="#window-a-go-no-go-checklist">Window-A go/no-go checklist</a>
-<a href="#suite-next-packet-methodology-synthesis-dispositions">suite_next packet + methodology synthesis dispositions</a>
-<a href="#process-trace-appendix">Process trace appendix</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-09-cp5-resume-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-09-cp5-resume.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-09-cp5-resume.md · commit untracked + uncommitted"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-09-cp5-resume.md</span><span class="source-commit">commit untracked + uncommitted</span></span></div>
-    <h1>Run report — CP-5 resume: pre-campaign review completion (2026-07-09)</h1>
-<h2 id="deliverable-check-0">Deliverable check (§0)</h2>
-<p>The primary deliverable SHIPPED: CP-5 is cleared. All paused CP-5 work was
-gated and landed (PRs #23/#24/#25 + already-open #22 merged), the
-methodology synthesis and the suite_next specs packet were adjudicated,
-every accepted hardwareless pre-campaign change was IMPLEMENTED AND MERGED
-this same session (PRs #26/#27/#28), and Ed&#39;s four-part answer + Window-A
-go/no-go are recorded below. The stop card is cleared in this session&#39;s
-bookkeeping commit.</p>
-<h2 id="what-landed-7-prs-all-merged">What landed (7 PRs, all merged)</h2>
-<div class="table-scroll"><table>
-<thead>
-<tr>
-<th>PR</th>
-<th>Content</th>
-<th>Merge</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>#22</td>
-<td>P2-026: D-033 strict legacy-bypass close (frozen six-identity allowlist)</td>
-<td>5e12f11</td>
-</tr>
-<tr>
-<td>#23</td>
-<td>P2-010b: envelope-gate script (E1-E4 + E5 advisory, D-036/D-047) + CLI</td>
-<td>5b3a177</td>
-</tr>
-<tr>
-<td>#24</td>
-<td>P2-025: campaign-runner expected-vs-realized prompt-hash check</td>
-<td>725b8bf</td>
-</tr>
-<tr>
-<td>#25</td>
-<td>P2-027: bundle-pack publication tooling (pack + one-command verify)</td>
-<td>ac18f21</td>
-</tr>
-<tr>
-<td>#26</td>
-<td>P2-012 amendment: tokenizer identity widening + manifest regen</td>
-<td>1604f7d</td>
-</tr>
-<tr>
-<td>#27</td>
-<td>Capture hardening: output token IDs, fail-closed sampler pin, model hashing, hash-domain closure</td>
-<td>7666652</td>
-</tr>
-<tr>
-<td>#28</td>
-<td>Advisor status site + suite_next draft-spec packet (D-051)</td>
-<td>9f26e73</td>
-</tr>
-</tbody></table></div>
-<p>Suite: 734 (session start) → 822 OK (skipped=10) on final main, lead-run.</p>
-<h2 id="verification-evidence-lead-gates-none-delegated">Verification evidence (lead gates — none delegated)</h2>
-<ul>
-<li>Envelope gate live: real mock affine bundle → honest <code>envelope_failed[E1]</code>
-(mock emits stop_reason=length); wrong-profile → <code>bundle_refused [suite_id_mismatch]</code>; malformed/tampered → refused; exit codes 0/2/3.</li>
-<li>Hash check live: missing sidecar → error(2); real-sidecar pairing
-mismatch → named problems, error(2); classifier truth table live-verified
-(affine-scorer→not_applicable, unknown-future→error, {}→error,
-prompt-hash→checked).</li>
-<li>Bundle pack live: pack → verify(0) → byte tamper → verify(2); manifest
-tamper detected.</li>
-<li>Capture live (real MLX, Qwen2.5-1.5B, .venv): single-prompt + TWO full
-48-item jw_mixed suite runs (old manifests pre-merge, NEW regenerated
-manifests on final merged main) — all strict-valid; 48/48 hash-domain
-closures passed on the real tokenizer; token IDs on both paths
-(<code>tokens.jsonl.token_id</code>, <code>emitted_token_ids</code> == emitted count);
-model artifact identity (per-file sha256 + folded) captured; sampler
-<code>pinned: true</code> with zero false refusals on mlx-lm 0.31.3; environment
-<code>python_packages</code> records mlx 0.31.2 / mlx-lm 0.31.3 / transformers
-5.12.1 (see final-live section below for the post-merge run).</li>
-<li>Manifest regen: byte-identical double-regen (cmp==0 all four files);
-realized counts all exactly 512 on the real tokenizer; new effective
-shas 855be4e5 (mixed) / 0316283d (sentinel).</li>
-<li>Post-merge integration reviews: wave 1 (after #22-25) CLEAN with a full
-end-to-end mock campaign → strict → envelope-gate → pack → verify flow
-and a D-033 spoof probe that failed closed; wave 2 (after #26-28) —
-see below.</li>
-<li>CI green on every merged head; PR #27&#39;s first CI run FAILED on the merge
-ref (cross-branch fixture interaction) and was fixed test-side without
-weakening validation — a unique CI-layer catch.</li>
-</ul>
-<h2 id="ed-s-four-part-answer">Ed&#39;s four-part answer</h2>
-<p><strong>1. Queue fit (Mac-only reality, start collecting data).</strong> The queue top
-was already Mac-aligned and remains so; the synthesis confirmed rather than
-overturned it. Accepted adjustments (applied to TASK_QUEUE.md this
-session): the [AGENT] pre-Window-A preflight that the synthesis wanted is
-now DONE (output token IDs, sampler fail-closed, model hashing, hash
-closure, tokenizer widening — all merged); P2-015 gains the Window-B-start
-floor-revalidation cell and a real design-doc prep item; P2-019 gains the
-8192-prompt anchor as thesis-support scope (D-048 split predictions
-extrapolate otherwise); P2-020 gains an opportunistic Window-A-tail pilot
-note; P2-012&#39;s remaining scope shrank (manifest work done; the
-identification-core campaign remains).</p>
-<p><strong>2. Determinism verdict.</strong> Conditional GO → the conditions are now
-closed, except the two that are campaign-time by nature: P2-015&#39;s design
-doc (a paper artifact, next session) and the C-019 production-shaped
-shakedown (first minutes of Window A). Determinism is demonstrated, not
-asserted: byte-identical manifest regen, 48/48 realized-vs-manifest token
-closures on the real tokenizer, pinned greedy sampler recorded per bundle,
-model weight bytes hashed, runtime versions captured, and strict
-validation now enforces all of it post-hoc.</p>
-<p><strong>3. Capture changes (retrofit-impossible data, now captured).</strong> Output
-token IDs (forensics, drift audits, AP-5/AP-4/AP-6 identity), model
-artifact identity hashes, mlx/mlx-lm/transformers versions with
-present/absent records, realized-vs-planned prompt closure fatal for
-budgeted items. DEFERRED EXPLICITLY: cold-load/model-load energy capture —
-upcoming bundles answer STEADY-STATE inference only; C5-1.7 and any
-cold-start Q4 term are out of claim scope until a load-window capture
-lands (documented here; wording rides the claims ladder as-is since no
-cold-start claim row exists).</p>
-<p><strong>4. Askable questions (decomposition × hardness/length).</strong> The corpus
-after Windows A+B supports: detection floors + MDE per window class
-(P2-015, L1); per-profile Mac baselines and shape effects above floor
-(P2-006/AP-2, L2); prefill/decode asymmetry (L2 structural; short-prefill
-unresolvable); Q4 fixed+prompt+decode model with holdouts (P2-019/AP-1,
-L3 only if floors and holdouts pass); within-boundary rank stability
-(AP-3, L2); rail/DVFS phase signatures (L2 structural); context scaling to
-4096 — and to 8192 with the accepted anchor; token-shape sufficiency null
-(AP-4, L2 equivalence only if the 2% margin beats floor); content
-sensitivity at equal shape (AP-6, five ids-native conditions, L2);
-affine envelope validation (L1 now; AP-5 L2 after a full scored run);
-natural-EOS thinking-token inflation (pilot, L2). NOT askable from this
-corpus: cold-start/keep-warm (deferred capture), tokenizer fertility
-(needs FLORES-class source plumbing), anything cross-boundary.</p>
-<h2 id="window-a-go-no-go-checklist">Window-A go/no-go checklist</h2>
-<p>GO, gated on two campaign-time steps (both already queued):</p>
-<ol>
-<li>P2-015 detection-floor design doc (cells, n, UCB floor rule, Window-B
-revalidation cell) — [AGENT], half-day, BEFORE the quiet window.</li>
-<li>C-019 shakedown: ONE tiny production-shaped campaign-runner run →
-strict → reduce → backup, first thing in the window.
-Everything else on the synthesis&#39;s do-not-start list is closed and merged:
-output token IDs ✓, sampler fail-closed + version capture ✓, model weight
-hashing ✓, text-path realized-vs-manifest checks (runner #24 + runtime/
-validator #27) ✓, tokenizer identity widening + regen ✓, cold-load
-explicitly deferred ✓. Machine state discipline per C-007 lanes applies
-(no agent fleet during the quiet window).</li>
-</ol>
-<h2 id="suite-next-packet-methodology-synthesis-dispositions">suite_next packet + methodology synthesis dispositions</h2>
-<p>Recorded as CP-6 in <code>docs/stream_logs/2026-07-08-precampaign-review.md</code>.
-SN-001..005 accepted as DRAFT (packet landed via #28); promotion to D-NNN
-stays with the implementing sessions. The packet&#39;s checkpoint-metrics spec
-now cross-references the shipped <code>envelope_gate.v1</code> artifact.</p>
-<h2 id="process-trace-appendix">Process trace appendix</h2>
-<h3>Shape</h3>
-<p>Resumed per CP-5 exact sequence; lead-driven codex-run pipelines, zero
-orchestrator subagents, ~35 codex sessions total (implementation, fix
-rounds, 12+ review lenses/final passes, 2 integration reviews). Mid-session
-scope additions re-shaped explicitly: advisor-site landing (found as 4
-unpushed commits in codex&#39;s own worktree — codex had no push credentials)
-and the capture/genwide implementation fan-out (shared-file analysis put
-W1+W2+W3 in ONE worktree; genwide disjoint parallel).</p>
-<h3>Catches by layer (unique)</h3>
-<ul>
-<li>Codex final-head passes: 3 BLOCKERs + 7 SHOULD-FIX on heads that had
-survived pre-stop lens+fix rounds and the lead gate (negative token
-counts reaching gate math; inferred-sidecar silent bypass; missing
-source_manifest acceptance; README↔manifest consistency; dup entries;
-copy race; D-050 collision).</li>
-<li>Codex lens rounds (wave 2): validator/runtime mirror gaps
-(emitted_token_ids length, budgeted planned-count), case-sensitive sha
-predicates, offline-fallback flattening/detectability.</li>
-<li>Lead live gates: adjudicated mock-E1-fail as honest (no false fix);
-classifier truth table; site regenerated with real renderer after
-sandbox fallback; everything else confirmed clean.</li>
-<li>CI merge-ref: the ONLY layer that could see the #23×#27 fixture
-interaction (branches individually green). Unique catch.</li>
-<li>Prompt-defect (lead): the first inferred-sidecar fail-closed pin caused
-the affine scorer-sidecar regression; caught next round, refixed via
-type discrimination. Logged as prompt-defect, not model-defect.</li>
-</ul>
-<h3>Delegation calibration (summary)</h3>
-<p>~35 codex units: implementation clean-on-first-gate 4/5 streams (capture
-needed the merge-interaction fix — cross-branch, not implementer error);
-review layers produced 16+ unique accepted findings; zero units required
-lead rework beyond adjudication; 1 prompt-defect (above). Fresh-eyes
-final-head passes and CI merge-ref both justified their existence with
-unique catches; no layer produced zero catches this session.</p>
-<h3>Deliberations</h3>
-<ul>
-<li>Mock-bundle E1 failure: argued honest-vs-defect; adjudicated honest
-(mock ≠ science bundle; E1 exists to catch exactly this on real runs).</li>
-<li>Inferred-sidecar semantics: fail-closed vs type-tolerant — resolved as
-type-discriminating allowlist (unknown-without-items fails closed).</li>
-<li>suite_prompt_plan_class substring heuristic accepted for now; an
-explicit manifest plan-class field is the eventual home (noted for the
-sequencing spec&#39;s next revision).</li>
-</ul>
-<h3>Interventions</h3>
-<p>None — zero wedged/stalled codex sessions across ~35 (codex-run watchdog
-shape held; one npx-marked hang inside a sandbox was self-reported by the
-session and handled lead-side).</p>
-<h3>Yield + spend</h3>
-<p>Session output: 7 merged PRs, 88 net new tests, 2 live MLX suite gates,
-CP-5 cleared, specs packet landed, queue re-ranked. Codex spend:
-~35 sessions (near-free per economics doctrine). Lead context: the scarce
-resource — consumed mainly by diff gates and live verification, per
-doctrine.</p>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><span class="muted">No h2 sections found.</span></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-09-scientific-rigor-review-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-09-scientific-rigor-review.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-09-scientific-rigor-review.md · commit untracked + uncommitted"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-09-scientific-rigor-review.md</span><span class="source-commit">commit untracked + uncommitted</span></span></div>
+    <h1>Run Report — Scientific-Rigor Review Session (2026-07-09, C-023)</h1>
+<p>Review-only session; no code changed, no tests affected (suite untouched
+at 822 from <code>RUN_STATE.md</code> Current Verification).</p>
+<p><strong>Primary deliverable (user ask):</strong> an in-depth cross-model analysis of
+the scientific usefulness and rigor of the measurement suite and
+benchmark — steelman of methodology, scope, and objectives against the
+full research question bank, discussed with gpt-5.5 — ending in a
+confidence verdict at the Stanford-PhD-EE-advisor bar. <strong>SHIPPED:</strong> the
+full adjudicated record, including verbatim outputs of all four review
+lenses and the discussion round, is
+<code>docs/reviews/2026-07-09-scientific-rigor-review.md</code>; the council entry
+is C-023 in <code>docs/council_log.md</code>.</p>
+<p><strong>Verdict:</strong> strong provisional today; advisor-defensible once a named
+all-software artifact list lands (error budget/P2-015 combined spec,
+analysis registry + multiplicity policy, canonical RQ registry + claims
+linter, frozen capstone headline, contrast-level statistics amendment,
+ordering executability, token-normalization contract). Every
+blocker-class finding is closable without hardware.</p>
+<p><strong>Process trace:</strong> shape = 4 parallel fresh gpt-5.5-high read-only
+lenses (codex-run background protocol, zero stalls) + independent lead
+read of the bank/contracts + 1 bidirectional discussion round that
+converged (notable: the discussion round overturned one lead-accepted
+blocker — C5-1.1 is already contract-capped — and improved the work-plan
+order). Catches, layer yields, and dissents: C-023 entry. Skill-usage
+rows appended to the global skill-usage log.</p>
+<p><strong>Next action:</strong> user-led planning session to turn the review&#39;s
+recommended pre-hardware work order into queue items (specs/plans for
+all no-hardware pieces so hardware plugs in at the end). Queue was
+deliberately NOT re-ranked this session.</p>
 
 
   </div>
@@ -246,7 +67,7 @@ doctrine.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-09-cp5-resume.md · commit untracked + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-09-scientific-rigor-review.md · commit untracked + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

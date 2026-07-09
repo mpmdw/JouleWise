@@ -97,7 +97,9 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 ## Session History (pointers only — run reports own the narrative)
 
 - 2026-07-09 scientific-rigor review of suite/benchmark/question bank
-  (C-023; review-only): `docs/reviews/2026-07-09-scientific-rigor-review.md`
+  (C-023; review-only; full record in
+  `docs/reviews/2026-07-09-scientific-rigor-review.md`):
+  `docs/run_reports/2026-07-09-scientific-rigor-review.md`
 - 2026-07-09 CP-5 resume: pre-campaign review completed, stop card
   cleared, PRs #22..#28 merged, Window-A GO
   (C-022): `docs/run_reports/2026-07-09-cp5-resume.md`
