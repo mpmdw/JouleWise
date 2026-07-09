@@ -326,6 +326,10 @@ def _strict_problems(reader: BundleReader) -> list[str]:
 
 _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
     "claim_eligibility",
+    # P2-040 FIX-2: metric-specific request gates are additive over pre-0.3.0
+    # summaries whose claim_eligibility carried only the deprecated alias.
+    "claim_eligibility.gross_request",
+    "claim_eligibility.idle_subtracted_request",
     "energy_bound_terms_j",
     "energy_uncertainty_status",
     "energy_variance_terms_j2",

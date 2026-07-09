@@ -420,7 +420,40 @@ def _claim_eligibility(
     curve: list[TracePoint],
     measured_window: Window,
     request_bound_terms_j: dict[str, float | None],
+    idle_baseline: IdleBaseline | None,
 ) -> dict[str, Any]:
+    # P2-040 FIX-2 (STA-5): metric-specific request gates. ``gross_request``
+    # never requires idle/drift evidence; ``idle_subtracted_request`` requires
+    # idle baseline plus a recorded drift bound. ``request`` remains the
+    # deprecated schema-0.1 alias with its original idle-subtracted meaning.
+    gross_request = _window_claim_eligibility(
+        curve,
+        metadata,
+        measured_window,
+        cadence_ratio_min=REQUEST_WINDOW_CADENCE_RATIO_MIN,
+        require_sample_count=False,
+        require_drift=False,
+        require_cooldown=True,
+        bound_terms_j=request_bound_terms_j,
+    )
+    gross_request["metric_name"] = "gross_energy_j"
+    gross_request["window_class"] = "gross_request"
+
+    idle_subtracted_request = _window_claim_eligibility(
+        curve,
+        metadata,
+        measured_window,
+        cadence_ratio_min=REQUEST_WINDOW_CADENCE_RATIO_MIN,
+        require_sample_count=False,
+        require_drift=True,
+        require_cooldown=True,
+        require_idle_baseline=True,
+        idle_baseline=idle_baseline,
+        bound_terms_j=request_bound_terms_j,
+    )
+    idle_subtracted_request["metric_name"] = "idle_subtracted_energy_j"
+    idle_subtracted_request["window_class"] = "idle_subtracted_request"
+
     result: dict[str, Any] = {
         "request": _window_claim_eligibility(
             curve,
@@ -429,8 +462,11 @@ def _claim_eligibility(
             cadence_ratio_min=REQUEST_WINDOW_CADENCE_RATIO_MIN,
             require_sample_count=False,
             require_drift=True,
+            require_cooldown=True,
             bound_terms_j=request_bound_terms_j,
-        )
+        ),
+        "gross_request": gross_request,
+        "idle_subtracted_request": idle_subtracted_request,
     }
 
     phase_windows = reader.phase_windows()
@@ -528,6 +564,9 @@ def _window_claim_eligibility(
     cadence_ratio_min: float,
     require_sample_count: bool,
     require_drift: bool,
+    require_cooldown: bool = False,
+    require_idle_baseline: bool = False,
+    idle_baseline: IdleBaseline | None = None,
     bound_terms_j: dict[str, float | None] | None = None,
 ) -> dict[str, Any]:
     reasons: list[str] = []
@@ -569,7 +608,12 @@ def _window_claim_eligibility(
     )
     if require_drift and drift_bound_j is None:
         reasons.append("drift_term_unknown")
-    if require_drift and _cooldown_cap_hit(metadata) is True:
+    if require_idle_baseline and idle_baseline is None:
+        # P2-040 FIX-2 (D-057 additive code): an idle-subtracted metric was
+        # requested but no valid idle baseline exists.
+        reasons.append("idle_baseline_unrecorded")
+    # Request-level quality exclusion, decoupled from the idle-drift switch.
+    if require_cooldown and _cooldown_cap_hit(metadata) is True:
         reasons.append("cooldown_cap_hit")
 
     return {
@@ -793,7 +837,7 @@ def _reduce(
     energy_variance_terms_j2 = _energy_variance_terms_j2(idle_baseline, window)
     energy_bound_terms_j = _energy_bound_terms_j(metadata, curve, window)
     claim_eligibility = _claim_eligibility(
-        reader, metadata, curve, window, energy_bound_terms_j
+        reader, metadata, curve, window, energy_bound_terms_j, idle_baseline
     )
 
     quality = MeasurementQuality(

@@ -235,12 +235,19 @@ class ReducerPropagationTests(ReducerUncertaintyTestCase):
 
                 summary = reduce_module.reduce_bundle(builder.path)
 
-                request = (summary.claim_eligibility or {})["request"]
+                gates = summary.claim_eligibility or {}
                 self.assertIsNone(
                     (summary.energy_bound_terms_j or {})["E_drift_bound_j"]
                 )
-                self.assertFalse(request["eligible"])
-                self.assertEqual(request["reasons"], ["drift_term_unknown"])
+                self.assertFalse(gates["request"]["eligible"])
+                self.assertEqual(gates["request"]["reasons"], ["drift_term_unknown"])
+                self.assertFalse(gates["idle_subtracted_request"]["eligible"])
+                self.assertEqual(
+                    gates["idle_subtracted_request"]["reasons"],
+                    ["drift_term_unknown"],
+                )
+                # Unsupported drift aliases do not affect the gross gate.
+                self.assertTrue(gates["gross_request"]["eligible"])
 
 
 class ClaimGateTests(ReducerUncertaintyTestCase):
@@ -264,6 +271,31 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
         self.assertFalse(window_entry["eligible"])
         self.assertIn("nonpositive_window_duration", window_entry["reasons"])
 
+    def test_gross_request_without_idle_model_passes_while_idle_subtracted_fails(self) -> None:
+        # P2-040 FIX-2 mutation test: valid cadence/clock, a recorded drift
+        # bound, but no idle baseline.
+        builder = self.builder()
+        builder.measured_window(0.0, 4.0)
+        builder.write_trace(constant_samples(0.0, 4.0, hz=1.0, power_w=8.0))
+        builder.write_metadata(idle=None, idle_drift_bound_w=0.1)
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        gates = summary.claim_eligibility or {}
+        self.assertTrue(gates["gross_request"]["eligible"])
+        self.assertEqual(gates["gross_request"]["reasons"], [])
+        self.assertEqual(gates["gross_request"]["metric_name"], "gross_energy_j")
+        self.assertEqual(gates["gross_request"]["window_class"], "gross_request")
+        self.assertFalse(gates["idle_subtracted_request"]["eligible"])
+        self.assertEqual(
+            gates["idle_subtracted_request"]["reasons"],
+            ["idle_baseline_unrecorded"],
+        )
+        self.assertEqual(
+            gates["idle_subtracted_request"]["metric_name"],
+            "idle_subtracted_energy_j",
+        )
+
     def test_request_window_at_cadence_and_clock_boundaries_is_eligible(self) -> None:
         builder = self.builder()
         builder.measured_window(0.0, 4.0)
@@ -272,6 +304,11 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
+        # Deprecated alias plus both P2-040 metric-specific entries.
+        for key in ("request", "gross_request", "idle_subtracted_request"):
+            entry = (summary.claim_eligibility or {})[key]
+            self.assertTrue(entry["eligible"], key)
+            self.assertEqual(entry["reasons"], [], key)
         request = (summary.claim_eligibility or {})["request"]
         self.assertTrue(request["eligible"])
         self.assertEqual(request["reasons"], [])
@@ -404,9 +441,16 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
-        request = (summary.claim_eligibility or {})["request"]
-        self.assertFalse(request["eligible"])
-        self.assertEqual(request["reasons"], ["drift_term_unknown"])
+        gates = summary.claim_eligibility or {}
+        self.assertFalse(gates["request"]["eligible"])
+        self.assertEqual(gates["request"]["reasons"], ["drift_term_unknown"])
+        self.assertFalse(gates["idle_subtracted_request"]["eligible"])
+        self.assertEqual(
+            gates["idle_subtracted_request"]["reasons"], ["drift_term_unknown"]
+        )
+        # Gross request energy needs no idle-drift evidence (P2-040 FIX-2).
+        self.assertTrue(gates["gross_request"]["eligible"])
+        self.assertEqual(gates["gross_request"]["reasons"], [])
         self.assertIsNone((summary.energy_bound_terms_j or {})["E_drift_bound_j"])
 
     def test_missing_bracketing_gap_records_no_cadence_ratio(self) -> None:
