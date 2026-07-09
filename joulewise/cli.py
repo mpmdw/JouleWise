@@ -55,6 +55,36 @@ from joulewise.validation import finite_float
 _PROMPT_TOKEN_IDS_HASH_DOMAIN = PROMPT_TOKEN_IDS_HASH_DOMAIN
 _SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN = SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN
 
+# The pre-D-033 corpus; frozen forever, never extended.
+_STRICT_LEGACY_BUNDLE_IDENTITIES = frozenset(
+    {
+        (
+            "example-mac-mlx-local__r1",
+            "ee80585a2f6cee6aa7e12eb83c318fd88a934be02d5fa2fb2eb7509630640fd5",
+        ),
+        (
+            "example-mac-mlx-local__r2",
+            "08144a7be4a10d887babbd5fcd1a93f391c1db2d11c63d3131afad80b59cb373",
+        ),
+        (
+            "example-mac-mlx-local__r3",
+            "fe75fc3bafe0af7485fdf98b70ac3d07ccc1db502230bf1b180b94689ab54652",
+        ),
+        (
+            "example-mac-mlx-qwen35-122b-512t__r1",
+            "74761e420520e0d6d979be7d3d08aa6ff7e0f5f8ac8e48109d3dedc08d8d0b7a",
+        ),
+        (
+            "example-mac-mlx-qwen35-122b-512t__r2",
+            "8808632f0235b412d30563747283c397ad534edb711e4cec784712182cbe3b60",
+        ),
+        (
+            "example-mac-mlx-qwen35-122b-512t__r3",
+            "8be8dd955219a8631c8e37a1b3467f368f37624d07acebd2d52924137dff69f4",
+        ),
+    }
+)
+
 
 def _load_config(path: Path) -> dict[str, Any]:
     if path.suffix.lower() != ".json":
@@ -270,6 +300,7 @@ def _strict_problems(reader: BundleReader) -> list[str]:
                 "measured window; a succeeded summary needs a "
                 "reducer-consumable curve"
             )
+    problems.extend(_strict_summary_provenance_problems(reader, summary))
     problems.extend(_strict_workload_provenance_problems(reader, summary))
     problems.extend(_strict_raw_to_trace_problems(reader))
     fresh = reduce_bundle(reader.path).to_dict()
@@ -351,12 +382,13 @@ def _strict_summary_differences(
 def _strict_workload_provenance_problems(
     reader: BundleReader, summary: dict[str, Any]
 ) -> list[str]:
-    if not isinstance(summary.get("summary_provenance"), dict):
-        return []
     metadata = reader.raw_metadata()
+    legacy = _strict_legacy_bundle_metadata(metadata)
     if not isinstance(metadata, dict):
         return ["strict: metadata.workload_provenance is missing"]
     workload = metadata.get("workload_provenance")
+    if legacy and not isinstance(workload, dict):
+        return []
     if not isinstance(workload, dict):
         return ["strict: metadata.workload_provenance is missing or not an object"]
 
@@ -467,6 +499,28 @@ def _strict_workload_provenance_problems(
         )
     )
     return problems
+
+
+def _strict_summary_provenance_problems(
+    reader: BundleReader, summary: dict[str, Any]
+) -> list[str]:
+    if _strict_legacy_bundle_metadata(reader.raw_metadata()):
+        return []
+    if isinstance(summary.get("summary_provenance"), dict):
+        return []
+    return [
+        "strict: summary_metrics.summary_provenance is missing or not an "
+        "object for current-era bundle"
+    ]
+
+
+def _strict_legacy_bundle_metadata(metadata: Any) -> bool:
+    if not isinstance(metadata, dict):
+        return False
+    return (
+        metadata.get("run_id"),
+        metadata.get("config_sha256"),
+    ) in _STRICT_LEGACY_BUNDLE_IDENTITIES
 
 
 def _strict_suite_prompt_rollup(
