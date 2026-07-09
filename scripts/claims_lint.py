@@ -589,6 +589,12 @@ def lint_packs(pack_dir: Path, required_fields: Sequence[str]) -> list[Finding]:
         raise ClaimsLintError(f"{pack_dir} exists but is not a directory")
     findings: list[Finding] = []
     for path in sorted(pack_dir.glob("*.md")):
+        if path.name == "README.md":
+            continue
+        text = read_text(path)
+        tables = iter_markdown_tables(path, text)
+        if not list(iter_ap_tables(tables)) and "Plan ID / RQ consumer" not in text:
+            continue
         path_findings, _ = lint_ap_document(path, "pack", required_fields)
         findings.extend(path_findings)
     return findings

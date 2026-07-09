@@ -59,6 +59,7 @@ standing instructions.
 | C-022 | 2026-07-09 | CP-5 resume session (pointer entry; run report `2026-07-09-cp5-resume.md` owns the full trace) — lead-driven, ~35 codex sessions: implementation, fix rounds, 12+ lenses/final-head passes, 2 integration reviews | PRs #22..#28 merged (merge-gate shape held: lens→fix→lead live gate→fresh final-head→CI→merge); final-head layer caught 3 blockers + 7 should-fixes post-lens; CI merge-ref caught the one cross-branch interaction (#23 fixtures × #27 strict rules) no other layer could see; 1 lead prompt-defect (inferred-sidecar pin) caught and refixed; methodology synthesis + suite_next packet adjudicated (CP-6); D-047 sampler clause amended (fail-closed); stop card CLEARED; Window-A GO |
 | C-023 | 2026-07-09 | Scientific-rigor review of the measurement suite, benchmark, and full question bank (user-directed; full record `docs/reviews/2026-07-09-scientific-rigor-review.md`) — 4 fresh 5.5 lenses (metrology, benchmark/stats, per-question bank audit, advisor simulation) + independent lead read + 1 bidirectional discussion round | Verdict: strong provisional, advisor sign-off after a named all-software artifact list (error budget/P2-015 combined spec, analysis registry + multiplicity policy, canonical RQ registry + linter, frozen headline, contrast-level stats amendment, ordering executability, token-normalization contract); every blocker no-hardware-fixable; C5-1.1 blocker OVERTURNED in discussion (already contract-capped by C-014/D-037); ordering gap (C-015 promise vs manifest_order execution) elevated to pre-campaign; queue impact deferred to the step-2 planning session |
 | C-024 | 2026-07-09 | Spec-fleshing wave 1 (pointer entry; run report `2026-07-09-spec-fleshing-wave1.md`) — 4 worktree streams (5.5 implement), 4 counterreview lenses, 3 fix rounds, 4 final-head + 1 tail-verification pass, integration review | PRs #29..#32 merged (D-052..D-055 ratified: scope contract, contrast-level stats + registry, false-effect guard floor, RQ registry); R2's estimator kill (percentile-UCB unidentifiable at n=10) was the session's decisive catch; integration review caught 5 cross-stream seam drifts (S1/S2 written against pre-S3 contract text); P2-015-PREP (queue rank 0) closed; checkpoint-push cadence adopted mid-session (Ed) |
+| C-025 | 2026-07-09 | Wave 2 — ultracode workflow build (pointer entry; run report `2026-07-09-spec-fleshing-wave2.md`) — 46-agent workflow (4 impl streams, 8 lenses, severity-tiered refuters) + 2 lead-driven reinforcement streams + 6 final-heads + tail verification + combined-ref check + integration review | PRs #33..#38 merged (D-056..D-059 ratified: order policies + order_row, drift-is-a-bound + stable reason codes, token-normalization contract, claims-lint CI enforcement); refuter layer killed 10 findings pre-triage; final-heads caught 2 live-path defects (MLX position under rotation; linter false-negative regression); mutation testing debuted in the test-audit lens; combined-ref suite check validated the p2029 x p2030 strict-surface interaction pre-merge; suite 877 |
 
 ---
 
@@ -1371,3 +1372,34 @@ accepted (floor redefined as false-effect guard); FH ledger-promotion
 blocker resolved by supersession annotation per the history rule, not
 rewrite; R4's bank-cited un-merge of C5-W.3 from Q5 overrode the original
 C-023 lens's duplicate call.
+
+
+## C-025: Wave 2 — ultracode workflow build (2026-07-09)
+
+Pointer entry. Full narrative and verification:
+`docs/run_reports/2026-07-09-spec-fleshing-wave2.md`; decisions
+D-056..D-059; work order from C-023 via C-024.
+
+Shape: first Workflow-orchestrated build (46 agents: 4 codex implement
+streams in worktrees -> 2 lenses each with stream-specific angles ->
+severity-tiered adversarial refuters: blockers 2, should-fix 1) plus two
+lead-driven reinforcement streams (claims linter pulled forward from the
+cut-line; RQ-ENERGY-VARIANCE candidate design from Ed's variance
+question), then per-stream fix rounds, lead gates (suite + live e2e on
+the lead's shell, incl. strict-validating live rotated campaign
+bundles), 6 fresh final-heads, a combined tail-verification pass, a
+throwaway combined-ref merge + full suite BEFORE merging (C-022 lesson,
+first deliberate use), CI, self-merges, and one integration review with
+live rotated-campaign interaction checks.
+
+Notable: the design-round-first flow (Ed's directive, folded to
+operation-loop §4a) ran on P2-030 — 5.5's design memo ratified with pins
+before implementation; zero design rework followed. Codex worktree
+commits remain sandbox-blocked (index.lock) despite git permissions —
+workflow wrapper agents committed/pushed; lead pathspec commits for
+direct codex-run streams. PROCESS DEFECT recorded: the lead ran its
+bookkeeping edits concurrently with a workspace-write codex fix round in
+the SAME main tree; the fix round's cleanup reverted the uncommitted
+bookkeeping (recovered same-session from in-context content) — the
+two-writers rule applies to the LEAD as well; bookkeeping waits for tree
+quiescence. Dissents: none unresolved.

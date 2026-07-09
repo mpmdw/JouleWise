@@ -190,8 +190,10 @@ Operator sequence:
    with schema `joulewise.order_manifest.v1`, including paired ABBA-like
    profile order and start/end `short_short_sentinel` entries that must execute
    as the first and last measured bundles bracketing each hardware session.
-   Extending `scripts/generate_matrix.py` for Q6 boundary matrices is a PLANNED
-   prerequisite owned by Phase 3 Stage 3.1 if the manifest is not hand-authored.
+   See `docs/campaign_packs/README.md` for the campaign-order versus
+   intra-suite-order distinction. Extending `scripts/generate_matrix.py` for Q6
+   boundary matrices is a PLANNED prerequisite owned by Phase 3 Stage 3.1 if
+   the manifest is not hand-authored.
 4. Start external meter logging, run JouleWise workload bundles, and preserve
    meter traces with synchronization notes.
 5. Strict-validate and reduce JouleWise member bundles

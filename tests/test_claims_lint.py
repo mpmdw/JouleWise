@@ -484,6 +484,44 @@ class ClaimsLintFixtureTests(unittest.TestCase):
             self.assertGreater(payload["errors"], 0, payload)
             self.assertTrue(any(finding["code"] == "AP_MISSING_FIELD" for finding in payload["findings"]), payload)
 
+    def test_pack_lint_skips_readme_like_file_without_ap_marker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack_dir = Path(tmp) / "packs"
+            pack_dir.mkdir()
+            write(
+                pack_dir / "overview.md",
+                """
+                # Campaign Pack Overview
+
+                | Pack | File |
+                |---|---|
+                | Fixture | fixture.md |
+                """,
+            )
+            findings = claims_lint.lint_packs(pack_dir, REQUIRED_FIELDS)
+            self.assertEqual(findings, [])
+
+    def test_pack_lint_errors_on_marker_bearing_file_with_broken_ap_table(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            pack_dir = Path(tmp) / "packs"
+            pack_dir.mkdir()
+            write(
+                pack_dir / "broken_pack.md",
+                """
+                # Broken Pack
+
+                ### AP-77: broken
+
+                | Field | Value |
+                |-|-|
+                | Plan ID / RQ consumer | AP-77 / fixture |
+                """,
+            )
+            findings = claims_lint.lint_packs(pack_dir, REQUIRED_FIELDS)
+            codes = {finding.code for finding in findings}
+            self.assertIn("AP_TABLE_MISSING", codes)
+            self.assertIn("AP_NO_TABLES", codes)
+
     def test_forbidden_cli_warns_but_exits_clean(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

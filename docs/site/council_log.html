@@ -50,10 +50,11 @@
 <a href="#c-020-stop-and-analyze-whole-project-technical-research-merit-debate-2026-07-08">C-020: Stop-and-analyze whole project — technical + research merit debate (2026-07-08)</a>
 <a href="#c-021-advisor-status-site-live-depth-refresh-2026-07-09">C-021: Advisor status-site live-depth refresh (2026-07-09)</a>
 <a href="#c-023-scientific-rigor-review-suite-benchmark-question-bank-2026-07-09">C-023: Scientific-rigor review — suite, benchmark, question bank (2026-07-09)</a>
-<a href="#c-024-spec-fleshing-wave-1-no-hardware-artifact-build-2026-07-09">C-024: Spec-fleshing wave 1 — no-hardware artifact build (2026-07-09)</a></aside>
+<a href="#c-024-spec-fleshing-wave-1-no-hardware-artifact-build-2026-07-09">C-024: Spec-fleshing wave 1 — no-hardware artifact build (2026-07-09)</a>
+<a href="#c-025-wave-2-ultracode-workflow-build-2026-07-09">C-025: Wave 2 — ultracode workflow build (2026-07-09)</a></aside>
   <div class="doc-wrap doc-source-docs-council-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/council_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/council_log.md · commit 59bf6cb + uncommitted"><span class="source-file">docs/<wbr>council_log.md</span><span class="source-commit">commit 59bf6cb + uncommitted</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/council_log.md · commit 556b69e + uncommitted"><span class="source-file">docs/<wbr>council_log.md</span><span class="source-commit">commit 556b69e + uncommitted</span></span></div>
     <h1>Council Log</h1>
 <p>Chronicle of multi-model review councils: sessions where more than one
 model reviews, counterreviews, or votes on JouleWise work before it
@@ -236,6 +237,12 @@ standing instructions.</p>
 <td>2026-07-09</td>
 <td>Spec-fleshing wave 1 (pointer entry; run report <code>2026-07-09-spec-fleshing-wave1.md</code>) — 4 worktree streams (5.5 implement), 4 counterreview lenses, 3 fix rounds, 4 final-head + 1 tail-verification pass, integration review</td>
 <td>PRs #29..#32 merged (D-052..D-055 ratified: scope contract, contrast-level stats + registry, false-effect guard floor, RQ registry); R2&#39;s estimator kill (percentile-UCB unidentifiable at n=10) was the session&#39;s decisive catch; integration review caught 5 cross-stream seam drifts (S1/S2 written against pre-S3 contract text); P2-015-PREP (queue rank 0) closed; checkpoint-push cadence adopted mid-session (Ed)</td>
+</tr>
+<tr>
+<td>C-025</td>
+<td>2026-07-09</td>
+<td>Wave 2 — ultracode workflow build (pointer entry; run report <code>2026-07-09-spec-fleshing-wave2.md</code>) — 46-agent workflow (4 impl streams, 8 lenses, severity-tiered refuters) + 2 lead-driven reinforcement streams + 6 final-heads + tail verification + combined-ref check + integration review</td>
+<td>PRs #33..#38 merged (D-056..D-059 ratified: order policies + order_row, drift-is-a-bound + stable reason codes, token-normalization contract, claims-lint CI enforcement); refuter layer killed 10 findings pre-triage; final-heads caught 2 live-path defects (MLX position under rotation; linter false-negative regression); mutation testing debuted in the test-audit lens; combined-ref suite check validated the p2029 x p2030 strict-surface interaction pre-merge; suite 877</td>
 </tr>
 </tbody></table></div>
 <hr>
@@ -1141,29 +1148,14 @@ D-027, D-030 amendments; phase_energy_j; provenance; lanes convention).</li>
 Deliberations / Interventions / Spend record was preserved VERBATIM as
 <code>docs/run_reports/2026-07-07-checkpoint-session-trace.md</code>, and the
 product state + restart instructions live in
-<code>docs/run_reports/2026-07-07-checkpoint-multistream-session.md</code>. Do not
-restate; read those.</p>
-<p>Pointer entry (per the C-009 recording rule): all product state,
-process learnings, per-layer catches, and the calibration aggregate
-live in the run report + its Process Trace Appendix. One
-deliberation-class fact belongs here: the session&#39;s process conventions
-(ledgers v2, calibration schema, decision-review doctrine) were shaped
-by a Codex review that OVERTURNED two lead-designed schemas — dissents
-and adjudications in the trace appendix.</p>
-<hr>
-<h2 id="c-009-meta-review-of-the-orchestration-system-signed-consensus">C-009: Meta-review of the orchestration system (SIGNED consensus)</h2>
-<ul>
-<li>Date: 2026-07-07. Participants: Fable (lead), Codex gpt-5.5 (2 blind
-analysis sessions + 1 conferral session). Shape: both sides analyzed
-the process architecture and all logs BLIND to each other, then one
-conferral round; Codex SIGNED with 2 amendments 
+<code>docs/run_reports/2026-07-07-checkpoint-multistream-session.md</code
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/council_log.md · commit 59bf6cb + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/council_log.md · commit 556b69e + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

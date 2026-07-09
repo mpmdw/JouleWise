@@ -1,11 +1,12 @@
 # JouleWise Run State
 
-Last updated: 2026-07-09 (spec-fleshing wave 1 C-024: PRs #29..#32
-merged — capstone scope contract, contrast-level stats + analysis
-registry, P2-015 false-effect-guard floor design (queue rank 0 CLOSED),
-canonical RQ registry; D-052..D-055; integration fixes on main; suite
-822 lead-verified. Earlier same day: C-023 rigor review, C-022 CP-5
-clearance)
+Last updated: 2026-07-09 (spec-fleshing wave 2 C-025, ultracode: PRs
+#33..#38 merged — uncertainty propagation + claim gates, ordering
+executability (pre-campaign blocker closed), token-normalization
+contract, campaign packs, claims-lint CI enforcement, RQ-ENERGY-VARIANCE
+candidate design; D-056..D-059; integration fixes; suite 877
+lead-verified. Earlier same day: C-024 wave 1 (PRs #29..#32), C-023
+rigor review, C-022 CP-5 clearance)
 
 ## Start Here For Every Big Run
 
@@ -90,17 +91,22 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 `docs/run_reports/2026-07-09-cp5-resume.md`.
 
 **RESTART HERE (next agent):**
-1. Read `docs/run_reports/2026-07-09-spec-fleshing-wave1.md` (latest
-   session record; wave-2 handoff) and, for campaign context,
-   `docs/run_reports/2026-07-09-cp5-resume.md` (Window-A go/no-go).
-2. Next AGENT work per `TASK_QUEUE.md` ranks 0a-0d: P2-029 uncertainty
-   propagation, P2-030 ordering executability (pre-campaign blocker),
-   P2-031 token-normalization contract, P2-032 campaign packs.
-3. Quiet Window A [QUIET-MAC] unchanged: C-019 shakedown → P2-015 floors
-   (per the merged `docs/phase_2/detection_floor.md` design) → P2-006.
+1. Read `docs/run_reports/2026-07-09-spec-fleshing-wave2.md` (latest
+   session record) and `docs/run_reports/2026-07-09-cp5-resume.md`
+   (Window-A go/no-go).
+2. Next AGENT work per `TASK_QUEUE.md`: P2-034 broad campaign packs
+   (linter cut-line satisfied); P2-035 (RQ-ENERGY-VARIANCE
+   prerequisites) waits for floors.
+3. Quiet Window A [QUIET-MAC] unchanged and now fully unblocked on the
+   software side: C-019 shakedown → P2-015 floors (per merged
+   `docs/phase_2/detection_floor.md`) → P2-006; rotation policies
+   (D-056) and uncertainty claim gates (D-057) are live for campaign
+   bundles.
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-09 spec-fleshing wave 2, ultracode (C-025; PRs #33..#38;
+  D-056..D-059): `docs/run_reports/2026-07-09-spec-fleshing-wave2.md`
 - 2026-07-09 spec-fleshing wave 1 (C-024; PRs #29..#32; D-052..D-055):
   `docs/run_reports/2026-07-09-spec-fleshing-wave1.md`
 - 2026-07-09 scientific-rigor review of suite/benchmark/question bank
@@ -132,7 +138,13 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 
 ## Current Verification
 
-- Series head f75134d (post PRs #29..#32; docs-only) lead-verified;
+- Main after wave-2 integration fixes: `python3 -m unittest discover -s
+  tests` → `Ran 877 tests, OK (skipped=10)`, lead-run; repo lint
+  errors=0; CI green on all six PR heads (#33..#38); combined-ref
+  pre-merge suite check green; live rotated mock campaign strict-valid
+  with order provenance (lead-validated); mock e2e emits uncertainty
+  fields per D-057.
+- Prior: series head f75134d (post PRs #29..#32; docs-only) lead-verified;
   integration-fix commit 7156295 is also docs-only (no test surface):
   `python3 -m unittest discover -s tests` → `Ran 822 tests, OK
   (skipped=10)`, lead-run; CI green on all four PR heads (py3.11+py3.14);

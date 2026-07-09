@@ -30,72 +30,82 @@
 <a href="#verification">Verification</a>
 <a href="#process-trace-appendix">Process trace appendix</a>
 <a href="#next-actions">Next actions</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-09-spec-fleshing-wave1-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-09-spec-fleshing-wave1.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-09-spec-fleshing-wave1.md · commit untracked + uncommitted"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-09-spec-fleshing-wave1.md</span><span class="source-commit">commit untracked + uncommitted</span></span></div>
-    <h1>Run Report — Spec-Fleshing Wave 1 (2026-07-09, C-024)</h1>
-<p><strong>Primary deliverable (user ask):</strong> start the post-review planning/build
-phase — flesh out specs and plans for the suite&#39;s no-hardware pieces, with
-5.5 implementing under lead orchestration, so hardware plugs in at the end.
-<strong>SHIPPED (wave 1 of the C-023 work order):</strong> PRs #29..#32 merged on green
-CI; suite 822 OK (lead-run) on merged main <code>f75134d</code>; integration fixes
-landed on main after review.</p>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-09-spec-fleshing-wave2-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-09-spec-fleshing-wave2.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-09-spec-fleshing-wave2.md · commit untracked + uncommitted"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-09-spec-fleshing-wave2.md</span><span class="source-commit">commit untracked + uncommitted</span></span></div>
+    <h1>Run Report — Spec-Fleshing Wave 2, Ultracode (2026-07-09, C-025)</h1>
+<p><strong>Primary deliverable (user ask):</strong> wave 2 of the no-hardware work order —
+5.5 implements, lead orchestrates/specs, ultracode multi-agent
+orchestration. <strong>SHIPPED:</strong> PRs #33..#38 merged on green CI; suite 877 OK
+lead-run on main after integration fixes (875 at merge head <code>039c052</code>;
+integration fixes added 2 linter tests).</p>
 <h2 id="what-landed">What landed</h2>
 <ul>
-<li><strong>PR #29 (D-053)</strong>: contrast-level statistical inference replaces
-interval separation; three-way <code>not resolvable</code> / <code>unresolved</code> /
-predeclared-equivalence rule; analysis registry with enumerated
-contrast_id freeze and multiplicity fields; AP-1..AP-6 amended.</li>
-<li><strong>PR #30 (D-052)</strong>: <code>docs/contracts/capstone_scope.md</code> — frozen umbrella
-headline, per-result ceilings, three-rung contribution ladder (encodes
-Ed&#39;s filled-matrix novelty position with auditability as the warrant),
-MVC stop-lines deferring to R-012, single-unit caption templates,
-consumer/decision table.</li>
-<li><strong>PR #31 (D-054)</strong>: <code>docs/phase_2/detection_floor.md</code> — P2-015 design
-(queue rank 0 CLOSED): false-effect guard floor (replaced the
-percentile-UCB after counterreview proved it unidentifiable at n=10),
-per-backend error budgets with unknown-term claim-ceiling policy,
-campaign economics (180-340 total bundles incl. Window-B, 2.4-11.3 h; 170 is the Window-A request/phase subset), uncertainty-propagation
-spec for P2-029, telemetry-trust hierarchy, pre-registered wall/USB-C PD
-bridge-model runbooks.</li>
-<li><strong>PR #32 (D-055)</strong>: <code>docs/research_question_registry.md</code> — canonical live
-index, 75 rows, aliases normalized, 7 C-023 coverage-gap candidates.</li>
-<li><strong>Integration fixes on main</strong> (post-merge review, 5 findings, 0
-blockers): three-way rule alignment in the scope contract, telemetry
-equivalence-gate wording, registry-ownership note in the floor doc,
-PROJECT_STATUS pointers.</li>
-<li><strong>Lakebed feedback log</strong> (<code>site_capsule/LAKEBED_FEEDBACK.md</code>): standing
-alpha-feedback rule + backfilled and same-day field reports (Ed&#39;s
-directive).</li>
+<li><strong>PR #33 / P2-029 (D-057)</strong>: reducer/aggregator uncertainty propagation<ul>
+<li>claim gates per detection_floor §3 — uncertainty status, variance
+terms, deterministic bounds (drift-is-a-bound), claim_eligibility with
+stable machine reason codes; strict-validation additive compatibility;
+legacy + 6 real corpus bundles verified.</li>
+</ul>
+</li>
+<li><strong>PR #34 / P2-030 (D-056)</strong>: ordering executability — rotation policies
+(round-robin, Williams Latin square), controller-derived order_row,
+fail-closed strict verification of realized order + recomputed
+order_seed; MLX/mock parity; pinned manifests byte-identical; the
+C-023 pre-campaign blocker is closed.</li>
+<li><strong>PR #35 / P2-031 (D-058)</strong>: token-normalization + stack-identity
+contract (11 fields, anti-silent-omission, all governed surfaces).</li>
+<li><strong>PR #36 / P2-032</strong>: plug-in-day campaign packs (Q1–Q3 split suite with
+D-048/D-049 obligations, Q6 rail-vs-wall, C5-2.3 KV economics);
+quiet-machine step 0; live-verified KV numbers (14/56/224 MiB).</li>
+<li><strong>PR #37 / P2-033 (D-059)</strong>: claims-lint v1, CI-wired; satisfies the
+broad-packs cut-line. First run caught a real registry defect.</li>
+<li><strong>PR #38 / RQ-ENERGY-VARIANCE</strong>: candidate design sketch (Ed&#39;s variance
+question) — replay-decomposition protocol with statistically honest
+path-selection and censoring rules; named harness gaps G-RQVAR-*.</li>
+<li><strong>Integration fixes on main</strong>: pack-mode README exemption
+(marker-gated AP enforcement), ordering-mechanisms operator note.</li>
 </ul>
 <h2 id="verification">Verification</h2>
 <ul>
-<li>CI green on all four PRs (py3.11 + py3.14); lead-run suite on merged
-main: <code>Ran 822 tests, OK (skipped=10)</code>.</li>
-<li>Docs-only series; no runtime surface beyond the suite. Integration
-reviewer independently re-ran the suite and recomputed the floor-doc
-campaign arithmetic.</li>
+<li>CI green on all six PRs (py3.11 + py3.14); lead-run suite after
+integration fixes: <code>Ran 877 tests, OK (skipped=10)</code>; repo lint
+<code>errors=0</code>.</li>
+<li>Lead gates (never delegated): p2029 mock e2e + strict + uncertainty
+field inspection on my shell; p2030 live rotation campaign bundles
+strict-validated with per-rep order rows/seeds; combined-ref merge of
+all six branches + full suite + lint + e2e BEFORE merging (C-022
+lesson, first deliberate use — zero conflicts, green).</li>
+<li>Integration review ran a live rotated campaign and confirmed the
+p2029×p2030 interaction clean; its 2 findings fixed same-session.</li>
 </ul>
 <h2 id="process-trace-appendix">Process trace appendix</h2>
-<p><strong>Shape:</strong> 4 worktree streams (disjoint footprints pinned in prompts),
-lead-driven codex-run pipelines; per stream: implement → fresh counterreview
-lens → FIX-N round → lead gate → fresh final-head pass → tail-verification
-pass over post-review commits → CI → merge; then one integration review.
-No Opus orchestrators (C-010 default held).</p>
-<p><strong>Catches by layer (unique):</strong> counterreview lenses — R1 scope
-ladder-consistency blockers (2), R2 estimator kill (percentile-UCB
-unidentifiable at n=10; the session&#39;s decisive catch) + bridge-model fix,
-R3 D-014/D-037 wording conflict + gameable freeze, R4 missing
-content-sentinel row + C5-W.3 un-merge (overrode the original C-023 lens&#39;s
-duplicate call with bank citations); final-head passes — stale
-ledger-promotion blocker on the rejected estimator (would have promoted the
-wrong rule to the decision log), ABBA economics ambiguity (40 vs 80
-bundles), 3 wording/ID defects; tail verification — 1 residual unqualified
-L1 sentence; integration review — 5 cross-stream seam drifts (S1/S2 were
-written against pre-S3 contract text). Zero-yield layers: none.</p>
-<p><strong>Interventions:</strong> one launch failure (zsh parse error on a 4-prompt
-for-loop — relaunched as separate codex-run calls; instant-completion
-diagnostic worked as documented).</p>
+<p><strong>Shape:</strong> first Workflow-tool orchestration (46 agents, ~1.87M tokens,
+57 min: 4 codex implement streams → 2 stream-specific lenses each →
+severity-tiered refuters killing 10/30 findings pre-triage) + 2
+lead-driven reinforcement streams (S9 linter, S10 rqvar — launched on
+Ed&#39;s &quot;more agents&quot; directive after a fleet-health check showed nothing
+wedged) + per-stream FIX-N rounds + 6 fresh final-heads + combined tail
+verification + integration review.</p>
+<p><strong>Catches by layer (unique):</strong> lenses — mutation-testing debut
+(5 mutations proving test gaps in p2029), live kv-size number check
+(p2032), quiet-machine runbook omission; refuters — 10 false findings
+killed; final-heads — 2 live-path defects no earlier layer saw (MLX
+<code>position</code> missing under rotation → rotated MLX bundles would have
+failed strict validation on real hardware; linter false-negative
+parsing regression FROM the prior fix round); integration review —
+pack-mode README failure (first activation of pack mode against real
+packs) + ordering-mechanism confusability. Zero-yield layers: none.</p>
+<p><strong>Interventions:</strong> (1) user-reported stall → outside-evidence fleet
+check (ps/worktree mtimes/journal) showed healthy-slow, not wedged;
+response was additive streams, not kills. (2) One zsh for-loop launch
+failure (replaced with separate codex-run calls). (3) PROCESS DEFECT:
+lead bookkeeping edits ran concurrently with a workspace-write codex fix
+round in the same main tree; the fix round&#39;s cleanup reverted the
+uncommitted bookkeeping (recovered same-session — content was
+deterministic from the lead&#39;s in-context sources). Lesson folded: the
+two-writers rule binds the lead too; bookkeeping waits for tree
+quiescence, or commits before any concurrent round launches.</p>
 <p><strong>Delegation calibration (schema v2):</strong></p>
 <div class="table-scroll"><table>
 <thead>
@@ -110,70 +120,96 @@ diagnostic worked as documented).</p>
 </tr>
 </thead>
 <tbody><tr>
-<td>S1</td>
-<td>5.5</td>
-<td>scope contract</td>
-<td>design-freedom</td>
-<td>accepted after 7-finding fix round</td>
-<td>R1 2 blockers</td>
-<td>1-line tail edit</td>
-</tr>
-<tr>
-<td>S2</td>
-<td>5.5</td>
-<td>floor design doc</td>
-<td>design-freedom</td>
-<td>accepted after 7-finding fix round</td>
-<td>R2 estimator blocker</td>
-<td>none</td>
-</tr>
-<tr>
-<td>S3</td>
-<td>5.5</td>
-<td>stats/registry amendment</td>
-<td>design-freedom</td>
-<td>accepted after 7-finding fix round; FH CLEAN</td>
-<td>R3 2 blockers</td>
-<td>none</td>
-</tr>
-<tr>
-<td>S4</td>
-<td>5.5</td>
-<td>RQ registry</td>
+<td>p2029</td>
+<td>5.5 wf</td>
+<td>uncertainty code</td>
 <td>pinned-spec</td>
-<td>accepted after 3-finding fix round</td>
-<td>R4 1 blocker</td>
+<td>accepted; 8 findings + FH 1</td>
+<td>mutation-proven test gaps</td>
 <td>none</td>
 </tr>
 <tr>
-<td>F1-F6</td>
-<td>5.5</td>
-<td>fix rounds</td>
-<td>pinned FIX-N</td>
-<td>6/6 one-shot clean</td>
+<td>p2030</td>
+<td>5.5 wf</td>
+<td>ordering code</td>
+<td>design-freedom (ratified round)</td>
+<td>accepted; 2 findings + FH blocker</td>
+<td>MLX position</td>
+<td>none</td>
+</tr>
+<tr>
+<td>p2031</td>
+<td>5.5 wf</td>
+<td>contract</td>
+<td>pinned-shape</td>
+<td>accepted; 3 findings + FH 2</td>
+<td>—</td>
+<td>3-line lead edit</td>
+</tr>
+<tr>
+<td>p2032</td>
+<td>5.5 wf</td>
+<td>packs</td>
+<td>pinned-shape</td>
+<td>accepted; 7 findings; FH CLEAN</td>
+<td>—</td>
+<td>1 ledger line</td>
+</tr>
+<tr>
+<td>S9</td>
+<td>5.5 direct</td>
+<td>linter</td>
+<td>design-freedom</td>
+<td>accepted; 11 findings + FH regression</td>
+<td>false-negative regression</td>
+<td>none</td>
+</tr>
+<tr>
+<td>S10</td>
+<td>5.5 direct</td>
+<td>design sketch</td>
+<td>design-freedom</td>
+<td>accepted; 2 findings</td>
 <td>—</td>
 <td>none</td>
 </tr>
+<tr>
+<td>FIX rounds ×9</td>
+<td>5.5</td>
+<td>fix contracts</td>
+<td>pinned FIX-N</td>
+<td>9/9 one-shot</td>
+<td>—</td>
+<td>none</td>
+</tr>
+<tr>
+<td>INT fix</td>
+<td>5.5</td>
+<td>integration fixes</td>
+<td>pinned</td>
+<td>applied clean; cleanup step reverted concurrent lead edits</td>
+<td>—</td>
+<td>bookkeeping regen</td>
+</tr>
 </tbody></table></div>
-<p>Design-freedom delegation ran hot again (S2&#39;s estimator was wrong but the
-counterreview layer caught it — the pipeline, not the prompt, is the
-quality mechanism). FIX-N one-shot record now 13/13 across sessions.</p>
-<p><strong>Cadence amendment (Ed, mid-session):</strong> per-artifact commit+push; stream
-branches push at every pipeline checkpoint. Folded into the operation-loop
-skill same-session. Trigger: a parallel agent missed a just-created file.</p>
-<p><strong>Yield/spend (rough):</strong> ~20 codex sessions (4 impl, 4 lenses, 6 fix
-rounds incl. integration, 4 final-head, 1 tail verification, 1 integration
-review) ≈ 2.5M codex tokens; all four C-023 blockers (B1-B4) now have
-landed artifacts.</p>
+<p>Design-round-first (Ed&#39;s directive, now operation-loop §4a default for
+design-bearing streams): P2-030&#39;s memo→ratify→implement produced zero
+design rework. Codex worktree commits remain sandbox-blocked
+(index.lock) — workflow wrapper agents committed/pushed successfully;
+direct codex-run streams need lead commits.</p>
+<p><strong>Yield/spend (rough):</strong> workflow 1.87M subagent tokens + ~14 direct
+codex sessions ≈ 3M total; all four wave-2 queue items + 2 pulled-forward
+items landed reviewed and merged.</p>
 <h2 id="next-actions">Next actions</h2>
 <ol>
-<li>Wave 2 per queue ranks 0a-0d: P2-029 uncertainty propagation (code),
-P2-030 ordering executability (pre-campaign blocker), P2-031
-token-normalization contract, P2-032 campaign packs.</li>
-<li>Quiet Window A unchanged: C-019 shakedown → P2-015 floors (now per the
-merged false-effect guard design) → P2-006.</li>
-<li>Ed: Lakebed redeploy when convenient (site regen committed;
-<code>cd site_capsule &amp;&amp; npx lakebed deploy</code>).</li>
+<li>Broad campaign packs (C5-I.* + post-floor shortlist) now UNBLOCKED by
+the linter — queue row P2-034.</li>
+<li>RQ-ENERGY-VARIANCE promotion needs a council round + the G-RQVAR-*
+harness gaps (seed recording, forced-token replay) — queue row
+P2-035, post-floor.</li>
+<li>Quiet Window A unchanged: C-019 shakedown → P2-015 floors → P2-006.</li>
+<li>Watch: transient <code>test_node_worker</code> flake seen once in a worktree
+(passed on rerun and in CI); queue if it recurs.</li>
 </ol>
 
 
@@ -183,7 +219,7 @@ merged false-effect guard design) → P2-006.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-09-spec-fleshing-wave1.md · commit untracked + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-09-spec-fleshing-wave2.md · commit untracked + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

@@ -21,7 +21,7 @@ This stream intentionally covers only five core hardware-gated packs:
 
 The broader `TASK_QUEUE.md` rank-0d list is deliberately excluded from this
 stream: C5-2.7/2.8, C5-3.1/3.5, and C5-I.1..C5-I.5 are not authored here.
-The broad C5-I interop packs stay excluded until the claims-index linter
+(Superseded 2026-07-09, D-059: the claims linter landed the same day — `scripts/claims_lint.py`; the broad C5-I interop packs are now queued as P2-034 and every draft AP row must pass `--mode pack`.) Original exclusion note: The broad C5-I interop packs stay excluded until the claims-index linter
 exists, because those packs need machine-enforced frozen-contrast,
 source-provenance, and item-window claim guards before they are safe to turn
 into campaign templates.
@@ -52,6 +52,12 @@ The pack templates consume these frozen contracts:
   `docs/contracts/measurement_methodology.md`.
 - Floor rows and false-effect guard semantics:
   `docs/phase_2/detection_floor.md`.
+
+Operator ordering note: `order_manifest.json` controls whole
+config/bundle execution order across a campaign. Intra-suite block and item
+order are separate: they are controlled by `suite_manifest.json`
+`execution_policy.order_policy` plus the controller-derived `order_row`
+recorded for each suite member.
 
 ## Known Pre-Hardware Gaps
 

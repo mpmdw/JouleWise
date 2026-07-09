@@ -36,7 +36,7 @@
 <a href="#structured-failure-reasons">Structured Failure Reasons</a></aside>
   <div class="doc-wrap doc-source-docs-contracts-adapter-contracts-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/contracts/adapter_contracts.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/adapter_contracts.md · commit c91a4b8"><span class="source-file">docs/<wbr>contracts/<wbr>adapter_contracts.md</span><span class="source-commit">commit c91a4b8</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/adapter_contracts.md · commit 03bbc65"><span class="source-file">docs/<wbr>contracts/<wbr>adapter_contracts.md</span><span class="source-commit">commit 03bbc65</span></span></div>
     <h1>Adapter Contracts</h1>
 <p>Living cross-phase contract, drafted in Phase 1; the executable form is
 <code>joulewise/interfaces.py</code>. The benchmark separates runtime work from
@@ -200,17 +200,26 @@ validity, and reduction success. Verdict codes are
 </ul>
 <h2 id="suite-runtime-adapter-d-045-d-046-d-047-5">Suite Runtime Adapter (D-045/D-046/D-047.5)</h2>
 <p>A runtime that can execute a materialized suite manifest implements
-<code>SuiteRuntimeAdapter.run_suite(config, manifest, context, *, order_seed)</code>. The controller
-dispatches to this method only when <code>workload_profile.suite_manifest_ref</code> is
-set and validation has loaded the manifest. <code>run_workload</code> remains the
-single-prompt contract. <code>order_seed</code> is controller-derived (D-045.6), never
-runtime-chosen; adapters must use the supplied value in suite markers and
-workload provenance rather than deriving a seed from <code>run_id</code>.</p>
+<code>SuiteRuntimeAdapter.run_suite(config, manifest, context, *, order_seed, order_row=None)</code>. The controller dispatches to this method only when
+<code>workload_profile.suite_manifest_ref</code> is set and validation has loaded the
+manifest. <code>run_workload</code> remains the single-prompt contract. <code>order_seed</code> is
+controller-derived (D-045.6), never runtime-chosen; adapters must use the
+supplied value in suite markers and workload provenance rather than deriving a
+seed from <code>run_id</code>.</p>
+<p>2026-07-09 (P2-030): <code>order_row</code> is the controller-derived companion to
+<code>order_seed</code> for operational suite order policies. It is <code>0</code> for single runs
+and the one-based <code>__rN</code> repetition index for experiment members. Runtimes
+execute the pure realized order defined by <code>joulewise.suite.realized_order</code>
+from the manifest policy and <code>order_row</code>; they do not choose or randomize the
+row.</p>
 <p><code>run_suite</code> obligations:</p>
 <ul>
-<li>Iterate <code>manifest.items</code> in manifest order and emit suite, block, level,
-and item markers with the vocabulary and required metadata keys pinned in
-<code>joulewise/suite.py</code>.</li>
+<li>Iterate the realized suite order and emit suite, block, level, and item
+markers with the vocabulary and required metadata keys pinned in
+<code>joulewise/suite.py</code>. For <code>manifest_order</code> the realized order is manifest
+order. For rotated policies, <code>item_index</code> remains the manifest index,
+<code>position</code> is the realized execution ordinal, and <code>prev_item</code> is execution
+honest.</li>
 <li>Contain per-item generation exceptions: the item receives <code>item_end</code> with
 <code>status: &quot;runtime_failed&quot;</code> and a diagnostic <code>status_reason</code>, then the loop
 continues. Suite-level machinery failures may still raise out of
@@ -338,7 +347,7 @@ for reducer integration under both fake and real clocks.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/contracts/adapter_contracts.md · commit c91a4b8 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/contracts/adapter_contracts.md · commit 03bbc65 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

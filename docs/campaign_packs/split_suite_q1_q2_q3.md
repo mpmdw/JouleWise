@@ -373,9 +373,11 @@ Operator sequence:
    with schema `joulewise.order_manifest.v1`, including rotated
    model x prompt x link x condition order and start/end
    `short_short_sentinel` entries that must execute as the first and last
-   measured bundles bracketing each hardware session. Extending
-   `scripts/generate_matrix.py` for split-suite matrices is a PLANNED
-   prerequisite owned by Phase 3 Stage 3.1 if the manifest is not hand-authored.
+   measured bundles bracketing each hardware session. See
+   `docs/campaign_packs/README.md` for the campaign-order versus
+   intra-suite-order distinction. Extending `scripts/generate_matrix.py` for
+   split-suite matrices is a PLANNED prerequisite owned by Phase 3 Stage 3.1
+   if the manifest is not hand-authored.
 4. Run `kv-size` and the prompt-cache spike; record feasibility verdicts in
    `docs/phase_3/kv_feasibility.md`.
 5. Validate monolithic configs, run monolithic references, strict-validate and

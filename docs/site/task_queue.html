@@ -37,7 +37,7 @@
 <a href="#queue-maintenance">Queue Maintenance</a></aside>
   <div class="doc-wrap doc-source-task-queue-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 731e8e7 + uncommitted"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 731e8e7 + uncommitted</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 556b69e + uncommitted"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 556b69e + uncommitted</span></span></div>
     <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -146,33 +146,49 @@ Normal ranking applies.</p>
 <td align="right">0a</td>
 <td>P2-029</td>
 <td>P2 Next Slice</td>
-<td>NEW (C-023 work order item 4; C-024 wave 2) [AGENT]</td>
-<td>Reducer/aggregator uncertainty propagation + claim gates per the merged spec</td>
-<td>Implements <code>docs/phase_2/detection_floor.md</code> §3: idle-variance + drift-bound terms, <code>not estimable</code> single bundles, phase/item claim-gate thresholds honoring identifiability flags; tests; 5.5 pipeline + lead gate</td>
+<td>DONE 2026-07-09 (C-025 wave 2, PR #33; D-057) [AGENT]</td>
+<td>Reducer/aggregator uncertainty propagation + claim gates</td>
+<td>Landed per detection_floor §3; run report <code>docs/run_reports/2026-07-09-spec-fleshing-wave2.md</code></td>
 </tr>
 <tr>
 <td align="right">0b</td>
 <td>P2-030</td>
 <td>P2 Next Slice</td>
-<td>NEW (C-023 M2, elevated by D1; pre-campaign blocker for suite claims) [AGENT]</td>
-<td>Ordering executability: per-repetition manifests or a real runtime order policy so C-015 rotation promises are executable</td>
-<td>Sequencing spec + implementation agree; claims tooling downgrades to <code>manifest_order</code> wording when rotation absent; must land before any suite campaign&#39;s category/position inference</td>
+<td>DONE 2026-07-09 (C-025 wave 2, PR #34; D-056 — the runtime-order-policy option was implemented, superseding the per-repetition-manifest alternative) [AGENT]</td>
+<td>Ordering executability: rotation policies + order provenance</td>
+<td>Pre-campaign blocker CLOSED; run report <code>docs/run_reports/2026-07-09-spec-fleshing-wave2.md</code></td>
 </tr>
 <tr>
 <td align="right">0c</td>
 <td>P2-031</td>
 <td>P2 Next Slice</td>
-<td>NEW (C-023 M3 + L4 stack-identity gap; C-024 wave 2) [AGENT]</td>
+<td>DONE 2026-07-09 (C-025 wave 2, PR #35; D-058) [AGENT]</td>
 <td>Token-normalization contract + stack-identity table</td>
-<td>Contract: request energy primary, J/token tokenizer-scoped, cross-tokenizer comparisons need J/char / J/byte / semantic-pair companions; stack-identity fields required in every reader-facing figure; rides <code>docs/contracts/</code></td>
+<td><code>docs/contracts/token_normalization.md</code> binding; run report <code>docs/run_reports/2026-07-09-spec-fleshing-wave2.md</code></td>
 </tr>
 <tr>
 <td align="right">0d</td>
 <td>P2-032</td>
 <td>P2 Next Slice</td>
-<td>NEW (C-023 work order item 8; behind registry/linter cut-line for broad packs) [AGENT]</td>
-<td>Pre-hardware campaign packs for the fully-preparable list</td>
-<td>Per <code>docs/research_question_registry.md</code> pre_hardware_preparable=fully rows (Q1-Q3 split suite, Q6 rail-vs-wall, C5-2.3 KV economics, C5-2.7/2.8, C5-3.1/3.5 replication runbook, C5-I.1..I.5 contracts): analysis plan + manifest/config templates + expected-artifact spec + figure skeletons per pack</td>
+<td>DONE (core five) 2026-07-09 (C-025 wave 2, PR #36) [AGENT]</td>
+<td>Campaign packs: Q1-Q3 split suite, Q6 rail-vs-wall, C5-2.3 KV economics</td>
+<td><code>docs/campaign_packs/</code>; remaining breadth moved to P2-034</td>
+</tr>
+<tr>
+<td align="right">0e</td>
+<td>P2-034</td>
+<td>P2 Next Slice</td>
+<td>NEW (C-025; cut-line SATISFIED by P2-033 linter, D-059) [AGENT]</td>
+<td>Broad campaign packs: C5-2.7/2.8, C5-3.1/3.5 replication runbook, C5-I.1..I.5 interop contracts</td>
+<td>Same pack shape as P2-032; every draft AP row must pass <code>scripts/claims_lint.py --mode pack</code></td>
+</tr>
+<tr>
+<td align="right">0f</td>
+<td>P2-035</td>
+<td>P3 Research Expansion</td>
+<td>NEW (C-025; candidate design <code>docs/specs/rq_energy_variance_design.md</code>, PR #38) [AGENT after P2-015 floors]</td>
+<td>RQ-ENERGY-VARIANCE promotion prerequisites: council round + harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests)</td>
+<td>Promotion per registry rules; C-004 quarantine binds; floors first</td>
 </tr>
 <tr>
 <td align="right">1</td>
@@ -673,7 +689,7 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit 731e8e7 + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit 556b69e + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

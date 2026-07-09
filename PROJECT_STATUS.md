@@ -5,11 +5,14 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-09 (spec-fleshing wave 1, C-024: capstone scope
-  contract, contrast-level statistics + analysis registry, P2-015
-  detection-floor design, canonical question registry — PRs #29..#32,
-  D-052..D-055; next AGENT work is wave 2 (queue ranks 0a-0d), next
-  QUIET-MAC work is C-019 shakedown + P2-015 calibration)
+- Last updated: 2026-07-09 (spec-fleshing waves 1+2, C-024/C-025:
+  capstone scope contract, contrast-level statistics + analysis
+  registry, P2-015 detection-floor design, canonical question registry
+  (PRs #29..#32, D-052..D-055); then uncertainty propagation + claim
+  gates, suite order policies, token-normalization contract, campaign
+  packs, claims-lint CI enforcement (PRs #33..#38, D-056..D-059). Next
+  AGENT work: P2-034 broad packs; next QUIET-MAC work: C-019 shakedown +
+  P2-015 calibration)
 - Project phase: Phase 1 closing; Phase 2 in progress - instrument
   CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
   are complete; workload-suite build is merged; CP-5 pre-campaign review is

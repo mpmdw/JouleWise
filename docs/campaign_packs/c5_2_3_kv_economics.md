@@ -250,9 +250,10 @@ Operator sequence:
    with schema `joulewise.order_manifest.v1`, including rotated
    runtime/model/link/payload order and start/end `short_short_sentinel`
    entries that must execute as the first and last measured bundles bracketing
-   each hardware session. Extending `scripts/generate_matrix.py` for C5-2.3
-   transfer matrices is a PLANNED prerequisite owned by Phase 3 Stage 3.1 if
-   the manifest is not hand-authored.
+   each hardware session. See `docs/campaign_packs/README.md` for the
+   campaign-order versus intra-suite-order distinction. Extending
+   `scripts/generate_matrix.py` for C5-2.3 transfer matrices is a PLANNED
+   prerequisite owned by Phase 3 Stage 3.1 if the manifest is not hand-authored.
 5. Execute transfer/deserialization campaign once planned commands exist.
 6. Strict-validate, reduce, package, verify member bundles
    (`runs/<base_run_id>__rN`), then compare measured payload, transfer, and

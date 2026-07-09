@@ -77,6 +77,10 @@ be re-derived by a future agent gets an entry here.
 | D-053 | Contrast-level statistical inference and the frozen analysis registry | accepted |
 | D-054 | False-effect guard floor and unknown-term claim-ceiling policy | accepted |
 | D-055 | Research-question registry is the canonical live index | accepted |
+| D-056 | Suite order policies and order_row provenance | accepted |
+| D-057 | Uncertainty terms: drift is a bound; stable claim-gate reason codes | accepted |
+| D-058 | Token-normalization and stack-identity contract adopted | accepted |
+| D-059 | Claims-lint mechanical enforcement in CI | accepted |
 
 ---
 
@@ -2667,3 +2671,100 @@ council decisions; it never re-decides them. C-023 coverage gaps enter as
 Consequences: promotion/status changes edit the registry (with the bank
 still holding deliberation); front-facing docs point at the registry for
 current state; the future claims-index linter consumes registry columns.
+
+## D-056: Suite order policies and order_row provenance
+
+- Date: 2026-07-09
+- Status: accepted (promotes stream-ledger P30-1..P30-3; additive amendment to D-045.6)
+- Phase: 2 / suite execution
+
+Context: C-015 promised round-robin/Latin-square rotation; the sequencing
+spec executed manifest_order (C-023 M2, pre-campaign blocker). Design round
+ratified in `docs/stream_logs/2026-07-09-p2030.md` before implementation.
+
+Decision (PR #34): `execution_policy.order_policy` names an operational
+policy from the closed set {manifest_order, block_round_robin_v1,
+block_latin_square_v1 (Williams row-balanced)}; realized order is the pure
+function realized_order(manifest, policy, order_row); order_row is
+controller-derived (suite rep index), recorded in metadata.suite alongside
+order_seed = sha256(suite_seed, policy, order_row) — the D-045.6 hash
+surface gains order_row as a companion, additively. Rotation unit is the
+contiguous block run; all-sentinel blocks are position-anchored;
+item_index stays manifest identity, position is the realized ordinal.
+Strict validation recomputes the expected permutation AND the order_seed
+fail-closed when order_row is present; legacy bundles without order_row
+stay valid. Pinned generated manifests keep manifest_order byte-identical.
+Reports/tooling surface manifest_order wording when rotation is absent.
+Within-block item rotation is a named deferred revisit.
+
+Consequences: suite campaigns can execute the C-015 rotation promises with
+auditable order provenance; campaign-level config ordering remains
+order_manifest.json (a distinct mechanism — see the campaign-packs README
+operator note).
+
+## D-057: Uncertainty terms — drift is a bound; claim-gate reason codes are stable vocabulary
+
+- Date: 2026-07-09
+- Status: accepted (promotes stream-ledger P29-2/P29-3)
+- Phase: 2 / measurement
+
+Context: P2-029 (PR #33) implemented detection_floor.md §3 (D-054).
+
+Decision: (a) idle drift enters uncertainty accounting ONLY as a
+deterministic bound (E_drift_bound_j in energy_bound_terms_j, from the
+single documented evidence key idle_drift_bound_w) — never as a variance
+term unless a distributional model is explicitly justified; no drift
+magnitude is ever invented from cooldown flags (cap-hits add
+claim-ineligibility reasons instead). (b) The claim_eligibility reason
+codes (insufficient_in_window_samples, cadence_ratio_unrecorded/below,
+clock_bound_unrecorded/exceeds_quarter_window, drift_term_unknown,
+interpolation_bound_unrecorded/exceeds_floor, ...) are STABLE machine
+vocabulary: consumers may match on them; changes require a decision-log
+amendment. Single bundles are not_estimable; unknown gate inputs fail
+machine-readably, never silently pass.
+
+Consequences: claim tooling and the analysis registry consume these codes;
+P2-015 floor artifacts plug into the same gate fields.
+
+## D-058: Token-normalization and stack-identity contract adopted
+
+- Date: 2026-07-09
+- Status: accepted (promotes stream-ledger P31-1)
+- Phase: cross-phase / claims
+
+Decision (PR #35): `docs/contracts/token_normalization.md` is binding for
+token-denominated metrics and stack identity on all claims-ladder-governed
+surfaces: request energy primary; J/token tokenizer-scoped with
+runtime-observed denominators; cross-tokenizer/model-family comparisons
+require companion denominators (J/char, J/byte, semantic-pair) or must
+avoid efficiency-ranking language (enforceable forbidden-phrase list); the
+11-field stack-identity table (hardware unit, OS, runtime, kernel/library,
+model artifact hash, quantization, tokenizer identity incl.
+prompt_source/bos_present, sampler/output policy, batching/concurrency —
+always applicable, boundary label, telemetry backend) with the table-wide
+rule: every field is a concrete value or an explicit unavailable/unknown;
+silent omission is non-compliant.
+
+Consequences: the L4-review stack-confound and J/token-comparability
+attacks now have a binding answer; figures/captions compose with
+capstone_scope single-unit language.
+
+## D-059: Claims-lint mechanical enforcement in CI
+
+- Date: 2026-07-09
+- Status: accepted
+- Phase: cross-phase / claims tooling
+
+Decision (PR #37 + integration fix): `scripts/claims_lint.py` is the
+mechanical enforcement layer for the claims discipline — AP-row
+required-field/registry-field completeness (17-field contract, hard errors
+on malformed rows, strict multiplicity forms), registry integrity (closed
+sets incl. pre_hardware_preparable, duplicate IDs, AP-owner existence),
+campaign-pack draft AP linting (marker-gated; index/README files exempt),
+and a warning-only forbidden-language scan. A unittest lints the live repo
+in CI: breaking an AP row or the registry fails the build. The linter
+satisfies the C-023 cut-line condition for structural claim checks; the
+Phase 4 claims-index mode extends this tool rather than a new one.
+
+Consequences: the D-053 freeze discipline and D-055 registry are now
+machine-checked.
