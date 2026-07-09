@@ -61,6 +61,7 @@ from joulewise.suite import (
     SUITE_START,
     SuiteManifest,
     canonical_effective_manifest,
+    order_seed,
     realized_order,
     suite_manifest_sha256,
 )
@@ -781,6 +782,18 @@ def _suite_problems(
         manifest, suite_metadata, suite_start_metadata
     )
     problems.extend(order_row_problems)
+    if order_row is not None and isinstance(suite_metadata, dict):
+        expected_order_seed = order_seed(
+            manifest.suite_seed,
+            manifest.execution_policy.order_policy,
+            order_row,
+        )
+        if suite_metadata.get("order_seed") != expected_order_seed:
+            problems.append(
+                "metadata.suite.order_seed does not match derived order seed: "
+                f"expected {expected_order_seed!r} from suite_seed, order_policy, "
+                f"and order_row {order_row!r}; got {suite_metadata.get('order_seed')!r}"
+            )
 
     item_start_indices: list[int] = []
     item_start_positions: list[int] = []

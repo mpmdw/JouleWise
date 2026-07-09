@@ -287,6 +287,23 @@ class SuiteManifestTests(unittest.TestCase):
         self.assertEqual(len(rows), 6)
         for position in range(3):
             self.assertEqual(Counter(row[position] for row in rows), Counter({"A": 2, "B": 2, "C": 2}))
+        adjacency_counts = Counter(
+            (left, right)
+            for row in rows
+            for left, right in zip(row, row[1:], strict=False)
+        )
+        self.assertEqual(
+            set(adjacency_counts),
+            {
+                ("A", "B"),
+                ("A", "C"),
+                ("B", "A"),
+                ("B", "C"),
+                ("C", "A"),
+                ("C", "B"),
+            },
+        )
+        self.assertTrue(all(count == 2 for count in adjacency_counts.values()))
 
     def test_load_suite_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

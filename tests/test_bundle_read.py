@@ -507,6 +507,46 @@ class SuiteReaderTests(ReaderTestCase):
 
         self.assertTrue(any("order_row is required" in problem for problem in problems), problems)
 
+    def test_rotation_rejects_order_seed_that_does_not_match_order_row(self) -> None:
+        writer = self.make_suite_bundle(
+            "suite-wrong-derived-order-seed",
+            order_policy="block_round_robin_v1",
+            order_row=1,
+        )
+        metadata = json.loads((writer.path / "metadata.json").read_text())
+        metadata["suite"]["order_seed"] = "deadbeef"
+        (writer.path / "metadata.json").write_text(json.dumps(metadata, sort_keys=True) + "\n")
+        events = read_jsonl(writer.path / "events.jsonl")
+        for event in events:
+            if event["event_type"] == "suite_start":
+                event["metadata"]["order_seed"] = "deadbeef"
+        write_jsonl(writer.path / "events.jsonl", events)
+
+        problems = BundleReader(writer.path).problems()
+
+        self.assertTrue(
+            any("does not match derived order seed" in problem for problem in problems),
+            problems,
+        )
+        self.assertFalse(
+            any("metadata.suite.order_seed mismatch" in problem for problem in problems),
+            problems,
+        )
+
+    def test_manifest_order_without_order_row_does_not_recompute_legacy_order_seed(self) -> None:
+        writer = self.make_suite_bundle("suite-legacy-order-seed", order_row=None)
+        legacy_order_seed = order_seed("mock-suite-seed", "manifest_order", 5)
+        metadata = json.loads((writer.path / "metadata.json").read_text())
+        metadata["suite"]["order_seed"] = legacy_order_seed
+        (writer.path / "metadata.json").write_text(json.dumps(metadata, sort_keys=True) + "\n")
+        events = read_jsonl(writer.path / "events.jsonl")
+        for event in events:
+            if event["event_type"] == "suite_start":
+                event["metadata"]["order_seed"] = legacy_order_seed
+        write_jsonl(writer.path / "events.jsonl", events)
+
+        self.assertEqual(BundleReader(writer.path).problems(), [])
+
     def test_rotation_rejects_wrong_realized_order_prev_item_and_positions(self) -> None:
         def wrong_order(starts: list[dict]) -> None:
             starts[0]["metadata"], starts[-1]["metadata"] = (

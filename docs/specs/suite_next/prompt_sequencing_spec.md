@@ -82,8 +82,9 @@ hash and count checks.
 
 ## Sequencing rules
 
-Runtime execution is manifest order today. `order_seed` is derived and
-recorded, but current runtimes do not use it to reorder items.
+Historical note, superseded 2026-07-09 below: runtime execution was manifest
+order. `order_seed` was derived and recorded, but runtimes did not use it to
+reorder items.
 
 Therefore, any claim of round-robin, Latin-square, level rotation, or
 condition-balancing across repeated suite bundles must be implemented as one of:
@@ -95,7 +96,8 @@ condition-balancing across repeated suite bundles must be implemented as one of:
 3. A campaign-level order policy over whole configs, using `order_manifest.json`
    rather than changing item order inside a suite.
 
-Until one of those is implemented, specs and reports must say `manifest_order`.
+Before 2026-07-09, until one of those was implemented, specs and reports had
+to say `manifest_order`.
 
 ### 2026-07-09 (P2-030): operational suite order policies
 
@@ -124,8 +126,10 @@ must recompute the expected permutation and fail closed on mismatch.
 
 `item_index` means manifest index everywhere. `position` means realized
 execution ordinal. `prev_item` is the previous realized item ID, or `null` for
-the first realized item. `outputs/suite_items.jsonl` remains keyed by
-`item_index`, preserving expected-vs-realized prompt-hash checks.
+the first realized item. `block_index` is the realized block encounter ordinal
+and may vary across rows; `block_id` is the stable cross-bundle block key.
+`outputs/suite_items.jsonl` remains keyed by `item_index`, preserving
+expected-vs-realized prompt-hash checks.
 
 Blocks and levels must be contiguous runs. Naive interleaving such as
 `L01, L08, L01` inside a single block is invalid under the current validator.
