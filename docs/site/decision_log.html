@@ -77,7 +77,7 @@
 <a href="#d-047-affine-ladder-pins-level-set-smoke-sizing-gate-denominators">D-047: Affine ladder pins — level set, smoke sizing, gate denominators</a></aside>
   <div class="doc-wrap doc-source-docs-decision-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/decision_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 024cec9"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 024cec9</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 36e8524"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 36e8524</span></span></div>
     <h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
@@ -808,7 +808,14 @@ polling - log records are buffered in memory and flushed after
 <code>stop_sampling</code>); (c) the runtime adapter for local runs executes in the
 same process by design, so its cost <em>is</em> the workload; (d) document
 residual risk: controller wake-ups are zero by construction, and any OS
-background activity affects idle and load windows alike.</li>
+background activity affects idle and load windows alike.
+AMENDED 2026-07-08 (PR #21, <code>255a7e6</code>): the quiescent window is
+MARKER-bounded, not call-bounded — the <code>sampling_stopped</code> timestamp is
+stamped immediately after the runtime returns, BEFORE adapter alignment
+capture and <code>stop_sampling</code> wind-down, so that controller/adapter
+bookkeeping is outside the reducer&#39;s measured window. Item (b)&#39;s
+&quot;until stop_sampling&quot; phrasing predates this and reads call-bounded;
+the stamp is the boundary.</li>
 </ol>
 <p>Decision: option 3 for Phase 2, with option 2 recorded as the upgrade path
 once the SSH transport exists (re-run a subset and compare).</p>
@@ -1362,25 +1369,14 @@ consumer.</p>
 it; Phase 4 Stage 4.1&#39;s aggregate verb builds on the reader (noted in
 the Phase 4 plan).</p>
 <p>Revisit when: bundle schema v0.2 lands (the reader is where composite-
-bundle reading concentrates), or a consumer needs streaming reads that
-the whole-bundle reader cannot serve.</p>
-<hr>
-<h2 id="d-026-measured-window-is-bounded-by-sampling-active-marker-events">D-026: Measured window is bounded by sampling-active marker events</h2>
-<ul>
-<li>Date: 2026-07-06</li>
-<li>Status: accepted (Slice 2N.2)</li>
-<li>Phase: 2</li>
-</ul>
-<p>Context: the reducer integrated energy between the <code>measured_run</code>
-<code>stage_started</code> and <code>stage_completed</code> events. <code>stage_started</code> is stamped
-before <code>thermal_state</code> an
+bundle reading concentr
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/decision_log.md · commit 024cec9 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/decision_log.md · commit 36e8524 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

@@ -36,7 +36,7 @@
 <a href="#queue-maintenance">Queue Maintenance</a></aside>
   <div class="doc-wrap doc-source-task-queue-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span></div>
     <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -120,7 +120,7 @@ purchases, destinations.</li>
 <td>P2 Next Slice</td>
 <td>NEW (C-011, amended C-014) [QUIET-MAC]</td>
 <td>Detection-floor calibration campaign — expanded Window A floors for gross request, idle-sub request, phase window, and item/level window, plus comparative MDE from same-condition repeats/ABBA</td>
-<td>Versioned strict-valid calibration bundles; <code>docs/phase_2/detection_floor.md</code> as per-consumer table; per-metric/window-class <code>floor_abs_j</code> + <code>floor_cmp_j</code>; claim gate = <code>max(floor_abs, floor_cmp)</code>; calibration manifest hash cited by later reports; pre-Window-A lead-run tasks-sampler overhead smoke required before enabling any extra powermetrics samplers and validating that the 2s env-capture settle absorbs the probe burst (C-015/R2)</td>
+<td>Versioned strict-valid calibration bundles; <code>docs/phase_2/detection_floor.md</code> as per-consumer table; per-metric/window-class <code>floor_abs_j</code> + <code>floor_cmp_j</code>; claim gate = <code>max(floor_abs, floor_cmp)</code>; calibration manifest hash cited by later reports; pre-Window-A lead-run tasks-sampler overhead smoke required before enabling any extra powermetrics samplers and validating that the 2s env-capture settle absorbs the probe burst (C-015/R2); NEW post-suite-build shakedown gate (C-019): before any Window-A data, ONE tiny production-shaped run through the campaign-runner path (not bare <code>run</code>) → strict validation → reduce → backup, on the merged suite-substrate code</td>
 </tr>
 <tr>
 <td align="right">2</td>
@@ -198,15 +198,15 @@ purchases, destinations.</li>
 <td align="right">11</td>
 <td>P1-008</td>
 <td>P1 Phase Gate</td>
-<td>waiting-user [ED-EXTERNAL]</td>
-<td>Map phases to academic calendar</td>
-<td>Colloquium/report dates + borrow window entered in <code>docs/milestones.md</code>; phase target dates derived</td>
+<td>waiting-user; ELEVATED to ED-EXTERNAL rank 1 (C-019 reassessment: every phase target is TBD, R-012 is the biggest active management risk for an undergrad timeline; late dates force uncontrolled descoping) [ED-EXTERNAL]</td>
+<td>Map phases to academic calendar AND capture the evaluator&#39;s acceptance bar (minimum figures, demo expectation, reproducibility threshold, whether Mac-only + split-deferral is acceptable)</td>
+<td>Colloquium/report dates + borrow window in <code>docs/milestones.md</code>; phase targets derived; acceptance-bar notes beside the P1-001 scope notes</td>
 </tr>
 <tr>
 <td align="right">11b</td>
 <td>P2-025</td>
 <td>P2 Next Slice</td>
-<td>NEW (2026-07-08 suite-build oversight, B8 deferred half) [AGENT]</td>
+<td>NEW (2026-07-08 suite-build oversight, B8 deferred half); ADJACENCY (C-019 reassessment): execute WITH the P2-012 real-tokenizer manifest work, BEFORE any text-path suite campaign — it is the fail-closed validity guard for those campaigns [AGENT]</td>
 <td>Campaign-runner expected-vs-realized prompt-hash check for text-path suite items (ids-native items are already validator-checked)</td>
 <td>Runner compares generator sidecar <code>expected token_ids_sha256</code> against realized per-item hashes post-window; mismatch fails closed; lands with the first real-tokenizer campaign tooling</td>
 </tr>
@@ -541,7 +541,7 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit 6b1f73a · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit 36e8524 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

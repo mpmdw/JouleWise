@@ -29,7 +29,7 @@
   <div class="kicker">Roadmap</div>
   <h1>Queue rank is the flight plan.</h1>
   <p class="lede">The current queue is parsed from the exact live table headers in <code>TASK_QUEUE.md</code>. Lane filters are progressive enhancement.</p>
-  <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+  <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
 </section>
 <section class="flight-plan">
   <div class="next-two"><span class="card-label">Next two</span><strong class="mono">P2-015 -> P2-006</strong><p>P2-015 runs first, then P2-006 in the same quiet-machine window.</p></div>
@@ -46,8 +46,8 @@
     <div class="lane-head"><span class="lane-rank mono">#1</span><span class="mono task-code">P2-015</span><span class="status-chip">NEW</span><span class="lane-chip lane-quiet-mac">QUIET-MAC</span></div>
     <p class="status-note">NEW (C-011, amended C-014)</p>
     <h2>Detection-floor calibration campaign — expanded Window A floors for gross request, idle-sub request, phase window, and item/level window, plus comparative MDE from same-condition repeats/ABBA</h2>
-    <details><summary>Acceptance</summary><p>Versioned strict-valid calibration bundles; <code>docs/phase_2/detection_floor.md</code> as per-consumer table; per-metric/window-class <code>floor_abs_j</code> + <code>floor_cmp_j</code>; claim gate = <code>max(floor_abs, floor_cmp)</code>; calibration manifest hash cited by later reports; pre-Window-A lead-run tasks-sampler overhead smoke required before enabling any extra powermetrics samplers and validating that the 2s env-capture settle absorbs the probe burst (C-015/R2)</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <details><summary>Acceptance</summary><p>Versioned strict-valid calibration bundles; <code>docs/phase_2/detection_floor.md</code> as per-consumer table; per-metric/window-class <code>floor_abs_j</code> + <code>floor_cmp_j</code>; claim gate = <code>max(floor_abs, floor_cmp)</code>; calibration manifest hash cited by later reports; pre-Window-A lead-run tasks-sampler overhead smoke required before enabling any extra powermetrics samplers and validating that the 2s env-capture settle absorbs the probe burst (C-015/R2); NEW post-suite-build shakedown gate (C-019): before any Window-A data, ONE tiny production-shaped run through the campaign-runner path (not bare <code>run</code>) → strict validation → reduce → backup, on the merged suite-substrate code</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="QUIET-MAC">
   <div class="priority-band p2"></div>
@@ -56,7 +56,7 @@
     <p class="status-note">UNBLOCKED; acceptance extended by C-011/C-014</p>
     <h2>Homogeneous baselines (slice 2M) on the Mac target — Window A two-model campaign with drift-sentinel profiles, then <code>docs/phase_2/baseline_results.md</code> with variance + prefill/decode comparison</h2>
     <details><summary>Acceptance</summary><p>Campaign bundles born under the FIXED validator; pass <code>--strict</code>; FAIL-CLOSED runner + counterbalanced order manifest (C-011/D-014); drift sentinel block positions recorded (C-014); claim wording per <code>docs/contracts/claims_ladder.md</code> + <code>docs/contracts/analysis_plans.md</code>; runs AFTER P2-015 in Window A</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="AGENT">
   <div class="priority-band p3"></div>
@@ -65,7 +65,7 @@
     <p class="status-note">3.0.1 COMPLETE + MERGED (PR #9, verdict replay_supported, lead-re-verified; D-035/D-036 promoted); 3.0.2+ open — 3.0.2 needs installs (R-003 user approval) and inherits the 3.0.1 harness shape + its 2 deferred hardening fixes (ledger C-8)</p>
     <h2>KV persistence feasibility spikes (Phase 3 Stage 3.0)</h2>
     <details><summary>Acceptance</summary><p>Verdicts in <code>docs/phase_3/kv_feasibility.md</code>; checklist rows are the status authority; must complete before any borrow-window scheduling</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="AGENT">
   <div class="priority-band p2"></div>
@@ -74,7 +74,7 @@
     <p class="status-note">SUBSTRATE + LADDER CORE BUILT AND MERGED 2026-07-08 (PRs #17/#18/#20; D-044..D-047; run report 2026-07-08-suite-build.md); REMAINING: envelope-gate analysis script, then the smoke CAMPAIGN (B=5) on a quiet-window tail</p>
     <h2>P2-010b remainder: envelope-gate analysis script (E1-E4 gate + E5 advisory per D-047.3/4, sentinel-tag exclusion, distinct-item denominators, D-036 computed verdict) + smoke campaign execution</h2>
     <details><summary>Acceptance</summary><p>Script emits <code>envelope_validated</code>/<code>envelope_failed([codes])</code> from strict-valid smoke bundles; acceptance in AP-5; ledger pointer <code>docs/stream_logs/2026-07-08-affine-ladder.md</code> AFF-CHECKPOINT</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="QUIET-MAC">
   <div class="priority-band p2"></div>
@@ -83,7 +83,7 @@
     <p class="status-note">NEW (C-014)</p>
     <h2><code>q4_l3_shape_grid_v1</code> campaign — Window B, AP-1, two models, n sized from Window A</h2>
     <details><summary>Acceptance</summary><p>4x3 prompt/decode grid <code>{128,512,2048,4096}</code> x <code>{64,256,512}</code>; holdouts <code>(512,256)</code> and <code>(4096,512)</code>; categorical-additive fit first; top-up near-floor cells before L3 wording</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="QUIET-MAC">
   <div class="priority-band p2"></div>
@@ -92,7 +92,7 @@
     <p class="status-note">GENERATOR BUILT AND MERGED 2026-07-08 (PR #19; five ids-native BOS-less conditions per D-046); campaign execution Window B with real-tokenizer manifests (see P2-012 row)</p>
     <h2>Content-sensitivity sentinel campaign — Window B, AP-6</h2>
     <details><summary>Acceptance</summary><p>Five equal-shape ids-native conditions, n sized from Window A; request-energy deltas and MDE verdicts; AP-6 non-generalization caveat applies (D-046)</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="">
   <div class="priority-band p2"></div>
@@ -101,7 +101,7 @@
     <p class="status-note">phase-1 ENGINE BUILT AND MERGED 2026-07-08 (PR #19: six category generators, exact-shape fill, B7 identity); REMAINING: lead-side real-tokenizer (.venv Qwen2.5-1.5B) jw_mixed + sentinel manifest generation and commit (GEN-CHECKPOINT in docs/stream_logs/2026-07-08-jw-mixed-generators.md) [AGENT with lead .venv step]; natural-EOS pilot + full panels later phases</p>
     <h2>Generate + commit the real-tokenizer manifests + sidecars; identification-core campaign after Window A</h2>
     <details><summary>Acceptance</summary><p>Manifests substrate-valid, sidecars complete (B7 rows, ground truths), per AP-4; no category claims outside matched strata</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="AGENT">
   <div class="priority-band p2"></div>
@@ -110,7 +110,7 @@
     <p class="status-note">NEW (C-015; post-2M + post-P2-010a)</p>
     <h2>Marker-shim energy-layer feasibility spike — verdict-shaped export path only</h2>
     <details><summary>Acceptance</summary><p><code>external_markers_supported</code> / <code>partial(&lt;limitation&gt;)</code> / <code>external_markers_unsupported</code>; 3+ marked items, external result artifact hashed, strict bundle valid; energy-layer-only pin: no accuracy interpretation, no leaderboard join, no pass@k-energy ratio, no general adapter framework; AP row required before any L2 claim; contract in <code>docs/contracts/adapter_contracts.md</code></p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="AGENT">
   <div class="priority-band p2"></div>
@@ -119,7 +119,7 @@
     <p class="status-note">NEW (C-015; post-P2-022)</p>
     <h2>HumanEval import smoke — <code>benchmark_import</code> manifest + suite profile plumbing goal</h2>
     <details><summary>Acceptance</summary><p>Freeze subset with C-005 discipline, MIT license/provenance fields, 256/512-token completion policy; no pass@k/accuracy/capability claim; design in <code>docs/research_question_bank.md</code></p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="AGENT">
   <div class="priority-band p2"></div>
@@ -128,25 +128,25 @@
     <p class="status-note">NEW (C-015; post-Window-A)</p>
     <h2>Cheap-campaign shortlist — select among C5-1.6 sampler ABBA / C5-1.12 quant decomposition / C5-1.8 runtime attribution per measured floors</h2>
     <details><summary>Acceptance</summary><p>Explicit select-after-floors row, not stealth scope; selection/analysis task; the SELECTED campaign is then queued [QUIET-MAC]; choose one only after P2-015/2M reductions identify floor/MDE headroom; bank pointer <code>docs/research_question_bank.md</code></p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="ED-EXTERNAL">
   <div class="priority-band p1"></div>
   <div class="lane-main">
     <div class="lane-head"><span class="lane-rank mono">#11</span><span class="mono task-code">P1-008</span><span class="status-chip">WAITING</span><span class="lane-chip lane-ed-external">ED-EXTERNAL</span></div>
-    <p class="status-note">waiting-user</p>
-    <h2>Map phases to academic calendar</h2>
-    <details><summary>Acceptance</summary><p>Colloquium/report dates + borrow window entered in <code>docs/milestones.md</code>; phase target dates derived</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <p class="status-note">waiting-user; ELEVATED to ED-EXTERNAL rank 1 (C-019 reassessment: every phase target is TBD, R-012 is the biggest active management risk for an undergrad timeline; late dates force uncontrolled descoping)</p>
+    <h2>Map phases to academic calendar AND capture the evaluator&#x27;s acceptance bar (minimum figures, demo expectation, reproducibility threshold, whether Mac-only + split-deferral is acceptable)</h2>
+    <details><summary>Acceptance</summary><p>Colloquium/report dates + borrow window in <code>docs/milestones.md</code>; phase targets derived; acceptance-bar notes beside the P1-001 scope notes</p></details>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="AGENT">
   <div class="priority-band p2"></div>
   <div class="lane-main">
     <div class="lane-head"><span class="lane-rank mono">#11b</span><span class="mono task-code">P2-025</span><span class="status-chip">NEW</span><span class="lane-chip lane-agent">AGENT</span></div>
-    <p class="status-note">NEW (2026-07-08 suite-build oversight, B8 deferred half)</p>
+    <p class="status-note">NEW (2026-07-08 suite-build oversight, B8 deferred half); ADJACENCY (C-019 reassessment): execute WITH the P2-012 real-tokenizer manifest work, BEFORE any text-path suite campaign — it is the fail-closed validity guard for those campaigns</p>
     <h2>Campaign-runner expected-vs-realized prompt-hash check for text-path suite items (ids-native items are already validator-checked)</h2>
     <details><summary>Acceptance</summary><p>Runner compares generator sidecar <code>expected token_ids_sha256</code> against realized per-item hashes post-window; mismatch fails closed; lands with the first real-tokenizer campaign tooling</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="">
   <div class="priority-band p1"></div>
@@ -155,7 +155,7 @@
     <p class="status-note">waiting-user, deprioritized</p>
     <h2>Capture supervisor approval and scope notes</h2>
     <details><summary>Acceptance</summary><p>Dated notes in <code>docs/phase_1/phase_1_exit_checklist.md</code>; unblocks full D-016 closure (P2-004) when it lands</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="">
   <div class="priority-band p0"></div>
@@ -164,7 +164,7 @@
     <p class="status-note">waiting-user, deprioritized</p>
     <h2>Replace interim backup destination (R-016) with external/cloud location</h2>
     <details><summary>Acceptance</summary><p>User names the destination; one fresh restore test; R-016 → fully mitigated</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="ED-EXTERNAL">
   <div class="priority-band p1"></div>
@@ -173,7 +173,7 @@
     <p class="status-note">open (elevated value: gates Q6 boundary-sensitivity, C-003)</p>
     <h2>Record wall-meter decision</h2>
     <details><summary>Acceptance</summary><p>Meter make/model or &quot;unavailable&quot; verdict plus measurement/export method (exit-checklist wall-meter section; informs D-018 boundary calibration)</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="ED-EXTERNAL">
   <div class="priority-band p1"></div>
@@ -182,7 +182,7 @@
     <p class="status-note">partial</p>
     <h2>Fill network/interconnect topology plan</h2>
     <details><summary>Acceptance</summary><p>Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="ED-EXTERNAL">
   <div class="priority-band p1"></div>
@@ -191,7 +191,7 @@
     <p class="status-note">open</p>
     <h2>Confirm NVIDIA/Orin telemetry access paths</h2>
     <details><summary>Acceptance</summary><p>SSH/runtime/telemetry command evidence in the exit-checklist instrumentation section, or marked pending with blocker (gates slices 2K/2L)</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="">
   <div class="priority-band p2"></div>
@@ -200,7 +200,7 @@
     <p class="status-note">partial (provisional small-model pick 2026-07-06 opens 2G; full closure gated P1-001)</p>
     <h2>Close model selection (D-016)</h2>
     <details><summary>Acceptance</summary><p>Decision-log entry: models, revisions, artifact paths, local mirror, fallback candidate. Mid-model pick, CUDA load, GGUF paths outstanding.</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="">
   <div class="priority-band p2"></div>
@@ -209,7 +209,7 @@
     <p class="status-note">2K fixture-first MERGED (PR #11, 2026-07-08); ALL protocol pins PROVISIONAL; live validation gated (P1-006, evidence script ready: docs/phase_1/2k_live_verification_checklist.md); 2L Orin open; before 2K live: pin richer nvidia-smi query fields (clocks/pstate/throttle-reasons/memory; C-015/R2)</p>
     <h2>Remote targets (slices 2K NVIDIA/vLLM/ssh, 2L Orin)</h2>
     <details><summary>Acceptance</summary><p>Remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide.</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article><article class="lane-card" data-lane="AGENT">
   <div class="priority-band p2"></div>
@@ -218,7 +218,7 @@
     <p class="status-note">NEW (C-011 deferred batch; post-2M / with-2K-live)</p>
     <h2>Critique-adjudicated queue batch: (a) post-2M controller split (experiment loop/cooldown/env capture out of controller.py); (b) node-worker protocol parity tests + table-driven validation (with 2K live); (c) NVIDIA [N/A]-row skip counts surfaced into measurement quality (with 2K live); (d) per-backend raw-to-trace strict generalization (with 2K live); (e) claims-to-evidence index seeded once 2M corpus exists; (f) schema v0.2 loader/export parity acceptance rule; (g) boundary labels propagated into report index/chart titles before any cross-boundary claims; (h) require <code>summary_provenance</code> in the strict succeeded-summary key list (C-014 scout); (i) align <code>token_count_source</code> value naming with the claims ladder&#x27;s <code>config fallback</code> vocabulary (C-014 scout)</h2>
     <details><summary>Acceptance</summary><p>Each item lands with its named gate; dispositions + rejected items (RemoteNodeSession per B-1, run-ID randomization per D-010/D-022, console script pre-2M) recorded in C-011</p></details>
-    <span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span>
   </div>
 </article></section>
 <section class="interlock"><h2>Do not do yet</h2><ul><li>(satisfied 2026-06-12) The mock bundle/reducer path and report generator now exist; dashboard/report work is no longer blocked.</li>
@@ -229,7 +229,7 @@
 <li>Do not schedule the 3080 Ti borrow window before Stage 3.0 verdicts and the rehearsed runbook exist (R-006).</li>
 <li>Do not start Phase 3 live-split work (3.3) before offline replay (3.2) has produced data.</li>
 <li>Do not close D-016 (model selection) without P1-001 supervisor scope or an explicit user go-ahead.</li>
-<li>(satisfied 2026-07-06) Slice 2N landed; 2G/2H may start once their own gates (D-016 + <code>[mac]</code> install; privileged sample + D-004 sudoers) open — build on the post-2N seams (RunContext raw evidence, D-026 markers, D-027 rail rows, 2N.3 observed-token fallback).</li></ul><span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span></section>
+<li>(satisfied 2026-07-06) Slice 2N landed; 2G/2H may start once their own gates (D-016 + <code>[mac]</code> install; privileged sample + D-004 sudoers) open — build on the post-2N seams (RunContext raw evidence, D-026 markers, D-027 rail rows, 2N.3 observed-token fallback).</li></ul><span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span></section>
 <section class="timeline-rail"><h2>Completed reel</h2><div class="timeline-node"><span class="mono">2026-07-08</span><strong>P2-018</strong><p>Deploy the site as a shareable Lakebed capsule with live GitHub freshness</p></div>
 <div class="timeline-node"><span class="mono">2026-07-08</span><strong>P2-021</strong><p>Drift sentinels + block-position covariates in the 2M generator</p></div>
 <div class="timeline-node"><span class="mono">2026-07-08</span><strong>P2-017</strong><p>Honest per-source site provenance stamps</p></div>
@@ -241,7 +241,7 @@
 <div class="timeline-node"><span class="mono">2026-07-07</span><strong>FLAGSHIP-001</strong><p>User-directed flagship benchmark: Qwen3.5-122B-A10B-4bit on the M3 Max</p></div>
 <div class="timeline-node"><span class="mono">2026-07-06</span><strong>P1-002</strong><p>Mac-local Phase 1 telemetry/runtime evidence — sample captured, fields pinned, D-004 sudoers installed + <code>sudo -n</code> verified, MLX installed</p></div>
 <div class="timeline-node"><span class="mono">2026-07-06</span><strong>P2-003</strong><p>Mac MLX + powermetrics vertical slice (2G, 2H, 2I) — <strong>first real energy numbers</strong></p></div>
-<div class="timeline-node"><span class="mono">2026-07-06</span><strong>P0-002</strong><p>Measurement-corpus backup protocol (R-016) — interim destination per user direction</p></div><span class="source-chip" title="TASK_QUEUE.md · commit 6b1f73a"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 6b1f73a</span></span></section>
+<div class="timeline-node"><span class="mono">2026-07-06</span><strong>P0-002</strong><p>Measurement-corpus backup protocol (R-016) — interim destination per user direction</p></div><span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span></section>
 <script>
 (function () {
   var buttons = document.querySelectorAll('[data-lane-filter]');
@@ -265,7 +265,7 @@
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit 6b1f73a · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit 36e8524 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

@@ -35,10 +35,11 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 6b1f73a + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 6b1f73a + uncommitted</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 36e8524"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 36e8524</span></span></div>
     <h1>JouleWise Run State</h1>
-<p>Last updated: 2026-07-08 (suite BUILD session close; adjudication
-D-044..D-047 + PRs #17/#18/#20/#19 merged; suite 732; C-017)</p>
+<p>Last updated: 2026-07-08 (suite BUILD close + alignment fix PR #21 +
+meta-reassessment; adjudication D-044..D-047; PRs #17..#21 merged;
+suite 734; C-017/C-018/C-019)</p>
 <h2 id="start-here-for-every-big-run">Start Here For Every Big Run</h2>
 <p>Before starting substantial work:</p>
 <ol>
@@ -127,8 +128,8 @@ D-038..D-042): <code>docs/run_reports/2026-07-08-suite-science-expansion.md</cod
 </ul>
 <h2 id="current-verification">Current Verification</h2>
 <ul>
-<li>Merged main (c752c30): <code>python3 -m unittest discover -s tests</code> →
-<code>Ran 732 tests, OK (skipped=10)</code> (post PRs #17/#18/#20/#19).</li>
+<li>Merged main (49c5b66 + reassessment batch): <code>python3 -m unittest discover -s tests</code> → <code>Ran 734 tests, OK (skipped=10)</code> (post PRs
+#17..#21; #21 = D-013 alignment-capture window fix, C-018).</li>
 <li>Live lead gates on merged main: real MLX (1.5B, mock telemetry) suite
 bundle strict-valid + reduced (sampler pinned via sample_utils; honest
 per-item identifiability); mock affine smoke 26/26 strict-valid.</li>
@@ -180,7 +181,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit 6b1f73a + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit 36e8524 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
