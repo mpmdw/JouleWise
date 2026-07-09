@@ -41,6 +41,8 @@ is the frozen claim-facing view of this table plus campaign-specific
 manifest IDs, family IDs, claim roles, selection scopes, and multiplicity
 rules.
 
+Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
+
 - The registry is FROZEN before each campaign's execution. The freeze
   records the AP rows in scope, the campaign manifest hash or planned
   manifest ID, and the complete frozen set of claim-bearing contrasts
