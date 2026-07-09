@@ -57,6 +57,7 @@ standing instructions.
 | C-017 | 2026-07-08 | Suite-build adjudication + implementation gates (full entry below) — Codex disposition draft + fresh adversarial round + lead calls; 11 unit lenses + 1 Opus outage substitute + 7-reviewer oversight + 3 final-head + integration | 37 amendments dispositioned → D-044..D-047; substrate/ladder/generators BUILT and merged (PRs #17/#18/#20/#19, suite 732); 3 lead live-only catches (refs, strict rollup, sampler namespace); oversight caught 2 validation holes pre-merge; PR #18 base-retarget slip recovered via #20 |
 | C-021 | 2026-07-09 | Advisor status-site live-depth refresh (pointer entry; D-051; run report `2026-07-09-advisor-status-site.md`) | Static generated pages remain the audit fallback; Lakebed gets fail-soft live overlays from current GitHub markdown; Story page volatile counts removed; advisor cockpit expanded with attention, readiness, evidence, and claim-ceiling panels; gpt-5.5-high counterreview used before deploy |
 | C-022 | 2026-07-09 | CP-5 resume session (pointer entry; run report `2026-07-09-cp5-resume.md` owns the full trace) — lead-driven, ~35 codex sessions: implementation, fix rounds, 12+ lenses/final-head passes, 2 integration reviews | PRs #22..#28 merged (merge-gate shape held: lens→fix→lead live gate→fresh final-head→CI→merge); final-head layer caught 3 blockers + 7 should-fixes post-lens; CI merge-ref caught the one cross-branch interaction (#23 fixtures × #27 strict rules) no other layer could see; 1 lead prompt-defect (inferred-sidecar pin) caught and refixed; methodology synthesis + suite_next packet adjudicated (CP-6); D-047 sampler clause amended (fail-closed); stop card CLEARED; Window-A GO |
+| C-023 | 2026-07-09 | Scientific-rigor review of the measurement suite, benchmark, and full question bank (user-directed; full record `docs/reviews/2026-07-09-scientific-rigor-review.md`) — 4 fresh 5.5 lenses (metrology, benchmark/stats, per-question bank audit, advisor simulation) + independent lead read + 1 bidirectional discussion round | Verdict: strong provisional, advisor sign-off after a named all-software artifact list (error budget/P2-015 combined spec, analysis registry + multiplicity policy, canonical RQ registry + linter, frozen headline, contrast-level stats amendment, ordering executability, token-normalization contract); every blocker no-hardware-fixable; C5-1.1 blocker OVERTURNED in discussion (already contract-capped by C-014/D-037); ordering gap (C-015 promise vs manifest_order execution) elevated to pre-campaign; queue impact deferred to the step-2 planning session |
 
 ---
 
@@ -1295,3 +1296,56 @@ Resolution:
 
 Dissent: none recorded before deploy; counterreview findings, if any, are
 adjudicated in the run report.
+
+## C-023: Scientific-rigor review — suite, benchmark, question bank (2026-07-09)
+
+- Date: 2026-07-09. Participants: Claude Fable (lead adjudicator), 4 fresh
+  gpt-5.5-high read-only lenses (L1 metrology, L2 benchmark/statistical
+  design, L3 question-bank audit — every question individually, L4
+  Stanford-PhD-EE advisor simulation), 1 fresh gpt-5.5-high discussion
+  instance (D1) arguing the lead's synthesis with doc-verification duty.
+- Full record with verbatim lens outputs:
+  `docs/reviews/2026-07-09-scientific-rigor-review.md`. Review-only
+  session: no code changed, no worktrees (read-only fan-out per
+  codex-delegation §Parallel threads).
+
+Question: steelman the methodology, scope, and objectives; does the
+project as specced (hardware openly not in hand) stand up to a
+Stanford-PhD-EE advisor?
+
+Resolution (lead, with D1 concurrence):
+
+- Today: strong PROVISIONAL methodology; simulated advisor withholds
+  final sign-off on specific, curable grounds.
+- All blocker-class gaps are software/spec-only: B1 metrological error
+  budget + uncertainty propagation; B2 benchmark-level multiplicity /
+  analysis registry; B3 canonical RQ registry (bank overgrown, aliases
+  unnormalized); B4 frozen capstone headline + minimum-viable-capstone
+  contract. With those landed, both models independently answer YES at
+  the advisor bar, under the headline "auditable, boundary-labeled local
+  LLM energy characterization on named stacks" with split inference as
+  gated stretch.
+- Design-bearing majors accepted: contrast-level inference replaces
+  "intervals separate" (amends D-014 wording when adopted); ordering
+  executability before any suite campaign (C-015 rotation promise vs
+  sequencing-spec manifest_order — elevated by D1); token-normalization
+  contract + stack-identity table; phase-window claim gate; thermal
+  proxy honesty; per-backend telemetry-trust caveats + pre-registered
+  calibration runbooks.
+- Discussion catches (the review system working both directions): D1
+  OVERTURNED the lead-accepted C5-1.1 attribution blocker by citing the
+  existing C-014 amendment + claims-ladder forbidden language (lead
+  verified and accepted — naming hygiene only); D1 reordered the lead's
+  pre-hardware work plan (headline first, P2-015 as combined
+  floor+calibration+trust+error-budget spec, stats amendment before
+  reducer code, campaign packs last behind a registry/linter cut-line).
+- Unique catches by layer: L1 error budget + idle-model + phase-gate;
+  L2 multiplicity + contrast-rule + ordering gap; L3 registry gap +
+  per-question table + coverage gaps (telemetry perturbation, version
+  drift, jitter sensitivity, output-token identity); L4 frozen headline
+  + MVC contract + stack-identity table; D1 the C5-1.1 overturn + plan
+  reorder. Zero-yield layers: none.
+- Dissents: none unresolved after one discussion round.
+- Queue impact: deliberately NOT applied — the recommended work order is
+  input to the user's next planning session (spec fleshing for all
+  no-hardware pieces), per the user's two-step directive.

@@ -1,9 +1,10 @@
 # JouleWise Run State
 
-Last updated: 2026-07-09 (CP-5 resumed and CLEARED: PRs #22..#28 merged,
-methodology synthesis + suite_next packet adjudicated at CP-6, all
-accepted pre-campaign changes landed, Window-A GO behind P2-015 design
-doc + C-019 shakedown; suite 822; C-022; D-051)
+Last updated: 2026-07-09 (scientific-rigor review C-023: verdict strong
+provisional → advisor-defensible once the named all-software artifact
+list lands; docs-only session. Prior same day: CP-5 CLEARED, PRs
+#22..#28 merged, Window-A GO behind P2-015 design doc + C-019 shakedown;
+suite 822; C-022; D-051)
 
 ## Start Here For Every Big Run
 
@@ -95,6 +96,8 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-09 scientific-rigor review of suite/benchmark/question bank
+  (C-023; review-only): `docs/reviews/2026-07-09-scientific-rigor-review.md`
 - 2026-07-09 CP-5 resume: pre-campaign review completed, stop card
   cleared, PRs #22..#28 merged, Window-A GO
   (C-022): `docs/run_reports/2026-07-09-cp5-resume.md`
@@ -159,7 +162,11 @@ Follow `TASK_QUEUE.md` (lane-annotated). In order:
 
 1. **P2-015 design-doc prep** [AGENT]: cell list, n, UCB floor rule,
    Window-B-start revalidation cell (accepted synthesis condition; the
-   only remaining pre-window agent work).
+   only remaining pre-window agent work). Before drafting, read C-023's
+   recommended scope expansion (combined floor + calibration runbooks +
+   telemetry-trust hierarchy + error budget) in
+   `docs/reviews/2026-07-09-scientific-rigor-review.md` — adoption is
+   the next planning session's call.
 2. **Quiet Window A** [QUIET-MAC]: C-019 shakedown first, then P2-015
    floors, then P2-006 2M baselines; AP-6 sentinel pilot may ride the
    window tail (manifests are ready).
