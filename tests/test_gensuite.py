@@ -19,6 +19,7 @@ from joulewise.gensuite import (
     _build_sentinel_suite,
     build_jw_mixed_manifest,
     build_sentinel_manifest,
+    canonical_tokenizer_manifest,
     generate_chat,
     generate_code,
     generate_json,
@@ -30,10 +31,12 @@ from joulewise.gensuite import (
     realize_exact_prompt,
     repeated_seed_ids,
     sentinel_content,
+    tokenizer_manifest_sha256,
     tokenizer_id_from_manifest,
 )
 from joulewise.provenance import prompt_token_ids_sha256
 from joulewise.suite import SuiteManifest
+from scripts.gen_jw_mixed import TOKENIZER_FILES, tokenizer_manifest
 
 
 class QuirkyFakeTokenizer:
@@ -118,6 +121,46 @@ class ScriptedDrbg(Drbg):
 class GenSuiteTests(unittest.TestCase):
     def fake_tokenizer_id(self) -> str:
         return tokenizer_id_from_manifest(FAKE_TOKENIZER_MANIFEST)
+
+    def test_tokenizer_manifest_records_absent_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "tokenizer.json").write_text("tok", encoding="utf-8")
+            (root / "special_tokens_map.json").write_text("special", encoding="utf-8")
+            rows = tokenizer_manifest(root)
+        canonical = canonical_tokenizer_manifest(rows)
+        by_name = {row["filename"]: row for row in canonical}
+        self.assertEqual(set(by_name), set(TOKENIZER_FILES))
+        self.assertEqual(
+            by_name["tokenizer.json"]["sha256"],
+            hashlib.sha256(b"tok").hexdigest(),
+        )
+        self.assertEqual(
+            by_name["tokenizer.model"],
+            {"filename": "tokenizer.model", "status": "absent"},
+        )
+        self.assertEqual(
+            by_name["chat_template.jinja"],
+            {"filename": "chat_template.jinja", "status": "absent"},
+        )
+
+    def test_tokenizer_absence_is_folded_into_identity(self) -> None:
+        present_only = (("tokenizer.json", "a" * 64),)
+        with_absent = (
+            ("tokenizer.json", "a" * 64),
+            {"filename": "chat_template.jinja", "status": "absent"},
+        )
+        self.assertNotEqual(
+            tokenizer_manifest_sha256(present_only),
+            tokenizer_manifest_sha256(with_absent),
+        )
+        self.assertEqual(
+            canonical_tokenizer_manifest(with_absent),
+            [
+                {"filename": "chat_template.jinja", "status": "absent"},
+                {"filename": "tokenizer.json", "sha256": "a" * 64},
+            ],
+        )
 
     def test_drbg_determinism_and_rejection_edge(self) -> None:
         a = Drbg(b"seed")

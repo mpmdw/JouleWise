@@ -18,7 +18,7 @@
   },
   "generator": {
     "name": "jw_mixed_v1",
-    "parameters_hash": "226e0e6a79c943827c7edb507c9dea10efd52d1e54612f353619276d54f4f45f",
+    "parameters_hash": "5ad1c1a130b283979bcff95fd366d3e5d6ace553629c7bad54ffa429b0585243",
     "version": "1.0.0"
   },
   "items": [
@@ -38,7 +38,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "b0042efe0bdd5776b761424a2888bc43ca7c0f57922434672023886ecece4231",
+      "item_id": "6887a5c010a86f133cae2b02c222c471b7fba4e9e20935f89e5a62526811411a",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -52,7 +52,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.chat:1.0.0",
         "prompt_text": "You are a helpful assistant. Use the context below.\nThe team updates permit slips for the shared dock inspection routes while the plan remains easy to audit. The team reviews route cards for the shared regional survey teams while the plan remains easy to audit. The route lead reviews route cards for the seasonal transit repair logs while the plan remains easy to audit. The group routes shift totals for the temporary regional survey teams while the plan remains easy to audit. The clerk balances shift totals for the temporary greenhouse irrigation schedules while the plan remains easy to audit. The clerk records repair flags for the seasonal dock inspection routes while the plan remains easy to audit. The group reviews route cards for the seasonal regional survey teams while the plan remains easy to audit. The route lead records shift totals for the daily harbor pilot crews while the plan remains easy to audit. The team routes supply counts for the shared storm shelter rosters while the plan remains easy to audit. The clerk tracks intake forms for the shared greenhouse irrigation schedules while the plan remains easy to audit. The clerk balances shift totals for the daily dock inspection routes while the plan remains easy to audit. The clerk tracks ledger rows for the daily dock inspection routes while the plan remains easy to audit. The team routes supply counts for the shared market stall ledgers while the plan remains easy to audit. The group updates shift totals for the local regional survey teams while the plan remains easy to audit. The clerk updates route cards for the seasonal market stall ledgers while the plan remains easy to audit. The group updates shift totals for the daily regional survey teams while the plan remains easy to audit. The group compares repair flags for the daily greenhouse irrigation schedules while the plan remains easy to audit. The clerk reviews permit slips for the seasonal market stall ledgers while the plan remains easy to audit. The group checks permit slips for the quiet regional survey teams while the plan remains easy to audit. The route lead routes shift totals for the local storm shelter rosters while the plan remains easy to audit. The team routes route cards for the local dock inspection routes while the plan remains easy to audit. The group balances intake forms for the temporary library lending desks while the plan remains easy to audit. The clerk balances intake forms for the local storm shelter rosters while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nExplain the quiet market stall ledgers to a new town clerk, avoid jargon, use a numbered list, avoid jargon.",
-        "source_item_id": "b0042efe0bdd5776b761424a2888bc43ca7c0f57922434672023886ecece4231",
+        "source_item_id": "6887a5c010a86f133cae2b02c222c471b7fba4e9e20935f89e5a62526811411a",
         "source_sha256": "65c3ab895511e2ce5ce380790885f08382628110a8b196b8c16d2c16c56ec5f0"
       },
       "status_policy": "none",
@@ -74,7 +74,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "67ba1fced5b5fe498ff249db6d864d0478fbf23a9c47a8f36220d833b3f52834",
+      "item_id": "c68bdaea7b616f2916fc5571d4db1c1a03565acbfc2c8c4d88580df7df73ddbd",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -88,7 +88,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.chat:1.0.0",
         "prompt_text": "You are a helpful assistant. Use the context below.\nThe team reviews supply counts for the seasonal harbor pilot crews while the plan remains easy to audit. The group routes supply counts for the shared regional survey teams while the plan remains easy to audit. The route lead routes repair flags for the local transit repair logs while the plan remains easy to audit. The route lead checks crew notes for the seasonal dock inspection routes while the plan remains easy to audit. The clerk balances supply counts for the careful library lending desks while the plan remains easy to audit. The route lead compares crew notes for the rotating storm shelter rosters while the plan remains easy to audit. The clerk checks permit slips for the seasonal market stall ledgers while the plan remains easy to audit. The team balances repair flags for the daily greenhouse irrigation schedules while the plan remains easy to audit. The clerk checks permit slips for the daily harbor pilot crews while the plan remains easy to audit. The route lead routes permit slips for the rotating harbor pilot crews while the plan remains easy to audit. The route lead balances shift totals for the local market stall ledgers while the plan remains easy to audit. The group records shift totals for the temporary harbor pilot crews while the plan remains easy to audit. The clerk records supply counts for the local harbor pilot crews while the plan remains easy to audit. The group updates permit slips for the local dock inspection routes while the plan remains easy to audit. The group balances repair flags for the shared harbor pilot crews while the plan remains easy to audit. The clerk checks supply counts for the daily dock inspection routes while the plan remains easy to audit. The route lead tracks permit slips for the daily market stall ledgers while the plan remains easy to audit. The group updates ledger rows for the careful market stall ledgers while the plan remains easy to audit. The clerk updates intake forms for the local greenhouse irrigation schedules while the plan remains easy to audit. The team checks permit slips for the local regional survey teams while the plan remains easy to audit. The route lead routes supply counts for the rotating library lending desks while the plan remains easy to audit. The clerk routes intake forms for the shared library lending desks while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nExplain the seasonal regional survey teams to a harbor coordinator, name the tradeoffs, avoid jargon, name the tradeoffs, use a numbered list.",
-        "source_item_id": "67ba1fced5b5fe498ff249db6d864d0478fbf23a9c47a8f36220d833b3f52834",
+        "source_item_id": "c68bdaea7b616f2916fc5571d4db1c1a03565acbfc2c8c4d88580df7df73ddbd",
         "source_sha256": "ca6038c73d4363208cc3537b1df8c6c31150742b50535ff601372b174051d061"
       },
       "status_policy": "none",
@@ -110,7 +110,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "2a991285c0ac1bfd7804a8c511e2b86ff30b3e74ee82c8b88b98ababb6e252af",
+      "item_id": "0d4b1c89b97ab7d5d0ba111f1f11c9cc9849a5c4d39fa3ba75c1e655fc57321a",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -124,7 +124,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.chat:1.0.0",
         "prompt_text": "You are a helpful assistant. Use the context below.\nThe team checks shift totals for the daily dock inspection routes while the plan remains easy to audit. The team tracks route cards for the shared greenhouse irrigation schedules while the plan remains easy to audit. The group records supply counts for the seasonal transit repair logs while the plan remains easy to audit. The route lead records shift totals for the temporary regional survey teams while the plan remains easy to audit. The group tracks supply counts for the local market stall ledgers while the plan remains easy to audit. The clerk checks crew notes for the rotating library lending desks while the plan remains easy to audit. The clerk checks intake forms for the careful market stall ledgers while the plan remains easy to audit. The route lead records intake forms for the local dock inspection routes while the plan remains easy to audit. The group compares intake forms for the local market stall ledgers while the plan remains easy to audit. The clerk routes route cards for the rotating storm shelter rosters while the plan remains easy to audit. The clerk tracks ledger rows for the seasonal market stall ledgers while the plan remains easy to audit. The team compares intake forms for the daily market stall ledgers while the plan remains easy to audit. The team tracks intake forms for the rotating market stall ledgers while the plan remains easy to audit. The clerk records intake forms for the careful library lending desks while the plan remains easy to audit. The team checks ledger rows for the careful harbor pilot crews while the plan remains easy to audit. The team updates supply counts for the shared market stall ledgers while the plan remains easy to audit. The team compares intake forms for the rotating dock inspection routes while the plan remains easy to audit. The team reviews crew notes for the seasonal greenhouse irrigation schedules while the plan remains easy to audit. The team balances crew notes for the local storm shelter rosters while the plan remains easy to audit. The team checks supply counts for the local greenhouse irrigation schedules while the plan remains easy to audit. The group routes crew notes for the rotating regional survey teams while the plan remains easy to audit. The group checks ledger rows for the careful regional survey teams while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases\nExplain the careful greenhouse irrigation schedules to a new town clerk, keep the tone practical, name the tradeoffs, include one risk to watch, name the tradeoffs, include one risk to watch.",
-        "source_item_id": "2a991285c0ac1bfd7804a8c511e2b86ff30b3e74ee82c8b88b98ababb6e252af",
+        "source_item_id": "0d4b1c89b97ab7d5d0ba111f1f11c9cc9849a5c4d39fa3ba75c1e655fc57321a",
         "source_sha256": "b20b3283c8eb83ddb2588e2df349d7869f2d6755c563c607881ef5a0f2e4ce00"
       },
       "status_policy": "none",
@@ -146,7 +146,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "8df9b641d2f5b6fdfed541fc418699f46eb6677f52769ff33902c3fdb405789b",
+      "item_id": "c3a2791e4b11477f8a474a872b3cd7e4f7e751c13556b5c144deb062ac09b725",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -160,7 +160,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.chat:1.0.0",
         "prompt_text": "You are a helpful assistant. Use the context below.\nThe clerk routes intake forms for the seasonal market stall ledgers while the plan remains easy to audit. The team tracks crew notes for the daily dock inspection routes while the plan remains easy to audit. The route lead records ledger rows for the seasonal market stall ledgers while the plan remains easy to audit. The group reviews permit slips for the careful market stall ledgers while the plan remains easy to audit. The route lead compares permit slips for the shared greenhouse irrigation schedules while the plan remains easy to audit. The clerk checks supply counts for the temporary library lending desks while the plan remains easy to audit. The route lead tracks supply counts for the quiet dock inspection routes while the plan remains easy to audit. The clerk tracks supply counts for the seasonal dock inspection routes while the plan remains easy to audit. The route lead routes intake forms for the seasonal storm shelter rosters while the plan remains easy to audit. The clerk reviews route cards for the careful regional survey teams while the plan remains easy to audit. The clerk checks repair flags for the daily storm shelter rosters while the plan remains easy to audit. The clerk checks intake forms for the temporary harbor pilot crews while the plan remains easy to audit. The clerk updates repair flags for the seasonal storm shelter rosters while the plan remains easy to audit. The route lead records ledger rows for the local transit repair logs while the plan remains easy to audit. The group compares permit slips for the daily greenhouse irrigation schedules while the plan remains easy to audit. The team compares crew notes for the daily dock inspection routes while the plan remains easy to audit. The team checks supply counts for the rotating regional survey teams while the plan remains easy to audit. The route lead reviews repair flags for the daily dock inspection routes while the plan remains easy to audit. The clerk balances shift totals for the shared regional survey teams while the plan remains easy to audit. The group tracks permit slips for the quiet regional survey teams while the plan remains easy to audit. The route lead reviews intake forms for the quiet greenhouse irrigation schedules while the plan remains easy to audit. The clerk compares supply counts for the temporary library lending desks while the plan remains easy to audit. The group tracks crew notes for the rotating transit repair logs while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nExplain the shared greenhouse irrigation schedules to a maintenance dispatcher, keep the tone practical, name the tradeoffs, give two examples.",
-        "source_item_id": "8df9b641d2f5b6fdfed541fc418699f46eb6677f52769ff33902c3fdb405789b",
+        "source_item_id": "c3a2791e4b11477f8a474a872b3cd7e4f7e751c13556b5c144deb062ac09b725",
         "source_sha256": "733b25238cbfea1ad125e954c2b446bb7a21ace3adbaa54e0fbc3b60eed17930"
       },
       "status_policy": "none",
@@ -182,7 +182,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "83c74d44e6283b809b02ee034f3683629446d372d2563b34e507d195e44d5b90",
+      "item_id": "edbba88334399bd439c13cc2765c2e66521e428c14ebc405f997c70daf8c8a43",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -196,7 +196,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.chat:1.0.0",
         "prompt_text": "You are a helpful assistant. Use the context below.\nThe clerk checks route cards for the temporary transit repair logs while the plan remains easy to audit. The route lead updates intake forms for the seasonal greenhouse irrigation schedules while the plan remains easy to audit. The team tracks shift totals for the local regional survey teams while the plan remains easy to audit. The team routes supply counts for the local market stall ledgers while the plan remains easy to audit. The team reviews ledger rows for the shared greenhouse irrigation schedules while the plan remains easy to audit. The route lead checks route cards for the local regional survey teams while the plan remains easy to audit. The team balances ledger rows for the shared harbor pilot crews while the plan remains easy to audit. The team tracks ledger rows for the careful greenhouse irrigation schedules while the plan remains easy to audit. The route lead updates ledger rows for the seasonal regional survey teams while the plan remains easy to audit. The clerk reviews permit slips for the careful dock inspection routes while the plan remains easy to audit. The group compares repair flags for the daily dock inspection routes while the plan remains easy to audit. The team updates permit slips for the temporary library lending desks while the plan remains easy to audit. The team routes shift totals for the daily library lending desks while the plan remains easy to audit. The route lead balances shift totals for the careful dock inspection routes while the plan remains easy to audit. The group tracks crew notes for the shared library lending desks while the plan remains easy to audit. The group balances shift totals for the careful storm shelter rosters while the plan remains easy to audit. The group routes repair flags for the temporary greenhouse irrigation schedules while the plan remains easy to audit. The route lead checks repair flags for the careful storm shelter rosters while the plan remains easy to audit. The team updates crew notes for the seasonal dock inspection routes while the plan remains easy to audit. The route lead compares supply counts for the shared regional survey teams while the plan remains easy to audit. The team checks permit slips for the rotating harbor pilot crews while the plan remains easy to audit. The route lead updates crew notes for the careful dock inspection routes while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases\nExplain the quiet transit repair logs to a new town clerk, use a numbered list, give two examples, give two examples, include one risk to watch, include one risk to watch.",
-        "source_item_id": "83c74d44e6283b809b02ee034f3683629446d372d2563b34e507d195e44d5b90",
+        "source_item_id": "edbba88334399bd439c13cc2765c2e66521e428c14ebc405f997c70daf8c8a43",
         "source_sha256": "dc5a0b80a202113a116f68b662ebb21fb871c84bac02dcfec213daab1b2b0c2f"
       },
       "status_policy": "none",
@@ -218,7 +218,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "b560ccc1cbccf01bac782a111593d37417839dd86dcb405417d364181989f112",
+      "item_id": "9d539fc9f6c519f474650bdf4f3ce7eb15beb59d03ccf64e44e9f1615c518301",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -232,7 +232,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.chat:1.0.0",
         "prompt_text": "You are a helpful assistant. Use the context below.\nThe clerk routes route cards for the seasonal market stall ledgers while the plan remains easy to audit. The team routes repair flags for the daily regional survey teams while the plan remains easy to audit. The team routes shift totals for the careful transit repair logs while the plan remains easy to audit. The route lead compares intake forms for the daily market stall ledgers while the plan remains easy to audit. The group tracks supply counts for the shared storm shelter rosters while the plan remains easy to audit. The clerk tracks crew notes for the rotating market stall ledgers while the plan remains easy to audit. The team tracks ledger rows for the daily library lending desks while the plan remains easy to audit. The route lead tracks crew notes for the quiet library lending desks while the plan remains easy to audit. The route lead checks shift totals for the local dock inspection routes while the plan remains easy to audit. The team checks shift totals for the shared greenhouse irrigation schedules while the plan remains easy to audit. The group compares intake forms for the careful dock inspection routes while the plan remains easy to audit. The group balances crew notes for the local dock inspection routes while the plan remains easy to audit. The team updates permit slips for the seasonal greenhouse irrigation schedules while the plan remains easy to audit. The group tracks repair flags for the daily transit repair logs while the plan remains easy to audit. The team reviews permit slips for the shared transit repair logs while the plan remains easy to audit. The route lead tracks permit slips for the rotating storm shelter rosters while the plan remains easy to audit. The route lead reviews supply counts for the quiet greenhouse irrigation schedules while the plan remains easy to audit. The clerk reviews ledger rows for the local library lending desks while the plan remains easy to audit. The clerk updates ledger rows for the temporary storm shelter rosters while the plan remains easy to audit. The team compares repair flags for the shared regional survey teams while the plan remains easy to audit. The group tracks intake forms for the local storm shelter rosters while the plan remains easy to audit. The team routes permit slips for the rotating library lending desks while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nExplain the quiet storm shelter rosters to a field supervisor, name the tradeoffs, give two examples, keep the tone practical, give two examples.",
-        "source_item_id": "b560ccc1cbccf01bac782a111593d37417839dd86dcb405417d364181989f112",
+        "source_item_id": "9d539fc9f6c519f474650bdf4f3ce7eb15beb59d03ccf64e44e9f1615c518301",
         "source_sha256": "2120f0266febc19473d76e6074d687d82c654a982230e88e6cd87416fb8681d7"
       },
       "status_policy": "none",
@@ -254,7 +254,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "343d3a4d5b33bdd60bc8fe7705f5c789cb3f7b03835a4fc301fb48aba980aecc",
+      "item_id": "ee44b705edbbe1c6f195fc1bf363ab0ed3a123ccc02ab28c367f4f43998863a1",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -268,7 +268,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.chat:1.0.0",
         "prompt_text": "You are a helpful assistant. Use the context below.\nThe team compares shift totals for the rotating dock inspection routes while the plan remains easy to audit. The group checks crew notes for the seasonal library lending desks while the plan remains easy to audit. The team routes supply counts for the shared storm shelter rosters while the plan remains easy to audit. The route lead compares crew notes for the daily harbor pilot crews while the plan remains easy to audit. The clerk updates repair flags for the daily greenhouse irrigation schedules while the plan remains easy to audit. The route lead tracks shift totals for the careful greenhouse irrigation schedules while the plan remains easy to audit. The group tracks supply counts for the shared greenhouse irrigation schedules while the plan remains easy to audit. The route lead routes crew notes for the daily transit repair logs while the plan remains easy to audit. The group updates crew notes for the rotating market stall ledgers while the plan remains easy to audit. The clerk tracks crew notes for the rotating dock inspection routes while the plan remains easy to audit. The team balances route cards for the temporary harbor pilot crews while the plan remains easy to audit. The group compares shift totals for the seasonal harbor pilot crews while the plan remains easy to audit. The team routes ledger rows for the shared harbor pilot crews while the plan remains easy to audit. The route lead reviews supply counts for the quiet transit repair logs while the plan remains easy to audit. The clerk updates crew notes for the seasonal harbor pilot crews while the plan remains easy to audit. The team routes supply counts for the rotating market stall ledgers while the plan remains easy to audit. The team balances repair flags for the daily library lending desks while the plan remains easy to audit. The route lead compares supply counts for the quiet harbor pilot crews while the plan remains easy to audit. The route lead updates ledger rows for the shared regional survey teams while the plan remains easy to audit. The group balances crew notes for the local transit repair logs while the plan remains easy to audit. The clerk compares shift totals for the local regional survey teams while the plan remains easy to audit. The clerk compares ledger rows for the local library lending desks while the plan remains easy to audit. The group checks intake forms for the daily greenhouse irrigation schedules while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nExplain the rotating greenhouse irrigation schedules to a harbor coordinator, use a numbered list, keep the tone practical, name the tradeoffs.",
-        "source_item_id": "343d3a4d5b33bdd60bc8fe7705f5c789cb3f7b03835a4fc301fb48aba980aecc",
+        "source_item_id": "ee44b705edbbe1c6f195fc1bf363ab0ed3a123ccc02ab28c367f4f43998863a1",
         "source_sha256": "9b06b3c032aa620b4ed86e6f3319e417f5209f1fe18390f543fd7f11b8b383dc"
       },
       "status_policy": "none",
@@ -290,7 +290,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "f6a5738f19edca40f9d794fb041f1d4e6c3603b89ee6be71d8298cb678f116f9",
+      "item_id": "60c1a492aff55e5c5ef7dfd58d91c9b0b795c9a0280a5629f60670f31447ec7f",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -304,7 +304,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.chat:1.0.0",
         "prompt_text": "You are a helpful assistant. Use the context below.\nThe group checks shift totals for the rotating market stall ledgers while the plan remains easy to audit. The team updates permit slips for the seasonal market stall ledgers while the plan remains easy to audit. The team tracks crew notes for the temporary greenhouse irrigation schedules while the plan remains easy to audit. The route lead tracks crew notes for the shared storm shelter rosters while the plan remains easy to audit. The clerk reviews ledger rows for the quiet library lending desks while the plan remains easy to audit. The group checks intake forms for the shared harbor pilot crews while the plan remains easy to audit. The clerk routes ledger rows for the careful harbor pilot crews while the plan remains easy to audit. The clerk routes shift totals for the daily library lending desks while the plan remains easy to audit. The route lead routes supply counts for the quiet storm shelter rosters while the plan remains easy to audit. The clerk reviews ledger rows for the shared greenhouse irrigation schedules while the plan remains easy to audit. The route lead checks supply counts for the temporary transit repair logs while the plan remains easy to audit. The group routes permit slips for the rotating greenhouse irrigation schedules while the plan remains easy to audit. The group reviews intake forms for the careful dock inspection routes while the plan remains easy to audit. The clerk balances shift totals for the quiet regional survey teams while the plan remains easy to audit. The group tracks route cards for the quiet transit repair logs while the plan remains easy to audit. The route lead updates permit slips for the careful transit repair logs while the plan remains easy to audit. The group tracks intake forms for the careful greenhouse irrigation schedules while the plan remains easy to audit. The route lead records repair flags for the seasonal harbor pilot crews while the plan remains easy to audit. The team records crew notes for the rotating transit repair logs while the plan remains easy to audit. The group updates repair flags for the seasonal regional survey teams while the plan remains easy to audit. The group updates ledger rows for the local dock inspection routes while the plan remains easy to audit. The team balances route cards for the daily library lending desks while the plan remains easy to audit. The group updates route cards for the seasonal harbor pilot crews while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases\nExplain the daily harbor pilot crews to a first-year nursing student, give two examples, include one risk to watch, use a numbered list.",
-        "source_item_id": "f6a5738f19edca40f9d794fb041f1d4e6c3603b89ee6be71d8298cb678f116f9",
+        "source_item_id": "60c1a492aff55e5c5ef7dfd58d91c9b0b795c9a0280a5629f60670f31447ec7f",
         "source_sha256": "b696695e7273366398811a969c72511d38da148663e9c0af2725245c28dfff5f"
       },
       "status_policy": "none",
@@ -326,7 +326,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "8a7ea19f4be2e3e7e6ae86b1b1315c40c786eb510a50a9758e85528013d07648",
+      "item_id": "59bf87407c43c652b32aa108b90c139bd676bd4d01f5bdd1afa6fe9c28a1f714",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -340,7 +340,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.code:1.0.0",
         "prompt_text": "Complete the final function in this module. Return only code.\nimport collections\nimport json\nimport datetime\n\"\"\"route_manifest helpers for synthetic records.\"\"\"\n\ndef kel_sai_nori(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\ndef sai_kel(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\ndef pak_sai(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\n# note: pak_nori_pak keeps local state before the final stub\n# note: luma_dor keeps local state before the final stub\n# note: luma_tavi keeps local state before the final stub\n# note: tor_tavi keeps local state before the final stub\n# note: dor_min_ver keeps local state before the final stub\n# note: ver_lan_wen keeps local state before the final stub\n# note: dor_kel_nori keeps local state before the final stub\n# note: ver_pak_wen keeps local state before the final stub\n# note: sai_lan_dor keeps local state before the final stub\n# note: luma_dor_wen keeps local state before the final stub\n# note: wen_tor keeps local state before the final stub\n# note: luma_dor keeps local state before the final stub\n# note: lan_tavi_lan keeps local state before the final stub\n# note: tavi_lan_lan keeps local state before the final stub\n# note: min_luma keeps local state before the final stub\n# note: luma_dor keeps local state before the final stub\n# note: ver_tor keeps local state before the final stub\n# note: dor_wen_lan keeps local state before the final stub\n# note: dor_tor_luma keeps local state before the final stub\n# note: nori_ver keeps local state before the final stub\n# note: nori_pak keeps local state before the final stub\n # note: keep the branch simple # note: keep the branch simple # note: keep the branch simple # note: keep the branch simple value value\ndef wen_tavi_sai(records, key):\n    \"\"\"Merge rows into a dictionary of lists keyed by key.\"\"\"\n    # TODO: implement\n",
-        "source_item_id": "8a7ea19f4be2e3e7e6ae86b1b1315c40c786eb510a50a9758e85528013d07648",
+        "source_item_id": "59bf87407c43c652b32aa108b90c139bd676bd4d01f5bdd1afa6fe9c28a1f714",
         "source_sha256": "d6923b82346638608ba952518adec97ffdc6b2d6e5e47718f197a31ebbac68c1"
       },
       "status_policy": "none",
@@ -362,7 +362,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "a53d071869d75f21680b8ca75d4dca9106502c82c8a27ccbbc62e746a3edc4a4",
+      "item_id": "8b1672ec48c784afc7063e09aad021a769da8d435398ebbb465a1b2fadfcaee9",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -376,7 +376,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.code:1.0.0",
         "prompt_text": "Complete the final function in this module. Return only code.\nimport pathlib\nimport itertools\n\"\"\"route_manifest helpers for synthetic records.\"\"\"\n\ndef nori_dor_kel(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\ndef kel_tavi_luma(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\n# note: min_kel keeps local state before the final stub\n# note: dor_wen keeps local state before the final stub\n# note: pak_nori keeps local state before the final stub\n# note: nori_sai keeps local state before the final stub\n# note: kel_lan_min keeps local state before the final stub\n# note: tavi_dor keeps local state before the final stub\n# note: lan_kel_nori keeps local state before the final stub\n# note: pak_luma_tavi keeps local state before the final stub\n# note: kel_lan keeps local state before the final stub\n# note: luma_tavi keeps local state before the final stub\n# note: ver_wen_lan keeps local state before the final stub\n# note: kel_min keeps local state before the final stub\n# note: nori_tavi_lan keeps local state before the final stub\n# note: tavi_tor keeps local state before the final stub\n# note: sai_luma keeps local state before the final stub\n# note: ver_kel_luma keeps local state before the final stub\n# note: tavi_dor_dor keeps local state before the final stub\n# note: lan_ver_kel keeps local state before the final stub\n# note: wen_tavi_tavi keeps local state before the final stub\n# note: wen_ver keeps local state before the final stub\n# note: lan_tavi_lan keeps local state before the final stub\n# note: kel_sai keeps local state before the final stub\n# note: luma_tavi_min keeps local state before the final stub\n# note: tavi_tavi_lan keeps local state before the final stub\n # note: keep the branch simple # note: keep the branch simple # note: keep the branch simple # handles empty input\ndef tor_luma_tor(records, key):\n    \"\"\"Merge rows into a dictionary of lists keyed by key.\"\"\"\n    # TODO: implement\n",
-        "source_item_id": "a53d071869d75f21680b8ca75d4dca9106502c82c8a27ccbbc62e746a3edc4a4",
+        "source_item_id": "8b1672ec48c784afc7063e09aad021a769da8d435398ebbb465a1b2fadfcaee9",
         "source_sha256": "a104d1e436f27ac34ea69b92245c6f343d06a2e3518ca2aac69511a7b418229d"
       },
       "status_policy": "none",
@@ -398,7 +398,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "439b508ecb04989673b91715bf061fa9780547245ab149b62a06ceb1c7e430cb",
+      "item_id": "04bf3194d5a60313f0733f25958289b15b1ec04327759236623ea3660af5324a",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -412,7 +412,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.code:1.0.0",
         "prompt_text": "Complete the final function in this module. Return only code.\nimport math\nimport pathlib\n\"\"\"route_manifest helpers for synthetic records.\"\"\"\n\ndef min_ver(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\ndef kel_nori(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\n# note: wen_tavi keeps local state before the final stub\n# note: kel_tavi_lan keeps local state before the final stub\n# note: dor_pak keeps local state before the final stub\n# note: min_tavi keeps local state before the final stub\n# note: luma_luma keeps local state before the final stub\n# note: sai_wen_ver keeps local state before the final stub\n# note: dor_min keeps local state before the final stub\n# note: lan_nori_ver keeps local state before the final stub\n# note: tavi_lan keeps local state before the final stub\n# note: luma_kel_nori keeps local state before the final stub\n# note: tavi_ver keeps local state before the final stub\n# note: nori_pak keeps local state before the final stub\n# note: min_wen keeps local state before the final stub\n# note: dor_sai_tavi keeps local state before the final stub\n# note: luma_ver keeps local state before the final stub\n# note: min_dor_tavi keeps local state before the final stub\n# note: nori_min_dor keeps local state before the final stub\n# note: nori_kel_lan keeps local state before the final stub\n# note: kel_nori_dor keeps local state before the final stub\n# note: wen_tor_luma keeps local state before the final stub\n# note: ver_ver_min keeps local state before the final stub\n# note: tavi_nori_sai keeps local state before the final stub\n# note: luma_wen_luma keeps local state before the final stub\n# note: ver_min_tavi keeps local state before the final stub\n # note: keep the branch simple # note: keep the branch simple # note: keep the branch simple # handles empty input value\ndef nori_dor_ver(records, key):\n    \"\"\"Merge rows into a dictionary of lists keyed by key.\"\"\"\n    # TODO: implement\n",
-        "source_item_id": "439b508ecb04989673b91715bf061fa9780547245ab149b62a06ceb1c7e430cb",
+        "source_item_id": "04bf3194d5a60313f0733f25958289b15b1ec04327759236623ea3660af5324a",
         "source_sha256": "b44200d006c1351e6cadae1a0c41f406a606f10c091b07f9553edbdc592fec44"
       },
       "status_policy": "none",
@@ -434,7 +434,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "1bbb5776630fcdf6dcb3533db31ce2700415bee4793827f03bc04d694b1014a4",
+      "item_id": "f8ea8e0c1a3a1cb308854159376771413c3321c3c20d98a381483d8ef9ada09f",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -448,7 +448,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.code:1.0.0",
         "prompt_text": "Complete the final function in this module. Return only code.\nimport json\nimport pathlib\n\"\"\"route_manifest helpers for synthetic records.\"\"\"\n\ndef wen_wen_pak(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\ndef ver_tor(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\n# note: min_luma_lan keeps local state before the final stub\n# note: pak_ver_min keeps local state before the final stub\n# note: dor_pak_tavi keeps local state before the final stub\n# note: nori_sai keeps local state before the final stub\n# note: ver_sai_kel keeps local state before the final stub\n# note: dor_dor keeps local state before the final stub\n# note: tavi_lan_kel keeps local state before the final stub\n# note: sai_lan_tor keeps local state before the final stub\n# note: lan_wen_sai keeps local state before the final stub\n# note: sai_luma_tor keeps local state before the final stub\n# note: ver_kel_wen keeps local state before the final stub\n# note: luma_wen keeps local state before the final stub\n# note: lan_min_sai keeps local state before the final stub\n# note: min_ver keeps local state before the final stub\n# note: pak_nori_kel keeps local state before the final stub\n# note: kel_dor keeps local state before the final stub\n# note: lan_luma keeps local state before the final stub\n# note: dor_dor keeps local state before the final stub\n# note: pak_luma keeps local state before the final stub\n# note: pak_dor_ver keeps local state before the final stub\n# note: nori_luma_tor keeps local state before the final stub\n# note: tavi_nori_nori keeps local state before the final stub\n# note: wen_wen_dor keeps local state before the final stub\n# note: lan_luma keeps local state before the final stub\n # note: keep the branch simple # note: keep the branch simple # note: keep the branch simple # local check\ndef tor_pak_sai(records, key):\n    \"\"\"Merge rows into a dictionary of lists keyed by key.\"\"\"\n    # TODO: implement\n",
-        "source_item_id": "1bbb5776630fcdf6dcb3533db31ce2700415bee4793827f03bc04d694b1014a4",
+        "source_item_id": "f8ea8e0c1a3a1cb308854159376771413c3321c3c20d98a381483d8ef9ada09f",
         "source_sha256": "00154a2f4e3291b50dbac8627be078ef687014b0d4c264ddc0ce01758b20765b"
       },
       "status_policy": "none",
@@ -470,7 +470,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "b4d0bcd765c39b57b8271d7476b9610425325da436d9b86c5b842bec540d980e",
+      "item_id": "d46975a2bb6d20f0d486d06c3a6e60399aeea73ab53a6e270b7cc18e5da4f2df",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -484,7 +484,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.code:1.0.0",
         "prompt_text": "Complete the final function in this module. Return only code.\nimport datetime\nimport datetime\n\"\"\"route_manifest helpers for synthetic records.\"\"\"\n\ndef dor_lan_nori(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\ndef kel_nori(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\n# note: tavi_wen_luma keeps local state before the final stub\n# note: tor_pak_nori keeps local state before the final stub\n# note: lan_min_dor keeps local state before the final stub\n# note: min_tor_lan keeps local state before the final stub\n# note: tavi_dor_nori keeps local state before the final stub\n# note: kel_sai_nori keeps local state before the final stub\n# note: kel_tor_nori keeps local state before the final stub\n# note: tor_kel_tavi keeps local state before the final stub\n# note: luma_pak_ver keeps local state before the final stub\n# note: kel_sai_lan keeps local state before the final stub\n# note: kel_wen_pak keeps local state before the final stub\n# note: sai_lan_ver keeps local state before the final stub\n# note: pak_wen keeps local state before the final stub\n# note: dor_ver_wen keeps local state before the final stub\n# note: lan_ver_tor keeps local state before the final stub\n# note: dor_ver_min keeps local state before the final stub\n# note: lan_sai keeps local state before the final stub\n# note: min_wen keeps local state before the final stub\n# note: tor_ver keeps local state before the final stub\n# note: kel_tavi keeps local state before the final stub\n# note: pak_wen keeps local state before the final stub\n# note: luma_min_kel keeps local state before the final stub\n# note: tavi_lan keeps local state before the final stub\n# note: lan_tor keeps local state before the final stub\n # note: keep the branch simple # note: keep the branch simple # note: keep the branch simple # local check\ndef ver_sai_sai(records, key):\n    \"\"\"Merge rows into a dictionary of lists keyed by key.\"\"\"\n    # TODO: implement\n",
-        "source_item_id": "b4d0bcd765c39b57b8271d7476b9610425325da436d9b86c5b842bec540d980e",
+        "source_item_id": "d46975a2bb6d20f0d486d06c3a6e60399aeea73ab53a6e270b7cc18e5da4f2df",
         "source_sha256": "1fc6f1bf64d4292ec03c6644d423fb9121737aa64d9b6432d7f748fb524cd62e"
       },
       "status_policy": "none",
@@ -506,7 +506,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "fcf62f17e399d6ae49e4d7c7ada6870cce273a1736386307a370383478f201d7",
+      "item_id": "8128196a3c89e67cebe08d67a2c4c3681de5b53d8f044ea2d8664fa2acc8bc5f",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -520,7 +520,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.code:1.0.0",
         "prompt_text": "Complete the final function in this module. Return only code.\nimport pathlib\nimport pathlib\n\"\"\"route_manifest helpers for synthetic records.\"\"\"\n\ndef ver_lan(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\ndef tor_kel(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\ndef sai_min_luma(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\n# note: dor_min_nori keeps local state before the final stub\n# note: ver_pak_tor keeps local state before the final stub\n# note: ver_min keeps local state before the final stub\n# note: ver_lan_wen keeps local state before the final stub\n# note: min_tor keeps local state before the final stub\n# note: nori_tor keeps local state before the final stub\n# note: dor_kel_tor keeps local state before the final stub\n# note: tavi_kel_lan keeps local state before the final stub\n# note: ver_dor_kel keeps local state before the final stub\n# note: dor_nori keeps local state before the final stub\n# note: pak_sai_luma keeps local state before the final stub\n# note: tavi_dor keeps local state before the final stub\n# note: dor_tor_dor keeps local state before the final stub\n# note: wen_min keeps local state before the final stub\n# note: min_dor keeps local state before the final stub\n# note: wen_kel keeps local state before the final stub\n# note: pak_tavi_kel keeps local state before the final stub\n# note: nori_wen_pak keeps local state before the final stub\n# note: pak_ver keeps local state before the final stub\n# note: min_nori_lan keeps local state before the final stub\n# note: pak_sai_dor keeps local state before the final stub\n# note: kel_luma_tavi keeps local state before the final stub\n # note: keep the branch simple # note: keep the branch simple # note: keep the branch simple # handles empty input value value\ndef tor_sai(records, key):\n    \"\"\"Merge rows into a dictionary of lists keyed by key.\"\"\"\n    # TODO: implement\n",
-        "source_item_id": "fcf62f17e399d6ae49e4d7c7ada6870cce273a1736386307a370383478f201d7",
+        "source_item_id": "8128196a3c89e67cebe08d67a2c4c3681de5b53d8f044ea2d8664fa2acc8bc5f",
         "source_sha256": "df82941d377a8ad5b7580376982e19b0d8fb9d16206d5eea0c41ba48fadcc733"
       },
       "status_policy": "none",
@@ -542,7 +542,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "a0e5c81af1141e03a5241f6477fb8a92ab2c7b98332b3718b654cbc0d7f2e486",
+      "item_id": "32faadd419d18f8698b82da5b641a20afa18d30a59201f93796b5860c4927a52",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -556,7 +556,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.code:1.0.0",
         "prompt_text": "Complete the final function in this module. Return only code.\nimport pathlib\nimport itertools\nimport json\n\"\"\"route_manifest helpers for synthetic records.\"\"\"\n\ndef nori_min_luma(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\ndef wen_tavi_tavi(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\ndef kel_sai_kel(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\n# note: nori_lan keeps local state before the final stub\n# note: tor_ver keeps local state before the final stub\n# note: lan_min keeps local state before the final stub\n# note: nori_lan keeps local state before the final stub\n# note: luma_dor_dor keeps local state before the final stub\n# note: sai_wen_sai keeps local state before the final stub\n# note: kel_tor keeps local state before the final stub\n# note: kel_ver keeps local state before the final stub\n# note: sai_lan keeps local state before the final stub\n# note: dor_min keeps local state before the final stub\n# note: dor_luma keeps local state before the final stub\n# note: ver_lan_tor keeps local state before the final stub\n# note: wen_tor_nori keeps local state before the final stub\n# note: nori_ver keeps local state before the final stub\n# note: kel_ver_kel keeps local state before the final stub\n# note: nori_sai_kel keeps local state before the final stub\n# note: pak_min keeps local state before the final stub\n# note: sai_luma_ver keeps local state before the final stub\n# note: ver_luma_nori keeps local state before the final stub\n# note: luma_kel_kel keeps local state before the final stub\n# note: sai_tor_luma keeps local state before the final stub\n# note: dor_wen keeps local state before the final stub\n # note: keep the branch simple # note: keep the branch simple # note: keep the branch simple # handles empty input\ndef luma_ver_kel(records, key):\n    \"\"\"Merge rows into a dictionary of lists keyed by key.\"\"\"\n    # TODO: implement\n",
-        "source_item_id": "a0e5c81af1141e03a5241f6477fb8a92ab2c7b98332b3718b654cbc0d7f2e486",
+        "source_item_id": "32faadd419d18f8698b82da5b641a20afa18d30a59201f93796b5860c4927a52",
         "source_sha256": "39c802528950375eee6ac6ebbfab94df69ee7f831198789f8350b1f79b129db8"
       },
       "status_policy": "none",
@@ -578,7 +578,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "78e8146a02f6a68baffea54166ec411202a03305d0a8933f00205664ad520285",
+      "item_id": "28c0f36bceaf96f87e5295c4a3e012d820c7521f067b552ed0b83da089fcdeff",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -592,7 +592,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.code:1.0.0",
         "prompt_text": "Complete the final function in this module. Return only code.\nimport datetime\nimport math\nimport math\n\"\"\"route_manifest helpers for synthetic records.\"\"\"\n\ndef sai_tor_sai(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\ndef lan_ver(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\ndef min_nori_ver(records):\n    total = 0\n    for row in records:\n        total += int(row.get('count', 0))\n    return total\n\n# note: ver_pak keeps local state before the final stub\n# note: tor_pak keeps local state before the final stub\n# note: pak_kel_tavi keeps local state before the final stub\n# note: lan_pak_dor keeps local state before the final stub\n# note: min_dor keeps local state before the final stub\n# note: tavi_kel keeps local state before the final stub\n# note: sai_tavi keeps local state before the final stub\n# note: sai_ver keeps local state before the final stub\n# note: lan_tavi keeps local state before the final stub\n# note: wen_sai_dor keeps local state before the final stub\n# note: pak_min_luma keeps local state before the final stub\n# note: kel_wen_lan keeps local state before the final stub\n# note: dor_tor_min keeps local state before the final stub\n# note: wen_sai_pak keeps local state before the final stub\n# note: nori_tavi keeps local state before the final stub\n# note: luma_sai keeps local state before the final stub\n# note: tor_pak keeps local state before the final stub\n# note: min_kel keeps local state before the final stub\n# note: nori_sai_tavi keeps local state before the final stub\n# note: pak_wen keeps local state before the final stub\n# note: min_pak keeps local state before the final stub\n# note: dor_kel keeps local state before the final stub\n # note: keep the branch simple # note: keep the branch simple # note: keep the branch simple # handles empty input value value\ndef tavi_pak_luma(records, key):\n    \"\"\"Merge rows into a dictionary of lists keyed by key.\"\"\"\n    # TODO: implement\n",
-        "source_item_id": "78e8146a02f6a68baffea54166ec411202a03305d0a8933f00205664ad520285",
+        "source_item_id": "28c0f36bceaf96f87e5295c4a3e012d820c7521f067b552ed0b83da089fcdeff",
         "source_sha256": "710d462ec1a8fdf1ab114382d8dfabea028fc883a08bb4c8f42a553438b446ff"
       },
       "status_policy": "none",
@@ -614,7 +614,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "2fdde8c334cf2b91ccfc72dafd25549abe6ac892c153d5848ed1c3b7e5dfb62a",
+      "item_id": "49694b1df15be92700a7ab00b2f0ef2a2c83de19f7bfbac0d70f4d4876f7b962",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -628,7 +628,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.summ:1.0.0",
         "prompt_text": "Read the following report.\nSaisai reported 61 route notes during the local review, and the same party later checked permit slips. The unique reference code was NEEDLE-2339. Lanlan reported 23 route notes during the local review, and the same party later checked route cards. The unique reference code was NEEDLE-2780. Lanlan reported 10 route notes during the shared review, and the same party later checked ledger rows. Wenmin reported 59 route notes during the careful review, and the same party later checked intake forms. Wenmin reported 16 route notes during the quiet review, and the same party later checked intake forms. Sailuma reported 65 route notes during the quiet review, and the same party later checked supply counts. Saisai reported 43 route notes during the quiet review, and the same party later checked route cards. Sailuma reported 89 route notes during the rotating review, and the same party later checked ledger rows. Sailuma reported 36 route notes during the daily review, and the same party later checked ledger rows. Saisai reported 64 route notes during the quiet review, and the same party later checked supply counts. Saisai reported 48 route notes during the seasonal review, and the same party later checked route cards. Sailuma reported 50 route notes during the shared review, and the same party later checked crew notes. Saisai reported 37 route notes during the quiet review, and the same party later checked repair flags. Sailuma reported 22 route notes during the local review, and the same party later checked crew notes. Wenmin reported 58 route notes during the quiet review, and the same party later checked crew notes. Wenmin reported 35 route notes during the seasonal review, and the same party later checked permit slips. Lanlan reported 15 route notes during the careful review, and the same party later checked supply counts. Sailuma reported 54 route notes during the careful review, and the same party later checked permit slips. Sailuma reported 18 route notes during the shared review, and the same party later checked ledger rows.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases clearly\nSummarize the report above in about 120 words, covering each named party.",
-        "source_item_id": "2fdde8c334cf2b91ccfc72dafd25549abe6ac892c153d5848ed1c3b7e5dfb62a",
+        "source_item_id": "49694b1df15be92700a7ab00b2f0ef2a2c83de19f7bfbac0d70f4d4876f7b962",
         "source_sha256": "cd9426768981e9ddb5ab757ec691c05d3401db1790603a5b8c9c4a84e37e234e"
       },
       "status_policy": "none",
@@ -650,7 +650,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "f3af07f511d79f6e04f8e9390e4cb4254090ee62f1928c65518d2d184574dde8",
+      "item_id": "25983434802266826385a10756986bb44ec99c62eaa0994177991c543b3b9b93",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -664,7 +664,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.summ:1.0.0",
         "prompt_text": "Read the following report.\nLankel reported 85 route notes during the quiet review, and the same party later checked permit slips. The unique reference code was NEEDLE-6438. Wendor reported 11 route notes during the careful review, and the same party later checked repair flags. The unique reference code was NEEDLE-1010. Keltor reported 11 route notes during the rotating review, and the same party later checked repair flags. Kelmin reported 69 route notes during the shared review, and the same party later checked route cards. Lumatavi reported 60 route notes during the seasonal review, and the same party later checked permit slips. Wendor reported 78 route notes during the local review, and the same party later checked permit slips. Wendor reported 70 route notes during the quiet review, and the same party later checked repair flags. Wendor reported 76 route notes during the quiet review, and the same party later checked crew notes. Wendor reported 14 route notes during the seasonal review, and the same party later checked intake forms. Lumatavi reported 52 route notes during the rotating review, and the same party later checked route cards. Keltor reported 72 route notes during the seasonal review, and the same party later checked route cards. Kelmin reported 53 route notes during the local review, and the same party later checked intake forms. Lankel reported 88 route notes during the local review, and the same party later checked permit slips. Keltor reported 82 route notes during the careful review, and the same party later checked route cards. Kelmin reported 13 route notes during the local review, and the same party later checked crew notes. Lumatavi reported 76 route notes during the quiet review, and the same party later checked shift totals. Keltor reported 38 route notes during the shared review, and the same party later checked crew notes. Lankel reported 82 route notes during the careful review, and the same party later checked permit slips. Keltor reported 17 route notes during the shared review, and the same party later checked shift totals.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases clearly\nSummarize the report above in about 120 words, covering each named party.",
-        "source_item_id": "f3af07f511d79f6e04f8e9390e4cb4254090ee62f1928c65518d2d184574dde8",
+        "source_item_id": "25983434802266826385a10756986bb44ec99c62eaa0994177991c543b3b9b93",
         "source_sha256": "d4394bd85176626dc1d9f2d1152756b351ba4ca080de6179f2adf8e497d02a14"
       },
       "status_policy": "none",
@@ -686,7 +686,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "ca07439aa127c030cbf6c155f9fb46595dcf4ba2a0070619b4f23a9837aebfa2",
+      "item_id": "d4264d89f5ebf191ca1853b9020c8ac115535de9ad665fd39055d3efdadc7026",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -700,7 +700,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.summ:1.0.0",
         "prompt_text": "Read the following report.\nTaviluma reported 58 route notes during the local review, and the same party later checked route cards. The unique reference code was NEEDLE-1434. Torsai reported 58 route notes during the seasonal review, and the same party later checked supply counts. Tavipak reported 11 route notes during the quiet review, and the same party later checked permit slips. Tavipak reported 76 route notes during the careful review, and the same party later checked intake forms. Torsai reported 42 route notes during the temporary review, and the same party later checked route cards. Verkel reported 66 route notes during the careful review, and the same party later checked intake forms. Verkel reported 32 route notes during the local review, and the same party later checked crew notes. Sailan reported 20 route notes during the local review, and the same party later checked route cards. Taviluma reported 11 route notes during the quiet review, and the same party later checked intake forms. Sailan reported 77 route notes during the quiet review, and the same party later checked crew notes. Sailan reported 14 route notes during the daily review, and the same party later checked permit slips. Tavipak reported 87 route notes during the shared review, and the same party later checked intake forms. Taviluma reported 45 route notes during the seasonal review, and the same party later checked permit slips. Sailan reported 44 route notes during the daily review, and the same party later checked intake forms. Tavipak reported 19 route notes during the temporary review, and the same party later checked route cards. Tavipak reported 27 route notes during the daily review, and the same party later checked permit slips. Tavipak reported 16 route notes during the seasonal review, and the same party later checked ledger rows. Torsai reported 68 route notes during the seasonal review, and the same party later checked route cards. Verkel reported 43 route notes during the careful review, and the same party later checked ledger rows.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases clearly\nSummarize the report above in about 120 words, covering each named party.",
-        "source_item_id": "ca07439aa127c030cbf6c155f9fb46595dcf4ba2a0070619b4f23a9837aebfa2",
+        "source_item_id": "d4264d89f5ebf191ca1853b9020c8ac115535de9ad665fd39055d3efdadc7026",
         "source_sha256": "9913c1409c93f99412f952e2f1f616ab6e5d31fc849c2e4fd8f691e5dbe57b2a"
       },
       "status_policy": "none",
@@ -722,7 +722,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "1fa6f3838fd7e1df6370cf05fe3973f828bf90537ae62bdcb064a2f61370b1e3",
+      "item_id": "5886eddb1d0b8cb0cb66a8592070186ca0dabe47f5970762371c5f2a7a56a0d3",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -736,7 +736,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.summ:1.0.0",
         "prompt_text": "Read the following report.\nTavilan reported 75 route notes during the quiet review, and the same party later checked supply counts. The unique reference code was NEEDLE-3179. Lankel reported 32 route notes during the rotating review, and the same party later checked shift totals. Tavilan reported 53 route notes during the quiet review, and the same party later checked supply counts. Tavilan reported 66 route notes during the local review, and the same party later checked repair flags. Tavilan reported 27 route notes during the careful review, and the same party later checked ledger rows. Dornori reported 48 route notes during the local review, and the same party later checked route cards. Lankel reported 86 route notes during the careful review, and the same party later checked shift totals. Tavilan reported 47 route notes during the rotating review, and the same party later checked crew notes. Dornori reported 28 route notes during the local review, and the same party later checked ledger rows. Dornori reported 47 route notes during the local review, and the same party later checked crew notes. Dornori reported 57 route notes during the temporary review, and the same party later checked crew notes. Dornori reported 59 route notes during the seasonal review, and the same party later checked crew notes. Tavilan reported 71 route notes during the shared review, and the same party later checked repair flags. Tavilan reported 81 route notes during the temporary review, and the same party later checked permit slips. Tavilan reported 67 route notes during the daily review, and the same party later checked route cards. Lankel reported 25 route notes during the temporary review, and the same party later checked repair flags. Lankel reported 66 route notes during the careful review, and the same party later checked repair flags. Lankel reported 71 route notes during the local review, and the same party later checked intake forms. Lankel reported 27 route notes during the seasonal review, and the same party later checked intake forms.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases\nSummarize the report above in about 120 words, covering each named party.",
-        "source_item_id": "1fa6f3838fd7e1df6370cf05fe3973f828bf90537ae62bdcb064a2f61370b1e3",
+        "source_item_id": "5886eddb1d0b8cb0cb66a8592070186ca0dabe47f5970762371c5f2a7a56a0d3",
         "source_sha256": "5e4ed1d65b633f9a1de21143783360da36acc22b5b6f2c96b6953002af785498"
       },
       "status_policy": "none",
@@ -758,7 +758,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "7ce29c2bccf06c15d2ed0c314c8de30d679abfa06ef0497e169901672137f492",
+      "item_id": "2e6cb9d73dead2beca7f4f073da043b45e057b1620e916b5cfa1b930ff5f838e",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -772,7 +772,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.summ:1.0.0",
         "prompt_text": "Read the following report.\nTavitor reported 62 route notes during the local review, and the same party later checked repair flags. The unique reference code was NEEDLE-6414. Lumaluma reported 23 route notes during the careful review, and the same party later checked crew notes. The unique reference code was NEEDLE-9685. Lumaluma reported 37 route notes during the daily review, and the same party later checked ledger rows. Wennori reported 23 route notes during the quiet review, and the same party later checked supply counts. Lumaluma reported 59 route notes during the shared review, and the same party later checked shift totals. Tavitor reported 18 route notes during the careful review, and the same party later checked crew notes. Lumaluma reported 30 route notes during the rotating review, and the same party later checked ledger rows. Wennori reported 70 route notes during the quiet review, and the same party later checked repair flags. Wennori reported 51 route notes during the shared review, and the same party later checked ledger rows. Tavitor reported 48 route notes during the shared review, and the same party later checked permit slips. Tavitor reported 30 route notes during the rotating review, and the same party later checked permit slips. Tavitor reported 84 route notes during the shared review, and the same party later checked supply counts. Tavitor reported 34 route notes during the local review, and the same party later checked supply counts. Wennori reported 31 route notes during the shared review, and the same party later checked shift totals. Wennori reported 11 route notes during the careful review, and the same party later checked shift totals. Lumaluma reported 66 route notes during the careful review, and the same party later checked shift totals. Wennori reported 65 route notes during the rotating review, and the same party later checked shift totals. Tavitor reported 66 route notes during the careful review, and the same party later checked route cards. Tavitor reported 16 route notes during the local review, and the same party later checked repair flags.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nSummarize the report above in about 120 words, covering each named party.",
-        "source_item_id": "7ce29c2bccf06c15d2ed0c314c8de30d679abfa06ef0497e169901672137f492",
+        "source_item_id": "2e6cb9d73dead2beca7f4f073da043b45e057b1620e916b5cfa1b930ff5f838e",
         "source_sha256": "cb171ce7b3839edc0c194840176193e50ea0f43b4b314daeee5a08a8325e95c9"
       },
       "status_policy": "none",
@@ -794,7 +794,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "569b0e67fb17a9c84f32704313ad3cb82135a8088ce9c272a8d1739ebe37dce2",
+      "item_id": "73d94e4bbd419f37daedcbbb6d545a392cbaae14aa3ff5ec6c4dc80975dd3ee3",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -808,7 +808,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.summ:1.0.0",
         "prompt_text": "Read the following report.\nPakver reported 25 route notes during the daily review, and the same party later checked crew notes. The unique reference code was NEEDLE-9698. Minmin reported 87 route notes during the seasonal review, and the same party later checked repair flags. The unique reference code was NEEDLE-9759. Saiver reported 83 route notes during the local review, and the same party later checked ledger rows. Saiver reported 58 route notes during the daily review, and the same party later checked route cards. Pakver reported 14 route notes during the daily review, and the same party later checked shift totals. Pakver reported 16 route notes during the seasonal review, and the same party later checked supply counts. Minmin reported 87 route notes during the daily review, and the same party later checked supply counts. Pakver reported 10 route notes during the temporary review, and the same party later checked intake forms. Minmin reported 38 route notes during the local review, and the same party later checked route cards. Saiver reported 42 route notes during the shared review, and the same party later checked supply counts. Saiver reported 37 route notes during the careful review, and the same party later checked permit slips. Minmin reported 79 route notes during the shared review, and the same party later checked supply counts. Pakver reported 24 route notes during the careful review, and the same party later checked permit slips. Minmin reported 68 route notes during the daily review, and the same party later checked shift totals. Pakver reported 28 route notes during the local review, and the same party later checked intake forms. Minmin reported 13 route notes during the shared review, and the same party later checked permit slips. Saiver reported 10 route notes during the local review, and the same party later checked shift totals. Saiver reported 36 route notes during the quiet review, and the same party later checked ledger rows. Saiver reported 11 route notes during the temporary review, and the same party later checked crew notes.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nSummarize the report above in about 120 words, covering each named party.",
-        "source_item_id": "569b0e67fb17a9c84f32704313ad3cb82135a8088ce9c272a8d1739ebe37dce2",
+        "source_item_id": "73d94e4bbd419f37daedcbbb6d545a392cbaae14aa3ff5ec6c4dc80975dd3ee3",
         "source_sha256": "c91cdcc64d288c8886b7cef4ed82eebcbb6ff164d304e79eb6e3a0ba1e6bdc7a"
       },
       "status_policy": "none",
@@ -830,7 +830,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "c994f410be2913469796e13d163dce4d9b9161bd9f04d6c895786ab23d3f9b70",
+      "item_id": "8ee4d02c7c19d4d062450af9954c1424edca9369fc21e7ff1e5646a1e9266e30",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -844,7 +844,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.summ:1.0.0",
         "prompt_text": "Read the following report.\nKelsai reported 70 route notes during the temporary review, and the same party later checked ledger rows. The unique reference code was NEEDLE-5503. Kelsai reported 28 route notes during the rotating review, and the same party later checked intake forms. Tavimin reported 85 route notes during the quiet review, and the same party later checked repair flags. Kelsai reported 58 route notes during the seasonal review, and the same party later checked intake forms. Tavimin reported 15 route notes during the careful review, and the same party later checked shift totals. Lumaluma reported 46 route notes during the local review, and the same party later checked shift totals. Kelsai reported 51 route notes during the quiet review, and the same party later checked shift totals. Kelsai reported 24 route notes during the seasonal review, and the same party later checked intake forms. Lumaluma reported 69 route notes during the careful review, and the same party later checked crew notes. Kelsai reported 71 route notes during the careful review, and the same party later checked supply counts. Tavimin reported 78 route notes during the shared review, and the same party later checked route cards. Kelsai reported 33 route notes during the daily review, and the same party later checked crew notes. Lumaluma reported 51 route notes during the shared review, and the same party later checked supply counts. Tavimin reported 43 route notes during the rotating review, and the same party later checked repair flags. Lumaluma reported 84 route notes during the shared review, and the same party later checked crew notes. Lumaluma reported 37 route notes during the daily review, and the same party later checked supply counts. Kelsai reported 10 route notes during the seasonal review, and the same party later checked permit slips. Kelsai reported 68 route notes during the temporary review, and the same party later checked intake forms. Kelsai reported 15 route notes during the shared review, and the same party later checked ledger rows.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases\nSummarize the report above in about 120 words, covering each named party.",
-        "source_item_id": "c994f410be2913469796e13d163dce4d9b9161bd9f04d6c895786ab23d3f9b70",
+        "source_item_id": "8ee4d02c7c19d4d062450af9954c1424edca9369fc21e7ff1e5646a1e9266e30",
         "source_sha256": "d641074b4c4b055bab4c9d817af1ed435ff8a08806c933c05b556b9b021ccc54"
       },
       "status_policy": "none",
@@ -866,7 +866,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "57b1374a28bdc25433b66588e8057786f6609fb5a545aa7c752beb748a97a740",
+      "item_id": "0760c870af86fdb6b3dca24b007eaccbc2390ded75fe19760aa8c7c723e2f3da",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -880,7 +880,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.summ:1.0.0",
         "prompt_text": "Read the following report.\nLumatavi reported 60 route notes during the daily review, and the same party later checked crew notes. The unique reference code was NEEDLE-5798. Saiwen reported 45 route notes during the careful review, and the same party later checked intake forms. Saiwen reported 25 route notes during the seasonal review, and the same party later checked ledger rows. Minver reported 46 route notes during the local review, and the same party later checked crew notes. Minver reported 23 route notes during the quiet review, and the same party later checked supply counts. Lumatavi reported 14 route notes during the careful review, and the same party later checked repair flags. Tormin reported 68 route notes during the careful review, and the same party later checked route cards. Lumatavi reported 16 route notes during the temporary review, and the same party later checked shift totals. Tormin reported 84 route notes during the quiet review, and the same party later checked permit slips. Minver reported 20 route notes during the local review, and the same party later checked permit slips. Tormin reported 13 route notes during the local review, and the same party later checked route cards. Lumatavi reported 70 route notes during the seasonal review, and the same party later checked route cards. Lumatavi reported 10 route notes during the shared review, and the same party later checked permit slips. Lumatavi reported 83 route notes during the rotating review, and the same party later checked repair flags. Saiwen reported 84 route notes during the careful review, and the same party later checked crew notes. Lumatavi reported 39 route notes during the local review, and the same party later checked supply counts. Lumatavi reported 73 route notes during the shared review, and the same party later checked supply counts. Lumatavi reported 76 route notes during the rotating review, and the same party later checked permit slips. Minver reported 86 route notes during the rotating review, and the same party later checked repair flags.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases clearly\nSummarize the report above in about 120 words, covering each named party.",
-        "source_item_id": "57b1374a28bdc25433b66588e8057786f6609fb5a545aa7c752beb748a97a740",
+        "source_item_id": "0760c870af86fdb6b3dca24b007eaccbc2390ded75fe19760aa8c7c723e2f3da",
         "source_sha256": "79a46c08ca9dc404f871ac7cb436b3f1e5d74426d566c0f43cb7929bb8b6ea46"
       },
       "status_policy": "none",
@@ -902,7 +902,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "bc9a7755cb17feb1faa33f146aad935b17f850edc2fada098df213d0b55dad64",
+      "item_id": "5a8f63a9304fbd19c7eb2852848b078a9649fc9915164a6ab13552b0375594e2",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -916,7 +916,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.reason:1.0.0",
         "prompt_text": "Solve the following reasoning task.\nFive delivery leads arrived in a fixed order. Lanluma arrived before Torluma. Torluma arrived before Lumador. Lumador arrived before Dorpak. Dorpak arrived before Lumatavi. Lanluma arrived before Lumador. Who arrived third? The side ledger mentioned 39 labels, but those labels are unrelated. The side ledger mentioned 36 labels, but those labels are unrelated. The side ledger mentioned 40 labels, but those labels are unrelated. The scene balances supply counts for the local regional survey teams while the plan remains easy to audit. The scene checks ledger rows for the quiet library lending desks while the plan remains easy to audit. The scene records supply counts for the local transit repair logs while the plan remains easy to audit. The scene checks shift totals for the daily library lending desks while the plan remains easy to audit. The scene routes crew notes for the shared storm shelter rosters while the plan remains easy to audit. The scene balances ledger rows for the temporary regional survey teams while the plan remains easy to audit. The scene compares repair flags for the quiet market stall ledgers while the plan remains easy to audit. The scene records supply counts for the careful library lending desks while the plan remains easy to audit. The scene checks ledger rows for the quiet regional survey teams while the plan remains easy to audit. The scene tracks permit slips for the rotating dock inspection routes while the plan remains easy to audit. The scene tracks repair flags for the local library lending desks while the plan remains easy to audit. The scene updates permit slips for the local dock inspection routes while the plan remains easy to audit. The scene updates ledger rows for the daily storm shelter rosters while the plan remains easy to audit. The scene records ledger rows for the temporary harbor pilot crews while the plan remains easy to audit. The scene compares intake forms for the temporary storm shelter rosters while the plan remains easy to audit. The scene compares ledger rows for the quiet storm shelter rosters while the plan remains easy to audit. The scene balances shift totals for the quiet regional survey teams while the plan remains easy to audit. The scene checks permit slips for the rotating regional survey teams while the plan remains easy to audit. The scene records intake forms for the quiet greenhouse irrigation schedules while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases\nWork through this step by step, then state the final number or name.",
-        "source_item_id": "bc9a7755cb17feb1faa33f146aad935b17f850edc2fada098df213d0b55dad64",
+        "source_item_id": "5a8f63a9304fbd19c7eb2852848b078a9649fc9915164a6ab13552b0375594e2",
         "source_sha256": "bf259a779054da3e8faced9dde165eda94ba6465c413b1c87c57cf2eb8569f8d"
       },
       "status_policy": "none",
@@ -938,7 +938,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "be626fc0931c9ef878a28f9c52b90c21039dfd178f8c88ad0e38be2d6d7a95e1",
+      "item_id": "71a59ef5a0c56ba6ea19372c5ff8d838e8cede4696e37789b11db978c2e5405f",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -952,7 +952,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.reason:1.0.0",
         "prompt_text": "Solve the following reasoning task.\nThe starting count is 12 crates. Then the clerk raises the count by 50 percent. Then the clerk removes 4. Then the clerk adds 9. Then the clerk adds 7. Then the clerk raises the count by 50 percent. Then the clerk adds 14. The side ledger mentioned 48 labels, but those labels are unrelated. The side ledger mentioned 28 labels, but those labels are unrelated. The scene checks crew notes for the local greenhouse irrigation schedules while the plan remains easy to audit. The scene records repair flags for the careful regional survey teams while the plan remains easy to audit. The scene compares permit slips for the careful regional survey teams while the plan remains easy to audit. The scene reviews permit slips for the local transit repair logs while the plan remains easy to audit. The scene balances crew notes for the rotating transit repair logs while the plan remains easy to audit. The scene checks crew notes for the shared regional survey teams while the plan remains easy to audit. The scene checks route cards for the shared market stall ledgers while the plan remains easy to audit. The scene compares supply counts for the careful harbor pilot crews while the plan remains easy to audit. The scene records repair flags for the quiet greenhouse irrigation schedules while the plan remains easy to audit. The scene updates repair flags for the temporary market stall ledgers while the plan remains easy to audit. The scene reviews repair flags for the rotating regional survey teams while the plan remains easy to audit. The scene routes crew notes for the rotating harbor pilot crews while the plan remains easy to audit. The scene compares shift totals for the temporary greenhouse irrigation schedules while the plan remains easy to audit. The scene updates permit slips for the temporary transit repair logs while the plan remains easy to audit. The scene reviews permit slips for the local transit repair logs while the plan remains easy to audit. The scene compares intake forms for the quiet regional survey teams while the plan remains easy to audit. The scene compares ledger rows for the careful greenhouse irrigation schedules while the plan remains easy to audit. The scene reviews route cards for the careful transit repair logs while the plan remains easy to audit. The scene reviews intake forms for the temporary library lending desks while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases\nWork through this step by step, then state the final number or name.",
-        "source_item_id": "be626fc0931c9ef878a28f9c52b90c21039dfd178f8c88ad0e38be2d6d7a95e1",
+        "source_item_id": "71a59ef5a0c56ba6ea19372c5ff8d838e8cede4696e37789b11db978c2e5405f",
         "source_sha256": "5a0126637e1512814ce51e715878700ab589fefad681a50fafd09b03886a4261"
       },
       "status_policy": "none",
@@ -974,7 +974,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "014cc65a2a434cce0f0aa40c2675a34d0197adb967e03a8b7b237619b1eb7141",
+      "item_id": "48c9049e3cfa73c109c656ee8516c75252f7e0fe0232d9916d1dbd7fba45f6a7",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -988,7 +988,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.reason:1.0.0",
         "prompt_text": "Solve the following reasoning task.\nThe starting count is 29 crates. Then the clerk removes 3. Then the clerk removes 14. Then the clerk multiplies the count by 2. Then the clerk adds 8. Then the clerk raises the count by 25 percent. The side ledger mentioned 82 labels, but those labels are unrelated. The side ledger mentioned 26 labels, but those labels are unrelated. The scene updates repair flags for the careful storm shelter rosters while the plan remains easy to audit. The scene reviews permit slips for the shared dock inspection routes while the plan remains easy to audit. The scene balances shift totals for the shared library lending desks while the plan remains easy to audit. The scene checks ledger rows for the local dock inspection routes while the plan remains easy to audit. The scene reviews intake forms for the seasonal harbor pilot crews while the plan remains easy to audit. The scene routes repair flags for the daily harbor pilot crews while the plan remains easy to audit. The scene routes crew notes for the shared transit repair logs while the plan remains easy to audit. The scene tracks crew notes for the local dock inspection routes while the plan remains easy to audit. The scene updates route cards for the quiet storm shelter rosters while the plan remains easy to audit. The scene reviews ledger rows for the seasonal storm shelter rosters while the plan remains easy to audit. The scene tracks route cards for the seasonal greenhouse irrigation schedules while the plan remains easy to audit. The scene routes ledger rows for the careful market stall ledgers while the plan remains easy to audit. The scene balances ledger rows for the local dock inspection routes while the plan remains easy to audit. The scene compares permit slips for the temporary market stall ledgers while the plan remains easy to audit. The scene reviews route cards for the rotating storm shelter rosters while the plan remains easy to audit. The scene tracks ledger rows for the temporary market stall ledgers while the plan remains easy to audit. The scene compares ledger rows for the seasonal dock inspection routes while the plan remains easy to audit. The scene tracks repair flags for the seasonal library lending desks while the plan remains easy to audit. The scene balances ledger rows for the quiet library lending desks while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases\nWork through this step by step, then state the final number or name.",
-        "source_item_id": "014cc65a2a434cce0f0aa40c2675a34d0197adb967e03a8b7b237619b1eb7141",
+        "source_item_id": "48c9049e3cfa73c109c656ee8516c75252f7e0fe0232d9916d1dbd7fba45f6a7",
         "source_sha256": "cb0f31ca036439df5631cb8d74e0ecfe338956af8295fd7fd1ea294c80b0db69"
       },
       "status_policy": "none",
@@ -1010,7 +1010,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "d6c58e0417e8874bb0b9f2c2652069cda6991caac8ab1e1d7bd58e066dde71b6",
+      "item_id": "10c5d0d329426dc49d55bf000f52d91dda92ef2c844975e759ac15b6ad91c2fc",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1024,7 +1024,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.reason:1.0.0",
         "prompt_text": "Solve the following reasoning task.\nThe starting count is 140 crates. Then the clerk multiplies the count by 3. Then the clerk adds 18. Then the clerk packs the count evenly into groups of 6. Then the clerk removes 18. Then the clerk removes 16. The side ledger mentioned 24 labels, but those labels are unrelated. The scene balances supply counts for the local regional survey teams while the plan remains easy to audit. The scene checks crew notes for the seasonal greenhouse irrigation schedules while the plan remains easy to audit. The scene records permit slips for the seasonal storm shelter rosters while the plan remains easy to audit. The scene routes permit slips for the seasonal library lending desks while the plan remains easy to audit. The scene tracks route cards for the shared dock inspection routes while the plan remains easy to audit. The scene routes permit slips for the seasonal harbor pilot crews while the plan remains easy to audit. The scene routes ledger rows for the rotating greenhouse irrigation schedules while the plan remains easy to audit. The scene compares permit slips for the quiet library lending desks while the plan remains easy to audit. The scene updates repair flags for the quiet regional survey teams while the plan remains easy to audit. The scene tracks permit slips for the local market stall ledgers while the plan remains easy to audit. The scene routes shift totals for the daily storm shelter rosters while the plan remains easy to audit. The scene reviews shift totals for the shared storm shelter rosters while the plan remains easy to audit. The scene reviews route cards for the shared market stall ledgers while the plan remains easy to audit. The scene reviews permit slips for the careful harbor pilot crews while the plan remains easy to audit. The scene routes repair flags for the rotating storm shelter rosters while the plan remains easy to audit. The scene routes ledger rows for the temporary dock inspection routes while the plan remains easy to audit. The scene compares intake forms for the shared harbor pilot crews while the plan remains easy to audit. The scene balances permit slips for the careful library lending desks while the plan remains easy to audit. The scene records ledger rows for the daily dock inspection routes while the plan remains easy to audit. The scene tracks shift totals for the temporary library lending desks while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nWork through this step by step, then state the final number or name.",
-        "source_item_id": "d6c58e0417e8874bb0b9f2c2652069cda6991caac8ab1e1d7bd58e066dde71b6",
+        "source_item_id": "10c5d0d329426dc49d55bf000f52d91dda92ef2c844975e759ac15b6ad91c2fc",
         "source_sha256": "a488c40aef8f0036558215816029f89c2c563cc75b7b019c8a9d0dfd8c2ad042"
       },
       "status_policy": "none",
@@ -1046,7 +1046,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "e330122120016cac029cd9ea7cb0669c37af0df7ed56fa7f6a0c029a602fe0ce",
+      "item_id": "4b6e9fa33faba77691293502a6ef283ae704418746a501b446ffc4bce0e90e3b",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1060,7 +1060,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.reason:1.0.0",
         "prompt_text": "Solve the following reasoning task.\nThe starting count is 26 crates. Then the clerk multiplies the count by 2. Then the clerk adds 5. Then the clerk multiplies the count by 2. Then the clerk removes 4. Then the clerk raises the count by 20 percent. Then the clerk packs the count evenly into groups of 3. The side ledger mentioned 64 labels, but those labels are unrelated. The side ledger mentioned 81 labels, but those labels are unrelated. The side ledger mentioned 60 labels, but those labels are unrelated. The scene tracks supply counts for the daily dock inspection routes while the plan remains easy to audit. The scene compares route cards for the quiet transit repair logs while the plan remains easy to audit. The scene compares shift totals for the local storm shelter rosters while the plan remains easy to audit. The scene checks route cards for the quiet regional survey teams while the plan remains easy to audit. The scene routes route cards for the careful dock inspection routes while the plan remains easy to audit. The scene records repair flags for the careful dock inspection routes while the plan remains easy to audit. The scene reviews intake forms for the quiet market stall ledgers while the plan remains easy to audit. The scene records crew notes for the quiet regional survey teams while the plan remains easy to audit. The scene tracks supply counts for the quiet greenhouse irrigation schedules while the plan remains easy to audit. The scene tracks repair flags for the temporary greenhouse irrigation schedules while the plan remains easy to audit. The scene tracks intake forms for the rotating market stall ledgers while the plan remains easy to audit. The scene routes repair flags for the careful harbor pilot crews while the plan remains easy to audit. The scene compares crew notes for the temporary transit repair logs while the plan remains easy to audit. The scene reviews shift totals for the rotating greenhouse irrigation schedules while the plan remains easy to audit. The scene compares crew notes for the shared greenhouse irrigation schedules while the plan remains easy to audit. The scene reviews crew notes for the seasonal market stall ledgers while the plan remains easy to audit. The scene checks repair flags for the temporary dock inspection routes while the plan remains easy to audit. The scene reviews permit slips for the daily greenhouse irrigation schedules while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases\nWork through this step by step, then state the final number or name.",
-        "source_item_id": "e330122120016cac029cd9ea7cb0669c37af0df7ed56fa7f6a0c029a602fe0ce",
+        "source_item_id": "4b6e9fa33faba77691293502a6ef283ae704418746a501b446ffc4bce0e90e3b",
         "source_sha256": "72626bebe108cd406957730908ea7f348300dc621d13b450d50670608ba2ffc2"
       },
       "status_policy": "none",
@@ -1082,7 +1082,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "3e7f16711a04b2ec91e0253c926f5b8922fec4a967d7e384b14ea41e6d9949ac",
+      "item_id": "ad8101ac435465d296b63205f2a285e8db4391b9e646ea42f5074d75b83db0a6",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1096,7 +1096,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.reason:1.0.0",
         "prompt_text": "Solve the following reasoning task.\nThe starting count is 144 crates. Then the clerk removes 14. Then the clerk packs the count evenly into groups of 5. Then the clerk removes 7. Then the clerk adds 7. Then the clerk adds 10. The side ledger mentioned 51 labels, but those labels are unrelated. The scene checks crew notes for the shared regional survey teams while the plan remains easy to audit. The scene updates supply counts for the rotating harbor pilot crews while the plan remains easy to audit. The scene compares permit slips for the careful transit repair logs while the plan remains easy to audit. The scene updates intake forms for the seasonal regional survey teams while the plan remains easy to audit. The scene records route cards for the quiet transit repair logs while the plan remains easy to audit. The scene tracks intake forms for the rotating market stall ledgers while the plan remains easy to audit. The scene balances supply counts for the seasonal storm shelter rosters while the plan remains easy to audit. The scene compares supply counts for the daily library lending desks while the plan remains easy to audit. The scene checks repair flags for the shared market stall ledgers while the plan remains easy to audit. The scene routes route cards for the local greenhouse irrigation schedules while the plan remains easy to audit. The scene balances supply counts for the careful dock inspection routes while the plan remains easy to audit. The scene reviews route cards for the seasonal market stall ledgers while the plan remains easy to audit. The scene tracks permit slips for the temporary transit repair logs while the plan remains easy to audit. The scene records permit slips for the local regional survey teams while the plan remains easy to audit. The scene routes route cards for the seasonal library lending desks while the plan remains easy to audit. The scene compares shift totals for the daily market stall ledgers while the plan remains easy to audit. The scene updates supply counts for the local harbor pilot crews while the plan remains easy to audit. The scene checks permit slips for the rotating greenhouse irrigation schedules while the plan remains easy to audit. The scene checks permit slips for the local library lending desks while the plan remains easy to audit. The scene compares supply counts for the seasonal greenhouse irrigation schedules while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nWork through this step by step, then state the final number or name.",
-        "source_item_id": "3e7f16711a04b2ec91e0253c926f5b8922fec4a967d7e384b14ea41e6d9949ac",
+        "source_item_id": "ad8101ac435465d296b63205f2a285e8db4391b9e646ea42f5074d75b83db0a6",
         "source_sha256": "115d131e3a0d0d1312a6e5c7baebae19366ca726135ea7ac91cb1c1e56c95580"
       },
       "status_policy": "none",
@@ -1118,7 +1118,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "48e2269c96dd443c9985d4a762dbbe716e4f0b617727769ae81014082da29104",
+      "item_id": "7cf022bd55c8f47fdcf67f16ad3a95fcc058357b71d8423579ee0bab7b7d71e4",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1132,7 +1132,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.reason:1.0.0",
         "prompt_text": "Solve the following reasoning task.\nThe starting count is 4350 crates. Then the clerk packs the count evenly into groups of 3. Then the clerk packs the count evenly into groups of 5. Then the clerk packs the count evenly into groups of 5. Then the clerk removes 4. Then the clerk adds 10. Then the clerk adds 10. The side ledger mentioned 22 labels, but those labels are unrelated. The side ledger mentioned 24 labels, but those labels are unrelated. The side ledger mentioned 30 labels, but those labels are unrelated. The scene checks supply counts for the seasonal regional survey teams while the plan remains easy to audit. The scene tracks ledger rows for the quiet storm shelter rosters while the plan remains easy to audit. The scene updates permit slips for the local regional survey teams while the plan remains easy to audit. The scene checks repair flags for the daily transit repair logs while the plan remains easy to audit. The scene balances permit slips for the careful library lending desks while the plan remains easy to audit. The scene tracks ledger rows for the seasonal regional survey teams while the plan remains easy to audit. The scene reviews shift totals for the temporary library lending desks while the plan remains easy to audit. The scene checks permit slips for the careful storm shelter rosters while the plan remains easy to audit. The scene records intake forms for the careful library lending desks while the plan remains easy to audit. The scene records permit slips for the local storm shelter rosters while the plan remains easy to audit. The scene routes ledger rows for the rotating transit repair logs while the plan remains easy to audit. The scene checks intake forms for the daily regional survey teams while the plan remains easy to audit. The scene checks intake forms for the careful market stall ledgers while the plan remains easy to audit. The scene reviews crew notes for the seasonal transit repair logs while the plan remains easy to audit. The scene balances crew notes for the seasonal market stall ledgers while the plan remains easy to audit. The scene records shift totals for the quiet harbor pilot crews while the plan remains easy to audit. The scene checks route cards for the rotating storm shelter rosters while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nWork through this step by step, then state the final number or name.",
-        "source_item_id": "48e2269c96dd443c9985d4a762dbbe716e4f0b617727769ae81014082da29104",
+        "source_item_id": "7cf022bd55c8f47fdcf67f16ad3a95fcc058357b71d8423579ee0bab7b7d71e4",
         "source_sha256": "781dbd739051bcf3b257d3c3377784a5dbcb1ebbbfd6c6421cc79ceca92091cb"
       },
       "status_policy": "none",
@@ -1154,7 +1154,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "b3038aea609aad55cf085f88dd56d0c1fd34cc706c30b0753c8ce15b28243ea0",
+      "item_id": "8ed9cc813e912c9a5d91fb7dc069c9a0a8f96354d3bf87c4c91a80b01faa2898",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1168,7 +1168,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.reason:1.0.0",
         "prompt_text": "Solve the following reasoning task.\nThe starting count is 210 crates. Then the clerk raises the count by 50 percent. Then the clerk removes 5. Then the clerk adds 11. Then the clerk removes 16. Then the clerk packs the count evenly into groups of 5. The side ledger mentioned 46 labels, but those labels are unrelated. The scene records crew notes for the local regional survey teams while the plan remains easy to audit. The scene updates repair flags for the seasonal library lending desks while the plan remains easy to audit. The scene checks crew notes for the quiet storm shelter rosters while the plan remains easy to audit. The scene balances supply counts for the daily library lending desks while the plan remains easy to audit. The scene routes permit slips for the quiet market stall ledgers while the plan remains easy to audit. The scene tracks repair flags for the seasonal library lending desks while the plan remains easy to audit. The scene records repair flags for the local greenhouse irrigation schedules while the plan remains easy to audit. The scene records ledger rows for the quiet storm shelter rosters while the plan remains easy to audit. The scene records repair flags for the daily harbor pilot crews while the plan remains easy to audit. The scene compares intake forms for the temporary library lending desks while the plan remains easy to audit. The scene updates shift totals for the careful dock inspection routes while the plan remains easy to audit. The scene reviews shift totals for the seasonal market stall ledgers while the plan remains easy to audit. The scene routes permit slips for the rotating transit repair logs while the plan remains easy to audit. The scene routes crew notes for the shared dock inspection routes while the plan remains easy to audit. The scene balances permit slips for the shared storm shelter rosters while the plan remains easy to audit. The scene records supply counts for the daily greenhouse irrigation schedules while the plan remains easy to audit. The scene records crew notes for the shared greenhouse irrigation schedules while the plan remains easy to audit. The scene updates repair flags for the rotating storm shelter rosters while the plan remains easy to audit. The scene checks route cards for the quiet regional survey teams while the plan remains easy to audit. The scene compares repair flags for the daily regional survey teams while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nWork through this step by step, then state the final number or name.",
-        "source_item_id": "b3038aea609aad55cf085f88dd56d0c1fd34cc706c30b0753c8ce15b28243ea0",
+        "source_item_id": "8ed9cc813e912c9a5d91fb7dc069c9a0a8f96354d3bf87c4c91a80b01faa2898",
         "source_sha256": "44d5e6db42da9f2f0cb835f37a4797acaf3c30d9d978ca3517821f38596f3633"
       },
       "status_policy": "none",
@@ -1190,7 +1190,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "9bed0e48a2101d95414050c7b4fc90b43b618efa82be45efe096c231dc33920c",
+      "item_id": "e20b9c001aee8d0002215db324996900e0b1183c0279b2dc4ce6f1491f2fa822",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1204,7 +1204,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.json:1.0.0",
         "prompt_text": "Extract the following fields from the record below. Output only JSON matching the schema.\n{\"dor_nori\": \"date\", \"kel_tor_nori\": \"int\", \"nori_wen\": \"nullable\", \"pak_dor_luma\": \"date\", \"pak_wen\": \"date\", \"tavi_sai\": \"enum\", \"tavi_sai_tavi\": \"enum\", \"tor_ver\": \"date\", \"wen_min_min\": \"enum\"}\n[2031-04-12 08:31] wen_min_min=A; source=synthetic\n[2031-04-12 08:31] pak_wen=2033-03-14; source=synthetic\n[2031-04-12 08:31] tavi_sai=B; source=synthetic\n[2031-04-12 08:31] tor_ver=2030-05-17; source=synthetic\n[2031-04-12 08:31] kel_tor_nori=556; source=synthetic\n[2031-04-12 08:31] tavi_sai_tavi=D; source=synthetic\n[2031-04-12 08:31] nori_wen=None; source=synthetic\n[2031-04-12 08:31] dor_nori=2031-05-11; source=synthetic\n[2031-04-12 08:31] pak_dor_luma=2032-09-13; source=synthetic\nnear_miss=4731 should be ignored\nnear_miss=6666 should be ignored\nnear_miss=3148 should be ignored\nnear_miss=2341 should be ignored\nextra_tavi_lan: repair flags\nextra_sai_tavi: supply counts\nextra_kel_luma: repair flags\n in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nOutput only the JSON object.",
-        "source_item_id": "9bed0e48a2101d95414050c7b4fc90b43b618efa82be45efe096c231dc33920c",
+        "source_item_id": "e20b9c001aee8d0002215db324996900e0b1183c0279b2dc4ce6f1491f2fa822",
         "source_sha256": "c7c0085a0c39c1acf443f749454f66bc613122bc0a0a89e74d26e3569db52d03"
       },
       "status_policy": "none",
@@ -1226,7 +1226,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "cf3f3c8c172722f68170e802e995e5fbf5a51291ca69ee01bdcdd71b437fcb34",
+      "item_id": "344d646d83001b76dbf7249ab524437a51c9b5d4184dba510bc089c0abdca75d",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1240,7 +1240,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.json:1.0.0",
         "prompt_text": "Extract the following fields from the record below. Output only JSON matching the schema.\n{\"dor_min\": \"enum\", \"dor_pak_kel\": \"nullable\", \"lan_tor_lan\": \"enum\", \"min_luma\": \"nullable\", \"nori_tor\": \"nullable\", \"pak_ver_dor\": \"bool\", \"pak_ver_luma\": \"string\", \"wen_dor_kel\": \"enum\"}\n[2031-04-12 08:31] wen_dor_kel=B; source=synthetic\n[2031-04-12 08:31] pak_ver_dor=True; source=synthetic\n[2031-04-12 08:31] pak_ver_luma=Dordor; source=synthetic\n[2031-04-12 08:31] lan_tor_lan=D; source=synthetic\n[2031-04-12 08:31] min_luma=None; source=synthetic\n[2031-04-12 08:31] dor_pak_kel=None; source=synthetic\n[2031-04-12 08:31] dor_min=A; source=synthetic\n[2031-04-12 08:31] nori_tor=None; source=synthetic\nnear_miss=7516 should be ignored\nnear_miss=7429 should be ignored\nextra_sai_tavi: shift totals\nextra_dor_luma: ledger rows\nextra_min_ver: supply counts\nnotes: The team checks supply counts for the local library lending desks while the plan remains easy to audit. notes: The clerk reviews ledger rows for the rotating regional survey teams while the plan remains easy to audit. notes: The route lead routes route cards for the temporary market stall ledgers while the plan remains easy to audit. notes: The route lead routes supply counts for the careful regional survey teams while the plan remains easy to audit. notes: The team compares ledger rows for the shared greenhouse irrigation schedules while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nOutput only the JSON object.",
-        "source_item_id": "cf3f3c8c172722f68170e802e995e5fbf5a51291ca69ee01bdcdd71b437fcb34",
+        "source_item_id": "344d646d83001b76dbf7249ab524437a51c9b5d4184dba510bc089c0abdca75d",
         "source_sha256": "bdac07529bb8be644cf035ffce2d00ef0137eb386c0ffbaf9a456aed131b3be8"
       },
       "status_policy": "none",
@@ -1262,7 +1262,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "fc900067b078fa45952fe866ab0575813f5549884817757609d6568506b81e13",
+      "item_id": "c0ed0b37fa0a40b7b978adcf5b1d8b5037b2be62af63e8c3f3f475e5f5e8090c",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1276,7 +1276,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.json:1.0.0",
         "prompt_text": "Extract the following fields from the record below. Output only JSON matching the schema.\n{\"lan_nori\": \"date\", \"luma_sai_tor\": \"int\", \"pak_tavi\": \"int\", \"ver_nori_wen\": \"bool\", \"wen_nori\": \"nullable\", \"wen_pak_sai\": \"nullable\", \"wen_tavi\": \"int\"}\n[2031-04-12 08:31] luma_sai_tor=258; source=synthetic\n[2031-04-12 08:31] wen_tavi=783; source=synthetic\n[2031-04-12 08:31] lan_nori=2033-05-21; source=synthetic\n[2031-04-12 08:31] wen_pak_sai=None; source=synthetic\n[2031-04-12 08:31] ver_nori_wen=True; source=synthetic\n[2031-04-12 08:31] wen_nori=None; source=synthetic\n[2031-04-12 08:31] pak_tavi=582; source=synthetic\nnear_miss=3543 should be ignored\nnear_miss=3724 should be ignored\nnear_miss=2145 should be ignored\nnear_miss=8617 should be ignored\nextra_min_kel: permit slips\nextra_lan_kel: intake forms\nnotes: The clerk reviews shift totals for the seasonal greenhouse irrigation schedules while the plan remains easy to audit. notes: The route lead records crew notes for the seasonal greenhouse irrigation schedules while the plan remains easy to audit. notes: The clerk routes intake forms for the careful harbor pilot crews while the plan remains easy to audit. notes: The clerk checks route cards for the temporary library lending desks while the plan remains easy to audit. notes: The team records crew notes for the local harbor pilot crews while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nOutput only the JSON object.",
-        "source_item_id": "fc900067b078fa45952fe866ab0575813f5549884817757609d6568506b81e13",
+        "source_item_id": "c0ed0b37fa0a40b7b978adcf5b1d8b5037b2be62af63e8c3f3f475e5f5e8090c",
         "source_sha256": "ca9c6dd40ee59affaba7449289eb7d5f76008e644534c176dc0899c186274e9d"
       },
       "status_policy": "none",
@@ -1298,7 +1298,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "5b189af37bf9fe4fe6c8aa1a80aa8028bc01951bcf2a63ae3a416a9a8e898b7d",
+      "item_id": "56bffe68c48c69d048110efc87c2438bd53411c4d0cb98543010b3f0fec8d9eb",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1312,7 +1312,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.json:1.0.0",
         "prompt_text": "Extract the following fields from the record below. Output only JSON matching the schema.\n{\"lan_lan_wen\": \"date\", \"lan_pak\": \"string\", \"lan_sai\": \"bool\", \"pak_wen_kel\": \"date\", \"tavi_kel_tor\": \"nullable\", \"tor_wen_min\": \"date\", \"ver_tavi_tavi\": \"string\", \"wen_nori_nori\": \"enum\", \"wen_ver\": \"int\"}\n[2031-04-12 08:31] wen_nori_nori=C; source=synthetic\n[2031-04-12 08:31] lan_sai=True; source=synthetic\n[2031-04-12 08:31] lan_lan_wen=2032-07-27; source=synthetic\n[2031-04-12 08:31] ver_tavi_tavi=Wentavi; source=synthetic\n[2031-04-12 08:31] lan_pak=Wenkel; source=synthetic\n[2031-04-12 08:31] tor_wen_min=2030-03-17; source=synthetic\n[2031-04-12 08:31] wen_ver=138; source=synthetic\n[2031-04-12 08:31] tavi_kel_tor=None; source=synthetic\n[2031-04-12 08:31] pak_wen_kel=2032-07-26; source=synthetic\nnear_miss=8571 should be ignored\nnear_miss=3004 should be ignored\nnear_miss=2451 should be ignored\nnear_miss=3523 should be ignored\nextra_sai_min: ledger rows\nnotes: The route lead reviews ledger rows for the rotating transit repair logs while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nOutput only the JSON object.",
-        "source_item_id": "5b189af37bf9fe4fe6c8aa1a80aa8028bc01951bcf2a63ae3a416a9a8e898b7d",
+        "source_item_id": "56bffe68c48c69d048110efc87c2438bd53411c4d0cb98543010b3f0fec8d9eb",
         "source_sha256": "303c7c0c259daeea637a540a5781dc32c8337c578b0c18dcaf1c4797af05821f"
       },
       "status_policy": "none",
@@ -1334,7 +1334,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "f817d469d6b3ada94f45af261985e57e787567996e4cb37a5db929bdf031c858",
+      "item_id": "caae3d89a36b45a603e385f04581487957496c3d492239fd5cbefce99a77abe7",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1348,7 +1348,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.json:1.0.0",
         "prompt_text": "Extract the following fields from the record below. Output only JSON matching the schema.\n{\"kel_luma\": \"nullable\", \"luma_wen\": \"nullable\", \"nori_wen_tor\": \"bool\", \"sai_nori\": \"date\", \"sai_pak\": \"string\", \"wen_luma_luma\": \"string\"}\n[2031-04-12 08:31] sai_nori=2033-01-12; source=synthetic\n[2031-04-12 08:31] kel_luma=None; source=synthetic\n[2031-04-12 08:31] nori_wen_tor=True; source=synthetic\n[2031-04-12 08:31] sai_pak=Versai; source=synthetic\n[2031-04-12 08:31] wen_luma_luma=Saiver; source=synthetic\n[2031-04-12 08:31] luma_wen=None; source=synthetic\nnear_miss=7751 should be ignored\nnear_miss=1421 should be ignored\nnear_miss=8768 should be ignored\nnear_miss=2836 should be ignored\nextra_dor_wen: intake forms\nextra_min_sai: ledger rows\nextra_nori_dor: route cards\nnotes: The route lead records route cards for the rotating market stall ledgers while the plan remains easy to audit. notes: The clerk tracks supply counts for the daily market stall ledgers while the plan remains easy to audit. notes: The route lead records route cards for the quiet regional survey teams while the plan remains easy to audit. notes: The clerk tracks route cards for the careful harbor pilot crews while the plan remains easy to audit. notes: The team routes crew notes for the shared market stall ledgers while the plan remains easy to audit. notes: The team records supply counts for the careful regional survey teams while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases clearly\nOutput only the JSON object.",
-        "source_item_id": "f817d469d6b3ada94f45af261985e57e787567996e4cb37a5db929bdf031c858",
+        "source_item_id": "caae3d89a36b45a603e385f04581487957496c3d492239fd5cbefce99a77abe7",
         "source_sha256": "002b1803cf5717667997e47bbd1f04c3ac90a6ce1afe8cd063e574c0f65e5838"
       },
       "status_policy": "none",
@@ -1370,7 +1370,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "ef3a2dc23145307450ddf703a0b7868d90ef0f41c30cfad5d26841268335bf3c",
+      "item_id": "5b9fd79df814c646910553768ea4e62169b5273da318aad507df315ceb426fa2",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1384,7 +1384,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.json:1.0.0",
         "prompt_text": "Extract the following fields from the record below. Output only JSON matching the schema.\n{\"dor_wen\": \"nullable\", \"kel_wen\": \"int\", \"sai_sai_tor\": \"enum\", \"sai_tor_luma\": \"bool\", \"tavi_kel_pak\": \"enum\", \"tavi_min_dor\": \"string\", \"tavi_tor\": \"date\", \"tavi_wen\": \"string\", \"ver_ver\": \"nullable\"}\n[2031-04-12 08:31] tavi_kel_pak=C; source=synthetic\n[2031-04-12 08:31] tavi_tor=2030-03-17; source=synthetic\n[2031-04-12 08:31] sai_sai_tor=D; source=synthetic\n[2031-04-12 08:31] sai_tor_luma=False; source=synthetic\n[2031-04-12 08:31] ver_ver=None; source=synthetic\n[2031-04-12 08:31] tavi_wen=Dornori; source=synthetic\n[2031-04-12 08:31] kel_wen=485; source=synthetic\n[2031-04-12 08:31] tavi_min_dor=Keltor; source=synthetic\n[2031-04-12 08:31] dor_wen=None; source=synthetic\nnear_miss=2597 should be ignored\nnear_miss=8653 should be ignored\nnear_miss=6614 should be ignored\nnear_miss=7596 should be ignored\nextra_tavi_ver_wen: shift totals\nnotes: The clerk reviews shift totals for the careful harbor pilot crews while the plan remains easy to audit. notes: The clerk compares permit slips for the rotating market stall ledgers while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases clearly\nOutput only the JSON object.",
-        "source_item_id": "ef3a2dc23145307450ddf703a0b7868d90ef0f41c30cfad5d26841268335bf3c",
+        "source_item_id": "5b9fd79df814c646910553768ea4e62169b5273da318aad507df315ceb426fa2",
         "source_sha256": "841f7c5ba700b3ef4e985c0b3665c46b8817274e8f15c37a0cece5109908ad83"
       },
       "status_policy": "none",
@@ -1406,7 +1406,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "610cb7ad95fc7d852b8d6e6336b3629d4530ba0518db970249868d8516246c9f",
+      "item_id": "a2e7ef76ad80c517328c917604ff29aa0af0ff854718e0ba53e3ca580b0dcdf3",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1420,7 +1420,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.json:1.0.0",
         "prompt_text": "Extract the following fields from the record below. Output only JSON matching the schema.\n{\"kel_nori_tavi\": \"int\", \"nori_lan\": \"date\", \"pak_ver\": \"bool\", \"sai_dor_wen\": \"enum\", \"tavi_nori_ver\": \"nullable\", \"tor_nori_wen\": \"bool\", \"wen_sai_lan\": \"int\"}\n[2031-04-12 08:31] nori_lan=2033-01-26; source=synthetic\n[2031-04-12 08:31] wen_sai_lan=243; source=synthetic\n[2031-04-12 08:31] sai_dor_wen=B; source=synthetic\n[2031-04-12 08:31] tavi_nori_ver=None; source=synthetic\n[2031-04-12 08:31] tor_nori_wen=False; source=synthetic\n[2031-04-12 08:31] pak_ver=True; source=synthetic\n[2031-04-12 08:31] kel_nori_tavi=686; source=synthetic\nnear_miss=1284 should be ignored\nnear_miss=6191 should be ignored\nnear_miss=7714 should be ignored\nextra_ver_tor_ver: shift totals\nextra_pak_luma: ledger rows\nextra_nori_dor_dor: repair flags\nnotes: The route lead reviews route cards for the local harbor pilot crews while the plan remains easy to audit. notes: The group tracks repair flags for the quiet harbor pilot crews while the plan remains easy to audit. notes: The team tracks crew notes for the local transit repair logs while the plan remains easy to audit. notes: The clerk records repair flags for the daily transit repair logs while the plan remains easy to audit. notes: The team records ledger rows for the daily storm shelter rosters while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases\nOutput only the JSON object.",
-        "source_item_id": "610cb7ad95fc7d852b8d6e6336b3629d4530ba0518db970249868d8516246c9f",
+        "source_item_id": "a2e7ef76ad80c517328c917604ff29aa0af0ff854718e0ba53e3ca580b0dcdf3",
         "source_sha256": "1723b8a59db2d157a73dd3680a4444b9f3939071d8b4065960ecc38e994ff93b"
       },
       "status_policy": "none",
@@ -1442,7 +1442,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "1da1176f9ecc9da914510b827bca3ac29bb7d75226101bab1da80aa7069779b9",
+      "item_id": "af1daf648cfb6c85fd6154c6038df231a08897c75f3600323f420b2e1d100326",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1456,7 +1456,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.json:1.0.0",
         "prompt_text": "Extract the following fields from the record below. Output only JSON matching the schema.\n{\"dor_min\": \"int\", \"dor_tavi\": \"enum\", \"nori_nori_tor\": \"date\", \"sai_dor_nori\": \"bool\", \"sai_ver_luma\": \"string\", \"tavi_tavi\": \"string\", \"tavi_ver_nori\": \"int\", \"tor_tavi\": \"date\", \"wen_nori\": \"int\"}\n[2031-04-12 08:31] tavi_ver_nori=158; source=synthetic\n[2031-04-12 08:31] wen_nori=911; source=synthetic\n[2031-04-12 08:31] dor_tavi=C; source=synthetic\n[2031-04-12 08:31] nori_nori_tor=2034-05-22; source=synthetic\n[2031-04-12 08:31] dor_min=874; source=synthetic\n[2031-04-12 08:31] sai_ver_luma=Wenpak; source=synthetic\n[2031-04-12 08:31] tavi_tavi=Wenlan; source=synthetic\n[2031-04-12 08:31] tor_tavi=2031-06-11; source=synthetic\n[2031-04-12 08:31] sai_dor_nori=False; source=synthetic\nnear_miss=2519 should be ignored\nnear_miss=3655 should be ignored\nnear_miss=3407 should be ignored\nnear_miss=4557 should be ignored\nextra_nori_wen: crew notes\nnotes: The route lead tracks crew notes for the shared market stall ledgers while the plan remains easy to audit.  in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases in most cases over time\nOutput only the JSON object.",
-        "source_item_id": "1da1176f9ecc9da914510b827bca3ac29bb7d75226101bab1da80aa7069779b9",
+        "source_item_id": "af1daf648cfb6c85fd6154c6038df231a08897c75f3600323f420b2e1d100326",
         "source_sha256": "65c8b17c1de893b8cb07a90d4f961603c86bc81d303bd65f8ce31b27642f800c"
       },
       "status_policy": "none",
@@ -1478,7 +1478,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "fdf2694e190b3a42bff5405a5f510ccf0d5ae01f6ca0b7f75aa7d40408245385",
+      "item_id": "a8844672ea463c68206a0b938e66e003004cdaa3c753d526ddea3244491dd112",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1492,7 +1492,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.multiling:1.0.0",
         "prompt_text": "Continue the following text in the same language:\nand tv rnrspr npls ii rpmpi. with re alaan rvam inr. and mo tleo panlo rii eraar pe vops aop lt. with emp vort tria. near esnvt nars il olpnn reon rnlpio in ost vsnlv trlssn. and rio am rlov mrtlns alimle man epllrs. the smo irmns eee eie eaie rr. the vtstvt risrs mramtn pioaii reel sm raas. the omm erims sp ttrsnm lition. with rn ntren vmmpp sla. the lae rnslnv pm nil riprrt ip vnes nlp ive nlpal. the spaps isn ipioos elppm stte iipvi nn pvese. with rr etvi smll avn vrlma le. the vstei psin ne ava llns. the tp vvaa ieip rlmiea sse. near ien ppom ni olasoi. with otlat lai popan eoparn osoa. the orm lir poton ir. with sp tlrl aip ml availl opsm lo ovotri venoms. and lel ops miipls seo nv arrsr spv lo. and omevp errot aepom. and ppmor aise ep riri pa rtoome nt omvvat mvlen. and psm se vna irilt otvt ar sone mopt tso. near rt vvlol valita pnmt rl no vepem nvaavr vlmt taiv. and netnia la ortl teeovl. near pani im plnroa et osatrr. near lm oeva ts. near sr aloni maaar stn rr. the nnln omt vnos ermmno ae ivitse eo ooir. with nrlin rrtonv msinpa onramv loslle eaanrn tn iinnn. and minlm rsopp ttav rri ea mmo. the lanpsn meommo vnts. and lopp opm ravl spmooe lmvlm os ips. lllnearnearnearnearnearnearnearnearnearnearnearnearnearnearnearnearnearnearnearnearnearnearnearnearnearnearnear",
-        "source_item_id": "fdf2694e190b3a42bff5405a5f510ccf0d5ae01f6ca0b7f75aa7d40408245385",
+        "source_item_id": "a8844672ea463c68206a0b938e66e003004cdaa3c753d526ddea3244491dd112",
         "source_sha256": "465c56a7130f6be5d97684d491bc057644a01f437d143555c2a90070ea90a3e6"
       },
       "status_policy": "none",
@@ -1514,7 +1514,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "c589263f6ce72b8ec54f617f555381275ab90dbc4933072c9f8e4847b713a318",
+      "item_id": "6b5bedc8df18d5e04660f05968594668023a8dfb3901bd0bed31ab60e2dba5ae",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1528,7 +1528,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.multiling:1.0.0",
         "prompt_text": "Continue the following text in the same language:\n\u043d\u0430 \u0440\u0441\u0431\u0432 \u0437\u0433 \u0443\u043c\u043b\u043c \u0443\u0440\u043e\u0438 \u0431\u0437\u0434 \u043c\u043c\u043f \u0436\u0433\u0434\u043e \u0438\u0440\u0433\u0431 \u043b\u043c\u0443\u0432\u0436 \u043c\u043a\u043e\u0442\u043c\u0443. \u0434\u043b\u044f \u043c\u0432\u0432\u0437\u0438\u0436 \u0440\u043b\u0434\u0441 \u043e\u0431\u043a \u0436\u043b \u0436\u0442\u0432\u0441\u043f\u0432 \u043f\u0441\u0443 \u0432\u043f\u0442. \u0434\u043b\u044f \u0435\u043f\u043d \u0430\u043c\u0430\u0443 \u0440\u0433 \u0441\u043d \u0436\u0443 \u0437\u0433 \u0435\u043b\u0443\u043e\u0434\u0433 \u0440\u0432\u0435\u0441 \u0432\u0436\u043d. \u0438 \u0440\u0435\u043b\u0441\u0431\u0441 \u0436\u0433\u0441 \u0442\u043a\u0436\u043e \u043c\u043b\u0435\u043b\u0433\u043f. \u0438 \u043f\u0432\u0431\u0440 \u0441\u0438\u043a\u043f \u0435\u0432 \u043c\u043a\u0437\u043b\u043c \u0437\u043e\u043c\u0440\u0435\u043b \u0441\u043b\u0433\u043d. \u0438 \u0432\u0433\u0443\u043d\u0443\u0433 \u043e\u0433\u043a\u0438\u0435 \u043c\u0432\u0430\u0435\u0433 \u0430\u0437\u0430\u0432\u0434\u0432 \u0433\u043c\u0440\u0434 \u043d\u0431\u043f\u0442\u0440 \u0438\u0432. \u0438 \u0440\u043e\u0435\u0435\u0441\u0430 \u0430\u043e\u0434\u0438\u0432 \u043d\u0437\u043e\u043c\u0434 \u0432\u0437\u0437\u043e\u043f\u0434 \u0441\u043c \u0435\u043b\u0438\u0434\u0432 \u0438\u0433\u0435\u0431\u043e\u043e. \u0438 \u0438\u043f \u0440\u0431\u0443\u043e\u0432 \u043a\u0434\u043c\u0431 \u0431\u043f \u043e\u0442\u0436\u043f\u0433\u0443 \u0442\u0434 \u043c\u0442\u043e\u0442\u0434. \u0438 \u0433\u0431\u0432\u0441\u0442\u0440 \u0432\u0442\u043f \u043f\u0441 \u0430\u043c \u043f\u0441\u0438 \u0442\u043f \u0431\u0440\u0436\u043e. \u043f\u043e \u043e\u0432\u043b \u0430\u043e\u0433\u0440\u0434\u0434 \u043b\u0436\u0442\u0443\u0443 \u0441\u043c\u043c\u0437. \u043d\u0430 \u0440\u0434\u043a\u043f\u0438\u043b \u0436\u0435\u043e\u043c \u0441\u0437\u0435\u043b\u0434\u0434. \u043f\u043e \u0435\u043f\u0438\u043d \u043a\u0430\u0434 \u0431\u0441\u0436\u043f \u0431\u043a\u0430\u0435\u043d\u0443 \u0433\u043f\u043f\u0442\u0432\u0438 \u0437\u0432\u0434\u0433\u043a \u0438\u0432 \u0441\u0438\u043d\u0431\u043f \u043b\u0434 \u043d\u043d. \u0434\u043b\u044f \u0437\u0434\u043a\u0438 \u0432\u043e\u043d\u0431\u043e \u0437\u0434\u0443 \u0436\u0443\u043c. \u0434\u043b\u044f \u0441\u0438\u0441\u0433 \u0435\u0442\u043d\u0436 \u043d\u0437\u0435 \u0431\u0434\u0430\u043f\u0436 \u0436\u0437\u0435 \u0437\u043b\u043a\u0434\u0438 \u043b\u0430. \u043f\u043e \u0443\u0433\u043c \u0443\u0437\u043b\u0438\u0436\u0434 \u0442\u0431\u0440\u0430\u0437. \u043f\u043e \u0437\u043a\u0437\u043a\u043d \u0436\u0440\u043d\u0434\u0431\u0436 \u0442\u043f\u0437\u043d\u043b\u0442 \u043a\u0441\u0436\u0442 \u0438\u043a. \u043f\u043e \u0440\u0434\u0437 \u0437\u0430 \u0432\u0434 \u0434\u0437 \u0434\u043e\u043f\u0442\u0432\u0433 \u043d\u0434\u0431\u043d\u043f\u0443 \u0437\u043d\u0441\u0431\u0443 \u0430\u0438\u0431\u0432\u0432 \u0441\u0440\u0443\u0433\u043c. \u0438 \u0430\u043c\u0433\u0440 \u0435\u0431\u0431\u0437 \u043c\u0437 \u043b\u0431\u0433\u0431\u043e \u0434\u0440\u0435\u043c\u0437. \u0438 \u0438\u0438\u0437\u0433\u0433\u0441 \u043a\u0432\u0431\u0441 \u043c\u0437 \u0437\u0441\u0442\u0437 \u0436\u043b\u0438 \u0435\u0430\u0442\u043f\u0441\u0441 \u043a\u0432. \u0434\u043b\u044f \u0435\u043b\u043e \u0442\u043e \u043c\u0442\u043f\u0437 \u0441\u0436\u0441\u043f. \u043f\u043e \u0431\u0441 \u0443\u0433\u0434\u043b\u043a \u0433\u0433\u043e\u0434\u0433 \u043d\u043e\u0442 \u0443\u043f\u0438\u0442. \u043f\u043e \u0436\u0436\u043d\u043b\u043f \u0443\u0433\u043d\u0437 \u0435\u043b\u0431 \u043a\u0436\u043a \u0433\u0440 \u0430\u0436\u0431\u0431\u0431\u0433 \u043e\u0440\u0437\u0430. \u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430\u0430",
-        "source_item_id": "c589263f6ce72b8ec54f617f555381275ab90dbc4933072c9f8e4847b713a318",
+        "source_item_id": "6b5bedc8df18d5e04660f05968594668023a8dfb3901bd0bed31ab60e2dba5ae",
         "source_sha256": "8a35bddf4994819152e491c6a23032dd4d3e4344b135fd951acb7d349f0d68fd"
       },
       "status_policy": "none",
@@ -1550,7 +1550,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "0aafd293334c1b65c9c2edc96168341fb18940de0ea149570cfc097b49f62a36",
+      "item_id": "6ac3eb51f7d8972cefe9b3e2b82b7f2c3f5c159dc428eed9d180f7b9c00ae88f",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1564,7 +1564,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.multiling:1.0.0",
         "prompt_text": "Continue the following text in the same language:\n\u5728\u4e2a\u4ee5\u8981\u5927\u6211\u4e0a\u6211\u8981\u6211\u6211\u8fd9\u548c\u4e2a\u6211\u5728\u4e00\u8981\u548c\u4e2a\u6709\u4e2a\u4e2d\u662f\u4e0a\u4e3a\u662f\u4e86\u4e2d\u4e3a\u6709\u4e2a\u4eba\u4e2a\u7684\u4e2a\u3002 \u548c\u8981\u548c\u5927\u4e3a\u8981\u4ed6\u6211\u4e0a\u4eba\u4eba\u548c\u4e2a\u8fd9\u8981\u8fd9\u4e3a\u4ed6\u6709\u3002 \u548c\u56fd\u5927\u4e86\u6709\u4eba\u8fd9\u4e3a\u56fd\u4e3a\u4ee5\u4e00\u4ed6\u8fd9\u4e0d\u4e2d\u5927\u8981\u4e00\u8981\u4ee5\u4ed6\u8fd9\u548c\u8981\u5927\u5728\u4eba\u4e0d\u548c\u6211\u6211\u8fd9\u4ee5\u4eba\u4e3a\u5728\u3002 \u4e0e\u5728\u4eba\u4e86\u8fd9\u4e0d\u7684\u4e3a\u5927\u4ed6\u8fd9\u6211\u6709\u5927\u8981\u548c\u4ee5\u4e0a\u4ed6\u662f\u6709\u7684\u4e0d\u4e2d\u56fd\u4e86\u3002 \u5411\u4eba\u4e2d\u6211\u6211\u5927\u56fd\u4e0d\u4e0a\u6709\u662f\u4e3a\u4e0a\u6211\u8981\u8fd9\u4ee5\u4ed6\u662f\u4e00\u3002 \u4e0e\u6211\u4ed6\u8fd9\u6709\u5927\u4ee5\u8fd9\u7684\u4ed6\u4e0a\u6709\u8fd9\u4e0a\u4e3a\u662f\u8981\u6709\u4e86\u5927\u4ee5\u56fd\u4e0d\u6709\u4ee5\u4e86\u662f\u8fd9\u3002 \u5411\u56fd\u4e86\u4e0a\u4e0d\u4e2a\u8981\u7684\u6211\u4e86\u4e2d\u4e00\u662f\u4e0a\u4e3a\u5927\u6709\u4e0a\u4e00\u3002 \u548c\u6211\u7684\u4e00\u5728\u4e3a\u548c\u7684\u4e0a\u4e0a\u548c\u6709\u4e2a\u4e0d\u5728\u4e2d\u4e0d\u4e86\u4e0d\u6211\u4e2d\u5927\u4e0d\u4e2d\u4eba\u4e00\u56fd\u4ee5\u662f\u56fd\u56fd\u8fd9\u8981\u4e00\u4e86\u56fd\u6211\u6211\u4e3a\u4eba\u4e86\u4ed6\u3002 \u5411\u8fd9\u5927\u5728\u4e2d\u4ee5\u4e86\u6709\u4e3a\u4ee5\u8981\u4e86\u56fd\u662f\u4ed6\u7684\u6709\u662f\u4e86\u8fd9\u4e3a\u5728\u4e86\u5927\u8fd9\u4e86\u3002 \u5411\u8981\u56fd\u4e0d\u4eba\u8fd9\u4e86\u56fd\u7684\u4e0a\u4e0a\u8981\u8fd9\u6211\u4e0d\u6709\u4e2d\u8fd9\u4ee5\u4e2a\u4eba\u4e0a\u5728\u4e0d\u4e86\u4e2a\u5728\u4e00\u4ee5\u662f\u4ed6\u56fd\u3002 \u548c\u4e3a\u4e00\u5927\u4ee5\u5927\u7684\u4e2d\u4e86\u548c\u4e0a\u4e2a\u56fd\u3002 \u5728\u8fd9\u4e0a\u4e86\u4ed6\u548c\u6709\u8fd9\u6709\u7684\u4e86\u8981\u662f\u662f\u4e2d\u8981\u4eba\u4e2a\u4e86\u5927\u4e0d\u5728\u3002 \u548c\u6211\u4ed6\u8981\u4e0a\u4e86\u4e2d\u4e2a\u6211\u4e0d\u548c\u4e00\u8fd9\u548c\u4ed6\u548c\u7684\u4ee5\u5927\u56fd\u4e2d\u6211\u3002 \u5411\u662f\u6709\u7684\u4e0d\u4e2a\u5728\u4eba\u4ed6\u6709\u7684\u5927\u6211\u8fd9\u4e00\u4e00\u4e00\u7684\u4e0a\u8fd9\u3002 \u5411\u5927\u6211\u548c\u5728\u5927\u5728\u5927\u4e2a\u7684\u56fd\u4ed6\u4e0d\u6211\u4e00\u5728\u4e0d\u662f\u4e00\u56fd\u4eba\u4eba\u6709\u8fd9\u4ed6\u56fd\u4ed6\u3002 \u5728\u4e00\u662f\u4e2a\u4e3a\u4eba\u5728\u662f\u8981\u4e0d\u4e0a\u662f\u4e86\u4eba\u4e86\u4e0a\u548c\u4e86\u4e3a\u662f\u5927\u548c\u3002 \u548c\u5927\u548c\u8981\u5927\u4e00\u7684\u7684\u5728\u4ed6\u548c\u4ee5\u662f\u5927\u7684\u6211\u4e86\u4e0d\u662f\u6211\u4e2a\u8981\u4eba\u7684\u6211\u5728\u6211\u4e0a\u3002 \u5728\u7684\u6709\u4eba\u4e0a\u6211\u4e2a\u4e3a\u56fd\u5927\u4e0d\u4e2d\u4e0a\u5728\u662f\u4ed6\u4ed6\u4e0a\u4ee5\u662f\u56fd\u6709\u6709\u4ee5\u7684\u4e00\u8fd9\u4eba\u548c\u4eba\u4e00\u6709\u6211\u5927\u5927\u7684\u4ed6\u4e0a\u4e2a\u4e3a\u8fd9\u5927\u548c\u4e2d\u662f\u4e0d\u56fd\u7684\u5927\u4e86\u56fd\u5728\u3002 \u548c\u4ed6\u4e2a\u56fd\u548c\u4e0d\u4e0a\u4ee5\u4eba\u4e0d\u4e3a\u6211\u6709\u4e2d\u4e0a\u7684\u8981\u4e86\u8981\u3002 \u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411\u5411",
-        "source_item_id": "0aafd293334c1b65c9c2edc96168341fb18940de0ea149570cfc097b49f62a36",
+        "source_item_id": "6ac3eb51f7d8972cefe9b3e2b82b7f2c3f5c159dc428eed9d180f7b9c00ae88f",
         "source_sha256": "739b433c6d50ab2400605ee83627853e87a04618c871eaf705d5538deb2004e7"
       },
       "status_policy": "none",
@@ -1586,7 +1586,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "ae9c70e1b8a345e47dc9bce39cfbf15cd03f1a8eecbb4e5d5a35996cee9883cb",
+      "item_id": "aea58a23729437100e2a4a05493c8da8f1243df1aa1597de0cd45f0c29f566f6",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1600,7 +1600,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.multiling:1.0.0",
         "prompt_text": "Continue the following text in the same language:\n\u092e\u0947\u0902 \u092f\u0935\u091f\u094b\u0939 \u0928\u0930\u0947 \u0947\u0941\u094b\u091c\u0941. \u0938\u0947 \u0915\u092a\u092a\u0935\u094b \u091a\u0930\u094b \u092f\u094b\u0915\u0941\u093f \u0940\u092f\u0917\u091a \u0930\u0917 \u092a\u092e\u091c\u0941\u0928\u0915. \u0938\u0947 \u0916\u0935\u091c \u092a\u0917\u0930\u091f \u0941\u0940\u0916\u091a\u094b \u0940\u093f\u092e \u092a\u0947\u0930\u0935. \u0914\u0930 \u091a\u092e\u093f \u091c\u092f\u091a\u0947 \u0917\u093f \u0939\u0932\u091c\u0939\u091f\u0930. \u092e\u0947\u0902 \u092a\u092a \u091f\u0917 \u093f\u0915\u092f\u092a \u093e\u094b \u0947\u0930\u092f\u093e\u091a\u0939 \u0930\u0940\u0939\u0928 \u0932\u0938. \u0939\u0948 \u094b\u0928\u092a \u093e\u0947\u092f\u0928\u092a\u094b \u094b\u0938\u092a\u0935 \u092e\u0940\u091a\u0915\u0916\u0939 \u093f\u094b\u091c\u091c\u0940 \u0928\u091c\u0917\u091f\u0938 \u0947\u093e\u091c\u0935\u093e\u0938 \u0915\u0916\u091f \u092e\u0915\u0947\u091c\u0941. \u092e\u0947\u0902 \u092f\u0917\u091c\u092a\u093f \u0940\u0935\u0947\u0915 \u093f\u092f\u0932\u093f\u0941 \u0941\u0938\u0940 \u0932\u091a\u093e \u093e\u0947\u0916\u094b\u0932\u093f \u093e\u093f \u092f\u0935\u0932 \u0940\u0935\u0947\u0939\u093f\u093f. \u0914\u0930 \u0947\u0917\u091c\u0928 \u094b\u0916\u0928\u092a \u091c\u094b\u0939 \u0935\u0935\u0940\u091c \u092f\u094b \u092a\u091a\u0930\u0915\u092e\u0917 \u0930\u093e\u0930\u0938. \u0939\u0948 \u092a\u0917 \u093e\u091f\u0916\u0932\u091c \u0916\u092f\u092f\u0947\u091c\u092e \u0938\u091c\u093f\u094b\u0916\u092e. \u0939\u0948 \u0941\u0932\u093e\u0928 \u091c\u0930\u093e\u0940 \u0932\u092f\u0917\u091f\u0935\u0938 \u0917\u0935\u091f\u091c\u0941 \u0915\u0915\u094b\u092a\u0916 \u092e\u091c \u092e\u0940\u093f\u0935 \u0941\u092a\u0932\u0940 \u092a\u091c\u0930\u092a\u092f \u0935\u091c\u091a\u093e. \u0914\u0930 \u0917\u0940 \u091a\u092f\u092e\u0941\u0915 \u0915\u0940\u094b\u0932 \u0938\u093f\u093e. \u0939\u0948 \u0915\u0930 \u0947\u091a\u091c\u091f\u093f\u092e \u092a\u091f\u0917 \u0932\u093f \u0915\u0939\u0940\u0916\u0930 \u092a\u092f\u091a\u091f\u092e\u0917 \u092f\u093e\u091a\u0947. \u092e\u0947\u0902 \u0940\u092a\u094b\u094b \u0930\u0939 \u0935\u092e\u0935 \u091c\u0928\u0916\u094b\u0935 \u091f\u0932\u092f\u0917\u091f\u091c \u093f\u0939 \u091f\u0939\u0915\u093f\u0916. \u092e\u0947\u0902 \u0932\u094b\u0938\u0935\u092f\u092f \u0939\u093e\u0939\u091f\u092f\u0928 \u093e\u0932 \u091c\u0930 \u0930\u0938\u0917\u092a\u091f. \u092e\u0947\u0902\u092e\u0947\u0902\u092e\u0947\u0902\u092e\u0947\u0902\u092e\u0947\u0902\u092e\u0947\u0902\u092e\u0947\u0902\u092e\u0947\u0902\u092e\u0947\u0902\u092e\u0947\u0902\u0915\u0915",
-        "source_item_id": "ae9c70e1b8a345e47dc9bce39cfbf15cd03f1a8eecbb4e5d5a35996cee9883cb",
+        "source_item_id": "aea58a23729437100e2a4a05493c8da8f1243df1aa1597de0cd45f0c29f566f6",
         "source_sha256": "637a140ca52dbe07a11ae2a9f3e0c0fc368fab90aa666145ae9435a829c35bf6"
       },
       "status_policy": "none",
@@ -1622,7 +1622,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "053d3d9dde616c7c28f56b1a268363d33b6445c5594062e6eb7809582f65856a",
+      "item_id": "f86dcdce73379d9168121f8eb09d48c0c16002962ae457d45d75504599c01a37",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1636,7 +1636,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.multiling:1.0.0",
         "prompt_text": "Continue the following text in the same language:\n\u0639\u0644\u0649 \u0638\u0641\u062f\u0643\u0628 \u0641\u0633\u0634\u0648\u0635\u0634 \u0627\u062c\u0636\u0646\u062a\u062c \u0628\u063a\u062e\u0645\u0637\u062b \u0636\u0639\u0634\u0634 \u0638\u0644 \u0639\u0634\u0644\u062f\u063a\u0641 \u0642\u0648\u0638\u0647 \u062a\u0638\u062d\u0646\u062f\u062c\u061f \u0639\u0644\u0649 \u0642\u0643\u062e \u0643\u0645\u0632 \u0637\u0645 \u0636\u0642 \u062a\u0638\u0627\u062d\u063a \u063a\u062c\u0630\u062e\u0628\u062f \u0647\u0634\u061f \u0648 \u063a\u0632\u0639\u0634\u0648 \u0637\u0644\u0635 \u0647\u0641\u0646\u0632\u062c \u063a\u062f\u0635\u0637\u062d\u0644\u061f \u0639\u0644\u0649 \u0633\u062e \u062e\u0630\u0628\u0647\u0633\u062a \u0634\u0633\u0636 \u062b\u0633\u0639\u0635\u0633\u062d \u0643\u062c\u0635\u0647 \u0637\u064a \u0632\u062d\u062b\u0644\u0641\u0646 \u0643\u0631\u0648\u0642\u062b\u062d\u061f \u0639\u0644\u0649 \u0632\u0633 \u062e\u0639\u0631 \u0634\u0631\u0648\u062d\u063a \u0641\u0627\u0637\u0647 \u0641\u0637\u062e\u0628 \u0627\u0641\u0638\u0634\u0644\u0636 \u0642\u0642\u061f \u0648 \u0645\u0637 \u0647\u0639 \u0632\u0628\u0637\u062e\u0638\u061f \u0645\u0646 \u0642\u0641\u063a\u0638\u0646 \u0635\u062c \u0647\u0631\u0645\u0642\u0636 \u0631\u0631 \u0630\u062f\u063a\u0630\u0639 \u0633\u0634 \u0630\u0645 \u0645\u0636\u062f\u0627 \u0634\u0636 \u0630\u0642\u062d\u0637\u0636\u062c\u061f \u0645\u0646 \u062d\u0642\u0648\u0632\u0633\u0634 \u0643\u0628\u064a\u062c\u062a\u0641 \u063a\u0628\u0637\u062e\u0633\u0633 \u0634\u062a\u0632\u0633\u0645 \u0634\u062f\u0646\u062a \u062c\u063a\u064a\u0627 \u0633\u063a\u062d\u0648\u0638 \u0647\u062c\u062f\u0647\u0645\u061f \u0648 \u0638\u062a\u0627\u064a\u0638\u0635 \u0628\u064a \u062e\u0638 \u0641\u0639\u063a\u0644\u0633 \u0645\u0635\u062a\u0645\u062a\u0633 \u0648\u062c\u0631 \u062a\u062a\u0645 \u062e\u0644 \u0632\u0643\u0643\u0634\u0634 \u0630\u0648\u0637\u061f \u0639\u0644\u0649 \u0633\u0636\u062b \u062a\u0648\u0635\u0645\u064a\u0634 \u0634\u062c\u0648 \u0634\u0637\u0636\u0635\u0636\u0647 \u063a\u062c\u0638\u0648 \u0642\u0627\u0632\u0628 \u062c\u062a\u0641 \u0639\u0627\u0642\u0632\u0627 \u0643\u0627\u0637\u0628\u0630\u061f \u0648 \u0637\u063a\u0645 \u0639\u062c\u0628 \u0632\u062f\u0641\u0643\u062f \u0637\u064a\u062d \u062d\u062c\u0645\u0633\u0639\u0633 \u0639\u0636\u063a\u0645 \u0631\u0633\u063a\u062d\u061f \u0645\u0646 \u0638\u0633\u0644\u062a \u0648\u0648\u0639\u0633\u0644\u0635 \u062c\u0648\u0638\u062b\u061f \u0645\u0646 \u062f\u062a \u062f\u0642\u0645 \u062a\u0646\u0628\u062f\u0633\u061f \u0645\u0646 \u0644\u0638\u0630 \u062a\u0641\u062a\u0648\u0637\u0630 \u062d\u0627\u0634\u0636 \u062b\u0641\u0644\u062e\u0635\u0628\u061f \u0639\u0644\u0649 \u0628\u0634\u0636\u0639\u0646 \u0636\u0639\u062a\u0637 \u0639\u0648\u0647 \u063a\u062f\u0637\u0636\u0628 \u0643\u0632 \u0635\u0643\u0642\u061f \u0645\u0646 \u062f\u063a \u0628\u0641 \u0635\u0636\u062a \u0639\u0633\u062d\u0628\u0631\u061f \u0641\u064a \u0643\u062d\u0628\u062e \u063a\u0641\u062d \u0636\u063a\u0647\u0639\u0648\u063a \u0634\u0641 \u0631\u062c \u0645\u062e\u063a\u0645\u062f\u0645\u061f \u0648 \u0639\u063a\u0638\u0644\u0638 \u0632\u0633\u062e\u0647\u062a\u0637 \u0643\u0642 \u0634\u0639 \u062b\u0628\u0648\u0631\u062f\u061f \u0639\u0644\u0649 \u0633\u0638\u0641 \u062a\u062a\u0635\u063a\u0631 \u0628\u0637 \u0641\u0648 \u062b\u0631\u0643 \u062a\u0645\u0637 \u0632\u062b\u0636 \u0646\u0627\u0644\u0632\u062d\u0637\u061f \u0639\u0644\u0649 \u0630\u0633\u0648\u062d\u0633\u0641 \u0633\u0627 \u0638\u062b\u0648\u0646\u062d\u0627 \u0630\u0627\u062d\u0643 \u0643\u0645\u062c\u061f \u0641\u064a \u0628\u064a\u0635\u0647 \u0639\u062f\u0639\u0637\u0644 \u0638\u0635\u0644\u0627\u0645\u063a \u062b\u0647\u062a\u0648 \u0641\u062e\u0632\u0634 \u0647\u0636\u062a\u062a\u0644\u0638 \u0641\u062f\u0633\u0630\u061f \u0627\u0627\u0627\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646\u0645\u0646",
-        "source_item_id": "053d3d9dde616c7c28f56b1a268363d33b6445c5594062e6eb7809582f65856a",
+        "source_item_id": "f86dcdce73379d9168121f8eb09d48c0c16002962ae457d45d75504599c01a37",
         "source_sha256": "d1c858db64ce404fbfcf3be82c9a2f82a5391c85b5c8e3aec6fa1d190369681c"
       },
       "status_policy": "none",
@@ -1658,7 +1658,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "04867b8d0f8bb3b08a83735ec4f9f6a556938df6cb8951d40ff095fabb03fdd0",
+      "item_id": "4997e9c125d1f34b3df7ca7226979a3a01302cae306203f0c425f82bcd5cf1ca",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1672,7 +1672,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.multiling:1.0.0",
         "prompt_text": "Continue the following text in the same language:\n\u03ba\u03b1\u03b9 \u03b2\u03bc \u03b7\u03bc\u03c0\u03c8\u03bc\u03c3 \u03c6\u03c1\u03c8\u03b8 \u03bb\u03bd\u03bc\u03b4 \u03c4\u03c9\u03b2\u03be\u03b9 \u03b4\u03b1\u03bc\u03c1\u03bb\u03c8 \u03c8\u03bf\u03c9\u03c0\u03c6 \u03b1\u03c5\u03b3\u03ba\u03b4 \u03c6\u03c1\u03b5\u03b5. \u03ba\u03b1\u03b9 \u03bd\u03c0\u03b9\u03c9 \u03bb\u03b2\u03b4 \u03b3\u03b8\u03b2\u03b5\u03c9 \u03b6\u03c0\u03c9 \u03c7\u03c5 \u03bc\u03c0 \u03c3\u03c9\u03bc. \u03c3\u03b5 \u03b8\u03b9\u03c9\u03b9\u03c8\u03b2 \u03bd\u03c8 \u03b8\u03c3\u03bd\u03bc\u03c3 \u03c1\u03c9 \u03c1\u03bb\u03c6. \u03ba\u03b1\u03b9 \u03b2\u03b9 \u03b4\u03c0\u03b9\u03b8 \u03c1\u03c8\u03c4\u03b7\u03c5 \u03bd\u03bd\u03c8\u03bc\u03b3\u03be \u03be\u03be\u03c5\u03b4\u03b4 \u03c8\u03b1 \u03c9\u03bb\u03b6\u03b3\u03b2. \u03bc\u03b5 \u03c1\u03b9 \u03b5\u03c9\u03c9\u03c8\u03c8\u03bc \u03bc\u03c6. \u03c3\u03b5 \u03c6\u03c8\u03c0\u03c6\u03c5\u03c4 \u03c3\u03b3\u03b7\u03c5\u03c8\u03b5 \u03bf\u03bb\u03b8\u03ba \u03bc\u03c5\u03ba\u03c9\u03c8\u03b7 \u03c1\u03c4\u03bc \u03b5\u03b4\u03b5 \u03c7\u03b9\u03b4\u03c3 \u03b5\u03c5\u03b6\u03c3\u03bf\u03c3. \u03c3\u03b5 \u03b6\u03b3\u03bc\u03c6 \u03c1\u03bf\u03c8 \u03b7\u03c4\u03be\u03b8\u03b4\u03c1 \u03b6\u03c4\u03b8 \u03bb\u03c7\u03c8 \u03c1\u03b5\u03b8\u03c8 \u03c4\u03c6\u03b7\u03b6 \u03c4\u03bf\u03b4\u03c9 \u03b4\u03c6\u03ba\u03ba\u03b5 \u03c8\u03b1\u03b6\u03c4. \u03b3\u03b9\u03b1 \u03b8\u03b4\u03bf \u03be\u03ba\u03b1\u03b8\u03b6 \u03bd\u03b6 \u03ba\u03c8 \u03c6\u03c7\u03b3\u03b5\u03be\u03c9 \u03bc\u03b6\u03b2\u03bc\u03c1 \u03b8\u03b1\u03bb\u03b9\u03b3 \u03be\u03b7\u03c9\u03b9\u03c0. \u03bc\u03b5 \u03b4\u03b3\u03c5\u03be \u03bc\u03bd\u03bd \u03c8\u03b7\u03c6\u03b4 \u03c0\u03c1\u03c6\u03b5\u03c9\u03b9 \u03b9\u03c6\u03c6\u03b2\u03b3 \u03b5\u03bc\u03bd\u03b9\u03b5. \u03c3\u03b5 \u03ba\u03c1\u03b5\u03c9\u03b4 \u03bd\u03b1 \u03c5\u03c1\u03b9\u03be \u03bc\u03c3\u03b6 \u03b4\u03ba\u03b6\u03b6\u03b1 \u03b6\u03b1\u03bc\u03ba\u03c9 \u03c5\u03b9\u03c5\u03bd \u03bb\u03b6\u03c8\u03bc\u03bf\u03b9. \u03bc\u03b5 \u03c0\u03b2 \u03bf\u03bb \u03be\u03c1 \u03c4\u03c6\u03c4\u03bf\u03b5\u03c4. \u03ba\u03b1\u03b9 \u03c7\u03c7\u03b3\u03c1\u03b5 \u03ba\u03c1\u03c0\u03b5\u03c9\u03c6 \u03be\u03b3\u03b7 \u03bc\u03c1\u03c8 \u03b7\u03b7 \u03bf\u03ba\u03b8\u03b7\u03b5\u03bc \u03b1\u03bf\u03be\u03bf. \u03ba\u03b1\u03b9 \u03bc\u03b2\u03b1\u03b7\u03c9\u03b8 \u03c7\u03b1 \u03b3\u03c9\u03bd \u03b4\u03bf \u03be\u03c4\u03b7\u03ba. \u03c3\u03b5 \u03c4\u03c8 \u03c8\u03bb\u03b9\u03b9\u03b1 \u03c0\u03b6 \u03b1\u03bf\u03c9\u03c8 \u03b3\u03b7\u03c5\u03b9\u03c1\u03b6 \u03be\u03c3\u03b3\u03b6\u03ba. \u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03ba\u03b1\u03b9\u03b1",
-        "source_item_id": "04867b8d0f8bb3b08a83735ec4f9f6a556938df6cb8951d40ff095fabb03fdd0",
+        "source_item_id": "4997e9c125d1f34b3df7ca7226979a3a01302cae306203f0c425f82bcd5cf1ca",
         "source_sha256": "c11487a03a272a1ecc1bc0d767da5be7b10e24ce262691a953578b82e6152de2"
       },
       "status_policy": "none",
@@ -1694,7 +1694,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "41dcf9d67d556d29fff131cbd5938604aae54911c0872f38f010f477226cefea",
+      "item_id": "c33a3edead73d1b144438a9f6f5f53caa516f1d8cea6cca83cf401d6eda50c77",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1708,7 +1708,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.multiling:1.0.0",
         "prompt_text": "Continue the following text in the same language:\nand mim li lp oislr omlsim npvvp patoi. the aomme rprl ipri pnv. and alar rrppp emlla otapoa nppomv oro plar poilr lvpor. and lnpaa ito ptoamr tvrp alrmel erl ovm. and loss tnat oimme pamms leaov tssinv tmp invs or. with iaar tm ns sesls. and eaato mipa ss nps eo lts riree aipiva rimmot. and ramm ssrl pts rntsav. near lrtlpp oat pl aa oms. near srornp en pnlom. and anpo tmvt vrn anm sa mialv pmmepo plsors pelnva roaesl. near lp ln vmp atvait eet vnv meen svrm os noesp. and tnl os tses imee ilaa ne. the ravn np leos oltiio reoa ll neoea rm. and io om pom pvlav na. near ien eosmn ntmll pnspsa. with miioto vtiv nrsto pso iv. the mvatri tl mmsaia oa. the ai oor sirmre pvnis aanltp pi. and eilr msopst iav saos. and rtnv rsie atil. near erl aa oippvn ioorta otrter ple aovne. the osrt roo ot ripsaa nmimv anrva. with vsi nis ara tvvvlp rmpoa. with np tpraa aitsp sprmpr vis ovpspv pllsa sio. the snpem li lenpl po oi ot it ttvsi tmsrlp ssnt. near ovi tta eoetle eemon nsv mistn vo ron iamret oe. near lolvrl mn tpmoi ons sseao. the nornnl eleil omr mo pttive. near mnnlm amve etli mrsovs iavl lvpn pvitl aano nrrpv. near totrv slant vtnim anapea ipa rtirv. lllllllllllllllllllllllllllllllllllllllllllllllllll",
-        "source_item_id": "41dcf9d67d556d29fff131cbd5938604aae54911c0872f38f010f477226cefea",
+        "source_item_id": "c33a3edead73d1b144438a9f6f5f53caa516f1d8cea6cca83cf401d6eda50c77",
         "source_sha256": "320f9e831c66c177f9a6fd4e8f6552c45a84f016424d3bf8d43e7754704d7510"
       },
       "status_policy": "none",
@@ -1730,7 +1730,7 @@
         "level_id": "common_512_256",
         "prefix_group_id": null
       },
-      "item_id": "e6bb278ad38e8a3f3d55eeec123569e7c8b77b9c978032d135a3b1ff181635e4",
+      "item_id": "04b85404fc25098e5ca6dc71643b20c20bd11ad478af8fead707dbe5188b78b1",
       "item_type": "text_prompt",
       "output_policy": "fixed_budget_exact",
       "shape": {
@@ -1744,7 +1744,7 @@
         "license": "internal-synthetic",
         "prompt_template_id": "jw.multiling:1.0.0",
         "prompt_text": "Continue the following text in the same language:\n\u043d\u0430 \u0438\u0442\u0434 \u0432\u043b\u0436 \u0434\u0435\u0436\u0432 \u0432\u0430\u0440\u0433\u0441\u0443 \u0434\u0443 \u0440\u0442\u043b\u0438 \u0437\u0430\u043c \u043a\u043c\u043e \u0436\u0433. \u0438 \u0437\u0438\u0437\u043b \u0437\u043a\u0433\u0431\u043e\u0430 \u0443\u043a\u0438 \u0442\u0430. \u043d\u0430 \u0430\u0434\u0433\u0442\u0436 \u0441\u043d\u043b \u0437\u043c\u043a\u0436\u0430\u043b. \u0438 \u0434\u0437\u043b \u0431\u0443\u043d\u0442\u043a\u043b \u0437\u0437 \u0438\u0442\u0441\u0432\u043e\u0442 \u043a\u0434\u043a\u043f \u043b\u0442 \u0443\u0440\u0438\u0436\u043b\u0436 \u043f\u043c\u043b. \u043f\u043e \u0441\u0436\u043a \u0434\u043f\u0432 \u0430\u0430\u0435 \u0442\u043d\u0437\u0442 \u0430\u043e \u0432\u0438\u043d \u0443\u0440\u043c\u0437\u0438\u0436. \u0438 \u0440\u043c\u0436 \u0437\u0434\u0440 \u0443\u0430\u0432\u0435\u0435 \u043d\u0432\u043a\u0431\u0440\u0435 \u043a\u043f \u0433\u043f\u0443\u043c\u043f\u0433 \u0435\u0438\u0434. \u0434\u043b\u044f \u0443\u043b\u0438\u0432 \u043d\u0435\u0440 \u0442\u0442\u0432\u0433\u043c\u043b \u0430\u0432\u043f. \u043d\u0430 \u0442\u043a\u0438\u043d \u0438\u0440\u043b\u0436\u043c\u043d \u043c\u0431\u0442\u0443\u0431\u043e \u043c\u043c\u0432\u0435\u0433 \u043c\u043e\u043f\u0436\u0438\u0443 \u0435\u0433\u043d\u043f\u0433. \u043f\u043e \u0435\u0441 \u043a\u0443\u0438\u0437\u0441\u043c \u043b\u0437\u0433\u0432\u0443 \u0441\u0432\u0432 \u0436\u0434\u0432\u043a\u043b\u0443 \u0435\u0442\u0437. \u0438 \u043a\u043e\u043b\u0440 \u043d\u0443\u0432\u0434\u0440\u0433 \u0438\u043a\u0441 \u0437\u0432\u043d\u0431\u0442 \u0435\u0431\u0437\u0440\u0431\u0433. \u043d\u0430 \u0431\u043b\u043f\u043b \u0438\u0432\u0431\u0436 \u0442\u043c\u0437\u0435\u0436\u0435 \u0435\u0440\u0437\u0440 \u043f\u0441\u0443\u0433\u0438 \u043c\u0431\u043e. \u0438 \u043a\u0435\u0443 \u0442\u043d\u043d\u043e\u0433\u0430 \u0441\u043a\u0433\u043f\u0436\u0442 \u043c\u043c \u0440\u0437 \u0442\u0440 \u0440\u0434\u0431 \u0440\u043f \u0441\u043c\u0432 \u0434\u0442\u0443\u0443\u043d\u0434. \u043f\u043e \u0435\u0438 \u043f\u0437 \u0436\u0435 \u0438\u0433\u0432 \u043f\u0436\u043b \u0443\u0436\u0441\u043d\u0438 \u0431\u043f\u043a\u0441\u043c. \u0434\u043b\u044f \u0433\u0438\u0435\u043c\u043b \u0443\u043d \u0430\u0435\u0443\u0436. \u0438 \u0440\u0440\u0430\u0440\u043f\u043a \u0430\u043f\u043d\u0441 \u0431\u043e \u0440\u043f\u0438. \u043d\u0430 \u043b\u0432 \u0437\u0437\u043b \u0432\u0430 \u0443\u0441\u0440\u0435\u043c \u043c\u0431\u043a\u0442\u0442\u0442 \u0431\u0435 \u043d\u0435\u043e\u0441\u0432\u0437. \u0438 \u0432\u0432\u0435 \u043c\u0433\u0442\u0442 \u0434\u0441\u0440\u043b\u0441\u0436 \u0440\u043d \u0441\u043c\u0430\u0441\u0440 \u0430\u0440\u0443\u0434. \u0434\u043b\u044f \u0438\u0437\u0432\u0434\u043b\u043a \u0441\u0440 \u0433\u0432 \u0441\u0431\u0431\u0431\u0438 \u0430\u0435\u0441\u043e\u0434\u0432 \u0441\u0441 \u0441\u0440\u0436\u0437 \u0431\u0442\u043a\u043a\u0435\u0433. \u0438 \u0437\u0442 \u0437\u0441 \u043a\u043d \u0431\u043f\u043b\u0441\u043a \u0435\u0438\u0440\u0442\u0433. \u043f\u043e \u0433\u0435 \u043d\u0434\u0443\u0433\u0438 \u043a\u0437\u0442 \u0442\u043b\u0433 \u0440\u0436\u0438\u043a \u0436\u0435 \u043e\u0438\u0431\u0434 \u0431\u043d\u0440 \u0443\u0431 \u0434\u0434\u043e. \u0434\u043b\u044f \u0431\u043e \u043d\u0441\u0432\u0430\u0438 \u0435\u0436\u043a \u0431\u043d\u0430\u0430 \u043b\u0430\u0431. \u043f\u043e \u0437\u0432\u0430\u0435\u0431\u0435 \u043e\u0433 \u0438\u043b\u043e\u0441\u0432\u0443 \u0440\u0438\u0437\u0436\u0430. \u043d\u0430 \u0435\u043f\u0443\u0440 \u0437\u0430\u0442\u0432 \u0431\u043e \u0442\u0438\u0432\u0438 \u0438\u043e. \u0430\u0430\u0430\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e\u043f\u043e",
-        "source_item_id": "e6bb278ad38e8a3f3d55eeec123569e7c8b77b9c978032d135a3b1ff181635e4",
+        "source_item_id": "04b85404fc25098e5ca6dc71643b20c20bd11ad478af8fead707dbe5188b78b1",
         "source_sha256": "4bb6ce0d3d9aab5dd874420af96cbedbdecab714ee2e857ed6a347c47ec3d622"
       },
       "status_policy": "none",
@@ -1756,10 +1756,10 @@
     "contamination_note": "closed-bank synthetic prompts; tokenizer id includes B7 file manifest",
     "license": "internal-synthetic",
     "revision": "1.0.0",
-    "source_id": "jw_mixed_v1:tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c",
+    "source_id": "jw_mixed_v1:tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6",
     "source_kind": "synthetic",
     "subset_id": "jw_mixed_v1_common_512_256",
-    "subset_sha256": "c87d2f3ca2c8275daad1c7d81c5355567c5cc15493d552bbf044b211420d0c3c"
+    "subset_sha256": "952cb8ef7db6f421486606e650530b341205296d6999a3d75839639bc3cc2363"
   },
   "suite_id": "jw_mixed_v1",
   "suite_profile": "jw_mixed_v1_common_512_256",
