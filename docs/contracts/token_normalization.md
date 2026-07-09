@@ -1,7 +1,8 @@
 # Token Normalization And Stack Identity Contract
 
 Status: binding for token-denominated metrics, cross-tokenizer comparison
-language, and reader-facing stack-identity captions from 2026-07-09 onward.
+language, and stack identity on all claims-ladder-governed surfaces from
+2026-07-09 onward.
 It composes with `docs/contracts/claims_ladder.md` for claim levels and
 `docs/contracts/capstone_scope.md` for single-unit limitation language.
 
@@ -100,7 +101,7 @@ bundle/provenance surface when it is already known.
 | Model artifact hash | Model artifact byte identity, not only a display name. For directories, the folded directory identity satisfies this field. | `metadata.runtime.model_artifact_identity`; model identity inside `metadata.workload_provenance` where recorded. |
 | Quantization | Quantization format, precision, and runtime quantization label, or `none`/`unknown` if that is the recorded state. | `metadata.runtime`; model/config fields; `metadata.workload_provenance` model fields where recorded. |
 | Tokenizer identity | Tokenizer name, revision, class, and vocabulary size where available; prompt source and BOS handling (`prompt_source`, `bos_present`) when per-token metrics are shown; token-ID hash domain and hash when the caption cites prompt-token identity. | `metadata.workload_provenance` (D-033); `outputs/suite_items.jsonl` item `prompt_source`, `bos_present`, and per-item token hashes; single-prompt domain `joulewise.prompt_token_ids.v1`; suite rollup domain `joulewise.suite_prompt_token_ids.v1`. |
-| Sampler/output policy | Sampler settings, stop condition, runtime stop reason, and output cap/policy label. | `events.jsonl` `item_start` event metadata `output_policy`; `outputs/suite_items.jsonl` item `stop_reason`; `metadata.workload_provenance.output_policy`; suite `metadata.workload_provenance` sampler provenance per `docs/contracts/run_bundle_layout.md`. |
+| Sampler/output policy | Sampler settings, stop condition, runtime stop reason, and output cap/policy label. | `events.jsonl` `item_start` event metadata `output_policy`; `outputs/suite_items.jsonl` item `stop_reason`; `metadata.workload_provenance.output_policy`; `metadata.workload_provenance.sampler` (single-prompt and suite runs); suite sampler provenance per `docs/contracts/run_bundle_layout.md`. |
 | Batching/concurrency policy | Always applicable: state explicit batch size/concurrency policy, `single-request sequential`, or `unavailable`. | Runtime adapter metadata, serving-stack configuration, run orchestration metadata, or explicit `unavailable` when not captured. |
 | Measurement boundary label | Named boundary whose joules are reported, including rail/source semantics. | `metadata.telemetry`, `power_trace.csv` `source`/`rail`, rail-manifest metadata, and D-018 boundary label used under `docs/contracts/claims_ladder.md`. |
 | Telemetry backend | Backend that produced the power trace, including version or command semantics where available. | `metadata.telemetry`; `metadata.device.powermetrics` for powermetrics sampler evidence; backend-native artifacts under `raw/`; telemetry logs. |

@@ -32,7 +32,7 @@ but later reader-facing summaries must use the current level.
   downgrades to L0 capability language.
 - (2026-07-09) Token-denominated metrics and cross-tokenizer comparison
   language follow `docs/contracts/token_normalization.md`, including its
-  stack-identity table for reader-facing figures.
+  stack-identity table, across all surfaces this ladder governs.
 
 ## Ladder
 
