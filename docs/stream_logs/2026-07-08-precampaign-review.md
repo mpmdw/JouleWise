@@ -53,3 +53,34 @@ dispositions recorded HERE as CP entries), land accepted changes
 (queue/plan/capture code rows), then write the final answer covering
 asks 2-5. If the workflow died mid-run, resume it with
 resumeFromRunId — do not relaunch from scratch.
+
+### CP-2 — parallel build fan-out + real-tokenizer manifests LANDED
+- Four [AGENT] implementation streams launched in worktrees (all
+  pre-campaign prerequisites, independent of review outcome):
+  `jw-wt-envgate`/branch `envelope-gate` (P2-010 remainder: E1-E5 gate
+  script per D-047/D-036), `jw-wt-hashcheck`/`runner-hash-check`
+  (P2-025 post-window expected-vs-realized hash fail-closed),
+  `jw-wt-strictfix`/`strict-era-fix` (P2-026 D-033 legacy-bypass
+  close), `jw-wt-bundlepack`/`bundle-pack` (P2-027 publishable pack
+  tooling). Codex out-files: scratchpad/codex/{envgate,hashcheck,
+  strictfix,bundlepack}.md. Each gets lens round → fix → lead gate →
+  small PR (bases = main; retarget rule N/A, no stacking).
+- GEN-CHECKPOINT DISCHARGED (lead-side, .venv): real-tokenizer
+  manifests generated and verified —
+  configs/suite_manifests/jw_mixed_v1_qwen25_15b.json (48 items,
+  6 categories x 8, all shapes 512/256, effective sha 06d5199a…) and
+  jw_sentinel_v1_qwen25_15b.json (5 ids-native conditions, sha
+  66f45283…), master seeds jw-{mixed,sentinel}-v1-2026-07-08,
+  tokenizer = mirrored Qwen2.5-1.5B-Instruct-4bit @ 8b403126.
+  VERIFIED: substrate-valid (from_mapping); ALL realized counts == 512
+  on the real tokenizer; regeneration BYTE-IDENTICAL (manifest +
+  sidecar); B7 tokenizer file rows present (4 files) with folded id;
+  ground truth sidecar-only. Ed's determinism question: demonstrated,
+  not asserted.
+- Methodology-review workflow wf_efd7d9d2-c85 still running.
+
+RESUME (if interrupted here): harvest the four codex out-files, run
+lens rounds per stream, gate/commit/PR each; adjudicate the
+methodology-review synthesis when wf_efd7d9d2-c85 completes; then the
+final four-part answer (queue fit / determinism / capture changes /
+askable questions).

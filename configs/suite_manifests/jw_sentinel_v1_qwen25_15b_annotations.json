@@ -1,0 +1,195 @@
+{
+  "items": {
+    "4d4805cc1d8bc2030500415fc4b31f4a349a9df790d398653aa2d2d90f6b55f8": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "bos_present": false,
+      "coarse_units": 24,
+      "condition_id": "code_like",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 35,
+      "generator_id": "jw.sentinel.code_like",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "indent": {
+          "source": "pinned",
+          "value": "    "
+        },
+        "n_complete_functions": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "n_imports": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        }
+      },
+      "prompt_source": "token_ids",
+      "realized_token_count": 512,
+      "seed": 11507449710495719214,
+      "text_sha256": null,
+      "token_accounting": "encode_add_special_false",
+      "token_ids_sha256": "1ed32d811a0fc6c557d3aa6c4a13234df25ac98f674810e07a6e8d62d0de6b2a",
+      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+    },
+    "6177e1c5923aa21c2e9fa3f5cbdba6ed7312bb8287db71498a817bbcf9385aae": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "bos_present": false,
+      "chars_per_token": 1.369140625,
+      "coarse_units": 3,
+      "condition_id": "multilingual",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 53,
+      "generator_id": "jw.sentinel.multilingual",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "mixed_profiles": {
+          "source": "pinned",
+          "value": [
+            "ru-Cyrillic",
+            "zh-CJK",
+            "hi-Devanagari",
+            "ar-Arabic"
+          ]
+        }
+      },
+      "prompt_source": "token_ids",
+      "realized_token_count": 512,
+      "seed": 9984356447749811618,
+      "text_sha256": null,
+      "token_accounting": "encode_add_special_false",
+      "token_ids_sha256": "4219b12b97d979933800acfa0b88fbe03e6353389fddae20c57b9689c622d259",
+      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+    },
+    "801e08027f07018c75a850c27637f075ed8d96332cebf02de06c24d6f12865fa": {
+      "bos_present": false,
+      "condition_id": "random_token",
+      "drbg": "sha256-ctr-v1",
+      "excluded_special_ids": [
+        151643,
+        151644,
+        151645,
+        151646,
+        151647,
+        151648,
+        151649,
+        151650,
+        151651,
+        151652,
+        151653,
+        151654,
+        151655,
+        151656
+      ],
+      "generator_id": "jw.sentinel.random_token",
+      "generator_version": "1.0.0",
+      "prompt_source": "token_ids",
+      "realized_token_count": 512,
+      "seed": 8091458837222928171,
+      "text_sha256": null,
+      "token_ids_sha256": "849f769fc250e2c304c84e71c5480f0d8bcfefbadb533b8aeef81cb0563bfc5f",
+      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+    },
+    "81a91b809dde9bebe202c845ea307e2dbdb0de086091d7e521313778e9bd2180": {
+      "bos_present": false,
+      "condition_id": "repeated_seed",
+      "drbg": "sha256-ctr-v1",
+      "generator_id": "jw.sentinel.repeated_seed",
+      "generator_version": "1.0.0",
+      "prompt_source": "token_ids",
+      "realized_token_count": 512,
+      "seed": 13547963404057522519,
+      "text_sha256": null,
+      "token_ids_sha256": "a551a0d85cebf6a486c88b3c4c39dcdd98323e690443443749bd8ef077e39868",
+      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+    },
+    "8d879e0b6a812a35b46d108ebfe0aa33c9963e9a202839129e246d9aa3cb9ac3": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "bos_present": false,
+      "coarse_units": 24,
+      "condition_id": "natural_prose",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 41,
+      "generator_id": "jw.sentinel.natural_prose",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_constraints": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 5
+        },
+        "persona": {
+          "range": [
+            0,
+            7
+          ],
+          "source": "drbg",
+          "value": "a visiting exchange student"
+        },
+        "topic": {
+          "grammar": "adjective+domain",
+          "source": "drbg",
+          "value": "the rotating greenhouse irrigation schedules"
+        }
+      },
+      "prompt_source": "token_ids",
+      "realized_token_count": 512,
+      "seed": 14330433773433968140,
+      "text_sha256": null,
+      "token_accounting": "encode_add_special_false",
+      "token_ids_sha256": "2eb294dfaaddeab0ef017fcbc57d4a066a1ec02092b05188fcb9234d7311e174",
+      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+    }
+  },
+  "source_manifest": {
+    "source_id": "jw_mixed_v1:tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c",
+    "subset_sha256": "da94e82a5cb4f94a83b487b968f5c1b0dced3ecf8f9c71f23951d1702b16feb9",
+    "tokenizer_files_sha256": "18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c",
+    "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+  },
+  "suite": "jw_mixed_v1_sentinel",
+  "tokenizer": {
+    "files": [
+      {
+        "filename": "merges.txt",
+        "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+      },
+      {
+        "filename": "tokenizer.json",
+        "sha256": "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf"
+      },
+      {
+        "filename": "tokenizer_config.json",
+        "sha256": "f7c61e32b7a17d19bf8e7037dcb74079a833e53ea9801f24008cac68458f03b7"
+      },
+      {
+        "filename": "vocab.json",
+        "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+      }
+    ],
+    "files_sha256": "18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c",
+    "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+  }
+}
