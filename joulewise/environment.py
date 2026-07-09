@@ -6,6 +6,7 @@ import re
 import subprocess
 import time
 import json
+from importlib import metadata as importlib_metadata
 from typing import Any
 
 COMMAND_TIMEOUT_S = 3.0
@@ -54,6 +55,11 @@ def empty_environment_snapshot() -> dict[str, Any]:
             "status": "unavailable",
             "timed_running": None,
             "timed_probe_error": None,
+        },
+        "python_packages": {
+            "mlx": _package_version_record("mlx"),
+            "mlx-lm": _package_version_record("mlx-lm"),
+            "transformers": _package_version_record("transformers"),
         },
         "load_average_1m": None,
         "load_average_5m": None,
@@ -210,6 +216,16 @@ def collect_environment_snapshot(timeout_s: float = COMMAND_TIMEOUT_S) -> dict[s
 
     snapshot["errors"] = errors
     return snapshot
+
+
+def _package_version_record(distribution: str) -> dict[str, str | bool | None]:
+    try:
+        version = importlib_metadata.version(distribution)
+    except importlib_metadata.PackageNotFoundError:
+        return {"present": False, "version": None}
+    except Exception as exc:  # noqa: BLE001 - environment capture must never raise
+        return {"present": False, "version": None, "error": f"{type(exc).__name__}: {exc}"}
+    return {"present": True, "version": version}
 
 
 def _apply_command(

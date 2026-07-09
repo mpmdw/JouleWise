@@ -72,6 +72,14 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
   affected fields null, or set explicit probe statuses such as
   `display.status: "probe_unavailable"` and `clock_sync.status:
   "unavailable"`.
+- `metadata.environment.python_packages` records present-or-absent package
+  version evidence for `mlx`, `mlx-lm`, and `transformers` as additive
+  records shaped like `{"present": bool, "version": string|null}`.
+- Runtime metadata may include `model_artifact_identity`, a model weight byte
+  identity record. A single weight file records its SHA-256 bytes hash; a
+  directory with multiple recognized weight files records a relative-path to
+  SHA-256 map plus a folded SHA-256 over that map. Mock runtimes may record an
+  explicit hashed mock marker.
 - `metadata.device.powermetrics`, when the powermetrics telemetry adapter is
   used, records `samplers_requested` as the exact sampler string requested
   from powermetrics and `samplers_available` as either the list confirmed by
@@ -148,6 +156,9 @@ phase. Prompt-side token provenance is recorded in `metadata.json`
 (`workload_provenance.prompt`) and must not be counted as output-token
 runtime evidence. When decode phase windows are present, output-token events
 used by reduction must fall inside a decode window.
+For single-prompt runs, `outputs/tokens.jsonl` rows may include additive
+`token_id` fields, and `metadata.workload_provenance.response.emitted_token_ids`
+records the emitted output token IDs in order when the runtime exposes them.
 
 Runtime phase windows are discovered generically from paired
 `phase_start`/`phase_end` records. MLX runs may emit non-overlapping
@@ -183,11 +194,14 @@ line is one JSON object with `item_id`, `item_index`, `status`,
 optional `status_reason`, `prompt.token_hash_domain`,
 `prompt.token_ids_sha256`, `response_text`, `response_sha256`,
 `stop_reason`, `prompt_tokens`, `emitted_tokens`, and `tokens`
-(`[{index, timestamp_s}, ...]`). Suites do not write `response.txt`.
+(`[{index, timestamp_s, token_id?}, ...]`). Additive `emitted_token_ids`
+records the emitted output token IDs in order and must have the same length as
+`emitted_tokens` when present. Suites do not write `response.txt`.
 For ids-native manifest items (`source.prompt_token_ids`), bundle validation
 recomputes `prompt_token_ids_sha256(manifest ids)` and checks it against the
-line's realized `prompt.token_ids_sha256`; text-path expected-hash closure is
-campaign-runner checked.
+line's realized `prompt.token_ids_sha256`. For text manifest items with a
+SHA-256-shaped `source.source_sha256`, validation accepts either the realized
+prompt token-ID hash domain or the prompt-text SHA-256 domain.
 
 `metadata.suite` is a top-level metadata block, not `metadata.extra`.
 Required fields are `suite_id`, `suite_profile`, `suite_revision`,

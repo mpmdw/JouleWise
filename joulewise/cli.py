@@ -38,6 +38,7 @@ from joulewise.kv_size import (
 from joulewise.provenance import (
     PROMPT_TOKEN_IDS_HASH_DOMAIN,
     SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN,
+    suite_prompt_plan_class,
     suite_prompt_rollup,
 )
 from joulewise.reduce import reduce_bundle
@@ -302,6 +303,8 @@ def _strict_problems(reader: BundleReader) -> list[str]:
             )
     problems.extend(_strict_summary_provenance_problems(reader, summary))
     problems.extend(_strict_workload_provenance_problems(reader, summary))
+    problems.extend(_strict_emitted_token_ids_problems(reader))
+    problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
     problems.extend(_strict_raw_to_trace_problems(reader))
     fresh = reduce_bundle(reader.path).to_dict()
     differing = _strict_summary_differences(fresh, summary)
@@ -572,6 +575,120 @@ def _strict_suite_prompt_rollup(
     if problems:
         return None, problems
     return suite_prompt_rollup(prompt_hashes, total_tokens), []
+
+
+def _strict_emitted_token_ids_problems(reader: BundleReader) -> list[str]:
+    problems: list[str] = []
+    metadata = reader.raw_metadata()
+    if isinstance(metadata, dict):
+        workload = metadata.get("workload_provenance")
+        if isinstance(workload, dict):
+            response = workload.get("response")
+            output_policy = workload.get("output_policy")
+            emitted_tokens = (
+                output_policy.get("emitted_tokens")
+                if isinstance(output_policy, dict)
+                else None
+            )
+            if isinstance(response, dict) and "emitted_token_ids" in response:
+                emitted_token_ids = response.get("emitted_token_ids")
+                problems.extend(
+                    _strict_emitted_token_ids_length_problems(
+                        emitted_token_ids,
+                        emitted_tokens,
+                        "metadata.workload_provenance.response",
+                    )
+                )
+
+    for line_index, record in _strict_suite_item_records(reader):
+        if "emitted_token_ids" not in record:
+            continue
+        problems.extend(
+            _strict_emitted_token_ids_length_problems(
+                record.get("emitted_token_ids"),
+                record.get("emitted_tokens"),
+                f"outputs/suite_items.jsonl line {line_index}",
+            )
+        )
+    return problems
+
+
+def _strict_emitted_token_ids_length_problems(
+    emitted_token_ids: Any,
+    emitted_tokens: Any,
+    path: str,
+) -> list[str]:
+    if not isinstance(emitted_token_ids, list):
+        return [f"strict: {path}.emitted_token_ids is present but not a list"]
+    if not _is_nonnegative_int(emitted_tokens):
+        return [
+            f"strict: {path}.emitted_tokens is not a non-negative integer for "
+            "emitted_token_ids validation"
+        ]
+    if len(emitted_token_ids) != emitted_tokens:
+        return [
+            f"strict: {path}.emitted_token_ids length {len(emitted_token_ids)} "
+            f"does not equal emitted_tokens {emitted_tokens}"
+        ]
+    return []
+
+
+def _strict_budgeted_suite_prompt_count_problems(reader: BundleReader) -> list[str]:
+    try:
+        manifest = reader.suite_manifest()
+    except BundleReadError as exc:
+        return [f"strict: {exc}"]
+    if manifest is None:
+        return []
+    plan_class = suite_prompt_plan_class(
+        manifest.suite_id,
+        manifest.suite_profile,
+        manifest.source_manifest.source_id,
+    )
+    if plan_class != "budgeted":
+        return []
+    problems: list[str] = []
+    records = {
+        record.get("item_index"): record
+        for _, record in _strict_suite_item_records(reader)
+        if _is_nonnegative_int(record.get("item_index"))
+    }
+    for item_index, item in enumerate(manifest.items):
+        if item.source.prompt_text is None:
+            continue
+        record = records.get(item_index)
+        if not isinstance(record, dict) or record.get("status") != "succeeded":
+            continue
+        realized = record.get("prompt_tokens")
+        planned = item.shape.planned_prompt_tokens
+        if realized != planned:
+            problems.append(
+                "strict: outputs/suite_items.jsonl item_index "
+                f"{item_index} planned_prompt_tokens_mismatch: "
+                f"planned_prompt_tokens {planned}, realized_prompt_tokens {realized}"
+            )
+    return problems
+
+
+def _strict_suite_item_records(reader: BundleReader) -> list[tuple[int, dict[str, Any]]]:
+    path = reader.path / "outputs" / "suite_items.jsonl"
+    if not path.is_file():
+        return []
+    try:
+        text = path.read_text()
+    except OSError:
+        return []
+    records: list[tuple[int, dict[str, Any]]] = []
+    for index, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict):
+            records.append((index, record))
+    return records
 
 
 def _strict_required_object_keys(

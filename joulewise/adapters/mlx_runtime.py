@@ -10,6 +10,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import json
+import operator
 import os
 import subprocess
 from collections.abc import Iterable
@@ -19,12 +20,21 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.clock import Clock
-from joulewise.interfaces import AdapterResult, RunContext, RuntimeEvent, RuntimeResult
+from joulewise.interfaces import (
+    AdapterFailure,
+    AdapterResult,
+    RunContext,
+    RuntimeEvent,
+    RuntimeResult,
+)
 from joulewise.provenance import (
     PROMPT_TOKEN_IDS_HASH_DOMAIN,
+    folded_model_artifact_sha256,
+    normalized_sha256_hex,
     output_policy,
     prompt_provenance,
     sha256_hex,
+    suite_prompt_plan_class,
     suite_prompt_rollup,
 )
 from joulewise.schemas import BenchmarkConfig, FailureReason
@@ -60,6 +70,7 @@ class _GenerationRecord:
     sampler_provenance: dict[str, Any]
     prompt_token_ids: list[int]
     prompt_text: str | None
+    output_token_ids: list[int]
 
 
 class MlxRuntimeAdapter:
@@ -74,6 +85,7 @@ class MlxRuntimeAdapter:
         self._tokenizer: Any | None = None
         self._model_config: dict[str, Any] | None = None
         self._original_eos_token_ids: set[int] | None = None
+        self._model_artifact_identity: dict[str, Any] | None = None
 
     def prepare(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -137,16 +149,19 @@ class MlxRuntimeAdapter:
         self._model, self._tokenizer, self._model_config = loaded
         self._original_eos_token_ids = _tokenizer_eos_ids(self._tokenizer)
 
+        self._model_artifact_identity = model_artifact_identity(source)
         metadata = {
             "adapter": "mlx_runtime",
             "mlx_lm_version": _module_or_distribution_version(mlx_lm, "mlx-lm"),
             "mlx_version": _distribution_version("mlx"),
+            "transformers_version": _distribution_version("transformers"),
             "model_source": str(Path(source).expanduser()),
             "model_source_is_local_path": Path(source).expanduser().exists(),
             "model_revision": config.model.revision,
             "load_wall_time_s": end_s - start_s,
             "weight_format": config.model.weight_format,
             "quantization": config.quantization.name,
+            "model_artifact_identity": self._model_artifact_identity,
         }
         if isinstance(self._model_config, dict):
             metadata["model_config_name"] = self._model_config.get("model_type")
@@ -223,6 +238,10 @@ class MlxRuntimeAdapter:
                 "model": {
                     "source": config.model.source,
                     "revision": config.model.revision,
+                    "artifact_identity": self._model_artifact_identity,
+                },
+                "response": {
+                    "emitted_token_ids": record.output_token_ids,
                 },
                 "output_policy": output_policy(
                     "fixed_budget_exact",
@@ -243,6 +262,7 @@ class MlxRuntimeAdapter:
     ) -> RuntimeResult:
         if self._mlx_lm is None or self._model is None or self._tokenizer is None:
             raise RuntimeError("runtime backend 'mlx' run_suite called before prepare")
+        self._sampler_for_generation()
 
         manifest_sha256 = suite_manifest_sha256(manifest.to_dict())
         events: list[RuntimeEvent] = [
@@ -345,6 +365,7 @@ class MlxRuntimeAdapter:
                 item_index,
                 previous_item_id,
                 events,
+                suite_identity=_suite_identity(manifest),
             )
             # First real record wins: an item whose generation never started
             # returns the unavailable sentinel and must not mask an earlier
@@ -416,6 +437,7 @@ class MlxRuntimeAdapter:
                 "model": {
                     "source": config.model.source,
                     "revision": config.model.revision,
+                    "artifact_identity": self._model_artifact_identity,
                 },
                 "output_policy": output_policy(
                     manifest.execution_policy.default_output_policy,
@@ -432,6 +454,8 @@ class MlxRuntimeAdapter:
         item_index: int,
         previous_item_id: str | None,
         events: list[RuntimeEvent],
+        *,
+        suite_identity: str,
     ) -> dict[str, Any]:
         prompt_tokens_for_marker = item.shape.planned_prompt_tokens
         prompt_text: str | None = None
@@ -486,6 +510,8 @@ class MlxRuntimeAdapter:
         stop_reason = "runtime_failed"
         emitted_tokens = 0
         token_records: list[dict[str, float | int]] = []
+        emitted_token_ids: list[int] = []
+        annotations: list[dict[str, Any]] = []
         sampler_recorded = False
         sampler_provenance = self._sampler_provenance_unavailable(
             "item generation did not start"
@@ -494,6 +520,20 @@ class MlxRuntimeAdapter:
         try:
             if not prompt_ready:
                 raise RuntimeError("suite item prompt could not be prepared")
+            prompt_problem = _suite_prompt_closure_problem(
+                item,
+                prompt_token_ids,
+                prompt_text,
+                suite_identity=suite_identity,
+            )
+            if prompt_problem is not None and prompt_problem["severity"] == "fatal":
+                status = ItemStatus.MALFORMED.value
+                status_reason = prompt_problem["code"]
+                stop_reason = "malformed"
+                annotations.append(prompt_problem)
+                raise _SuiteItemMalformed()
+            if prompt_problem is not None:
+                annotations.append(prompt_problem)
             generation = self._generate(
                 prompt,
                 prompt_token_ids,
@@ -512,6 +552,7 @@ class MlxRuntimeAdapter:
             stop_reason = generation.stop_condition
             emitted_tokens = generation.output_tokens
             token_records = generation.token_records
+            emitted_token_ids = generation.output_token_ids
             prompt_tokens_for_marker = generation.prompt_tokens
             if item.output_policy == "fixed_budget_exact":
                 if emitted_tokens < item.shape.planned_output_tokens:
@@ -524,6 +565,8 @@ class MlxRuntimeAdapter:
                 stop_reason = "length"
             else:
                 status = ItemStatus.SUCCEEDED.value
+        except _SuiteItemMalformed:
+            pass
         except Exception as exc:  # noqa: BLE001 - per-item containment (D-045)
             status = ItemStatus.RUNTIME_FAILED.value
             status_reason = f"{type(exc).__name__}: {exc}"
@@ -562,10 +605,13 @@ class MlxRuntimeAdapter:
             "stop_reason": stop_reason,
             "prompt_tokens": prompt_tokens_for_marker,
             "emitted_tokens": emitted_tokens,
+            "emitted_token_ids": emitted_token_ids,
             "tokens": token_records,
         }
         if status_reason is not None:
             output["status_reason"] = status_reason
+        if annotations:
+            output["annotations"] = annotations
         return {
             "status": status,
             "prompt_tokens": prompt_tokens_for_marker,
@@ -644,6 +690,7 @@ class MlxRuntimeAdapter:
             )
         )
         token_records: list[dict[str, float | int]] = []
+        output_token_ids: list[int] = []
         text_parts: list[str] = []
         last_finish_reason: str | None = None
         sampler, sampler_provenance = self._sampler_for_generation()
@@ -701,6 +748,8 @@ class MlxRuntimeAdapter:
                 finish_reason = getattr(response, "finish_reason", None)
                 if isinstance(finish_reason, str):
                     last_finish_reason = finish_reason
+                token_id = _response_token_id(response)
+                output_token_ids.append(token_id)
                 token_metadata: dict[str, Any] = {"index": index}
                 if item_id is not None:
                     token_metadata.update({"item_id": item_id, "item_index": item_index})
@@ -717,7 +766,9 @@ class MlxRuntimeAdapter:
                         metadata=token_metadata,
                     )
                 )
-                token_records.append({"index": index, "timestamp_s": timestamp_s})
+                token_records.append(
+                    {"index": index, "timestamp_s": timestamp_s, "token_id": token_id}
+                )
         finally:
             self._restore_eos(original_eos_ids)
 
@@ -781,6 +832,7 @@ class MlxRuntimeAdapter:
             sampler_provenance=sampler_provenance,
             prompt_token_ids=prompt_token_ids,
             prompt_text=prompt_text,
+            output_token_ids=output_token_ids,
         )
 
     def cleanup(
@@ -792,6 +844,7 @@ class MlxRuntimeAdapter:
         self._model_config = None
         self._mlx_lm = None
         self._original_eos_token_ids = None
+        self._model_artifact_identity = None
         return AdapterResult(ok=True, metadata=metadata)
 
     def _memory_snapshot(self, label: str) -> dict[str, Any]:
@@ -859,11 +912,7 @@ class MlxRuntimeAdapter:
             "temperature": 0.0,
         }
         if not self._stream_generate_accepts_sampler():
-            return None, {
-                **base,
-                "pinned": False,
-                "reason": "mlx_lm sampler API unavailable",
-            }
+            self._raise_sampler_pin_failure("mlx_lm stream_generate sampler API unavailable")
         make_sampler = getattr(self._mlx_lm, "make_sampler", None)
         sampler_api = "mlx_lm.make_sampler"
         if not callable(make_sampler):
@@ -873,11 +922,7 @@ class MlxRuntimeAdapter:
             make_sampler = getattr(sample_utils, "make_sampler", None)
             sampler_api = "mlx_lm.sample_utils.make_sampler"
         if not callable(make_sampler):
-            return None, {
-                **base,
-                "pinned": False,
-                "reason": "mlx_lm sampler API unavailable",
-            }
+            self._raise_sampler_pin_failure("mlx_lm sampler API unavailable")
         errors: list[str] = []
         for kwargs in ({"temp": 0.0}, {"temperature": 0.0}):
             try:
@@ -890,14 +935,9 @@ class MlxRuntimeAdapter:
             except TypeError as exc:
                 errors.append(f"{next(iter(kwargs))}: {exc}")
             except Exception as exc:  # noqa: BLE001 - feature detection must be fail-soft
-                return None, {
-                    **base,
-                    "pinned": False,
-                    "reason": (
-                        "mlx_lm sampler API unavailable: "
-                        f"{type(exc).__name__}: {exc}"
-                    ),
-                }
+                self._raise_sampler_pin_failure(
+                    f"mlx_lm sampler API unavailable: {type(exc).__name__}: {exc}"
+                )
         try:
             return make_sampler(0.0), {
                 **base,
@@ -908,17 +948,30 @@ class MlxRuntimeAdapter:
         except TypeError as exc:
             errors.append(f"positional_temp: {exc}")
         except Exception as exc:  # noqa: BLE001 - feature detection must be fail-soft
-            return None, {
-                **base,
-                "pinned": False,
-                "reason": f"mlx_lm sampler API unavailable: {type(exc).__name__}: {exc}",
-            }
-        return None, {
-            **base,
+            self._raise_sampler_pin_failure(
+                f"mlx_lm sampler API unavailable: {type(exc).__name__}: {exc}"
+            )
+        self._raise_sampler_pin_failure(
+            "mlx_lm sampler API unavailable",
+            errors=errors,
+        )
+
+    @staticmethod
+    def _raise_sampler_pin_failure(reason: str, *, errors: list[str] | None = None) -> None:
+        metadata: dict[str, Any] = {
+            "error": "sampler_pin_unverified",
+            "kind": "greedy",
+            "temperature": 0.0,
             "pinned": False,
-            "reason": "mlx_lm sampler API unavailable",
-            "errors": errors,
+            "reason": reason,
         }
+        if errors:
+            metadata["errors"] = list(errors)
+        raise AdapterFailure(
+            FailureReason.RUNTIME_UNAVAILABLE,
+            f"sampler_pin_unverified: {reason}",
+            metadata=metadata,
+        )
 
     def _stream_generate_accepts_sampler(self) -> bool:
         stream_generate = getattr(self._mlx_lm, "stream_generate", None)
@@ -986,6 +1039,71 @@ def _encode(tokenizer: Any, text: str, *, add_special_tokens: bool) -> list[int]
     return list(encoded)
 
 
+class _SuiteItemMalformed(Exception):
+    pass
+
+
+def _response_token_id(response: Any) -> int:
+    for attr in ("token", "token_id", "id"):
+        value = getattr(response, attr, None)
+        if isinstance(value, bool):
+            continue
+        try:
+            return operator.index(value)
+        except TypeError:
+            pass
+    raise AdapterFailure(
+        FailureReason.RUNTIME_UNAVAILABLE,
+        "output_token_id_unavailable: mlx_lm stream response did not expose an integer token id",
+    )
+
+
+def _suite_identity(manifest: SuiteManifest) -> str:
+    return suite_prompt_plan_class(
+        manifest.suite_id,
+        manifest.suite_profile,
+        manifest.source_manifest.source_id,
+    )
+
+
+def _suite_prompt_closure_problem(
+    item: SuiteItem,
+    prompt_token_ids: list[int],
+    prompt_text: str | None,
+    *,
+    suite_identity: str,
+) -> dict[str, Any] | None:
+    if item.source.prompt_text is None:
+        return None
+    realized_hash = prompt_provenance(prompt_token_ids, text=prompt_text)[
+        "token_ids_sha256"
+    ]
+    text_hash = sha256_hex(prompt_text or "")
+    source_hash = normalized_sha256_hex(item.source.source_sha256)
+    if source_hash is not None and source_hash not in {realized_hash, text_hash}:
+        return {
+            "code": "prompt_ids_mismatch",
+            "severity": "fatal",
+            "source_sha256": source_hash,
+            "realized_prompt_token_ids_sha256": realized_hash,
+            "prompt_text_sha256": text_hash,
+        }
+    planned = item.shape.planned_prompt_tokens
+    realized = len(prompt_token_ids)
+    if planned == realized:
+        return None
+    annotation = {
+        "code": "planned_prompt_tokens_mismatch",
+        "planned_prompt_tokens": planned,
+        "realized_prompt_tokens": realized,
+    }
+    if suite_identity == "budgeted":
+        return {**annotation, "severity": "fatal"}
+    if suite_identity == "affine":
+        return {**annotation, "severity": "advisory"}
+    return {**annotation, "severity": "advisory"}
+
+
 def _bos_present(tokenizer: Any, token_ids: list[int], *, add_special_tokens: bool) -> bool:
     if not add_special_tokens or not token_ids:
         return False
@@ -1010,6 +1128,82 @@ def _synthetic_prompt_tokens(tokenizer: Any, target_tokens: int) -> list[int]:
     while len(repeated) < target_tokens:
         repeated.extend(seed)
     return repeated[:target_tokens]
+
+
+def model_artifact_identity(source: str | None) -> dict[str, Any]:
+    if not source:
+        return {"status": "unavailable", "reason": "model source is not configured"}
+    path = Path(source).expanduser()
+    if path.is_file():
+        try:
+            digest = sha256_hex(path.read_bytes())
+        except OSError as exc:
+            return {
+                "status": "unavailable",
+                "reason": f"cannot read model weight file: {exc}",
+                "path": str(path),
+            }
+        return {
+            "status": "ok",
+            "kind": "single_file",
+            "algorithm": "sha256",
+            "sha256": digest,
+            "path": str(path),
+        }
+    if path.is_dir():
+        file_hashes: dict[str, str] = {}
+        try:
+            children = sorted(path.rglob("*"))
+        except OSError as exc:
+            return {
+                "status": "unavailable",
+                "reason": f"cannot enumerate model directory: {exc}",
+                "root": str(path),
+            }
+        for child in children:
+            if child.is_file() and _is_model_weight_file(child):
+                try:
+                    file_hashes[child.relative_to(path).as_posix()] = sha256_hex(
+                        child.read_bytes()
+                    )
+                except OSError as exc:
+                    return {
+                        "status": "unavailable",
+                        "reason": f"cannot read model weight file: {exc}",
+                        "path": str(child),
+                    }
+        if file_hashes:
+            return {
+                "status": "ok",
+                "kind": "file_set",
+                "algorithm": "sha256",
+                "folded_sha256": folded_model_artifact_sha256(file_hashes),
+                "files": file_hashes,
+                "root": str(path),
+            }
+        return {
+            "status": "unavailable",
+            "reason": "no recognized model weight files found",
+            "root": str(path),
+        }
+    return {
+        "status": "unavailable",
+        "reason": "model source is not a local file or directory",
+        "source": source,
+    }
+
+
+def _is_model_weight_file(path: Path) -> bool:
+    return path.name.endswith(
+        (
+            ".safetensors",
+            ".bin",
+            ".pt",
+            ".pth",
+            ".npz",
+            ".gguf",
+        )
+    )
 
 
 def _tokenizer_eos_ids(tokenizer: Any) -> set[int] | None:
@@ -1161,4 +1355,3 @@ def _mlx_metal_memory(errors: dict[str, str]) -> dict[str, Any]:
     if result["api_available"] and numeric_values == 0:
         errors["mlx_metal"] = "getters_unavailable"
     return result
-

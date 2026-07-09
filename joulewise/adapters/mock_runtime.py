@@ -33,9 +33,11 @@ from joulewise.clock import Clock
 from joulewise.interfaces import AdapterResult, RunContext, RuntimeEvent, RuntimeResult
 from joulewise.provenance import (
     PROMPT_TOKEN_IDS_HASH_DOMAIN,
+    normalized_sha256_hex,
     output_policy,
     prompt_provenance,
     sha256_hex,
+    suite_prompt_plan_class,
     suite_prompt_rollup,
 )
 from joulewise.schemas import BenchmarkConfig, FailureReason
@@ -93,7 +95,11 @@ class MockRuntimeAdapter:
             )
         return AdapterResult(
             ok=True,
-            metadata={"adapter": "mock_runtime", "version": __version__},
+            metadata={
+                "adapter": "mock_runtime",
+                "version": __version__,
+                "model_artifact_identity": _mock_model_artifact_identity(config),
+            },
         )
 
     def warmup(
@@ -117,9 +123,12 @@ class MockRuntimeAdapter:
 
         events.append(self._event("phase_start", "decode", "mock decode started"))
         token_records: list[dict[str, float | int]] = []
+        emitted_token_ids: list[int] = []
         for index in range(output_tokens):
             clock.sleep(DECODE_SECONDS_PER_OUTPUT_TOKEN)
             timestamp_s = clock.now()
+            token_id = index + 1
+            emitted_token_ids.append(token_id)
             events.append(
                 RuntimeEvent(
                     timestamp_s=timestamp_s,
@@ -129,7 +138,9 @@ class MockRuntimeAdapter:
                     metadata={"index": index},
                 )
             )
-            token_records.append({"index": index, "timestamp_s": timestamp_s})
+            token_records.append(
+                {"index": index, "timestamp_s": timestamp_s, "token_id": token_id}
+            )
         events.append(self._event("phase_end", "decode", "mock decode completed"))
 
         response_text = (
@@ -166,6 +177,10 @@ class MockRuntimeAdapter:
                 "model": {
                     "source": config.model.source,
                     "revision": config.model.revision,
+                    "artifact_identity": _mock_model_artifact_identity(config),
+                },
+                "response": {
+                    "emitted_token_ids": emitted_token_ids,
                 },
                 "output_policy": output_policy(
                     "fixed_budget_exact",
@@ -281,6 +296,7 @@ class MockRuntimeAdapter:
                 item_index,
                 previous_item_id,
                 events,
+                suite_identity=_suite_identity(manifest),
             )
             previous_item_id = item.item_id
             output_lines.append(json.dumps(item_result["output"], sort_keys=True) + "\n")
@@ -351,6 +367,7 @@ class MockRuntimeAdapter:
                 "model": {
                     "source": config.model.source,
                     "revision": config.model.revision,
+                    "artifact_identity": _mock_model_artifact_identity(config),
                 },
                 "output_policy": output_policy(
                     manifest.execution_policy.default_output_policy,
@@ -372,8 +389,10 @@ class MockRuntimeAdapter:
         item_index: int,
         previous_item_id: str | None,
         events: list[RuntimeEvent],
+        *,
+        suite_identity: str,
     ) -> dict[str, Any]:
-        prompt_token_ids = item.prompt_token_ids()
+        prompt_token_ids = _mock_suite_prompt_token_ids(item)
         prompt = prompt_provenance(prompt_token_ids, text=item.source.prompt_text)
         events.append(
             self._event(
@@ -402,9 +421,22 @@ class MockRuntimeAdapter:
         response_text = ""
         stop_reason = "requested_tokens_emitted"
         emitted_tokens = 0
+        emitted_token_ids: list[int] = []
         token_records: list[dict[str, float | int]] = []
+        annotations: list[dict[str, Any]] = []
+        prompt_problem = _suite_prompt_closure_problem(
+            item,
+            prompt_token_ids,
+            item.source.prompt_text,
+            suite_identity=suite_identity,
+        )
 
-        if "mock-runtime-failed" in item.tags:
+        if prompt_problem is not None and prompt_problem["severity"] == "fatal":
+            status = ItemStatus.MALFORMED.value
+            status_reason = prompt_problem["code"]
+            stop_reason = "malformed"
+            annotations.append(prompt_problem)
+        elif "mock-runtime-failed" in item.tags:
             status = ItemStatus.RUNTIME_FAILED.value
             status_reason = "mock-runtime-failed"
             stop_reason = "runtime_failed"
@@ -413,6 +445,8 @@ class MockRuntimeAdapter:
             status_reason = "mock-malformed"
             stop_reason = "malformed"
         else:
+            if prompt_problem is not None:
+                annotations.append(prompt_problem)
             item_phase_metadata = {"item_id": item.item_id, "item_index": item_index}
             events.append(
                 self._event(
@@ -444,6 +478,8 @@ class MockRuntimeAdapter:
             for index in range(item.shape.planned_output_tokens):
                 self._clock.sleep(DECODE_SECONDS_PER_OUTPUT_TOKEN)
                 timestamp_s = self._clock.now()
+                token_id = index + 1
+                emitted_token_ids.append(token_id)
                 events.append(
                     RuntimeEvent(
                         timestamp_s=timestamp_s,
@@ -453,7 +489,9 @@ class MockRuntimeAdapter:
                         metadata={"item_id": item.item_id, "item_index": item_index, "index": index},
                     )
                 )
-                token_records.append({"index": index, "timestamp_s": timestamp_s})
+                token_records.append(
+                    {"index": index, "timestamp_s": timestamp_s, "token_id": token_id}
+                )
             events.append(
                 self._event(
                     "phase_end",
@@ -511,10 +549,13 @@ class MockRuntimeAdapter:
             "stop_reason": stop_reason,
             "prompt_tokens": len(prompt_token_ids),
             "emitted_tokens": emitted_tokens,
+            "emitted_token_ids": emitted_token_ids,
             "tokens": token_records,
         }
         if status_reason is not None:
             output["status_reason"] = status_reason
+        if annotations:
+            output["annotations"] = annotations
         return {
             "status": status,
             "prompt_tokens": len(prompt_token_ids),
@@ -556,3 +597,69 @@ class MockRuntimeAdapter:
 def _suite_item_prompt_source(item: SuiteItem) -> str:
     source = item.prompt_source_kind()
     return "token_ids" if source == "prompt_token_ids" else source
+
+
+def _mock_suite_prompt_token_ids(item: SuiteItem) -> list[int]:
+    if item.source.prompt_text is not None:
+        return list(range(1, len(item.source.prompt_text.split()) + 1))
+    return item.prompt_token_ids()
+
+
+def _mock_model_artifact_identity(config: BenchmarkConfig) -> dict[str, Any]:
+    marker = {
+        "adapter": "mock_runtime",
+        "model_name": config.model.name,
+        "model_source": config.model.source,
+        "model_revision": config.model.revision,
+    }
+    return {
+        "status": "ok",
+        "kind": "mock_marker",
+        "algorithm": "sha256",
+        "sha256": sha256_hex(json.dumps(marker, separators=(",", ":"), sort_keys=True)),
+        "marker": marker,
+    }
+
+
+def _suite_identity(manifest: SuiteManifest) -> str:
+    return suite_prompt_plan_class(
+        manifest.suite_id,
+        manifest.suite_profile,
+        manifest.source_manifest.source_id,
+    )
+
+
+def _suite_prompt_closure_problem(
+    item: SuiteItem,
+    prompt_token_ids: list[int],
+    prompt_text: str | None,
+    *,
+    suite_identity: str,
+) -> dict[str, Any] | None:
+    if item.source.prompt_text is None:
+        return None
+    realized_hash = prompt_provenance(prompt_token_ids, text=prompt_text)[
+        "token_ids_sha256"
+    ]
+    text_hash = sha256_hex(prompt_text or "")
+    source_hash = normalized_sha256_hex(item.source.source_sha256)
+    if source_hash is not None and source_hash not in {realized_hash, text_hash}:
+        return {
+            "code": "prompt_ids_mismatch",
+            "severity": "fatal",
+            "source_sha256": source_hash,
+            "realized_prompt_token_ids_sha256": realized_hash,
+            "prompt_text_sha256": text_hash,
+        }
+    planned = item.shape.planned_prompt_tokens
+    realized = len(prompt_token_ids)
+    if planned == realized:
+        return None
+    annotation = {
+        "code": "planned_prompt_tokens_mismatch",
+        "planned_prompt_tokens": planned,
+        "realized_prompt_tokens": realized,
+    }
+    if suite_identity == "budgeted":
+        return {**annotation, "severity": "fatal"}
+    return {**annotation, "severity": "advisory"}
