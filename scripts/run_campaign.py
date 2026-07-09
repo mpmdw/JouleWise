@@ -52,12 +52,9 @@ STATUSES = (
     "dry_run",
 )
 ORDER_MANIFEST_NAME = "order_manifest.json"
-PROMPT_HASH_SIDECAR_SCHEMAS = frozenset(
+KNOWN_NON_PROMPT_SIDECAR_SCHEMAS = frozenset(
     {
-        "joulewise.prompt_hash_sidecar.v1",
-        "jw.prompt_hash_sidecar.v1",
-        "jw_prompt_hash_sidecar.v1",
-        "prompt_hash_sidecar.v1",
+        "affine_smoke_annotations.v1",
     }
 )
 
@@ -585,7 +582,7 @@ def _is_recognizable_other_sidecar(sidecar: dict[str, Any]) -> bool:
     if "annotations" in sidecar:
         return True
     schema = _sidecar_schema_string(sidecar)
-    return schema is not None and schema not in PROMPT_HASH_SIDECAR_SCHEMAS
+    return schema in KNOWN_NON_PROMPT_SIDECAR_SCHEMAS
 
 
 def _classify_inferred_prompt_sidecar(sidecar_path: Path) -> PromptHashCheck | None:

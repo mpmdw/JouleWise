@@ -930,13 +930,13 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(check["sidecar_path"], str(sidecar))
             self.assertIn("not valid JSON", check["problems"][0])
 
-    def test_affine_scorer_shaped_inferred_sidecar_is_not_applicable(self) -> None:
+    def test_inferred_sidecar_with_annotations_marker_is_not_applicable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
-            manifest = tmp_path / "affine_smoke_v1.json"
-            sidecar = tmp_path / "affine_smoke_v1_annotations.json"
+            manifest = tmp_path / "mock_suite_manifest.json"
+            sidecar = tmp_path / "mock_suite_manifest_annotations.json"
             config_dir.mkdir()
             manifest.write_text(
                 (ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json").read_text(
@@ -953,14 +953,13 @@ class RunCampaignTests(unittest.TestCase):
                                 "scorer_id": "affine_mod_ladder_v1/score_v1",
                             }
                         ],
-                        "schema_version": "affine_smoke_annotations.v1",
                     }
                 )
                 + "\n",
                 encoding="utf-8",
             )
             write_suite_config(
-                config_dir, "suite.json", "suite-inferred-affine", suite_manifest=manifest
+                config_dir, "suite.json", "suite-inferred-annotations", suite_manifest=manifest
             )
 
             result = run_campaign(config_dir, runs_dir)
@@ -971,6 +970,110 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(check["status"], "not_applicable")
             self.assertEqual(check["sidecar_path"], str(sidecar))
             self.assertEqual(check["checked_items"], 0)
+
+    def test_inferred_sidecar_with_known_non_prompt_schema_is_not_applicable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            manifest = tmp_path / "affine_smoke_v1.json"
+            sidecar = tmp_path / "affine_smoke_v1_annotations.json"
+            config_dir.mkdir()
+            manifest.write_text(
+                (ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json").read_text(
+                    encoding="utf-8"
+                ),
+                encoding="utf-8",
+            )
+            sidecar.write_text(
+                json.dumps({"schema_version": "affine_smoke_annotations.v1"}) + "\n",
+                encoding="utf-8",
+            )
+            write_suite_config(
+                config_dir, "suite.json", "suite-inferred-schema", suite_manifest=manifest
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check["status"], "not_applicable")
+            self.assertEqual(check["sidecar_path"], str(sidecar))
+            self.assertEqual(check["checked_items"], 0)
+
+    def test_unknown_schema_inferred_prompt_hash_sidecar_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            manifest = tmp_path / "mock_suite_manifest.json"
+            sidecar = tmp_path / "mock_suite_manifest_annotations.json"
+            config_dir.mkdir()
+            manifest.write_text(
+                (ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json").read_text(
+                    encoding="utf-8"
+                ),
+                encoding="utf-8",
+            )
+            sidecar.write_text(
+                json.dumps({"schema_version": "joulewise.prompt_hash_sidecar.v2"}) + "\n",
+                encoding="utf-8",
+            )
+            write_suite_config(
+                config_dir, "suite.json", "suite-inferred-unknown-schema", suite_manifest=manifest
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("prompt_hash_check_error", result.stderr)
+            self.assertIn(str(sidecar), result.stderr)
+            self.assertIn("ambiguous", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check["status"], "error")
+            self.assertEqual(check["sidecar_path"], str(sidecar))
+            self.assertEqual(
+                check["problems"],
+                [
+                    "inferred generator sidecar is ambiguous: "
+                    "missing prompt-hash items and no recognized other-type marker"
+                ],
+            )
+
+    def test_non_object_items_inferred_prompt_hash_sidecar_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            manifest = tmp_path / "mock_suite_manifest.json"
+            sidecar = tmp_path / "mock_suite_manifest_annotations.json"
+            config_dir.mkdir()
+            manifest.write_text(
+                (ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json").read_text(
+                    encoding="utf-8"
+                ),
+                encoding="utf-8",
+            )
+            sidecar.write_text(json.dumps({"items": []}) + "\n", encoding="utf-8")
+            write_suite_config(
+                config_dir, "suite.json", "suite-inferred-non-object-items", suite_manifest=manifest
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("prompt_hash_check_error", result.stderr)
+            self.assertIn(str(sidecar), result.stderr)
+            self.assertIn("inferred generator sidecar items is not an object", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check["status"], "error")
+            self.assertEqual(check["sidecar_path"], str(sidecar))
+            self.assertEqual(
+                check["problems"], ["inferred generator sidecar items is not an object"]
+            )
 
     def test_empty_object_inferred_prompt_hash_sidecar_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
