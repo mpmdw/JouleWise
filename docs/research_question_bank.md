@@ -7,6 +7,10 @@ out of the bank requires: a named RQ slot in `PROJECT_STATUS.md`, a data
 plan that does not displace queue ranks above it, and (post P1-001) scope
 fit. Killed ideas stay recorded with their cause of death.
 
+Canonical live index: `docs/research_question_registry.md`. The registry is
+the current index for aliases, status, claim ceilings, owners, and gates; this
+bank remains the historical and deliberative record.
+
 ## Promoted 2026-07-07 (now Q4-Q6 in PROJECT_STATUS)
 
 - **Q4 Fixed-vs-marginal energy model** — fit
