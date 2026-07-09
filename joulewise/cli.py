@@ -330,6 +330,9 @@ _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
     # summaries whose claim_eligibility carried only the deprecated alias.
     "claim_eligibility.gross_request",
     "claim_eligibility.idle_subtracted_request",
+    # P2-040 FIX-3: joint interpolation bound is additive over pre-0.3.0
+    # summaries.
+    "energy_bound_terms_j.E_interpolation_joint_edge_bound_j",
     "energy_bound_terms_j",
     "energy_uncertainty_status",
     "energy_variance_terms_j2",
@@ -377,6 +380,10 @@ def _strict_summary_differences(
                 if child == "summary_provenance":
                     continue
                 if child in absent_tolerance:
+                    continue
+                # P2-040 FIX-3: nested joint-interpolation fields are additive
+                # for pre-0.3.0 summaries at every (dynamic) precheck path.
+                if child.endswith(".interpolation_joint_edge_bound_j"):
                     continue
                 if fresh[key] is not None:
                     differences.append(child)

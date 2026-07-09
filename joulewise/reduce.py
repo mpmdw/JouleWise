@@ -352,6 +352,9 @@ def _energy_bound_terms_j(
     return {
         "E_drift_bound_j": drift_bound_j,
         "E_interpolation_edge_bound_j": _interpolation_edge_bound_j(curve, window),
+        "E_interpolation_joint_edge_bound_j": _interpolation_joint_edge_bound_j(
+            curve, window
+        ),
     }
 
 
@@ -403,6 +406,38 @@ def _interpolation_edge_bound_j(
         _integrate(curve, window.start_s + start_delta, window.end_s),
         _integrate(curve, window.start_s, window.end_s - end_delta),
         _integrate(curve, window.start_s, window.end_s + end_delta),
+    )
+    return max(abs(value - base) for value in perturbed)
+
+
+def _interpolation_joint_edge_bound_j(
+    curve: list[TracePoint],
+    window: Window,
+) -> float | None:
+    """P2-040 FIX-3 (STA-6): simultaneous-endpoint interpolation bound.
+
+    Evaluates all four Cartesian combinations of independently shifting the
+    window start and end by +/- half their local bracketing gaps and returns
+    the maximum absolute change from the base energy. Deterministic bound over
+    the declared perturbation recipe, not a probability model. Null when
+    either gap is unavailable or the maximally inward combination inverts the
+    window (equality is allowed and yields a zero-duration candidate).
+    """
+    if window.duration_s <= 0.0 or len(curve) < 2:
+        return None
+    start_gap = _bracketing_gap_s(curve, window.start_s)
+    end_gap = _bracketing_gap_s(curve, window.end_s)
+    if start_gap is None or end_gap is None:
+        return None
+    start_delta = 0.5 * start_gap
+    end_delta = 0.5 * end_gap
+    if window.start_s + start_delta > window.end_s - end_delta:
+        return None
+    base = _integrate(curve, window.start_s, window.end_s)
+    perturbed = (
+        _integrate(curve, window.start_s + a * start_delta, window.end_s + b * end_delta)
+        for a in (-1.0, 1.0)
+        for b in (-1.0, 1.0)
     )
     return max(abs(value - base) for value in perturbed)
 
@@ -589,11 +624,17 @@ def _window_claim_eligibility(
         reasons.append("clock_bound_exceeds_quarter_window")
 
     interpolation_bound_j: float | None
+    joint_interpolation_bound_j: float | None
     if bound_terms_j is None:
         interpolation_bound_j = _interpolation_edge_bound_j(curve, window)
+        joint_interpolation_bound_j = _interpolation_joint_edge_bound_j(curve, window)
     else:
         interpolation_bound_j = bound_terms_j.get("E_interpolation_edge_bound_j")
-    if interpolation_bound_j is None:
+        joint_interpolation_bound_j = bound_terms_j.get(
+            "E_interpolation_joint_edge_bound_j"
+        )
+    # P2-040 FIX-3: recorded/unrecorded status is governed by the joint bound.
+    if joint_interpolation_bound_j is None:
         reasons.append("interpolation_bound_unrecorded")
 
     drift_bound_j = (
@@ -620,6 +661,7 @@ def _window_claim_eligibility(
         "cadence_ratio_min": cadence_ratio_min,
         "clock_anchor_bound_s": clock_bound_s,
         "interpolation_edge_bound_j": interpolation_bound_j,
+        "interpolation_joint_edge_bound_j": joint_interpolation_bound_j,
     }
 
 

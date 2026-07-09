@@ -250,6 +250,26 @@ class ReducerPropagationTests(ReducerUncertaintyTestCase):
                 self.assertTrue(gates["gross_request"]["eligible"])
 
 
+class ReducerJointEdgeBoundTests(ReducerUncertaintyTestCase):
+    def test_joint_edge_bound_moves_both_edges(self) -> None:
+        # P2-040 FIX-3 mutation test: constant 8 W, one-second gaps, window
+        # [2.5, 6.5]. Joint +/- half-gap shifts change energy by 8 J; the
+        # legacy one-edge sensitivity stays 4 J.
+        builder = self.builder()
+        builder.measured_window(2.5, 6.5)
+        builder.write_trace(constant_samples(0.0, 9.0, hz=1.0, power_w=8.0))
+        builder.write_metadata(idle_drift_bound_w=0.1)
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        bounds = summary.energy_bound_terms_j or {}
+        self.assertAlmostEqual(bounds["E_interpolation_edge_bound_j"], 4.0, places=12)
+        self.assertAlmostEqual(
+            bounds["E_interpolation_joint_edge_bound_j"], 8.0, places=12
+        )
+
+
 class ClaimGateTests(ReducerUncertaintyTestCase):
     def test_zero_duration_phase_has_nonpositive_window_reason(self) -> None:
         # P2-040 FIX-1: a zero-duration subwindow inside a valid positive
@@ -416,6 +436,12 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
             "windows"
         ][0]
         self.assertAlmostEqual(phase["interpolation_edge_bound_j"], 13.0, places=12)
+        # P2-040 FIX-3 hand computation: gaps at both edges are 2.0 s, so the
+        # joint inward candidate is the zero-duration window [2,2] (allowed at
+        # equality): |0 - 26| = 26 J dominates.
+        self.assertAlmostEqual(
+            phase["interpolation_joint_edge_bound_j"], 26.0, places=12
+        )
 
     def test_interpolation_edge_bound_uses_edge_perturbation_recipe(self) -> None:
         builder = self.builder()
@@ -427,11 +453,26 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         self.assertIsNotNone(summary.energy_bound_terms_j)
+        # Legacy one-edge sensitivity is retained unchanged...
         self.assertAlmostEqual(
             summary.energy_bound_terms_j["E_interpolation_edge_bound_j"],
             4.0,
             places=12,
         )
+        # ...while the governed P2-040 FIX-3 joint bound shifts both edges
+        # simultaneously (joint inward/outward changes energy by 8 J).
+        self.assertAlmostEqual(
+            summary.energy_bound_terms_j["E_interpolation_joint_edge_bound_j"],
+            8.0,
+            places=12,
+        )
+        # The request prechecks expose and consume the joint field.
+        for key in ("request", "gross_request", "idle_subtracted_request"):
+            entry = (summary.claim_eligibility or {})[key]
+            self.assertAlmostEqual(
+                entry["interpolation_joint_edge_bound_j"], 8.0, places=12, msg=key
+            )
+            self.assertNotIn("interpolation_bound_unrecorded", entry["reasons"])
 
     def test_request_without_drift_evidence_is_ineligible(self) -> None:
         builder = self.builder()
@@ -522,6 +563,7 @@ class AggregatorPropagationTests(unittest.TestCase):
                     "energy_bound_terms_j": {
                         "E_drift_bound_j": 0.5 * index,
                         "E_interpolation_edge_bound_j": 0.1 * index,
+                        "E_interpolation_joint_edge_bound_j": 0.2 * index,
                     },
                 },
             )
@@ -551,6 +593,52 @@ class AggregatorPropagationTests(unittest.TestCase):
         self.assertTrue(
             math.isclose(
                 metric["energy_bound_terms_j"]["E_interpolation_edge_bound_j"], 0.3
+            )
+        )
+        self.assertTrue(
+            math.isclose(
+                metric["energy_bound_terms_j"][
+                    "E_interpolation_joint_edge_bound_j"
+                ],
+                0.6,
+            )
+        )
+
+    def test_joint_edge_bound_is_null_when_any_member_lacks_it(self) -> None:
+        members = []
+        for index in range(1, 3):
+            member = f"r{index}"
+            members.append(member)
+            bound_terms: dict[str, Any] = {
+                "E_drift_bound_j": 0.5,
+                "E_interpolation_edge_bound_j": 0.1,
+            }
+            if index == 1:
+                bound_terms["E_interpolation_joint_edge_bound_j"] = 0.2
+            _write_summary(
+                self.runs_root,
+                member,
+                {
+                    "status": "succeeded",
+                    "energy_request_j": float(index),
+                    "idle_subtracted_energy_j": float(index),
+                    "gross_energy_j": float(index + 10),
+                    "energy_variance_terms_j2": {"E_idle_mean_j2": 1.0},
+                    "energy_bound_terms_j": bound_terms,
+                },
+            )
+
+        aggregate = aggregate_experiment(self.runs_root, {"members": members})
+        metric = aggregate["metrics"]["energy_request_j"]
+
+        # All-members-known rule: one member without the joint bound nulls it,
+        # while the fully known legacy bound still propagates.
+        self.assertIsNone(
+            metric["energy_bound_terms_j"]["E_interpolation_joint_edge_bound_j"]
+        )
+        self.assertTrue(
+            math.isclose(
+                metric["energy_bound_terms_j"]["E_interpolation_edge_bound_j"], 0.1
             )
         )
 
