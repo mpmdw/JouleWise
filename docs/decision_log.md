@@ -2548,6 +2548,24 @@ Revisit when: one full stopped-and-resumed session completes under the
 new stop-card rule, or the invocation manifest proves too heavy for
 ordinary delegated runs.
 
+Stop-card override addendum (2026-07-09, C-027, MET-001 / REV-5):
+during the ACTIVE CP-5 stop card (RUN_STATE at 2c8b267: "Do not start
+other queue work"), advisor-site commits bf9ffc5, a1ac0a7, fda79c1,
+e6cf431 were produced before CP-5 resumed (later landed via PR #28).
+User direction for that work existed and is recorded at
+docs/run_reports/2026-07-09-advisor-status-site.md:13, but no override
+was recorded on the stop card at the time. Disposition: recorded
+retroactively as a USER-DIRECTED OVERRIDE (scope: advisor status site
+only; CP-5 state untouched), plus a recording failure — the override
+should have been appended to the stop card when work began. Rule
+restated: undocumented supersession of an active stop card is
+indistinguishable from bypass; overrides are recorded on the card
+before the first commit of overriding work. A second override
+precedent is recorded here for the same reason: Ed's 2026-07-09 live
+directive to begin implementation before spec adjudication (C-027 spec
+wave) superseded the recorded DRAFT-pending-adjudication gate —
+recorded so undocumented supersession does not recur.
+
 ---
 
 ## D-051: Advisor status site uses source-derived static pages plus fail-soft live GitHub overlays
