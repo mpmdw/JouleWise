@@ -36,7 +36,7 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit a346449"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit a346449</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit a346449 + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit a346449 + uncommitted</span></span></div>
     <h1>JouleWise Run State</h1>
 <p>Last updated: 2026-07-09 (P2-034 broad campaign packs C-026: PR #39
 merged — six packs, pack lint clean; pre-hardware campaign surface
@@ -122,11 +122,14 @@ specs (D-051). Suite 822 OK. Ed&#39;s four-part answer + Window-A go/no-go:
 <ol>
 <li>Read <code>docs/run_reports/2026-07-09-p2034-broad-packs.md</code> (latest) and
 <code>docs/run_reports/2026-07-09-cp5-resume.md</code> (Window-A go/no-go).</li>
-<li>The pre-window AGENT backlog is CLEAR. Next work is machine-state
-dependent: [QUIET-MAC] quiet Window A (C-019 shakedown → P2-015
-floors → P2-006) is the top item; [AGENT] lanes next are P2-022 shim
-spike / P2-023 HumanEval import (post-2M gates — check queue) and
-P2-035 (after floors); [ED-EXTERNAL] items per queue.</li>
+<li>The pre-Window-A AGENT blockers are clear. Next work is
+machine-state dependent: [QUIET-MAC] quiet Window A (P2-015-SMOKE
+preflight row, then P2-015 floors → P2-006) is the top item; [AGENT]
+lane next is P2-022 shim spike / P2-023 HumanEval import (C-015
+post-2M sequencing — revisit after Window A; they are now the interop
+execution gates) and P2-035 (after floors); [ED-EXTERNAL]: P0-003
+backup destination is REQUIRED before Window-A data accumulates
+(C-026 escalation), plus P1-008 calendar/acceptance-bar.</li>
 <li>Rotation (D-056), uncertainty gates (D-057), and the campaign packs
 are live for Window-A execution.</li>
 </ol>
@@ -252,7 +255,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit a346449 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit a346449 + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

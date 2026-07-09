@@ -37,7 +37,7 @@
 <a href="#queue-maintenance">Queue Maintenance</a></aside>
   <div class="doc-wrap doc-source-task-queue-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit a346449"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit a346449</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit a346449 + uncommitted"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit a346449 + uncommitted</span></span></div>
     <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -191,12 +191,28 @@ Normal ranking applies.</p>
 <td>Promotion per registry rules; C-004 quarantine binds; floors first</td>
 </tr>
 <tr>
+<td align="right">0g</td>
+<td>P2-036</td>
+<td>P3 Research Expansion</td>
+<td>SHELF (C-026 meeting; P2-034 left the import second family deliberately unnamed) [AGENT, after HumanEval smoke]</td>
+<td>Second-benchmark-family source session: pick + freeze the second import family (licensing/contamination/shape discipline per <code>docs/campaign_packs/c5_i_1_i_2_i_5_import_family.md</code>; MMLU/tinyBenchmarks remain rejected as first)</td>
+<td>Named family + frozen subset manifest passing <code>claims_lint --mode pack</code>; FLORES language-set decision (D-046/B6) may share the session</td>
+</tr>
+<tr>
 <td align="right">1</td>
 <td>P2-015</td>
 <td>P2 Next Slice</td>
 <td>NEW (C-011, amended C-014; CP-6: + Window-B-start revalidation cell) [QUIET-MAC]</td>
 <td>Detection-floor calibration campaign — expanded Window A floors for gross request, idle-sub request, phase window, and item/level window, plus comparative MDE from same-condition repeats/ABBA</td>
 <td>Versioned strict-valid calibration bundles; <code>docs/phase_2/detection_floor.md</code> as per-consumer table; per-metric/window-class <code>floor_abs_j</code> + <code>floor_cmp_j</code>; claim gate = <code>max(floor_abs, floor_cmp)</code>; calibration manifest hash cited by later reports; pre-Window-A lead-run tasks-sampler overhead smoke required before enabling any extra powermetrics samplers and validating that the 2s env-capture settle absorbs the probe burst (C-015/R2); post-suite-build shakedown gate (C-019): before any Window-A data, ONE tiny production-shaped run through the campaign-runner path (not bare <code>run</code>) → strict validation → reduce → backup, on the merged suite-substrate code; CP-6: include a Window-B-start floor-revalidation cell</td>
+</tr>
+<tr>
+<td align="right">1a</td>
+<td>P2-015-SMOKE</td>
+<td>P2 Next Slice</td>
+<td>NEW (C-026 meeting; extracted from P2-015 acceptance prose so the quiet window starts with an explicit checklist row) [QUIET-MAC first act]</td>
+<td>Pre-Window-A tasks-sampler overhead smoke + C-019 production-shaped shakedown (campaign-runner path -&gt; strict -&gt; reduce -&gt; backup)</td>
+<td>Both preconditions in <code>docs/phase_2/detection_floor.md</code> Ordering Preconditions; lead-run; results noted in the Window-A run report BEFORE P2-015 floor cells</td>
 </tr>
 <tr>
 <td align="right">2</td>
@@ -250,7 +266,7 @@ Normal ranking applies.</p>
 <td align="right">8</td>
 <td>P2-022</td>
 <td>P2 Next Slice</td>
-<td>NEW (C-015; post-2M + post-P2-010a) [AGENT]</td>
+<td>NEW (C-015 sequencing: post-2M + post-P2-010a — scheduling preference, REVISIT after Window A: P2-034 made P2-022/P2-023 the only remaining gates for interop-pack execution, C-026 meeting) [AGENT]</td>
 <td>Marker-shim energy-layer feasibility spike — verdict-shaped export path only</td>
 <td><code>external_markers_supported</code> / <code>partial(&lt;limitation&gt;)</code> / <code>external_markers_unsupported</code>; 3+ marked items, external result artifact hashed, strict bundle valid; energy-layer-only pin: no accuracy interpretation, no leaderboard join, no pass@k-energy ratio, no general adapter framework; AP row required before any L2 claim; contract in <code>docs/contracts/adapter_contracts.md</code></td>
 </tr>
@@ -258,7 +274,7 @@ Normal ranking applies.</p>
 <td align="right">9</td>
 <td>P2-023</td>
 <td>P2 Next Slice</td>
-<td>NEW (C-015; post-P2-022) [AGENT]</td>
+<td>NEW (C-015; post-P2-022; same revisit-after-Window-A note as P2-022) [AGENT]</td>
 <td>HumanEval import smoke — <code>benchmark_import</code> manifest + suite profile plumbing goal</td>
 <td>Freeze subset with C-005 discipline, MIT license/provenance fields, 256/512-token completion policy; no pass@k/accuracy/capability claim; design in <code>docs/research_question_bank.md</code></td>
 </tr>
@@ -313,8 +329,8 @@ Normal ranking applies.</p>
 <tr>
 <td align="right">meta</td>
 <td>P0-003</td>
-<td>P0 Safety (user-deferred 2026-07-06 — interim same-disk backup accepted for now)</td>
-<td>waiting-user, deprioritized</td>
+<td>P0 Safety (user-deferred 2026-07-06 — interim same-disk backup accepted for now; C-026 meeting ESCALATION: becomes REQUIRED before Window-A data accumulates — campaign bundles on one disk are unrecoverable evidence)</td>
+<td>waiting-user, PRE-WINDOW-A</td>
 <td>Replace interim backup destination (R-016) with external/cloud location</td>
 <td>User names the destination; one fresh restore test; R-016 → fully mitigated</td>
 </tr>
@@ -689,7 +705,7 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit a346449 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit a346449 + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

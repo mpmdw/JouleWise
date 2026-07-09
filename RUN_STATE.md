@@ -91,11 +91,14 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 **RESTART HERE (next agent):**
 1. Read `docs/run_reports/2026-07-09-p2034-broad-packs.md` (latest) and
    `docs/run_reports/2026-07-09-cp5-resume.md` (Window-A go/no-go).
-2. The pre-window AGENT backlog is CLEAR. Next work is machine-state
-   dependent: [QUIET-MAC] quiet Window A (C-019 shakedown → P2-015
-   floors → P2-006) is the top item; [AGENT] lanes next are P2-022 shim
-   spike / P2-023 HumanEval import (post-2M gates — check queue) and
-   P2-035 (after floors); [ED-EXTERNAL] items per queue.
+2. The pre-Window-A AGENT blockers are clear. Next work is
+   machine-state dependent: [QUIET-MAC] quiet Window A (P2-015-SMOKE
+   preflight row, then P2-015 floors → P2-006) is the top item; [AGENT]
+   lane next is P2-022 shim spike / P2-023 HumanEval import (C-015
+   post-2M sequencing — revisit after Window A; they are now the interop
+   execution gates) and P2-035 (after floors); [ED-EXTERNAL]: P0-003
+   backup destination is REQUIRED before Window-A data accumulates
+   (C-026 escalation), plus P1-008 calendar/acceptance-bar.
 3. Rotation (D-056), uncertainty gates (D-057), and the campaign packs
    are live for Window-A execution.
 
