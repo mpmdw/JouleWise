@@ -656,7 +656,16 @@ class MlxRuntimeTests(unittest.TestCase):
                 if event.event_type == ITEM_START
             ]
 
-        self.assertEqual(item_start_indices(mlx_result), item_start_indices(mock_result))
+        mlx_item_indices = item_start_indices(mlx_result)
+        self.assertEqual(mlx_item_indices, item_start_indices(mock_result))
+
+        mlx_records = [
+            json.loads(line)
+            for line in mlx_result.output_artifacts["suite_items.jsonl"].splitlines()
+        ]
+        self.assertTrue(all("position" in record for record in mlx_records))
+        self.assertEqual([record["item_index"] for record in mlx_records], mlx_item_indices)
+        self.assertEqual([record["position"] for record in mlx_records], [0, 1, 2])
 
     def test_suite_per_item_generation_exception_runtime_failed_and_continues(self) -> None:
         adapter = MlxRuntimeAdapter(FakeClock(start=1000.0))

@@ -182,6 +182,12 @@ perform. The safest near-term path is to treat manifest order as the execution
 truth and move balancing either into generated manifests or whole-config
 campaign order.
 
+2026-07-09 (P2-030) amendment: the preceding near-term rationale is historical
+for the pre-P2-030 substrate. P2-030 implements executable suite order policies,
+so `manifest_order` is no longer the only runtime execution truth; realized
+policy order is the execution truth when a non-`manifest_order` policy and
+validated `order_row` are present.
+
 Rejected alternatives:
 
 - Let `order_seed` imply reordering. Rejected because it is recorded but not
@@ -196,5 +202,8 @@ Rejected alternatives:
 
 - P2-025 lands and changes the strict-validation surface.
 - A real non-`manifest_order` suite execution policy is implemented.
+  2026-07-09 (P2-030) disposition: triggered and satisfied for
+  `block_round_robin_v1` and `block_latin_square_v1`; future revisits should
+  name a new policy class or a semantics change, not this now-shipped trigger.
 - Full affine ladder or benchmark imports need fields that sidecars cannot
   carry honestly.

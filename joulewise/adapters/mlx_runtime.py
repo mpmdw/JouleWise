@@ -608,6 +608,7 @@ class MlxRuntimeAdapter:
         output = {
             "item_id": item.item_id,
             "item_index": item_index,
+            "position": position,
             "status": status,
             "prompt_source": prompt_source,
             "bos_present": bos_present,
