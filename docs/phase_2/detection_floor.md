@@ -249,9 +249,12 @@ DF-TELEM-ONOFF has two layers:
 
 Until the external layer exists, true telemetry-on/off energy perturbation is
 `unknown` for absolute instrument validity. The current-hardware layer can
-still bound extra-sampler overhead and can support a narrow claim such as "the
-extra task sampler was not detectable above the P2-015 floor on this stack" if
-the ABBA contrast clears the floor gate in the null direction.
+still report the extra-sampler ABBA delta with its P2-015 floor status, but
+floor-clearing alone must not be phrased as a null, equivalence, or "no
+difference" claim. Such language requires a named equivalence or
+non-inferiority margin that exceeds `floor_gate_j` and a contrast confidence
+interval entirely inside that margin, matching the analysis-plan equivalence
+gate shape.
 
 ## 2. ERROR-BUDGET STRUCTURE
 
@@ -488,10 +491,9 @@ Claim ceilings while absent:
   claims-ladder prose names Phase 4 Stage 4.0/4.5. This is a timing mismatch,
   not a scientific contradiction: the P2-015 artifact is the earlier concrete
   floor source that those later stages consume.
-- C-023 recommends claim tooling that refuses L2/L3 without multiplicity and
-  registry fields. That is broader than P2-015 and should land in a later
-  analysis-registry stream. This document only defines the floor/error-budget
-  fields needed by that tooling.
+- Analysis-registry requirements are owned by
+  `docs/contracts/analysis_plans.md` in its Analysis Registry section. P2-015
+  supplies the floor/error-budget fields that registry consumes.
 - True telemetry-on/off energy perturbation needs an external meter because
   turning off the only energy telemetry removes the energy trace. Until
   wall/PD hardware exists, P2-015 can measure extra-sampler perturbation but

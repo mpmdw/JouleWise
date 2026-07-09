@@ -12,8 +12,8 @@ are provided for anyone who wants the full evidence trail.
   CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
   are complete; workload-suite build is merged; CP-5 pre-campaign review is
   COMPLETE and CLEARED (2026-07-09, PRs #22..#28; see
-  `docs/run_reports/2026-07-09-cp5-resume.md`); next is the P2-015
-  design doc, then quiet Window A
+  `docs/run_reports/2026-07-09-cp5-resume.md`); the P2-015 design doc is
+  merged; next is C-019 shakedown plus P2-015 quiet calibration (Window A)
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 - Live status site: https://quiet-signal-6af8833395.lakebed.app (Lakebed
   capsule; `/status.html` is the advisor cockpit and shows live overlays
@@ -30,8 +30,9 @@ cockpit adds live snapshot state, attention items, campaign readiness,
 evidence cards, and claim-ceiling panels; the Story page drops
 hand-authored volatile counts. The operational policy is D-051: repo
 markdown remains the source of truth and Lakebed never hides static
-provenance. Current work follows `TASK_QUEUE.md`: `P2-015-PREP`, then quiet
-Window A (the CP-5 stop card was cleared 2026-07-09).
+provenance. Current work follows `TASK_QUEUE.md`: C-019 shakedown, then
+P2-015 quiet calibration for Window A (the CP-5 stop card was cleared
+2026-07-09).
 
 ## Previous Update (as of 2026-07-08, all four streams merged) — 30-second read
 
@@ -158,13 +159,15 @@ Research questions:
 - **Q6** (C-003; gated on the wall meter): Does the measurement boundary
   (platform rails vs AC wall power) change the conclusions?
 
-A curated bank of further candidate questions (and deliberately killed
-ones) lives in `docs/research_question_bank.md`; the measurement noise
-floor / detection limit is treated as the methodology centerpiece rather
-than a numbered question.
+Current question status, aliases, gates, and claim ceilings live in the
+canonical live index, `docs/research_question_registry.md`. The curated bank
+of further candidate questions and deliberately killed ones remains the
+historical/deliberative record in `docs/research_question_bank.md`; the
+measurement noise floor / detection limit is treated as the methodology
+centerpiece rather than a numbered question.
 
-The capability map by claim ceiling lives in
-`docs/research_question_bank.md` (C-015), alongside the suite architecture
+The capability map by claim ceiling is reflected in
+`docs/research_question_registry.md` (C-015), alongside the suite architecture
 v2 and benchmark interop direction; the guaranteed-capstone stop-line is
 recorded in the Phase 2 plan.
 

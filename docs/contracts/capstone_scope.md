@@ -126,8 +126,13 @@ Cut triggers:
 - If split replay portability fails, move to synthetic transfer plus
   analytical composition, with the failure itself reported as a feasibility
   finding.
-- If effects do not clear the floor or uncertainty model, report them as
-  `not resolvable` and preserve the matrix cell as measured evidence.
+- Use the three-way floor rule for cut decisions: below-floor contrasts are
+  `not resolvable`; above-floor contrasts whose confidence interval does not
+  support direction are `unresolved` with no directional claim; equivalence or
+  "no difference" language is allowed only through a predeclared equivalence
+  gate whose margin exceeds the floor and whose contrast confidence interval
+  lies entirely within that margin. Preserve the matrix cell as measured
+  evidence.
 
 ## Single-Unit Limitation Language
 
