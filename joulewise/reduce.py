@@ -41,6 +41,7 @@ windows, token events) live in :class:`joulewise.bundle_read.BundleReader`
 
 from __future__ import annotations
 
+import math
 import statistics
 from pathlib import Path
 from typing import Any
@@ -65,8 +66,15 @@ from joulewise.validation import finite_float
 REDUCER_ID = SUMMARY_REDUCER_ID
 REDUCER_VERSION = SUMMARY_REDUCER_VERSION
 MIN_PHASE_SAMPLES = 3
+SHORT_WINDOW_CADENCE_RATIO_MIN = 2.0
+REQUEST_WINDOW_CADENCE_RATIO_MIN = 4.0
 
-__all__ = ["MIN_PHASE_SAMPLES", "REDUCER_ID", "REDUCER_VERSION", "reduce_bundle"]
+__all__ = [
+    "MIN_PHASE_SAMPLES",
+    "REDUCER_ID",
+    "REDUCER_VERSION",
+    "reduce_bundle",
+]
 
 
 class _ReduceError(Exception):
@@ -312,6 +320,356 @@ def _dropped_samples(curve: list[TracePoint], requested_hz: float) -> int:
 
 
 # ----------------------------------------------------------------------------
+# Uncertainty terms + claim gates
+
+
+def _energy_variance_terms_j2(
+    idle_baseline: IdleBaseline | None,
+    window: Window,
+) -> dict[str, float | None]:
+    """Reducer-level stochastic terms derivable from a single bundle.
+
+    Gross-energy repetition variance is unavailable for one bundle, but the
+    idle-baseline mean variance is recorded when the idle baseline supplies its
+    sample standard deviation and sample count.
+    """
+    idle_term: float | None = None
+    if idle_baseline is not None and idle_baseline.sample_count > 0:
+        idle_power_mean_variance = (
+            idle_baseline.power_w_stddev * idle_baseline.power_w_stddev
+        ) / idle_baseline.sample_count
+        idle_term = window.duration_s * window.duration_s * idle_power_mean_variance
+    return {
+        "E_gross_repetition_j2": None,
+        "E_idle_mean_j2": idle_term,
+    }
+
+
+def _energy_bound_terms_j(
+    metadata: dict[str, Any],
+    curve: list[TracePoint],
+    window: Window,
+) -> dict[str, float | None]:
+    drift_power_bound_w = _idle_drift_power_bound_w(metadata)
+    drift_bound_j = (
+        window.duration_s * drift_power_bound_w
+        if drift_power_bound_w is not None
+        else None
+    )
+    return {
+        "E_drift_bound_j": drift_bound_j,
+        "E_interpolation_edge_bound_j": _interpolation_edge_bound_j(curve, window),
+    }
+
+
+def _idle_drift_power_bound_w(metadata: dict[str, Any]) -> float | None:
+    """Return a recorded idle-drift power bound, never a modeled variance.
+
+    The accepted bundle spelling is ``idle_drift_bound_w`` at top level, with
+    ``metadata.extra.idle_drift_bound_w`` accepted for ``extra_metadata`` parity.
+    """
+    direct = _optional_nonnegative_number(metadata.get("idle_drift_bound_w"))
+    if direct is not None:
+        return direct
+
+    extra = metadata.get("extra")
+    if isinstance(extra, dict):
+        value = _optional_nonnegative_number(extra.get("idle_drift_bound_w"))
+        if value is not None:
+            return value
+    return None
+
+
+def _optional_nonnegative_number(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    try:
+        result = finite_float(value, "optional uncertainty evidence")
+    except ValueError:
+        return None
+    return result if result >= 0.0 else None
+
+
+def _interpolation_edge_bound_j(
+    curve: list[TracePoint],
+    window: Window,
+) -> float | None:
+    if window.duration_s < 0.0 or len(curve) < 2:
+        return None
+    if window.duration_s == 0.0:
+        return 0.0
+    start_gap = _bracketing_gap_s(curve, window.start_s)
+    end_gap = _bracketing_gap_s(curve, window.end_s)
+    if start_gap is None or end_gap is None:
+        return None
+    base = _integrate(curve, window.start_s, window.end_s)
+    start_delta = 0.5 * start_gap
+    end_delta = 0.5 * end_gap
+    perturbed = (
+        _integrate(curve, window.start_s - start_delta, window.end_s),
+        _integrate(curve, window.start_s + start_delta, window.end_s),
+        _integrate(curve, window.start_s, window.end_s - end_delta),
+        _integrate(curve, window.start_s, window.end_s + end_delta),
+    )
+    return max(abs(value - base) for value in perturbed)
+
+
+def _claim_eligibility(
+    reader: BundleReader,
+    metadata: dict[str, Any],
+    curve: list[TracePoint],
+    measured_window: Window,
+    request_bound_terms_j: dict[str, float | None],
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "request": _window_claim_eligibility(
+            curve,
+            metadata,
+            measured_window,
+            cadence_ratio_min=REQUEST_WINDOW_CADENCE_RATIO_MIN,
+            require_sample_count=False,
+            require_drift=True,
+            bound_terms_j=request_bound_terms_j,
+        )
+    }
+
+    phase_windows = reader.phase_windows()
+    if phase_windows:
+        result["phase"] = {
+            phase: _windows_claim_eligibility(
+                curve,
+                metadata,
+                intervals,
+                cadence_ratio_min=SHORT_WINDOW_CADENCE_RATIO_MIN,
+                require_sample_count=True,
+                require_drift=False,
+            )
+            for phase, intervals in sorted(phase_windows.items())
+        }
+
+    item_windows = reader.item_windows()
+    if item_windows:
+        result["item"] = {
+            f"{item.item_index}:{item.item_id}": _window_claim_eligibility(
+                curve,
+                metadata,
+                item.window,
+                cadence_ratio_min=SHORT_WINDOW_CADENCE_RATIO_MIN,
+                require_sample_count=True,
+                require_drift=False,
+            )
+            for item in item_windows
+        }
+
+    block_windows = reader.block_windows()
+    if block_windows:
+        result["block"] = {
+            block_id: _windows_claim_eligibility(
+                curve,
+                metadata,
+                intervals,
+                cadence_ratio_min=SHORT_WINDOW_CADENCE_RATIO_MIN,
+                require_sample_count=True,
+                require_drift=False,
+            )
+            for block_id, intervals in sorted(block_windows.items())
+        }
+
+    level_windows = reader.level_windows()
+    if level_windows:
+        result["level"] = {
+            f"{block_id}/{level_id}": _windows_claim_eligibility(
+                curve,
+                metadata,
+                intervals,
+                cadence_ratio_min=SHORT_WINDOW_CADENCE_RATIO_MIN,
+                require_sample_count=True,
+                require_drift=False,
+            )
+            for (block_id, level_id), intervals in sorted(level_windows.items())
+        }
+    return result
+
+
+def _windows_claim_eligibility(
+    curve: list[TracePoint],
+    metadata: dict[str, Any],
+    windows: list[Window],
+    *,
+    cadence_ratio_min: float,
+    require_sample_count: bool,
+    require_drift: bool,
+) -> dict[str, Any]:
+    entries = [
+        _window_claim_eligibility(
+            curve,
+            metadata,
+            window,
+            cadence_ratio_min=cadence_ratio_min,
+            require_sample_count=require_sample_count,
+            require_drift=require_drift,
+        )
+        for window in windows
+    ]
+    reasons = sorted({reason for entry in entries for reason in entry["reasons"]})
+    return {
+        "eligible": bool(entries) and not reasons,
+        "reasons": reasons,
+        "window_count": len(windows),
+        "windows": entries,
+    }
+
+
+def _window_claim_eligibility(
+    curve: list[TracePoint],
+    metadata: dict[str, Any],
+    window: Window,
+    *,
+    cadence_ratio_min: float,
+    require_sample_count: bool,
+    require_drift: bool,
+    bound_terms_j: dict[str, float | None] | None = None,
+) -> dict[str, Any]:
+    reasons: list[str] = []
+    sample_count = _in_window_sample_count(curve, window)
+    if (
+        require_sample_count
+        and window.duration_s > 0.0
+        and sample_count < MIN_PHASE_SAMPLES
+    ):
+        reasons.append("insufficient_in_window_samples")
+
+    gap_stats = _window_gap_stats(curve, window)
+    cadence_ratio = gap_stats["cadence_ratio"]
+    if cadence_ratio is None:
+        reasons.append("cadence_ratio_unrecorded")
+    elif cadence_ratio < cadence_ratio_min:
+        reasons.append("cadence_ratio_below_threshold")
+
+    clock_bound_s = _clock_anchor_bound_s(metadata)
+    if clock_bound_s is None:
+        reasons.append("clock_bound_unrecorded")
+    elif clock_bound_s > 0.25 * window.duration_s:
+        reasons.append("clock_bound_exceeds_quarter_window")
+
+    interpolation_bound_j: float | None
+    if bound_terms_j is None:
+        interpolation_bound_j = _interpolation_edge_bound_j(curve, window)
+    else:
+        interpolation_bound_j = bound_terms_j.get("E_interpolation_edge_bound_j")
+    if interpolation_bound_j is None:
+        reasons.append("interpolation_bound_unrecorded")
+
+    drift_bound_j = (
+        None if bound_terms_j is None else bound_terms_j.get("E_drift_bound_j")
+    )
+    if require_drift and drift_bound_j is None:
+        reasons.append("drift_term_unknown")
+    if require_drift and _cooldown_cap_hit(metadata) is True:
+        reasons.append("cooldown_cap_hit")
+
+    return {
+        "eligible": not reasons,
+        "reasons": sorted(reasons),
+        "window_duration_s": window.duration_s,
+        "in_window_sample_count": sample_count,
+        "observed_window_p95_sample_gap_s": gap_stats["window_p95_sample_gap_s"],
+        "observed_bracketing_max_sample_gap_s": gap_stats["bracketing_max_sample_gap_s"],
+        "cadence_ratio": cadence_ratio,
+        "cadence_ratio_min": cadence_ratio_min,
+        "clock_anchor_bound_s": clock_bound_s,
+        "interpolation_edge_bound_j": interpolation_bound_j,
+    }
+
+
+def _clock_anchor_bound_s(metadata: dict[str, Any]) -> float | None:
+    values: list[float] = []
+    for key in ("clock_anchor_bound_s", "offset_bound_s"):
+        value = _optional_nonnegative_number(metadata.get(key))
+        if value is not None:
+            values.append(value)
+
+    alignment = metadata.get("clock_alignment")
+    if isinstance(alignment, dict):
+        value = _optional_nonnegative_number(alignment.get("offset_bound_s"))
+        if value is not None:
+            values.append(value)
+
+    adapters = metadata.get("adapters")
+    if isinstance(adapters, dict):
+        for adapter in adapters.values():
+            if not isinstance(adapter, dict):
+                continue
+            alignments = adapter.get("clock_alignments")
+            if not isinstance(alignments, list):
+                continue
+            for item in alignments:
+                if not isinstance(item, dict):
+                    continue
+                value = _optional_nonnegative_number(item.get("offset_bound_s"))
+                if value is not None:
+                    values.append(value)
+    return max(values) if values else None
+
+
+def _window_gap_stats(
+    curve: list[TracePoint], window: Window
+) -> dict[str, float | None]:
+    window_gaps = [
+        right.t - left.t
+        for left, right in zip(curve, curve[1:])
+        if window.start_s <= left.t and right.t <= window.end_s
+    ]
+    window_p95 = _p95(window_gaps)
+    start_bracketing_gap = _bracketing_gap_s(curve, window.start_s)
+    end_bracketing_gap = _bracketing_gap_s(curve, window.end_s)
+    bracketing_max = (
+        max(start_bracketing_gap, end_bracketing_gap)
+        if start_bracketing_gap is not None and end_bracketing_gap is not None
+        else None
+    )
+    denominator = (
+        max(window_p95, bracketing_max)
+        if window_p95 is not None and bracketing_max is not None
+        else None
+    )
+    cadence_ratio = None
+    if denominator is not None and denominator > 0.0:
+        cadence_ratio = window.duration_s / denominator
+    return {
+        "window_p95_sample_gap_s": window_p95,
+        "bracketing_max_sample_gap_s": bracketing_max,
+        "cadence_ratio": cadence_ratio,
+    }
+
+
+def _p95(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = max(0, math.ceil(0.95 * len(ordered)) - 1)
+    return ordered[index]
+
+
+def _bracketing_gap_s(curve: list[TracePoint], t: float) -> float | None:
+    if len(curve) < 2 or t < curve[0].t or t > curve[-1].t:
+        return None
+    for index, point in enumerate(curve):
+        if point.t != t:
+            continue
+        gaps: list[float] = []
+        if index > 0:
+            gaps.append(point.t - curve[index - 1].t)
+        if index + 1 < len(curve):
+            gaps.append(curve[index + 1].t - point.t)
+        return max(gaps) if gaps else None
+    for left, right in zip(curve, curve[1:]):
+        if left.t < t < right.t:
+            return right.t - left.t
+    return None
+
+
+# ----------------------------------------------------------------------------
 # Top-level reducer
 
 
@@ -428,6 +786,11 @@ def _reduce(
     phase_energy_j = _phase_energy(phase_windows, curve)
     phase_identifiability = _phase_identifiability(phase_windows, curve)
     suite_metrics = _suite_metrics(reader, curve)
+    energy_variance_terms_j2 = _energy_variance_terms_j2(idle_baseline, window)
+    energy_bound_terms_j = _energy_bound_terms_j(metadata, curve, window)
+    claim_eligibility = _claim_eligibility(
+        reader, metadata, curve, window, energy_bound_terms_j
+    )
 
     quality = MeasurementQuality(
         requested_sampling_hz=config.sampling.power_hz,
@@ -459,6 +822,10 @@ def _reduce(
         measurement_quality=quality,
         phase_energy_j=phase_energy_j,
         suite_metrics=suite_metrics,
+        energy_uncertainty_status="not_estimable",
+        energy_variance_terms_j2=energy_variance_terms_j2,
+        energy_bound_terms_j=energy_bound_terms_j,
+        claim_eligibility=claim_eligibility,
     )
 
 
@@ -478,6 +845,11 @@ def _zero_window_summary(
     energy_request_j = 0.0 if idle_baseline is not None else None
     energy_token_j = _energy_token_j(energy_request_j, total_tokens)
     energy_output_token_j = _energy_output_token_j(energy_request_j, output_token_count)
+    energy_variance_terms_j2 = _energy_variance_terms_j2(idle_baseline, window)
+    energy_bound_terms_j = _energy_bound_terms_j(metadata, curve, window)
+    claim_eligibility = _claim_eligibility(
+        reader, metadata, curve, window, energy_bound_terms_j
+    )
     quality = MeasurementQuality(
         requested_sampling_hz=config.sampling.power_hz,
         idle_power_w_stddev=(
@@ -505,6 +877,10 @@ def _zero_window_summary(
         measurement_quality=quality,
         phase_energy_j=_phase_energy(reader.phase_windows(), curve),
         suite_metrics=_suite_metrics(reader, curve),
+        energy_uncertainty_status="not_estimable",
+        energy_variance_terms_j2=energy_variance_terms_j2,
+        energy_bound_terms_j=energy_bound_terms_j,
+        claim_eligibility=claim_eligibility,
     )
 
 

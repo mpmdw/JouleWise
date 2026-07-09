@@ -413,6 +413,22 @@ class StrictValidateTests(CliRunTestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("valid bundle:", out)
 
+    def test_missing_p2029_additive_uncertainty_fields_pass_strict(self) -> None:
+        bundle = self.make_bundle("strict-p2029-additive-absent")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        for key in (
+            "energy_uncertainty_status",
+            "energy_variance_terms_j2",
+            "energy_bound_terms_j",
+            "claim_eligibility",
+        ):
+            summary.pop(key)
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
     def test_mock_suite_bundle_passes_strict(self) -> None:
         exit_code, stdout, stderr = self.run_verb(
             self.write_suite_config("strict-suite-clean")

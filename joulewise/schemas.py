@@ -640,6 +640,10 @@ class SummaryMetrics:
     measurement_quality: MeasurementQuality | None = None
     phase_energy_j: dict[str, float] | None = None
     suite_metrics: SuiteSummary | None = None
+    energy_uncertainty_status: str | None = None
+    energy_variance_terms_j2: dict[str, float | None] | None = None
+    energy_bound_terms_j: dict[str, float | None] | None = None
+    claim_eligibility: dict[str, Any] | None = None
     summary_provenance: dict[str, str] | None = field(
         default_factory=lambda: {
             "summary_schema_version": SUMMARY_SCHEMA_VERSION,
@@ -691,6 +695,13 @@ class SummaryMetrics:
                 "suite_metrics": {
                     "anyOf": [{"$ref": "#/$defs/suite_summary"}, {"type": "null"}]
                 },
+                "energy_uncertainty_status": {
+                    "type": ["string", "null"],
+                    "enum": ["not_estimable", "estimated", "bounded", None],
+                },
+                "energy_variance_terms_j2": {"type": ["object", "null"]},
+                "energy_bound_terms_j": {"type": ["object", "null"]},
+                "claim_eligibility": {"type": ["object", "null"]},
                 "summary_provenance": {
                     "anyOf": [{"$ref": "#/$defs/summary_provenance"}, {"type": "null"}]
                 },

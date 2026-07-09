@@ -317,6 +317,10 @@ def _strict_problems(reader: BundleReader) -> list[str]:
 
 
 _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
+    "claim_eligibility",
+    "energy_bound_terms_j",
+    "energy_uncertainty_status",
+    "energy_variance_terms_j2",
     "idle_baseline.gpu_idle_ratio_mean",
     "idle_baseline.gpu_idle_ratio_min",
     "idle_baseline.gpu_freq_hz_mean",

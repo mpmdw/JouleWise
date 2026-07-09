@@ -239,6 +239,9 @@ def _aggregate_metric(metric_name: str, records: list[dict[str, Any]]) -> dict[s
             "headline_includes_outliers": True,
         }
     )
+    propagation = _idle_subtracted_request_propagation(metric_name, records, points)
+    if propagation is not None:
+        entry.update(propagation)
     return entry
 
 
@@ -314,6 +317,107 @@ def _interval_entry(values: list[float]) -> dict[str, Any]:
         upper=upper,
     )
     return {**asdict(interval), "interval_status": interval_status, **flags}
+
+
+def _idle_subtracted_request_propagation(
+    metric_name: str,
+    records: list[dict[str, Any]],
+    points: list[tuple[str, float]],
+) -> dict[str, Any] | None:
+    if metric_name not in {"energy_request_j", "idle_subtracted_energy_j"}:
+        return None
+    point_members = {member for member, _ in points}
+    gross_values: list[float] = []
+    idle_terms: list[float] = []
+    drift_bounds: list[float | None] = []
+    interpolation_bounds: list[float | None] = []
+
+    for record in records:
+        member = record["member"]
+        summary = record.get("summary")
+        if member not in point_members or not isinstance(summary, dict):
+            continue
+
+        gross = summary.get("gross_energy_j")
+        if _is_finite_number(gross):
+            gross_values.append(float(gross))
+
+        variance_terms = summary.get("energy_variance_terms_j2")
+        if isinstance(variance_terms, dict):
+            idle_term = variance_terms.get("E_idle_mean_j2")
+            if _is_finite_number(idle_term):
+                idle_terms.append(float(idle_term))
+
+        bound_terms = summary.get("energy_bound_terms_j")
+        if isinstance(bound_terms, dict):
+            drift = bound_terms.get("E_drift_bound_j")
+            drift_bounds.append(float(drift) if _is_finite_number(drift) else None)
+            interpolation = bound_terms.get("E_interpolation_edge_bound_j")
+            interpolation_bounds.append(
+                float(interpolation) if _is_finite_number(interpolation) else None
+            )
+        else:
+            drift_bounds.append(None)
+            interpolation_bounds.append(None)
+
+    gross_variance = (
+        _sample_variance_or_none(gross_values)
+        if len(gross_values) == len(points)
+        else None
+    )
+    idle_mean_variance = (
+        statistics.mean(idle_terms)
+        if len(idle_terms) == len(points) and idle_terms
+        else None
+    )
+    variance_terms_out = {
+        "E_gross_repetition_j2": gross_variance,
+        "E_idle_mean_j2": idle_mean_variance,
+        "E_idle_sub_total_j2": (
+            gross_variance + idle_mean_variance
+            if gross_variance is not None and idle_mean_variance is not None
+            else None
+        ),
+    }
+    bound_terms_out = {
+        "E_drift_bound_j": _max_bound_or_unknown(drift_bounds, len(points)),
+        "E_interpolation_edge_bound_j": _max_bound_or_unknown(
+            interpolation_bounds, len(points)
+        ),
+    }
+    status = (
+        "estimated"
+        if variance_terms_out["E_idle_sub_total_j2"] is not None
+        else "not_estimable"
+    )
+    return {
+        "energy_uncertainty_status": status,
+        "energy_variance_terms_j2": variance_terms_out,
+        "energy_bound_terms_j": bound_terms_out,
+    }
+
+
+def _sample_variance_or_none(values: list[float]) -> float | None:
+    if len(values) < 2:
+        return None
+    try:
+        variance = statistics.variance(values)
+    except OverflowError:
+        return None
+    return variance if _is_finite_number(variance) else None
+
+
+def _max_bound_or_unknown(
+    values: list[float | None], expected_count: int
+) -> float | None:
+    if (
+        expected_count == 0
+        or len(values) != expected_count
+        or any(value is None for value in values)
+    ):
+        return None
+    finite_values = [value for value in values if value is not None]
+    return max(finite_values) if finite_values else None
 
 
 def _outlier_entries(points: list[tuple[str, float]]) -> tuple[list[dict[str, Any]], str]:
