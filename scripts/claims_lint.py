@@ -22,6 +22,7 @@ DEFAULT_PACK_DIR = Path("docs/campaign_packs")
 DEFAULT_CLAIMS_LADDER_PATH = Path("docs/contracts/claims_ladder.md")
 
 CLAIM_ROLES = {"primary", "secondary", "exploratory"}
+REQUIRED_FIELDS_EXPECTED_COUNT = 17
 REGISTRY_REQUIRED_FIELDS = {
     "family_id",
     "claim_role",
@@ -96,7 +97,30 @@ def split_markdown_row(line: str) -> list[str]:
         stripped = stripped[1:]
     if stripped.endswith("|"):
         stripped = stripped[:-1]
-    return [cell.strip() for cell in stripped.split("|")]
+    cells: list[str] = []
+    current: list[str] = []
+    in_code = False
+    escaped = False
+    for char in stripped:
+        if escaped:
+            current.append(char)
+            escaped = False
+            continue
+        if char == "\\":
+            current.append(char)
+            escaped = True
+            continue
+        if char == "`":
+            in_code = not in_code
+            current.append(char)
+            continue
+        if char == "|" and not in_code:
+            cells.append("".join(current).strip())
+            current = []
+            continue
+        current.append(char)
+    cells.append("".join(current).strip())
+    return cells
 
 
 def is_table_separator(line: str) -> bool:
@@ -163,13 +187,57 @@ def read_text(path: Path) -> str:
 
 
 def find_required_fields(tables: Sequence[MarkdownTable]) -> list[str]:
+    table = find_required_fields_table(tables)
+    if table.malformed_rows:
+        raise ClaimsLintError("Required fields table has malformed rows")
+    fields = [row.cells[0] for row in table.rows if row.cells and row.cells[0].strip()]
+    if len(fields) != REQUIRED_FIELDS_EXPECTED_COUNT:
+        raise ClaimsLintError(
+            f"Required fields table has {len(fields)} fields; expected {REQUIRED_FIELDS_EXPECTED_COUNT}"
+        )
+    return fields
+
+
+def find_required_fields_table(tables: Sequence[MarkdownTable]) -> MarkdownTable:
     for table in tables:
         headers = [header.lower() for header in table.headers]
         if headers == ["field", "requirement"]:
-            fields = [row.cells[0] for row in table.rows if row.cells and row.cells[0].strip()]
-            if fields:
-                return fields
+            if table.rows or table.malformed_rows:
+                return table
     raise ClaimsLintError("no Required fields table found")
+
+
+def required_fields_from_tables(
+    path: Path,
+    tables: Sequence[MarkdownTable],
+    mode: str,
+) -> tuple[list[str], list[Finding]]:
+    table = find_required_fields_table(tables)
+    findings: list[Finding] = []
+    for row in table.malformed_rows:
+        findings.append(
+            Finding(
+                "error",
+                mode,
+                str(path),
+                row.line_no,
+                "REQUIRED_FIELDS_COLUMN_COUNT",
+                f"required-fields row has {len(row.cells)} columns; expected {table.expected_columns}",
+            )
+        )
+    fields = [row.cells[0] for row in table.rows if row.cells and row.cells[0].strip()]
+    if len(fields) != REQUIRED_FIELDS_EXPECTED_COUNT:
+        findings.append(
+            Finding(
+                "error",
+                mode,
+                str(path),
+                table.start_line,
+                "REQUIRED_FIELDS_COUNT",
+                f"required-fields table has {len(fields)} fields; expected {REQUIRED_FIELDS_EXPECTED_COUNT}",
+            )
+        )
+    return fields, findings
 
 
 def table_field_map(table: MarkdownTable) -> dict[str, MarkdownRow]:
@@ -190,6 +258,15 @@ def iter_ap_tables(tables: Sequence[MarkdownTable]) -> Iterable[MarkdownTable]:
             yield table
 
 
+def iter_ap_headings(text: str) -> list[MarkdownRow]:
+    headings: list[MarkdownRow] = []
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        stripped = line.strip()
+        if stripped.startswith("### ") and AP_ID_RE.search(stripped):
+            headings.append(MarkdownRow(line_no=line_no, cells=[stripped]))
+    return headings
+
+
 def ap_table_label(table: MarkdownTable, fields: dict[str, MarkdownRow]) -> str:
     row = fields.get("Plan ID / RQ consumer")
     if row:
@@ -204,11 +281,21 @@ def ap_table_label(table: MarkdownTable, fields: dict[str, MarkdownRow]) -> str:
 
 def multiplicity_rule_is_valid(value: str) -> bool:
     lowered = value.lower()
-    if "holm" in lowered or "exploratory" in lowered:
+    if re.search(r"\b(tbd|later|none)\b", lowered):
+        return False
+    if re.search(r"\b(?:no|not|without)\s+(?:holm|benjamini-hochberg|bh|exploratory)\b", lowered):
+        return False
+    if re.search(r"\bholm\s+within\b", lowered):
         return True
     has_bh_name = "benjamini-hochberg" in lowered or re.search(r"\bbh\b", lowered) is not None
     has_q = re.search(r"\bq\s*[=:<]\s*0?\.\d+", lowered) is not None
-    return bool(has_bh_name and has_q)
+    if has_bh_name and has_q:
+        return True
+    no_confirmatory = r"no[- ]confirmatory[- ]inference"
+    return bool(
+        re.search(rf"\bexploratory\b.*\b{no_confirmatory}\b", lowered)
+        or re.search(rf"\b{no_confirmatory}\b.*\bexploratory\b", lowered)
+    )
 
 
 def floor_gate_is_valid(value: str) -> bool:
@@ -222,15 +309,54 @@ def lint_ap_document(
 ) -> tuple[list[Finding], list[str]]:
     text = read_text(path)
     tables = iter_markdown_tables(path, text)
-    required_fields = list(fallback_required_fields or find_required_fields(tables))
     findings: list[Finding] = []
+    if fallback_required_fields is None:
+        required_fields, required_findings = required_fields_from_tables(path, tables, mode)
+        findings.extend(required_findings)
+    else:
+        required_fields = list(fallback_required_fields)
     ap_tables = list(iter_ap_tables(tables))
     labels: list[str] = []
+    ap_headings = iter_ap_headings(text)
+    for heading in ap_headings:
+        if not any(table.heading == heading.cells[0] for table in ap_tables):
+            findings.append(
+                Finding(
+                    "error",
+                    mode,
+                    str(path),
+                    heading.line_no,
+                    "AP_TABLE_MISSING",
+                    f"{heading.cells[0]} must be followed by a parseable Field|Value table",
+                )
+            )
+    if not ap_tables:
+        findings.append(
+            Finding(
+                "error",
+                mode,
+                str(path),
+                1,
+                "AP_NO_TABLES",
+                "document linted as AP content has no parseable AP Field|Value tables",
+            )
+        )
 
     for table in ap_tables:
         fields = table_field_map(table)
         label = ap_table_label(table, fields)
         labels.append(label)
+        for row in table.malformed_rows:
+            findings.append(
+                Finding(
+                    "error",
+                    mode,
+                    str(path),
+                    row.line_no,
+                    "AP_COLUMN_COUNT",
+                    f"{label} row has {len(row.cells)} columns; expected {table.expected_columns}",
+                )
+            )
         for field in required_fields:
             row = fields.get(field)
             if row is None:
@@ -355,6 +481,7 @@ def lint_registry(path: Path, analysis_plans_path: Path) -> list[Finding]:
         "status",
         "AP owner",
         "gate_class",
+        "pre_hardware_preparable",
     ]
     for column in required_columns:
         if column not in headers:
@@ -364,6 +491,7 @@ def lint_registry(path: Path, analysis_plans_path: Path) -> list[Finding]:
         "question_type": legend_closed_set(text, "question_type"),
         "status": legend_closed_set(text, "status"),
         "gate_class": legend_closed_set(text, "gate_class"),
+        "pre_hardware_preparable": legend_closed_set(text, "pre_hardware_preparable"),
     }
     known_ap_ids = plan_ids_from_analysis_plans(analysis_plans_path)
     canonical_seen: dict[str, int] = {}
@@ -386,7 +514,7 @@ def lint_registry(path: Path, analysis_plans_path: Path) -> list[Finding]:
             canonical_seen[canonical] = row.line_no
             canonical_ids.add(canonical)
 
-        for column in ("question_type", "status", "gate_class"):
+        for column in ("question_type", "status", "gate_class", "pre_hardware_preparable"):
             value = row.cells[headers[column]].strip()
             if value not in closed_sets[column]:
                 findings.append(
@@ -478,10 +606,9 @@ def forbidden_terms_from_claims_ladder(path: Path) -> set[str]:
     for row in table.rows:
         if len(row.cells) <= index:
             continue
-        for term in row.cells[index].split(","):
-            cleaned = term.strip().strip("`").lower()
-            if cleaned:
-                terms.add(cleaned)
+        cleaned = row.cells[index].strip().strip("`").lower()
+        if cleaned:
+            terms.add(cleaned)
     return terms
 
 
@@ -597,7 +724,12 @@ def run(args: argparse.Namespace) -> tuple[int, list[Finding]]:
     required_fields: list[str] | None = None
     if modes & {"ap", "pack"}:
         ap_text = read_text(analysis_plans_path)
-        required_fields = find_required_fields(iter_markdown_tables(analysis_plans_path, ap_text))
+        required_fields, required_findings = required_fields_from_tables(
+            analysis_plans_path,
+            iter_markdown_tables(analysis_plans_path, ap_text),
+            "ap",
+        )
+        findings.extend(required_findings)
 
     if "ap" in modes:
         ap_findings, _ = lint_ap_document(analysis_plans_path, "ap", required_fields)
@@ -615,10 +747,29 @@ def run(args: argparse.Namespace) -> tuple[int, list[Finding]]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
+    args: argparse.Namespace | None = None
     try:
         args = parser.parse_args(argv)
         exit_code, findings = run(args)
     except ClaimsLintError as exc:
+        if args is not None and args.json:
+            payload = {
+                "ok": False,
+                "errors": 1,
+                "warnings": 0,
+                "findings": [
+                    Finding(
+                        "error",
+                        "usage",
+                        "",
+                        0,
+                        "CLAIMS_LINT_ERROR",
+                        str(exc),
+                    ).as_dict()
+                ],
+            }
+            print(json.dumps(payload, indent=2, sort_keys=True))
+            return EXIT_USAGE_PARSE
         print(f"claims_lint: {exc}", file=sys.stderr)
         return EXIT_USAGE_PARSE
 
