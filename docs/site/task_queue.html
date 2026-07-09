@@ -36,7 +36,7 @@
 <a href="#queue-maintenance">Queue Maintenance</a></aside>
   <div class="doc-wrap doc-source-task-queue-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 36e8524"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 36e8524</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 036913e"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 036913e</span></span></div>
     <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -201,6 +201,30 @@ purchases, destinations.</li>
 <td>waiting-user; ELEVATED to ED-EXTERNAL rank 1 (C-019 reassessment: every phase target is TBD, R-012 is the biggest active management risk for an undergrad timeline; late dates force uncontrolled descoping) [ED-EXTERNAL]</td>
 <td>Map phases to academic calendar AND capture the evaluator&#39;s acceptance bar (minimum figures, demo expectation, reproducibility threshold, whether Mac-only + split-deferral is acceptable)</td>
 <td>Colloquium/report dates + borrow window in <code>docs/milestones.md</code>; phase targets derived; acceptance-bar notes beside the P1-001 scope notes</td>
+</tr>
+<tr>
+<td align="right">11a</td>
+<td>P2-026</td>
+<td>P2 Next Slice</td>
+<td>NEW (C-020 merit debate) [AGENT]</td>
+<td>Fix the D-033 strict-validation legacy bypass: a bundle lacking summary_provenance skips all workload-provenance strict checks — new-era bundles must not be able to validate as legacy (gate on reducer_version/schema era; tamper test)</td>
+<td>Strict validation rejects a provenance-stripped new-era bundle; regression test; contract wording updated</td>
+</tr>
+<tr>
+<td align="right">11c</td>
+<td>P2-027</td>
+<td>P2 Next Slice</td>
+<td>NEW (C-020; D5 ruling #1) [AGENT prep; ED-EXTERNAL for the outsider]</td>
+<td>Bundle-pack publication prep: select 2-3 strict-valid corpus bundles, package with re-reduction instructions (one command), so ONE external party can run strict re-reduction — converts auditability from design property (L0) to demonstrated property</td>
+<td>Published pack + a documented external re-reduction; until then the review doc&#39;s auditability claim stays L0-scoped</td>
+</tr>
+<tr>
+<td align="right">11d</td>
+<td>P3-001b</td>
+<td>P3 Research Expansion</td>
+<td>NEW (D-048/D-049; binds split prep) [AGENT after 2M coefficients exist]</td>
+<td>Seed the split analysis-plan row: pre-registered compositional predictions per pairing/link (incl. named same-boundary headline + at least one predicted-crossover cell if feasible), per-cell transfer-boundary labels (D-049)</td>
+<td>AP row committed BEFORE any split hardware run; phase_3_plan amendment line landed</td>
 </tr>
 <tr>
 <td align="right">11b</td>
@@ -541,7 +565,7 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit 36e8524 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit 036913e · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

@@ -74,10 +74,12 @@
 <a href="#d-044-suite-config-identity-omission-serialized-ref-effective-manifest-hash">D-044: Suite config identity — omission-serialized ref + effective-manifest hash</a>
 <a href="#d-045-suite-substrate-execution-semantics">D-045: Suite substrate execution semantics</a>
 <a href="#d-046-ap-6-sentinel-delivery-ids-native-bos-less-literal-equal-shape">D-046: AP-6 sentinel delivery — ids-native, BOS-less, literal equal shape</a>
-<a href="#d-047-affine-ladder-pins-level-set-smoke-sizing-gate-denominators">D-047: Affine ladder pins — level set, smoke sizing, gate denominators</a></aside>
+<a href="#d-047-affine-ladder-pins-level-set-smoke-sizing-gate-denominators">D-047: Affine ladder pins — level set, smoke sizing, gate denominators</a>
+<a href="#d-048-split-program-is-model-first-pre-registered-compositional-prediction-before-split-runs">D-048: Split program is model-first — pre-registered compositional prediction before split runs</a>
+<a href="#d-049-split-transfer-energy-boundary-accounting-on-discrete-gpu-ends">D-049: Split transfer-energy boundary accounting on discrete-GPU ends</a></aside>
   <div class="doc-wrap doc-source-docs-decision-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/decision_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 36e8524"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 36e8524</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 036913e"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 036913e</span></span></div>
     <h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
@@ -338,6 +340,16 @@ must be re-examined, not quietly worked around.</li>
 <tr>
 <td>D-047</td>
 <td>Affine ladder pins: level set, smoke sizing, gate denominators</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-048</td>
+<td>Split program is model-first: pre-registered compositional prediction before split runs</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-049</td>
+<td>Split transfer-energy boundary accounting on discrete-GPU ends</td>
 <td>accepted</td>
 </tr>
 </tbody></table></div>
@@ -1365,18 +1377,14 @@ home rule; the reducer&#39;s math (<code>_integrate</code>, idle subtraction) st
 report/reducer alignment must be implemented BY building on the reader,
 not as a spot fix, or the divergence just reappears at the next
 consumer.</p>
-<p>Consequences: Slice 2N gains item 2N.8; 2N.7 is implemented on top of
-it; Phase 4 Stage 4.1&#39;s aggregate verb builds on the reader (noted in
-the Phase 4 plan).</p>
-<p>Revisit when: bundle schema v0.2 lands (the reader is where composite-
-bundle reading concentr
+<p>Consequ
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/decision_log.md · commit 36e8524 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/decision_log.md · commit 036913e · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
