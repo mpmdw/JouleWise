@@ -2362,6 +2362,13 @@ Revisit when: the first smoke bundle's measured item time falls outside
 0.11–0.20 s/item (resize per the report's table); or the scored
 campaign is scheduled (k-policy ratification).
 
+Amendment (2026-07-09, CP-5 resume, PR #27): the sampler-pinning clause
+is superseded — adapters now FAIL CLOSED with `sampler_pin_unverified`
+when the sampler cannot be pinned/verified, instead of proceeding
+unpinned with a provenance note. Accepted at the CP-6 methodology
+adjudication; contract wording updated in
+`docs/contracts/adapter_contracts.md` the same session.
+
 
 ---
 

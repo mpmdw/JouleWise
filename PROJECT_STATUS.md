@@ -10,8 +10,10 @@ are provided for anyone who wants the full evidence trail.
   cockpit panels, and stale-count cleanup; source-of-truth policy D-051)
 - Project phase: Phase 1 closing; Phase 2 in progress - instrument
   CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
-  are complete; workload-suite build is merged; current restart authority
-  is CP-5 in `RUN_STATE.md` before any new campaign work
+  are complete; workload-suite build is merged; CP-5 pre-campaign review is
+  COMPLETE and CLEARED (2026-07-09, PRs #22..#28; see
+  `docs/run_reports/2026-07-09-cp5-resume.md`); next is the P2-015
+  design doc, then quiet Window A
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 - Live status site: https://quiet-signal-6af8833395.lakebed.app (Lakebed
   capsule; `/status.html` is the advisor cockpit and shows live overlays
@@ -28,8 +30,8 @@ cockpit adds live snapshot state, attention items, campaign readiness,
 evidence cards, and claim-ceiling panels; the Story page drops
 hand-authored volatile counts. The operational policy is D-051: repo
 markdown remains the source of truth and Lakebed never hides static
-provenance. Current work should still resume at CP-5 before starting new
-queue items.
+provenance. Current work follows `TASK_QUEUE.md`: `P2-015-PREP`, then quiet
+Window A (the CP-5 stop card was cleared 2026-07-09).
 
 ## Previous Update (as of 2026-07-08, all four streams merged) — 30-second read
 

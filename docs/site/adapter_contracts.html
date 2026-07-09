@@ -36,7 +36,7 @@
 <a href="#structured-failure-reasons">Structured Failure Reasons</a></aside>
   <div class="doc-wrap doc-source-docs-contracts-adapter-contracts-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/contracts/adapter_contracts.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/adapter_contracts.md · commit ed1eea8"><span class="source-file">docs/<wbr>contracts/<wbr>adapter_contracts.md</span><span class="source-commit">commit ed1eea8</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/adapter_contracts.md · commit c91a4b8"><span class="source-file">docs/<wbr>contracts/<wbr>adapter_contracts.md</span><span class="source-commit">commit c91a4b8</span></span></div>
     <h1>Adapter Contracts</h1>
 <p>Living cross-phase contract, drafted in Phase 1; the executable form is
 <code>joulewise/interfaces.py</code>. The benchmark separates runtime work from
@@ -221,11 +221,11 @@ Each line carries the item id/index, status and optional status reason,
 text/hash, stop reason, prompt/output token counts, and token timestamps
 (D-045.8/AP-6). Suites do not emit <code>response.txt</code>.</li>
 <li>Preserve workload provenance for suite identity, generator, tokenizer,
-model, and sampler. MLX adapters must attempt to pin greedy/temp-0 by
-constructing the installed <code>mlx_lm</code> sampler and passing it to
-<code>stream_generate</code> when the API supports it; otherwise they record
-<code>pinned: false</code> with an unavailable-API reason and proceed with the
-library default (D-047.5).</li>
+model, and sampler. MLX adapters must pin greedy/temp-0 by constructing the
+installed <code>mlx_lm</code> sampler and passing it to <code>stream_generate</code>; if the
+sampler cannot be constructed or verified, measured single-prompt and suite
+generation fail closed with the named adapter error
+<code>sampler_pin_unverified</code>.</li>
 </ul>
 <p>Runtime status assignment:</p>
 <pre><code class="language-text">condition                                           item_end.status
@@ -250,6 +250,14 @@ with no BOS added; this is required for D-046 sentinel conditions.
 Absent text and ids use a synthetic prompt with
 <code>shape.planned_prompt_tokens</code>. Any field named <code>prompt_sha256</code> means the
 domain-separated token-ID hash, not a text hash.</p>
+<p>For prompt-text items with a SHA-256-shaped <code>source.source_sha256</code>, runtimes
+compare the realized prompt token-ID hash against <code>source_sha256</code>; if it does
+not match, they may accept <code>sha256(prompt_text)</code> as a text-domain manifest.
+Any other value fails the item closed as <code>malformed</code> with
+<code>status_reason: &quot;prompt_ids_mismatch&quot;</code>. For planned prompt token counts,
+<code>jw_mixed_v1</code> prompt-text items are budgeted and a realized/planned mismatch
+is fatal; affine ladder prompt-text items are nominal and receive an advisory
+annotation instead.</p>
 <p><code>suite_items.jsonl.prompt_source</code> is one of <code>prompt_text</code>, <code>token_ids</code>, or
 <code>synthetic</code>. <code>bos_present</code> records whether BOS is present in the realized
 prompt. For text-path adapters, when the tokenizer exposes a BOS id this is
@@ -330,7 +338,7 @@ for reducer integration under both fake and real clocks.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/contracts/adapter_contracts.md · commit ed1eea8 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/contracts/adapter_contracts.md · commit c91a4b8 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

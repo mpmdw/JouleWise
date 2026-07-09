@@ -1,9 +1,9 @@
 # JouleWise Run State
 
-Last updated: 2026-07-09 (meta-process cleanup + codex-bridge audit
-manifest; CP-5 preserved untouched; suite BUILD close + alignment fix
-PR #21 + meta-reassessment; adjudication D-044..D-047; PRs #17..#21
-merged; suite 734; C-017/C-018/C-019)
+Last updated: 2026-07-09 (CP-5 resumed and CLEARED: PRs #22..#28 merged,
+methodology synthesis + suite_next packet adjudicated at CP-6, all
+accepted pre-campaign changes landed, Window-A GO behind P2-015 design
+doc + C-019 shakedown; suite 822; C-022; D-051)
 
 ## Start Here For Every Big Run
 
@@ -53,36 +53,15 @@ At the end of substantial work:
 
 ## ACTIVE_STOP_CARD
 
-Status: **ACTIVE — CP-5 must resume first.**
-
-Authority: `docs/stream_logs/2026-07-08-precampaign-review.md`, CP-5
-section near the bottom. This card is only a pointer and safety wrapper;
-do not treat it as a replacement for the exact CP-5 sequence.
-
-Reason: Ed intentionally stopped the pre-campaign review session because
-token spend ran out. The work is paused, not abandoned.
-
-Do not start normal queue work, quiet-window campaigns, suite follow-ons,
-or cleanup of CP-5 worktrees until this card is cleared by a CP-5 resume
-session.
-
-Paused work inventory:
-
-| Item | State | Resume handling |
-|---|---|---|
-| `jw-wt-envgate` | `APPLIED_UNVERIFIED`; uncommitted fix-round diff reported by implementer | Lead-gate diff first; live-gate against real affine mock bundle as CP-5 specifies; then commit/PR if accepted. |
-| `jw-wt-hashcheck` | `APPLIED_UNVERIFIED`; uncommitted fix-round diff reported by implementer | Lead-gate diff first; commit/PR only after accepted gates. |
-| `jw-wt-bundlepack` | `APPLIED_UNVERIFIED`; uncommitted fix-round diff reported by implementer | Lead-gate diff first; commit/PR only after accepted gates. |
-| `strict-era-fix` / PR #22 | `PR_OPEN_CI_GREEN`; unmerged | Re-check final head and merge only inside the CP-5 sequence. |
-| Methodology synthesis | `UNREAD_UNADJUDICATED` | Read/adjudicate after code gates; land accepted pre-campaign changes; deliver Ed's four-part answer and Window-A go/no-go. |
-
-Durable artifact pointer: `~/.claude/projects/-Users-edr-code-JouleWise/ae807c57-7163-4f10-8532-42e8cfacdaff/checkpoint-2026-07-08/`.
-
-Clearance criteria: CP-5 worktrees gated and either landed or explicitly
-rejected; PR #22 handled; methodology synthesis adjudicated; accepted
-pre-campaign changes landed; post-merge integration review run if any
-CP-5 code merges; `TASK_QUEUE.md` rank 0 updated/closed; this card
-removed or marked CLEARED with a run-report pointer.
+Status: **CLEARED 2026-07-09** by the CP-5 resume session. Every
+clearance criterion was met: all three worktree diffs lead-gated
+(envgate live-gated against the real affine mock bundle) and merged as
+PRs #23/#24/#25; PR #22 merged after a fresh final-head pass; the
+methodology synthesis and suite_next specs packet adjudicated (CP-6 in
+the stream log); all accepted pre-campaign changes landed and merged
+(PRs #26/#27/#28); both post-merge integration reviews CLEAN; queue
+rank 0 closed. Full record:
+`docs/run_reports/2026-07-09-cp5-resume.md`. No stop card is active.
 
 ## Current Project Status
 
@@ -98,27 +77,32 @@ dispositions). Live-verified on real MLX at three code states; three
 live-only defects caught and fixed at the lead gate. Post-merge
 integration review: zero cross-stream defects.
 
-**PAUSED AT STABLE CHECKPOINT CP-5 (2026-07-08, pre-campaign
-review session — RESUME THIS FIRST on "start again"):** see
-`ACTIVE_STOP_CARD` above. The exact resume authority remains
-`docs/stream_logs/2026-07-08-precampaign-review.md` (CP-5, bottom).
+**CP-5 RESUMED AND CLEARED (2026-07-09): pre-campaign review COMPLETE;
+Window A is GO behind two queued campaign-time steps.** Seven PRs merged
+(#22..#28): D-033 strict legacy-bypass close, envelope-gate script,
+campaign-runner prompt-hash check, bundle-pack tooling, tokenizer
+identity widening + manifest regen, capture hardening (output token IDs,
+fail-closed sampler pin, model weight hashing, hash-domain
+realized-vs-manifest closure), advisor status site + suite_next draft
+specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
+`docs/run_reports/2026-07-09-cp5-resume.md`.
 
 **RESTART HERE (next agent):**
-1. If `ACTIVE_STOP_CARD` is ACTIVE, resume CP-5 first from
-   `docs/stream_logs/2026-07-08-precampaign-review.md`.
-2. Only after CP-5 is cleared, read
-   `docs/run_reports/2026-07-08-suite-build.md` for the normal
-   suite-build session record and restart details.
-3. Only after CP-5 is cleared, return to `TASK_QUEUE.md` for suite
-   follow-ons, Quiet Window A, and later campaign work.
+1. Read `docs/run_reports/2026-07-09-cp5-resume.md` for this session's
+   record and the Window-A go/no-go checklist.
+2. Next work per `TASK_QUEUE.md`: P2-015 design-doc prep [AGENT], then
+   quiet Window A (P2-015 floors + C-019 shakedown first, then P2-006).
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-09 CP-5 resume: pre-campaign review completed, stop card
+  cleared, PRs #22..#28 merged, Window-A GO
+  (C-022): `docs/run_reports/2026-07-09-cp5-resume.md`
 - 2026-07-09 meta-process stop-card + codex-bridge audit cleanup
   (D-050; CP-5 preserved untouched):
   `docs/run_reports/2026-07-09-meta-process-stop-card-cleanup.md`
 - 2026-07-09 advisor status-site live-depth refresh (D-051/C-021;
-  subordinate to the active CP-5 stop card):
+  subordinate to the then-active CP-5 stop card):
   `docs/run_reports/2026-07-09-advisor-status-site.md`
 - 2026-07-08 suite build (C-017; adjudication + PRs #17/#18/#20/#19;
   D-044..D-047): `docs/run_reports/2026-07-08-suite-build.md`
@@ -136,58 +120,52 @@ review session — RESUME THIS FIRST on "start again"):** see
 
 ## Current Verification
 
-- 2026-07-09 meta-process/tooling cleanup: `bash -n
-  scripts/codex-bridge` green; `CODEX_BIN=/bin/echo
-  scripts/codex-bridge new audit smoke prompt` wrote a manifest row with
-  prompt/output/log hashes; Python test suite not run.
-- Advisor status-site refresh authored in the landing worktree
-  (2026-07-09; D-051/C-021): `python3 -m py_compile
-  scripts/build_site.py` OK; targeted site/capsule tests
-  (`tests/test_build_site_parsers.py`, `tests/test_pack_capsule.py`) →
-  32 tests OK; `python3 scripts/build_site.py` rebuilt generated pages;
-  `python3 scripts/pack_capsule.py` packed 0.29 MiB capsule content;
-  `npx lakebed build` passed; full suite `python3 -m unittest discover
-  -s tests` → `Ran 734 tests, OK (skipped=10)`.
-- Merged main (49c5b66 + reassessment batch): `python3 -m unittest
-  discover -s tests` → `Ran 734 tests, OK (skipped=10)` (post PRs
-  #17..#21; #21 = D-013 alignment-capture window fix, C-018).
-- Live lead gates on merged main: real MLX (1.5B, mock telemetry) suite
-  bundle strict-valid + reduced (sampler pinned via sample_utils; honest
-  per-item identifiability); mock affine smoke 26/26 strict-valid.
-- CI green on both matrix legs on every PR head and post-review commit.
-- `validate-bundle --strict` green over all 6 real corpus bundles
-  (unchanged this session; the lead-gate suite bundles are disposable
-  /tmp artifacts, not corpus).
-- Post-merge integration review: no cross-stream defects; AP-6
-  vocabulary join verified; repeated-seed drift test green.
+- Final merged main (7666652, post PRs #22..#28): `python3 -m unittest
+  discover -s tests` → `Ran 822 tests, OK (skipped=10)`, lead-run.
+- Live lead gates this session (real MLX, Qwen2.5-1.5B via `.venv`, mock
+  telemetry): single-prompt + TWO full 48-item jw_mixed suite runs
+  (pre-merge old manifests, then final merged main with the REGENERATED
+  manifests) — all strict-valid; 48/48 hash-domain closures on the
+  real tokenizer; output token ids, model artifact hash, pinned sampler,
+  and package versions verified present in the bundles.
+- Envelope gate live: honest `envelope_failed[E1]` on the mock affine
+  bundle; refusals for wrong-profile/malformed/mixed inputs; exit codes
+  0/2/3.
+- Bundle pack live: pack → verify(0) → tamper → verify(2).
+- Manifest regen: byte-identical double-regen; all realized counts 512;
+  new effective shas 855be4e5 (mixed) / 0316283d (sentinel).
+- CI green on every merged head (PR #27's first merge-ref run failed on
+  a cross-branch fixture interaction; fixed test-side, then green).
+- Post-merge integration reviews (both waves): CLEAN, incl. an
+  end-to-end mock campaign → strict → envelope-gate → pack → verify flow
+  and a D-033 legacy-identity spoof probe that failed closed.
+- `validate-bundle --strict` green over all 6 real corpus bundles under
+  the new era rule (PR #22 live gate: 6/6 valid, tamper fails named).
 
 ## Known Workspace State
 
-- Before the 2026-07-09 meta-process/tooling cleanup, `main` was pushed
-  and current through prior bookkeeping. This cleanup leaves local docs
-  plus `scripts/codex-bridge` changes until committed.
-- CP-5 paused work may exist in `jw-wt-envgate`, `jw-wt-hashcheck`,
-  `jw-wt-bundlepack`, and branch/PR `strict-era-fix` / #22. Do not
-  clean, remove, rebase, or merge these outside the CP-5 resume
-  sequence.
-- Worktrees `jw-wt-suite`, `jw-wt-affine`, `jw-wt-gens` may remain
-  (branches merged; safe to remove with `git worktree remove`).
-- `/tmp/jw-lead-verify/` holds disposable lead-verification artifacts.
+- `main` pushed and current through this session's bookkeeping. No open
+  PRs; no stream worktrees remain (all seven merged and removed).
+- Codex's own worktree `/Users/edr/.codex/worktrees/7fe2/JouleWise`
+  still holds the ORIGINAL advisor-site commits (bf9ffc5..e6cf431);
+  their content landed via PR #28 (D-051 renumber applied). Safe to
+  leave or remove; do not re-land.
+- `/tmp/jw-lead-verify/` and the session scratchpad hold disposable
+  lead-verification artifacts (live-runs bundles are not corpus).
 
 ## What Is Next
 
-While `ACTIVE_STOP_CARD` is ACTIVE, the only next task is
-`TASK_QUEUE.md` rank 0 (`RESUME-CP5`). The normal list below is
-temporarily blocked.
+Follow `TASK_QUEUE.md` (lane-annotated). In order:
 
-After CP-5 is cleared, follow `TASK_QUEUE.md` (lane-annotated). In order:
-
-1. **P2-015 then P2-006 in quiet Window A** [QUIET-MAC] (unchanged top;
-   affine smoke campaign may ride the window tail).
-2. **Suite follow-ons** [AGENT]: envelope-gate script; real-tokenizer
-   manifest generation; P2-025 runner hash check.
+1. **P2-015 design-doc prep** [AGENT]: cell list, n, UCB floor rule,
+   Window-B-start revalidation cell (accepted synthesis condition; the
+   only remaining pre-window agent work).
+2. **Quiet Window A** [QUIET-MAC]: C-019 shakedown first, then P2-015
+   floors, then P2-006 2M baselines; AP-6 sentinel pilot may ride the
+   window tail (manifests are ready).
 3. **Ed's external one-pass** [ED-EXTERNAL]: calendar, device access,
-   borrow window, wall meter, backup destination (P0-003).
+   borrow window, wall meter, backup destination (P0-003); plus P2-027
+   external re-reduction party selection.
 4. **3.0.2 llama.cpp spike** [AGENT after R-003 approval].
 
 Hardware-gated (unchanged): 2K/2L (P1-006), wall meter (P1-003),
