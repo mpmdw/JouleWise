@@ -1,10 +1,9 @@
 # JouleWise Run State
 
-Last updated: 2026-07-09 (P2-034 broad campaign packs C-026: PR #39
-merged — six packs, pack lint clean; pre-hardware campaign surface
-COMPLETE. Earlier same day: C-025 wave 2 (PRs #33..#38, D-056..D-059),
-C-024 wave 1 (PRs #29..#32, D-052..D-055), C-023 rigor review, C-022
-CP-5 clearance; suite 877)
+Last updated: 2026-07-09 (user-directed Claude Code → Codex MCP bridge
+hardened and live-verified; no research phase/gate change. Prior same day:
+P2-034/C-026, C-025 wave 2, C-024 wave 1, C-023 rigor review, C-022 CP-5
+clearance; suite 877)
 
 ## Start Here For Every Big Run
 
@@ -104,6 +103,8 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-09 Claude Code → Codex MCP bridge hardening and live smoke:
+  `docs/run_reports/2026-07-09-claude-codex-mcp-bridge.md`
 - 2026-07-09 P2-034 broad campaign packs (C-026; PR #39):
   `docs/run_reports/2026-07-09-p2034-broad-packs.md`
 - 2026-07-09 spec-fleshing wave 2, ultracode (C-025; PRs #33..#38;
@@ -139,6 +140,13 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 
 ## Current Verification
 
+- Claude Code 2.1.205 approved the project `codex` MCP server; Codex CLI
+  0.144.0 protocol handshake exposed `codex` + `codex-reply` with the
+  expected full-session controls. A real Claude → Codex read-only call
+  read `AGENTS.md`/`RUN_STATE.md`, and the same thread continued through
+  `codex-reply` (`JOULEWISE_CODEX_MCP_OK` /
+  `JOULEWISE_CODEX_REPLY_OK`). `scripts/check-codex-mcp.mjs` passes;
+  canonical suite `Ran 877 tests, OK (skipped=10)`.
 - Main c095c83 (post PR #39; docs-only): suite `OK (skipped=10)` and
   repo lint errors=0, lead-run; pack lint errors=0 warnings=0.
 - Prior: main after wave-2 integration fixes: `python3 -m unittest discover -s
@@ -177,8 +185,9 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 
 ## Known Workspace State
 
-- `main` pushed and current through this session's bookkeeping. No open
-  PRs; no stream worktrees remain (all seven merged and removed).
+- `main` remains at the pushed post-PR-39 head. This user-directed bridge
+  hardening is an uncommitted working-tree change; no PR was opened and no
+  research stream worktree was created.
 - Codex's own worktree `/Users/edr/.codex/worktrees/7fe2/JouleWise`
   still holds the ORIGINAL advisor-site commits (bf9ffc5..e6cf431);
   their content landed via PR #28 (D-051 renumber applied). Safe to
