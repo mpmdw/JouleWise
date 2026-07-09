@@ -290,6 +290,32 @@ class BundlePackTests(unittest.TestCase):
         self.assertIn("error:", stderr)
         self.assertEqual(sentinel.read_text(encoding="utf-8"), "keep me")
 
+    def test_output_dir_claim_race_is_refused_and_preserved(self) -> None:
+        source_bundle = self.make_bundle("pack-output-race")
+        pack_dir = self.tmp / "race-pack"
+        sentinel = pack_dir / "sentinel.txt"
+
+        def create_competing_output_dir() -> dict[str, str]:
+            pack_dir.mkdir()
+            sentinel.write_text("raced claim", encoding="utf-8")
+            return {
+                "project_commit": "race-test",
+                "project_tree_state": package_bundle_pack.TREE_STATE_CLEAN,
+            }
+
+        with patch.object(
+            package_bundle_pack,
+            "_git_provenance",
+            side_effect=create_competing_output_dir,
+        ):
+            with self.assertRaisesRegex(
+                package_bundle_pack.BundlePackError,
+                "output directory already exists",
+            ):
+                package_bundle_pack.package_bundles([source_bundle], pack_dir)
+
+        self.assertEqual(sentinel.read_text(encoding="utf-8"), "raced claim")
+
     def test_suite_bundle_records_effective_manifest_sha256(self) -> None:
         source_bundle = self.make_suite_bundle("pack-suite")
         pack_dir = self.tmp / "suite-pack"
