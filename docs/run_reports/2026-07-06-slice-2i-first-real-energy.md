@@ -81,3 +81,20 @@ gate between reps:
 - P2-008 (mock telemetry × SystemClock hardening) still queued.
 - Deferred (user): P1-001 scope (meta), P0-003 real backup destination
   (meta), P1-008 calendar.
+
+---
+
+## Addendum (2026-07-09, C-027 — append-only correction; table above unchanged)
+
+The per-repetition table's `mJ/out-token` column actually reports
+`energy_token_j` (denominator = prompt + output tokens, 528 total), not
+the generated-output-token metric. The correct
+`energy_output_token_j` values from the same bundles are 79.40 (rep 1),
+90.46 (rep 2), 90.45 (rep 3) mJ/output-token (mean 86.77), on the
+idle-subtracted basis. The "~77-88 mJ" range propagated from this
+column to README/PROJECT_STATUS headlines has been corrected in those
+living docs (C-027 B1); this dated report is preserved verbatim above
+per the history-immutability rule. Also per D-055 (2026-07-09): the
+prefill-energy column (~0.03 J) is below the measurement path's current
+detection capability and is not a quantitative result.
+Record: `docs/reviews/2026-07-09-c027-whole-project-review.md`.

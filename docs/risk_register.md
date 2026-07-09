@@ -35,6 +35,7 @@ Conventions:
 | R-015 | Schema changes after data collection starts | 2+ | low | high | mitigated |
 | R-016 | Measurement-corpus loss (`runs/` has no backup path) | 2-5 | low | high | mitigated-interim (protocol + restore test 2026-07-06; final destination pending user) |
 | R-017 | Repo on iCloud-synced Desktop (EPERM lock recurrence) | all | low | medium | mitigated (repo moved 2026-07-05; residual: session launch paths) |
+| R-018 | Agent-loop self-expansion consumes calendar without grader-facing output | all | medium | high | open (C-027; D-060 stop line proposed as mitigation) |
 
 ## R-001: Supervisor approval delayed or scope shifts
 
@@ -309,9 +310,11 @@ Conventions:
 - Phase: all. Likelihood: low (mitigated; was high while on Desktop).
   Impact: medium (blocks work sessions mid-run; small integrity risk
   around eviction during writes).
-- Status: **mitigated 2026-07-05** - the repo moved to
-  `~/code/CapstoneRivoire/Capstone` (P0-001 complete; git + suite
-  verified green at the new path). Residual exposure: agent sessions
+- Status: **mitigated 2026-07-05** - the repo moved off the synced
+  Desktop (current canonical path: `~/code/JouleWise`; the interim
+  `~/code/CapstoneRivoire/Capstone` path recorded here was itself later
+  renamed - corrected 2026-07-09, C-027). P0-001 complete; git + suite
+  verified green at the new path. Residual exposure: agent sessions
   launched from the stale Desktop path (delete the leftover
   `~/Desktop/CapstoneRivoire` husk after relaunching from the new
   path), and any future placement of repo or `runs/` data under an
@@ -328,3 +331,20 @@ Conventions:
   incidents did), then re-verify with the test suite before continuing;
   the remote (`origin/main`) bounds code loss to the working tree.
 - Owner: user (launch paths), agent (post-lock verification discipline).
+
+## R-018: The agent loop itself as a schedule and scope risk
+
+- Phase: all. Likelihood: medium. Impact: high (capstones fail by
+  calendar, R-012).
+- Registered by C-027 (NEGSPACE lens finding accepted in council): the
+  multi-agent workflow can remain locally productive - packs, registries,
+  meta-process, site work - while the graded deliverable path (rubric,
+  report source, backup, real corpus, figures) stays starved. Same-day
+  evidence at registration: ~6M tokens of breadth work vs six real
+  corpus bundles, no report source, same-disk backup.
+- Trigger: an agent-heavy work block that produces neither a new real
+  evidence bundle nor a report/figure increment.
+- Mitigation: proposed D-060 depth-before-breadth stop line (awaiting
+  Ed); RPT-001 vertical slice; the C-027 correctness rows ranked ahead
+  of all breadth work.
+- Owner: lead (queue discipline), Ed (D-060 ratification).

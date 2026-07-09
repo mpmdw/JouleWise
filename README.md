@@ -13,10 +13,12 @@ The benchmark is designed around three stable ideas:
 - Run bundles preserve raw traces, events, metadata, logs, and summary metrics
   for later audit and analysis.
 
-**Status:** research prototype. The measurement harness is campaign-ready on
-Mac (Apple M3 Max); as of 2026-07-07, P2-013/P2-014 integrity and
-provenance fixes are complete; the verified end-user quickstart is a Phase
-5 deliverable.
+**Status:** research prototype. The Mac (Apple M3 Max) measurement harness
+has cleared its pre-campaign software review; campaign execution remains
+gated on a production-shaped shakedown, detection-floor calibration, a
+quiet machine, and an external backup destination. As of 2026-07-07,
+P2-013/P2-014 integrity and provenance fixes are complete; the verified
+end-user quickstart is a Phase 5 deliverable.
 
 ## Current State
 
@@ -26,8 +28,12 @@ typed config, one command produces a complete, schema-valid, auditable run
 bundle and reduces it to energy/latency summary metrics — proven first on
 deterministic mock adapters, and now live on real hardware: the MLX runtime +
 `powermetrics` telemetry adapters measured Qwen2.5-1.5B-Instruct (4-bit) on an
-Apple M3 Max at ~47 J per 512-token request (~77-88 mJ per generated token,
-257 tok/s). The six real corpus bundles pass `validate-bundle --strict`
+Apple M3 Max at ~47.2 J gross rail energy per 512-token request (~44.4 J
+idle-subtracted; ~79-90 mJ per generated output token on the idle-subtracted
+basis, mean 86.8 mJ; 257 tok/s). These are legacy L1 preliminary
+observations (pre-2M, manual review) under
+`docs/contracts/claims_ladder.md`; metric bases per
+`docs/contracts/token_normalization.md`. The six real corpus bundles pass `validate-bundle --strict`
 read-only and unrewritten: strict re-derives the recorded powermetrics power
 trace from raw plist evidence, re-derives summary metrics from the recorded
 trace and event log, checks the legacy additive summary comparison, and

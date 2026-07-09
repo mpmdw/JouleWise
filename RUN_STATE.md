@@ -1,9 +1,12 @@
 # JouleWise Run State
 
-Last updated: 2026-07-09 (user-directed Claude Code → Codex MCP bridge
-hardened and live-verified; no research phase/gate change. Prior same day:
-P2-034/C-026, C-025 wave 2, C-024 wave 1, C-023 rigor review, C-022 CP-5
-clearance; suite 877)
+Last updated: 2026-07-09 (C-027 whole-project council review with
+gpt-5.6-sol: claim-surface corrections in README/PROJECT_STATUS/this
+file, 15 adjudicated follow-up queue rows, D-060 proposed +
+D-061..D-063 accepted; record in
+`docs/reviews/2026-07-09-c027-whole-project-review.md`. Earlier same
+day: Codex MCP bridge hardening; P2-034/C-026, C-025 wave 2, C-024
+wave 1, C-023 rigor review, C-022 CP-5 clearance; suite 877)
 
 ## Start Here For Every Big Run
 
@@ -87,22 +90,35 @@ realized-vs-manifest closure), advisor status site + suite_next draft
 specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 `docs/run_reports/2026-07-09-cp5-resume.md`.
 
-**RESTART HERE (next agent):**
-1. Read `docs/run_reports/2026-07-09-p2034-broad-packs.md` (latest) and
+**RESTART HERE (next agent) — this is the ONLY next-action block; the
+queue owns ordering (C-027):**
+1. Read `docs/reviews/2026-07-09-c027-whole-project-review.md` (latest —
+   whole-project council review, adjudicated follow-ups) and
    `docs/run_reports/2026-07-09-cp5-resume.md` (Window-A go/no-go).
-2. The pre-Window-A AGENT blockers are clear. Next work is
-   machine-state dependent: [QUIET-MAC] quiet Window A (P2-015-SMOKE
-   preflight row, then P2-015 floors → P2-006) is the top item; [AGENT]
-   lane next is P2-022 shim spike / P2-023 HumanEval import (C-015
-   post-2M sequencing — revisit after Window A; they are now the interop
-   execution gates) and P2-035 (after floors); [ED-EXTERNAL]: P0-003
-   backup destination is REQUIRED before Window-A data accumulates
-   (C-026 escalation), plus P1-008 calendar/acceptance-bar.
+2. Lane state after C-027:
+   - [ED-EXTERNAL] P0-003 external backup destination is a HARD GATE
+     before any new irreplaceable Window-A evidence is retained; plus
+     P1-008 rubric/calendar (provisional-contract fallback per proposed
+     D-060).
+   - [AGENT]: the C-027 correctness rows, in queue order — P2-040
+     (reducer/gate fixes incl. zero-window strict), P2-038 (production
+     uncertainty evidence path), P2-039 (frozen floor artifact +
+     guard factor), then RPT-001 (report skeleton + vertical slice),
+     P2-037 (contrast/claim engine — required before any P2-006
+     interpretation). P2-022/P2-023 remain BLOCKED post-2M per D-041 —
+     do not start them.
+   - [QUIET-MAC] Window A (C-019 shakedown → P2-015-SMOKE → P2-015
+     floors → P2-006) proceeds only after P2-038 + P2-039 land and the
+     P0-003 backup gate is satisfied.
 3. Rotation (D-056), uncertainty gates (D-057), and the campaign packs
-   are live for Window-A execution.
+   are live for Window-A execution once the above gates clear.
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-09 C-027 whole-project council review (7 gpt-5.6-sol lenses +
+  counterreview + independent final examiner):
+  `docs/reviews/2026-07-09-c027-whole-project-review.md` (compact run
+  report: `docs/run_reports/2026-07-09-c027-council-review.md`)
 - 2026-07-09 Claude Code → Codex MCP bridge hardening and live smoke:
   `docs/run_reports/2026-07-09-claude-codex-mcp-bridge.md`
 - 2026-07-09 P2-034 broad campaign packs (C-026; PR #39):
@@ -147,7 +163,9 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
   `codex-reply` (`JOULEWISE_CODEX_MCP_OK` /
   `JOULEWISE_CODEX_REPLY_OK`). `scripts/check-codex-mcp.mjs` passes;
   canonical suite `Ran 877 tests, OK (skipped=10)`.
-- Main c095c83 (post PR #39; docs-only): suite `OK (skipped=10)` and
+- Last code-bearing verified head c095c83 (post PR #39; note: 36d5641
+  later changed `scripts/build_site.py` on main without a recorded
+  verification — flagged by C-027, covered by RETRO-001): suite `OK (skipped=10)` and
   repo lint errors=0, lead-run; pack lint errors=0 warnings=0.
 - Prior: main after wave-2 integration fixes: `python3 -m unittest discover -s
   tests` → `Ran 877 tests, OK (skipped=10)`, lead-run; repo lint
@@ -197,25 +215,13 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 
 ## What Is Next
 
-Follow `TASK_QUEUE.md` (lane-annotated). In order:
+See **RESTART HERE** above — that block and `TASK_QUEUE.md` are the only
+next-action authorities. (C-027 removed the duplicated ranking that
+previously lived here after it drifted stale against the queue.)
 
-1. **Wave 2 [AGENT]** (queue ranks 0a-0d; C-024 handoff): P2-029
-   reducer/aggregator uncertainty propagation, P2-030 ordering
-   executability (pre-campaign blocker for suite claims), P2-031
-   token-normalization contract + stack-identity table, P2-032
-   pre-hardware campaign packs. (P2-015-PREP is DONE — the design landed
-   as `docs/phase_2/detection_floor.md` with the false-effect guard
-   floor, D-054.)
-2. **Quiet Window A** [QUIET-MAC]: C-019 shakedown first, then P2-015
-   floors, then P2-006 2M baselines; AP-6 sentinel pilot may ride the
-   window tail (manifests are ready).
-3. **Ed's external one-pass** [ED-EXTERNAL]: calendar, device access,
-   borrow window, wall meter, backup destination (P0-003); plus P2-027
-   external re-reduction party selection.
-4. **3.0.2 llama.cpp spike** [AGENT after R-003 approval].
-
-Hardware-gated (unchanged): 2K/2L (P1-006), wall meter (P1-003),
-topology (P1-004), calendar mapping (P1-008).
+Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
+C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),
+calendar mapping (P1-008).
 
 ## Open Decisions And Blockers
 

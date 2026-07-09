@@ -9,12 +9,21 @@ every phase start.
 
 | Constraint | Date | Source |
 |---|---|---|
-| Mac local-machine auth session (unblocks privileged powermetrics sample) | to reschedule (the planned 2026-06-10 slot passed with no session/evidence recorded) | user; updated 2026-07-05 |
+| Mac local-machine auth session (unblocks privileged powermetrics sample) | CLOSED 2026-07-06 - privileged sample captured and sudoers rule recorded (C-027 correction: this row had stayed "to reschedule" after the gate closed; the missed 2026-06-10 slot remains a historical note) | user; updated 2026-07-09 |
 | Project pause (vacation) | 2026-06-13 through 2026-07-04 | user; recorded 2026-07-05 so the run-report gap reads as planned, not stalled |
 | Supervisor approval meeting | TBD | P1-001 |
 | 3080 Ti borrow window | TBD | R-006; needed during Phase 3 Stage 3.4 |
 | Colloquium date | TBD | user/program |
 | Final report due | TBD | user/program |
+
+## Evidence-By Dates (C-027 / proposed D-060)
+
+Every external gate needs a hard evidence-by date with an automatic cut
+rule: if the gate is not proven by its date, the project moves
+permanently to the Mac + synthetic-transfer/analytical-composition
+floor for that dependency. Dates to be filled with P1-008; the CUT RULE
+stands regardless, so late dates force recorded descoping instead of
+uncontrolled slippage.
 
 ## Phase Targets
 

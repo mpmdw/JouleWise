@@ -2768,3 +2768,125 @@ Phase 4 claims-index mode extends this tool rather than a new one.
 
 Consequences: the D-053 freeze discipline and D-055 registry are now
 machine-checked.
+
+## D-060: Depth-before-breadth stop line (PROPOSED — awaiting Ed's ratification)
+
+- Date: 2026-07-09
+- Status: **proposed** (C-027 council recommendation; allocates
+  Ed-facing work, so Ed ratifies or amends)
+- Phase: cross-phase / project management
+
+Proposal (C-027; amends D-041/D-052 sequencing and extends R-012/R-018):
+no NEW breadth — new campaign packs, registry expansion, site features,
+meta-process growth — until four gates pass:
+
+1. Grading rubric + calendar captured by a hard date; if the program
+   stays silent past it, adopt and RECORD a provisional grading contract
+   with conservative internal deadlines (external silence triggers scope
+   fallback, never indefinite paralysis).
+2. Off-machine backup with a restore proof, before any NEW irreplaceable
+   campaign evidence is retained (P0-003). Does not block report
+   drafting, analysis tooling, or correctness fixes.
+3. Window A complete in the C-027 sense: smoke, frozen sampling rule and
+   guard factor (P2-039), production uncertainty evidence (P2-038),
+   versioned floor artifact, floors, baselines — with the executable
+   contrast/claim path (P2-037) before any L2 interpretation.
+4. One end-to-end vertical slice: report source skeleton + reproducible
+   bundle→analysis→figure→claims-row→report-page path (RPT-001).
+
+Work that CLOSES these gates, correctness defects, report writing, and
+already-obligated hardware preparation are always permitted.
+
+Alternatives considered: status quo (rejected — C-027/NEGSPACE evidence:
+six real bundles vs ~6M tokens of same-day breadth work); a blanket
+freeze including correctness work (rejected — would block the gates'
+own prerequisites).
+
+## D-061: Review-layer evaluation rule v2 (replaces the two-zero-sessions drop rule)
+
+- Date: 2026-07-09
+- Status: accepted (C-027; process-layer, within council authority)
+- Phase: cross-phase / process instrumentation
+
+Context: the "drop a layer after two zero-catch sessions" rule was
+falsified by its own record — integration review returned zero unique
+catches twice (C-017, CP-5) and then caught five real cross-stream seams
+(C-024). Mechanical application would have deleted the layer immediately
+before its highest-value session.
+
+Decision: layer evaluation uses (a) applicability decided by
+PRE-DECLARED mechanical predicates (e.g. integration review counts only
+when 2+ independently developed streams merge touching a shared
+contract/consumer/generated artifact), never post-hoc judgment; (b) an
+outcome taxonomy separating accepted-unique-defect / duplicate /
+clean-verification / false-positive-suppression — suppression is
+valuable but is not a catch; (c) fixed severity weights declared before
+the session; (d) three applicable exposures TRIGGER an expected-loss
+review decision, never automatic deletion; (e) safety, final-head, and
+integration layers are never auto-dropped on zero-defect streaks —
+they are judged by expected-loss reduction.
+
+Alternatives considered: keep the two-zero rule (falsified); "three
+applicable sessions, severity-weighted" as free-text judgment (rejected
+in council — reintroduces the discretion that made the old rule
+unfalsifiable).
+
+## D-062: Confirmatory sampling policy — fixed n, explicit demotion, no silent top-ups
+
+- Date: 2026-07-09
+- Status: accepted (C-027; scientific protocol, ratifies the RIGOR/STATS
+  adjudication; amends the top-up language in
+  `docs/contracts/analysis_plans.md` — AP-EDIT applies the text)
+- Phase: cross-phase / statistical protocol
+
+Context: the analysis plans repeatedly started at n=5 and added
+repetitions when an observed CI was near-floor or unsatisfactory, then
+reported ordinary 95% CIs. Outcome-dependent sample growth invalidates
+nominal coverage (C-027 RIGOR finding, adjudicated with the peer's
+counterreview).
+
+Decision: (a) confirmatory contrasts use n FROZEN before observing that
+pack's effects, sized from Window-A variance/MDE evidence — nearer 10
+than 5 for near-floor comparisons; (b) predeclare replacement rules for
+technically invalid runs (they are not top-ups); (c) any
+outcome-dependent top-up permanently DEMOTES that contrast to
+exploratory: the original fixed-n analysis is reported regardless of
+direction, pooled estimates are never presented as retaining nominal
+confirmatory coverage, and no later convenience re-promotes the claim;
+(d) a pre-registered two-look alpha-spending design (frozen max n, look
+boundaries, spending function) is PERMITTED for a specifically justified
+expensive campaign, never the default.
+
+Alternatives considered: full group-sequential machinery as default
+(rejected — avoidable defense surface for a capstone); status quo
+(rejected — statistically invalid).
+
+## D-063: Process architecture v2 — machine-readable state kernel first
+
+- Date: 2026-07-09
+- Status: accepted (C-027; process-layer)
+- Phase: cross-phase / process architecture
+
+Context: five core process files grew 3,106 → 4,893 lines with ~9.5k net
+process/history lines since orchestration landed; the same-day RUN_STATE
+dual next-action drift (C-027 B3) is the demonstrated failure mode of
+hand-maintained state mirrors.
+
+Decision (staged; big-bang migration rejected by both council sides):
+Stage 1 (DOC-008) = a thin machine-readable state kernel (task id, lane,
+status, dependencies, authority pointer, acceptance pointer, stop-card
+pointer) from which the RUN_STATE restart block and the live queue view
+are GENERATED; PROJECT_STATUS compaction with a status-history archive;
+retire `docs/planning_reflection_protocol.md` as standalone intake
+(zero credited catches across four recent sessions — its useful fields
+fold into queue rows); the two-writer rule and credential-boundary push
+procedure move into `docs/orchestration.md`. Stage 2 = per-session
+findings/invocations ledgers making "unique catch" a query (extends
+D-050). Policy-doc generation comes LAST — supersession requires
+semantic judgment (council position, adopted from the peer's argument
+over the lead's original ordering).
+
+Alternatives considered: defer the kernel and generate
+current_policy.md first (the lead's draft position — REVERSED in
+council: it leaves the demonstrated drift mode active); full big-bang
+migration (rejected: risks the drift it cures).
