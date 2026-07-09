@@ -84,3 +84,23 @@ lens rounds per stream, gate/commit/PR each; adjudicate the
 methodology-review synthesis when wf_efd7d9d2-c85 completes; then the
 final four-part answer (queue fit / determinism / capture changes /
 askable questions).
+
+### CP-3 — stream landings + live-gate catch on strictfix era rule
+- All four streams landed green (envgate OK; hashcheck 738; strictfix
+  OK; bundlepack 737). Final messages: scratchpad/codex/*.md.
+- LEAD LIVE GATE CATCH: strictfix's era rule (base-field presence)
+  FAILED all six real corpus bundles — legacy carries joulewise_version
+  0.1.0 same as current; version does not discriminate. Lead-pinned
+  replacement: frozen six-identity LEGACY ALLOWLIST
+  (run_id + config_sha256 pairs extracted from the local corpus),
+  everything else current-era → provenance required; honest
+  identity-clause-not-crypto limit documented. Fix round 2 running
+  (strictfix-r2). Live-only catch count this session: 4.
+- Lens rounds for envgate/hashcheck/bundlepack running as Workflow
+  wf_c5294fe5-a32 (2 lenses + tiered refuters per stream).
+- Methodology-review workflow wf_efd7d9d2-c85 still running.
+
+RESUME (if interrupted here): read wf_c5294fe5-a32 results → triage →
+fix rounds where needed → lead gates → commit per worktree → 4 small
+PRs (base main); re-verify strictfix-r2 against the REAL corpus
+(all 6 must pass strict; tamper test must fail) before its PR.
