@@ -17,7 +17,7 @@ import joulewise.adapters as adapters
 from joulewise.adapters.nvidia_smi import parse_nvidia_smi_csv
 from joulewise.clock import Clock
 from joulewise.cli import validate_bundle
-from joulewise.controller import run_benchmark
+from joulewise.controller import run_benchmark, run_experiment
 from joulewise.interfaces import AdapterResult
 from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus
 
@@ -498,6 +498,46 @@ class NvidiaNodeIntegrationTests(unittest.TestCase):
         self.assertEqual(set(node.task_run_ids), {generated_run_id})
         self.assertTrue(all(f"/{generated_run_id}/tasks/" in path for path in node.task_paths))
         self.assertTrue(all(f"/{generated_run_id}/artifacts/" in path for path in node.artifact_paths))
+
+    def test_generated_id_multi_rep_experiment_executes_cooldown(self) -> None:
+        # NV-2 (ARC-7): a generated-experiment-id config has run_id == None,
+        # and the D-014 cooldown gate calls measure_idle with no RunContext.
+        # Before the fix nvidia_smi's run-id requirement raised AdapterFailure
+        # and every cooldown was silently recorded as "skipped". The gate must
+        # EXECUTE (result in the executed vocabulary) and record the
+        # cooldown-scoped run id it used for node-side task isolation.
+        payload = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+        payload.pop("run_id", None)
+        payload["hardware_target"]["host"] = "fake-nvidia-node"
+        payload["workload_profile"]["repetitions"] = 2
+        config = BenchmarkConfig.from_mapping(payload)
+
+        node = StubNode()
+        self.addCleanup(node.cleanup)
+
+        def factory(clock: Clock, destination: str, **kwargs: Any) -> StubSshTransport:
+            del kwargs
+            return StubSshTransport(clock, destination, node=node)
+
+        with patch("joulewise.adapters.ssh_transport.SshTransport", side_effect=factory):
+            manifest_path, results = run_experiment(config, self.runs_root, AutoClock())
+
+        self.assertEqual(
+            [summary.status for _, summary in results],
+            [RunStatus.SUCCEEDED, RunStatus.SUCCEEDED],
+        )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        cooldown = manifest["cooldown"]
+        self.assertEqual(len(cooldown), 1)
+        note = cooldown[0]
+        self.assertIn(note["result"], {"recovered", "cap_hit"})
+        expected_cooldown_run_id = (
+            f"{manifest['experiment_id']}-cooldown-{note['after_member']}"
+        )
+        self.assertEqual(note["cooldown_run_id"], expected_cooldown_run_id)
+        # The node actually received tasks under the cooldown-scoped id, so
+        # the manifest is auditable against node-side artifacts.
+        self.assertIn(expected_cooldown_run_id, node.task_run_ids)
 
     def test_missing_vllm_launcher_surfaces_structured_unsupported(self) -> None:
         bundle_path, summary = self.run_with_node(

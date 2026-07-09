@@ -937,6 +937,7 @@ def cooldown_gate(
     reference_baseline: IdleBaseline,
     config: BenchmarkConfig,
     clock: Clock,
+    run_id: str | None = None,
 ) -> dict[str, Any]:
     """Hold until idle power recovers to within 10% of ``reference_baseline``.
 
@@ -951,10 +952,17 @@ def cooldown_gate(
 
     All blocking is via ``telemetry.measure_idle`` (which sleeps on the clock),
     so a ``FakeClock`` makes the gate instant and exact in tests.
+
+    ``run_id`` (NV-2/ARC-7): the gate calls ``measure_idle`` out-of-run with
+    no ``RunContext``, so adapters that need a run id for node-side isolation
+    fall back to ``config.run_id`` - which is ``None`` for generated-id
+    experiments. When given, ``run_id`` is stamped onto the sub-window config
+    so those adapters see a cooldown-scoped id instead of failing.
     """
     reference = reference_baseline.power_w_mean
     sub_config = replace(
         config,
+        run_id=run_id if run_id is not None else config.run_id,
         sampling=replace(config.sampling, idle_seconds=COOLDOWN_SUBWINDOW_S),
     )
     start_s = clock.now()
@@ -1224,8 +1232,18 @@ def _cooldown_between_reps(
         note.update({"result": "skipped", "reason": reason})
         return note, False
 
+    # NV-2 (ARC-7): generated-id experiments have config.run_id == None, and
+    # the gate's out-of-run measure_idle passes no RunContext, so adapters
+    # that require a run id for node-side task isolation (nvidia_smi) would
+    # fail and silently downgrade every cooldown to "skipped". Thread a
+    # cooldown-scoped run id, unique per gate invocation, and record it so
+    # the manifest is auditable against node-side artifacts.
+    cooldown_run_id = f"{experiment_id}-cooldown-{after_member}"
+    note["cooldown_run_id"] = cooldown_run_id
     try:
-        gate = cooldown_gate(telemetry, summary.idle_baseline, config, clock)
+        gate = cooldown_gate(
+            telemetry, summary.idle_baseline, config, clock, run_id=cooldown_run_id
+        )
     except AdapterFailure as failure:
         note.update(
             {
