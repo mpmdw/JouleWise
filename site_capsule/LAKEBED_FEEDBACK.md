@@ -59,9 +59,116 @@ real deploy blocker or near-blocker:
    headless/token path, so automated agents must hand off to a human.
    Severity: minor for demos, major for CI. Suggestion: device-code or
    token auth.
+8. **Root page paths are reserved in a way that surprises static-site
+   deploys.** Registering server endpoints for `/` or `/index.html`
+   conflicts with the Lakebed client shell. Workaround: serve the static
+   homepage from `/index` and let the client redirect `/` there. Severity:
+   minor once known, major for static-site ports. Suggestion: document
+   reserved paths prominently and make the validator error name the
+   reserved route and suggested replacement.
 
-## 2026-07-09 — No new Lakebed defects this session
+## 2026-07-09 — Advisor-status redeploy: hosted inspection and HTTP/API friction
 
-`build_site.py`/`pack_capsule.py` regen ran clean (0.29 MiB capsule).
-The deploy step itself was deferred to Ed for approval-policy reasons on
-the agent side — not a Lakebed issue. No new platform behavior observed.
+Environment: Lakebed CLI package resolved through `npx`; generated
+anonymous artifact reported `lakebed: 0.0.25`, compiler `0.1.0`.
+Capsule deploy ID: `dep_2I04CG6tQ4t0mzY7`. Live app:
+`https://quiet-signal-6af8833395.lakebed.app`.
+
+### Hosted inspection auth cannot use the committed deploy binding alone
+
+- Command / action:
+  - from `site_capsule/`: `npx lakebed logs https://quiet-signal-6af8833395.lakebed.app`
+  - from `site_capsule/`: `npx lakebed db dump https://quiet-signal-6af8833395.lakebed.app`
+- Expected: because `site_capsule/lakebed.json` contains the deploy ID and
+  the command was run from the capsule directory, hosted inspection would
+  authenticate or at least give a next step that identifies the missing
+  local credential file.
+- Observed:
+
+  ```
+  Error: {
+    "command": "npx lakebed logs dep_2I04CG6tQ4t0mzY7",
+    "error": "Lakebed hosted inspection requires authorization.",
+    "hint": "Run this command from the capsule directory so Lakebed can read .lakebed/deploy.json, or send Authorization: Bearer <claim-token>.",
+    "inspectPolicy": "private",
+    "path": "/__lakebed/logs"
+  }
+  ```
+
+  `db dump` produced the same authorization error and hint.
+- Workaround: rely on public smoke endpoints (`/api/health`,
+  `/api/freshness`, `/api/live-status`) instead of hosted logs/DB dump.
+- Severity for a production user: major for incident response; minor for a
+  demo where public health endpoints are enough.
+- Suggestion for the maintainer: distinguish `lakebed.json` deploy
+  binding from `.lakebed/deploy.json` claim-token state in the docs and
+  in the error. If inspection requires a private claim token, add
+  `npx lakebed inspect --login` or a command that prints exactly which
+  local credential file is missing and how to recreate it.
+
+### GET endpoints do not automatically satisfy HEAD requests
+
+- Command / action: smoke checks used `HEAD`/`curl -I` against deployed
+  page endpoints during live-site analysis, including `/index` and
+  `/status.html`.
+- Expected: `HEAD` on a `GET` endpoint returns the same status and headers
+  as `GET` with no body, as many uptime monitors and link checkers assume.
+- Observed: `GET /index` and `GET /status.html` returned 200, but `HEAD`
+  returned 404 for the same paths.
+- Workaround: use `GET` smoke checks:
+
+  ```
+  curl -s -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' \
+    https://quiet-signal-6af8833395.lakebed.app/status.html
+  ```
+
+- Severity for a production user: minor to major depending on monitoring
+  setup; it can create false outage reports.
+- Suggestion for the maintainer: either auto-route `HEAD` to matching
+  `GET` endpoints or document that `HEAD` must be registered explicitly
+  with `endpoint({ method: "HEAD", path }, ...)`.
+
+### `npx lakebed` depends on registry access unless cached
+
+- Command / action:
+  - `npx lakebed build`
+  - `npx lakebed deploy`
+- Expected: the CLI is installed or resolved quickly enough to build and
+  deploy from a repo checkout.
+- Observed in a restricted-network agent environment:
+
+  ```
+  npm error code ENOTFOUND
+  npm error syscall getaddrinfo
+  npm error errno ENOTFOUND
+  npm error network request to https://registry.npmjs.org/lakebed failed,
+  reason: getaddrinfo ENOTFOUND registry.npmjs.org
+  ```
+
+- Workaround: rerun with explicit network approval, or rely on an already
+  cached `npx` package directory.
+- Severity for a production user: paper-cut for local demos; major for CI
+  or agentic deploys in restricted networks.
+- Suggestion for the maintainer: document a reproducible pinned CLI
+  install path, for example `devDependency` + `npm exec lakebed`, or
+  publish a recommendation such as `npx --yes lakebed@0.0.25 ...` so
+  deploy logs and artifacts can cite a stable CLI version.
+
+### Public deploy smoke cannot reveal server exceptions without inspection
+
+- Command / action: after deploying `/api/freshness`, one public JSON
+  response returned only a partial freshness check. Hosted `logs` and
+  `db dump` were unavailable because of the inspection auth issue above.
+- Expected: either public endpoint errors include enough structured detail
+  for the app owner, or private inspection works immediately from the
+  claimed capsule checkout.
+- Observed: public endpoint could only show `unavailable: true`, while
+  the private diagnostic path was blocked. This forced diagnosis by code
+  inspection and redeploy rather than by server logs.
+- Workaround: patch application code to fail per source instead of per
+  request, then redeploy; use public JSON fields as the only diagnostic
+  surface.
+- Severity for a production user: major when debugging live incidents.
+- Suggestion for the maintainer: make owner-authenticated logs easy to
+  access from the deployed capsule directory, and consider an owner-only
+  response-debug mode for endpoint exceptions.
