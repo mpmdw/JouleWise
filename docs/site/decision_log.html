@@ -76,10 +76,12 @@
 <a href="#d-046-ap-6-sentinel-delivery-ids-native-bos-less-literal-equal-shape">D-046: AP-6 sentinel delivery — ids-native, BOS-less, literal equal shape</a>
 <a href="#d-047-affine-ladder-pins-level-set-smoke-sizing-gate-denominators">D-047: Affine ladder pins — level set, smoke sizing, gate denominators</a>
 <a href="#d-048-split-program-is-model-first-pre-registered-compositional-prediction-before-split-runs">D-048: Split program is model-first — pre-registered compositional prediction before split runs</a>
-<a href="#d-049-split-transfer-energy-boundary-accounting-on-discrete-gpu-ends">D-049: Split transfer-energy boundary accounting on discrete-GPU ends</a></aside>
+<a href="#d-049-split-transfer-energy-boundary-accounting-on-discrete-gpu-ends">D-049: Split transfer-energy boundary accounting on discrete-GPU ends</a>
+<a href="#d-050-active-stop-cards-and-process-trace-manifests">D-050: Active stop cards and process-trace manifests</a>
+<a href="#d-051-advisor-status-site-uses-source-derived-static-pages-plus-fail-soft-live-github-overlays">D-051: Advisor status site uses source-derived static pages plus fail-soft live GitHub overlays</a></aside>
   <div class="doc-wrap doc-source-docs-decision-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/decision_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 036913e"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 036913e</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 4e644da + uncommitted"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 4e644da + uncommitted</span></span></div>
     <h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
@@ -352,9 +354,19 @@ must be re-examined, not quietly worked around.</li>
 <td>Split transfer-energy boundary accounting on discrete-GPU ends</td>
 <td>accepted</td>
 </tr>
+<tr>
+<td>D-050</td>
+<td>Active stop cards and process-trace manifests</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-051</td>
+<td>Advisor status site uses source-derived static pages plus fail-soft live GitHub overlays</td>
+<td>accepted</td>
+</tr>
 </tbody></table></div>
 <hr>
-<h2>D-001: Run bundles store normalized <code>config.json</code>, not YAML</h2>
+<h2 id="d-001-run-bundles-store-normalized-config-json-not-yaml">D-001: Run bundles store normalized <code>config.json</code>, not YAML</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -466,7 +478,7 @@ flag them in measurement quality.</p>
 <p>Revisit when: sampling moves to &gt;=100 Hz (wall meters with fast export) or a
 target cannot run NTP.</p>
 <hr>
-<h2>D-004: <code>powermetrics</code> privilege workflow</h2>
+<h2 id="d-004-powermetrics-privilege-workflow">D-004: <code>powermetrics</code> privilege workflow</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -606,7 +618,7 @@ docs stop calling YAML &quot;preferred&quot;.</p>
 <p>Revisit when: the Phase 3 experiment matrix produces hand-edited config
 sprawl that JSON makes painful.</p>
 <hr>
-<h2>D-008: Split runs arrive via schema v0.2 (<code>run_kind</code> + <code>split_plan</code>)</h2>
+<h2 id="d-008-split-runs-arrive-via-schema-v0-2-run-kind-split-plan">D-008: Split runs arrive via schema v0.2 (<code>run_kind</code> + <code>split_plan</code>)</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted (design), implementation in Phase 3 Stage 3.1</li>
@@ -708,7 +720,7 @@ suffix prevents same-second collisions; refusing to overwrite enforces the
 collision behavior.</p>
 <p>Revisit when: never expected.</p>
 <hr>
-<h2>D-011: <code>summary_metrics.json</code> is the bundle completion marker</h2>
+<h2 id="d-011-summary-metrics-json-is-the-bundle-completion-marker">D-011: <code>summary_metrics.json</code> is the bundle completion marker</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -1029,7 +1041,7 @@ mock end-to-end step to it; README badges optional, not required.</p>
 <p>Revisit when: a self-hosted runner with GPU/Mac hardware ever materializes
 (unlikely; not planned).</p>
 <hr>
-<h2>D-018: Per-backend <code>power_w</code> definition and rail policy</h2>
+<h2 id="d-018-per-backend-power-w-definition-and-rail-policy">D-018: Per-backend <code>power_w</code> definition and rail policy</h2>
 <ul>
 <li>Date: 2026-06-09</li>
 <li>Status: accepted</li>
@@ -1103,7 +1115,7 @@ lifecycle stage so trapezoidal integration has a closed-form expectation.</p>
 calls <code>time.time()</code>/<code>time.sleep()</code> directly except <code>SystemClock</code>.</p>
 <p>Revisit when: never expected.</p>
 <hr>
-<h2>D-020: CLI binds <code>FakeClock</code> for all-mock runs, <code>SystemClock</code> otherwise</h2>
+<h2 id="d-020-cli-binds-fakeclock-for-all-mock-runs-systemclock-otherwise">D-020: CLI binds <code>FakeClock</code> for all-mock runs, <code>SystemClock</code> otherwise</h2>
 <ul>
 <li>Date: 2026-06-12</li>
 <li>Status: accepted</li>
@@ -1146,7 +1158,7 @@ citing this entry; the CI mock end-to-end step is effectively instant;
 test needs to drive the CLI with a seeded clock (then add the explicit
 flag from option 2 with a refuse-on-real-telemetry guard).</p>
 <hr>
-<h2>D-021: Controller flushes <code>events.jsonl</code> before the reduce stage</h2>
+<h2 id="d-021-controller-flushes-events-jsonl-before-the-reduce-stage">D-021: Controller flushes <code>events.jsonl</code> before the reduce stage</h2>
 <ul>
 <li>Date: 2026-06-12</li>
 <li>Status: accepted</li>
@@ -1283,7 +1295,7 @@ pointers.</p>
 then replace the mirror with a generated table (option 3) rather than
 adding discipline.</p>
 <hr>
-<h2>D-024: Adapters receive a <code>RunContext</code>, not piecemeal parameters</h2>
+<h2 id="d-024-adapters-receive-a-runcontext-not-piecemeal-parameters">D-024: Adapters receive a <code>RunContext</code>, not piecemeal parameters</h2>
 <ul>
 <li>Date: 2026-07-06</li>
 <li>Status: accepted; implemented in Slice 2N.1 (2026-07-06)</li>
@@ -1373,18 +1385,14 @@ querying needs.</li>
 rails sum to <code>power_w</code>&quot; are answered in exactly one place.</p>
 <p>Considerations: this is the code-level analogue of D-023&#39;s one-fact-one-
 home rule; the reducer&#39;s math (<code>_integrate</code>, idle subtraction) stays in
-<code>reduce.py</code> - the reader owns parsing and policy, not metrics. The 2N.7
-report/reducer alignment must be implemented BY building on the reader,
-not as a spot fix, or the divergence just reappears at the next
-consumer.</p>
-<p>Consequ
+<c
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/decision_log.md · commit 036913e · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/decision_log.md · commit 4e644da + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

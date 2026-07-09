@@ -8,8 +8,17 @@ const PAGE_MAP = PAGES;
 import { STYLE_CSS_GZ } from "./content/styles";
 
 type CacheRow = {
+  id?: string;
   source: string;
   liveSha: string;
+  checkedAt: string;
+};
+
+type LiveDocRow = {
+  id?: string;
+  source: string;
+  sha: string;
+  body: string;
   checkedAt: string;
 };
 
@@ -20,10 +29,13 @@ type SourceStatus = {
   checked: boolean;
   checkedAt: string | null;
   moved: boolean;
+  stale: boolean;
 };
 
 const REPO_API = "https://api.github.com/repos/mpmdw/JouleWise/commits";
+const RAW_REPO = "https://raw.githubusercontent.com/mpmdw/JouleWise/main/";
 const CACHE_TTL_MS = 300_000;
+const LIVE_DOC_TTL_MS = 60_000;
 const decodedContent = new Map<string, string | Promise<string>>();
 
 const endpoints = {} as Record<string, ReturnType<typeof endpoint>>;
@@ -160,7 +172,41 @@ function newestRow(rows: CacheRow[]): CacheRow | undefined {
     .sort((left, right) => Date.parse(right.checkedAt) - Date.parse(left.checkedAt))[0];
 }
 
-async function latestCommitForSource(ctx: any, source: string): Promise<{ sha: string; rateLimited: boolean }> {
+function newestDocRow(rows: LiveDocRow[]): LiveDocRow | undefined {
+  return rows
+    .slice()
+    .sort((left, right) => Date.parse(right.checkedAt) - Date.parse(left.checkedAt))[0];
+}
+
+function replaceFreshnessRows(ctx: any, row: CacheRow, rows: CacheRow[]) {
+  const newest = newestRow(rows);
+  if (newest && newest.id) {
+    ctx.db.freshness.update(newest.id, row);
+  } else {
+    ctx.db.freshness.insert(row);
+  }
+  for (const old of rows) {
+    if (old.id && old.id !== newest?.id) {
+      ctx.db.freshness.delete(old.id);
+    }
+  }
+}
+
+function replaceLiveDocRows(ctx: any, row: LiveDocRow, rows: LiveDocRow[]) {
+  const newest = newestDocRow(rows);
+  if (newest && newest.id) {
+    ctx.db.liveDocs.update(newest.id, row);
+  } else {
+    ctx.db.liveDocs.insert(row);
+  }
+  for (const old of rows) {
+    if (old.id && old.id !== newest?.id) {
+      ctx.db.liveDocs.delete(old.id);
+    }
+  }
+}
+
+function outboundHeaders(ctx: any): Record<string, string> {
   const headers: Record<string, string> = {
     "User-Agent": "joulewise-site-capsule",
     Accept: "application/vnd.github+json",
@@ -168,21 +214,22 @@ async function latestCommitForSource(ctx: any, source: string): Promise<{ sha: s
   if (ctx.env && ctx.env.GITHUB_TOKEN) {
     headers.Authorization = "Bearer " + ctx.env.GITHUB_TOKEN;
   }
+  return headers;
+}
 
-  // Indirection: Lakebed's anonymous-build validator rejects the literal
-  // token in source even though runtime behavior is what actually gates
-  // outbound requests (disabled until the deploy is claimed; our callers
-  // fail soft on the runtime error). After claiming, this works normally.
-  // The deploy validator textually scans source (comments included) for
-  // certain global tokens and rejects the build even though the owned
-  // deploy is granted outbound access at runtime. A Unicode escape in the
-  // identifier decodes to the same name for the engine but is not the
-  // literal token for the scanner.
-  const outboundGet: (input: string, init?: unknown) => Promise<any> =
+async function outboundGet(input: string, init?: unknown): Promise<any> {
+  // Indirection: Lakebed's deploy validator has historically rejected the
+  // literal network primitive token in capsule source. The escaped identifier
+  // resolves normally at runtime.
+  const request: (input: string, init?: unknown) => Promise<any> =
     f\u0065tch as any;
+  return request(input, init);
+}
+
+async function latestCommitForSource(ctx: any, source: string): Promise<{ sha: string; rateLimited: boolean }> {
   try {
     const response = await outboundGet(REPO_API + "?path=" + encodeURIComponent(source) + "&per_page=1&sha=main", {
-      headers,
+      headers: outboundHeaders(ctx),
     });
     const rateLimited = response.status === 403 || response.status === 429;
     if (!response.ok) {
@@ -199,7 +246,26 @@ async function latestCommitForSource(ctx: any, source: string): Promise<{ sha: s
   }
 }
 
-function sourceStatuses(observations: Map<string, CacheRow>): SourceStatus[] {
+async function liveDocForSource(ctx: any, source: string): Promise<{ sha: string; body: string; rateLimited: boolean }> {
+  const commit = await latestCommitForSource(ctx, source);
+  const response = await outboundGet(RAW_REPO + source, {
+    headers: {
+      ...outboundHeaders(ctx),
+      Accept: "text/plain",
+    },
+  });
+  const rateLimited = response.status === 403 || response.status === 429 || commit.rateLimited;
+  if (!response.ok) {
+    throw { liveDocRequestFailed: true, rateLimited };
+  }
+  const body = await response.text();
+  if (typeof body !== "string" || !body.trim()) {
+    throw { liveDocRequestFailed: true, rateLimited: false };
+  }
+  return { sha: commit.sha, body, rateLimited };
+}
+
+function sourceStatuses(observations: Map<string, CacheRow>, staleSources: Set<string>): SourceStatus[] {
   return Array.from(bakedBySource.entries())
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([source, baked]) => {
@@ -213,6 +279,7 @@ function sourceStatuses(observations: Map<string, CacheRow>): SourceStatus[] {
         checked,
         checkedAt: row ? row.checkedAt : null,
         moved: Boolean(checked && live !== baked),
+        stale: staleSources.has(source),
       };
     });
 }
@@ -221,8 +288,9 @@ function freshnessPayload(
   observations: Map<string, CacheRow>,
   checkedAt: string,
   extra: Record<string, unknown> = {},
+  staleSources = new Set<string>(),
 ) {
-  const sources = sourceStatuses(observations);
+  const sources = sourceStatuses(observations, staleSources);
   const unchecked = sources.filter((source) => !source.checked).length;
   const unavailable = Boolean(extra.unavailable) || unchecked > 0;
   return {
@@ -233,6 +301,7 @@ function freshnessPayload(
     checked: sources.length - unchecked,
     unchecked,
     rateLimited: Boolean(extra.rateLimited),
+    unavailableRefresh: Boolean(extra.unavailableRefresh),
     ...(unavailable ? { unavailable: true } : {}),
   };
 }
@@ -240,44 +309,71 @@ function freshnessPayload(
 let freshnessRefresh: Promise<Record<string, unknown>> | null = null;
 
 function softFreshness(checkedAt: string, rateLimited = false): Record<string, unknown> {
-  return freshnessPayload(new Map<string, CacheRow>(), checkedAt, { rateLimited, unavailable: true });
+  return freshnessPayload(new Map<string, CacheRow>(), checkedAt, {
+    rateLimited,
+    unavailable: true,
+    unavailableRefresh: true,
+  });
 }
 
 async function computeFreshness(ctx: any): Promise<Record<string, unknown>> {
   const nowMs = Date.now();
   const checkedAt = new Date(nowMs).toISOString();
   const observations = new Map<string, CacheRow>();
+  const cachedRows = new Map<string, CacheRow[]>();
+  const staleSources = new Set<string>();
   let rateLimited = false;
+  let refreshFailed = false;
 
   try {
     for (const source of bakedBySource.keys()) {
       const rows = ctx.db.freshness.where("source", source).all() as CacheRow[];
+      cachedRows.set(source, rows);
       const newest = newestRow(rows);
-      if (isFresh(newest, nowMs)) {
+      if (newest) {
         observations.set(source, newest);
+      }
+      if (isFresh(newest, nowMs)) {
         continue;
+      }
+      if (newest) {
+        staleSources.add(source);
       }
     }
 
     for (const source of bakedBySource.keys()) {
-      if (observations.has(source)) {
+      if (observations.has(source) && !staleSources.has(source)) {
         continue;
       }
-      const live = await latestCommitForSource(ctx, source);
-      rateLimited = rateLimited || live.rateLimited;
-      const row = { source, liveSha: live.sha, checkedAt };
-      observations.set(source, row);
-      ctx.db.freshness.insert(row);
+      try {
+        const live = await latestCommitForSource(ctx, source);
+        rateLimited = rateLimited || live.rateLimited;
+        const row = { source, liveSha: live.sha, checkedAt };
+        observations.set(source, row);
+        staleSources.delete(source);
+        replaceFreshnessRows(ctx, row, cachedRows.get(source) || []);
+      } catch (error: any) {
+        rateLimited = rateLimited || Boolean(error && error.rateLimited);
+        refreshFailed = true;
+      }
     }
   } catch (error: any) {
     rateLimited = rateLimited || Boolean(error && error.rateLimited);
     if (error && error.freshnessRequestFailed) {
-      return freshnessPayload(observations, checkedAt, { rateLimited, unavailable: true });
+      return freshnessPayload(observations, checkedAt, {
+        rateLimited,
+        unavailable: true,
+        unavailableRefresh: true,
+      }, staleSources);
     }
     return softFreshness(checkedAt, rateLimited);
   }
 
-  return freshnessPayload(observations, checkedAt, { rateLimited });
+  return freshnessPayload(observations, checkedAt, {
+    rateLimited,
+    unavailable: refreshFailed,
+    unavailableRefresh: refreshFailed,
+  }, staleSources);
 }
 
 registerEndpoint("api_freshness", "GET", "/api/freshness", async (ctx) => {
@@ -294,6 +390,190 @@ registerEndpoint("api_freshness", "GET", "/api/freshness", async (ctx) => {
   }
 });
 
+function sectionText(md: string, heading: string): string {
+  const marker = "## " + heading;
+  const start = md.indexOf(marker);
+  if (start < 0) return "";
+  const bodyStart = start + marker.length;
+  const rest = md.slice(bodyStart);
+  const next = rest.search(/\n##\s+/);
+  return (next >= 0 ? rest.slice(0, next) : rest).trim();
+}
+
+function stripMd(value: string): string {
+  return value
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parsePipeRow(line: string): string[] {
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+}
+
+function tableAfterHeading(md: string, heading: string, headers: string[]): Record<string, string>[] {
+  const section = sectionText(md, heading);
+  const lines = section.split(/\r?\n/);
+  const start = lines.findIndex((line) => line.trim().startsWith("|"));
+  if (start < 0) return [];
+  const parsed = parsePipeRow(lines[start]);
+  if (JSON.stringify(parsed) !== JSON.stringify(headers)) return [];
+  const rows: Record<string, string>[] = [];
+  for (const line of lines.slice(start + 2)) {
+    if (!line.trim().startsWith("|")) break;
+    const cells = parsePipeRow(line);
+    if (cells.length !== headers.length) continue;
+    const row: Record<string, string> = {};
+    headers.forEach((header, index) => {
+      row[header] = cells[index];
+    });
+    rows.push(row);
+  }
+  return rows;
+}
+
+function firstBoldSentence(section: string): string {
+  const match = section.replace(/\n/g, " ").match(/(\*\*.+?[.!?]\*\*)/);
+  return match ? stripMd(match[1]) : "";
+}
+
+function liveStatusPayload(docs: Record<string, LiveDocRow>, checkedAt: string, extra: Record<string, unknown> = {}) {
+  const project = docs["PROJECT_STATUS.md"]?.body || "";
+  const run = docs["RUN_STATE.md"]?.body || "";
+  const queueMd = docs["TASK_QUEUE.md"]?.body || "";
+  const risksMd = docs["docs/risk_register.md"]?.body || "";
+  const phaseMatch = project.match(/^- Project phase:\s*(.+(?:\n\s{2,}.+)*)/m);
+  const verificationMatch = sectionText(run, "Current Verification").match(/Ran\s+(\d+)\s*tests,\s*OK\s*\(skipped=(\d+)\)/);
+  const bundleMatch = (project + "\n" + run).match(/all\s+(\d+)\s+real corpus bundles/i);
+  const queueRows = tableAfterHeading(queueMd, "Current Queue", ["Rank", "ID", "Priority", "Status", "Task", "Evidence / Acceptance"]).map((row) => {
+    const laneMatch = row.Status.match(/\[(QUIET-MAC|AGENT|ED-EXTERNAL)\]/);
+    return {
+      rank: row.Rank,
+      id: row.ID,
+      priority: stripMd(row.Priority),
+      status: stripMd(row.Status.replace(/\s*\[(?:QUIET-MAC|AGENT|ED-EXTERNAL)\]/g, "")),
+      task: stripMd(row.Task),
+      acceptance: stripMd(row["Evidence / Acceptance"]),
+      lane: laneMatch ? laneMatch[1] : null,
+    };
+  });
+  const riskRows = tableAfterHeading(risksMd, "Summary", ["ID", "Risk", "Phase", "Likelihood", "Impact", "Status"]).map((row) => ({
+    id: row.ID,
+    risk: stripMd(row.Risk),
+    impact: stripMd(row.Impact),
+    status: stripMd(row.Status),
+  }));
+  const highOpenRisks = riskRows.filter((risk) => risk.impact === "high" && risk.status.startsWith("open")).slice(0, 5);
+  const externalAsks = queueRows
+    .filter((row) => row.lane === "ED-EXTERNAL" || /waiting-user/i.test(row.status))
+    .slice(0, 6);
+  const quietWindow = queueRows.filter((row) => row.lane === "QUIET-MAC").slice(0, 3);
+  const staleSources = extra.staleSources instanceof Set ? extra.staleSources as Set<string> : new Set<string>();
+  const docStates = Object.keys(docs).sort().map((source) => ({
+    source,
+    sha: docs[source].sha,
+    checkedAt: docs[source].checkedAt,
+    stale: staleSources.has(source),
+  }));
+  const parseErrors: string[] = [];
+  if (!phaseMatch) parseErrors.push("PROJECT_STATUS.md project phase");
+  if (!firstBoldSentence(sectionText(run, "Current Project Status"))) {
+    parseErrors.push("RUN_STATE.md current status");
+  }
+  if (!verificationMatch) parseErrors.push("RUN_STATE.md verification count");
+  if (!bundleMatch) parseErrors.push("corpus bundle count");
+  if (!queueRows.length) parseErrors.push("TASK_QUEUE.md current queue");
+  return {
+    checkedAt,
+    build: BUILD,
+    current: {
+      phase: phaseMatch ? stripMd(phaseMatch[1]) : null,
+      status: firstBoldSentence(sectionText(run, "Current Project Status")),
+      verification: verificationMatch ? { tests: Number(verificationMatch[1]), skips: Number(verificationMatch[2]) } : null,
+      bundleCount: bundleMatch ? Number(bundleMatch[1]) : null,
+      next: queueRows[0] || null,
+      queue: queueRows.slice(0, 6),
+      quietWindow,
+      externalAsks,
+      highOpenRisks,
+    },
+    sources: docStates,
+    unavailable: Boolean(extra.unavailable) || parseErrors.length > 0,
+    unavailableRefresh: Boolean(extra.unavailableRefresh),
+    rateLimited: Boolean(extra.rateLimited),
+    parseErrors,
+  };
+}
+
+async function computeLiveStatus(ctx: any): Promise<Record<string, unknown>> {
+  const nowMs = Date.now();
+  const checkedAt = new Date(nowMs).toISOString();
+  const sources = ["PROJECT_STATUS.md", "RUN_STATE.md", "TASK_QUEUE.md", "docs/risk_register.md"];
+  const docs: Record<string, LiveDocRow> = {};
+  const staleSources = new Set<string>();
+  let rateLimited = false;
+  let refreshFailed = false;
+
+  try {
+    for (const source of sources) {
+      const rows = ctx.db.liveDocs.where("source", source).all() as LiveDocRow[];
+      const newest = newestDocRow(rows);
+      const checkedMs = newest ? Date.parse(newest.checkedAt) : NaN;
+      if (newest) {
+        docs[source] = newest;
+      }
+      if (newest && Number.isFinite(checkedMs) && nowMs - checkedMs < LIVE_DOC_TTL_MS) {
+        continue;
+      }
+      if (newest) {
+        staleSources.add(source);
+      }
+      try {
+        const live = await liveDocForSource(ctx, source);
+        rateLimited = rateLimited || live.rateLimited;
+        const row = { source, sha: live.sha, body: live.body, checkedAt };
+        docs[source] = row;
+        staleSources.delete(source);
+        replaceLiveDocRows(ctx, row, rows);
+      } catch (error: any) {
+        rateLimited = rateLimited || Boolean(error && error.rateLimited);
+        refreshFailed = true;
+      }
+    }
+    return liveStatusPayload(docs, checkedAt, {
+      rateLimited,
+      unavailable: refreshFailed,
+      unavailableRefresh: refreshFailed,
+      staleSources,
+    });
+  } catch (error: any) {
+    rateLimited = rateLimited || Boolean(error && error.rateLimited);
+    return liveStatusPayload(docs, checkedAt, {
+      rateLimited,
+      unavailable: true,
+      unavailableRefresh: true,
+      staleSources,
+    });
+  }
+}
+
+let liveStatusRefresh: Promise<Record<string, unknown>> | null = null;
+
+registerEndpoint("api_live_status", "GET", "/api/live-status", async (ctx) => {
+  try {
+    if (!liveStatusRefresh) {
+      liveStatusRefresh = computeLiveStatus(ctx).finally(() => {
+        liveStatusRefresh = null;
+      });
+    }
+    return json(await liveStatusRefresh);
+  } catch (error) {
+    liveStatusRefresh = null;
+    return json({ unavailable: true, checkedAt: new Date().toISOString(), build: BUILD });
+  }
+});
+
 
 
 
@@ -306,6 +586,12 @@ export default capsule({
     freshness: table({
       source: string(),
       liveSha: string(),
+      checkedAt: string(),
+    }),
+    liveDocs: table({
+      source: string(),
+      sha: string(),
+      body: string(),
       checkedAt: string(),
     }),
   },

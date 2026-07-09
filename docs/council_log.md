@@ -55,6 +55,7 @@ standing instructions.
 | C-019 | 2026-07-08 | Post-suite-build meta-reassessment (full entry below) — 4 analyst lanes (5.5-direction study over 43 invocations; calibration longitudinal; project status/value ranking; closure) + completeness critic | Direction doctrine folded into codex-delegation skill (precedence/autonomy/FIX-N/production-gate clauses; model-version scoping rule pre-upgrade); D-013 prose back-annotated marker-bounded; shakedown gate added to P2-015; P2-025 adjacency + P1-008 elevation (incl. examiner acceptance-bar ask); pre-#21 corpus validity noted (dict-read-scale overhead, no re-reduction); watch items: integration-after-oversight, Opus A/B |
 | C-018 | 2026-07-08 | D-013 alignment-capture window fix (parallel session; full entry below) | sampling_stopped stamped before alignment capture (PR #21: `255a7e6`, bookkeeping `c2e51b2`, merge `49c5b66`); suite 734; D-013 prose back-annotated to marker-bounded wording in the reassessment batch |
 | C-017 | 2026-07-08 | Suite-build adjudication + implementation gates (full entry below) — Codex disposition draft + fresh adversarial round + lead calls; 11 unit lenses + 1 Opus outage substitute + 7-reviewer oversight + 3 final-head + integration | 37 amendments dispositioned → D-044..D-047; substrate/ladder/generators BUILT and merged (PRs #17/#18/#20/#19, suite 732); 3 lead live-only catches (refs, strict rollup, sampler namespace); oversight caught 2 validation holes pre-merge; PR #18 base-retarget slip recovered via #20 |
+| C-021 | 2026-07-09 | Advisor status-site live-depth refresh (pointer entry; D-051; run report `2026-07-09-advisor-status-site.md`) | Static generated pages remain the audit fallback; Lakebed gets fail-soft live overlays from current GitHub markdown; Story page volatile counts removed; advisor cockpit expanded with attention, readiness, evidence, and claim-ceiling panels; gpt-5.5-high counterreview used before deploy |
 
 ---
 
@@ -1267,3 +1268,29 @@ publication prep, split-prep AP-row obligation, PROJECT_STATUS
 orchestration-surface trim. Owner items surfaced (not queued as
 blockers per scope rule): LICENSE choice; USB-C PD analyzer; external
 re-reducer recruit.
+
+## C-021: Advisor status-site live-depth refresh (2026-07-09)
+
+Pointer entry. Full narrative and verification live in
+`docs/run_reports/2026-07-09-advisor-status-site.md`; decision policy is
+D-051.
+
+Shape: Codex implementation stream over the Lakebed capsule and generated
+site, with a separate gpt-5.5-high read-only counterreview before deploy.
+The work was intentionally deployment-scoped rather than research-scoped:
+make the advisor preview harder to stale, easier to scan live, and deeper
+without moving source-of-truth status out of the repository.
+
+Resolution:
+- Keep generated static pages as the audit fallback; do not make Lakebed a
+  parallel project-status database.
+- Add `/api/live-status` as a fail-soft overlay parsed from current GitHub
+  markdown for `PROJECT_STATUS.md`, `RUN_STATE.md`, `TASK_QUEUE.md`, and
+  `docs/risk_register.md`.
+- Expand the generated status cockpit with advisor attention, campaign
+  readiness, evidence, and claim-ceiling panels.
+- Remove volatile hand-authored counts from the Story page unless they are
+  generated or source-linked.
+
+Dissent: none recorded before deploy; counterreview findings, if any, are
+adjudicated in the run report.

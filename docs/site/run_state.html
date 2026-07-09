@@ -27,6 +27,7 @@
 <main>
 <div class="doc-layout">
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#start-here-for-every-big-run">Start Here For Every Big Run</a>
+<a href="#active-stop-card">ACTIVE_STOP_CARD</a>
 <a href="#current-project-status">Current Project Status</a>
 <a href="#session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</a>
 <a href="#current-verification">Current Verification</a>
@@ -35,11 +36,12 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 36e8524"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 36e8524</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 4e644da + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 4e644da + uncommitted</span></span></div>
     <h1>JouleWise Run State</h1>
-<p>Last updated: 2026-07-08 (suite BUILD close + alignment fix PR #21 +
-meta-reassessment; adjudication D-044..D-047; PRs #17..#21 merged;
-suite 734; C-017/C-018/C-019)</p>
+<p>Last updated: 2026-07-09 (meta-process cleanup + codex-bridge audit
+manifest; CP-5 preserved untouched; suite BUILD close + alignment fix
+PR #21 + meta-reassessment; adjudication D-044..D-047; PRs #17..#21
+merged; suite 734; C-017/C-018/C-019)</p>
 <h2 id="start-here-for-every-big-run">Start Here For Every Big Run</h2>
 <p>Before starting substantial work:</p>
 <ol>
@@ -59,6 +61,8 @@ suite 734; C-017/C-018/C-019)</p>
 report and no recorded break, start with a milestones + risk review.</li>
 <li>Live MLX gates use the repo venv: <code>.venv/bin/python -m joulewise ...</code>
 (system python3 lacks mlx → <code>runtime_unavailable</code>).</li>
+<li>If an <code>ACTIVE_STOP_CARD</code> exists below, it overrides every normal
+&quot;restart&quot;, &quot;next&quot;, queue, and mission pointer until explicitly cleared.</li>
 </ol>
 <p>At the end of substantial work:</p>
 <ol>
@@ -82,6 +86,57 @@ REDEPLOY the site so the public snapshot tracks the repo (C-012):
 <li>Call out any dirty working-tree state that should not be accidentally
 committed.</li>
 </ol>
+<h2 id="active-stop-card">ACTIVE_STOP_CARD</h2>
+<p>Status: <strong>ACTIVE — CP-5 must resume first.</strong></p>
+<p>Authority: <code>docs/stream_logs/2026-07-08-precampaign-review.md</code>, CP-5
+section near the bottom. This card is only a pointer and safety wrapper;
+do not treat it as a replacement for the exact CP-5 sequence.</p>
+<p>Reason: Ed intentionally stopped the pre-campaign review session because
+token spend ran out. The work is paused, not abandoned.</p>
+<p>Do not start normal queue work, quiet-window campaigns, suite follow-ons,
+or cleanup of CP-5 worktrees until this card is cleared by a CP-5 resume
+session.</p>
+<p>Paused work inventory:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>State</th>
+<th>Resume handling</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>jw-wt-envgate</code></td>
+<td><code>APPLIED_UNVERIFIED</code>; uncommitted fix-round diff reported by implementer</td>
+<td>Lead-gate diff first; live-gate against real affine mock bundle as CP-5 specifies; then commit/PR if accepted.</td>
+</tr>
+<tr>
+<td><code>jw-wt-hashcheck</code></td>
+<td><code>APPLIED_UNVERIFIED</code>; uncommitted fix-round diff reported by implementer</td>
+<td>Lead-gate diff first; commit/PR only after accepted gates.</td>
+</tr>
+<tr>
+<td><code>jw-wt-bundlepack</code></td>
+<td><code>APPLIED_UNVERIFIED</code>; uncommitted fix-round diff reported by implementer</td>
+<td>Lead-gate diff first; commit/PR only after accepted gates.</td>
+</tr>
+<tr>
+<td><code>strict-era-fix</code> / PR #22</td>
+<td><code>PR_OPEN_CI_GREEN</code>; unmerged</td>
+<td>Re-check final head and merge only inside the CP-5 sequence.</td>
+</tr>
+<tr>
+<td>Methodology synthesis</td>
+<td><code>UNREAD_UNADJUDICATED</code></td>
+<td>Read/adjudicate after code gates; land accepted pre-campaign changes; deliver Ed&#39;s four-part answer and Window-A go/no-go.</td>
+</tr>
+</tbody></table></div>
+<p>Durable artifact pointer: <code>~/.claude/projects/-Users-edr-code-JouleWise/ae807c57-7163-4f10-8532-42e8cfacdaff/checkpoint-2026-07-08/</code>.</p>
+<p>Clearance criteria: CP-5 worktrees gated and either landed or explicitly
+rejected; PR #22 handled; methodology synthesis adjudicated; accepted
+pre-campaign changes landed; post-merge integration review run if any
+CP-5 code merges; <code>TASK_QUEUE.md</code> rank 0 updated/closed; this card
+removed or marked CLEARED with a run-report pointer.</p>
 <h2 id="current-project-status">Current Project Status</h2>
 <p><strong>Suite BUILD session COMPLETE and MERGED (2026-07-08; C-017;
 D-044..D-047).</strong> The workload suite is now CODE, not contracts: P2-010a
@@ -94,24 +149,28 @@ sentinels). All 37 research-doc amendments adjudicated first (recorded
 dispositions). Live-verified on real MLX at three code states; three
 live-only defects caught and fixed at the lead gate. Post-merge
 integration review: zero cross-stream defects.</p>
+<p><strong>PAUSED AT STABLE CHECKPOINT CP-5 (2026-07-08, pre-campaign
+review session — RESUME THIS FIRST on &quot;start again&quot;):</strong> see
+<code>ACTIVE_STOP_CARD</code> above. The exact resume authority remains
+<code>docs/stream_logs/2026-07-08-precampaign-review.md</code> (CP-5, bottom).</p>
 <p><strong>RESTART HERE (next agent):</strong></p>
 <ol>
-<li>Read <code>docs/run_reports/2026-07-08-suite-build.md</code> (session record +
-restart detail).</li>
-<li><strong>Suite follow-ons [AGENT]:</strong> envelope-gate analysis script (queue
-P2-010 row), lead-side real-tokenizer manifest generation (P2-012
-row), campaign-runner text-item hash check (P2-025).</li>
-<li><strong>Quiet Window A [QUIET-MAC], next machine-quiet opportunity:</strong>
-P2-015 expanded floors FIRST (incl. lead-run tasks-sampler + settle
-smoke), then P2-006 2M with drift sentinels; fail-closed runner +
-order manifest; claims per <code>docs/contracts/claims_ladder.md</code> +
-<code>docs/contracts/analysis_plans.md</code>; no-agent quiet lock (C-009 T5);
-corpus backed up per R-016. The affine smoke campaign (B=5,
-~10-25 min) may ride a quiet-window tail after P2-015.</li>
-<li>Window B (P2-019 q4 grid + P2-020 campaign) with n sized from A.</li>
+<li>If <code>ACTIVE_STOP_CARD</code> is ACTIVE, resume CP-5 first from
+<code>docs/stream_logs/2026-07-08-precampaign-review.md</code>.</li>
+<li>Only after CP-5 is cleared, read
+<code>docs/run_reports/2026-07-08-suite-build.md</code> for the normal
+suite-build session record and restart details.</li>
+<li>Only after CP-5 is cleared, return to <code>TASK_QUEUE.md</code> for suite
+follow-ons, Quiet Window A, and later campaign work.</li>
 </ol>
 <h2 id="session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</h2>
 <ul>
+<li>2026-07-09 meta-process stop-card + codex-bridge audit cleanup
+(D-050; CP-5 preserved untouched):
+<code>docs/run_reports/2026-07-09-meta-process-stop-card-cleanup.md</code></li>
+<li>2026-07-09 advisor status-site live-depth refresh (D-051/C-021;
+subordinate to the active CP-5 stop card):
+<code>docs/run_reports/2026-07-09-advisor-status-site.md</code></li>
 <li>2026-07-08 suite build (C-017; adjudication + PRs #17/#18/#20/#19;
 D-044..D-047): <code>docs/run_reports/2026-07-08-suite-build.md</code></li>
 <li>2026-07-08 suite-science + expansion (C-014/C-015; PRs #14/#15/#16;
@@ -128,6 +187,14 @@ D-038..D-042): <code>docs/run_reports/2026-07-08-suite-science-expansion.md</cod
 </ul>
 <h2 id="current-verification">Current Verification</h2>
 <ul>
+<li>2026-07-09 meta-process/tooling cleanup: <code>bash -n scripts/codex-bridge</code> green; <code>CODEX_BIN=/bin/echo scripts/codex-bridge new audit smoke prompt</code> wrote a manifest row with
+prompt/output/log hashes; Python test suite not run.</li>
+<li>Advisor status-site refresh authored in the landing worktree
+(2026-07-09; D-051/C-021): <code>python3 -m py_compile scripts/build_site.py</code> OK; targeted site/capsule tests
+(<code>tests/test_build_site_parsers.py</code>, <code>tests/test_pack_capsule.py</code>) →
+32 tests OK; <code>python3 scripts/build_site.py</code> rebuilt generated pages;
+<code>python3 scripts/pack_capsule.py</code> packed 0.29 MiB capsule content;
+<code>npx lakebed build</code> passed; full suite <code>python3 -m unittest discover -s tests</code> → <code>Ran 734 tests, OK (skipped=10)</code>.</li>
 <li>Merged main (49c5b66 + reassessment batch): <code>python3 -m unittest discover -s tests</code> → <code>Ran 734 tests, OK (skipped=10)</code> (post PRs
 #17..#21; #21 = D-013 alignment-capture window fix, C-018).</li>
 <li>Live lead gates on merged main: real MLX (1.5B, mock telemetry) suite
@@ -142,13 +209,22 @@ vocabulary join verified; repeated-seed drift test green.</li>
 </ul>
 <h2 id="known-workspace-state">Known Workspace State</h2>
 <ul>
-<li><code>main</code> is pushed and current (through this session&#39;s bookkeeping).</li>
+<li>Before the 2026-07-09 meta-process/tooling cleanup, <code>main</code> was pushed
+and current through prior bookkeeping. This cleanup leaves local docs
+plus <code>scripts/codex-bridge</code> changes until committed.</li>
+<li>CP-5 paused work may exist in <code>jw-wt-envgate</code>, <code>jw-wt-hashcheck</code>,
+<code>jw-wt-bundlepack</code>, and branch/PR <code>strict-era-fix</code> / #22. Do not
+clean, remove, rebase, or merge these outside the CP-5 resume
+sequence.</li>
 <li>Worktrees <code>jw-wt-suite</code>, <code>jw-wt-affine</code>, <code>jw-wt-gens</code> may remain
 (branches merged; safe to remove with <code>git worktree remove</code>).</li>
 <li><code>/tmp/jw-lead-verify/</code> holds disposable lead-verification artifacts.</li>
 </ul>
 <h2 id="what-is-next">What Is Next</h2>
-<p>Follow <code>TASK_QUEUE.md</code> (lane-annotated). In order:</p>
+<p>While <code>ACTIVE_STOP_CARD</code> is ACTIVE, the only next task is
+<code>TASK_QUEUE.md</code> rank 0 (<code>RESUME-CP5</code>). The normal list below is
+temporarily blocked.</p>
+<p>After CP-5 is cleared, follow <code>TASK_QUEUE.md</code> (lane-annotated). In order:</p>
 <ol>
 <li><strong>P2-015 then P2-006 in quiet Window A</strong> [QUIET-MAC] (unchanged top;
 affine smoke campaign may ride the window tail).</li>
@@ -181,7 +257,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit 36e8524 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit 4e644da + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
