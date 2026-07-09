@@ -4,6 +4,11 @@ Purpose: these packs are pre-hardware campaign artifacts. They let the
 operator plug in hardware, fill only device-pair/link placeholders, freeze the
 analysis registry, and execute with minimal design work.
 
+`configs/campaign_packs/` does not exist yet. Plug-in-day execution must first
+create that directory and materialize each filled in-doc JSON template into a
+named config file under it; the template placeholders are intentionally not
+committed as runnable starter configs.
+
 ## Cut-Line
 
 This stream intentionally covers only five core hardware-gated packs:

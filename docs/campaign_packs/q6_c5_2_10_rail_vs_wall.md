@@ -10,14 +10,14 @@ hardware and calibration manifest are known.
 | Plan ID / RQ consumer | DRAFT-AP-Q6-C5-2.10 / Q6 boundary sensitivity; C5-2.10 boundary-directional bias quantification. DRAFT until registry freeze. |
 | family_id | FAM-Q6-RAIL-WALL-BOUNDARY |
 | claim_role | primary |
-| selection_scope | Frozen paired boundary campaign for `<<TARGET_DEVICE>>`, platform telemetry backend `<<RAIL_BACKEND>>`, external boundary `wall_meter` or `USB-C PD/DC`, workload profiles `{mid_mid, long_prompt if feasible, long_decode if feasible}`, one model artifact, one runtime, and matched platform-vs-external windows. |
+| selection_scope | Frozen paired boundary campaign for `<<TARGET_DEVICE>>`, platform telemetry backend `<<RAIL_BACKEND>>`, external boundary `wall_meter` or `USB-C PD/DC`, and workload-profile set resolved at registry freeze to one of `{mid_mid}`, `{mid_mid,long_prompt}`, `{mid_mid,long_decode}`, or `{mid_mid,long_prompt,long_decode}`, with one model artifact, one runtime, and matched platform-vs-external windows. Excluded long profiles require named `DROP-FEASIBILITY-P1-004-P1-006-BOUNDARY-PROFILE` evidence before any campaign bundle exists. |
 | multiplicity_rule | Holm within FAM-Q6-RAIL-WALL-BOUNDARY across predeclared workload-profile boundary deltas and conclusion-flip tests. Any post-hoc workload, boundary, or backend subset is exploratory. |
 | Metric + exact window class | Primary: workload-induced delta energy by boundary on gross request windows and idle-subtracted request windows: `delta_external_j`, `delta_platform_j`, `external_minus_platform_j`, and sign/direction of any conclusion flip. Calibration descriptors may include session-window idle and sustained blocks. |
 | Unit of analysis + dependence structure | Paired block: the same workload execution or matched active block with simultaneous platform telemetry and external meter trace. Platform and external readings in a block are dependent paired measurements. |
 | Estimator/formula | Fit or summarize paired boundary difference `external_minus_platform_j = delta_external_j - delta_platform_j` by workload family. If at least three active load levels exist, fit the detection-floor runbook bridge `delta_external_j = alpha + beta * delta_platform_j + residual_j`; quantitative bridge accepted only when held-out or cross-validated residuals satisfy the P2-015 threshold. A conclusion-flip test is predeclared as whether a same-condition ordering changes sign between boundary estimates. |
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid JouleWise bundles plus external meter artifact required. Exclude blocks without synchronization evidence, meter calibration/status, meter cadence, platform rail manifest, shared marker plan/manual sync note, or matched window definitions. Waivers must be named in the frozen registry and cannot turn missing external evidence into a calibrated claim. |
 | Order/blocking/covariates | ABBA or paired step-load blocks where feasible: idle, active A, active B, idle, then reversed order. For repeated LLM workloads, counterbalance profile order per D-014/C-011 conventions and record cooldown cap hits. Include block/session and meter-cadence covariates only if frozen. |
-| Floor gate | pending-P2-015: consume `DF-RQ-GROSS-MID` (`gross_energy_j`, gross request), `DF-RQ-IDLE-MID` (`energy_request_j`, `idle_subtracted_energy_j`, idle-sub request), optional `DF-RQ-GROSS-LONG-PROMPT` / `DF-RQ-IDLE-LONG-PROMPT` for long-prompt claims, optional `DF-RQ-GROSS-LONG-DECODE` / `DF-RQ-IDLE-LONG-DECODE` for long-decode claims, and `DF-CMP-ABBA-RQ` (`gross_energy_j`, `energy_request_j`, request windows). Phase-window boundary claims additionally consume `DF-PH-PREFILL`, `DF-PH-DECODE`, and `DF-CMP-ABBA-PH` only if cadence and clock thresholds clear. |
+| Floor gate | pending-P2-015: consume `DF-RQ-GROSS-MID` (`gross_energy_j`, gross request), `DF-RQ-IDLE-MID` (`energy_request_j`, `idle_subtracted_energy_j`, idle-sub request), optional `DF-RQ-GROSS-LONG-PROMPT` / `DF-RQ-IDLE-LONG-PROMPT` for matching-or-harder long-prompt claims, optional `DF-RQ-GROSS-LONG-DECODE` / `DF-RQ-IDLE-LONG-DECODE` for matching-or-harder long-decode claims, and `DF-CMP-ABBA-RQ` (`gross_energy_j`, `energy_request_j`, request windows). Canonical `mid_mid` is 1024/256. Any 8192/256 long-prompt request cell and any 2048/2048 request cell are capped until P2-015 adds matching-or-harder cells or the frozen AP names an accepted AP-specific bound; ambiguous coverage must consume every plausible harder cell and take the maximum floor. Phase-window boundary claims additionally consume `DF-PH-PREFILL`, `DF-PH-DECODE`, and `DF-CMP-ABBA-PH` only if cadence and clock thresholds clear. |
 | MDE/n sizing + predeclared top-up rule | n>=5 paired blocks per primary workload family; top up to n=10 if the boundary-delta CI crosses the floor gate, if the bridge residual threshold is near-failing, or if a conclusion-flip verdict changes under leave-one-out. |
 | Denominator provenance requirement | Runtime-observed output tokens, stop reason, output policy, platform rail manifest, external meter make/model/calibration/status, meter resolution/cadence/logging mode, synchronization method, and matched window IDs. |
 | Holdout cells (L3 only) | not applicable. |
@@ -34,7 +34,7 @@ PLANNED under P1-003 wall-meter evidence and P2-015 calibration runbooks. The
 ```json
 {
   "schema_version": "0.1",
-  "run_id": "q6-boundary-<<BOUNDARY_PAIR.TARGET_DEVICE>>-mid-mid-r1",
+  "run_id": "q6-boundary-<<BOUNDARY_PAIR.TARGET_DEVICE>>-mid-mid",
   "model": {
     "name": "Qwen2.5-1.5B-Instruct-4bit",
     "family": "qwen2.5",
@@ -58,7 +58,7 @@ PLANNED under P1-003 wall-meter evidence and P2-015 calibration runbooks. The
   },
   "workload_profile": {
     "name": "boundary_mid_mid",
-    "prompt_tokens": 512,
+    "prompt_tokens": 1024,
     "output_tokens": 256,
     "repetitions": 5,
     "warmup_runs": 1
@@ -84,6 +84,12 @@ are identical JouleWise workload labels under simultaneous external metering.
 For step-load calibration, alternate idle and sustained active blocks with at
 least three transitions and reverse the active-load order across blocks.
 
+For `workload_profile.repetitions > 1`, the current runner dispatches to the
+experiment runner: member bundles are written as `runs/<base_run_id>__r1` ...
+`runs/<base_run_id>__rN`, and the manifest lands at
+`runs/experiments/<base_run_id>.json`. Validation, reduction, import, and
+packaging paths must name member bundles, not the base `run_id`.
+
 ## Expected Artifacts
 
 Standard run bundles must contain `config.json`, `metadata.json`,
@@ -93,7 +99,7 @@ and `summary_metrics.json`, per `docs/contracts/run_bundle_layout.md`.
 Additional expected external-meter artifacts:
 
 ```text
-runs/<run_id>/
+runs/<base_run_id>__rN/
   external_meter/
     meter_metadata.json
     trace.csv
@@ -151,9 +157,10 @@ Existing commands:
 ```sh
 python3 -m joulewise validate-config configs/campaign_packs/<<Q6_CONFIG>>.json
 python3 -m joulewise run configs/campaign_packs/<<Q6_CONFIG>>.json --runs-dir runs
-python3 -m joulewise validate-bundle --strict runs/<<RUN_ID>>
-python3 -m joulewise reduce runs/<<RUN_ID>>
-python3 scripts/package_bundle_pack.py --output runs/bundle_packs/<<PACK_ID>> runs/<<RUN_ID_1>> runs/<<RUN_ID_2>>
+python3 scripts/run_campaign.py configs/campaign_packs/<<Q6_CONFIG_DIR>> --runs-dir runs --log runs/experiments/<<Q6_EXPERIMENT_ID>>.jsonl --backup
+python3 -m joulewise validate-bundle --strict runs/<<BASE_RUN_ID>>__r1
+python3 -m joulewise reduce runs/<<BASE_RUN_ID>>__r1
+python3 scripts/package_bundle_pack.py --output runs/bundle_packs/<<PACK_ID>> runs/<<BASE_RUN_ID_A>>__r1 runs/<<BASE_RUN_ID_B>>__r1
 python3 scripts/package_bundle_pack.py --verify runs/bundle_packs/<<PACK_ID>>
 ```
 
@@ -161,18 +168,37 @@ PLANNED commands:
 
 ```sh
 # PLANNED, owner: P1-003 wall-meter evidence plus P2-015 calibration runbook.
-python3 -m joulewise import-external-meter --bundle runs/<<RUN_ID>> --trace <<METER_TRACE_CSV>> --metadata <<METER_METADATA_JSON>>
+python3 -m joulewise import-external-meter --bundle runs/<<BASE_RUN_ID>>__r1 --trace <<METER_TRACE_CSV>> --metadata <<METER_METADATA_JSON>>
 
 # PLANNED, owner: P2-015 floor/calibration implementation.
-python3 -m joulewise boundary-calibrate runs/<<RUN_ID_1>> runs/<<RUN_ID_2>> --output runs/analysis/<<Q6_RESULTS>>.json
+python3 -m joulewise boundary-calibrate runs/<<BASE_RUN_ID_A>>__r1 runs/<<BASE_RUN_ID_B>>__r1 --output runs/analysis/<<Q6_RESULTS>>.json
 ```
 
 Operator sequence:
 
-1. Record meter make/model/calibration/export method before the first workload.
-2. Fill config placeholders and freeze the AP row with complete contrast IDs.
-3. Start external meter logging, run JouleWise workload bundles, and preserve
+0. Acquire the no-agent quiet-machine lock (`[QUIET-MAC]`; see
+   `docs/orchestration.md`): stop all agent/Codex load for the whole
+   measurement session and confirm machine-idle state before the first idle
+   baseline.
+1. Create `configs/campaign_packs/` if needed, copy the filled template JSON
+   into that directory, record meter make/model/calibration/export method, and
+   freeze the AP row with complete contrast IDs.
+2. Resolve all selection-scope alternatives to included/excluded verdicts
+   before any campaign bundle exists, using named evidence such as
+   `DROP-FEASIBILITY-P1-004-P1-006-BOUNDARY-PROFILE` for excluded profiles.
+3. Generate or hand-author `configs/campaign_packs/<<Q6_CONFIG_DIR>>/order_manifest.json`
+   with schema `joulewise.order_manifest.v1`, including paired ABBA-like
+   profile order and start/end `short_short_sentinel` entries that must execute
+   as the first and last measured bundles bracketing each hardware session.
+   Extending `scripts/generate_matrix.py` for Q6 boundary matrices is a PLANNED
+   prerequisite owned by Phase 3 Stage 3.1 if the manifest is not hand-authored.
+4. Start external meter logging, run JouleWise workload bundles, and preserve
    meter traces with synchronization notes.
-4. Strict-validate and reduce JouleWise bundles.
-5. Import/pair external traces once the planned importer exists; otherwise
+5. Strict-validate and reduce JouleWise member bundles
+   (`runs/<base_run_id>__rN`) and retain `runs/experiments/<base_run_id>.json`.
+6. Import/pair external traces once the planned importer exists; otherwise
    keep external artifacts adjacent to bundles and cap claims at L1/descriptive.
+
+Closing cooldown-gate note: the D-014 cooldown gate between repetitions is
+runner-automated, but cooldown cap-hit flags must be checked in each member
+bundle's measurement quality before analysis.

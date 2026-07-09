@@ -18,7 +18,7 @@ the split model.
 | Estimator/formula | Analytic KV bytes per token: `2 * n_layers * n_kv_heads * head_dim * dtype_bytes`, multiplied by prompt tokens and adjusted only by predeclared runtime cache dtype/layout metadata. Prediction error: `measured_payload_bytes - predicted_payload_bytes` and percent error. Transfer economics: `transfer_energy_j / payload_gib`, `transfer_time_s / payload_gib`; deserialize economics: `deserialize_energy_j` and `deserialize_time_s` per payload. |
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid transfer/replay/composite bundles only; include only cells with actual payload size, payload SHA-256, runtime cache format/version, link measurement, and cache-load markers. Exclude cells where cache is not portable unless the row is explicitly scoped to same-machine replay. Waivers must be named before registry freeze. |
 | Order/blocking/covariates | Counterbalanced payload/link order by model and prompt length. Use ABBA duplicate-payload blocks for transfer repeatability where possible. Record block/session/link-position covariates and cooldown notes. |
-| Floor gate | pending-P2-015: composite request validation consumes `DF-RQ-GROSS-MID`, `DF-RQ-IDLE-MID`, `DF-RQ-GROSS-LONG-PROMPT`, `DF-RQ-IDLE-LONG-PROMPT`, and `DF-CMP-ABBA-RQ` for request windows. Decode-stage companions consume `DF-PH-DECODE` and `DF-CMP-ABBA-PH`; prefill descriptors consume `DF-PH-PREFILL`. No exact P2-015 rows currently exist for `transfer` or `deserialize`; C5-2.3 L2 claims about those terms require P2-015 to add transfer/deserialize rows or this AP to freeze an accepted AP-specific bound. |
+| Floor gate | pending-P2-015: same-node request companions consume `DF-RQ-GROSS-MID`, `DF-RQ-IDLE-MID`, `DF-RQ-GROSS-LONG-PROMPT`, `DF-RQ-IDLE-LONG-PROMPT`, and `DF-CMP-ABBA-RQ` for request windows. The 2048/256 request cells consume the ambiguity-rule maximum of the MID and LONG-PROMPT rows; 8192/256 request cells are capped until P2-015 adds matching-or-harder >=8192 prompt / 256 decode rows or the frozen AP names an accepted AP-specific bound. Any 2048/2048 request cell is likewise capped until P2-015 adds a matching-or-harder cell or the frozen AP names a bound. Optional composite request validation has no exact P2-015 composite row and is capped until P2-015 adds a composite row or the frozen AP names an accepted combination rule. Decode-stage companions consume `DF-PH-DECODE` and `DF-CMP-ABBA-PH`; prefill descriptors consume `DF-PH-PREFILL`. No exact P2-015 rows currently exist for `transfer` or `deserialize`; C5-2.3 L2 claims about those terms require P2-015 to add transfer/deserialize rows or this AP to freeze an accepted AP-specific bound. |
 | MDE/n sizing + predeclared top-up rule | n>=3 per payload/link cell; n>=5 for headline runtime/model/link cells. Top up to n=10 when byte prediction error or energy/GiB CI crosses the active floor gate, or when leave-one-out changes the verdict. |
 | Denominator provenance requirement | Model config fields `n_layers`, `n_kv_heads`, `head_dim`, dtype bytes, prompt tokens, runtime cache format/version, serialized payload bytes, payload SHA-256, link throughput, transfer duration, deserialize/load markers, output tokens/stop reason for split validation companions. |
 | Holdout cells (L3 only) | not applicable. |
@@ -36,6 +36,11 @@ The analytic prediction is generated from current CLI:
 python3 -m joulewise kv-size /Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit/config.json --prompt-tokens 512,2048,8192
 ```
 
+Live-verified for the named Qwen2.5-1.5B-Instruct-4bit config:
+`bytes_per_token=28672` (28 KiB/token), so prompt totals are 14,680,064 bytes
+(14 MiB) at 512 tokens, 58,720,256 bytes (56 MiB) at 2048 tokens, and
+234,881,024 bytes (224 MiB) at 8192 tokens.
+
 ### PLANNED Transfer/Deserialize Template
 
 Owner: Phase 3 Stage 3.1/3.2. No current CLI validates `run_kind:
@@ -47,7 +52,7 @@ link slots.
 {
   "schema_version": "0.2",
   "run_kind": "transfer_bench",
-  "run_id": "c5-2-3-kv-<<DEVICE_PAIR>>-<<LINK_MBPS>>mbps-qwen25-15b-p2048-r1",
+  "run_id": "c5-2-3-kv-<<DEVICE_PAIR>>-<<LINK_MBPS>>mbps-qwen25-15b-p2048",
   "model": {
     "name": "Qwen2.5-1.5B-Instruct-4bit",
     "family": "qwen2.5",
@@ -66,9 +71,19 @@ link slots.
     "receiver_target": "<<DEVICE_PAIR.RECEIVER_TARGET_ID>>",
     "link_label": "<<LINK_LABEL>>",
     "link_speed_mbps": "<<LINK_MBPS>>",
-    "payload_kind": "kv_cache",
-    "payload_sizes_mib": [16, 64, 256, 1024, 2048],
-    "prompt_tokens": [512, 2048, 8192],
+    "payload_sets": [
+      {
+        "payload_kind": "synthetic",
+        "payload_sizes_mib": [16, 64, 256, 1024, 2048],
+        "stage": "Stage 3.1 microbench bytes independent of any LLM runtime"
+      },
+      {
+        "payload_kind": "kv_cache",
+        "prompt_tokens": [512, 2048, 8192],
+        "analytic_payload_sizes_mib": [14, 56, 224],
+        "analytic_payload_sizes_bytes": [14680064, 58720256, 234881024]
+      }
+    ],
     "decode_tokens": 256,
     "method": "tcp_payload",
     "deserialize_probe": "load_prompt_cache_fresh_process",
@@ -111,12 +126,18 @@ Order policy: execute payload sizes in rotated log-spaced order per link and
 reverse the order across blocks. If hardware switching forces link blocks,
 record link-position and session covariates before registry freeze.
 
+For any future transfer/replay config with `repetitions > 1`, member bundles
+must follow the current experiment-runner convention:
+`runs/<base_run_id>__r1` ... `runs/<base_run_id>__rN`, with the manifest at
+`runs/experiments/<base_run_id>.json`. Validation, reduction, and packaging
+paths must name member bundles, not the base `run_id`.
+
 ## Expected Artifacts
 
 Transfer/composite bundles must include:
 
 ```text
-runs/<run_id>/
+runs/<base_run_id>__rN/
   config.json
   metadata.json
   events.jsonl
@@ -183,12 +204,19 @@ F-C523-PREDICTION-ERROR: model residuals.
 
 Existing commands:
 
+`kv-size` prints an analytic size calculation only. The prompt-cache spike
+writes a spike report under `--workdir`, not a standard run bundle.
+`validate-bundle`, `reduce`, and `package_bundle_pack.py` apply only after a
+bundle-producing step has run: the PLANNED transfer-bench/split-replay commands
+below, or v0.1 monolithic reference runs borrowed from the split-suite pack.
+
 ```sh
 python3 -m joulewise kv-size /Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit/config.json --prompt-tokens 512,2048,8192
 python3 scripts/spike_mlx_prompt_cache.py run --model /Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit --prompt-len 1024 --decode 64 --workdir runs/spikes/c5-2-3-mlx-cache --keep
-python3 -m joulewise validate-bundle --strict runs/<<RUN_ID>>
-python3 -m joulewise reduce runs/<<RUN_ID>>
-python3 scripts/package_bundle_pack.py --output runs/bundle_packs/<<PACK_ID>> runs/<<RUN_ID_1>> runs/<<RUN_ID_2>>
+python3 scripts/run_campaign.py configs/campaign_packs/<<C523_REFERENCE_CONFIG_DIR>> --runs-dir runs --log runs/experiments/<<C523_EXPERIMENT_ID>>.jsonl --backup
+python3 -m joulewise validate-bundle --strict runs/<<BASE_RUN_ID>>__r1
+python3 -m joulewise reduce runs/<<BASE_RUN_ID>>__r1
+python3 scripts/package_bundle_pack.py --output runs/bundle_packs/<<PACK_ID>> runs/<<BASE_RUN_ID_A>>__r1 runs/<<BASE_RUN_ID_B>>__r1
 python3 scripts/package_bundle_pack.py --verify runs/bundle_packs/<<PACK_ID>>
 ```
 
@@ -207,9 +235,29 @@ python3 -m joulewise kv-economics-reduce runs/bundle_packs/<<PACK_ID>> --output 
 
 Operator sequence:
 
-1. Generate analytic KV-size predictions and record model-config hashes.
+0. Acquire the no-agent quiet-machine lock (`[QUIET-MAC]`; see
+   `docs/orchestration.md`): stop all agent/Codex load for the whole
+   measurement session and confirm machine-idle state before the first idle
+   baseline.
+1. Create `configs/campaign_packs/` if needed, copy the filled template JSON
+   into that directory, generate analytic KV-size predictions, and record
+   model-config hashes.
 2. Run cache persistence spike for the target runtime and record verdict.
-3. Freeze AP row and manifest with exact runtime/model/link/payload cells.
-4. Execute transfer/deserialization campaign once planned commands exist.
-5. Strict-validate, reduce, package, verify, then compare measured payload,
-   transfer, and deserialize terms against the frozen predictions.
+3. Freeze AP row and manifest with exact runtime/model/link/payload cells,
+   explicitly separating synthetic payload ladder cells from prompt-derived
+   KV-cache cells.
+4. Generate or hand-author `configs/campaign_packs/<<C523_CONFIG_DIR>>/order_manifest.json`
+   with schema `joulewise.order_manifest.v1`, including rotated
+   runtime/model/link/payload order and start/end `short_short_sentinel`
+   entries that must execute as the first and last measured bundles bracketing
+   each hardware session. Extending `scripts/generate_matrix.py` for C5-2.3
+   transfer matrices is a PLANNED prerequisite owned by Phase 3 Stage 3.1 if
+   the manifest is not hand-authored.
+5. Execute transfer/deserialization campaign once planned commands exist.
+6. Strict-validate, reduce, package, verify member bundles
+   (`runs/<base_run_id>__rN`), then compare measured payload, transfer, and
+   deserialize terms against the frozen predictions.
+
+Closing cooldown-gate note: the D-014 cooldown gate between repetitions is
+runner-automated, but cooldown cap-hit flags must be checked in each member
+bundle's measurement quality before analysis.
