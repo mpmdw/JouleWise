@@ -1,10 +1,11 @@
 # JouleWise Run State
 
-Last updated: 2026-07-09 (scientific-rigor review C-023: verdict strong
-provisional → advisor-defensible once the named all-software artifact
-list lands; docs-only session. Prior same day: CP-5 CLEARED, PRs
-#22..#28 merged, Window-A GO behind P2-015 design doc + C-019 shakedown;
-suite 822; C-022; D-051)
+Last updated: 2026-07-09 (spec-fleshing wave 1 C-024: PRs #29..#32
+merged — capstone scope contract, contrast-level stats + analysis
+registry, P2-015 false-effect-guard floor design (queue rank 0 CLOSED),
+canonical RQ registry; D-052..D-055; integration fixes on main; suite
+822 lead-verified. Earlier same day: C-023 rigor review, C-022 CP-5
+clearance)
 
 ## Start Here For Every Big Run
 
@@ -89,13 +90,19 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 `docs/run_reports/2026-07-09-cp5-resume.md`.
 
 **RESTART HERE (next agent):**
-1. Read `docs/run_reports/2026-07-09-cp5-resume.md` for this session's
-   record and the Window-A go/no-go checklist.
-2. Next work per `TASK_QUEUE.md`: P2-015 design-doc prep [AGENT], then
-   quiet Window A (P2-015 floors + C-019 shakedown first, then P2-006).
+1. Read `docs/run_reports/2026-07-09-spec-fleshing-wave1.md` (latest
+   session record; wave-2 handoff) and, for campaign context,
+   `docs/run_reports/2026-07-09-cp5-resume.md` (Window-A go/no-go).
+2. Next AGENT work per `TASK_QUEUE.md` ranks 0a-0d: P2-029 uncertainty
+   propagation, P2-030 ordering executability (pre-campaign blocker),
+   P2-031 token-normalization contract, P2-032 campaign packs.
+3. Quiet Window A [QUIET-MAC] unchanged: C-019 shakedown → P2-015 floors
+   (per the merged `docs/phase_2/detection_floor.md` design) → P2-006.
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-09 spec-fleshing wave 1 (C-024; PRs #29..#32; D-052..D-055):
+  `docs/run_reports/2026-07-09-spec-fleshing-wave1.md`
 - 2026-07-09 scientific-rigor review of suite/benchmark/question bank
   (C-023; review-only; full record in
   `docs/reviews/2026-07-09-scientific-rigor-review.md`):
@@ -125,8 +132,14 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 
 ## Current Verification
 
-- Final merged main (7666652, post PRs #22..#28): `python3 -m unittest
-  discover -s tests` → `Ran 822 tests, OK (skipped=10)`, lead-run.
+- Series head f75134d (post PRs #29..#32; docs-only) lead-verified;
+  integration-fix commit 7156295 is also docs-only (no test surface):
+  `python3 -m unittest discover -s tests` → `Ran 822 tests, OK
+  (skipped=10)`, lead-run; CI green on all four PR heads (py3.11+py3.14);
+  integration reviewer independently re-ran the suite and recomputed the
+  detection-floor campaign arithmetic.
+- Prior verification (7666652, post PRs #22..#28): `Ran 822 tests, OK
+  (skipped=10)`, lead-run.
 - Live lead gates this session (real MLX, Qwen2.5-1.5B via `.venv`, mock
   telemetry): single-prompt + TWO full 48-item jw_mixed suite runs
   (pre-merge old manifests, then final merged main with the REGENERATED
@@ -162,13 +175,13 @@ specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 
 Follow `TASK_QUEUE.md` (lane-annotated). In order:
 
-1. **P2-015 design-doc prep** [AGENT]: cell list, n, UCB floor rule,
-   Window-B-start revalidation cell (accepted synthesis condition; the
-   only remaining pre-window agent work). Before drafting, read C-023's
-   recommended scope expansion (combined floor + calibration runbooks +
-   telemetry-trust hierarchy + error budget) in
-   `docs/reviews/2026-07-09-scientific-rigor-review.md` — adoption is
-   the next planning session's call.
+1. **Wave 2 [AGENT]** (queue ranks 0a-0d; C-024 handoff): P2-029
+   reducer/aggregator uncertainty propagation, P2-030 ordering
+   executability (pre-campaign blocker for suite claims), P2-031
+   token-normalization contract + stack-identity table, P2-032
+   pre-hardware campaign packs. (P2-015-PREP is DONE — the design landed
+   as `docs/phase_2/detection_floor.md` with the false-effect guard
+   floor, D-054.)
 2. **Quiet Window A** [QUIET-MAC]: C-019 shakedown first, then P2-015
    floors, then P2-006 2M baselines; AP-6 sentinel pilot may ride the
    window tail (manifests are ready).

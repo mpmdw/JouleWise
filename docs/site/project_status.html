@@ -47,22 +47,24 @@
 <a href="#maintenance-of-this-document">Maintenance Of This Document</a></aside>
   <div class="doc-wrap doc-source-project-status-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>PROJECT_STATUS.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit 731e8e7"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 731e8e7</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit 7156295 + uncommitted"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 7156295 + uncommitted</span></span></div>
     <h1>JouleWise: Project Status, Plan, And Architecture</h1>
 <p>Audience: project advisor. This is the standalone monitoring document - it
 summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.</p>
 <ul>
-<li>Last updated: 2026-07-09 (advisor status-site live-depth refresh:
-Lakebed preview gains fail-soft live status overlays, deeper advisor
-cockpit panels, and stale-count cleanup; source-of-truth policy D-051)</li>
+<li>Last updated: 2026-07-09 (spec-fleshing wave 1, C-024: capstone scope
+contract, contrast-level statistics + analysis registry, P2-015
+detection-floor design, canonical question registry — PRs #29..#32,
+D-052..D-055; next AGENT work is wave 2 (queue ranks 0a-0d), next
+QUIET-MAC work is C-019 shakedown + P2-015 calibration)</li>
 <li>Project phase: Phase 1 closing; Phase 2 in progress - instrument
 CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
 are complete; workload-suite build is merged; CP-5 pre-campaign review is
 COMPLETE and CLEARED (2026-07-09, PRs #22..#28; see
-<code>docs/run_reports/2026-07-09-cp5-resume.md</code>); next is the P2-015
-design doc, then quiet Window A</li>
+<code>docs/run_reports/2026-07-09-cp5-resume.md</code>); the P2-015 design doc is
+merged; next is C-019 shakedown plus P2-015 quiet calibration (Window A)</li>
 <li>Repository: <code>github.com/mpmdw/JouleWise</code> (branch <code>main</code>)</li>
 <li>Live status site: <a href="https://quiet-signal-6af8833395.lakebed.app">https://quiet-signal-6af8833395.lakebed.app</a> (Lakebed
 capsule; <code>/status.html</code> is the advisor cockpit and shows live overlays
@@ -78,8 +80,9 @@ cockpit adds live snapshot state, attention items, campaign readiness,
 evidence cards, and claim-ceiling panels; the Story page drops
 hand-authored volatile counts. The operational policy is D-051: repo
 markdown remains the source of truth and Lakebed never hides static
-provenance. Current work follows <code>TASK_QUEUE.md</code>: <code>P2-015-PREP</code>, then quiet
-Window A (the CP-5 stop card was cleared 2026-07-09).</p>
+provenance. Current work follows <code>TASK_QUEUE.md</code>: C-019 shakedown, then
+P2-015 quiet calibration for Window A (the CP-5 stop card was cleared
+2026-07-09).</p>
 <h2 id="previous-update-as-of-2026-07-08-all-four-streams-merged-30-second-read">Previous Update (as of 2026-07-08, all four streams merged) — 30-second read</h2>
 <p><strong>Everything landed.</strong> The multi-stream session merged as four PRs:
 P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite passed
@@ -190,6 +193,10 @@ characterization it can already execute on the M3 Max. Split
 (disaggregated) inference remains the differentiating validating study;
 when Phase 3 hardware and feasibility gates land, it upgrades the capstone
 from local characterization to a split-energy crossover study.</p>
+<p>The frozen capstone headline, fallback claims, contribution ladder, and
+minimum-viable stop-lines are now recorded in
+<code>docs/contracts/capstone_scope.md</code>; that contract is the scope pointer for
+reader-facing wording under the claims ladder.</p>
 <p>The first working slice runs on a MacBook (Apple Silicon) with MLX as the
 runtime and <code>powermetrics</code> as the power source, producing complete,
 auditable run bundles. Further backends (NVIDIA + vLLM/llama.cpp, Jetson
@@ -216,12 +223,14 @@ extension is hardware-gated.</li>
 <li><strong>Q6</strong> (C-003; gated on the wall meter): Does the measurement boundary
 (platform rails vs AC wall power) change the conclusions?</li>
 </ul>
-<p>A curated bank of further candidate questions (and deliberately killed
-ones) lives in <code>docs/research_question_bank.md</code>; the measurement noise
-floor / detection limit is treated as the methodology centerpiece rather
-than a numbered question.</p>
-<p>The capability map by claim ceiling lives in
-<code>docs/research_question_bank.md</code> (C-015), alongside the suite architecture
+<p>Current question status, aliases, gates, and claim ceilings live in the
+canonical live index, <code>docs/research_question_registry.md</code>. The curated bank
+of further candidate questions and deliberately killed ones remains the
+historical/deliberative record in <code>docs/research_question_bank.md</code>; the
+measurement noise floor / detection limit is treated as the methodology
+centerpiece rather than a numbered question.</p>
+<p>The capability map by claim ceiling is reflected in
+<code>docs/research_question_registry.md</code> (C-015), alongside the suite architecture
 v2 and benchmark interop direction; the guaranteed-capstone stop-line is
 recorded in the Phase 2 plan.</p>
 <h2 id="status-at-a-glance">Status At A Glance</h2>
@@ -832,7 +841,7 @@ date above and the repository&#39;s run reports are the freshness check.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>PROJECT_STATUS.md · commit 731e8e7 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>PROJECT_STATUS.md · commit 7156295 + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

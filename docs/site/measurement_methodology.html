@@ -41,7 +41,7 @@
 <a href="#statistical-protocol">Statistical Protocol</a></aside>
   <div class="doc-wrap doc-source-docs-contracts-measurement-methodology-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/contracts/measurement_methodology.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/measurement_methodology.md · commit 817f470"><span class="source-file">docs/<wbr>contracts/<wbr>measurement_methodology.md</span><span class="source-commit">commit 817f470</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/measurement_methodology.md · commit 8197b05"><span class="source-file">docs/<wbr>contracts/<wbr>measurement_methodology.md</span><span class="source-commit">commit 8197b05</span></span></div>
     <h1>Measurement Methodology</h1>
 <p>Living cross-phase contract, drafted in Phase 1. Changes require a
 decision-log entry when they bind later work.</p>
@@ -244,7 +244,7 @@ correlation can be audited (Phase 4 Stage 4.5 does this audit).</li>
 </ul>
 <h2 id="statistical-protocol">Statistical Protocol</h2>
 <p>Per decision D-014 (draft to be ratified against observed variance at
-Phase 4 Stage 4.0):</p>
+Phase 4 Stage 4.0), amended 2026-07-09 pending ratification (C-023 S3):</p>
 <ul>
 <li>Repetitions: n &gt;= 5 for headline comparisons; n &gt;= 3 minimum elsewhere;
 the n is recorded per experiment.</li>
@@ -253,10 +253,33 @@ interval via Student t; Phase 4 runs a bootstrap sensitivity comparison
 and reports both where they materially disagree.</li>
 <li>Outliers: flagged by modified z-score on MAD &gt; 3.5; never silently
 dropped; reported with-and-without only when a physical cause is
-identified and documented; otherwise kept in headline numbers.</li>
+identified and documented; otherwise kept in headline numbers. Amendment
+2026-07-09 (pending ratification, C-023 S3): at n &lt;= 10, reports also run
+a leave-one-out influence check on every claim-bearing contrast. The
+report lists the full-data estimate/CI/verdict and each leave-one-out
+estimate/CI/verdict. An omitted point is influential if it changes the
+sign, floor status, adjusted rejection/equivalence verdict, or moves the
+estimate by more than 0.25 x the active threshold: MDE for rank/MDE-gated
+claims, otherwise the floor gate. Influential points are reported as
+sensitivity evidence, not silently removed.</li>
 <li>Figures always show raw points alongside aggregates.</li>
-<li>Differences are claimed only where intervals separate; &quot;no measurable
-difference&quot; is a reportable result category.</li>
+<li>Amendment 2026-07-09 (pending ratification, C-023 S3): differences are
+claimed from the confidence interval of the paired/block difference, or
+from the named model contrast, not by visual separation of marginal
+intervals. Where execution order was randomized, the analysis includes a
+permutation/randomization check for the same contrast following the actual
+randomization scheme, permuting labels only within exchangeable
+blocks/strata. The minimum for this check is 6 exchangeable blocks; below
+that count, report the check as not run and rely on the contrast CI with
+the caveat that randomization-inference sensitivity was underpowered. A
+paired contrast is preferred when it matches the design; mixed or
+hierarchical models are reserved for real dependence structures that a
+paired/block contrast cannot represent. Floor-gated outcomes use a
+three-way rule: below-floor contrasts are <code>not resolvable</code>; above-floor
+contrasts whose CI does not support direction are <code>unresolved</code> with no
+directional claim; equivalence or &quot;no difference&quot; language requires a
+predeclared equivalence gate whose margin exceeds the floor and whose
+contrast CI lies entirely within that margin.</li>
 </ul>
 
 
@@ -266,7 +289,7 @@ difference&quot; is a reportable result category.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/contracts/measurement_methodology.md · commit 817f470 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/contracts/measurement_methodology.md · commit 8197b05 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

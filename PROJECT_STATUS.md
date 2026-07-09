@@ -5,9 +5,11 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-09 (advisor status-site live-depth refresh:
-  Lakebed preview gains fail-soft live status overlays, deeper advisor
-  cockpit panels, and stale-count cleanup; source-of-truth policy D-051)
+- Last updated: 2026-07-09 (spec-fleshing wave 1, C-024: capstone scope
+  contract, contrast-level statistics + analysis registry, P2-015
+  detection-floor design, canonical question registry — PRs #29..#32,
+  D-052..D-055; next AGENT work is wave 2 (queue ranks 0a-0d), next
+  QUIET-MAC work is C-019 shakedown + P2-015 calibration)
 - Project phase: Phase 1 closing; Phase 2 in progress - instrument
   CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
   are complete; workload-suite build is merged; CP-5 pre-campaign review is

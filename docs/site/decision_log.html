@@ -78,10 +78,14 @@
 <a href="#d-048-split-program-is-model-first-pre-registered-compositional-prediction-before-split-runs">D-048: Split program is model-first — pre-registered compositional prediction before split runs</a>
 <a href="#d-049-split-transfer-energy-boundary-accounting-on-discrete-gpu-ends">D-049: Split transfer-energy boundary accounting on discrete-GPU ends</a>
 <a href="#d-050-active-stop-cards-and-process-trace-manifests">D-050: Active stop cards and process-trace manifests</a>
-<a href="#d-051-advisor-status-site-uses-source-derived-static-pages-plus-fail-soft-live-github-overlays">D-051: Advisor status site uses source-derived static pages plus fail-soft live GitHub overlays</a></aside>
+<a href="#d-051-advisor-status-site-uses-source-derived-static-pages-plus-fail-soft-live-github-overlays">D-051: Advisor status site uses source-derived static pages plus fail-soft live GitHub overlays</a>
+<a href="#d-052-capstone-scope-contract-frozen-umbrella-headline-and-contribution-ladder">D-052: Capstone scope contract — frozen umbrella headline and contribution ladder</a>
+<a href="#d-053-contrast-level-statistical-inference-and-the-frozen-analysis-registry">D-053: Contrast-level statistical inference and the frozen analysis registry</a>
+<a href="#d-054-false-effect-guard-floor-and-unknown-term-claim-ceiling-policy">D-054: False-effect guard floor and unknown-term claim-ceiling policy</a>
+<a href="#d-055-research-question-registry-is-the-canonical-live-index">D-055: Research-question registry is the canonical live index</a></aside>
   <div class="doc-wrap doc-source-docs-decision-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/decision_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 731e8e7"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 731e8e7</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 731e8e7 + uncommitted"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 731e8e7 + uncommitted</span></span></div>
     <h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
@@ -362,6 +366,26 @@ must be re-examined, not quietly worked around.</li>
 <tr>
 <td>D-051</td>
 <td>Advisor status site uses source-derived static pages plus fail-soft live GitHub overlays</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-052</td>
+<td>Capstone scope contract: frozen umbrella headline and contribution ladder</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-053</td>
+<td>Contrast-level statistical inference and the frozen analysis registry</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-054</td>
+<td>False-effect guard floor and unknown-term claim-ceiling policy</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-055</td>
+<td>Research-question registry is the canonical live index</td>
 <td>accepted</td>
 </tr>
 </tbody></table></div>
@@ -1377,22 +1401,14 @@ manifest, measured/phase windows, completion state, and structural
 problems - one implementation of every bundle-interpretation policy;
 consumers apply presentation/reduction on top.</li>
 <li>Full ORM/database layer now. Con: heavyweight; Phase 4&#39;s CSV plan
-plus a possible stdlib-sqlite cache (Stage 4.1 note) already covers
-querying needs.</li>
-</ol>
-<p>Decision: option 2. Reducer, report, <code>validate-bundle</code>, and (later)
-<code>aggregate</code> all consume the shared reader; policy questions like &quot;which
-rails sum to <code>power_w</code>&quot; are answered in exactly one place.</p>
-<p>Considerations: this is the code-level analogue of D-023&#39;s one-fact-one-
-home rule; the reducer&#39;s math (<code>_integrate</code>, idle subtraction) stays in
-<c
+plus a possible stdlib-sqlite cache (St
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/decision_log.md · commit 731e8e7 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/decision_log.md · commit 731e8e7 + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

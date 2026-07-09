@@ -73,6 +73,10 @@ be re-derived by a future agent gets an entry here.
 | D-049 | Split transfer-energy boundary accounting on discrete-GPU ends | accepted |
 | D-050 | Active stop cards and process-trace manifests | accepted |
 | D-051 | Advisor status site uses source-derived static pages plus fail-soft live GitHub overlays | accepted |
+| D-052 | Capstone scope contract: frozen umbrella headline and contribution ladder | accepted |
+| D-053 | Contrast-level statistical inference and the frozen analysis registry | accepted |
+| D-054 | False-effect guard floor and unknown-term claim-ceiling policy | accepted |
+| D-055 | Research-question registry is the canonical live index | accepted |
 
 ---
 
@@ -2556,3 +2560,110 @@ Consequences:
 Revisit when: GitHub raw-content fetch becomes unreliable enough to need
 an authenticated token or when a formal advisor portal with user-specific
 state is required.
+
+## D-052: Capstone scope contract — frozen umbrella headline and contribution ladder
+
+- Date: 2026-07-09
+- Status: accepted
+- Phase: cross-phase / claims
+
+Context: review C-023 (finding B4) required one frozen, defensible headline
+claim with fallbacks, and the user's 2026-07-09 direction required the
+contribution framing to honor the filled measurement matrix as the end-goal
+novelty. Stream ledger: `docs/stream_logs/2026-07-09-scope.md` (SC-1).
+
+Decision: `docs/contracts/capstone_scope.md` (PR #30) is the binding scope
+contract. Headline: "auditable, boundary-labeled local LLM energy
+characterization on named hardware/runtime/model/workload stacks" — an
+umbrella scope statement carrying NO global claim level; per-result
+ceilings follow D-037. Split inference is a stretch extension gated on a
+named method; calibration is required specifically for cross-boundary
+quantitative winners. Contribution is argued as a three-rung ladder
+(instrument/methodology → filled-matrix scoped empirical coverage →
+contingent findings), with auditability as the warrant that makes the
+coverage claim believable, not a substitute for it. R-012 remains the
+single home of the minimum-viable-capstone floor; the contract adds
+reporting stop-lines only.
+
+Consequences: reader-facing wording must trace to this contract; the
+related-work check (vs JouleSort, MLPerf Power, ML.ENERGY, Zeus) is a
+named precondition for the Rung-2 coverage-novelty claim.
+
+## D-053: Contrast-level statistical inference and the frozen analysis registry
+
+- Date: 2026-07-09
+- Status: accepted (ratifies the "pending ratification (C-023 S3)" contract markers)
+- Phase: cross-phase / statistical protocol
+
+Context: review C-023 (findings B2 + M1) found the D-014 interval-separation
+rule statistically wrong for paired designs and no benchmark-level
+multiplicity policy. Stream ledger: `docs/stream_logs/2026-07-09-stats.md`.
+
+Decision (PR #29): claims derive from the confidence interval of the
+paired/block difference or named model contrast, never marginal-interval
+separation; three-way wording rule (below-floor `not resolvable`;
+above-floor non-directional `unresolved`/no directional claim; equivalence
+only via a predeclared gate); permutation checks follow the actual
+randomization scheme within exchangeable strata (minimum 6 blocks);
+leave-one-out influence checks at n<=10 with defined triggers. Analysis
+plans gain required fields family_id / claim_role / selection_scope /
+multiplicity_rule; the registry is FROZEN before campaign execution with an
+enumerated complete contrast_id set (exact Holm/BH denominators); post-hoc
+claims are exploratory. AP-1..AP-6 carry seeded family values; AP-5 BH
+sweeps are restricted to correctness/metadata (item-window energy stays
+exploratory). This amends D-014's protocol wording; D-014's repetition
+counts and outlier never-silently-drop rules stand.
+
+Consequences: the claims-index linter (future) refuses L2/L3 without these
+fields; campaign execution requires a frozen registry snapshot.
+
+## D-054: False-effect guard floor and unknown-term claim-ceiling policy
+
+- Date: 2026-07-09
+- Status: accepted (promotes stream-ledger P15-7)
+- Phase: 2 / measurement
+
+Context: C-023 finding B1 (no metrological error budget); counterreview R2
+killed the drafted percentile-UCB floor (unidentifiable at n=10: the sample
+maximum exceeds the true 95th percentile only 40.1% of the time; a
+nonparametric 95/95 bound needs n=59). Stream ledger:
+`docs/stream_logs/2026-07-09-p2015.md` (P15-7; P15-2/P15-6 superseded).
+
+Decision (PR #31): `docs/phase_2/detection_floor.md` is the P2-015 design.
+Floors are FALSE-EFFECT GUARD FLOORS — max(largest observed absolute
+residual/contrast, Student-t prediction bound for one new observation) —
+with bootstrap as sensitivity only and a pre-registered small-sample guard
+factor at 5<=n<10. Error-budget terms are enumerated per
+backend x metric x window class; UNKNOWN terms cap claim level (they do not
+block L0/L1 operation). Variance and deterministic bounds propagate
+separately (drift is a bound unless a distributional model is justified).
+Wall/USB-C PD calibration runbooks are pre-registered as bridge-model fits
+(slope/intercept over workload-induced deltas), not absolute-delta
+acceptance. Window-B revalidation: stale floors cap affected claims until
+topped up.
+
+Consequences: P2-015 campaign sizing is derivable from the economics table
+(170-340 bundles); claim tooling must consume floor rows + error-budget
+fields per the analysis registry (D-053).
+
+## D-055: Research-question registry is the canonical live index
+
+- Date: 2026-07-09
+- Status: accepted (promotes stream-ledger RQ-1)
+- Phase: cross-phase / research bookkeeping
+
+Context: C-023 finding B3 — the same question existed as promoted Q, banked
+item, capability-map row, and C5 tier row with no alias normalization.
+Stream ledger: `docs/stream_logs/2026-07-09-rqreg.md`.
+
+Decision (PR #32): `docs/research_question_registry.md` is the canonical
+LIVE index of question status, aliases, type, claim ceiling, forbidden
+upgrade, AP/campaign owners, gate class, and pre-hardware preparability
+(75 rows). `docs/research_question_bank.md` remains the historical and
+deliberative record — single-writer split. The registry indexes ratified
+council decisions; it never re-decides them. C-023 coverage gaps enter as
+`candidate (C-023)` rows.
+
+Consequences: promotion/status changes edit the registry (with the bank
+still holding deliberation); front-facing docs point at the registry for
+current state; the future claims-index linter consumes registry columns.

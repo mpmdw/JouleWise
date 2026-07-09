@@ -58,6 +58,7 @@ standing instructions.
 | C-021 | 2026-07-09 | Advisor status-site live-depth refresh (pointer entry; D-051; run report `2026-07-09-advisor-status-site.md`) | Static generated pages remain the audit fallback; Lakebed gets fail-soft live overlays from current GitHub markdown; Story page volatile counts removed; advisor cockpit expanded with attention, readiness, evidence, and claim-ceiling panels; gpt-5.5-high counterreview used before deploy |
 | C-022 | 2026-07-09 | CP-5 resume session (pointer entry; run report `2026-07-09-cp5-resume.md` owns the full trace) — lead-driven, ~35 codex sessions: implementation, fix rounds, 12+ lenses/final-head passes, 2 integration reviews | PRs #22..#28 merged (merge-gate shape held: lens→fix→lead live gate→fresh final-head→CI→merge); final-head layer caught 3 blockers + 7 should-fixes post-lens; CI merge-ref caught the one cross-branch interaction (#23 fixtures × #27 strict rules) no other layer could see; 1 lead prompt-defect (inferred-sidecar pin) caught and refixed; methodology synthesis + suite_next packet adjudicated (CP-6); D-047 sampler clause amended (fail-closed); stop card CLEARED; Window-A GO |
 | C-023 | 2026-07-09 | Scientific-rigor review of the measurement suite, benchmark, and full question bank (user-directed; full record `docs/reviews/2026-07-09-scientific-rigor-review.md`) — 4 fresh 5.5 lenses (metrology, benchmark/stats, per-question bank audit, advisor simulation) + independent lead read + 1 bidirectional discussion round | Verdict: strong provisional, advisor sign-off after a named all-software artifact list (error budget/P2-015 combined spec, analysis registry + multiplicity policy, canonical RQ registry + linter, frozen headline, contrast-level stats amendment, ordering executability, token-normalization contract); every blocker no-hardware-fixable; C5-1.1 blocker OVERTURNED in discussion (already contract-capped by C-014/D-037); ordering gap (C-015 promise vs manifest_order execution) elevated to pre-campaign; queue impact deferred to the step-2 planning session |
+| C-024 | 2026-07-09 | Spec-fleshing wave 1 (pointer entry; run report `2026-07-09-spec-fleshing-wave1.md`) — 4 worktree streams (5.5 implement), 4 counterreview lenses, 3 fix rounds, 4 final-head + 1 tail-verification pass, integration review | PRs #29..#32 merged (D-052..D-055 ratified: scope contract, contrast-level stats + registry, false-effect guard floor, RQ registry); R2's estimator kill (percentile-UCB unidentifiable at n=10) was the session's decisive catch; integration review caught 5 cross-stream seam drifts (S1/S2 written against pre-S3 contract text); P2-015-PREP (queue rank 0) closed; checkpoint-push cadence adopted mid-session (Ed) |
 
 ---
 
@@ -1349,3 +1350,24 @@ Resolution (lead, with D1 concurrence):
 - Queue impact: deliberately NOT applied — the recommended work order is
   input to the user's next planning session (spec fleshing for all
   no-hardware pieces), per the user's two-step directive.
+
+
+## C-024: Spec-fleshing wave 1 — no-hardware artifact build (2026-07-09)
+
+Pointer entry. Full narrative and verification:
+`docs/run_reports/2026-07-09-spec-fleshing-wave1.md`; decisions
+D-052..D-055; review inputs from C-023.
+
+Shape: lead-driven, four worktree streams implemented by gpt-5.5 against
+the C-023 packet (scope/headline, P2-015 combined floor design, stats
+amendment + analysis registry, canonical RQ registry), each with a fresh
+read-only counterreview lens, FIX-N rounds for accepted findings, a fresh
+final-head pass per branch, a tail-verification pass over post-review
+commits, CI, self-merge under the standing authority, and one post-merge
+integration review (5 seam findings, fixed same-session).
+
+Dissent: none unresolved. Notable adjudications: R2 estimator kill
+accepted (floor redefined as false-effect guard); FH ledger-promotion
+blocker resolved by supersession annotation per the history rule, not
+rewrite; R4's bank-cited un-merge of C5-W.3 from Q5 overrode the original
+C-023 lens's duplicate call.

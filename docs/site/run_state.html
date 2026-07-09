@@ -36,13 +36,14 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 59bf6cb + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 59bf6cb + uncommitted</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 3b23f48 + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 3b23f48 + uncommitted</span></span></div>
     <h1>JouleWise Run State</h1>
-<p>Last updated: 2026-07-09 (scientific-rigor review C-023: verdict strong
-provisional → advisor-defensible once the named all-software artifact
-list lands; docs-only session. Prior same day: CP-5 CLEARED, PRs
-#22..#28 merged, Window-A GO behind P2-015 design doc + C-019 shakedown;
-suite 822; C-022; D-051)</p>
+<p>Last updated: 2026-07-09 (spec-fleshing wave 1 C-024: PRs #29..#32
+merged — capstone scope contract, contrast-level stats + analysis
+registry, P2-015 false-effect-guard floor design (queue rank 0 CLOSED),
+canonical RQ registry; D-052..D-055; integration fixes on main; suite
+822 lead-verified. Earlier same day: C-023 rigor review, C-022 CP-5
+clearance)</p>
 <h2 id="start-here-for-every-big-run">Start Here For Every Big Run</h2>
 <p>Before starting substantial work:</p>
 <ol>
@@ -120,13 +121,19 @@ specs (D-051). Suite 822 OK. Ed&#39;s four-part answer + Window-A go/no-go:
 <code>docs/run_reports/2026-07-09-cp5-resume.md</code>.</p>
 <p><strong>RESTART HERE (next agent):</strong></p>
 <ol>
-<li>Read <code>docs/run_reports/2026-07-09-cp5-resume.md</code> for this session&#39;s
-record and the Window-A go/no-go checklist.</li>
-<li>Next work per <code>TASK_QUEUE.md</code>: P2-015 design-doc prep [AGENT], then
-quiet Window A (P2-015 floors + C-019 shakedown first, then P2-006).</li>
+<li>Read <code>docs/run_reports/2026-07-09-spec-fleshing-wave1.md</code> (latest
+session record; wave-2 handoff) and, for campaign context,
+<code>docs/run_reports/2026-07-09-cp5-resume.md</code> (Window-A go/no-go).</li>
+<li>Next AGENT work per <code>TASK_QUEUE.md</code> ranks 0a-0d: P2-029 uncertainty
+propagation, P2-030 ordering executability (pre-campaign blocker),
+P2-031 token-normalization contract, P2-032 campaign packs.</li>
+<li>Quiet Window A [QUIET-MAC] unchanged: C-019 shakedown → P2-015 floors
+(per the merged <code>docs/phase_2/detection_floor.md</code> design) → P2-006.</li>
 </ol>
 <h2 id="session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</h2>
 <ul>
+<li>2026-07-09 spec-fleshing wave 1 (C-024; PRs #29..#32; D-052..D-055):
+<code>docs/run_reports/2026-07-09-spec-fleshing-wave1.md</code></li>
 <li>2026-07-09 scientific-rigor review of suite/benchmark/question bank
 (C-023; review-only; full record in
 <code>docs/reviews/2026-07-09-scientific-rigor-review.md</code>):
@@ -156,7 +163,12 @@ D-038..D-042): <code>docs/run_reports/2026-07-08-suite-science-expansion.md</cod
 </ul>
 <h2 id="current-verification">Current Verification</h2>
 <ul>
-<li>Final merged main (7666652, post PRs #22..#28): <code>python3 -m unittest discover -s tests</code> → <code>Ran 822 tests, OK (skipped=10)</code>, lead-run.</li>
+<li>Series head f75134d (post PRs #29..#32; docs-only) lead-verified;
+integration-fix commit 7156295 is also docs-only (no test surface):
+<code>python3 -m unittest discover -s tests</code> → <code>Ran 822 tests, OK (skipped=10)</code>, lead-run; CI green on all four PR heads (py3.11+py3.14);
+integration reviewer independently re-ran the suite and recomputed the
+detection-floor campaign arithmetic.</li>
+<li>Prior verification (7666652, post PRs #22..#28): <code>Ran 822 tests, OK (skipped=10)</code>, lead-run.</li>
 <li>Live lead gates this session (real MLX, Qwen2.5-1.5B via <code>.venv</code>, mock
 telemetry): single-prompt + TWO full 48-item jw_mixed suite runs
 (pre-merge old manifests, then final merged main with the REGENERATED
@@ -191,13 +203,13 @@ lead-verification artifacts (live-runs bundles are not corpus).</li>
 <h2 id="what-is-next">What Is Next</h2>
 <p>Follow <code>TASK_QUEUE.md</code> (lane-annotated). In order:</p>
 <ol>
-<li><strong>P2-015 design-doc prep</strong> [AGENT]: cell list, n, UCB floor rule,
-Window-B-start revalidation cell (accepted synthesis condition; the
-only remaining pre-window agent work). Before drafting, read C-023&#39;s
-recommended scope expansion (combined floor + calibration runbooks +
-telemetry-trust hierarchy + error budget) in
-<code>docs/reviews/2026-07-09-scientific-rigor-review.md</code> — adoption is
-the next planning session&#39;s call.</li>
+<li><strong>Wave 2 [AGENT]</strong> (queue ranks 0a-0d; C-024 handoff): P2-029
+reducer/aggregator uncertainty propagation, P2-030 ordering
+executability (pre-campaign blocker for suite claims), P2-031
+token-normalization contract + stack-identity table, P2-032
+pre-hardware campaign packs. (P2-015-PREP is DONE — the design landed
+as <code>docs/phase_2/detection_floor.md</code> with the false-effect guard
+floor, D-054.)</li>
 <li><strong>Quiet Window A</strong> [QUIET-MAC]: C-019 shakedown first, then P2-015
 floors, then P2-006 2M baselines; AP-6 sentinel pilot may ride the
 window tail (manifests are ready).</li>
@@ -229,7 +241,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit 59bf6cb + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit 3b23f48 + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
