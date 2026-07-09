@@ -244,6 +244,26 @@ class ReducerPropagationTests(ReducerUncertaintyTestCase):
 
 
 class ClaimGateTests(ReducerUncertaintyTestCase):
+    def test_zero_duration_phase_has_nonpositive_window_reason(self) -> None:
+        # P2-040 FIX-1: a zero-duration subwindow inside a valid positive
+        # measured window carries the D-057 additive reason and is never
+        # eligible.
+        builder = self.builder()
+        builder.measured_window(0.0, 4.0)
+        builder.phase_window("instant", 2.0, 2.0)
+        builder.write_trace(constant_samples(0.0, 4.0, hz=2.0, power_w=8.0))
+        builder.write_metadata(idle_drift_bound_w=0.1)
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        phase = (summary.claim_eligibility or {})["phase"]["instant"]
+        self.assertFalse(phase["eligible"])
+        self.assertIn("nonpositive_window_duration", phase["reasons"])
+        window_entry = phase["windows"][0]
+        self.assertFalse(window_entry["eligible"])
+        self.assertIn("nonpositive_window_duration", window_entry["reasons"])
+
     def test_request_window_at_cadence_and_clock_boundaries_is_eligible(self) -> None:
         builder = self.builder()
         builder.measured_window(0.0, 4.0)

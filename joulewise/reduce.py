@@ -24,15 +24,15 @@ integrated trapezoidally over a window ``[t0, t1]``. The integrand at a window
 edge that falls between two samples is obtained by linear interpolation between
 the bracketing samples; an edge outside the sample span is clamped to the
 nearest sample's value (the curve is held flat past its first/last sample).
-A zero-length window integrates to ``0.0``.
 
 Degenerate inputs are structured failures, never crashes (Slice 2D, hardened
-in Slice 2N.6): a missing ``measured_run`` window, fewer than two in-window
-samples (after boundary handling), missing/corrupt ``config.json`` or
-``metadata.json``, or a D-027 rail misalignment all yield a
+in Slice 2N.6): a missing ``measured_run`` window, a nonpositive
+(``duration_s <= 0``) measured window (P2-040 FIX-1/ARC-3), fewer than two
+in-window samples (after boundary handling), missing/corrupt ``config.json``
+or ``metadata.json``, or a D-027 rail misalignment all yield a
 ``SummaryMetrics`` with ``status=FAILED`` and
-``failure_reason=UNKNOWN_ERROR``. A zero-length measured window is *not* an
-error - it reduces to zero energy.
+``failure_reason=UNKNOWN_ERROR``. A zero-length measured window cannot be a
+claim-bearing succeeded measurement.
 
 Artifact parsing and interpretation policy (rail summation, measured/phase
 windows, token events) live in :class:`joulewise.bundle_read.BundleReader`
@@ -531,6 +531,10 @@ def _window_claim_eligibility(
     bound_terms_j: dict[str, float | None] | None = None,
 ) -> dict[str, Any]:
     reasons: list[str] = []
+    if window.duration_s <= 0.0:
+        # P2-040 FIX-1 (D-057 additive code): a nonpositive window can never
+        # be claim-bearing.
+        reasons.append("nonpositive_window_duration")
     sample_count = _in_window_sample_count(curve, window)
     if (
         require_sample_count
@@ -748,11 +752,11 @@ def _reduce(
 
     curve = reader.summed_curve()
 
-    # A zero-length measured window is a valid degenerate result, not an error:
-    # every energy is exactly 0.0 and there is nothing to integrate.
-    if window.duration_s == 0.0:
-        return _zero_window_summary(
-            reader, config, metadata, idle_baseline, window, curve
+    # P2-040 FIX-1 (ARC-3): a nonpositive measured window cannot be a
+    # claim-bearing succeeded measurement; fail closed before any derivation.
+    if window.duration_s <= 0.0:
+        raise _ReduceError(
+            f"measured_run window duration must be > 0 s; got {window.duration_s}"
         )
 
     if _in_window_sample_count(curve, window) < 2:
@@ -822,61 +826,6 @@ def _reduce(
         measurement_quality=quality,
         phase_energy_j=phase_energy_j,
         suite_metrics=suite_metrics,
-        energy_uncertainty_status="not_estimable",
-        energy_variance_terms_j2=energy_variance_terms_j2,
-        energy_bound_terms_j=energy_bound_terms_j,
-        claim_eligibility=claim_eligibility,
-    )
-
-
-def _zero_window_summary(
-    reader: BundleReader,
-    config: BenchmarkConfig,
-    metadata: dict[str, Any],
-    idle_baseline: IdleBaseline | None,
-    window: Window,
-    curve: list[TracePoint],
-) -> SummaryMetrics:
-    """A zero-length measured window: energies are exactly 0.0 (not an error)."""
-    token_timestamps = reader.token_timestamps()
-    output_token_count, token_counts_source = _output_token_count(config, token_timestamps)
-    total_tokens, token_count_source = _total_tokens(config, metadata, output_token_count)
-
-    energy_request_j = 0.0 if idle_baseline is not None else None
-    energy_token_j = _energy_token_j(energy_request_j, total_tokens)
-    energy_output_token_j = _energy_output_token_j(energy_request_j, output_token_count)
-    energy_variance_terms_j2 = _energy_variance_terms_j2(idle_baseline, window)
-    energy_bound_terms_j = _energy_bound_terms_j(metadata, curve, window)
-    claim_eligibility = _claim_eligibility(
-        reader, metadata, curve, window, energy_bound_terms_j
-    )
-    quality = MeasurementQuality(
-        requested_sampling_hz=config.sampling.power_hz,
-        idle_power_w_stddev=(
-            idle_baseline.power_w_stddev if idle_baseline is not None else None
-        ),
-        thermal_drift_c=_thermal_drift_c(metadata),
-        telemetry_source=_telemetry_source(metadata),
-        cooldown_cap_hit=_cooldown_cap_hit(metadata),
-        token_count_source=token_count_source,
-        idle_window_suspect=_idle_window_suspect(idle_baseline),
-        token_counts_source=token_counts_source,
-        phase_identifiability=_phase_identifiability(reader.phase_windows(), curve),
-    )
-    return SummaryMetrics(
-        status=RunStatus.SUCCEEDED,
-        energy_request_j=energy_request_j,
-        energy_token_j=energy_token_j,
-        energy_output_token_j=energy_output_token_j,
-        gross_energy_j=0.0,
-        idle_subtracted_energy_j=energy_request_j,
-        ttft_s=_ttft_s(token_timestamps, window),
-        decode_latency_s=_decode_latency_s(token_timestamps),
-        throughput_tokens_s=_throughput_tokens_s(token_timestamps, output_token_count),
-        idle_baseline=idle_baseline,
-        measurement_quality=quality,
-        phase_energy_j=_phase_energy(reader.phase_windows(), curve),
-        suite_metrics=_suite_metrics(reader, curve),
         energy_uncertainty_status="not_estimable",
         energy_variance_terms_j2=energy_variance_terms_j2,
         energy_bound_terms_j=energy_bound_terms_j,

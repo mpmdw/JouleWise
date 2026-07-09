@@ -291,7 +291,15 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     except BundleReadError as exc:
         problems.append(f"strict: {exc}")
         return problems
-    if window.duration_s > 0:
+    if window.duration_s <= 0:
+        # P2-040 FIX-1 (ARC-3): independent of the fresh-summary comparison, a
+        # succeeded bundle over a nonpositive measured window is never
+        # strict-valid.
+        problems.append(
+            "strict: succeeded bundle measured window duration must be > 0 s; "
+            f"got {window.duration_s}"
+        )
+    else:
         in_window = sum(
             1 for point in curve if window.start_s <= point.t <= window.end_s
         )
