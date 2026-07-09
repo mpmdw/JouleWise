@@ -30,6 +30,10 @@ from joulewise.schemas import BenchmarkConfig, RunStatus
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
 POWERMETRICS_FIXTURE = REPO_ROOT / "tests" / "fixtures" / "powermetrics_sample.plist"
+LEGACY_ALLOWLIST_PAIR = (
+    "example-mac-mlx-local__r1",
+    "ee80585a2f6cee6aa7e12eb83c318fd88a934be02d5fa2fb2eb7509630640fd5",
+)
 
 
 def _completed(command: list[str]) -> subprocess.CompletedProcess:
@@ -134,16 +138,18 @@ class StrictGateInteractionAmplification(unittest.TestCase):
             "".join(",".join(row) + "\n" for row in rows)
         )
 
-    def test_legacy_summary_marker_allows_missing_workload_provenance(self) -> None:
+    def test_allowlisted_legacy_identity_allows_missing_workload_provenance(self) -> None:
         bundle = self._mock_bundle("amp-legacy-provenance")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         summary.pop("summary_provenance")
         self._rewrite_json(bundle / "summary_metrics.json", summary)
         metadata = json.loads((bundle / "metadata.json").read_text())
         metadata.pop("workload_provenance")
+        metadata["run_id"], metadata["config_sha256"] = LEGACY_ALLOWLIST_PAIR
         self._rewrite_json(bundle / "metadata.json", metadata)
 
-        self.assertEqual(validate_bundle(bundle, strict=True), [])
+        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+            self.assertEqual(validate_bundle(bundle, strict=True), [])
 
     def test_legacy_summary_tolerance_does_not_hide_raw_to_trace_order_drift(self) -> None:
         bundle = self._powermetrics_bundle("amp-pm-legacy-order")
@@ -151,6 +157,9 @@ class StrictGateInteractionAmplification(unittest.TestCase):
         summary.pop("summary_provenance")
         summary.pop("uncertainty")
         self._rewrite_json(bundle / "summary_metrics.json", summary)
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["run_id"], metadata["config_sha256"] = LEGACY_ALLOWLIST_PAIR
+        self._rewrite_json(bundle / "metadata.json", metadata)
 
         rows = self._trace_rows(bundle)
         self.assertEqual(rows[1][3], "cpu_power")
@@ -158,7 +167,8 @@ class StrictGateInteractionAmplification(unittest.TestCase):
         rows[1], rows[2] = rows[2], rows[1]
         self._write_trace_rows(bundle, rows)
 
-        problems = validate_bundle(bundle, strict=True)
+        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+            problems = validate_bundle(bundle, strict=True)
         raw_problem = next((p for p in problems if "strict: raw-to-trace:" in p), None)
         self.assertIsNotNone(raw_problem, problems)
         assert raw_problem is not None

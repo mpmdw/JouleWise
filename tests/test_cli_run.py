@@ -22,7 +22,7 @@ from unittest.mock import patch
 
 from joulewise.adapters.powermetrics import RAW_SAMPLES_NAME
 from joulewise.clock import FakeClock
-from joulewise.cli import main, validate_bundle
+from joulewise.cli import _STRICT_LEGACY_BUNDLE_IDENTITIES, main, validate_bundle
 from joulewise.controller import run_benchmark
 from joulewise.schemas import BenchmarkConfig, RunStatus
 
@@ -37,6 +37,10 @@ POWERMETRICS_FIXTURE = (
 
 #: The single machine-greppable success line shape the contract pins.
 SUCCEEDED_LINE = re.compile(r"^bundle: (\S+) status=succeeded$")
+LEGACY_ALLOWLIST_PAIR = (
+    "example-mac-mlx-local__r1",
+    "ee80585a2f6cee6aa7e12eb83c318fd88a934be02d5fa2fb2eb7509630640fd5",
+)
 
 
 def _run(argv: list[str]) -> tuple[int, str, str]:
@@ -395,6 +399,13 @@ class StrictValidateTests(CliRunTestCase):
         self.assertEqual(exit_code, 0)
         return self.bundle_path_from_line(out.splitlines()[0])
 
+    def mark_allowlisted_legacy_identity(self, bundle: Path) -> None:
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["run_id"], metadata["config_sha256"] = LEGACY_ALLOWLIST_PAIR
+        (bundle / "metadata.json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+        )
+
     def test_fresh_succeeded_bundle_passes_strict(self) -> None:
         bundle = self.make_bundle("strict-clean")
         self.assertEqual(validate_bundle(bundle, strict=True), [])
@@ -515,6 +526,7 @@ class StrictValidateTests(CliRunTestCase):
     def test_legacy_summary_missing_additive_null_keys_passes_strict(self) -> None:
         bundle = self.make_bundle("strict-legacy-null-additive")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["summary_provenance"]
         del summary["idle_baseline"]["gpu_freq_hz_mean"]
         del summary["idle_baseline"]["gpu_idle_ratio_mean"]
         del summary["idle_baseline"]["gpu_idle_ratio_min"]
@@ -523,16 +535,42 @@ class StrictValidateTests(CliRunTestCase):
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
-        self.assertEqual(validate_bundle(bundle, strict=True), [])
+        self.mark_allowlisted_legacy_identity(bundle)
+        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+            self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_legacy_summary_missing_summary_provenance_passes_strict(self) -> None:
-        bundle = self.make_bundle("strict-legacy-summary-provenance")
+    def test_new_summary_missing_summary_provenance_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-new-missing-summary-provenance")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         del summary["summary_provenance"]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
-        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("summary_metrics.summary_provenance" in p for p in problems),
+            problems,
+        )
+
+    def test_allowlisted_legacy_bundle_missing_provenance_passes_strict(self) -> None:
+        self.assertIn(LEGACY_ALLOWLIST_PAIR, _STRICT_LEGACY_BUNDLE_IDENTITIES)
+        bundle = self.make_bundle("strict-allowlisted-legacy-provenance")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary.pop("summary_provenance")
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata.pop("workload_provenance")
+        (bundle / "metadata.json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+        )
+        self.mark_allowlisted_legacy_identity(bundle)
+
+        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+            self.assertEqual(validate_bundle(bundle, strict=True), [])
 
     def test_new_era_summary_missing_honesty_fields_fails_strict(self) -> None:
         bundle = self.make_bundle("strict-new-era-missing-honesty")
@@ -558,8 +596,10 @@ class StrictValidateTests(CliRunTestCase):
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
+        self.mark_allowlisted_legacy_identity(bundle)
 
-        self.assertEqual(validate_bundle(bundle, strict=True), [])
+        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+            self.assertEqual(validate_bundle(bundle, strict=True), [])
 
     def test_stored_value_drift_still_fails_strict(self) -> None:
         bundle = self.make_bundle("strict-stored-drift")
@@ -741,6 +781,30 @@ class StrictValidateTests(CliRunTestCase):
         (bundle / "metadata.json").write_text(json.dumps(metadata, indent=2))
 
         problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("metadata.workload_provenance" in p for p in problems),
+            problems,
+        )
+
+    def test_non_allowlisted_bundle_missing_provenance_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-non-allowlisted-missing-provenance")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary.pop("summary_provenance")
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata.pop("workload_provenance")
+        (bundle / "metadata.json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("summary_metrics.summary_provenance" in p for p in problems),
+            problems,
+        )
         self.assertTrue(
             any("metadata.workload_provenance" in p for p in problems),
             problems,
