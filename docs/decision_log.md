@@ -69,6 +69,8 @@ be re-derived by a future agent gets an entry here.
 | D-045 | Suite substrate execution semantics (run_suite, statuses, per-item outputs) | accepted |
 | D-046 | AP-6 sentinel delivery is ids-native BOS-less at literal equal shape | accepted |
 | D-047 | Affine ladder pins: level set, smoke sizing, gate denominators | accepted |
+| D-048 | Split program is model-first: pre-registered compositional prediction before split runs | accepted |
+| D-049 | Split transfer-energy boundary accounting on discrete-GPU ends | accepted |
 
 ---
 
@@ -2357,3 +2359,93 @@ Decision:
 Revisit when: the first smoke bundle's measured item time falls outside
 0.11–0.20 s/item (resize per the report's table); or the scored
 campaign is scheduled (k-policy ratification).
+
+
+---
+
+## D-048: Split program is model-first — pre-registered compositional prediction before split runs
+
+- Date: 2026-07-08
+- Status: accepted (C-020 whole-project merit debate; three-pole consensus)
+- Phase: 3 (binds Phase 3 design + AP row seeding; framing binds Phase 4)
+
+Context: the C-020 merit debate's decisive arithmetic (KV bytes/token ×
+link speed vs measured idle/decode watts) shows the Q1 crossover is
+possible but NOT likely uniformly across the planned pairings — a bare
+"no crossover found" sweep result would read as predictable. All three
+debate poles (session-lead Fable, fresh-Fable, Codex stack) converged
+independently on the fix.
+
+Options considered:
+
+1. Keep the crossover sweep as the flagship, report whatever verdict
+   lands. Con: the null branch is a shrug; a positive is a point
+   observation without a transferable theory.
+2. Invert entirely — make the Q4 compositional model the thesis and the
+   split sweep mere validation (fresh-Fable's strong form). Con:
+   under-weights that the both-end per-stage energy decomposition
+   DATASET is itself the first-of-kind artifact regardless of model fit.
+3. Synthesis: model-first FRAMING, dataset-first CONTRIBUTION.
+
+Decision: option 3. The program's thesis sentence is: "JouleWise builds
+auditable per-stage split-inference energy bundles, then tests whether a
+pre-registered compositional model predicts them." Binding mechanics:
+(a) BEFORE any split hardware runs, the compositional model (AP-1 Q4
+coefficients + measured link-transfer energy + idle floors) produces
+pre-registered predicted split-energy curves per pairing/link, recorded
+in a seeded analysis-plan row (incl. the named same-boundary headline
+pairing, which is L2-eligible calibration-free); (b) Phase 3 acceptance
+is reframed as prediction validation: every branch is a result —
+confirmed model (predictive tool), quantified unmodeled overhead term
+(systems finding), or crossover located where predicted (doubly
+credible); (c) a no-crossover verdict is publishable ONLY as successful
+prediction or quantified overhead discovery, never presented as a
+surprise negative. Design should include at least one pairing/link cell
+where the model PREDICTS a crossover, if any exists in the feasible set.
+
+Consequences: `docs/phase_3/phase_3_plan.md` acceptance framing gets a
+dated amendment pointing here; the AP row obligation rides the split-prep
+queue row; Phase 4 claim wording inherits the thesis sentence.
+
+Revisit when: the 2M-fitted Q4 model fails its own monolithic holdouts
+(then the compositional prediction has no validated coefficients and the
+sweep reverts to exploratory with that stated).
+
+---
+
+## D-049: Split transfer-energy boundary accounting on discrete-GPU ends
+
+- Date: 2026-07-08
+- Status: accepted (C-020; Codex-stack catch, repo-verified)
+- Phase: 3
+
+Context: on nvidia-smi-measured ends, board power EXCLUDES the host
+CPU/NIC/DRAM work of moving KV bytes over TCP — so "transfer energy"
+measured at a discrete-GPU end is near-zero by construction: a silent
+undercount in unmeasured silicon, asymmetric across the pairing matrix
+(Mac and Jetson boundaries include their NIC/host paths; dGPU boundaries
+do not).
+
+Options considered:
+
+1. Ignore — report board-only numbers. Con: cross-pairing transfer
+   comparisons silently broken; exactly the boundary sin (D-018) the
+   project exists to avoid.
+2. Wall-meter (or equivalent host-side measurement of) the GPU host on
+   transfer legs so the transfer window has a host-inclusive boundary.
+3. Explicitly scope dGPU transfer cells as board-only LOWER BOUNDS in
+   the stage accounting, named per cell in the AP row and claim wording.
+
+Decision: option 2 where the meter is available for the leg, option 3
+otherwise — never option 1. The per-stage accounting schema must carry a
+per-cell boundary label for the transfer stage; the seeded split AP row
+(D-048) names which cells are host-inclusive vs board-only lower bounds;
+cross-pairing transfer-energy comparisons are permitted only between
+like-boundary cells or via the D-018 calibration bridge.
+
+Consequences: split-prep queue row carries this; `docs/contracts/`
+boundary docs get the transfer-stage label when the split schema lands
+(Phase 3 implementation, not now — R-015 additive rule applies).
+
+Revisit when: the wall/USB-C calibration (Q6) bounds the host-side gap
+tightly enough to model it instead of measuring per leg.

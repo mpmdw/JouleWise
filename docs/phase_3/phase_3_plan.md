@@ -1,5 +1,13 @@
 # Phase 3 Plan: Disaggregation, KV Replay, And Interconnect Sweep
 
+(Amendment 2026-07-08, D-048/C-020: the split program is MODEL-FIRST —
+pre-registered compositional split-energy predictions (from AP-1 Q4
+coefficients + measured transfer energy) are seeded in an analysis-plan
+row BEFORE any split hardware runs, and Phase 3 acceptance is framed as
+prediction validation; a no-crossover verdict is publishable only as
+successful prediction or quantified unmodeled-overhead discovery. D-049
+binds per-cell transfer-stage boundary labels on discrete-GPU ends.)
+
 Status: tracked in `docs/phase_3/phase_3_exit_checklist.md` (per-item
 status authority, per D-023). Gated by the Phase 3 readiness section of
 `docs/phase_2/phase_2_exit_checklist.md`.

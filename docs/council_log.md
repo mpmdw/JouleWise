@@ -51,6 +51,7 @@ standing instructions.
 | C-014 | 2026-07-08 | Workload-suite science hardening (full entry below) — lead audit + scout + 3 design lenses + invited peer counterreview | Q4-at-L3 gap closed via `q4_l3_shape_grid_v1` (4x3 + holdouts); P2-015 expanded to comparative MDE floors; jw_mixed common-shape stratum (C-W.1 was unfalsifiable); P2-010 split substrate/smoke, scored ladder deferred; two-quiet-window plan; analysis-plans contract (D-038); program restructure (D-039); two lead designs overturned by invited peer |
 | C-015 | 2026-07-08 | Benchmark expansion council (full entry below) — reach lenses R1/R2 + design lenses E1/E2 + peer counterreview | Suite architecture v2 (D-040: B×k bundles, one generic mechanism, per-item status model); interop direction (D-041: HumanEval-first imports, marker-shim energy layer, kill list); capability map landed in bank; R2 collect-now set spawned the window-a-capture stream; capstone stop-line + D-034 gate restated |
 | C-016 | 2026-07-08 | Post-large-workload meta-reassessment (pointer entry; records: D-043, `~/.claude/skills/skill-usage-log.md`, run report addendum) — 4 analysts (council/decision/skill mining + cold-start derivability) + completeness critic, Workflow-orchestrated | Supersession drift named as THE recurring unfolded failure mode (~70% of doc defects) → D-043 write-time + sweep-time discipline; operative merge-authority contradiction fixed; 5 skill divergences fixed; codex-delegation rewritten procedure-first; clean-machine derivability closed (scripts/codex-run committed + orchestration.md pointer map); §10 post-large-workload trigger now standing |
+| C-020 | 2026-07-08 | STOP-AND-ANALYZE WHOLE PROJECT: technical + research merit debate (full entry below) — 69-agent Codex assessment workflow + 2 independent Fable position papers + recorded Fable-vs-Codex debate; owner-directed | Merit verdict recorded (docs/reviews/2026-07-08-technical-merit-review.md); D-048 model-first split program + D-049 transfer-boundary accounting promoted; question ranking adjudicated (Q4→Q1 coupled #1, Token-Shape Null sustained #2, Q6 elevated #3, affine ladder = validity instrument); crossover prior corrected by arithmetic; cheap-validity priority set (bundle publication + external re-reduction first); repo-verified gaps: bundles unpublished, no LICENSE, D-033 strict-validation legacy bypass |
 | C-019 | 2026-07-08 | Post-suite-build meta-reassessment (full entry below) — 4 analyst lanes (5.5-direction study over 43 invocations; calibration longitudinal; project status/value ranking; closure) + completeness critic | Direction doctrine folded into codex-delegation skill (precedence/autonomy/FIX-N/production-gate clauses; model-version scoping rule pre-upgrade); D-013 prose back-annotated marker-bounded; shakedown gate added to P2-015; P2-025 adjacency + P1-008 elevation (incl. examiner acceptance-bar ask); pre-#21 corpus validity noted (dict-read-scale overhead, no re-reduction); watch items: integration-after-oversight, Opus A/B |
 | C-018 | 2026-07-08 | D-013 alignment-capture window fix (parallel session; full entry below) | sampling_stopped stamped before alignment capture (PR #21: `255a7e6`, bookkeeping `c2e51b2`, merge `49c5b66`); suite 734; D-013 prose back-annotated to marker-bounded wording in the reassessment batch |
 | C-017 | 2026-07-08 | Suite-build adjudication + implementation gates (full entry below) — Codex disposition draft + fresh adversarial round + lead calls; 11 unit lenses + 1 Opus outage substitute + 7-reviewer oversight + 3 final-head + integration | 37 amendments dispositioned → D-044..D-047; substrate/ladder/generators BUILT and merged (PRs #17/#18/#20/#19, suite 732); 3 lead live-only catches (refs, strict rollup, sampler namespace); oversight caught 2 validation holes pre-merge; PR #18 base-retarget slip recovered via #20 |
@@ -1178,3 +1179,91 @@ Lane findings adopted:
   (5) skill folds listed with paths in the run-report addendum;
   (6) site regen rides this batch; (7) noted above; (8) adopted into
   P1-008.
+
+
+## C-020: Stop-and-analyze whole project — technical + research merit debate (2026-07-08)
+
+Event class: owner-directed whole-project merit review ("strictly
+technical and research merit; logistics off-limits; split study is
+happening"). Largest review event to date: a 69-agent Workflow (5 codex
+readers over all top-level docs + code + evidence, 2 web freshness scans
+[2026 energy-benchmark landscape; split-inference energy literature],
+5 assessment lenses [technical feat / benchmark merit / audience /
+research questions / skeptic], per-finding adversarial verification
+tiered by materiality, synthesis + attack round), PLUS two independent
+Fable position papers (session lead, written pre-workflow-output; fresh
+Fable subagent with no session context), PLUS a recorded Fable-vs-Codex
+debate round and lead adjudication. Artifact: the corrected assessment
+is committed at docs/reviews/2026-07-08-technical-merit-review.md;
+position papers and debate transcripts in the session scratchpad;
+verdict summary in the run-report addendum.
+
+CONVERGENCES (all three poles independently; no debate needed):
+- The distinctive technical feat is the composed EVIDENCE ARCHITECTURE
+  (auditable raw-to-claim chains, marker-bounded windows, strict
+  re-derivation) plus the clinical-trial-style claim-gating stack
+  (ladder/floors/pre-registration) — plausibly field-first for energy
+  benchmarking; the components individually are well-executed-standard.
+- Machinery is ahead of data: ~six real bundles gate hundreds of pages
+  of methodology; nearly all research merit is promissory until the
+  campaigns run. Correct failure mode for this stage, but graded as
+  instrument + de-risked path, not results.
+- Sensor trust (vendor telemetry, uncalibrated) is the binding validity
+  ceiling; the wall/USB-C bridge is load-bearing methodology.
+- Pre-registering a compositional split-energy prediction before split
+  hardware runs (lead Thesis 5 = fresh-Fable "spine inversion" = Codex
+  "elevates Q1 to transferable theory") → promoted as D-048.
+
+DEBATE RULINGS (lead adjudication after Codex round 1; dissents kept):
+- D1 question ranking: coupled Q4→Q1 (compositional prediction +
+  first-of-kind per-stage dataset) #1; TOKEN-SHAPE SUFFICIENCY NULL
+  SUSTAINED at #2 over fresh-Fable's omission (equivalence-margin
+  results travel: a holding null validates every shape-matched synthetic
+  energy workload; a failure confounds every shape-only benchmark); Q6
+  boundary bias ELEVATED to #3 (fresh-Fable's "most citable by other
+  benchmark authors" conceded by Codex); active-parameter scaling #4;
+  affine ladder reclassified per D4; Q5 last ("unresolved ties" likely;
+  the MDE discipline is the contribution, not the answer).
+- D2 crossover prior: fresh-Fable CORRECT against the original Codex
+  draft — debate arithmetic (Qwen2.5-1.5B: 28,672 B/token → 56 MiB @
+  2048 tokens → ~0.5 s on 1GbE; 8B @ 8192 → ~9 s; second-device
+  overhead 5-50 W → 2.5-25 J against tens-of-joules prefill savings)
+  places crossover as possible-not-uniform: favored by asymmetric
+  device strengths, long prompts, ≥2.5GbE, low-idle pairings. This
+  arithmetic is why D-048 is mandatory, not stylistic.
+- D3 spine: synthesis adopted — model-first FRAMING, dataset-first
+  CONTRIBUTION (thesis sentence in D-048). Fresh-Fable's strong
+  inversion declined: the both-end per-stage decomposition dataset is
+  first-of-kind regardless of model fit.
+- D4 affine ladder: lead position sustained — a suite-validity and
+  denominator-discipline instrument, not a headline; C5-1.9
+  (MoE-vs-dense energy-per-correct) exempt. Codex conceded its stack
+  overstated the ladder's scientific independence.
+- D5 cheap validity moves, priority: (1) publish a bundle pack + obtain
+  ONE external strict re-reduction (fresh-Fable: "auditability is an L0
+  claim until an outsider re-reduces a bundle" — conceded by Codex as
+  the cleanest new criticism of the debate); (2) USB-C PD / wall
+  cross-check; (3) same-class unit-to-unit CV campaign. None upgrades
+  today's claims; each raises the claim ceiling.
+
+REPO-VERIFIED CORRECTIONS (attack round; applied to the review doc):
+bundles are gitignored/unpublished (external auditability never yet
+exercisable); NO LICENSE file (blocks all external adoption; owner
+decision); D-033 strict-validation legacy bypass (absent
+summary_provenance skips workload-provenance checks — known tamper
+hole, queue row); gating stack is partially exercised (D-014 protocol +
+MDE sizing ran on real data; the floor gate itself has never fired);
+contamination catches were one human + one automated (not two
+automated); Jetson leg is a physical shunt measurement, not a vendor
+model — the program's sensor taxonomy is mixed, not uniformly modeled.
+
+DISSENTS RECORDED: fresh-Fable maintains full spine inversion (thesis =
+model, not dataset); fresh-Fable's Token-Shape omission overruled;
+original Codex-draft optimism on the uniform crossover prior overruled
+by its own debate arithmetic.
+
+PROMOTED: D-048, D-049. Queue rows: D-033 bypass fix, bundle-pack
+publication prep, split-prep AP-row obligation, PROJECT_STATUS
+orchestration-surface trim. Owner items surfaced (not queued as
+blockers per scope rule): LICENSE choice; USB-C PD analyzer; external
+re-reducer recruit.
