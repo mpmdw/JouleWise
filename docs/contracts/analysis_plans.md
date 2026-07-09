@@ -109,7 +109,7 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
 | Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for request windows and any reported phase window. |
 | MDE/n sizing + predeclared top-up rule | n=5 provisional; top up to n=10 for near-floor cells or contrasts before L3 wording (C-014). |
 | Denominator provenance requirement | Runtime-observed output tokens for per-token companion tables; request-energy fit does not use config-token denominators. |
-| Holdout cells (L3 only) | `(512,256)` interpolation and `(4096,512)` extrapolation holdouts; prediction errors must clear the AP-1 floor gate. |
+| Holdout cells (L3 only) | `(512,256)` and `(4096,512)` held-out in-grid corner predictions (interaction/additivity validation — both factor levels occur in the training grid, so neither is statistical extrapolation); prediction errors must clear the AP-1 floor gate. No extrapolation claim is available from this grid. |
 | Claim ceiling + exact forbidden upgrade | Ceiling L3. Forbidden upgrade: no curvature, universal scaling law, or architecture-wide conclusion from this grid. |
 | Disqualifiers + not-resolvable conditions | Holdout miss, residual above floor, below-floor effects, unresolved rank gaps, or short-prefill <3 samples downgrade or report `not resolvable`. |
 | Linked manifests/bundle hashes | pending post-execution. |
