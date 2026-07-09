@@ -25,7 +25,7 @@ C-015 external marked-runner contract.
 | multiplicity_rule | Holm within FAM-C5I4-HARNESS-OVERHEAD across predeclared overhead-fraction and marker-validity contrasts when `external_markers_supported` or eligible `partial(<limitation>)` holds. If verdict is `external_markers_unsupported`, analysis is exploratory/no-confirmatory-inference feasibility only. |
 | Metric + exact window class | Harness process overhead energy/time on session or request windows; item-window energy only when item markers pair, fall inside measured windows, and P2-015 item floors clear. Components: harness start/end, item start/end, external results hash, marker validation, and measured-window inclusion. |
 | Unit of analysis + dependence structure | Marked harness run or bundle repetition. Items within a harness process are nested and not independent replicates unless repeated bundles/blocks are frozen. |
-| Estimator/formula | `overhead_fraction = (harness_window_energy_j - sum(valid_item_window_energy_j)) / harness_window_energy_j` when marker coverage supports decomposition. Verdict table records supported, partial, or unsupported branch. Energy comparisons require strict bundles, repeated runs, and same/calibrated boundary. |
+| Estimator/formula | `overhead_fraction = (harness_window_energy_j - sum(valid_item_window_energy_j)) / harness_window_energy_j` when marker coverage supports decomposition. Verdict table records exactly `external_markers_supported`, `partial(<limitation>)`, or `external_markers_unsupported`; every partial verdict must include the limitation payload inside the parentheses. Energy comparisons require strict bundles, repeated runs, and same/calibrated boundary. |
 | Inclusion/exclusion + quality-flag waiver rules | Include only strict-valid bundles with C-015 shim fields, paired item markers, monotonic timestamps, markers inside measured window, non-overlap unless declared, external results artifact SHA-256, and reducer success. Unsupported marker verdict records feasibility only and excludes energy comparison. |
 | Order/blocking/covariates | External harness order is frozen or recorded from harness output. Record item index, harness process ID, marker timestamp source, block/session, cooldown flags, and any partial verdict limitation. |
 | Floor gate | pending-P2-015: consume matching item-window rows such as `DF-ITEM` for item energy, matching request/session rows such as `DF-RQ-GROSS-MID`, `DF-RQ-IDLE-MID`, and `DF-CMP-ABBA-RQ` for harness/request energy, and any marker-jitter/telemetry floor rows added by P2-015. Missing matching floor rows cap overhead-energy claims at L1/descriptive. |
@@ -49,25 +49,45 @@ lands.
   "run_id": "c5-i4-overhead-<<P2-022.HARNESS_NAME>>-<<P2-022.SUBSET_ID>>",
   "external_runner": {
     "shim_schema_version": "<<P2-022.SHIM_SCHEMA_VERSION>>",
-    "harness_name": "<<P2-022.HARNESS_NAME>>",
-    "harness_version": "<<P2-022.HARNESS_VERSION>>",
-    "command_argv_sha256": "<<P2-022.COMMAND_ARGV_SHA256>>",
-    "working_dir_sha256_or_null": "<<P2-022.WORKING_DIR_SHA256_OR_NULL>>",
-    "environment_allowlist": "<<P2-022.ENVIRONMENT_ALLOWLIST>>",
-    "benchmark_name": "<<P2-022.BENCHMARK_NAME>>",
-    "benchmark_revision": "<<P2-022.BENCHMARK_REVISION>>",
-    "subset_id": "<<P2-022.SUBSET_ID>>",
-    "external_results_path": "<<P2-022.EXTERNAL_RESULTS_PATH>>",
-    "external_results_sha256": "<<P2-022.EXTERNAL_RESULTS_SHA256>>"
+    "invocation": {
+      "harness_name": "<<P2-022.HARNESS_NAME>>",
+      "harness_version": "<<P2-022.HARNESS_VERSION>>",
+      "command_argv_sha256": "<<P2-022.COMMAND_ARGV_SHA256>>",
+      "working_dir_sha256_or_null": "<<P2-022.WORKING_DIR_SHA256_OR_NULL>>",
+      "environment_allowlist": "<<P2-022.ENVIRONMENT_ALLOWLIST>>",
+      "benchmark_name": "<<P2-022.BENCHMARK_NAME>>",
+      "benchmark_revision": "<<P2-022.BENCHMARK_REVISION>>",
+      "subset_id": "<<P2-022.SUBSET_ID>>",
+      "external_results_path": "<<P2-022.EXTERNAL_RESULTS_PATH>>",
+      "external_results_sha256": "<<P2-022.EXTERNAL_RESULTS_SHA256>>"
+    },
+    "events": {
+      "required_event_types": ["harness_start", "harness_end", "item_start", "item_end"],
+      "required_top_level_keys": ["timestamp_s", "event_type", "phase", "message", "metadata"],
+      "metadata_required": [
+        "run_id",
+        "harness_item_id",
+        "item_index",
+        "benchmark_name",
+        "subset_id",
+        "prompt_sha256_or_null",
+        "output_sha256_or_null",
+        "external_metric_record_id_or_null",
+        "status",
+        "error_type_or_null",
+        "token_counts_if_reported",
+        "timestamp_source"
+      ]
+    },
+    "validation": {
+      "require_paired_item_markers": true,
+      "require_monotonic_timestamps": true,
+      "require_markers_inside_measured_window": true,
+      "require_no_overlapping_items_unless_declared": true,
+      "require_external_results_hash": true
+    }
   },
-  "marker_validation": {
-    "require_paired_item_markers": true,
-    "require_monotonic_timestamps": true,
-    "require_markers_inside_measured_window": true,
-    "require_no_overlapping_items_unless_declared": true,
-    "require_external_results_hash": true
-  },
-  "verdict_branch": "<<P2-022.external_markers_supported_OR_partial_OR_unsupported>>",
+  "verdict_branch": "<<P2-022.VERDICT: external_markers_supported | partial(<limitation>) | external_markers_unsupported>>",
   "run_metadata": {
     "project": "capstone-joulewise",
     "operator": "ed",
@@ -109,6 +129,10 @@ F-C5I4-OVERHEAD-FRACTION: overhead fraction vs item energy.
 - Caption uses capstone single-unit limitation language and full
   token-normalization stack identity fields. It states item energy is
   claim-bearing only when marker and floor gates pass.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 F-C5I4-MARKER-WATERFALL: marker-validity waterfall.
 
@@ -116,6 +140,10 @@ F-C5I4-MARKER-WATERFALL: marker-validity waterfall.
 - y-axis: count of items or runs retained.
 - Caption names paired markers, monotonic timestamps, measured-window
   inclusion, external results hash, strict validation, and reduction status.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 F-C5I4-VERDICT-TABLE: supported, partial, unsupported verdict table.
 
@@ -123,6 +151,10 @@ F-C5I4-VERDICT-TABLE: supported, partial, unsupported verdict table.
 - Columns: verdict branch, limitation, allowed claim ceiling, and reason.
 - Caption states unsupported markers produce feasibility evidence only and no
   energy comparison.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 ## Gates
 

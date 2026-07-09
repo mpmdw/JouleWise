@@ -136,6 +136,10 @@ F-C531-UNIT-DELTAS: original vs second-unit deltas.
 - y-axis: second-unit estimate or delta.
 - Caption uses capstone single-unit limitation language and states whether the
   result is still an L4 enabler rather than a population claim.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 F-C531-VARIANCE-FLOOR: variance relative to floor.
 
@@ -143,6 +147,10 @@ F-C531-VARIANCE-FLOOR: variance relative to floor.
 - y-axis: unit-to-unit variance or delta divided by active floor.
 - Caption names P2-015 floor rows and reports `not resolvable` where the floor
   absorbs the contrast.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 F-C535-CROSS-LAB-AGREEMENT: cross-lab agreement table.
 
@@ -151,6 +159,10 @@ F-C535-CROSS-LAB-AGREEMENT: cross-lab agreement table.
   agreement status.
 - Caption includes full stack identity, transferred bundle hashes, and
   boundary labels.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 ## Gates
 
@@ -168,6 +180,45 @@ F-C535-CROSS-LAB-AGREEMENT: cross-lab agreement table.
   affect the claim.
 
 ## Plug-In-Day Runbook
+
+### External-Lab Cold-Start Preflight
+
+Before execution, the external lab must start from a pinned source artifact and
+return enough provenance to prove that the same contract was run.
+
+Required artifact and install checks:
+
+```sh
+tar -xf <<JOULEWISE_SOURCE_ARTIFACT>> -C <<EXTERNAL_LAB_WORKDIR>>
+cd <<EXTERNAL_LAB_WORKDIR>>/<<JOULEWISE_SOURCE_DIR>>
+python3 -m pip install -e .
+python3 -m joulewise --help
+python3 scripts/package_bundle_pack.py --verify runs/bundle_packs/<<SOURCE_PACK_ID>>
+```
+
+Required config transfer and validation checks:
+
+```sh
+mkdir -p configs/campaign_packs/replication_transferred
+cp <<TRANSFERRED_CONFIG_DIR>>/*.json configs/campaign_packs/replication_transferred/
+for cfg in configs/campaign_packs/replication_transferred/*.json; do
+  python3 -m joulewise validate-config "$cfg"
+done
+python3 scripts/run_campaign.py configs/campaign_packs/replication_transferred --runs-dir runs --log runs/experiments/<<REPLICATION_EXPERIMENT_ID>>.jsonl --dry-run
+```
+
+Environment and telemetry checks before the first real run:
+
+- Record source artifact path, source artifact SHA-256, git commit if present,
+  install command output, `python3 -m joulewise --help` output, Python version,
+  OS/version, hardware unit identity, runtime/backend versions, and telemetry
+  backend/version or command semantics.
+- Confirm telemetry backend availability, power-trace write permission, clock
+  state, quiet-machine lock, idle baseline readiness, and bundle output path.
+- Return the transferred config directory hash, per-config SHA-256 values,
+  `validate-config` outputs, dry-run plan output, source bundle-pack verify
+  output, environment capture, telemetry check evidence, and any deviations
+  from the frozen acceptance matrix.
 
 Existing commands:
 

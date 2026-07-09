@@ -141,6 +141,10 @@ F-C527-BOUNDARY-RANK-TABLE: boundary-labeled device rank table.
 - Caption includes the capstone single-unit limitation language and the full
   token-normalization stack identity fields. It states that runtime revision is
   held constant while backend kernels differ by platform and are named.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 F-C527-ENERGY-THROUGHPUT: request energy vs throughput.
 
@@ -148,12 +152,20 @@ F-C527-ENERGY-THROUGHPUT: request energy vs throughput.
 - y-axis: request energy under the named boundary.
 - Caption co-displays request energy with any token companion and names the
   tokenizer identity. Cross-boundary points are descriptive unless calibrated.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 F-C527-WORKLOAD-STABILITY: workload-rank stability.
 
 - x-axis: workload shape.
 - y-axis: rank or rank gap with uncertainty.
 - Caption says adjacent gaps that do not clear MDE/floor are `unresolved tie`.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 ## Gates
 

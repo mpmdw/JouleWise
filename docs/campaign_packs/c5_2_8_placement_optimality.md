@@ -119,6 +119,10 @@ F-C528-PREDICTED-MEASURED: predicted vs measured placement energy.
 - Caption uses capstone single-unit limitation language and full
   token-normalization stack identity fields; it states that placement winners
   are validation-cell claims, not generic optimal placement.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 F-C528-REGRET: regret by validation cell.
 
@@ -126,6 +130,10 @@ F-C528-REGRET: regret by validation cell.
 - y-axis: regret in joules versus measured best.
 - Caption names the active floor/MDE threshold and marks below-threshold
   regret as unresolved, not as proof of equality.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 F-C528-OPTIMAL-MAP: optimal-placement map.
 
@@ -134,6 +142,10 @@ F-C528-OPTIMAL-MAP: optimal-placement map.
 - Fill: predicted optimum and measured-best agreement status.
 - Caption states whether Q4 holdouts cleared; if not, this is exploratory
   placement accounting.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 ## Gates
 
@@ -157,6 +169,8 @@ Existing commands:
 
 ```sh
 python3 scripts/package_bundle_pack.py --verify runs/bundle_packs/<<SOURCE_PACK_ID>>
+python3 -m joulewise validate-config configs/campaign_packs/<<C528_VALIDATION_CONFIG>>.json
+python3 scripts/run_campaign.py configs/campaign_packs/<<C528_VALIDATION_CONFIG_DIR>> --runs-dir runs --log runs/experiments/<<C528_VALIDATION_EXPERIMENT_ID>>.jsonl --backup
 python3 -m joulewise validate-bundle --strict runs/<<VALIDATION_BASE_RUN_ID>>__r1
 python3 -m joulewise reduce runs/<<VALIDATION_BASE_RUN_ID>>__r1
 python3 scripts/package_bundle_pack.py --output runs/bundle_packs/<<C528_VALIDATION_PACK_ID>> runs/<<VALIDATION_BASE_RUN_ID_A>>__r1 runs/<<VALIDATION_BASE_RUN_ID_B>>__r1

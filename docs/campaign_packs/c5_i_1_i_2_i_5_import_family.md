@@ -50,7 +50,7 @@ in `c5_i_3_flores_fertility.md`.
 | family_id | FAM-C5I2-DIFFICULTY-ASSOCIATION |
 | claim_role | secondary |
 | selection_scope | Frozen HumanEval imported subset with quarantined difficulty metadata fields, optional later second-family placeholder with no source named, matched shape/output policy, and predeclared strata `<<P2-023.DIFFICULTY_STRATA_OR_NONE>>`. Countable contrasts are descriptive association summaries across frozen source-provided strata only. |
-| multiplicity_rule | Holm within FAM-C5I2-DIFFICULTY-ASSOCIATION for predeclared repeated-bundle L2 stratum contrasts when such bundles exist; otherwise exploratory/no-confirmatory-inference for L1 association summaries. BH item-level sweeps at q=0.10 are limited to metadata/correctness summaries and cannot carry item-energy inference. |
+| multiplicity_rule | Holm within FAM-C5I2-DIFFICULTY-ASSOCIATION for predeclared repeated-bundle L2 stratum contrasts when such bundles exist; otherwise exploratory/no-confirmatory-inference for L1 association summaries. BH item-level sweeps at q=0.10 are limited to source-provided quarantined metadata summaries; no JouleWise correctness scoring, accuracy, pass@k, leaderboard, benchmark-score normalization, or item-energy inference. |
 | Metric + exact window class | Energy on request, item, or level windows as supported by the import run; stop-reason and token distributions are companions. Difficulty labels are source metadata, not causal treatments. |
 | Unit of analysis + dependence structure | Bundle or block-level uncertainty by difficulty stratum. Individual items are metadata observations, not independent energy replicates unless repeated bundles are frozen. |
 | Estimator/formula | Descriptive association between source-provided difficulty stratum and bundle/block energy, controlling for matched shape and output policy when frozen. No causal estimator is allowed. |
@@ -60,7 +60,7 @@ in `c5_i_3_flores_fertility.md`.
 | MDE/n sizing + predeclared top-up rule | L1 summaries may use HumanEval smoke evidence. Any L2 stratum contrast requires preplanned repeated bundles with n>=5 per stratum/block or an accepted repeated-block design; top up to n=10 when stratum CI crosses the floor or association direction changes under leave-one-out. |
 | Denominator provenance requirement | Source difficulty label, difficulty source, source row hash, frozen subset ID, prompt/render hash, runtime-observed tokens, stop reason, tokenizer identity, output policy, and quarantine metadata. |
 | Holdout cells (L3 only) | not applicable. |
-| Claim ceiling + exact forbidden upgrade | `L1 association; L2 only if preplanned repeated bundles`. Forbidden upgrade: `no difficulty causes energy`. |
+| Claim ceiling + exact forbidden upgrade | `L1 association; L2 only if preplanned repeated bundles`. Forbidden upgrade: no `difficulty causes energy`. |
 | Disqualifiers + not-resolvable conditions | Heterogeneous labels merged into causal difficulty language, no repeated-bundle design for L2, missing source difficulty provenance, shape/output mismatch, item windows treated as independent replicates, or benchmark-score normalization. |
 | Linked manifests/bundle hashes | pending post-execution; filled at registry freeze and final reduction. |
 
@@ -197,6 +197,10 @@ F-C5I1-FAMILY-SIGNATURES: imported-family energy signatures.
 - Caption uses capstone single-unit limitation language and full
   token-normalization stack identity fields. It states HumanEval is a plumbing
   smoke unless repeated strict-valid bundles support a later L2 contrast.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 F-C5I2-DIFFICULTY-ASSOCIATION: difficulty-stratum descriptive association.
 
@@ -204,6 +208,10 @@ F-C5I2-DIFFICULTY-ASSOCIATION: difficulty-stratum descriptive association.
 - y-axis: energy or stop/token distribution summary.
 - Caption states that labels are heterogeneous source metadata and do not
   support `difficulty causes energy`.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 F-C5I5-PROMPT-PAIRS: prompt-template paired deltas.
 
@@ -211,6 +219,10 @@ F-C5I5-PROMPT-PAIRS: prompt-template paired deltas.
 - y-axis: canonical-vs-JouleWise rendered energy delta.
 - Caption names template hashes, rendered prompt hashes, BOS policy, tokenizer
   identity, request energy, and any tokenizer-scoped companion metric.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 ## Gates
 

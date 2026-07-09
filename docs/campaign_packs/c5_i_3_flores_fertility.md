@@ -14,7 +14,8 @@ the deferred D-046/B6 6-vs-8 language decision.
 - Request energy is primary; tokenizer-scoped J/token is companion-only.
 - Required companion denominators: J/char, J/byte, and semantic-pair IDs.
 - FLORES source/licensing/hash discipline.
-- Claim ceiling: no tokenizer efficiency ranking without both legs.
+- Claim ceiling: no tokenizer efficiency ranking without semantic and
+  token-matched legs.
 
 ## Deferred To FLORES/Source Session
 
@@ -143,6 +144,10 @@ F-C5I3-SEMANTIC: semantic-matched energy by language/script.
 - Caption uses capstone single-unit limitation language and full
   token-normalization stack identity fields. It names semantic pair IDs and
   says request energy is primary.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 F-C5I3-TOKEN-MATCHED: token-matched control.
 
@@ -150,6 +155,10 @@ F-C5I3-TOKEN-MATCHED: token-matched control.
 - y-axis: request energy and companion tokenizer-scoped J/token.
 - Caption co-displays J/char and J/byte and states token counts are
   tokenizer-scoped companion metrics.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 F-C5I3-FERTILITY: fertility ratio vs energy delta.
 
@@ -157,6 +166,10 @@ F-C5I3-FERTILITY: fertility ratio vs energy delta.
 - y-axis: semantic-matched and token-matched energy delta.
 - Caption states no tokenizer efficiency ranking is allowed unless both legs
   are present and floor-cleared.
+- Caption includes/cites the full token-normalization stack-identity table,
+  including tokenizer name/revision/class/vocab size, `prompt_source`,
+  `bos_present` wherever per-token metrics appear, batching/concurrency,
+  boundary, and telemetry backend.
 
 ## Gates
 

@@ -81,7 +81,8 @@ recorded for each suite member.
 
 ## Known Pre-Hardware Gaps
 
-The current JouleWise CLI supports `validate-config`, `kv-size`, `run`,
+The current JouleWise CLI supports `validate-config`,
+`print-config-schema`, `print-output-schema`, `kv-size`, `run`,
 `validate-bundle`, `reduce`, `report`, and `envelope-gate`. Transfer-bench,
 schema v0.2 split configs, split orchestration, composite-bundle validation,
 wall-meter import, and reduced cross-bundle split/KV result scripts are still
