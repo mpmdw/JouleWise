@@ -1,5 +1,3 @@
-The workspace is read-only, so I could not create the file. Below is the complete Markdown ready for `docs/specs/c027/p2-038_production_uncertainty_evidence.md`.
-
 # P2-038 Production Uncertainty Evidence Path
 
 Status: DRAFT pending lead adjudication (C-027 spec wave)
