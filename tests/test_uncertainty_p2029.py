@@ -113,6 +113,8 @@ class BundleBuilder:
         idle_drift_bound_w: float | None = None,
         extra_idle_drift_bound_w: float | None = None,
         calibration_power_w_bound: float | None = None,
+        drift_power_w_bound: float | None = None,
+        idle_drift_power_w_abs_bound: float | None = None,
     ) -> None:
         metadata: dict[str, Any] = {
             "device": {"telemetry": "mock", "rail_manifest": ["mock"]},
@@ -128,6 +130,12 @@ class BundleBuilder:
             metadata["extra"] = {"idle_drift_bound_w": extra_idle_drift_bound_w}
         if calibration_power_w_bound is not None:
             metadata["calibration"] = {"power_w_bound": calibration_power_w_bound}
+        if drift_power_w_bound is not None:
+            metadata["drift"] = {"power_w_bound": drift_power_w_bound}
+        if idle_drift_power_w_abs_bound is not None:
+            metadata["idle_drift"] = {
+                "power_w_abs_bound": idle_drift_power_w_abs_bound
+            }
         self.writer.write_metadata(metadata)
 
 
@@ -209,6 +217,30 @@ class ReducerPropagationTests(ReducerUncertaintyTestCase):
         self.assertAlmostEqual(
             summary.energy_bound_terms_j["E_drift_bound_j"], 2.0, places=12
         )
+
+    def test_drift_bound_rejects_alias_only_key_paths(self) -> None:
+        alias_only_fixtures = [
+            {"calibration_power_w_bound": 99.0},
+            {"drift_power_w_bound": 99.0},
+            {"idle_drift_power_w_abs_bound": 99.0},
+        ]
+        for fixture in alias_only_fixtures:
+            with self.subTest(fixture=fixture):
+                builder = self.builder()
+                builder.measured_window(0.0, 4.0)
+                builder.write_trace(
+                    constant_samples(0.0, 4.0, hz=2.0, power_w=8.0)
+                )
+                builder.write_metadata(**fixture)
+
+                summary = reduce_module.reduce_bundle(builder.path)
+
+                request = (summary.claim_eligibility or {})["request"]
+                self.assertIsNone(
+                    (summary.energy_bound_terms_j or {})["E_drift_bound_j"]
+                )
+                self.assertFalse(request["eligible"])
+                self.assertEqual(request["reasons"], ["drift_term_unknown"])
 
 
 class ClaimGateTests(ReducerUncertaintyTestCase):
