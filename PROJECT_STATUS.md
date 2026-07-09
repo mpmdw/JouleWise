@@ -126,6 +126,11 @@ characterization it can already execute on the M3 Max. Split
 when Phase 3 hardware and feasibility gates land, it upgrades the capstone
 from local characterization to a split-energy crossover study.
 
+The frozen capstone headline, fallback claims, contribution ladder, and
+minimum-viable stop-lines are now recorded in
+`docs/contracts/capstone_scope.md`; that contract is the scope pointer for
+reader-facing wording under the claims ladder.
+
 The first working slice runs on a MacBook (Apple Silicon) with MLX as the
 runtime and `powermetrics` as the power source, producing complete,
 auditable run bundles. Further backends (NVIDIA + vLLM/llama.cpp, Jetson
