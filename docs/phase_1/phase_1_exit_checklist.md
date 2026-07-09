@@ -255,6 +255,12 @@ applicability table.
 - Runtime target: MLX. Telemetry target: powermetrics. Transport: local.
 - Status: partially checked on the current Apple Silicon controller;
   repeat on the final M3 Max measurement target before claiming support.
+  - ADDENDUM (2026-07-09, DOC-009 reconciliation): superseded — the
+    binding verdict below (this file, "Current verdict" section) is
+    **supported, end to end (2026-07-06)** per the Slice 2I flagship
+    (3 strict-valid real energy bundles). This earlier "partially
+    checked" line reflects the pre-2I snapshot and is retained for
+    history only.
 - Observed 2026-06-09:
   - Architecture: `arm64`; current user id non-root (`501`).
   - `powermetrics` found at `/usr/bin/powermetrics`.
