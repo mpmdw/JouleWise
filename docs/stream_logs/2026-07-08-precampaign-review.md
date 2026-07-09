@@ -183,3 +183,50 @@ EXACT RESUME SEQUENCE (Fable directs, Codex executes):
    checkpoint/methodology-review-results.json before implementing).
 4. Then Ed's four-part answer (queue fit / determinism verdict /
    capture changes / askable questions) + Window-A go/no-go checklist.
+
+### CP-6 — RESUME SESSION: gates, merges, adjudication (2026-07-09)
+
+Resume executed per the CP-5 sequence (Fable directed, Codex executed;
+~20 codex sessions this leg).
+
+Step 1 — lead gates on the three worktree fix-round diffs: ALL ACCEPTED.
+Envgate live-gated against the real mock affine bundle (honest E1 fail on
+mock stop_reason=length — adjudicated correct behavior), wrong-profile
+refusal, malformed-evidence refusal, multi-bundle identity refusal;
+hashcheck live fail-closed checks (missing sidecar, real-sidecar pairing
+mismatch); bundlepack live pack->verify->tamper->verify(2). Committed and
+opened PRs #23/#24/#25 (base main).
+
+Step 2 — merge gate: fresh codex final-head passes caught 3 BLOCKERs +
+7 SHOULD-FIX on heads that had survived all pre-stop rounds (envgate
+negative-token-count gate-math reach; hashcheck inferred-sidecar silent
+bypass + missing source_manifest acceptance; bundlepack README/manifest
+consistency, duplicate entries, copy race). Fix rounds (one prompt-defect
+regression on the inferred-sidecar pin, caught by the next fresh pass and
+re-fixed via type-discriminating allowlist; lead live-verified the
+classifier truth table). MERGED: #22 5e12f11, #23 5b3a177, #24 725b8bf,
+#25 ac18f21. CI green each head. Post-merge integration review (codex,
+workspace-write): CLEAN incl. end-to-end mock campaign -> strict ->
+envelope-gate -> pack -> verify and a D-033 legacy-identity spoof probe
+(failed closed on config_sha256 mismatch). Merged-main suite: 798 OK
+(skipped=10), lead-run.
+
+Step 3 — methodology synthesis ADJUDICATED (all dispositions accepted;
+detail in the session run report): output-token-ID capture, fail-closed
+sampler pinning + version capture, model weight hashing, hash-domain-aware
+realized-vs-manifest check (runtime+validator; runner side landed as #24),
+tokenizer identity widening + manifest regen — ALL ACCEPTED and dispatched
+as implementation streams this session (capture-hardening,
+tokenizer-id-widening worktrees). Cold-load capture: DEFERRED with explicit
+steady-state-only wording (docs change rides the capture PR). Cheap window
+additions accepted: AP-6 pilot in Window-A tail, 8192 anchor onto
+P2-019/D-048 prep, Window-B-start floor revalidation into P2-015, response-
+hash determinism gate as later [AGENT] rider. Queue-fit re-ranks accepted.
+suite_next draft-spec packet (SN-001..005, authored by codex in its own
+worktree with the advisor-site work): ACCEPTED AS DRAFT, landing via the
+advisor-status-site PR with the D-051 renumber (D-050 collision caught in
+review) and an envelope_gate.v1 cross-reference note.
+
+Step 4 (four-part answer + Window-A go/no-go + stop-card clearance):
+pending the implementation-stream gates; recorded in the session run
+report `docs/run_reports/2026-07-09-cp5-resume.md`.

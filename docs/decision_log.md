@@ -71,6 +71,8 @@ be re-derived by a future agent gets an entry here.
 | D-047 | Affine ladder pins: level set, smoke sizing, gate denominators | accepted |
 | D-048 | Split program is model-first: pre-registered compositional prediction before split runs | accepted |
 | D-049 | Split transfer-energy boundary accounting on discrete-GPU ends | accepted |
+| D-050 | Active stop cards and process-trace manifests | accepted |
+| D-051 | Advisor status site uses source-derived static pages plus fail-soft live GitHub overlays | accepted |
 
 ---
 
@@ -2498,3 +2500,52 @@ capture when present, and pending disposition fields.
 Revisit when: one full stopped-and-resumed session completes under the
 new stop-card rule, or the invocation manifest proves too heavy for
 ordinary delegated runs.
+
+---
+
+## D-051: Advisor status site uses source-derived static pages plus fail-soft live GitHub overlays
+
+- Date: 2026-07-09
+- Status: accepted
+- Phase: 2 / project communication
+
+Context: the Lakebed status site had a strong static source-derived
+observatory and a live freshness banner, but the deployed snapshot could
+still be stale exactly where an advisor cares most (`RUN_STATE.md` and
+`TASK_QUEUE.md`). The hand-authored Story page also carried moving counts
+that had drifted from the generated status pages.
+
+Options considered:
+
+1. Keep the site purely static and rely on the freshness banner. Pro:
+   simplest deployment. Con: advisors still read stale body text first.
+2. Make Lakebed the new source of truth for project status. Pro: live UI.
+   Con: creates a second status database and undermines the repo audit
+   trail.
+3. Keep repo markdown as the source of truth, generate static pages from
+   it, and add fail-soft Lakebed overlays that fetch current GitHub
+   markdown for a narrow set of advisor-facing fields.
+
+Decision: option 3. The source-derived static site remains the fallback
+and audit surface. Lakebed serves `/api/freshness` for commit drift and
+`/api/live-status` for a small parsed live view over
+`PROJECT_STATUS.md`, `RUN_STATE.md`, `TASK_QUEUE.md`, and the risk
+register. The status page may update top-line fields from this API while
+source chips and generated pages continue to show exactly what the baked
+snapshot was built from.
+
+Consequences:
+
+- The Story page should avoid volatile counts unless they are generated
+  or source-linked.
+- Advisor-facing depth belongs in generated status panels: snapshot
+  state, advisor asks, campaign readiness, evidence board, and claim
+  ceiling.
+- Lakebed endpoint aliases should remain server endpoints, because
+  Lakebed routes direct HTTP requests to matching `GET` endpoints before
+  client routes.
+- The live APIs must fail soft and must never hide static provenance.
+
+Revisit when: GitHub raw-content fetch becomes unreliable enough to need
+an authenticated token or when a formal advisor portal with user-specific
+state is required.

@@ -29,13 +29,14 @@
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#roles-an-apex-model-a-volume-model-and-a-human-at-the-top">Roles: an apex model, a volume model, and a human at the top</a>
 <a href="#the-loop-end-to-end">The loop, end to end</a>
 <a href="#the-artifact-system-where-rigor-becomes-auditable">The artifact system (where rigor becomes auditable)</a>
+<a href="#council-discipline">Council discipline</a>
 <a href="#topology-how-it-evolved-an-example-of-the-loop-improving-itself">Topology: how it evolved (an example of the loop improving itself)</a>
 <a href="#what-one-session-looks-like-2026-07-07-08-the-merge-session">What one session looks like (2026-07-07/08, the merge session)</a>
 <a href="#reconstructing-the-loop-on-a-clean-machine">Reconstructing the loop on a clean machine</a>
 <a href="#where-to-read-the-evidence">Where to read the evidence</a></aside>
   <div class="doc-wrap doc-source-docs-orchestration-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/orchestration.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/orchestration.md · commit ef37128"><span class="source-file">docs/<wbr>orchestration.md</span><span class="source-commit">commit ef37128</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/orchestration.md · commit 4e644da"><span class="source-file">docs/<wbr>orchestration.md</span><span class="source-commit">commit 4e644da</span></span></div>
     <h1>The Orchestration Process</h1>
 <p>How this project is actually built: a human researcher directing a
 multi-model AI system whose workflow is itself a deliberate, versioned,
@@ -140,6 +141,57 @@ consensus one such review produced). After large workloads the
 post-large-workload meta-reassessment (owned by operation-loop §10)
 always fires, and it runs LAST.</li>
 </ol>
+<h3>Stop cards and paused work</h3>
+<p>When a session stops with live work in progress, the lead creates or
+updates an <code>ACTIVE_STOP_CARD</code> at the top of <code>RUN_STATE.md</code>. While active,
+that card is the single restart authority and overrides every lower
+&quot;what next&quot; list, queue rank, mission guide, and run-report default.</p>
+<p>A stop card must name:</p>
+<ul>
+<li>the resume authority and exact artifact pointer,</li>
+<li>the reason for stopping,</li>
+<li>worktrees, branches, PRs, and off-repo artifacts that must not be
+cleaned accidentally,</li>
+<li>status terms for each paused item,</li>
+<li>the first resume action, and</li>
+<li>the clearance criteria.</li>
+</ul>
+<p>Use these status terms for paused work:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Term</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>APPLIED_UNVERIFIED</code></td>
+<td>A worker reports code or docs are applied, but the lead has not gated the diff. Not merge-safe.</td>
+</tr>
+<tr>
+<td><code>LEAD_GATED</code></td>
+<td>The lead has reviewed and run the required local/live checks for the item.</td>
+</tr>
+<tr>
+<td><code>PR_OPEN_CI_GREEN</code></td>
+<td>A PR exists and CI is green, but merge authority has not yet fired.</td>
+</tr>
+<tr>
+<td><code>MERGED</code></td>
+<td>The accepted work has landed on main.</td>
+</tr>
+<tr>
+<td><code>UNREAD_UNADJUDICATED</code></td>
+<td>A report/synthesis exists but has not been consumed into decisions, queue rows, or rejected findings.</td>
+</tr>
+<tr>
+<td><code>ADJUDICATED</code></td>
+<td>Findings have explicit accept/reject/defer disposition and downstream artifacts are updated.</td>
+</tr>
+</tbody></table></div>
+<p>Before an intentional pause, do the minimal stop sync even if full
+bookkeeping cannot fit: update only <code>RUN_STATE.md</code>&#39;s stop card and the
+rank-0 queue row. That is enough to prevent accidental bypass.</p>
 <h2 id="the-artifact-system-where-rigor-becomes-auditable">The artifact system (where rigor becomes auditable)</h2>
 <p>Each fact has exactly one home; everything else points at it:</p>
 <div class="table-scroll"><table>
@@ -182,7 +234,7 @@ always fires, and it runs LAST.</li>
 <td>Live risks with triggers and mitigation states.</td>
 </tr>
 </tbody></table></div>
-<p>Two instrumentation ledgers close the loop on the process itself:</p>
+<p>Instrumentation ledgers close the loop on the process itself:</p>
 <ul>
 <li><strong>Per-layer yield:</strong> every review layer&#39;s unique catches are
 attributed and tallied per session. A layer with zero unique catches
@@ -195,9 +247,34 @@ and lead rework minutes, with prompt-defects separated from
 model-defects. Delegation boundaries move on this evidence, not
 vibes. Current signal: pinned-spec delegation runs essentially
 defect-free; the serious defects cluster in volunteered additions and
-design-freedom wire contracts — which is exactly where the full lens
-tier is now mandatory.</li>
+design-freedom wire contracts — which is exactly where the full lens</li>
+<li><strong>Invocation manifest:</strong> substantial delegated/tool/skill runs get a
+lightweight manifest row per invocation. Minimum fields:
+<code>run_id</code>, <code>parent_report</code>, <code>role_or_lens</code>, <code>model</code>, <code>wrapper</code>,
+<code>session_id</code>, <code>prompt_sha256</code>, <code>prompt_path</code>, <code>output_path</code>, <code>status</code>,
+<code>consumed_by</code>, <code>disposition</code>, and <code>commit_or_pr</code>. Raw logs can stay
+out of git; every ephemeral artifact still needs a committed pointer
+row with <code>path</code>, <code>sha256</code> or stable id, <code>promoted_to</code>, and
+<code>not_promoted_reason</code>.</li>
 </ul>
+<h2 id="council-discipline">Council discipline</h2>
+<p>Councils are expensive instruments. Use a full council for methodology,
+measurement validity, schema/contract changes, claim boundaries, hardware
+protocols, or explicit user requests. For ordinary implementation, use a
+small number of targeted lenses plus lead adjudication.</p>
+<p>Every high-impact council must leave a durable scorecard:</p>
+<ul>
+<li>unique catches by severity,</li>
+<li>accepted/rejected/deferred/false-positive counts,</li>
+<li>lead triage and rework time when practical,</li>
+<li>shipped artifacts,</li>
+<li>queue rows created or re-ranked,</li>
+<li>decision-log IDs promoted, and</li>
+<li>a disposition table: finding → ruling → owner → artifact/queue/decision
+target → closure check.</li>
+</ul>
+<p>Deferred decision-log promotion is itself a tracked obligation, not
+ambient prose in a report.</p>
 <h2 id="topology-how-it-evolved-an-example-of-the-loop-improving-itself">Topology: how it evolved (an example of the loop improving itself)</h2>
 <ul>
 <li><strong>v1 (2026-07-07 AM):</strong> per-stream Fable orchestrator subagents, each
@@ -246,7 +323,10 @@ never skipped a gate.</p>
 <li>Committed invocation wrapper: <code>scripts/codex-run</code>.
 Usage: <code>codex-run &lt;out.md&gt; [--timeout SEC] [-C DIR] [-s SANDBOX] [--resume] &#39;&lt;prompt&gt;&#39;</code>.
 It writes <code>&lt;out&gt;.status</code>.</li>
-<li>Project bridge: <code>scripts/codex-bridge</code>.</li>
+<li>Project bridge: <code>scripts/codex-bridge</code>; writes prompt snapshots,
+response snapshots, logs, status files, and
+<code>.codex-bridge/invocation_manifest.jsonl</code> rows with prompt/output/log
+hashes.</li>
 <li>Skill-only mechanics on the operator&#39;s machine live under
 <code>~/.claude/skills</code>: <code>operation-loop</code> is the conductor,
 <code>codex-delegation</code> is the invocation/consumption contract,
@@ -282,7 +362,7 @@ design council; C-009 topology consensus; C-010 validation).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/orchestration.md · commit ef37128 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/orchestration.md · commit 4e644da · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

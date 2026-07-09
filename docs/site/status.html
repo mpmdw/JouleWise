@@ -28,13 +28,25 @@
 <section class="observatory-hero">
   <div class="kicker">Status observatory</div>
   <h1>The project state, read from the instruments.</h1>
+  <p class="lede">This page is built from repository source documents and then checks the live GitHub state while you read. Static source stamps remain visible so stale snapshots are obvious.</p>
+</section>
+<section class="live-snapshot" data-live-panel>
+  <div>
+    <span class="card-label">Live snapshot</span>
+    <strong data-live-field="snapshot-state">Checking GitHub...</strong>
+    <p data-live-field="snapshot-detail">Static fallback is shown until the live status endpoint responds.</p>
+  </div>
+  <div class="live-meta">
+    <span>Built <span class="mono" data-live-field="build">4e644da</span></span>
+    <span>Live check <span class="mono" data-live-field="checked-at">pending</span></span>
+  </div>
 </section>
 <section class="console-strip">
   <div class="status-summary">
-    <div><span class="card-label">Current phase</span><strong>Phase 2 in progress</strong></div>
-    <div><span class="card-label">Next</span><strong class="mono">P2-015</strong></div>
-    <div><span class="card-label">Verification</span><strong class="mono">734 tests</strong></div>
-    <div><span class="card-label">Corpus</span><strong class="mono">6 bundles</strong></div>
+    <div><span class="card-label">Current phase</span><strong data-live-field="phase">Phase 2 in progress</strong></div>
+    <div><span class="card-label">Next</span><strong class="mono" data-live-field="next">RESUME-CP5</strong></div>
+    <div><span class="card-label">Verification</span><strong class="mono" data-live-field="verification">734 tests</strong></div>
+    <div><span class="card-label">Corpus</span><strong class="mono" data-live-field="corpus">6 bundles</strong></div>
   </div>
   <div class="console-detail">
     <div class="phase-rail"><div class="phase-step">
@@ -67,31 +79,31 @@
       <div class="card-label">Next quiet-machine window <span class="status-chip amber">NO-AGENT-LOCK</span></div>
       <div><span class="mono">P2-015</span> Detection-floor calibration campaign — expanded Window A floors for gross request, idle-sub request, phase window, and item/level window, plus comparative MDE from same-condition repeats/ABBA</div>
 <div><span class="mono">P2-006</span> Homogeneous baselines (slice 2M) on the Mac target — Window A two-model campaign with drift-sentinel profiles, then <code>docs/phase_2/baseline_results.md</code> with variance + prefill/decode comparison</div>
-      <span class="source-chip" title="TASK_QUEUE.md · commit 036913e"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 036913e</span></span>
+      <span class="source-chip" title="TASK_QUEUE.md · commit 4e644da"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4e644da</span></span>
     </div>
   </div>
 </section>
 <section class="flight-recorder">
   <article class="station reveal-stagger" style="--delay:0ms">
     <div class="station-num">01</div><div><h2>What is true now</h2>
-    <p>Phase 1 closing; Phase 2 in progress - instrument CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes are complete; the two-model baseline matrix is the next Mac corpus step</p><p><strong>Suite BUILD session COMPLETE and MERGED (2026-07-08; C-017; D-044..D-047).</strong> <a href="run_state.html">RUN_STATE.md</a></p><span class="source-chip" title="PROJECT_STATUS.md · commit 6b1f73a"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 6b1f73a</span></span> <span class="source-chip" title="RUN_STATE.md · commit 36e8524"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 36e8524</span></span></div>
+    <p data-live-field="phase-line">Phase 1 closing; Phase 2 in progress - instrument CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes are complete; workload-suite build is merged; current restart authority is CP-5 in <code>RUN_STATE.md</code> before any new campaign work</p><p><span data-live-field="status-line"><strong>Suite BUILD session COMPLETE and MERGED (2026-07-08; C-017; D-044..D-047).</strong></span> <a href="run_state.html">RUN_STATE.md</a></p><span class="source-chip" title="PROJECT_STATUS.md · commit 6b1f73a + uncommitted"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 6b1f73a + uncommitted</span></span> <span class="source-chip" title="RUN_STATE.md · commit 4e644da + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 4e644da + uncommitted</span></span></div>
   </article>
   <article class="station reveal-stagger" style="--delay:90ms">
     <div class="station-num">02</div><div><h2>What changed</h2>
-    <p><span class="mono">2026-07-08</span> suite build (C-017; adjudication + PRs #17/#18/#20/#19; D-044..D-047)</p>
-    <p><a href="latest_run_report.html">docs/run_reports/2026-07-08-suite-build.md</a></p><span class="source-chip" title="RUN_STATE.md · commit 36e8524"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 36e8524</span></span></div>
+    <p><span class="mono">2026-07-09</span> meta-process stop-card + codex-bridge audit cleanup (D-050; CP-5 preserved untouched)</p>
+    <p><a href="latest_run_report.html">docs/run_reports/2026-07-09-meta-process-stop-card-cleanup.md</a></p><span class="source-chip" title="RUN_STATE.md · commit 4e644da + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 4e644da + uncommitted</span></span></div>
   </article>
   <article class="station reveal-stagger" style="--delay:180ms">
     <div class="station-num">03</div><div><h2>What happens next</h2>
-    <ol class="queue-mini"><li><span class="mono">#1 P2-015</span>
+    <ol class="queue-mini"><li><span class="mono">#0 RESUME-CP5</span>
+        
+        <span>Finish the pre-campaign review session from CP-5: gate 3 worktree fix-round diffs (envgate live-gated vs real affine bundle) -&gt; 3 PRs; merge PRs #22+new after fresh final-head passes + CI; post-merge integration review; adjudicate the methodology synthesis; land accepted pre-campaign changes (hash-domain-aware validity check expected); deliver Ed&#x27;s four-part answer + Window-A go/no-go</span></li>
+<li><span class="mono">#1 P2-015</span>
         <span class="lane-chip lane-quiet-mac">QUIET-MAC</span>
         <span>Detection-floor calibration campaign — expanded Window A floors for gross request, idle-sub request, phase window, and item/level window, plus comparative MDE from same-condition repeats/ABBA</span></li>
 <li><span class="mono">#2 P2-006</span>
         <span class="lane-chip lane-quiet-mac">QUIET-MAC</span>
-        <span>Homogeneous baselines (slice 2M) on the Mac target — Window A two-model campaign with drift-sentinel profiles, then <code>docs/phase_2/baseline_results.md</code> with variance + prefill/decode comparison</span></li>
-<li><span class="mono">#3 P3-000</span>
-        <span class="lane-chip lane-agent">AGENT</span>
-        <span>KV persistence feasibility spikes (Phase 3 Stage 3.0)</span></li></ol><span class="source-chip" title="TASK_QUEUE.md · commit 036913e"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 036913e</span></span></div>
+        <span>Homogeneous baselines (slice 2M) on the Mac target — Window A two-model campaign with drift-sentinel profiles, then <code>docs/phase_2/baseline_results.md</code> with variance + prefill/decode comparison</span></li></ol><span class="source-chip" title="TASK_QUEUE.md · commit 4e644da"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4e644da</span></span></div>
   </article>
   <article class="station reveal-stagger" style="--delay:270ms">
     <div class="station-num">04</div><div><h2>What could invalidate it</h2>
@@ -99,18 +111,127 @@
     <ul><li><span class="mono">R-001</span> Supervisor approval delayed or scope shifts <span class="status-chip danger">open</span></li>
 <li><span class="mono">R-004</span> KV persist/resume unsupported in a target runtime <span class="status-chip danger">open</span></li>
 <li><span class="mono">R-005</span> llama.cpp cache files not portable across machines/backends <span class="status-chip danger">open</span></li>
-<li><span class="mono">R-012</span> Schedule: five phases vs fixed academic deadlines <span class="status-chip danger">open</span></li></ul><p>The 2K NVIDIA protocol pins remain <strong>PROVISIONAL</strong> until live hardware contact.</p><span class="source-chip" title="docs/risk_register.md · commit 1581cd2"><span class="source-file">docs/<wbr>risk_register.md</span><span class="source-commit">commit 1581cd2</span></span> <span class="source-chip" title="PROJECT_STATUS.md · commit 6b1f73a"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 6b1f73a</span></span></div>
+<li><span class="mono">R-012</span> Schedule: five phases vs fixed academic deadlines <span class="status-chip danger">open</span></li></ul><p>The 2K NVIDIA protocol pins remain <strong>PROVISIONAL</strong> until live hardware contact.</p><span class="source-chip" title="docs/risk_register.md · commit 1581cd2"><span class="source-file">docs/<wbr>risk_register.md</span><span class="source-commit">commit 1581cd2</span></span> <span class="source-chip" title="PROJECT_STATUS.md · commit 6b1f73a + uncommitted"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 6b1f73a + uncommitted</span></span></div>
   </article>
   <article class="station reveal-stagger" style="--delay:360ms">
     <div class="station-num">05</div><div><h2>Where the evidence lives</h2>
-    <p><span class="mono">6</span> real corpus bundles pass strict validation. Start from <a href="library.html">Sources</a>, <a href="risk_register.html">Risk Register</a>, and <a href="../project_critique_review.html">Independent critique · second-passed</a>.</p><span class="source-chip" title="RUN_STATE.md · commit 36e8524"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 36e8524</span></span></div>
+    <p><span class="mono">6</span> real corpus bundles pass strict validation. Start from <a href="library.html">Sources</a>, <a href="risk_register.html">Risk Register</a>, and <a href="../project_critique_review.html">Independent critique · second-passed</a>.</p><span class="source-chip" title="RUN_STATE.md · commit 4e644da + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 4e644da + uncommitted</span></span></div>
   </article>
 </section>
+<section class="advisor-depth-grid">
+  <article class="advisor-panel advisor-attention">
+    <div class="card-label">Advisor attention</div>
+    <h2>What could use an external decision?</h2>
+    <div class="advisor-card-grid"><article class="advisor-card"><span class="mono">P1-008 · P1 Phase Gate</span><h3>Map phases to academic calendar AND capture the evaluator&#x27;s acceptance bar (minimum figures, demo expectation, reproducibility threshold, whether Mac-only + split-deferral is acceptable)</h3><p>Colloquium/report dates + borrow window in <code>docs/milestones.md</code>; phase targets derived; acceptance-bar notes beside the P1-001 scope notes</p></article>
+<article class="advisor-card"><span class="mono">P1-001 · P1 Phase Gate (user-deferred 2026-07-06 — &quot;ignore for the moment&quot;; R-001 mitigation continues to hold: all work stays harness-shaped)</span><h3>Capture supervisor approval and scope notes</h3><p>Dated notes in <code>docs/phase_1/phase_1_exit_checklist.md</code>; unblocks full D-016 closure (P2-004) when it lands</p></article>
+<article class="advisor-card"><span class="mono">P0-003 · P0 Safety (user-deferred 2026-07-06 — interim same-disk backup accepted for now)</span><h3>Replace interim backup destination (R-016) with external/cloud location</h3><p>User names the destination; one fresh restore test; R-016 → fully mitigated</p></article>
+<article class="advisor-card"><span class="mono">P1-003 · P1 Phase Gate</span><h3>Record wall-meter decision</h3><p>Meter make/model or &quot;unavailable&quot; verdict plus measurement/export method (exit-checklist wall-meter section; informs D-018 boundary calibration)</p></article>
+<article class="advisor-card"><span class="mono">P1-004 · P1 Phase Gate</span><h3>Fill network/interconnect topology plan</h3><p>Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section</p></article>
+<article class="advisor-card"><span class="mono">R-001</span><h3>Supervisor approval delayed or scope shifts</h3><p>Risk status: open</p></article></div>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4e644da"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4e644da</span></span> <span class="source-chip" title="docs/risk_register.md · commit 1581cd2"><span class="source-file">docs/<wbr>risk_register.md</span><span class="source-commit">commit 1581cd2</span></span>
+  </article>
+  <article class="advisor-panel">
+    <div class="card-label">Campaign readiness</div>
+    <h2>What must be true before data collection?</h2>
+    <div class="table-scroll"><table class="ledger readiness-table"><tr><th>Item</th><th>State</th><th>Blocking condition</th><th>Source</th></tr><tr><td>CP-5 resume</td><td>RESUME-CP5 · PAUSED</td><td>Full sequence + artifact paths: <code>docs/stream_logs/2026-07-08-precampaign-review.md</code> CP-5; Fable directs, Codex executes</td><td><a href="task_queue.html">RESUME-CP5</a></td></tr>
+<tr><td>Detection floors</td><td>P2-015 · NEW</td><td>Versioned strict-valid calibration bundles; <code>docs/phase_2/detection_floor.md</code> as per-consumer table; per-metric/window-class <code>floor_abs_j</code> + <code>floor_cmp_j</code>; claim gate = <code>max(floor_abs, floor_cmp)</code>; calibration manifest hash cited by later reports; pre-Window-A lead-run tasks-sampler overhead smoke required before enabling any extra powermetrics samplers and validating that the 2s env-capture settle absorbs the probe burst (C-015/R2); NEW post-suite-build shakedown gate (C-019): before any Window-A data, ONE tiny production-shaped run through the campaign-runner path (not bare <code>run</code>) → strict validation → reduce → backup, on the merged suite-substrate code</td><td><a href="task_queue.html">P2-015</a></td></tr>
+<tr><td>2M baseline corpus</td><td>P2-006 · UNBLOCKED</td><td>Campaign bundles born under the FIXED validator; pass <code>--strict</code>; FAIL-CLOSED runner + counterbalanced order manifest (C-011/D-014); drift sentinel block positions recorded (C-014); claim wording per <code>docs/contracts/claims_ladder.md</code> + <code>docs/contracts/analysis_plans.md</code>; runs AFTER P2-015 in Window A</td><td><a href="task_queue.html">P2-006</a></td></tr>
+<tr><td>Affine envelope gate</td><td>P2-010 · MERGED</td><td>Script emits <code>envelope_validated</code>/<code>envelope_failed([codes])</code> from strict-valid smoke bundles; acceptance in AP-5; ledger pointer <code>docs/stream_logs/2026-07-08-affine-ladder.md</code> AFF-CHECKPOINT</td><td><a href="task_queue.html">P2-010</a></td></tr>
+<tr><td>Real-tokenizer suites</td><td>P2-012 · MERGED</td><td>Manifests substrate-valid, sidecars complete (B7 rows, ground truths), per AP-4; no category claims outside matched strata</td><td><a href="task_queue.html">P2-012</a></td></tr>
+<tr><td>Text-path hash guard</td><td>P2-025 · NEW</td><td>Runner compares generator sidecar <code>expected token_ids_sha256</code> against realized per-item hashes post-window; mismatch fails closed; lands with the first real-tokenizer campaign tooling</td><td><a href="task_queue.html">P2-025</a></td></tr>
+<tr><td>Publishable bundle pack</td><td>P2-027 · NEW</td><td>Published pack + a documented external re-reduction; until then the review doc&#x27;s auditability claim stays L0-scoped</td><td><a href="task_queue.html">P2-027</a></td></tr></table></div>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 4e644da"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 4e644da</span></span>
+  </article>
+  <article class="advisor-panel">
+    <div class="card-label">Evidence board</div>
+    <h2>Most load-bearing evidence</h2>
+    <div class="evidence-grid"><article class="evidence-card"><div class="card-label">L0/L1 instrument capability</div><h3>Harness integrity</h3><p>734 tests, strict validation, and shared bundle reading.</p><a href="run_state.html">Open evidence</a></article>
+<article class="evidence-card"><div class="card-label">L0 auditability until external re-reduction lands</div><h3>Real corpus auditability</h3><p>6 real corpus bundles pass strict validation without rewriting.</p><a href="project_status.html">Open evidence</a></article>
+<article class="evidence-card"><div class="card-label">Pre-campaign evidence; not yet campaign-backed claims</div><h3>Suite substrate</h3><p>Generic suite markers, per-item outputs, strict rollup provenance, mock and MLX gates.</p><a href="latest_run_report.html">Open evidence</a></article>
+<article class="evidence-card"><div class="card-label">Descriptive L1 unless AP rows/floors support more</div><h3>First energy numbers</h3><p>M3 Max MLX runs and flagship 122B run establish measured local inference baselines.</p><a href="results.html">Open evidence</a></article>
+<article class="evidence-card"><div class="card-label">Review provenance, not scientific evidence by itself</div><h3>Process record</h3><p>Latest report: 2026-07-09 meta-process stop-card + codex-bridge audit cleanup (D-050; CP-5 preserved untouched).</p><a href="record.html">Open evidence</a></article></div>
+    <span class="source-chip" title="RUN_STATE.md · commit 4e644da + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 4e644da + uncommitted</span></span> <span class="source-chip" title="docs/run_reports/2026-07-09-meta-process-stop-card-cleanup.md · commit 4e644da"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-09-meta-process-stop-card-cleanup.md</span><span class="source-commit">commit 4e644da</span></span>
+  </article>
+  <article class="advisor-panel claim-guard">
+    <div class="card-label">Claims allowed today</div>
+    <h2>What the project can honestly say</h2>
+    <div class="claim-grid">
+      <div><span class="status-chip">L0/L1</span><p>Instrument capability, strict validation, and descriptive measured results are supported where bundles and reports exist.</p></div>
+      <div><span class="status-chip amber">Waiting</span><p>L2/L3 comparisons wait on P2-015 floor artifacts, filled analysis-plan rows, and campaign-sized repetitions.</p></div>
+      <div><span class="status-chip danger">Forbidden</span><p>No split-energy, cross-device ranking, or broad content-neutrality claim before the named hardware and analysis gates land.</p></div>
+    </div>
+    <span class="source-chip" title="docs/risk_register.md · commit 1581cd2"><span class="source-file">docs/<wbr>risk_register.md</span><span class="source-commit">commit 1581cd2</span></span> <span class="source-chip" title="docs/contracts/claims_ladder.md · commit 1581cd2"><span class="source-file">docs/<wbr>contracts/<wbr>claims_ladder.md</span><span class="source-commit">commit 1581cd2</span></span>
+  </article>
+</section>
+<script>
+(function () {
+  var panel = document.querySelector("[data-live-panel]");
+  var repo = "https://github.com/mpmdw/JouleWise";
+  function setField(name, value) {
+    document.querySelectorAll('[data-live-field="' + name + '"]').forEach(function (node) {
+      node.textContent = value == null || value === "" ? "unknown" : String(value);
+    });
+  }
+  function relativeTime(iso) {
+    if (!iso) return "unknown";
+    var ms = Date.now() - Date.parse(iso);
+    if (!isFinite(ms) || ms < 0) return iso;
+    var min = Math.floor(ms / 60000);
+    if (min < 1) return "just now";
+    if (min < 60) return min + " min ago";
+    return Math.floor(min / 60) + " hr ago";
+  }
+  function renderFreshness(data) {
+    if (!data || !Array.isArray(data.sources)) return;
+    var moved = data.sources.filter(function (item) { return item && item.checked && item.moved; });
+    var planningMoved = moved.some(function (item) { return item.source === "RUN_STATE.md" || item.source === "TASK_QUEUE.md"; });
+    setField("build", data.build && data.build.commit ? data.build.commit : "unknown");
+    setField("checked-at", relativeTime(data.checkedAt));
+    if (data.unavailable) {
+      setField("snapshot-state", "Live freshness unavailable");
+      setField("snapshot-detail", "The baked snapshot is visible, but Lakebed could not check GitHub freshness.");
+      panel && panel.setAttribute("data-state", "warn");
+    } else if (moved.length) {
+      setField("snapshot-state", planningMoved ? "Planning snapshot stale" : "Snapshot stale");
+      setField("snapshot-detail", moved.length + " source document" + (moved.length === 1 ? "" : "s") + " moved on GitHub since this deploy. The live fields below update from GitHub when available.");
+      panel && panel.setAttribute("data-state", "stale");
+    } else {
+      setField("snapshot-state", "Snapshot fresh");
+      setField("snapshot-detail", "Baked source commits match GitHub main for the tracked documents.");
+      panel && panel.setAttribute("data-state", "fresh");
+    }
+  }
+  function renderLiveStatus(data) {
+    if (!data) return;
+    if (data.unavailable || !data.current) {
+      setField("snapshot-state", "Live status unavailable");
+      var reason = data.parseErrors && data.parseErrors.length ? " Parser drift: " + data.parseErrors.join(", ") + "." : "";
+      setField("snapshot-detail", "The baked status remains visible, but Lakebed could not parse every live advisor field." + reason);
+      panel && panel.setAttribute("data-state", "warn");
+      return;
+    }
+    var current = data.current;
+    if (current.phase) setField("phase-line", current.phase);
+    if (current.status) setField("status-line", current.status);
+    if (current.next && current.next.id) setField("next", current.next.id);
+    if (current.verification && current.verification.tests) setField("verification", current.verification.tests + " tests");
+    if (current.bundleCount) setField("corpus", current.bundleCount + " bundles");
+    if (current.phase) setField("phase", current.phase.indexOf("Phase 2") >= 0 ? "Phase 2 in progress" : current.phase);
+    setField("checked-at", relativeTime(data.checkedAt));
+  }
+  function update() {
+    window.fetch("/api/freshness").then(function (response) { return response.json(); }).then(renderFreshness).catch(function () {});
+    window.fetch("/api/live-status").then(function (response) { return response.json(); }).then(renderLiveStatus).catch(function () {});
+  }
+  update();
+  window.setInterval(update, 60000);
+}());
+</script>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>PROJECT_STATUS.md · commit 6b1f73a · RUN_STATE.md · commit 36e8524 · TASK_QUEUE.md · commit 036913e · docs/risk_register.md · commit 1581cd2 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>PROJECT_STATUS.md · commit 6b1f73a + uncommitted · RUN_STATE.md · commit 4e644da + uncommitted · TASK_QUEUE.md · commit 4e644da · docs/risk_register.md · commit 1581cd2 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

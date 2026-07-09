@@ -865,6 +865,31 @@ def _cmd_report(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_envelope_gate(args: argparse.Namespace) -> int:
+    """Run the P2-010b affine smoke envelope gate and emit JSON."""
+    from joulewise.envelope_gate import (
+        VERDICT_REFUSED,
+        VERDICT_VALIDATED,
+        analyze_envelope_gate,
+    )
+
+    payload = analyze_envelope_gate(
+        [Path(path) for path in args.bundle_dirs],
+        lambda path: validate_bundle(path, strict=True),
+    )
+    text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if args.output:
+        Path(args.output).write_text(text)
+        print(f"envelope-gate: {args.output} verdict={payload['verdict']}")
+    else:
+        print(text, end="")
+    if payload["verdict"] == VERDICT_VALIDATED:
+        return 0
+    if payload["verdict"] == VERDICT_REFUSED:
+        return 2
+    return 3
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="joulewise")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -940,6 +965,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="directory the static report is written to (default: report/)",
     )
     report.set_defaults(func=_cmd_report)
+
+    envelope_gate = subparsers.add_parser(
+        "envelope-gate",
+        help="compute the affine smoke envelope-validation verdict JSON",
+    )
+    envelope_gate.add_argument(
+        "bundle_dirs",
+        nargs="+",
+        help="strict-valid affine smoke bundle directory/directories",
+    )
+    envelope_gate.add_argument(
+        "--output",
+        help="optional path to write the machine-readable verdict JSON",
+    )
+    envelope_gate.set_defaults(func=_cmd_envelope_gate)
 
     return parser
 

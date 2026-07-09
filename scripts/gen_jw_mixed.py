@@ -14,20 +14,37 @@ import json
 from pathlib import Path
 from typing import Any
 
-from joulewise.gensuite import build_jw_mixed_manifest, build_sentinel_manifest
+from joulewise.gensuite import (
+    TokenizerManifestRow,
+    build_jw_mixed_manifest,
+    build_sentinel_manifest,
+)
 from joulewise.suite import suite_manifest_sha256
 
 
-TOKENIZER_FILES = ("tokenizer.json", "tokenizer_config.json", "merges.txt", "vocab.json")
+TOKENIZER_FILES = (
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "merges.txt",
+    "vocab.json",
+    "tokenizer.model",
+    "spiece.model",
+    "special_tokens_map.json",
+    "added_tokens.json",
+    "chat_template.jinja",
+    "chat_template.json",
+)
 
 
-def tokenizer_manifest(tokenizer_path: Path) -> list[tuple[str, str]]:
-    rows = []
+def tokenizer_manifest(tokenizer_path: Path) -> list[TokenizerManifestRow]:
+    rows: list[TokenizerManifestRow] = []
     for name in TOKENIZER_FILES:
         path = tokenizer_path / name
-        if path.exists():
+        if path.is_file():
             rows.append((name, hashlib.sha256(path.read_bytes()).hexdigest()))
-    if not rows:
+        else:
+            rows.append({"filename": name, "status": "absent"})
+    if not any(isinstance(row, tuple) for row in rows):
         raise SystemExit(f"no tokenizer files found under {tokenizer_path}")
     return rows
 

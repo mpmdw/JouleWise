@@ -5,22 +5,39 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-08 (workload suite BUILT and merged: generic
-  suite substrate + affine smoke ladder + jw_mixed/sentinel generator
-  engine, PRs #17-#20, suite 732 tests; adjudicated decisions
-  D-044..D-047; live-verified on real MLX)
+- Last updated: 2026-07-09 (advisor status-site live-depth refresh:
+  Lakebed preview gains fail-soft live status overlays, deeper advisor
+  cockpit panels, and stale-count cleanup; source-of-truth policy D-051)
 - Project phase: Phase 1 closing; Phase 2 in progress - instrument
   CAMPAIGN-READY; P2-013 evidence-integrity and P2-014 provenance fixes
-  are complete; the two-model baseline matrix is the next Mac corpus step
+  are complete; workload-suite build is merged; current restart authority
+  is CP-5 in `RUN_STATE.md` before any new campaign work
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 - Live status site: https://quiet-signal-6af8833395.lakebed.app (Lakebed
-  capsule; shows a drift banner when the repo has moved past the snapshot)
+  capsule; `/status.html` is the advisor cockpit and shows live overlays
+  plus a drift banner when the repo has moved past the snapshot)
 
-## This Update (as of 2026-07-08, all four streams merged) — 30-second read
+## This Update (as of 2026-07-09, advisor status cockpit) — 30-second read
+
+**The public preview is being upgraded for live advisor observation.**
+The project-status page remains generated from repository evidence, but
+Lakebed now has a narrow fail-soft live overlay contract: freshness from
+GitHub commit checks plus parsed current fields from `PROJECT_STATUS.md`,
+`RUN_STATE.md`, `TASK_QUEUE.md`, and the risk register. The advisor
+cockpit adds live snapshot state, attention items, campaign readiness,
+evidence cards, and claim-ceiling panels; the Story page drops
+hand-authored volatile counts. The operational policy is D-051: repo
+markdown remains the source of truth and Lakebed never hides static
+provenance. Current work should still resume at CP-5 before starting new
+queue items.
+
+## Previous Update (as of 2026-07-08, all four streams merged) — 30-second read
 
 **Everything landed.** The multi-stream session merged as four PRs:
-P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite is
-732 tests with 10 skips and zero expected failures (as of 2026-07-08; current-count authority is RUN_STATE.md Current Verification), bundle provenance
+P2-013 and P2-014 are closed — all 31 audit pins fixed, the suite passed
+with zero expected failures (current count authority is RUN_STATE.md
+Current Verification; the suite-build merge was 732 tests and the
+post-alignment state is 734), bundle provenance
 now records prompt/workload identities, and `validate-bundle --strict`
 includes the powermetrics raw-plist-to-trace gate plus the legacy
 additive-summary comparison. The six existing real corpus bundles pass
@@ -182,9 +199,9 @@ Complete so far (all verifiable in the repository):
   shared, tested read layer, so displayed numbers can never diverge from
   reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (732 tests, 10 skipped, zero expected
-  failures, run in CI on every push, including a mock end-to-end run +
-  bundle validation); emitted configs
+  a CLI, plus a passing test suite (current count and skips live in
+  RUN_STATE.md Current Verification; run in CI on every push, including a
+  mock end-to-end run + bundle validation); emitted configs
   round-trip their own published schema, and config hashes (run identity)
   are pinned by test.
 - Adapter interface contracts (runtime / telemetry / transport), the run
@@ -455,7 +472,7 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (732 tests, 10 skipped, zero expected failures, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + test suite (current count and skips in RUN_STATE.md; zero expected failures, CI-enforced) |
 
 ## Process Note
 
@@ -517,7 +534,7 @@ model) can reconstruct why any decision was made.
 **The paper trail (every claim auditable).** Each fact has one home:
 `docs/decision_log.md` — the binding design decisions (the log is the count authority), each with
 alternatives considered and revisit conditions; `docs/council_log.md`
-(C-001…C-015) — the deliberation record; `docs/stream_logs/` —
+— the deliberation record; `docs/stream_logs/` —
 per-stream decision ledgers committed *with* the code they justify
 (wrong decisions are superseded in place, never erased);
 `docs/run_reports/` — one record per session with verification
@@ -576,7 +593,7 @@ suite went 415 → 546 tests with zero expected failures, and the lead
 never wrote implementation code and never skipped a gate.
 
 **Where to look.** `docs/orchestration.md` is the process description.
-`docs/council_log.md` (C-001…C-015) is the deliberation record — C-006
+`docs/council_log.md` is the deliberation record — C-006
 is a full orchestration trace of the five-stream day; C-009/C-010 are
 the topology meta-review and its validation; C-011 is the critique
 counter-review. `docs/decision_log.md` holds the binding design

@@ -1,3 +1,6 @@
+import contextlib
+import io
+import tempfile
 import unittest
 
 from scripts import build_site
@@ -186,6 +189,35 @@ Text.
         self.assertEqual(["C-001", "C-002"], [row.council_id for row in rows])
         self.assertEqual("accepted", rows[1].outcome)
         self.assert_fail_closed(build_site.parse_council_index, md.replace("Outcome", "Result"))
+
+    def test_basic_markdown_preserves_nested_unordered_lists(self):
+        report = (build_site.ROOT / "docs/run_reports/2026-07-09-advisor-status-site.md").read_text(encoding="utf-8")
+        rendered = build_site.render_basic_markdown(report)
+
+        self.assertIn("Counterreview dispositions:<ul>", rendered)
+        self.assertIn("<li><strong>Accepted/P1:</strong> generated", rendered)
+        self.assertNotIn("<li>Counterreview dispositions:</li><li><strong>Accepted/P1:", rendered)
+
+    def test_offline_fallback_is_detectable_once_per_run(self):
+        previous_unavailable = build_site.MARKED_UNAVAILABLE
+        previous_warned = build_site.MARKED_FALLBACK_WARNED
+        try:
+            build_site.MARKED_UNAVAILABLE = True
+            build_site.MARKED_FALLBACK_WARNED = False
+            with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".md") as handle:
+                handle.write("# Fallback\n\n- one\n")
+                handle.flush()
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr):
+                    first = build_site.render_markdown(build_site.Path(handle.name))
+                    second = build_site.render_markdown(build_site.Path(handle.name))
+
+            self.assertTrue(first.startswith("<!-- rendered: offline-fallback -->\n"))
+            self.assertTrue(second.startswith("<!-- rendered: offline-fallback -->\n"))
+            self.assertEqual(1, stderr.getvalue().count("offline fallback markdown renderer"))
+        finally:
+            build_site.MARKED_UNAVAILABLE = previous_unavailable
+            build_site.MARKED_FALLBACK_WARNED = previous_warned
 
 
 if __name__ == "__main__":

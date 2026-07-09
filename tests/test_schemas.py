@@ -40,7 +40,11 @@ PINNED_CONFIG_SHA256 = {
 }
 
 OMITTED_OPTIONAL_KEYS = {
-    "workload_profile": {"suite_manifest_ref", "suite_manifest_sha256"},
+    "workload_profile": {
+        "suite_manifest_ref",
+        "suite_manifest_sha256",
+        "generator_sidecar_ref",
+    },
 }
 
 
@@ -78,12 +82,18 @@ class BenchmarkConfigTests(unittest.TestCase):
         data = json.loads((ROOT / "configs" / "examples" / "mock_local.json").read_text())
         data["workload_profile"]["suite_manifest_ref"] = "suite.json"
         data["workload_profile"]["suite_manifest_sha256"] = "abc"
+        data["workload_profile"]["generator_sidecar_ref"] = "suite_annotations.json"
         with self.assertRaisesRegex(SchemaError, "mutually exclusive"):
             BenchmarkConfig.from_mapping(data)
         data["workload_profile"].pop("prompt_tokens")
         config = BenchmarkConfig.from_mapping(data)
         self.assertEqual(config.workload_profile.suite_manifest_ref, "suite.json")
         self.assertEqual(config.workload_profile.suite_manifest_sha256, "abc")
+        self.assertEqual(config.workload_profile.generator_sidecar_ref, "suite_annotations.json")
+        self.assertEqual(
+            config.to_dict()["workload_profile"]["generator_sidecar_ref"],
+            "suite_annotations.json",
+        )
 
     def test_json_schema_has_required_contract_fields(self) -> None:
         schema = BenchmarkConfig.json_schema()
@@ -247,7 +257,13 @@ class EmittedConfigRoundTripTests(unittest.TestCase):
     def test_workload_to_dict_omits_suite_fields_only_when_none(self) -> None:
         self.assertEqual(
             OMITTED_OPTIONAL_KEYS,
-            {"workload_profile": {"suite_manifest_ref", "suite_manifest_sha256"}},
+            {
+                "workload_profile": {
+                    "suite_manifest_ref",
+                    "suite_manifest_sha256",
+                    "generator_sidecar_ref",
+                }
+            },
         )
         schema = BenchmarkConfig.json_schema()
         for name, emitted in self.emitted_examples():
@@ -259,11 +275,9 @@ class EmittedConfigRoundTripTests(unittest.TestCase):
                 if section_key == "workload_profile":
                     suite_ref = section_value.get("suite_manifest_ref")
                     suite_sha = section_value.get("suite_manifest_sha256")
-                    expected = (
-                        {"suite_manifest_ref", "suite_manifest_sha256"}
-                        if suite_ref is None and suite_sha is None
-                        else set()
-                    )
+                    expected = {"generator_sidecar_ref"}
+                    if suite_ref is None and suite_sha is None:
+                        expected.update({"suite_manifest_ref", "suite_manifest_sha256"})
                 else:
                     expected = set()
                 with self.subTest(config=name, section=section_key):

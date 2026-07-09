@@ -44,11 +44,45 @@ the real Fraunces / IBM Plex faces for hosts without the size limit.
 
 `/api/freshness` compares each source's baked commit against
 `GET /repos/mpmdw/JouleWise/commits?path=<source>&sha=main`, DB-cached for
-5 minutes. It **fails soft**: on any fetch/rate-limit error it returns
-cached data if present, else `{unavailable: true}` — the page renders the
-identical snapshot with no drift banner, and never claims "not moved" when
-it could not actually check. Set `GITHUB_TOKEN` in `.env.lakebed.server`
-for higher rate limits (optional; the public API works unauthenticated).
+5 minutes. It **fails soft**: if a refresh fails after cached evidence exists,
+the API returns the newest cached rows, marks affected sources `stale: true`,
+and sets `unavailableRefresh: true` / `unavailable: true`. If no evidence is
+available, it returns `{unavailable: true}`. The page must never treat a failed
+refresh as proof that a source has not moved. Set `GITHUB_TOKEN` in
+`.env.lakebed.server` for higher rate limits (optional; the public API works
+unauthenticated).
+
+`/api/live-status` fetches the current GitHub markdown for the advisor-facing
+status sources (`PROJECT_STATUS.md`, `RUN_STATE.md`, `TASK_QUEUE.md`, and the
+risk register), parses the same high-level fields as the static generator, and
+caches them for one minute in the Lakebed DB. The status page polls this
+endpoint so the top-line queue, verification, and status readouts can update
+without a redeploy. It fails soft: if GitHub or outbound access is unavailable,
+it returns the newest cached markdown-derived payload when available, marks
+those source rows stale, and sets `unavailableRefresh: true`; otherwise, the
+baked page remains the source of visible truth.
+
+## Production smoke / inspection
+
+After deploying, verify the public endpoints:
+
+```sh
+curl -s -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' \
+  https://quiet-signal-6af8833395.lakebed.app/index
+curl -s -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' \
+  https://quiet-signal-6af8833395.lakebed.app/status.html
+curl -s https://quiet-signal-6af8833395.lakebed.app/api/freshness
+curl -s https://quiet-signal-6af8833395.lakebed.app/api/live-status
+```
+
+Lakebed hosted inspection is private by default and should stay that way for
+this project. From `site_capsule/`, use the committed `lakebed.json` binding:
+
+```sh
+npx lakebed inspect https://quiet-signal-6af8833395.lakebed.app
+npx lakebed db dump https://quiet-signal-6af8833395.lakebed.app
+npx lakebed logs https://quiet-signal-6af8833395.lakebed.app
+```
 
 ## Platform constraints worked around (so future edits don't reintroduce them)
 

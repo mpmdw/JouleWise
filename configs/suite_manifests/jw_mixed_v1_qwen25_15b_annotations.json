@@ -1,6 +1,554 @@
 {
   "items": {
-    "014cc65a2a434cce0f0aa40c2675a34d0197adb967e03a8b7b237619b1eb7141": {
+    "04b85404fc25098e5ca6dc71643b20c20bd11ad478af8fead707dbe5188b78b1": {
+      "ascii_tail_tokens": 0,
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "chars_per_token": 1.701171875,
+      "coarse_units": 23,
+      "direction": "ltr",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 33,
+      "generator_id": "jw.multiling",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "ascii_tail_max": {
+          "source": "pinned",
+          "value": 3
+        },
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "direction": {
+          "source": "pinned",
+          "value": "ltr"
+        },
+        "language": {
+          "range": [
+            0,
+            5
+          ],
+          "source": "pinned",
+          "value": "ru-Cyrillic"
+        }
+      },
+      "realized_token_count": 512,
+      "script_profile": "ru-Cyrillic",
+      "seed": 3867685950077038083,
+      "text_sha256": "901391ae724ba553817225f172f2fe3b7d918faecfee50f3694da5aa7524aa2d",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "4bb6ce0d3d9aab5dd874420af96cbedbdecab714ee2e857ed6a347c47ec3d622",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "04bf3194d5a60313f0733f25958289b15b1ec04327759236623ea3660af5324a": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 24,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 26,
+      "generator_id": "jw.code",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "indent": {
+          "source": "pinned",
+          "value": "    "
+        },
+        "n_complete_functions": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        },
+        "n_imports": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 18026304521611722269,
+      "text_sha256": "297c99574a5fbee30246ff805b9fd014cb50cf3541196316a2b4077760575e14",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "b44200d006c1351e6cadae1a0c41f406a606f10c091b07f9553edbdc592fec44",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "0760c870af86fdb6b3dca24b007eaccbc2390ded75fe19760aa8c7c723e2f3da": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 18,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 43,
+      "generator_id": "jw.summ",
+      "generator_version": "1.0.0",
+      "needle_positions": [
+        {
+          "entity": "Lumatavi",
+          "needle": "NEEDLE-5798",
+          "position": 0
+        }
+      ],
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "facts_per_entity_draw": {
+          "range": [
+            6,
+            10
+          ],
+          "semantics": "legacy draw recorded for replay; filler continues until token budget",
+          "source": "drbg",
+          "value": 10
+        },
+        "n_entities": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 4
+        },
+        "n_needles": {
+          "range": [
+            1,
+            2
+          ],
+          "source": "drbg",
+          "value": 1
+        }
+      },
+      "realized_needles": 1,
+      "realized_token_count": 512,
+      "requested_needles": 1,
+      "seed": 5685343951081148577,
+      "text_sha256": "fc9bc1bd017831cf5b4f1767941961b18f4b4d736c49b0a1427cabaa86e46506",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "79a46c08ca9dc404f871ac7cb436b3f1e5d74426d566c0f43cb7929bb8b6ea46",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "0d4b1c89b97ab7d5d0ba111f1f11c9cc9849a5c4d39fa3ba75c1e655fc57321a": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 22,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 30,
+      "generator_id": "jw.chat",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_constraints": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 5
+        },
+        "persona": {
+          "range": [
+            0,
+            7
+          ],
+          "source": "drbg",
+          "value": "a new town clerk"
+        },
+        "topic": {
+          "grammar": "adjective+domain",
+          "source": "drbg",
+          "value": "the careful greenhouse irrigation schedules"
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 17194605112665109461,
+      "text_sha256": "efaaa1915824844caa28628b2b3d2e6141d35dbef713e0b973624ddc01f2eba3",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "b20b3283c8eb83ddb2588e2df349d7869f2d6755c563c607881ef5a0f2e4ce00",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "10c5d0d329426dc49d55bf000f52d91dda92ef2c844975e759ac15b6ad91c2fc": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 27,
+      "distractors": [
+        "The side ledger mentioned 24 labels, but those labels are unrelated."
+      ],
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 29,
+      "generator_id": "jw.reason",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "answer": 39
+      },
+      "parameters": {
+        "answer_seed_range": {
+          "source": "implementation",
+          "value": [
+            10,
+            80
+          ]
+        },
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "intermediate_cap": {
+          "source": "pinned",
+          "value": 10000
+        },
+        "logic_variant": {
+          "rate": 0.25,
+          "source": "drbg",
+          "value": false
+        },
+        "n_distractors": {
+          "range": [
+            1,
+            3
+          ],
+          "source": "drbg",
+          "value": 1
+        },
+        "n_steps": {
+          "range": [
+            4,
+            6
+          ],
+          "source": "drbg",
+          "value": 5
+        }
+      },
+      "realized_token_count": 512,
+      "reasoning_trace": {
+        "answer": 39,
+        "initial": 140,
+        "integer_intermediates": [
+          420,
+          438,
+          73,
+          55,
+          39
+        ],
+        "reason_type": "arithmetic",
+        "steps": [
+          {
+            "after": 420,
+            "before": 140,
+            "op": "mul",
+            "operand": 3
+          },
+          {
+            "after": 438,
+            "before": 420,
+            "op": "add",
+            "operand": 18
+          },
+          {
+            "after": 73,
+            "before": 438,
+            "op": "int_div",
+            "operand": 6
+          },
+          {
+            "after": 55,
+            "before": 73,
+            "op": "sub",
+            "operand": 18
+          },
+          {
+            "after": 39,
+            "before": 55,
+            "op": "sub",
+            "operand": 16
+          }
+        ],
+        "verified_answer": 39
+      },
+      "seed": 5925030707282793094,
+      "text_sha256": "49445915bedfea977f6c37d766e99019ec6ba3a465ffd2e60746e5d4c1e91ffa",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "a488c40aef8f0036558215816029f89c2c563cc75b7b019c8a9d0dfd8c2ad042",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "25983434802266826385a10756986bb44ec99c62eaa0994177991c543b3b9b93": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 17,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 31,
+      "generator_id": "jw.summ",
+      "generator_version": "1.0.0",
+      "needle_positions": [
+        {
+          "entity": "Wendor",
+          "needle": "NEEDLE-1010",
+          "position": 1
+        },
+        {
+          "entity": "Lankel",
+          "needle": "NEEDLE-6438",
+          "position": 0
+        }
+      ],
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "facts_per_entity_draw": {
+          "range": [
+            6,
+            10
+          ],
+          "semantics": "legacy draw recorded for replay; filler continues until token budget",
+          "source": "drbg",
+          "value": 7
+        },
+        "n_entities": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 5
+        },
+        "n_needles": {
+          "range": [
+            1,
+            2
+          ],
+          "source": "drbg",
+          "value": 2
+        }
+      },
+      "realized_needles": 2,
+      "realized_token_count": 512,
+      "requested_needles": 2,
+      "seed": 1458539590683191788,
+      "text_sha256": "3a578bb391e87147b9a9403b490bba1a717a1a28f4a3311d2dd12543fa3ecfec",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "d4394bd85176626dc1d9f2d1152756b351ba4ca080de6179f2adf8e497d02a14",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "28c0f36bceaf96f87e5295c4a3e012d820c7521f067b552ed0b83da089fcdeff": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 22,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 27,
+      "generator_id": "jw.code",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "indent": {
+          "source": "pinned",
+          "value": "    "
+        },
+        "n_complete_functions": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "n_imports": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 3
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 3337666751754438686,
+      "text_sha256": "3624fa9921f90903c040146e548581120dc488325d18935930568f7d0969b896",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "710d462ec1a8fdf1ab114382d8dfabea028fc883a08bb4c8f42a553438b446ff",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "2e6cb9d73dead2beca7f4f073da043b45e057b1620e916b5cfa1b930ff5f838e": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 17,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 29,
+      "generator_id": "jw.summ",
+      "generator_version": "1.0.0",
+      "needle_positions": [
+        {
+          "entity": "Lumaluma",
+          "needle": "NEEDLE-9685",
+          "position": 1
+        },
+        {
+          "entity": "Tavitor",
+          "needle": "NEEDLE-6414",
+          "position": 0
+        }
+      ],
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "facts_per_entity_draw": {
+          "range": [
+            6,
+            10
+          ],
+          "semantics": "legacy draw recorded for replay; filler continues until token budget",
+          "source": "drbg",
+          "value": 7
+        },
+        "n_entities": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "n_needles": {
+          "range": [
+            1,
+            2
+          ],
+          "source": "drbg",
+          "value": 2
+        }
+      },
+      "realized_needles": 2,
+      "realized_token_count": 512,
+      "requested_needles": 2,
+      "seed": 9759568824187298572,
+      "text_sha256": "5b185ed7c4de98ee8cc79ce7742e26e5176fed50c95aaa73342c857635356d0c",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "cb171ce7b3839edc0c194840176193e50ea0f43b4b314daeee5a08a8325e95c9",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "32faadd419d18f8698b82da5b641a20afa18d30a59201f93796b5860c4927a52": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 22,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 25,
+      "generator_id": "jw.code",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "indent": {
+          "source": "pinned",
+          "value": "    "
+        },
+        "n_complete_functions": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "n_imports": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 3
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 9414277831387055012,
+      "text_sha256": "2aceae375e28ee974ffbed4cc04080185ce98ab8695a8c5ef66b74fc29efc64e",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "39c802528950375eee6ac6ebbfab94df69ee7f831198789f8350b1f79b129db8",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "344d646d83001b76dbf7249ab524437a51c9b5d4184dba510bc089c0abdca75d": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 18,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 29,
+      "generator_id": "jw.json",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "dor_min": "A",
+        "dor_pak_kel": null,
+        "lan_tor_lan": "D",
+        "min_luma": null,
+        "nori_tor": null,
+        "pak_ver_dor": true,
+        "pak_ver_luma": "Dordor",
+        "wen_dor_kel": "B"
+      },
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_distractors": {
+          "range": [
+            2,
+            4
+          ],
+          "source": "drbg",
+          "value": 2
+        },
+        "n_fields": {
+          "range": [
+            6,
+            9
+          ],
+          "source": "drbg",
+          "value": 8
+        },
+        "n_red_herrings": {
+          "range": [
+            1,
+            3
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "record_styles": {
+          "source": "pinned",
+          "value": [
+            "log",
+            "freetext",
+            "kv"
+          ]
+        }
+      },
+      "realized_token_count": 512,
+      "schema": {
+        "dor_min": "enum",
+        "dor_pak_kel": "nullable",
+        "lan_tor_lan": "enum",
+        "min_luma": "nullable",
+        "nori_tor": "nullable",
+        "pak_ver_dor": "bool",
+        "pak_ver_luma": "string",
+        "wen_dor_kel": "enum"
+      },
+      "seed": 5747845280633879154,
+      "text_sha256": "1a5dbda43cecc82c22eb54b5e22e5a857c14aea770b9324fe1115512f1251709",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "bdac07529bb8be644cf035ffce2d00ef0137eb386c0ffbaf9a456aed131b3be8",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "48c9049e3cfa73c109c656ee8516c75252f7e0fe0232d9916d1dbd7fba45f6a7": {
       "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
       "coarse_units": 27,
       "distractors": [
@@ -102,338 +650,9 @@
       "text_sha256": "e7753d485b0f3438f8bd11c2045f1e5b62068a1c79cae5dd7e5e3cdfc4649be7",
       "token_accounting": "encode_add_special_true",
       "token_ids_sha256": "cb0f31ca036439df5631cb8d74e0ecfe338956af8295fd7fd1ea294c80b0db69",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     },
-    "04867b8d0f8bb3b08a83735ec4f9f6a556938df6cb8951d40ff095fabb03fdd0": {
-      "ascii_tail_tokens": 0,
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "chars_per_token": 1.26171875,
-      "coarse_units": 14,
-      "direction": "ltr",
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 45,
-      "generator_id": "jw.multiling",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "ascii_tail_max": {
-          "source": "pinned",
-          "value": 3
-        },
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "direction": {
-          "source": "pinned",
-          "value": "ltr"
-        },
-        "language": {
-          "range": [
-            0,
-            5
-          ],
-          "source": "pinned",
-          "value": "el-Greek"
-        }
-      },
-      "realized_token_count": 512,
-      "script_profile": "el-Greek",
-      "seed": 11917929496043648924,
-      "text_sha256": "bd579233a88d328fd3076f66c432c8a950410fa200cdf7b72689af5360e3a2f9",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "c11487a03a272a1ecc1bc0d767da5be7b10e24ce262691a953578b82e6152de2",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "053d3d9dde616c7c28f56b1a268363d33b6445c5594062e6eb7809582f65856a": {
-      "ascii_tail_tokens": 0,
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "chars_per_token": 1.705078125,
-      "coarse_units": 21,
-      "direction": "rtl",
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 34,
-      "generator_id": "jw.multiling",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "ascii_tail_max": {
-          "source": "pinned",
-          "value": 3
-        },
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "direction": {
-          "source": "pinned",
-          "value": "rtl"
-        },
-        "language": {
-          "range": [
-            0,
-            5
-          ],
-          "source": "pinned",
-          "value": "ar-Arabic"
-        }
-      },
-      "realized_token_count": 512,
-      "script_profile": "ar-Arabic",
-      "seed": 12047106101055624691,
-      "text_sha256": "472b3ecbe5892b73994c552143f1ba5c36f0a98ffdf1debfc5389303189e78ae",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "d1c858db64ce404fbfcf3be82c9a2f82a5391c85b5c8e3aec6fa1d190369681c",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "0aafd293334c1b65c9c2edc96168341fb18940de0ea149570cfc097b49f62a36": {
-      "ascii_tail_tokens": 0,
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "chars_per_token": 1.224609375,
-      "coarse_units": 19,
-      "direction": "ltr",
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 29,
-      "generator_id": "jw.multiling",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "ascii_tail_max": {
-          "source": "pinned",
-          "value": 3
-        },
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "direction": {
-          "source": "pinned",
-          "value": "ltr"
-        },
-        "language": {
-          "range": [
-            0,
-            5
-          ],
-          "source": "pinned",
-          "value": "zh-CJK"
-        }
-      },
-      "realized_token_count": 512,
-      "script_profile": "zh-CJK",
-      "seed": 16100625457382821371,
-      "text_sha256": "479a7e988e064bc8f269f225400b63d3e1a088c28ea42bc012ec30237b0f138e",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "739b433c6d50ab2400605ee83627853e87a04618c871eaf705d5538deb2004e7",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "1bbb5776630fcdf6dcb3533db31ce2700415bee4793827f03bc04d694b1014a4": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 24,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 24,
-      "generator_id": "jw.code",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "indent": {
-          "source": "pinned",
-          "value": "    "
-        },
-        "n_complete_functions": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 2
-        },
-        "n_imports": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 2
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 17443930596380976830,
-      "text_sha256": "0d08459600b0bf5f2dda77480cc4b0886b1ebae253e5063577b9a5ae44debfac",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "00154a2f4e3291b50dbac8627be078ef687014b0d4c264ddc0ce01758b20765b",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "1da1176f9ecc9da914510b827bca3ac29bb7d75226101bab1da80aa7069779b9": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 15,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 35,
-      "generator_id": "jw.json",
-      "generator_version": "1.0.0",
-      "ground_truth": {
-        "dor_min": 874,
-        "dor_tavi": "C",
-        "nori_nori_tor": "2034-05-22",
-        "sai_dor_nori": false,
-        "sai_ver_luma": "Wenpak",
-        "tavi_tavi": "Wenlan",
-        "tavi_ver_nori": 158,
-        "tor_tavi": "2031-06-11",
-        "wen_nori": 911
-      },
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "n_distractors": {
-          "range": [
-            2,
-            4
-          ],
-          "source": "drbg",
-          "value": 4
-        },
-        "n_fields": {
-          "range": [
-            6,
-            9
-          ],
-          "source": "drbg",
-          "value": 9
-        },
-        "n_red_herrings": {
-          "range": [
-            1,
-            3
-          ],
-          "source": "drbg",
-          "value": 1
-        },
-        "record_styles": {
-          "source": "pinned",
-          "value": [
-            "log",
-            "freetext",
-            "kv"
-          ]
-        }
-      },
-      "realized_token_count": 512,
-      "schema": {
-        "dor_min": "int",
-        "dor_tavi": "enum",
-        "nori_nori_tor": "date",
-        "sai_dor_nori": "bool",
-        "sai_ver_luma": "string",
-        "tavi_tavi": "string",
-        "tavi_ver_nori": "int",
-        "tor_tavi": "date",
-        "wen_nori": "int"
-      },
-      "seed": 9300606977290976743,
-      "text_sha256": "38e2308e4c1fc5055799a96f6f31bbe971270501307a3b6f0f7cccc973bff05e",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "65c8b17c1de893b8cb07a90d4f961603c86bc81d303bd65f8ce31b27642f800c",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "1fa6f3838fd7e1df6370cf05fe3973f828bf90537ae62bdcb064a2f61370b1e3": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 18,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 36,
-      "generator_id": "jw.summ",
-      "generator_version": "1.0.0",
-      "needle_positions": [
-        {
-          "entity": "Tavilan",
-          "needle": "NEEDLE-3179",
-          "position": 0
-        }
-      ],
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "facts_per_entity_draw": {
-          "range": [
-            6,
-            10
-          ],
-          "semantics": "legacy draw recorded for replay; filler continues until token budget",
-          "source": "drbg",
-          "value": 9
-        },
-        "n_entities": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "n_needles": {
-          "range": [
-            1,
-            2
-          ],
-          "source": "drbg",
-          "value": 1
-        }
-      },
-      "realized_needles": 1,
-      "realized_token_count": 512,
-      "requested_needles": 1,
-      "seed": 12622301949499217500,
-      "text_sha256": "5ae9f1ce9e6f2a3f7956a03b846297d824987aee22b164d97096c211195b2877",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "5e4ed1d65b633f9a1de21143783360da36acc22b5b6f2c96b6953002af785498",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "2a991285c0ac1bfd7804a8c511e2b86ff30b3e74ee82c8b88b98ababb6e252af": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 22,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 30,
-      "generator_id": "jw.chat",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "n_constraints": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 5
-        },
-        "persona": {
-          "range": [
-            0,
-            7
-          ],
-          "source": "drbg",
-          "value": "a new town clerk"
-        },
-        "topic": {
-          "grammar": "adjective+domain",
-          "source": "drbg",
-          "value": "the careful greenhouse irrigation schedules"
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 17194605112665109461,
-      "text_sha256": "efaaa1915824844caa28628b2b3d2e6141d35dbef713e0b973624ddc01f2eba3",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "b20b3283c8eb83ddb2588e2df349d7869f2d6755c563c607881ef5a0f2e4ce00",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "2fdde8c334cf2b91ccfc72dafd25549abe6ac892c153d5848ed1c3b7e5dfb62a": {
+    "49694b1df15be92700a7ab00b2f0ef2a2c83de19f7bfbac0d70f4d4876f7b962": {
       "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
       "coarse_units": 17,
       "drbg": "sha256-ctr-v1",
@@ -490,1025 +709,16 @@
       "text_sha256": "e9b6f1191a9c8f37f2675ee635933492ea85ffde473820a93b118ca599158e00",
       "token_accounting": "encode_add_special_true",
       "token_ids_sha256": "cd9426768981e9ddb5ab757ec691c05d3401db1790603a5b8c9c4a84e37e234e",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     },
-    "343d3a4d5b33bdd60bc8fe7705f5c789cb3f7b03835a4fc301fb48aba980aecc": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 23,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 26,
-      "generator_id": "jw.chat",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "n_constraints": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "persona": {
-          "range": [
-            0,
-            7
-          ],
-          "source": "drbg",
-          "value": "a harbor coordinator"
-        },
-        "topic": {
-          "grammar": "adjective+domain",
-          "source": "drbg",
-          "value": "the rotating greenhouse irrigation schedules"
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 1699409790044426264,
-      "text_sha256": "01d3a35a4b2c435af1efc70a1f8bc982e920a795e37e86fa7c4ccd56b3cbff4d",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "9b06b3c032aa620b4ed86e6f3319e417f5209f1fe18390f543fd7f11b8b383dc",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "3e7f16711a04b2ec91e0253c926f5b8922fec4a967d7e384b14ea41e6d9949ac": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 27,
-      "distractors": [
-        "The side ledger mentioned 51 labels, but those labels are unrelated."
-      ],
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 35,
-      "generator_id": "jw.reason",
-      "generator_version": "1.0.0",
-      "ground_truth": {
-        "answer": 36
-      },
-      "parameters": {
-        "answer_seed_range": {
-          "source": "implementation",
-          "value": [
-            10,
-            80
-          ]
-        },
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "intermediate_cap": {
-          "source": "pinned",
-          "value": 10000
-        },
-        "logic_variant": {
-          "rate": 0.25,
-          "source": "drbg",
-          "value": false
-        },
-        "n_distractors": {
-          "range": [
-            1,
-            3
-          ],
-          "source": "drbg",
-          "value": 1
-        },
-        "n_steps": {
-          "range": [
-            4,
-            6
-          ],
-          "source": "drbg",
-          "value": 5
-        }
-      },
-      "realized_token_count": 512,
-      "reasoning_trace": {
-        "answer": 36,
-        "initial": 144,
-        "integer_intermediates": [
-          130,
-          26,
-          19,
-          26,
-          36
-        ],
-        "reason_type": "arithmetic",
-        "steps": [
-          {
-            "after": 130,
-            "before": 144,
-            "op": "sub",
-            "operand": 14
-          },
-          {
-            "after": 26,
-            "before": 130,
-            "op": "int_div",
-            "operand": 5
-          },
-          {
-            "after": 19,
-            "before": 26,
-            "op": "sub",
-            "operand": 7
-          },
-          {
-            "after": 26,
-            "before": 19,
-            "op": "add",
-            "operand": 7
-          },
-          {
-            "after": 36,
-            "before": 26,
-            "op": "add",
-            "operand": 10
-          }
-        ],
-        "verified_answer": 36
-      },
-      "seed": 8592445797920323884,
-      "text_sha256": "764819b999a39637e78b5af75d1e39470f4677258923a9c58e2949bf6dfb652a",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "115d131e3a0d0d1312a6e5c7baebae19366ca726135ea7ac91cb1c1e56c95580",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "41dcf9d67d556d29fff131cbd5938604aae54911c0872f38f010f477226cefea": {
+    "4997e9c125d1f34b3df7ca7226979a3a01302cae306203f0c425f82bcd5cf1ca": {
       "ascii_tail_tokens": 0,
       "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "chars_per_token": 2.46484375,
-      "coarse_units": 31,
-      "direction": "ltr",
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 26,
-      "generator_id": "jw.multiling",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "ascii_tail_max": {
-          "source": "pinned",
-          "value": 3
-        },
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "direction": {
-          "source": "pinned",
-          "value": "ltr"
-        },
-        "language": {
-          "range": [
-            0,
-            5
-          ],
-          "source": "pinned",
-          "value": "en-Latin"
-        }
-      },
-      "realized_token_count": 512,
-      "script_profile": "en-Latin",
-      "seed": 11690297315345595378,
-      "text_sha256": "6b5b6ea9cbaa08d35a3c3c0778d69ed27d4ac7aba279d99c196743e32cf8a1fb",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "320f9e831c66c177f9a6fd4e8f6552c45a84f016424d3bf8d43e7754704d7510",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "439b508ecb04989673b91715bf061fa9780547245ab149b62a06ceb1c7e430cb": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 24,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 26,
-      "generator_id": "jw.code",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "indent": {
-          "source": "pinned",
-          "value": "    "
-        },
-        "n_complete_functions": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 2
-        },
-        "n_imports": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 2
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 18026304521611722269,
-      "text_sha256": "297c99574a5fbee30246ff805b9fd014cb50cf3541196316a2b4077760575e14",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "b44200d006c1351e6cadae1a0c41f406a606f10c091b07f9553edbdc592fec44",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "48e2269c96dd443c9985d4a762dbbe716e4f0b617727769ae81014082da29104": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 27,
-      "distractors": [
-        "The side ledger mentioned 22 labels, but those labels are unrelated.",
-        "The side ledger mentioned 24 labels, but those labels are unrelated.",
-        "The side ledger mentioned 30 labels, but those labels are unrelated."
-      ],
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 41,
-      "generator_id": "jw.reason",
-      "generator_version": "1.0.0",
-      "ground_truth": {
-        "answer": 74
-      },
-      "parameters": {
-        "answer_seed_range": {
-          "source": "implementation",
-          "value": [
-            10,
-            80
-          ]
-        },
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "intermediate_cap": {
-          "source": "pinned",
-          "value": 10000
-        },
-        "logic_variant": {
-          "rate": 0.25,
-          "source": "drbg",
-          "value": false
-        },
-        "n_distractors": {
-          "range": [
-            1,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "n_steps": {
-          "range": [
-            4,
-            6
-          ],
-          "source": "drbg",
-          "value": 6
-        }
-      },
-      "realized_token_count": 512,
-      "reasoning_trace": {
-        "answer": 74,
-        "initial": 4350,
-        "integer_intermediates": [
-          1450,
-          290,
-          58,
-          54,
-          64,
-          74
-        ],
-        "reason_type": "arithmetic",
-        "steps": [
-          {
-            "after": 1450,
-            "before": 4350,
-            "op": "int_div",
-            "operand": 3
-          },
-          {
-            "after": 290,
-            "before": 1450,
-            "op": "int_div",
-            "operand": 5
-          },
-          {
-            "after": 58,
-            "before": 290,
-            "op": "int_div",
-            "operand": 5
-          },
-          {
-            "after": 54,
-            "before": 58,
-            "op": "sub",
-            "operand": 4
-          },
-          {
-            "after": 64,
-            "before": 54,
-            "op": "add",
-            "operand": 10
-          },
-          {
-            "after": 74,
-            "before": 64,
-            "op": "add",
-            "operand": 10
-          }
-        ],
-        "verified_answer": 74
-      },
-      "seed": 8630904541656994842,
-      "text_sha256": "5f262b9e1f442aa0154e899497f5bf932e1a00d91f88909d5a83ffef0dc8e5f1",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "781dbd739051bcf3b257d3c3377784a5dbcb1ebbbfd6c6421cc79ceca92091cb",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "569b0e67fb17a9c84f32704313ad3cb82135a8088ce9c272a8d1739ebe37dce2": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 17,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 41,
-      "generator_id": "jw.summ",
-      "generator_version": "1.0.0",
-      "needle_positions": [
-        {
-          "entity": "Minmin",
-          "needle": "NEEDLE-9759",
-          "position": 1
-        },
-        {
-          "entity": "Pakver",
-          "needle": "NEEDLE-9698",
-          "position": 0
-        }
-      ],
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "facts_per_entity_draw": {
-          "range": [
-            6,
-            10
-          ],
-          "semantics": "legacy draw recorded for replay; filler continues until token budget",
-          "source": "drbg",
-          "value": 10
-        },
-        "n_entities": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "n_needles": {
-          "range": [
-            1,
-            2
-          ],
-          "source": "drbg",
-          "value": 2
-        }
-      },
-      "realized_needles": 2,
-      "realized_token_count": 512,
-      "requested_needles": 2,
-      "seed": 16945180797236973315,
-      "text_sha256": "049a22f27d855979cb492691ed22c8ded1135ecdc3f3544fe783370ebe8e770a",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "c91cdcc64d288c8886b7cef4ed82eebcbb6ff164d304e79eb6e3a0ba1e6bdc7a",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "57b1374a28bdc25433b66588e8057786f6609fb5a545aa7c752beb748a97a740": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 18,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 43,
-      "generator_id": "jw.summ",
-      "generator_version": "1.0.0",
-      "needle_positions": [
-        {
-          "entity": "Lumatavi",
-          "needle": "NEEDLE-5798",
-          "position": 0
-        }
-      ],
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "facts_per_entity_draw": {
-          "range": [
-            6,
-            10
-          ],
-          "semantics": "legacy draw recorded for replay; filler continues until token budget",
-          "source": "drbg",
-          "value": 10
-        },
-        "n_entities": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 4
-        },
-        "n_needles": {
-          "range": [
-            1,
-            2
-          ],
-          "source": "drbg",
-          "value": 1
-        }
-      },
-      "realized_needles": 1,
-      "realized_token_count": 512,
-      "requested_needles": 1,
-      "seed": 5685343951081148577,
-      "text_sha256": "fc9bc1bd017831cf5b4f1767941961b18f4b4d736c49b0a1427cabaa86e46506",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "79a46c08ca9dc404f871ac7cb436b3f1e5d74426d566c0f43cb7929bb8b6ea46",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "5b189af37bf9fe4fe6c8aa1a80aa8028bc01951bcf2a63ae3a416a9a8e898b7d": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 15,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 35,
-      "generator_id": "jw.json",
-      "generator_version": "1.0.0",
-      "ground_truth": {
-        "lan_lan_wen": "2032-07-27",
-        "lan_pak": "Wenkel",
-        "lan_sai": true,
-        "pak_wen_kel": "2032-07-26",
-        "tavi_kel_tor": null,
-        "tor_wen_min": "2030-03-17",
-        "ver_tavi_tavi": "Wentavi",
-        "wen_nori_nori": "C",
-        "wen_ver": 138
-      },
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "n_distractors": {
-          "range": [
-            2,
-            4
-          ],
-          "source": "drbg",
-          "value": 4
-        },
-        "n_fields": {
-          "range": [
-            6,
-            9
-          ],
-          "source": "drbg",
-          "value": 9
-        },
-        "n_red_herrings": {
-          "range": [
-            1,
-            3
-          ],
-          "source": "drbg",
-          "value": 1
-        },
-        "record_styles": {
-          "source": "pinned",
-          "value": [
-            "log",
-            "freetext",
-            "kv"
-          ]
-        }
-      },
-      "realized_token_count": 512,
-      "schema": {
-        "lan_lan_wen": "date",
-        "lan_pak": "string",
-        "lan_sai": "bool",
-        "pak_wen_kel": "date",
-        "tavi_kel_tor": "nullable",
-        "tor_wen_min": "date",
-        "ver_tavi_tavi": "string",
-        "wen_nori_nori": "enum",
-        "wen_ver": "int"
-      },
-      "seed": 7356228621146206979,
-      "text_sha256": "f3f592e3860b132630c300022555ec9ba6a2aae12c1f0e6809084d3d4162ca4a",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "303c7c0c259daeea637a540a5781dc32c8337c578b0c18dcaf1c4797af05821f",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "610cb7ad95fc7d852b8d6e6336b3629d4530ba0518db970249868d8516246c9f": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 18,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 30,
-      "generator_id": "jw.json",
-      "generator_version": "1.0.0",
-      "ground_truth": {
-        "kel_nori_tavi": 686,
-        "nori_lan": "2033-01-26",
-        "pak_ver": true,
-        "sai_dor_wen": "B",
-        "tavi_nori_ver": null,
-        "tor_nori_wen": false,
-        "wen_sai_lan": 243
-      },
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "n_distractors": {
-          "range": [
-            2,
-            4
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "n_fields": {
-          "range": [
-            6,
-            9
-          ],
-          "source": "drbg",
-          "value": 7
-        },
-        "n_red_herrings": {
-          "range": [
-            1,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "record_styles": {
-          "source": "pinned",
-          "value": [
-            "log",
-            "freetext",
-            "kv"
-          ]
-        }
-      },
-      "realized_token_count": 512,
-      "schema": {
-        "kel_nori_tavi": "int",
-        "nori_lan": "date",
-        "pak_ver": "bool",
-        "sai_dor_wen": "enum",
-        "tavi_nori_ver": "nullable",
-        "tor_nori_wen": "bool",
-        "wen_sai_lan": "int"
-      },
-      "seed": 12647777970963703566,
-      "text_sha256": "81ea3fcd5c2133eee74be71acfd18f81b0e35920b15d703920c8482859cb5414",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "1723b8a59db2d157a73dd3680a4444b9f3939071d8b4065960ecc38e994ff93b",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "67ba1fced5b5fe498ff249db6d864d0478fbf23a9c47a8f36220d833b3f52834": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 22,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 38,
-      "generator_id": "jw.chat",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "n_constraints": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 4
-        },
-        "persona": {
-          "range": [
-            0,
-            7
-          ],
-          "source": "drbg",
-          "value": "a harbor coordinator"
-        },
-        "topic": {
-          "grammar": "adjective+domain",
-          "source": "drbg",
-          "value": "the seasonal regional survey teams"
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 12421235814810780564,
-      "text_sha256": "114b9cd5691ecb86d109282e01362ab20c519737d1565ff96d40b8049f84f479",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "ca6038c73d4363208cc3537b1df8c6c31150742b50535ff601372b174051d061",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "78e8146a02f6a68baffea54166ec411202a03305d0a8933f00205664ad520285": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 22,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 27,
-      "generator_id": "jw.code",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "indent": {
-          "source": "pinned",
-          "value": "    "
-        },
-        "n_complete_functions": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "n_imports": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 3337666751754438686,
-      "text_sha256": "3624fa9921f90903c040146e548581120dc488325d18935930568f7d0969b896",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "710d462ec1a8fdf1ab114382d8dfabea028fc883a08bb4c8f42a553438b446ff",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "7ce29c2bccf06c15d2ed0c314c8de30d679abfa06ef0497e169901672137f492": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 17,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 29,
-      "generator_id": "jw.summ",
-      "generator_version": "1.0.0",
-      "needle_positions": [
-        {
-          "entity": "Lumaluma",
-          "needle": "NEEDLE-9685",
-          "position": 1
-        },
-        {
-          "entity": "Tavitor",
-          "needle": "NEEDLE-6414",
-          "position": 0
-        }
-      ],
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "facts_per_entity_draw": {
-          "range": [
-            6,
-            10
-          ],
-          "semantics": "legacy draw recorded for replay; filler continues until token budget",
-          "source": "drbg",
-          "value": 7
-        },
-        "n_entities": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "n_needles": {
-          "range": [
-            1,
-            2
-          ],
-          "source": "drbg",
-          "value": 2
-        }
-      },
-      "realized_needles": 2,
-      "realized_token_count": 512,
-      "requested_needles": 2,
-      "seed": 9759568824187298572,
-      "text_sha256": "5b185ed7c4de98ee8cc79ce7742e26e5176fed50c95aaa73342c857635356d0c",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "cb171ce7b3839edc0c194840176193e50ea0f43b4b314daeee5a08a8325e95c9",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "83c74d44e6283b809b02ee034f3683629446d372d2563b34e507d195e44d5b90": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 22,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 33,
-      "generator_id": "jw.chat",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "n_constraints": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 5
-        },
-        "persona": {
-          "range": [
-            0,
-            7
-          ],
-          "source": "drbg",
-          "value": "a new town clerk"
-        },
-        "topic": {
-          "grammar": "adjective+domain",
-          "source": "drbg",
-          "value": "the quiet transit repair logs"
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 4483295786468755370,
-      "text_sha256": "eef54331a855d205bcdd0e208db0f96880a9bcc47823097b9041cebf5222a83d",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "dc5a0b80a202113a116f68b662ebb21fb871c84bac02dcfec213daab1b2b0c2f",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "8a7ea19f4be2e3e7e6ae86b1b1315c40c786eb510a50a9758e85528013d07648": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 21,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 30,
-      "generator_id": "jw.code",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "indent": {
-          "source": "pinned",
-          "value": "    "
-        },
-        "n_complete_functions": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "n_imports": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 1189791771997899813,
-      "text_sha256": "596f97a8f4338f7ab18bc12a013b0fdfce2ecd8c68c009deb35d15a0a39552fe",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "d6923b82346638608ba952518adec97ffdc6b2d6e5e47718f197a31ebbac68c1",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "8df9b641d2f5b6fdfed541fc418699f46eb6677f52769ff33902c3fdb405789b": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 23,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 23,
-      "generator_id": "jw.chat",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "n_constraints": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "persona": {
-          "range": [
-            0,
-            7
-          ],
-          "source": "drbg",
-          "value": "a maintenance dispatcher"
-        },
-        "topic": {
-          "grammar": "adjective+domain",
-          "source": "drbg",
-          "value": "the shared greenhouse irrigation schedules"
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 3370521975334900326,
-      "text_sha256": "2188a9f0e5af2aae22ff10b64f2b8f7fdd013ff289123ee5f5e6ea6fbe105fcd",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "733b25238cbfea1ad125e954c2b446bb7a21ace3adbaa54e0fbc3b60eed17930",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "9bed0e48a2101d95414050c7b4fc90b43b618efa82be45efe096c231dc33920c": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 16,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 35,
-      "generator_id": "jw.json",
-      "generator_version": "1.0.0",
-      "ground_truth": {
-        "dor_nori": "2031-05-11",
-        "kel_tor_nori": 556,
-        "nori_wen": null,
-        "pak_dor_luma": "2032-09-13",
-        "pak_wen": "2033-03-14",
-        "tavi_sai": "B",
-        "tavi_sai_tavi": "D",
-        "tor_ver": "2030-05-17",
-        "wen_min_min": "A"
-      },
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "n_distractors": {
-          "range": [
-            2,
-            4
-          ],
-          "source": "drbg",
-          "value": 4
-        },
-        "n_fields": {
-          "range": [
-            6,
-            9
-          ],
-          "source": "drbg",
-          "value": 9
-        },
-        "n_red_herrings": {
-          "range": [
-            1,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "record_styles": {
-          "source": "pinned",
-          "value": [
-            "log",
-            "freetext",
-            "kv"
-          ]
-        }
-      },
-      "realized_token_count": 512,
-      "schema": {
-        "dor_nori": "date",
-        "kel_tor_nori": "int",
-        "nori_wen": "nullable",
-        "pak_dor_luma": "date",
-        "pak_wen": "date",
-        "tavi_sai": "enum",
-        "tavi_sai_tavi": "enum",
-        "tor_ver": "date",
-        "wen_min_min": "enum"
-      },
-      "seed": 7794195510489243376,
-      "text_sha256": "f88b4c042338901acbb8d16c326ddbd69d299066e67663b40e92bfb235fff40f",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "c7c0085a0c39c1acf443f749454f66bc613122bc0a0a89e74d26e3569db52d03",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "a0e5c81af1141e03a5241f6477fb8a92ab2c7b98332b3718b654cbc0d7f2e486": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 22,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 25,
-      "generator_id": "jw.code",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "indent": {
-          "source": "pinned",
-          "value": "    "
-        },
-        "n_complete_functions": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "n_imports": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 9414277831387055012,
-      "text_sha256": "2aceae375e28ee974ffbed4cc04080185ce98ab8695a8c5ef66b74fc29efc64e",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "39c802528950375eee6ac6ebbfab94df69ee7f831198789f8350b1f79b129db8",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "a53d071869d75f21680b8ca75d4dca9106502c82c8a27ccbbc62e746a3edc4a4": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 24,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 25,
-      "generator_id": "jw.code",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "indent": {
-          "source": "pinned",
-          "value": "    "
-        },
-        "n_complete_functions": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 2
-        },
-        "n_imports": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 2
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 12525032168555837238,
-      "text_sha256": "fe241bcc1af6cac789358e6b68ca4079c04a979479534518085416cf2c941169",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "a104d1e436f27ac34ea69b92245c6f343d06a2e3518ca2aac69511a7b418229d",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "ae9c70e1b8a345e47dc9bce39cfbf15cd03f1a8eecbb4e5d5a35996cee9883cb": {
-      "ascii_tail_tokens": 0,
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "chars_per_token": 1.138671875,
+      "chars_per_token": 1.26171875,
       "coarse_units": 14,
       "direction": "ltr",
       "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 32,
+      "elastic_fill_tokens": 45,
       "generator_id": "jw.multiling",
       "generator_version": "1.0.0",
       "parameters": {
@@ -1530,770 +740,18 @@
             5
           ],
           "source": "pinned",
-          "value": "hi-Devanagari"
+          "value": "el-Greek"
         }
       },
       "realized_token_count": 512,
-      "script_profile": "hi-Devanagari",
-      "seed": 16897421313245276046,
-      "text_sha256": "6b7b0cb682868c45a5c0b012fd0b313934e7b309b2400862a067a538aa160503",
+      "script_profile": "el-Greek",
+      "seed": 11917929496043648924,
+      "text_sha256": "bd579233a88d328fd3076f66c432c8a950410fa200cdf7b72689af5360e3a2f9",
       "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "637a140ca52dbe07a11ae2a9f3e0c0fc368fab90aa666145ae9435a829c35bf6",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "token_ids_sha256": "c11487a03a272a1ecc1bc0d767da5be7b10e24ce262691a953578b82e6152de2",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     },
-    "b0042efe0bdd5776b761424a2888bc43ca7c0f57922434672023886ecece4231": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 23,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 26,
-      "generator_id": "jw.chat",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "n_constraints": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "persona": {
-          "range": [
-            0,
-            7
-          ],
-          "source": "drbg",
-          "value": "a new town clerk"
-        },
-        "topic": {
-          "grammar": "adjective+domain",
-          "source": "drbg",
-          "value": "the quiet market stall ledgers"
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 11734879160761897387,
-      "text_sha256": "23b5c35613a13bf280615c37d730a55871225727a5a325eac8483df3243fc9e1",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "65c3ab895511e2ce5ce380790885f08382628110a8b196b8c16d2c16c56ec5f0",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "b3038aea609aad55cf085f88dd56d0c1fd34cc706c30b0753c8ce15b28243ea0": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 27,
-      "distractors": [
-        "The side ledger mentioned 46 labels, but those labels are unrelated."
-      ],
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 29,
-      "generator_id": "jw.reason",
-      "generator_version": "1.0.0",
-      "ground_truth": {
-        "answer": 61
-      },
-      "parameters": {
-        "answer_seed_range": {
-          "source": "implementation",
-          "value": [
-            10,
-            80
-          ]
-        },
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "intermediate_cap": {
-          "source": "pinned",
-          "value": 10000
-        },
-        "logic_variant": {
-          "rate": 0.25,
-          "source": "drbg",
-          "value": false
-        },
-        "n_distractors": {
-          "range": [
-            1,
-            3
-          ],
-          "source": "drbg",
-          "value": 1
-        },
-        "n_steps": {
-          "range": [
-            4,
-            6
-          ],
-          "source": "drbg",
-          "value": 5
-        }
-      },
-      "realized_token_count": 512,
-      "reasoning_trace": {
-        "answer": 61,
-        "initial": 210,
-        "integer_intermediates": [
-          315,
-          310,
-          321,
-          305,
-          61
-        ],
-        "reason_type": "arithmetic",
-        "steps": [
-          {
-            "after": 315,
-            "before": 210,
-            "op": "percent_increase",
-            "operand": 50
-          },
-          {
-            "after": 310,
-            "before": 315,
-            "op": "sub",
-            "operand": 5
-          },
-          {
-            "after": 321,
-            "before": 310,
-            "op": "add",
-            "operand": 11
-          },
-          {
-            "after": 305,
-            "before": 321,
-            "op": "sub",
-            "operand": 16
-          },
-          {
-            "after": 61,
-            "before": 305,
-            "op": "int_div",
-            "operand": 5
-          }
-        ],
-        "verified_answer": 61
-      },
-      "seed": 17929558000877961295,
-      "text_sha256": "b8e8607899e827e311e1482620b92a4dcd4e59742c730d3d8e5569eb4ad05621",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "44d5e6db42da9f2f0cb835f37a4797acaf3c30d9d978ca3517821f38596f3633",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "b4d0bcd765c39b57b8271d7476b9610425325da436d9b86c5b842bec540d980e": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 24,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 24,
-      "generator_id": "jw.code",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "indent": {
-          "source": "pinned",
-          "value": "    "
-        },
-        "n_complete_functions": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 2
-        },
-        "n_imports": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 2
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 1025718292703155556,
-      "text_sha256": "68f82bc7880c357c7375cf1a6c5321a29e78cd8b89a7fd0c6cffb0174d1115e0",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "1fc6f1bf64d4292ec03c6644d423fb9121737aa64d9b6432d7f748fb524cd62e",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "b560ccc1cbccf01bac782a111593d37417839dd86dcb405417d364181989f112": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 22,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 38,
-      "generator_id": "jw.chat",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "n_constraints": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 4
-        },
-        "persona": {
-          "range": [
-            0,
-            7
-          ],
-          "source": "drbg",
-          "value": "a field supervisor"
-        },
-        "topic": {
-          "grammar": "adjective+domain",
-          "source": "drbg",
-          "value": "the quiet storm shelter rosters"
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 18404626027619424121,
-      "text_sha256": "83bf477b8d7551776d5d9102206f30b98ab6f7847b4a62afab80a4fee093fe8b",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "2120f0266febc19473d76e6074d687d82c654a982230e88e6cd87416fb8681d7",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "bc9a7755cb17feb1faa33f146aad935b17f850edc2fada098df213d0b55dad64": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 23,
-      "distractors": [
-        "The side ledger mentioned 39 labels, but those labels are unrelated.",
-        "The side ledger mentioned 36 labels, but those labels are unrelated.",
-        "The side ledger mentioned 40 labels, but those labels are unrelated."
-      ],
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 24,
-      "generator_id": "jw.reason",
-      "generator_version": "1.0.0",
-      "ground_truth": {
-        "answer": "Lumador"
-      },
-      "parameters": {
-        "answer_seed_range": {
-          "source": "implementation",
-          "value": [
-            10,
-            80
-          ]
-        },
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "intermediate_cap": {
-          "source": "pinned",
-          "value": 10000
-        },
-        "logic_variant": {
-          "rate": 0.25,
-          "source": "drbg",
-          "value": true
-        },
-        "n_distractors": {
-          "range": [
-            1,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "n_steps": {
-          "range": [
-            4,
-            6
-          ],
-          "source": "drbg",
-          "value": 5
-        }
-      },
-      "realized_token_count": 512,
-      "reasoning_trace": {
-        "answer": "Lumador",
-        "constraints": [
-          [
-            "Lanluma",
-            "Torluma"
-          ],
-          [
-            "Torluma",
-            "Lumador"
-          ],
-          [
-            "Lumador",
-            "Dorpak"
-          ],
-          [
-            "Dorpak",
-            "Lumatavi"
-          ],
-          [
-            "Lanluma",
-            "Lumador"
-          ]
-        ],
-        "reason_type": "logic",
-        "solution_order": [
-          "Lanluma",
-          "Torluma",
-          "Lumador",
-          "Dorpak",
-          "Lumatavi"
-        ]
-      },
-      "seed": 18010800372265794208,
-      "text_sha256": "867622803ba1b4146c430404a2bf5d6054509f1e107b2a123a39df4f861f9ad0",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "bf259a779054da3e8faced9dde165eda94ba6465c413b1c87c57cf2eb8569f8d",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "be626fc0931c9ef878a28f9c52b90c21039dfd178f8c88ad0e38be2d6d7a95e1": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 28,
-      "distractors": [
-        "The side ledger mentioned 48 labels, but those labels are unrelated.",
-        "The side ledger mentioned 28 labels, but those labels are unrelated."
-      ],
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 33,
-      "generator_id": "jw.reason",
-      "generator_version": "1.0.0",
-      "ground_truth": {
-        "answer": 59
-      },
-      "parameters": {
-        "answer_seed_range": {
-          "source": "implementation",
-          "value": [
-            10,
-            80
-          ]
-        },
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "intermediate_cap": {
-          "source": "pinned",
-          "value": 10000
-        },
-        "logic_variant": {
-          "rate": 0.25,
-          "source": "drbg",
-          "value": false
-        },
-        "n_distractors": {
-          "range": [
-            1,
-            3
-          ],
-          "source": "drbg",
-          "value": 2
-        },
-        "n_steps": {
-          "range": [
-            4,
-            6
-          ],
-          "source": "drbg",
-          "value": 6
-        }
-      },
-      "realized_token_count": 512,
-      "reasoning_trace": {
-        "answer": 59,
-        "initial": 12,
-        "integer_intermediates": [
-          18,
-          14,
-          23,
-          30,
-          45,
-          59
-        ],
-        "reason_type": "arithmetic",
-        "steps": [
-          {
-            "after": 18,
-            "before": 12,
-            "op": "percent_increase",
-            "operand": 50
-          },
-          {
-            "after": 14,
-            "before": 18,
-            "op": "sub",
-            "operand": 4
-          },
-          {
-            "after": 23,
-            "before": 14,
-            "op": "add",
-            "operand": 9
-          },
-          {
-            "after": 30,
-            "before": 23,
-            "op": "add",
-            "operand": 7
-          },
-          {
-            "after": 45,
-            "before": 30,
-            "op": "percent_increase",
-            "operand": 50
-          },
-          {
-            "after": 59,
-            "before": 45,
-            "op": "add",
-            "operand": 14
-          }
-        ],
-        "verified_answer": 59
-      },
-      "seed": 1690115078675278271,
-      "text_sha256": "d4e8596b6c5f2987000fb7e73ddcc0ad6656a2383290917c534459e7cfbef882",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "5a0126637e1512814ce51e715878700ab589fefad681a50fafd09b03886a4261",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "c589263f6ce72b8ec54f617f555381275ab90dbc4933072c9f8e4847b713a318": {
-      "ascii_tail_tokens": 0,
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "chars_per_token": 1.66015625,
-      "coarse_units": 22,
-      "direction": "ltr",
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 31,
-      "generator_id": "jw.multiling",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "ascii_tail_max": {
-          "source": "pinned",
-          "value": 3
-        },
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "direction": {
-          "source": "pinned",
-          "value": "ltr"
-        },
-        "language": {
-          "range": [
-            0,
-            5
-          ],
-          "source": "pinned",
-          "value": "ru-Cyrillic"
-        }
-      },
-      "realized_token_count": 512,
-      "script_profile": "ru-Cyrillic",
-      "seed": 3659534916612747878,
-      "text_sha256": "3787e95a51560b744eacc8a7f34f5e682eb876a96c622cf12d6332f3740af843",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "8a35bddf4994819152e491c6a23032dd4d3e4344b135fd951acb7d349f0d68fd",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "c994f410be2913469796e13d163dce4d9b9161bd9f04d6c895786ab23d3f9b70": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 18,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 36,
-      "generator_id": "jw.summ",
-      "generator_version": "1.0.0",
-      "needle_positions": [
-        {
-          "entity": "Kelsai",
-          "needle": "NEEDLE-5503",
-          "position": 0
-        }
-      ],
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "facts_per_entity_draw": {
-          "range": [
-            6,
-            10
-          ],
-          "semantics": "legacy draw recorded for replay; filler continues until token budget",
-          "source": "drbg",
-          "value": 8
-        },
-        "n_entities": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "n_needles": {
-          "range": [
-            1,
-            2
-          ],
-          "source": "drbg",
-          "value": 1
-        }
-      },
-      "realized_needles": 1,
-      "realized_token_count": 512,
-      "requested_needles": 1,
-      "seed": 13257092095343411315,
-      "text_sha256": "e0716b63ab3022b5bc58f98322cf2684b1d31581c9e441337c7faefa7d167afb",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "d641074b4c4b055bab4c9d817af1ed435ff8a08806c933c05b556b9b021ccc54",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "ca07439aa127c030cbf6c155f9fb46595dcf4ba2a0070619b4f23a9837aebfa2": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 18,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 34,
-      "generator_id": "jw.summ",
-      "generator_version": "1.0.0",
-      "needle_positions": [
-        {
-          "entity": "Taviluma",
-          "needle": "NEEDLE-1434",
-          "position": 0
-        }
-      ],
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "facts_per_entity_draw": {
-          "range": [
-            6,
-            10
-          ],
-          "semantics": "legacy draw recorded for replay; filler continues until token budget",
-          "source": "drbg",
-          "value": 10
-        },
-        "n_entities": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 5
-        },
-        "n_needles": {
-          "range": [
-            1,
-            2
-          ],
-          "source": "drbg",
-          "value": 1
-        }
-      },
-      "realized_needles": 1,
-      "realized_token_count": 512,
-      "requested_needles": 1,
-      "seed": 14728153939468087143,
-      "text_sha256": "46f7913ed06d53c711bf043422389bc0cea202f885db06b98ac11798ab3a3087",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "9913c1409c93f99412f952e2f1f616ab6e5d31fc849c2e4fd8f691e5dbe57b2a",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "cf3f3c8c172722f68170e802e995e5fbf5a51291ca69ee01bdcdd71b437fcb34": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 18,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 29,
-      "generator_id": "jw.json",
-      "generator_version": "1.0.0",
-      "ground_truth": {
-        "dor_min": "A",
-        "dor_pak_kel": null,
-        "lan_tor_lan": "D",
-        "min_luma": null,
-        "nori_tor": null,
-        "pak_ver_dor": true,
-        "pak_ver_luma": "Dordor",
-        "wen_dor_kel": "B"
-      },
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "n_distractors": {
-          "range": [
-            2,
-            4
-          ],
-          "source": "drbg",
-          "value": 2
-        },
-        "n_fields": {
-          "range": [
-            6,
-            9
-          ],
-          "source": "drbg",
-          "value": 8
-        },
-        "n_red_herrings": {
-          "range": [
-            1,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "record_styles": {
-          "source": "pinned",
-          "value": [
-            "log",
-            "freetext",
-            "kv"
-          ]
-        }
-      },
-      "realized_token_count": 512,
-      "schema": {
-        "dor_min": "enum",
-        "dor_pak_kel": "nullable",
-        "lan_tor_lan": "enum",
-        "min_luma": "nullable",
-        "nori_tor": "nullable",
-        "pak_ver_dor": "bool",
-        "pak_ver_luma": "string",
-        "wen_dor_kel": "enum"
-      },
-      "seed": 5747845280633879154,
-      "text_sha256": "1a5dbda43cecc82c22eb54b5e22e5a857c14aea770b9324fe1115512f1251709",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "bdac07529bb8be644cf035ffce2d00ef0137eb386c0ffbaf9a456aed131b3be8",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "d6c58e0417e8874bb0b9f2c2652069cda6991caac8ab1e1d7bd58e066dde71b6": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 27,
-      "distractors": [
-        "The side ledger mentioned 24 labels, but those labels are unrelated."
-      ],
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 29,
-      "generator_id": "jw.reason",
-      "generator_version": "1.0.0",
-      "ground_truth": {
-        "answer": 39
-      },
-      "parameters": {
-        "answer_seed_range": {
-          "source": "implementation",
-          "value": [
-            10,
-            80
-          ]
-        },
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "intermediate_cap": {
-          "source": "pinned",
-          "value": 10000
-        },
-        "logic_variant": {
-          "rate": 0.25,
-          "source": "drbg",
-          "value": false
-        },
-        "n_distractors": {
-          "range": [
-            1,
-            3
-          ],
-          "source": "drbg",
-          "value": 1
-        },
-        "n_steps": {
-          "range": [
-            4,
-            6
-          ],
-          "source": "drbg",
-          "value": 5
-        }
-      },
-      "realized_token_count": 512,
-      "reasoning_trace": {
-        "answer": 39,
-        "initial": 140,
-        "integer_intermediates": [
-          420,
-          438,
-          73,
-          55,
-          39
-        ],
-        "reason_type": "arithmetic",
-        "steps": [
-          {
-            "after": 420,
-            "before": 140,
-            "op": "mul",
-            "operand": 3
-          },
-          {
-            "after": 438,
-            "before": 420,
-            "op": "add",
-            "operand": 18
-          },
-          {
-            "after": 73,
-            "before": 438,
-            "op": "int_div",
-            "operand": 6
-          },
-          {
-            "after": 55,
-            "before": 73,
-            "op": "sub",
-            "operand": 18
-          },
-          {
-            "after": 39,
-            "before": 55,
-            "op": "sub",
-            "operand": 16
-          }
-        ],
-        "verified_answer": 39
-      },
-      "seed": 5925030707282793094,
-      "text_sha256": "49445915bedfea977f6c37d766e99019ec6ba3a465ffd2e60746e5d4c1e91ffa",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "a488c40aef8f0036558215816029f89c2c563cc75b7b019c8a9d0dfd8c2ad042",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "e330122120016cac029cd9ea7cb0669c37af0df7ed56fa7f6a0c029a602fe0ce": {
+    "4b6e9fa33faba77691293502a6ef283ae704418746a501b446ffc4bce0e90e3b": {
       "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
       "coarse_units": 28,
       "distractors": [
@@ -2403,49 +861,270 @@
       "text_sha256": "a64185c150d600eec2ea6e582b2becd5d09f863a955a0b4a63e962f82d26098b",
       "token_accounting": "encode_add_special_true",
       "token_ids_sha256": "72626bebe108cd406957730908ea7f348300dc621d13b450d50670608ba2ffc2",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     },
-    "e6bb278ad38e8a3f3d55eeec123569e7c8b77b9c978032d135a3b1ff181635e4": {
-      "ascii_tail_tokens": 0,
+    "56bffe68c48c69d048110efc87c2438bd53411c4d0cb98543010b3f0fec8d9eb": {
       "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "chars_per_token": 1.701171875,
-      "coarse_units": 23,
-      "direction": "ltr",
+      "coarse_units": 15,
       "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 33,
-      "generator_id": "jw.multiling",
+      "elastic_fill_tokens": 35,
+      "generator_id": "jw.json",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "lan_lan_wen": "2032-07-27",
+        "lan_pak": "Wenkel",
+        "lan_sai": true,
+        "pak_wen_kel": "2032-07-26",
+        "tavi_kel_tor": null,
+        "tor_wen_min": "2030-03-17",
+        "ver_tavi_tavi": "Wentavi",
+        "wen_nori_nori": "C",
+        "wen_ver": 138
+      },
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_distractors": {
+          "range": [
+            2,
+            4
+          ],
+          "source": "drbg",
+          "value": 4
+        },
+        "n_fields": {
+          "range": [
+            6,
+            9
+          ],
+          "source": "drbg",
+          "value": 9
+        },
+        "n_red_herrings": {
+          "range": [
+            1,
+            3
+          ],
+          "source": "drbg",
+          "value": 1
+        },
+        "record_styles": {
+          "source": "pinned",
+          "value": [
+            "log",
+            "freetext",
+            "kv"
+          ]
+        }
+      },
+      "realized_token_count": 512,
+      "schema": {
+        "lan_lan_wen": "date",
+        "lan_pak": "string",
+        "lan_sai": "bool",
+        "pak_wen_kel": "date",
+        "tavi_kel_tor": "nullable",
+        "tor_wen_min": "date",
+        "ver_tavi_tavi": "string",
+        "wen_nori_nori": "enum",
+        "wen_ver": "int"
+      },
+      "seed": 7356228621146206979,
+      "text_sha256": "f3f592e3860b132630c300022555ec9ba6a2aae12c1f0e6809084d3d4162ca4a",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "303c7c0c259daeea637a540a5781dc32c8337c578b0c18dcaf1c4797af05821f",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "5886eddb1d0b8cb0cb66a8592070186ca0dabe47f5970762371c5f2a7a56a0d3": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 18,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 36,
+      "generator_id": "jw.summ",
+      "generator_version": "1.0.0",
+      "needle_positions": [
+        {
+          "entity": "Tavilan",
+          "needle": "NEEDLE-3179",
+          "position": 0
+        }
+      ],
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "facts_per_entity_draw": {
+          "range": [
+            6,
+            10
+          ],
+          "semantics": "legacy draw recorded for replay; filler continues until token budget",
+          "source": "drbg",
+          "value": 9
+        },
+        "n_entities": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "n_needles": {
+          "range": [
+            1,
+            2
+          ],
+          "source": "drbg",
+          "value": 1
+        }
+      },
+      "realized_needles": 1,
+      "realized_token_count": 512,
+      "requested_needles": 1,
+      "seed": 12622301949499217500,
+      "text_sha256": "5ae9f1ce9e6f2a3f7956a03b846297d824987aee22b164d97096c211195b2877",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "5e4ed1d65b633f9a1de21143783360da36acc22b5b6f2c96b6953002af785498",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "59bf87407c43c652b32aa108b90c139bd676bd4d01f5bdd1afa6fe9c28a1f714": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 21,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 30,
+      "generator_id": "jw.code",
       "generator_version": "1.0.0",
       "parameters": {
-        "ascii_tail_max": {
+        "coarse_headroom": {
           "source": "pinned",
+          "value": 24
+        },
+        "indent": {
+          "source": "pinned",
+          "value": "    "
+        },
+        "n_complete_functions": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
           "value": 3
+        },
+        "n_imports": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 3
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 1189791771997899813,
+      "text_sha256": "596f97a8f4338f7ab18bc12a013b0fdfce2ecd8c68c009deb35d15a0a39552fe",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "d6923b82346638608ba952518adec97ffdc6b2d6e5e47718f197a31ebbac68c1",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "5a8f63a9304fbd19c7eb2852848b078a9649fc9915164a6ab13552b0375594e2": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 23,
+      "distractors": [
+        "The side ledger mentioned 39 labels, but those labels are unrelated.",
+        "The side ledger mentioned 36 labels, but those labels are unrelated.",
+        "The side ledger mentioned 40 labels, but those labels are unrelated."
+      ],
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 24,
+      "generator_id": "jw.reason",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "answer": "Lumador"
+      },
+      "parameters": {
+        "answer_seed_range": {
+          "source": "implementation",
+          "value": [
+            10,
+            80
+          ]
         },
         "coarse_headroom": {
           "source": "pinned",
           "value": 24
         },
-        "direction": {
+        "intermediate_cap": {
           "source": "pinned",
-          "value": "ltr"
+          "value": 10000
         },
-        "language": {
+        "logic_variant": {
+          "rate": 0.25,
+          "source": "drbg",
+          "value": true
+        },
+        "n_distractors": {
           "range": [
-            0,
-            5
+            1,
+            3
           ],
-          "source": "pinned",
-          "value": "ru-Cyrillic"
+          "source": "drbg",
+          "value": 3
+        },
+        "n_steps": {
+          "range": [
+            4,
+            6
+          ],
+          "source": "drbg",
+          "value": 5
         }
       },
       "realized_token_count": 512,
-      "script_profile": "ru-Cyrillic",
-      "seed": 3867685950077038083,
-      "text_sha256": "901391ae724ba553817225f172f2fe3b7d918faecfee50f3694da5aa7524aa2d",
+      "reasoning_trace": {
+        "answer": "Lumador",
+        "constraints": [
+          [
+            "Lanluma",
+            "Torluma"
+          ],
+          [
+            "Torluma",
+            "Lumador"
+          ],
+          [
+            "Lumador",
+            "Dorpak"
+          ],
+          [
+            "Dorpak",
+            "Lumatavi"
+          ],
+          [
+            "Lanluma",
+            "Lumador"
+          ]
+        ],
+        "reason_type": "logic",
+        "solution_order": [
+          "Lanluma",
+          "Torluma",
+          "Lumador",
+          "Dorpak",
+          "Lumatavi"
+        ]
+      },
+      "seed": 18010800372265794208,
+      "text_sha256": "867622803ba1b4146c430404a2bf5d6054509f1e107b2a123a39df4f861f9ad0",
       "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "4bb6ce0d3d9aab5dd874420af96cbedbdecab714ee2e857ed6a347c47ec3d622",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "token_ids_sha256": "bf259a779054da3e8faced9dde165eda94ba6465c413b1c87c57cf2eb8569f8d",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     },
-    "ef3a2dc23145307450ddf703a0b7868d90ef0f41c30cfad5d26841268335bf3c": {
+    "5b9fd79df814c646910553768ea4e62169b5273da318aad507df315ceb426fa2": {
       "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
       "coarse_units": 16,
       "drbg": "sha256-ctr-v1",
@@ -2517,68 +1196,9 @@
       "text_sha256": "5b5d394cfdbc204b7ede53d6c92d734d54d3be28e51e608b5b22b01c8f1ba080",
       "token_accounting": "encode_add_special_true",
       "token_ids_sha256": "841f7c5ba700b3ef4e985c0b3665c46b8817274e8f15c37a0cece5109908ad83",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     },
-    "f3af07f511d79f6e04f8e9390e4cb4254090ee62f1928c65518d2d184574dde8": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 17,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 31,
-      "generator_id": "jw.summ",
-      "generator_version": "1.0.0",
-      "needle_positions": [
-        {
-          "entity": "Wendor",
-          "needle": "NEEDLE-1010",
-          "position": 1
-        },
-        {
-          "entity": "Lankel",
-          "needle": "NEEDLE-6438",
-          "position": 0
-        }
-      ],
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "facts_per_entity_draw": {
-          "range": [
-            6,
-            10
-          ],
-          "semantics": "legacy draw recorded for replay; filler continues until token budget",
-          "source": "drbg",
-          "value": 7
-        },
-        "n_entities": {
-          "range": [
-            3,
-            5
-          ],
-          "source": "drbg",
-          "value": 5
-        },
-        "n_needles": {
-          "range": [
-            1,
-            2
-          ],
-          "source": "drbg",
-          "value": 2
-        }
-      },
-      "realized_needles": 2,
-      "realized_token_count": 512,
-      "requested_needles": 2,
-      "seed": 1458539590683191788,
-      "text_sha256": "3a578bb391e87147b9a9403b490bba1a717a1a28f4a3311d2dd12543fa3ecfec",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "d4394bd85176626dc1d9f2d1152756b351ba4ca080de6179f2adf8e497d02a14",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "f6a5738f19edca40f9d794fb041f1d4e6c3603b89ee6be71d8298cb678f116f9": {
+    "60c1a492aff55e5c5ef7dfd58d91c9b0b795c9a0280a5629f60670f31447ec7f": {
       "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
       "coarse_units": 23,
       "drbg": "sha256-ctr-v1",
@@ -2617,22 +1237,704 @@
       "text_sha256": "c2163f57dbcc85dc2001932089b38bd93e133e4e581941e1648a786530d94530",
       "token_accounting": "encode_add_special_true",
       "token_ids_sha256": "b696695e7273366398811a969c72511d38da148663e9c0af2725245c28dfff5f",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     },
-    "f817d469d6b3ada94f45af261985e57e787567996e4cb37a5db929bdf031c858": {
+    "6887a5c010a86f133cae2b02c222c471b7fba4e9e20935f89e5a62526811411a": {
       "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 19,
+      "coarse_units": 23,
       "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 43,
+      "elastic_fill_tokens": 26,
+      "generator_id": "jw.chat",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_constraints": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "persona": {
+          "range": [
+            0,
+            7
+          ],
+          "source": "drbg",
+          "value": "a new town clerk"
+        },
+        "topic": {
+          "grammar": "adjective+domain",
+          "source": "drbg",
+          "value": "the quiet market stall ledgers"
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 11734879160761897387,
+      "text_sha256": "23b5c35613a13bf280615c37d730a55871225727a5a325eac8483df3243fc9e1",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "65c3ab895511e2ce5ce380790885f08382628110a8b196b8c16d2c16c56ec5f0",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "6ac3eb51f7d8972cefe9b3e2b82b7f2c3f5c159dc428eed9d180f7b9c00ae88f": {
+      "ascii_tail_tokens": 0,
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "chars_per_token": 1.224609375,
+      "coarse_units": 19,
+      "direction": "ltr",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 29,
+      "generator_id": "jw.multiling",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "ascii_tail_max": {
+          "source": "pinned",
+          "value": 3
+        },
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "direction": {
+          "source": "pinned",
+          "value": "ltr"
+        },
+        "language": {
+          "range": [
+            0,
+            5
+          ],
+          "source": "pinned",
+          "value": "zh-CJK"
+        }
+      },
+      "realized_token_count": 512,
+      "script_profile": "zh-CJK",
+      "seed": 16100625457382821371,
+      "text_sha256": "479a7e988e064bc8f269f225400b63d3e1a088c28ea42bc012ec30237b0f138e",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "739b433c6d50ab2400605ee83627853e87a04618c871eaf705d5538deb2004e7",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "6b5bedc8df18d5e04660f05968594668023a8dfb3901bd0bed31ab60e2dba5ae": {
+      "ascii_tail_tokens": 0,
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "chars_per_token": 1.66015625,
+      "coarse_units": 22,
+      "direction": "ltr",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 31,
+      "generator_id": "jw.multiling",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "ascii_tail_max": {
+          "source": "pinned",
+          "value": 3
+        },
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "direction": {
+          "source": "pinned",
+          "value": "ltr"
+        },
+        "language": {
+          "range": [
+            0,
+            5
+          ],
+          "source": "pinned",
+          "value": "ru-Cyrillic"
+        }
+      },
+      "realized_token_count": 512,
+      "script_profile": "ru-Cyrillic",
+      "seed": 3659534916612747878,
+      "text_sha256": "3787e95a51560b744eacc8a7f34f5e682eb876a96c622cf12d6332f3740af843",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "8a35bddf4994819152e491c6a23032dd4d3e4344b135fd951acb7d349f0d68fd",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "71a59ef5a0c56ba6ea19372c5ff8d838e8cede4696e37789b11db978c2e5405f": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 28,
+      "distractors": [
+        "The side ledger mentioned 48 labels, but those labels are unrelated.",
+        "The side ledger mentioned 28 labels, but those labels are unrelated."
+      ],
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 33,
+      "generator_id": "jw.reason",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "answer": 59
+      },
+      "parameters": {
+        "answer_seed_range": {
+          "source": "implementation",
+          "value": [
+            10,
+            80
+          ]
+        },
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "intermediate_cap": {
+          "source": "pinned",
+          "value": 10000
+        },
+        "logic_variant": {
+          "rate": 0.25,
+          "source": "drbg",
+          "value": false
+        },
+        "n_distractors": {
+          "range": [
+            1,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        },
+        "n_steps": {
+          "range": [
+            4,
+            6
+          ],
+          "source": "drbg",
+          "value": 6
+        }
+      },
+      "realized_token_count": 512,
+      "reasoning_trace": {
+        "answer": 59,
+        "initial": 12,
+        "integer_intermediates": [
+          18,
+          14,
+          23,
+          30,
+          45,
+          59
+        ],
+        "reason_type": "arithmetic",
+        "steps": [
+          {
+            "after": 18,
+            "before": 12,
+            "op": "percent_increase",
+            "operand": 50
+          },
+          {
+            "after": 14,
+            "before": 18,
+            "op": "sub",
+            "operand": 4
+          },
+          {
+            "after": 23,
+            "before": 14,
+            "op": "add",
+            "operand": 9
+          },
+          {
+            "after": 30,
+            "before": 23,
+            "op": "add",
+            "operand": 7
+          },
+          {
+            "after": 45,
+            "before": 30,
+            "op": "percent_increase",
+            "operand": 50
+          },
+          {
+            "after": 59,
+            "before": 45,
+            "op": "add",
+            "operand": 14
+          }
+        ],
+        "verified_answer": 59
+      },
+      "seed": 1690115078675278271,
+      "text_sha256": "d4e8596b6c5f2987000fb7e73ddcc0ad6656a2383290917c534459e7cfbef882",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "5a0126637e1512814ce51e715878700ab589fefad681a50fafd09b03886a4261",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "73d94e4bbd419f37daedcbbb6d545a392cbaae14aa3ff5ec6c4dc80975dd3ee3": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 17,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 41,
+      "generator_id": "jw.summ",
+      "generator_version": "1.0.0",
+      "needle_positions": [
+        {
+          "entity": "Minmin",
+          "needle": "NEEDLE-9759",
+          "position": 1
+        },
+        {
+          "entity": "Pakver",
+          "needle": "NEEDLE-9698",
+          "position": 0
+        }
+      ],
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "facts_per_entity_draw": {
+          "range": [
+            6,
+            10
+          ],
+          "semantics": "legacy draw recorded for replay; filler continues until token budget",
+          "source": "drbg",
+          "value": 10
+        },
+        "n_entities": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "n_needles": {
+          "range": [
+            1,
+            2
+          ],
+          "source": "drbg",
+          "value": 2
+        }
+      },
+      "realized_needles": 2,
+      "realized_token_count": 512,
+      "requested_needles": 2,
+      "seed": 16945180797236973315,
+      "text_sha256": "049a22f27d855979cb492691ed22c8ded1135ecdc3f3544fe783370ebe8e770a",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "c91cdcc64d288c8886b7cef4ed82eebcbb6ff164d304e79eb6e3a0ba1e6bdc7a",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "7cf022bd55c8f47fdcf67f16ad3a95fcc058357b71d8423579ee0bab7b7d71e4": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 27,
+      "distractors": [
+        "The side ledger mentioned 22 labels, but those labels are unrelated.",
+        "The side ledger mentioned 24 labels, but those labels are unrelated.",
+        "The side ledger mentioned 30 labels, but those labels are unrelated."
+      ],
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 41,
+      "generator_id": "jw.reason",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "answer": 74
+      },
+      "parameters": {
+        "answer_seed_range": {
+          "source": "implementation",
+          "value": [
+            10,
+            80
+          ]
+        },
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "intermediate_cap": {
+          "source": "pinned",
+          "value": 10000
+        },
+        "logic_variant": {
+          "rate": 0.25,
+          "source": "drbg",
+          "value": false
+        },
+        "n_distractors": {
+          "range": [
+            1,
+            3
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "n_steps": {
+          "range": [
+            4,
+            6
+          ],
+          "source": "drbg",
+          "value": 6
+        }
+      },
+      "realized_token_count": 512,
+      "reasoning_trace": {
+        "answer": 74,
+        "initial": 4350,
+        "integer_intermediates": [
+          1450,
+          290,
+          58,
+          54,
+          64,
+          74
+        ],
+        "reason_type": "arithmetic",
+        "steps": [
+          {
+            "after": 1450,
+            "before": 4350,
+            "op": "int_div",
+            "operand": 3
+          },
+          {
+            "after": 290,
+            "before": 1450,
+            "op": "int_div",
+            "operand": 5
+          },
+          {
+            "after": 58,
+            "before": 290,
+            "op": "int_div",
+            "operand": 5
+          },
+          {
+            "after": 54,
+            "before": 58,
+            "op": "sub",
+            "operand": 4
+          },
+          {
+            "after": 64,
+            "before": 54,
+            "op": "add",
+            "operand": 10
+          },
+          {
+            "after": 74,
+            "before": 64,
+            "op": "add",
+            "operand": 10
+          }
+        ],
+        "verified_answer": 74
+      },
+      "seed": 8630904541656994842,
+      "text_sha256": "5f262b9e1f442aa0154e899497f5bf932e1a00d91f88909d5a83ffef0dc8e5f1",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "781dbd739051bcf3b257d3c3377784a5dbcb1ebbbfd6c6421cc79ceca92091cb",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "8128196a3c89e67cebe08d67a2c4c3681de5b53d8f044ea2d8664fa2acc8bc5f": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 22,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 27,
+      "generator_id": "jw.code",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "indent": {
+          "source": "pinned",
+          "value": "    "
+        },
+        "n_complete_functions": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "n_imports": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 3216761063331834054,
+      "text_sha256": "08a5823baee177e33e81869c669924ca148975981c8686a743bb7e225506fd32",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "df82941d377a8ad5b7580376982e19b0d8fb9d16206d5eea0c41ba48fadcc733",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "8b1672ec48c784afc7063e09aad021a769da8d435398ebbb465a1b2fadfcaee9": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 24,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 25,
+      "generator_id": "jw.code",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "indent": {
+          "source": "pinned",
+          "value": "    "
+        },
+        "n_complete_functions": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        },
+        "n_imports": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 12525032168555837238,
+      "text_sha256": "fe241bcc1af6cac789358e6b68ca4079c04a979479534518085416cf2c941169",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "a104d1e436f27ac34ea69b92245c6f343d06a2e3518ca2aac69511a7b418229d",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "8ed9cc813e912c9a5d91fb7dc069c9a0a8f96354d3bf87c4c91a80b01faa2898": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 27,
+      "distractors": [
+        "The side ledger mentioned 46 labels, but those labels are unrelated."
+      ],
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 29,
+      "generator_id": "jw.reason",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "answer": 61
+      },
+      "parameters": {
+        "answer_seed_range": {
+          "source": "implementation",
+          "value": [
+            10,
+            80
+          ]
+        },
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "intermediate_cap": {
+          "source": "pinned",
+          "value": 10000
+        },
+        "logic_variant": {
+          "rate": 0.25,
+          "source": "drbg",
+          "value": false
+        },
+        "n_distractors": {
+          "range": [
+            1,
+            3
+          ],
+          "source": "drbg",
+          "value": 1
+        },
+        "n_steps": {
+          "range": [
+            4,
+            6
+          ],
+          "source": "drbg",
+          "value": 5
+        }
+      },
+      "realized_token_count": 512,
+      "reasoning_trace": {
+        "answer": 61,
+        "initial": 210,
+        "integer_intermediates": [
+          315,
+          310,
+          321,
+          305,
+          61
+        ],
+        "reason_type": "arithmetic",
+        "steps": [
+          {
+            "after": 315,
+            "before": 210,
+            "op": "percent_increase",
+            "operand": 50
+          },
+          {
+            "after": 310,
+            "before": 315,
+            "op": "sub",
+            "operand": 5
+          },
+          {
+            "after": 321,
+            "before": 310,
+            "op": "add",
+            "operand": 11
+          },
+          {
+            "after": 305,
+            "before": 321,
+            "op": "sub",
+            "operand": 16
+          },
+          {
+            "after": 61,
+            "before": 305,
+            "op": "int_div",
+            "operand": 5
+          }
+        ],
+        "verified_answer": 61
+      },
+      "seed": 17929558000877961295,
+      "text_sha256": "b8e8607899e827e311e1482620b92a4dcd4e59742c730d3d8e5569eb4ad05621",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "44d5e6db42da9f2f0cb835f37a4797acaf3c30d9d978ca3517821f38596f3633",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "8ee4d02c7c19d4d062450af9954c1424edca9369fc21e7ff1e5646a1e9266e30": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 18,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 36,
+      "generator_id": "jw.summ",
+      "generator_version": "1.0.0",
+      "needle_positions": [
+        {
+          "entity": "Kelsai",
+          "needle": "NEEDLE-5503",
+          "position": 0
+        }
+      ],
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "facts_per_entity_draw": {
+          "range": [
+            6,
+            10
+          ],
+          "semantics": "legacy draw recorded for replay; filler continues until token budget",
+          "source": "drbg",
+          "value": 8
+        },
+        "n_entities": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "n_needles": {
+          "range": [
+            1,
+            2
+          ],
+          "source": "drbg",
+          "value": 1
+        }
+      },
+      "realized_needles": 1,
+      "realized_token_count": 512,
+      "requested_needles": 1,
+      "seed": 13257092095343411315,
+      "text_sha256": "e0716b63ab3022b5bc58f98322cf2684b1d31581c9e441337c7faefa7d167afb",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "d641074b4c4b055bab4c9d817af1ed435ff8a08806c933c05b556b9b021ccc54",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "9d539fc9f6c519f474650bdf4f3ce7eb15beb59d03ccf64e44e9f1615c518301": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 22,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 38,
+      "generator_id": "jw.chat",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_constraints": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 4
+        },
+        "persona": {
+          "range": [
+            0,
+            7
+          ],
+          "source": "drbg",
+          "value": "a field supervisor"
+        },
+        "topic": {
+          "grammar": "adjective+domain",
+          "source": "drbg",
+          "value": "the quiet storm shelter rosters"
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 18404626027619424121,
+      "text_sha256": "83bf477b8d7551776d5d9102206f30b98ab6f7847b4a62afab80a4fee093fe8b",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "2120f0266febc19473d76e6074d687d82c654a982230e88e6cd87416fb8681d7",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "a2e7ef76ad80c517328c917604ff29aa0af0ff854718e0ba53e3ca580b0dcdf3": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 18,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 30,
       "generator_id": "jw.json",
       "generator_version": "1.0.0",
       "ground_truth": {
-        "kel_luma": null,
-        "luma_wen": null,
-        "nori_wen_tor": true,
-        "sai_nori": "2033-01-12",
-        "sai_pak": "Versai",
-        "wen_luma_luma": "Saiver"
+        "kel_nori_tavi": 686,
+        "nori_lan": "2033-01-26",
+        "pak_ver": true,
+        "sai_dor_wen": "B",
+        "tavi_nori_ver": null,
+        "tor_nori_wen": false,
+        "wen_sai_lan": 243
       },
       "parameters": {
         "coarse_headroom": {
@@ -2645,7 +1947,7 @@
             4
           ],
           "source": "drbg",
-          "value": 4
+          "value": 3
         },
         "n_fields": {
           "range": [
@@ -2653,7 +1955,7 @@
             9
           ],
           "source": "drbg",
-          "value": 6
+          "value": 7
         },
         "n_red_herrings": {
           "range": [
@@ -2674,20 +1976,278 @@
       },
       "realized_token_count": 512,
       "schema": {
-        "kel_luma": "nullable",
-        "luma_wen": "nullable",
-        "nori_wen_tor": "bool",
-        "sai_nori": "date",
-        "sai_pak": "string",
-        "wen_luma_luma": "string"
+        "kel_nori_tavi": "int",
+        "nori_lan": "date",
+        "pak_ver": "bool",
+        "sai_dor_wen": "enum",
+        "tavi_nori_ver": "nullable",
+        "tor_nori_wen": "bool",
+        "wen_sai_lan": "int"
       },
-      "seed": 10209830147434581445,
-      "text_sha256": "10f133361d70640ffd5810f08bfeb199972c000432b942b0a81d547927a0d6bb",
+      "seed": 12647777970963703566,
+      "text_sha256": "81ea3fcd5c2133eee74be71acfd18f81b0e35920b15d703920c8482859cb5414",
       "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "002b1803cf5717667997e47bbd1f04c3ac90a6ce1afe8cd063e574c0f65e5838",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "token_ids_sha256": "1723b8a59db2d157a73dd3680a4444b9f3939071d8b4065960ecc38e994ff93b",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     },
-    "fc900067b078fa45952fe866ab0575813f5549884817757609d6568506b81e13": {
+    "a8844672ea463c68206a0b938e66e003004cdaa3c753d526ddea3244491dd112": {
+      "ascii_tail_tokens": 0,
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "chars_per_token": 2.623046875,
+      "coarse_units": 33,
+      "direction": "ltr",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 29,
+      "generator_id": "jw.multiling",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "ascii_tail_max": {
+          "source": "pinned",
+          "value": 3
+        },
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "direction": {
+          "source": "pinned",
+          "value": "ltr"
+        },
+        "language": {
+          "range": [
+            0,
+            5
+          ],
+          "source": "pinned",
+          "value": "en-Latin"
+        }
+      },
+      "realized_token_count": 512,
+      "script_profile": "en-Latin",
+      "seed": 16309079459440388552,
+      "text_sha256": "875ea5ef2452cf9f2986dc89cde17de3b40952572cf7fc6dd5954a5459b2248b",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "465c56a7130f6be5d97684d491bc057644a01f437d143555c2a90070ea90a3e6",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "ad8101ac435465d296b63205f2a285e8db4391b9e646ea42f5074d75b83db0a6": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 27,
+      "distractors": [
+        "The side ledger mentioned 51 labels, but those labels are unrelated."
+      ],
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 35,
+      "generator_id": "jw.reason",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "answer": 36
+      },
+      "parameters": {
+        "answer_seed_range": {
+          "source": "implementation",
+          "value": [
+            10,
+            80
+          ]
+        },
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "intermediate_cap": {
+          "source": "pinned",
+          "value": 10000
+        },
+        "logic_variant": {
+          "rate": 0.25,
+          "source": "drbg",
+          "value": false
+        },
+        "n_distractors": {
+          "range": [
+            1,
+            3
+          ],
+          "source": "drbg",
+          "value": 1
+        },
+        "n_steps": {
+          "range": [
+            4,
+            6
+          ],
+          "source": "drbg",
+          "value": 5
+        }
+      },
+      "realized_token_count": 512,
+      "reasoning_trace": {
+        "answer": 36,
+        "initial": 144,
+        "integer_intermediates": [
+          130,
+          26,
+          19,
+          26,
+          36
+        ],
+        "reason_type": "arithmetic",
+        "steps": [
+          {
+            "after": 130,
+            "before": 144,
+            "op": "sub",
+            "operand": 14
+          },
+          {
+            "after": 26,
+            "before": 130,
+            "op": "int_div",
+            "operand": 5
+          },
+          {
+            "after": 19,
+            "before": 26,
+            "op": "sub",
+            "operand": 7
+          },
+          {
+            "after": 26,
+            "before": 19,
+            "op": "add",
+            "operand": 7
+          },
+          {
+            "after": 36,
+            "before": 26,
+            "op": "add",
+            "operand": 10
+          }
+        ],
+        "verified_answer": 36
+      },
+      "seed": 8592445797920323884,
+      "text_sha256": "764819b999a39637e78b5af75d1e39470f4677258923a9c58e2949bf6dfb652a",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "115d131e3a0d0d1312a6e5c7baebae19366ca726135ea7ac91cb1c1e56c95580",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "aea58a23729437100e2a4a05493c8da8f1243df1aa1597de0cd45f0c29f566f6": {
+      "ascii_tail_tokens": 0,
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "chars_per_token": 1.138671875,
+      "coarse_units": 14,
+      "direction": "ltr",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 32,
+      "generator_id": "jw.multiling",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "ascii_tail_max": {
+          "source": "pinned",
+          "value": 3
+        },
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "direction": {
+          "source": "pinned",
+          "value": "ltr"
+        },
+        "language": {
+          "range": [
+            0,
+            5
+          ],
+          "source": "pinned",
+          "value": "hi-Devanagari"
+        }
+      },
+      "realized_token_count": 512,
+      "script_profile": "hi-Devanagari",
+      "seed": 16897421313245276046,
+      "text_sha256": "6b7b0cb682868c45a5c0b012fd0b313934e7b309b2400862a067a538aa160503",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "637a140ca52dbe07a11ae2a9f3e0c0fc368fab90aa666145ae9435a829c35bf6",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "af1daf648cfb6c85fd6154c6038df231a08897c75f3600323f420b2e1d100326": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 15,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 35,
+      "generator_id": "jw.json",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "dor_min": 874,
+        "dor_tavi": "C",
+        "nori_nori_tor": "2034-05-22",
+        "sai_dor_nori": false,
+        "sai_ver_luma": "Wenpak",
+        "tavi_tavi": "Wenlan",
+        "tavi_ver_nori": 158,
+        "tor_tavi": "2031-06-11",
+        "wen_nori": 911
+      },
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_distractors": {
+          "range": [
+            2,
+            4
+          ],
+          "source": "drbg",
+          "value": 4
+        },
+        "n_fields": {
+          "range": [
+            6,
+            9
+          ],
+          "source": "drbg",
+          "value": 9
+        },
+        "n_red_herrings": {
+          "range": [
+            1,
+            3
+          ],
+          "source": "drbg",
+          "value": 1
+        },
+        "record_styles": {
+          "source": "pinned",
+          "value": [
+            "log",
+            "freetext",
+            "kv"
+          ]
+        }
+      },
+      "realized_token_count": 512,
+      "schema": {
+        "dor_min": "int",
+        "dor_tavi": "enum",
+        "nori_nori_tor": "date",
+        "sai_dor_nori": "bool",
+        "sai_ver_luma": "string",
+        "tavi_tavi": "string",
+        "tavi_ver_nori": "int",
+        "tor_tavi": "date",
+        "wen_nori": "int"
+      },
+      "seed": 9300606977290976743,
+      "text_sha256": "38e2308e4c1fc5055799a96f6f31bbe971270501307a3b6f0f7cccc973bff05e",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "65c8b17c1de893b8cb07a90d4f961603c86bc81d303bd65f8ce31b27642f800c",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "c0ed0b37fa0a40b7b978adcf5b1d8b5037b2be62af63e8c3f3f475e5f5e8090c": {
       "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
       "coarse_units": 18,
       "drbg": "sha256-ctr-v1",
@@ -2755,56 +2315,16 @@
       "text_sha256": "1a3940f404bf5746fff62198c1d85b0d772f7b268ba54143722544f98d2c3ca3",
       "token_accounting": "encode_add_special_true",
       "token_ids_sha256": "ca9c6dd40ee59affaba7449289eb7d5f76008e644534c176dc0899c186274e9d",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     },
-    "fcf62f17e399d6ae49e4d7c7ada6870cce273a1736386307a370383478f201d7": {
-      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "coarse_units": 22,
-      "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 27,
-      "generator_id": "jw.code",
-      "generator_version": "1.0.0",
-      "parameters": {
-        "coarse_headroom": {
-          "source": "pinned",
-          "value": 24
-        },
-        "indent": {
-          "source": "pinned",
-          "value": "    "
-        },
-        "n_complete_functions": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 3
-        },
-        "n_imports": {
-          "range": [
-            2,
-            3
-          ],
-          "source": "drbg",
-          "value": 2
-        }
-      },
-      "realized_token_count": 512,
-      "seed": 3216761063331834054,
-      "text_sha256": "08a5823baee177e33e81869c669924ca148975981c8686a743bb7e225506fd32",
-      "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "df82941d377a8ad5b7580376982e19b0d8fb9d16206d5eea0c41ba48fadcc733",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
-    },
-    "fdf2694e190b3a42bff5405a5f510ccf0d5ae01f6ca0b7f75aa7d40408245385": {
+    "c33a3edead73d1b144438a9f6f5f53caa516f1d8cea6cca83cf401d6eda50c77": {
       "ascii_tail_tokens": 0,
       "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
-      "chars_per_token": 2.623046875,
-      "coarse_units": 33,
+      "chars_per_token": 2.46484375,
+      "coarse_units": 31,
       "direction": "ltr",
       "drbg": "sha256-ctr-v1",
-      "elastic_fill_tokens": 29,
+      "elastic_fill_tokens": 26,
       "generator_id": "jw.multiling",
       "generator_version": "1.0.0",
       "parameters": {
@@ -2831,29 +2351,533 @@
       },
       "realized_token_count": 512,
       "script_profile": "en-Latin",
-      "seed": 16309079459440388552,
-      "text_sha256": "875ea5ef2452cf9f2986dc89cde17de3b40952572cf7fc6dd5954a5459b2248b",
+      "seed": 11690297315345595378,
+      "text_sha256": "6b5b6ea9cbaa08d35a3c3c0778d69ed27d4ac7aba279d99c196743e32cf8a1fb",
       "token_accounting": "encode_add_special_true",
-      "token_ids_sha256": "465c56a7130f6be5d97684d491bc057644a01f437d143555c2a90070ea90a3e6",
-      "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+      "token_ids_sha256": "320f9e831c66c177f9a6fd4e8f6552c45a84f016424d3bf8d43e7754704d7510",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "c3a2791e4b11477f8a474a872b3cd7e4f7e751c13556b5c144deb062ac09b725": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 23,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 23,
+      "generator_id": "jw.chat",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_constraints": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "persona": {
+          "range": [
+            0,
+            7
+          ],
+          "source": "drbg",
+          "value": "a maintenance dispatcher"
+        },
+        "topic": {
+          "grammar": "adjective+domain",
+          "source": "drbg",
+          "value": "the shared greenhouse irrigation schedules"
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 3370521975334900326,
+      "text_sha256": "2188a9f0e5af2aae22ff10b64f2b8f7fdd013ff289123ee5f5e6ea6fbe105fcd",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "733b25238cbfea1ad125e954c2b446bb7a21ace3adbaa54e0fbc3b60eed17930",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "c68bdaea7b616f2916fc5571d4db1c1a03565acbfc2c8c4d88580df7df73ddbd": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 22,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 38,
+      "generator_id": "jw.chat",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_constraints": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 4
+        },
+        "persona": {
+          "range": [
+            0,
+            7
+          ],
+          "source": "drbg",
+          "value": "a harbor coordinator"
+        },
+        "topic": {
+          "grammar": "adjective+domain",
+          "source": "drbg",
+          "value": "the seasonal regional survey teams"
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 12421235814810780564,
+      "text_sha256": "114b9cd5691ecb86d109282e01362ab20c519737d1565ff96d40b8049f84f479",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "ca6038c73d4363208cc3537b1df8c6c31150742b50535ff601372b174051d061",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "caae3d89a36b45a603e385f04581487957496c3d492239fd5cbefce99a77abe7": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 19,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 43,
+      "generator_id": "jw.json",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "kel_luma": null,
+        "luma_wen": null,
+        "nori_wen_tor": true,
+        "sai_nori": "2033-01-12",
+        "sai_pak": "Versai",
+        "wen_luma_luma": "Saiver"
+      },
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_distractors": {
+          "range": [
+            2,
+            4
+          ],
+          "source": "drbg",
+          "value": 4
+        },
+        "n_fields": {
+          "range": [
+            6,
+            9
+          ],
+          "source": "drbg",
+          "value": 6
+        },
+        "n_red_herrings": {
+          "range": [
+            1,
+            3
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "record_styles": {
+          "source": "pinned",
+          "value": [
+            "log",
+            "freetext",
+            "kv"
+          ]
+        }
+      },
+      "realized_token_count": 512,
+      "schema": {
+        "kel_luma": "nullable",
+        "luma_wen": "nullable",
+        "nori_wen_tor": "bool",
+        "sai_nori": "date",
+        "sai_pak": "string",
+        "wen_luma_luma": "string"
+      },
+      "seed": 10209830147434581445,
+      "text_sha256": "10f133361d70640ffd5810f08bfeb199972c000432b942b0a81d547927a0d6bb",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "002b1803cf5717667997e47bbd1f04c3ac90a6ce1afe8cd063e574c0f65e5838",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "d4264d89f5ebf191ca1853b9020c8ac115535de9ad665fd39055d3efdadc7026": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 18,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 34,
+      "generator_id": "jw.summ",
+      "generator_version": "1.0.0",
+      "needle_positions": [
+        {
+          "entity": "Taviluma",
+          "needle": "NEEDLE-1434",
+          "position": 0
+        }
+      ],
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "facts_per_entity_draw": {
+          "range": [
+            6,
+            10
+          ],
+          "semantics": "legacy draw recorded for replay; filler continues until token budget",
+          "source": "drbg",
+          "value": 10
+        },
+        "n_entities": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 5
+        },
+        "n_needles": {
+          "range": [
+            1,
+            2
+          ],
+          "source": "drbg",
+          "value": 1
+        }
+      },
+      "realized_needles": 1,
+      "realized_token_count": 512,
+      "requested_needles": 1,
+      "seed": 14728153939468087143,
+      "text_sha256": "46f7913ed06d53c711bf043422389bc0cea202f885db06b98ac11798ab3a3087",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "9913c1409c93f99412f952e2f1f616ab6e5d31fc849c2e4fd8f691e5dbe57b2a",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "d46975a2bb6d20f0d486d06c3a6e60399aeea73ab53a6e270b7cc18e5da4f2df": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 24,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 24,
+      "generator_id": "jw.code",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "indent": {
+          "source": "pinned",
+          "value": "    "
+        },
+        "n_complete_functions": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        },
+        "n_imports": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 1025718292703155556,
+      "text_sha256": "68f82bc7880c357c7375cf1a6c5321a29e78cd8b89a7fd0c6cffb0174d1115e0",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "1fc6f1bf64d4292ec03c6644d423fb9121737aa64d9b6432d7f748fb524cd62e",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "e20b9c001aee8d0002215db324996900e0b1183c0279b2dc4ce6f1491f2fa822": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 16,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 35,
+      "generator_id": "jw.json",
+      "generator_version": "1.0.0",
+      "ground_truth": {
+        "dor_nori": "2031-05-11",
+        "kel_tor_nori": 556,
+        "nori_wen": null,
+        "pak_dor_luma": "2032-09-13",
+        "pak_wen": "2033-03-14",
+        "tavi_sai": "B",
+        "tavi_sai_tavi": "D",
+        "tor_ver": "2030-05-17",
+        "wen_min_min": "A"
+      },
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_distractors": {
+          "range": [
+            2,
+            4
+          ],
+          "source": "drbg",
+          "value": 4
+        },
+        "n_fields": {
+          "range": [
+            6,
+            9
+          ],
+          "source": "drbg",
+          "value": 9
+        },
+        "n_red_herrings": {
+          "range": [
+            1,
+            3
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "record_styles": {
+          "source": "pinned",
+          "value": [
+            "log",
+            "freetext",
+            "kv"
+          ]
+        }
+      },
+      "realized_token_count": 512,
+      "schema": {
+        "dor_nori": "date",
+        "kel_tor_nori": "int",
+        "nori_wen": "nullable",
+        "pak_dor_luma": "date",
+        "pak_wen": "date",
+        "tavi_sai": "enum",
+        "tavi_sai_tavi": "enum",
+        "tor_ver": "date",
+        "wen_min_min": "enum"
+      },
+      "seed": 7794195510489243376,
+      "text_sha256": "f88b4c042338901acbb8d16c326ddbd69d299066e67663b40e92bfb235fff40f",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "c7c0085a0c39c1acf443f749454f66bc613122bc0a0a89e74d26e3569db52d03",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "edbba88334399bd439c13cc2765c2e66521e428c14ebc405f997c70daf8c8a43": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 22,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 33,
+      "generator_id": "jw.chat",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_constraints": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 5
+        },
+        "persona": {
+          "range": [
+            0,
+            7
+          ],
+          "source": "drbg",
+          "value": "a new town clerk"
+        },
+        "topic": {
+          "grammar": "adjective+domain",
+          "source": "drbg",
+          "value": "the quiet transit repair logs"
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 4483295786468755370,
+      "text_sha256": "eef54331a855d205bcdd0e208db0f96880a9bcc47823097b9041cebf5222a83d",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "dc5a0b80a202113a116f68b662ebb21fb871c84bac02dcfec213daab1b2b0c2f",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "ee44b705edbbe1c6f195fc1bf363ab0ed3a123ccc02ab28c367f4f43998863a1": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 23,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 26,
+      "generator_id": "jw.chat",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_constraints": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 3
+        },
+        "persona": {
+          "range": [
+            0,
+            7
+          ],
+          "source": "drbg",
+          "value": "a harbor coordinator"
+        },
+        "topic": {
+          "grammar": "adjective+domain",
+          "source": "drbg",
+          "value": "the rotating greenhouse irrigation schedules"
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 1699409790044426264,
+      "text_sha256": "01d3a35a4b2c435af1efc70a1f8bc982e920a795e37e86fa7c4ccd56b3cbff4d",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "9b06b3c032aa620b4ed86e6f3319e417f5209f1fe18390f543fd7f11b8b383dc",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "f86dcdce73379d9168121f8eb09d48c0c16002962ae457d45d75504599c01a37": {
+      "ascii_tail_tokens": 0,
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "chars_per_token": 1.705078125,
+      "coarse_units": 21,
+      "direction": "rtl",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 34,
+      "generator_id": "jw.multiling",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "ascii_tail_max": {
+          "source": "pinned",
+          "value": 3
+        },
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "direction": {
+          "source": "pinned",
+          "value": "rtl"
+        },
+        "language": {
+          "range": [
+            0,
+            5
+          ],
+          "source": "pinned",
+          "value": "ar-Arabic"
+        }
+      },
+      "realized_token_count": 512,
+      "script_profile": "ar-Arabic",
+      "seed": 12047106101055624691,
+      "text_sha256": "472b3ecbe5892b73994c552143f1ba5c36f0a98ffdf1debfc5389303189e78ae",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "d1c858db64ce404fbfcf3be82c9a2f82a5391c85b5c8e3aec6fa1d190369681c",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
+    },
+    "f8ea8e0c1a3a1cb308854159376771413c3321c3c20d98a381483d8ef9ada09f": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "coarse_units": 24,
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 24,
+      "generator_id": "jw.code",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "indent": {
+          "source": "pinned",
+          "value": "    "
+        },
+        "n_complete_functions": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        },
+        "n_imports": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        }
+      },
+      "realized_token_count": 512,
+      "seed": 17443930596380976830,
+      "text_sha256": "0d08459600b0bf5f2dda77480cc4b0886b1ebae253e5063577b9a5ae44debfac",
+      "token_accounting": "encode_add_special_true",
+      "token_ids_sha256": "00154a2f4e3291b50dbac8627be078ef687014b0d4c264ddc0ce01758b20765b",
+      "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
     }
   },
   "source_manifest": {
-    "source_id": "jw_mixed_v1:tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c",
-    "subset_sha256": "c87d2f3ca2c8275daad1c7d81c5355567c5cc15493d552bbf044b211420d0c3c",
-    "tokenizer_files_sha256": "18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c",
-    "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+    "source_id": "jw_mixed_v1:tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6",
+    "subset_sha256": "952cb8ef7db6f421486606e650530b341205296d6999a3d75839639bc3cc2363",
+    "tokenizer_files_sha256": "7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6",
+    "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
   },
   "suite": "jw_mixed_v1",
   "tokenizer": {
     "files": [
       {
+        "filename": "added_tokens.json",
+        "sha256": "58b54bbe36fc752f79a24a271ef66a0a0830054b4dfad94bde757d851968060b"
+      },
+      {
+        "filename": "chat_template.jinja",
+        "status": "absent"
+      },
+      {
+        "filename": "chat_template.json",
+        "status": "absent"
+      },
+      {
         "filename": "merges.txt",
         "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
       },
       {
+        "filename": "special_tokens_map.json",
+        "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd"
+      },
+      {
+        "filename": "spiece.model",
+        "status": "absent"
+      },
+      {
         "filename": "tokenizer.json",
         "sha256": "a8506e7111b80c6d8635951a02eab0f4e1a8e4e5772da83846579e97b16f61bf"
+      },
+      {
+        "filename": "tokenizer.model",
+        "status": "absent"
       },
       {
         "filename": "tokenizer_config.json",
@@ -2864,7 +2888,7 @@
         "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
       }
     ],
-    "files_sha256": "18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c",
-    "tokenizer_id": "tokfiles_18fa3ae1a1ebf0c3015390079d561f6b68d68029bc76ad1264b2a86f76a5473c"
+    "files_sha256": "7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6",
+    "tokenizer_id": "tokfiles_7ec07055c58b3d1b80c7a329e8604488ce03feea7064412a68c63ceeebc68fd6"
   }
 }
