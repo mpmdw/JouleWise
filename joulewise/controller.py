@@ -462,12 +462,14 @@ class _Execution:
             )
         else:
             runtime_result = self._runtime.run_workload(self._config, self._context)
-        self._capture_adapter_alignments()
-        # The stop marker's timestamp is captured before stop_sampling so the
-        # sampler's wind-down (process stop, plist parsing) stays outside the
-        # window; the event itself is appended after the runtime events so the
-        # stable flush-sort keeps it bracketing them.
+        # The stop marker's timestamp is captured as soon as the runtime
+        # returns - before alignment capture and stop_sampling - so adapter
+        # clock_alignments() getters (D-013 quiescent window) and the
+        # sampler's wind-down (process stop, plist parsing) stay outside the
+        # window; the event itself is appended after the runtime events so
+        # the stable flush-sort keeps it bracketing them.
         sampling_stopped_s = self._clock.now()
+        self._capture_adapter_alignments()
         self._samples = self._telemetry.stop_sampling(self._config, self._context)
         self._capture_adapter_alignments()
         self._capture_adapter_metadata()
