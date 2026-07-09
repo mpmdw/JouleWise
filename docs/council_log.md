@@ -1107,3 +1107,23 @@ round 4 (effective-hash identity gap the standout); integration 0
 (clean). Process slip recorded: PR #18 merged into its stacked base
 (retarget missed); recovered same session via promotion PR #20; lesson
 folded into multi-stream-worktrees skill.
+
+## C-018: D-013 alignment-capture window fix (2026-07-08)
+
+Shape: background-chip session for the C-017 oversight spin-off
+(alignment capture inside the measured window; predates the suite
+substrate, since de5f04a). Solo lead implementation — a two-line
+reorder in `_stage_measured_run` (stamp `sampling_stopped_s` as soon
+as the runtime returns, then capture alignments) plus two regression
+tests (`AlignmentCostTelemetry`: costly `clock_alignments()` must not
+change metrics or move the stop marker) — with one light Codex
+read-only review of the final diff (timing-semantics-adjacent, so the
+cross-model pass ran despite the small size; no council per rule 3).
+
+Layer yield: the catch itself is credited to the C-017 oversight
+layer. This session: lead live verification proved both tests fail
+pre-fix (gross_energy_j 0.84 -> 38.34 J under a 5 s simulated capture
+cost) and re-ran the full suite (734 green); Codex review returned
+approve with zero findings (it independently re-checked
+`measured_window()` in bundle_read and the failure-path stop helper).
+Landed: PR #21.

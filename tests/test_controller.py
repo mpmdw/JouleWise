@@ -984,6 +984,45 @@ class LatencyRegistry:
         return adapters.resolve_transport(config)
 
 
+class AlignmentCostTelemetry:
+    """Wraps the mock telemetry with a ``clock_alignments()`` getter whose
+    call costs simulated time - the controller captures alignments after the
+    runtime returns, and that work must stay outside the measured window
+    (D-013 quiescent window, D-026 markers)."""
+
+    def __init__(self, inner: Any, clock: Clock, cost_s: float) -> None:
+        self._inner = inner
+        self._clock = clock
+        self._cost_s = cost_s
+
+    def clock_alignments(self) -> list[dict[str, Any]]:
+        self._clock.sleep(self._cost_s)
+        return []
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+class AlignmentCostRegistry:
+    """Real mock adapters, telemetry wrapped with costly alignment capture."""
+
+    def __init__(self, clock: Clock, cost_s: float) -> None:
+        self._clock = clock
+        self._cost_s = cost_s
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            telemetry = AlignmentCostTelemetry(telemetry, self._clock, self._cost_s)
+        return telemetry, failure
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
 class RunContextSeamTests(ControllerTestCase):
     """2N.1 (D-024/D-002): adapters can preserve raw evidence via the context."""
 
@@ -1091,6 +1130,59 @@ class SamplingWindowTests(ControllerTestCase):
                 places=9,
                 msg=metric,
             )
+
+    def run_with_alignment_cost(
+        self, run_id: str, cost_s: float
+    ) -> tuple[Path, SummaryMetrics]:
+        # The mock workload lasts ~0.1 s; sample fast enough that regular
+        # 1/power_hz-spaced samples land inside the measured window even when
+        # alignment-capture cost inflates the sampler's active span.
+        data = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+        data["run_id"] = run_id
+        data["sampling"]["power_hz"] = 100.0
+        config = BenchmarkConfig.from_mapping(data)
+        clock = FakeClock(start=1_700_000_000.0)
+        registry = AlignmentCostRegistry(clock, cost_s)
+        return run_benchmark(config, self.runs_root, clock, registry=registry)
+
+    def test_alignment_capture_cost_does_not_change_measured_metrics(self) -> None:
+        # Adapter clock_alignments() capture after the runtime returns must
+        # not be integrated into the measured window (D-013).
+        _, baseline_summary = self.run_with_alignment_cost("alignment-zero", 0.0)
+        _, costly_summary = self.run_with_alignment_cost("alignment-cost", 5.0)
+
+        self.assertEqual(baseline_summary.status, RunStatus.SUCCEEDED)
+        self.assertEqual(costly_summary.status, RunStatus.SUCCEEDED)
+        for metric in (
+            "gross_energy_j",
+            "idle_subtracted_energy_j",
+            "energy_request_j",
+            "ttft_s",
+            "decode_latency_s",
+        ):
+            self.assertAlmostEqual(
+                getattr(baseline_summary, metric),
+                getattr(costly_summary, metric),
+                places=9,
+                msg=metric,
+            )
+
+    def test_stop_marker_is_stamped_before_alignment_capture(self) -> None:
+        # The sampling_stopped timestamp is taken as soon as the runtime
+        # returns; a costly post-run alignment capture must not push it later.
+        bundle_path, _ = self.run_with_alignment_cost("alignment-marker", 5.0)
+        events = self.read_events(bundle_path)
+        stopped_s = next(
+            event["timestamp_s"]
+            for event in events
+            if event["event_type"] == "sampling_stopped"
+        )
+        last_runtime_s = max(
+            event["timestamp_s"]
+            for event in events
+            if event["event_type"] == "phase_end"
+        )
+        self.assertAlmostEqual(stopped_s - last_runtime_s, 0.0, places=9)
 
     def test_stage_window_still_contains_the_latency(self) -> None:
         # The stage boundaries DO include the simulated latency - proving the
