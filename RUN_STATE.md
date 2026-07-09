@@ -91,17 +91,27 @@ implementation fan-out ran. This card is the resume authority.
     cooldown-context fix (failing-first proven; suite 880 OK there).
     ARC-6 cleanup-into-quality SKIPPED (fence conflict) — route to
     integration or the p2040-core owner.
-  - impl/p2040-core — IN FLIGHT at checkpoint; pushed commits: FIX-1
-    zero-window fail-closed, FIX-2 metric-specific gates, FIX-4 D-058
-    token precedence. Agent may have added FIX-5 (zero-MAD) / others
-    after the push.
-  - impl/rpt001 — IN FLIGHT; pushed: figure/table/claims pipeline over
-    the shared read layer (stdlib SVG, byte-stable). Skeleton may
-    follow.
-  - impl/p2039 — IN FLIGHT; pushed: floor calculator + artifact
-    emit/validate + transport refusal (new files only).
-  - impl/doc008-kernel — IN FLIGHT; pushed: state kernel (39 tasks
-    migrated) + generator with --check/--stdout.
+  - impl/p2040-core — DONE (5 commits, all pushed): FIX-1 zero-window
+    fail-closed (+ strict gate + reducer version 0.3.0 — the version
+    bump WITHOUT a 0.2.0 projection is the main design call to
+    ratify), FIX-2 metric-specific gates, FIX-3 joint-edge bound,
+    FIX-4 D-058 token precedence, FIX-5 zero-MAD review flags. All
+    red/green mutation-proven; suite 884 OK there; all six corpus
+    bundles still pass strict read-only. FIX-6/7/8 remain (see io-nv2
+    + fence skips).
+  - impl/rpt001 — DONE (2 commits): report skeleton (10 chapters,
+    Pandoc-markdown, format-swap seam) + gated byte-stable
+    bundle→figure/table/claims-row→report-page pipeline; claims-row
+    means match spec golden values exactly.
+  - impl/p2039 — DONE: floor calculator (guard g(n)=max(1,sqrt(9/(n-1))),
+    ADJUDICATION-PENDING), artifact emit/validate w/ 16 tamper
+    rejections, transport refusal; 29 tests, 906 OK there. CLI +
+    integration hooks deferred.
+  - impl/doc008-kernel — DONE (2 commits): 39-task kernel (parity
+    verified vs queue), stdlib generator --check/--stdout byte-stable,
+    24 tests, orchestration inserts staged as a spec-dir doc. Live
+    RUN_STATE/TASK_QUEUE conversion deliberately NOT done
+    (adjudication-gated).
 
 **Resume procedure (in order):**
 
