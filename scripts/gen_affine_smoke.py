@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from joulewise.suite import ORDER_POLICIES
 from joulewise.workloads import DEFAULT_SMOKE_SUITE_SEED, write_affine_smoke_files
 
 
@@ -32,11 +33,18 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_SMOKE_SUITE_SEED,
         help="deterministic suite seed",
     )
+    parser.add_argument(
+        "--order-policy",
+        choices=sorted(ORDER_POLICIES),
+        default="manifest_order",
+        help="suite execution order policy for newly generated manifests",
+    )
     args = parser.parse_args(argv)
     manifest_path, sidecar_path, digest = write_affine_smoke_files(
         args.manifest,
         args.sidecar,
         suite_seed=args.suite_seed,
+        order_policy=args.order_policy,
     )
     print(f"wrote {manifest_path}")
     print(f"wrote {sidecar_path}")

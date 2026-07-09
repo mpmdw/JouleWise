@@ -82,8 +82,9 @@ hash and count checks.
 
 ## Sequencing rules
 
-Runtime execution is manifest order today. `order_seed` is derived and
-recorded, but current runtimes do not use it to reorder items.
+Historical note, superseded 2026-07-09 below: runtime execution was manifest
+order. `order_seed` was derived and recorded, but runtimes did not use it to
+reorder items.
 
 Therefore, any claim of round-robin, Latin-square, level rotation, or
 condition-balancing across repeated suite bundles must be implemented as one of:
@@ -95,7 +96,40 @@ condition-balancing across repeated suite bundles must be implemented as one of:
 3. A campaign-level order policy over whole configs, using `order_manifest.json`
    rather than changing item order inside a suite.
 
-Until one of those is implemented, specs and reports must say `manifest_order`.
+Before 2026-07-09, until one of those was implemented, specs and reports had
+to say `manifest_order`.
+
+### 2026-07-09 (P2-030): operational suite order policies
+
+`execution_policy.order_policy` is now a closed operational policy name:
+
+- `manifest_order`: execute manifest item order exactly. This is the
+  back-compatible default and the required wording when rotation is absent.
+- `block_round_robin_v1`: rotate the non-sentinel contiguous block runs by
+  `order_row`.
+- `block_latin_square_v1`: use the Williams row-balanced order over the
+  non-sentinel contiguous block runs; even block counts complete in `N` rows,
+  odd block counts use the standard `2N` paired rows.
+
+The rotation unit is the contiguous block run. Blocks whose items all carry the
+`sentinel` tag are anchored in their manifest positions and never rotate. Blocks
+and levels therefore remain contiguous by construction. Within-block item
+rotation is deferred; if needed, it must be a new named policy and revisit this
+spec.
+
+`order_row` is controller-derived: `0` for single runs and the one-based `__rN`
+suffix for experiment members. The row used is `order_row mod n_rows`.
+`order_seed` derivation and recording are unchanged and remain audit material;
+the runtime never chooses either value. Non-`manifest_order` bundles must record
+`order_row` in `suite_start` metadata and `metadata.suite`; strict validation
+must recompute the expected permutation and fail closed on mismatch.
+
+`item_index` means manifest index everywhere. `position` means realized
+execution ordinal. `prev_item` is the previous realized item ID, or `null` for
+the first realized item. `block_index` is the realized block encounter ordinal
+and may vary across rows; `block_id` is the stable cross-bundle block key.
+`outputs/suite_items.jsonl` remains keyed by `item_index`, preserving
+expected-vs-realized prompt-hash checks.
 
 Blocks and levels must be contiguous runs. Naive interleaving such as
 `L01, L08, L01` inside a single block is invalid under the current validator.
@@ -148,6 +182,12 @@ perform. The safest near-term path is to treat manifest order as the execution
 truth and move balancing either into generated manifests or whole-config
 campaign order.
 
+2026-07-09 (P2-030) amendment: the preceding near-term rationale is historical
+for the pre-P2-030 substrate. P2-030 implements executable suite order policies,
+so `manifest_order` is no longer the only runtime execution truth; realized
+policy order is the execution truth when a non-`manifest_order` policy and
+validated `order_row` are present.
+
 Rejected alternatives:
 
 - Let `order_seed` imply reordering. Rejected because it is recorded but not
@@ -162,6 +202,8 @@ Rejected alternatives:
 
 - P2-025 lands and changes the strict-validation surface.
 - A real non-`manifest_order` suite execution policy is implemented.
+  2026-07-09 (P2-030) disposition: triggered and satisfied for
+  `block_round_robin_v1` and `block_latin_square_v1`; future revisits should
+  name a new policy class or a semantics change, not this now-shipped trigger.
 - Full affine ladder or benchmark imports need fields that sidecars cannot
   carry honestly.
-

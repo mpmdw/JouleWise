@@ -11,15 +11,20 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
 from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 from joulewise.gensuite import (
     TokenizerManifestRow,
     build_jw_mixed_manifest,
     build_sentinel_manifest,
 )
-from joulewise.suite import suite_manifest_sha256
+from joulewise.suite import ORDER_POLICIES, suite_manifest_sha256
 
 
 TOKENIZER_FILES = (
@@ -67,6 +72,12 @@ def main() -> None:
     parser.add_argument("--out", required=True)
     parser.add_argument("--sidecar", required=True)
     parser.add_argument("--items-per-category", type=int, default=6)
+    parser.add_argument(
+        "--order-policy",
+        choices=sorted(ORDER_POLICIES),
+        default="manifest_order",
+        help="suite execution order policy for newly generated manifests",
+    )
     args = parser.parse_args()
 
     tokenizer_path = Path(args.tokenizer_path).expanduser().resolve()
@@ -81,6 +92,7 @@ def main() -> None:
             tokenizer_manifest=manifest_files,
             sidecar_path=sidecar,
             items_per_category=args.items_per_category,
+            order_policy=args.order_policy,
         )
     else:
         manifest = build_sentinel_manifest(
@@ -88,6 +100,7 @@ def main() -> None:
             tokenizer,
             tokenizer_manifest=manifest_files,
             sidecar_path=sidecar,
+            order_policy=args.order_policy,
         )
     out.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     print(json.dumps({"manifest": str(out), "sidecar": str(sidecar), "sha256": suite_manifest_sha256(manifest)}))

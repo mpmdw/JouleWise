@@ -51,6 +51,7 @@ from joulewise.suite import (
     ItemStatus,
     SuiteItem,
     SuiteManifest,
+    realized_order,
     suite_manifest_sha256,
 )
 
@@ -259,25 +260,30 @@ class MlxRuntimeAdapter:
         context: RunContext | None = None,
         *,
         order_seed: str,
+        order_row: int | None = None,
     ) -> RuntimeResult:
         if self._mlx_lm is None or self._model is None or self._tokenizer is None:
             raise RuntimeError("runtime backend 'mlx' run_suite called before prepare")
         self._sampler_for_generation()
 
         manifest_sha256 = suite_manifest_sha256(manifest.to_dict())
+        suite_start_metadata: dict[str, Any] = {
+            "suite_id": manifest.suite_id,
+            "suite_profile": manifest.suite_profile,
+            "suite_revision": manifest.suite_revision,
+            "suite_manifest_sha256": manifest_sha256,
+            "item_count": len(manifest.items),
+            "order_policy": manifest.execution_policy.order_policy,
+            "order_seed": order_seed,
+        }
+        if order_row is not None:
+            suite_start_metadata["order_row"] = order_row
         events: list[RuntimeEvent] = [
             self._event(
                 SUITE_START,
                 SUITE_PHASE,
                 "mlx suite started",
-                {
-                    "suite_id": manifest.suite_id,
-                    "suite_profile": manifest.suite_profile,
-                    "suite_revision": manifest.suite_revision,
-                    "suite_manifest_sha256": manifest_sha256,
-                    "item_count": len(manifest.items),
-                    "order_seed": order_seed,
-                },
+                suite_start_metadata,
             )
         ]
         output_lines: list[str] = []
@@ -296,7 +302,10 @@ class MlxRuntimeAdapter:
             "no suite item generation attempted"
         )
 
-        for item_index, item in enumerate(manifest.items):
+        for realized in realized_order(manifest, order_row=order_row):
+            item = realized.item
+            item_index = realized.item_index
+            position = realized.position
             block_id = item.grouping.block_id
             level_id = item.grouping.level_id
             if block_id != current_block:
@@ -363,6 +372,7 @@ class MlxRuntimeAdapter:
             item_result = self._run_suite_item(
                 item,
                 item_index,
+                position,
                 previous_item_id,
                 events,
                 suite_identity=_suite_identity(manifest),
@@ -426,7 +436,9 @@ class MlxRuntimeAdapter:
                     "suite_id": manifest.suite_id,
                     "manifest_sha256": manifest_sha256,
                     "item_count": len(manifest.items),
+                    "order_policy": manifest.execution_policy.order_policy,
                     "order_seed": order_seed,
+                    "order_row": order_row,
                 },
                 "generator": {
                     "name": "mlx_lm.stream_generate",
@@ -452,6 +464,7 @@ class MlxRuntimeAdapter:
         self,
         item: SuiteItem,
         item_index: int,
+        position: int,
         previous_item_id: str | None,
         events: list[RuntimeEvent],
         *,
@@ -488,7 +501,7 @@ class MlxRuntimeAdapter:
                 {
                     "item_id": item.item_id,
                     "item_index": item_index,
-                    "position": item_index,
+                    "position": position,
                     "block_id": item.grouping.block_id,
                     "level_id": item.grouping.level_id,
                     "condition_id": item.grouping.condition_id,
@@ -542,6 +555,7 @@ class MlxRuntimeAdapter:
                 suppress_eos=item.output_policy == "fixed_budget_exact",
                 item_id=item.item_id,
                 item_index=item_index,
+                position=position,
                 token_message_prefix=f"mlx suite item {item.item_id}",
             )
             events.extend(generation.events)
@@ -574,6 +588,7 @@ class MlxRuntimeAdapter:
         end_metadata = {
             "item_id": item.item_id,
             "item_index": item_index,
+            "position": position,
             "status": status,
             "prompt_tokens": prompt_tokens_for_marker,
             "emitted_tokens": emitted_tokens,
@@ -593,6 +608,7 @@ class MlxRuntimeAdapter:
         output = {
             "item_id": item.item_id,
             "item_index": item_index,
+            "position": position,
             "status": status,
             "prompt_source": prompt_source,
             "bos_present": bos_present,
@@ -633,6 +649,7 @@ class MlxRuntimeAdapter:
         suppress_eos: bool,
         item_id: str | None = None,
         item_index: int | None = None,
+        position: int | None = None,
         token_message_prefix: str = "mlx token",
         prepare_prompt: Any | None = None,
     ) -> _GenerationRecord:
@@ -680,7 +697,9 @@ class MlxRuntimeAdapter:
             "eos_suppressed": eos_suppressed,
         }
         if item_id is not None:
-            prefill_metadata.update({"item_id": item_id, "item_index": item_index})
+            prefill_metadata.update(
+                {"item_id": item_id, "item_index": item_index, "position": position}
+            )
         events.append(
             self._event(
                 "phase_start",
@@ -722,10 +741,18 @@ class MlxRuntimeAdapter:
                     }
                     if item_id is not None:
                         prefill_end_metadata.update(
-                            {"item_id": item_id, "item_index": item_index}
+                            {
+                                "item_id": item_id,
+                                "item_index": item_index,
+                                "position": position,
+                            }
                         )
                         decode_start_metadata.update(
-                            {"item_id": item_id, "item_index": item_index}
+                            {
+                                "item_id": item_id,
+                                "item_index": item_index,
+                                "position": position,
+                            }
                         )
                     events.append(
                         self._event(
@@ -752,7 +779,9 @@ class MlxRuntimeAdapter:
                 output_token_ids.append(token_id)
                 token_metadata: dict[str, Any] = {"index": index}
                 if item_id is not None:
-                    token_metadata.update({"item_id": item_id, "item_index": item_index})
+                    token_metadata.update(
+                        {"item_id": item_id, "item_index": item_index, "position": position}
+                    )
                 events.append(
                     RuntimeEvent(
                         timestamp_s=timestamp_s,

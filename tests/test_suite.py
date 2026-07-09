@@ -3,6 +3,7 @@ import hashlib
 import json
 import tempfile
 import unittest
+from collections import Counter
 from pathlib import Path
 
 from joulewise.schemas import SchemaError
@@ -19,6 +20,8 @@ from joulewise.suite import (
     canonical_effective_manifest,
     load_suite_manifest,
     order_seed,
+    policy_row_count,
+    realized_order,
     suite_manifest_sha256,
 )
 
@@ -33,6 +36,52 @@ PINNED_MOCK_SUITE_MANIFEST_SHA256 = (
 
 def manifest_data() -> dict:
     return json.loads(MANIFEST_PATH.read_text())
+
+
+def policy_manifest(
+    order_policy: str,
+    *,
+    rotatable_blocks: int = 3,
+    sentinel_anchors: bool = True,
+    two_item_first_block: bool = False,
+) -> SuiteManifest:
+    data = manifest_data()
+    data["execution_policy"]["order_policy"] = order_policy
+    template = copy.deepcopy(data["items"][0])
+    items = []
+    if sentinel_anchors:
+        items.append(_policy_item(template, "sentinel_start", "sentinel_start", ["sentinel"]))
+    for block_index in range(rotatable_blocks):
+        block = chr(ord("A") + block_index)
+        items.append(_policy_item(template, f"item_{block}_0", block, []))
+        if block_index == 0 and two_item_first_block:
+            items.append(_policy_item(template, f"item_{block}_1", block, []))
+    if sentinel_anchors:
+        items.append(_policy_item(template, "sentinel_end", "sentinel_end", ["sentinel"]))
+    data["items"] = items
+    return SuiteManifest.from_mapping(data)
+
+
+def _policy_item(template: dict, item_id: str, block_id: str, tags: list[str]) -> dict:
+    item = copy.deepcopy(template)
+    item["item_id"] = item_id
+    item["source"]["source_item_id"] = item_id
+    item["grouping"]["condition_id"] = block_id
+    item["grouping"]["block_id"] = block_id
+    item["grouping"]["level_id"] = block_id
+    item["tags"] = tags
+    return item
+
+
+def realized_block_sequence(manifest: SuiteManifest, order_row: int) -> list[str]:
+    blocks: list[str] = []
+    previous = None
+    for entry in realized_order(manifest, order_row=order_row):
+        block_id = entry.item.grouping.block_id
+        if block_id != previous:
+            blocks.append(block_id)
+            previous = block_id
+    return blocks
 
 
 class SuiteManifestTests(unittest.TestCase):
@@ -186,6 +235,75 @@ class SuiteManifestTests(unittest.TestCase):
     def test_order_seed_derivation(self) -> None:
         expected = hashlib.sha256(b"seed\0manifest_order\0007").hexdigest()
         self.assertEqual(order_seed("seed", "manifest_order", 7), expected)
+
+    def test_unknown_order_policy_is_rejected(self) -> None:
+        data = manifest_data()
+        data["execution_policy"]["order_policy"] = "surprise_shuffle"
+        with self.assertRaisesRegex(SchemaError, "execution_policy.order_policy"):
+            SuiteManifest.from_mapping(data)
+
+    def test_round_robin_rotates_only_non_sentinel_blocks(self) -> None:
+        manifest = policy_manifest(
+            "block_round_robin_v1",
+            rotatable_blocks=3,
+            sentinel_anchors=True,
+            two_item_first_block=True,
+        )
+
+        entries = realized_order(manifest, order_row=1)
+
+        self.assertEqual(
+            [entry.item.grouping.block_id for entry in entries],
+            ["sentinel_start", "B", "C", "A", "A", "sentinel_end"],
+        )
+        self.assertEqual([entry.item_index for entry in entries], [0, 3, 4, 1, 2, 5])
+        self.assertEqual([entry.position for entry in entries], list(range(6)))
+
+    def test_latin_square_even_rows_balance_positions_and_adjacencies(self) -> None:
+        manifest = policy_manifest(
+            "block_latin_square_v1",
+            rotatable_blocks=4,
+            sentinel_anchors=False,
+        )
+        rows = [realized_block_sequence(manifest, row) for row in range(policy_row_count(manifest))]
+
+        for position in range(4):
+            self.assertEqual({row[position] for row in rows}, {"A", "B", "C", "D"})
+        adjacency_counts = Counter(
+            (left, right)
+            for row in rows
+            for left, right in zip(row, row[1:], strict=False)
+        )
+        self.assertTrue(all(count == 1 for count in adjacency_counts.values()))
+
+    def test_latin_square_odd_rows_use_williams_pair(self) -> None:
+        manifest = policy_manifest(
+            "block_latin_square_v1",
+            rotatable_blocks=3,
+            sentinel_anchors=False,
+        )
+        rows = [realized_block_sequence(manifest, row) for row in range(policy_row_count(manifest))]
+
+        self.assertEqual(len(rows), 6)
+        for position in range(3):
+            self.assertEqual(Counter(row[position] for row in rows), Counter({"A": 2, "B": 2, "C": 2}))
+        adjacency_counts = Counter(
+            (left, right)
+            for row in rows
+            for left, right in zip(row, row[1:], strict=False)
+        )
+        self.assertEqual(
+            set(adjacency_counts),
+            {
+                ("A", "B"),
+                ("A", "C"),
+                ("B", "A"),
+                ("B", "C"),
+                ("C", "A"),
+                ("C", "B"),
+            },
+        )
+        self.assertTrue(all(count == 2 for count in adjacency_counts.values()))
 
     def test_load_suite_manifest(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

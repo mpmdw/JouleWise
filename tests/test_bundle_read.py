@@ -32,6 +32,7 @@ from joulewise.suite import (
     SuiteManifest,
     canonical_effective_manifest,
     order_seed,
+    realized_order,
     suite_manifest_sha256,
 )
 from joulewise.adapters.mock_runtime import MockRuntimeAdapter
@@ -385,17 +386,28 @@ class ProblemsParityTests(ReaderTestCase):
 
 
 class SuiteReaderTests(ReaderTestCase):
-    def make_suite_bundle(self, run_id: str = "suite-reader") -> RunBundleWriter:
-        config = load_suite_config(run_id)
-        writer = RunBundleWriter.create(self.runs_root, config, self.clock)
+    def make_suite_bundle(
+        self,
+        run_id: str = "suite-reader",
+        *,
+        order_policy: str = "manifest_order",
+        order_row: int | None = None,
+    ) -> RunBundleWriter:
         raw_manifest = json.loads(SUITE_MANIFEST_PATH.read_text())
+        raw_manifest["execution_policy"]["order_policy"] = order_policy
         effective = canonical_effective_manifest(raw_manifest)
         manifest = SuiteManifest.from_mapping(raw_manifest)
         manifest_hash = suite_manifest_sha256(effective)
+        data = json.loads(SUITE_CONFIG_PATH.read_text())
+        data["run_id"] = run_id
+        data["workload_profile"]["suite_manifest_ref"] = str(SUITE_MANIFEST_PATH)
+        data["workload_profile"]["suite_manifest_sha256"] = manifest_hash
+        config = BenchmarkConfig.from_mapping(data)
+        writer = RunBundleWriter.create(self.runs_root, config, self.clock)
         derived_order_seed = order_seed(
             manifest.suite_seed,
             manifest.execution_policy.order_policy,
-            0,
+            order_row or 0,
         )
         writer.write_suite_manifest(effective)
         writer.append_event(
@@ -403,7 +415,10 @@ class SuiteReaderTests(ReaderTestCase):
         )
         runtime = MockRuntimeAdapter(FakeClock(start=1.0))
         runtime_result = runtime.run_suite(
-            config, manifest, order_seed=derived_order_seed
+            config,
+            manifest,
+            order_seed=derived_order_seed,
+            order_row=order_row,
         )
         for event in runtime_result.events:
             writer.append_event(event)
@@ -422,7 +437,9 @@ class SuiteReaderTests(ReaderTestCase):
                     "manifest_sha256": manifest_hash,
                     "source_file_sha256": "0" * 64,
                     "item_count": len(manifest.items),
+                    "order_policy": manifest.execution_policy.order_policy,
                     "order_seed": derived_order_seed,
+                    **({} if order_row is None else {"order_row": order_row}),
                 },
             }
         )
@@ -448,6 +465,129 @@ class SuiteReaderTests(ReaderTestCase):
         self.assertIn(("block_a", "level_1"), reader.level_windows())
         self.assertIn(("block_b", "level_1"), reader.level_windows())
         self.assertEqual(reader.problems(), [])
+
+    def test_rotated_suite_bundle_records_and_validates_realized_order(self) -> None:
+        writer = self.make_suite_bundle(
+            "suite-rotated",
+            order_policy="block_round_robin_v1",
+            order_row=1,
+        )
+        raw_manifest = json.loads((writer.path / "suite_manifest.json").read_text())
+        manifest = SuiteManifest.from_mapping(raw_manifest)
+        expected = [entry.item_index for entry in realized_order(manifest, order_row=1)]
+        events = read_jsonl(writer.path / "events.jsonl")
+        starts = [event for event in events if event["event_type"] == "item_start"]
+        records = read_jsonl(writer.path / "outputs" / "suite_items.jsonl")
+        metadata = json.loads((writer.path / "metadata.json").read_text())
+
+        self.assertEqual([event["metadata"]["item_index"] for event in starts], expected)
+        self.assertEqual([event["metadata"]["position"] for event in starts], list(range(5)))
+        self.assertEqual([record["item_index"] for record in records], expected)
+        self.assertEqual([record["position"] for record in records], list(range(5)))
+        self.assertEqual(metadata["suite"]["order_policy"], "block_round_robin_v1")
+        self.assertEqual(metadata["suite"]["order_row"], 1)
+        self.assertEqual(BundleReader(writer.path).problems(), [])
+
+    def test_rotation_requires_order_row(self) -> None:
+        writer = self.make_suite_bundle(
+            "suite-missing-order-row",
+            order_policy="block_round_robin_v1",
+            order_row=1,
+        )
+        metadata = json.loads((writer.path / "metadata.json").read_text())
+        del metadata["suite"]["order_row"]
+        (writer.path / "metadata.json").write_text(json.dumps(metadata, sort_keys=True) + "\n")
+        events = read_jsonl(writer.path / "events.jsonl")
+        for event in events:
+            if event["event_type"] == "suite_start":
+                event["metadata"].pop("order_row", None)
+        write_jsonl(writer.path / "events.jsonl", events)
+
+        problems = BundleReader(writer.path).problems()
+
+        self.assertTrue(any("order_row is required" in problem for problem in problems), problems)
+
+    def test_rotation_rejects_order_seed_that_does_not_match_order_row(self) -> None:
+        writer = self.make_suite_bundle(
+            "suite-wrong-derived-order-seed",
+            order_policy="block_round_robin_v1",
+            order_row=1,
+        )
+        metadata = json.loads((writer.path / "metadata.json").read_text())
+        metadata["suite"]["order_seed"] = "deadbeef"
+        (writer.path / "metadata.json").write_text(json.dumps(metadata, sort_keys=True) + "\n")
+        events = read_jsonl(writer.path / "events.jsonl")
+        for event in events:
+            if event["event_type"] == "suite_start":
+                event["metadata"]["order_seed"] = "deadbeef"
+        write_jsonl(writer.path / "events.jsonl", events)
+
+        problems = BundleReader(writer.path).problems()
+
+        self.assertTrue(
+            any("does not match derived order seed" in problem for problem in problems),
+            problems,
+        )
+        self.assertFalse(
+            any("metadata.suite.order_seed mismatch" in problem for problem in problems),
+            problems,
+        )
+
+    def test_manifest_order_without_order_row_does_not_recompute_legacy_order_seed(self) -> None:
+        writer = self.make_suite_bundle("suite-legacy-order-seed", order_row=None)
+        legacy_order_seed = order_seed("mock-suite-seed", "manifest_order", 5)
+        metadata = json.loads((writer.path / "metadata.json").read_text())
+        metadata["suite"]["order_seed"] = legacy_order_seed
+        (writer.path / "metadata.json").write_text(json.dumps(metadata, sort_keys=True) + "\n")
+        events = read_jsonl(writer.path / "events.jsonl")
+        for event in events:
+            if event["event_type"] == "suite_start":
+                event["metadata"]["order_seed"] = legacy_order_seed
+        write_jsonl(writer.path / "events.jsonl", events)
+
+        self.assertEqual(BundleReader(writer.path).problems(), [])
+
+    def test_rotation_rejects_wrong_realized_order_prev_item_and_positions(self) -> None:
+        def wrong_order(starts: list[dict]) -> None:
+            starts[0]["metadata"], starts[-1]["metadata"] = (
+                starts[-1]["metadata"],
+                starts[0]["metadata"],
+            )
+
+        def wrong_prev(starts: list[dict]) -> None:
+            starts[1]["metadata"]["prev_item"] = "wrong"
+
+        def duplicate_position(starts: list[dict]) -> None:
+            starts[1]["metadata"]["position"] = 0
+
+        mutations = {
+            "wrong-order": wrong_order,
+            "wrong-prev": wrong_prev,
+            "duplicate-position": duplicate_position,
+        }
+        expected_needles = {
+            "wrong-order": "realized item_start order mismatch",
+            "wrong-prev": "prev_item mismatch",
+            "duplicate-position": "position is duplicated",
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                writer = self.make_suite_bundle(
+                    f"suite-{name}",
+                    order_policy="block_round_robin_v1",
+                    order_row=1,
+                )
+                events = read_jsonl(writer.path / "events.jsonl")
+                starts = [event for event in events if event["event_type"] == "item_start"]
+                mutate(starts)
+                write_jsonl(writer.path / "events.jsonl", events)
+
+                problems = BundleReader(writer.path).problems()
+
+                self.assertTrue(
+                    any(expected_needles[name] in problem for problem in problems),
+                    problems,
+                )
 
     def test_validate_bundle_skips_missing_manifest_for_unreadable_manifest_failed_suite(self) -> None:
         writer = RunBundleWriter.create(
@@ -709,7 +849,10 @@ class SuiteReaderTests(ReaderTestCase):
         suffix = suffix.replace('"item_index": 0', '"item_index": 99', 1)
         events_path.write_text(prefix + suffix)
         self.assertTrue(
-            any("monotonic" in problem for problem in BundleReader(writer.path).problems())
+            any(
+                "realized item_start order mismatch" in problem
+                for problem in BundleReader(writer.path).problems()
+            )
         )
 
     def test_metadata_suite_block_is_validated(self) -> None:

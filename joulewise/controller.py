@@ -291,6 +291,7 @@ class _Execution:
         self._suite_manifest_sha256: str | None = None
         self._suite_source_file_sha256: str | None = None
         self._suite_order_seed: str | None = None
+        self._suite_order_row: int | None = None
         self._samples: list[PowerSample] = []
         self._sampling_active = False
         # Idempotence flags so the failure path writes only what is missing.
@@ -462,6 +463,7 @@ class _Execution:
                 self._suite_manifest,
                 self._context,
                 order_seed=self._suite_order_seed,
+                order_row=self._suite_order_row,
             )
         else:
             runtime_result = self._runtime.run_workload(self._config, self._context)
@@ -708,7 +710,9 @@ class _Execution:
                 "manifest_sha256": self._suite_manifest_sha256,
                 "source_file_sha256": self._suite_source_file_sha256,
                 "item_count": len(self._suite_manifest.items),
+                "order_policy": self._suite_manifest.execution_policy.order_policy,
                 "order_seed": self._suite_order_seed,
+                "order_row": self._suite_order_row,
             }
         # Caller-supplied metadata (Slice 2F: the experiment runner records a
         # cooldown cap-hit against the following rep here). Lands under the
@@ -871,6 +875,7 @@ class _Execution:
             manifest.execution_policy.order_policy,
             rep_index,
         )
+        self._suite_order_row = rep_index
 
     @staticmethod
     def _resolution_failure(

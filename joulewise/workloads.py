@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from joulewise.suite import SuiteManifest, suite_manifest_sha256
+from joulewise.suite import ORDER_POLICY_MANIFEST, SuiteManifest, suite_manifest_sha256
 
 
 DOMAIN = "joulewise.workload.affine_mod_ladder.v1"
@@ -160,8 +160,11 @@ def parameters_hash(
     *,
     levels: tuple[int, ...] | list[int] = DEFAULT_SMOKE_LEVELS,
     items_per_level: int = DEFAULT_SMOKE_ITEMS_PER_LEVEL,
+    order_policy: str = ORDER_POLICY_MANIFEST,
 ) -> str:
     block = affine_parameters_block(levels=levels, items_per_level=items_per_level)
+    if order_policy != ORDER_POLICY_MANIFEST:
+        block["order_policy"] = order_policy
     payload = json.dumps(block, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
 
@@ -259,6 +262,7 @@ def _item_mapping(
 
 def build_affine_smoke_manifest(
     suite_seed: str = DEFAULT_SMOKE_SUITE_SEED,
+    order_policy: str = ORDER_POLICY_MANIFEST,
 ) -> dict[str, Any]:
     """Build the effective affine smoke suite manifest mapping."""
     items: list[dict[str, Any]] = []
@@ -301,18 +305,21 @@ def build_affine_smoke_manifest(
     )
     items.append(sentinel_end)
 
-    subset_material = json.dumps(
-        {
-            "suite_seed": suite_seed,
-            "levels": list(DEFAULT_SMOKE_LEVELS),
-            "items_per_level": DEFAULT_SMOKE_ITEMS_PER_LEVEL,
-            "sentinel": {
-                "item_id": SENTINEL_ITEM_ID,
-                "n_iter": SENTINEL_N_ITER,
-                "item_index": SENTINEL_ITEM_INDEX,
-                "executions": 2,
-            },
+    subset_block: dict[str, Any] = {
+        "suite_seed": suite_seed,
+        "levels": list(DEFAULT_SMOKE_LEVELS),
+        "items_per_level": DEFAULT_SMOKE_ITEMS_PER_LEVEL,
+        "sentinel": {
+            "item_id": SENTINEL_ITEM_ID,
+            "n_iter": SENTINEL_N_ITER,
+            "item_index": SENTINEL_ITEM_INDEX,
+            "executions": 2,
         },
+    }
+    if order_policy != ORDER_POLICY_MANIFEST:
+        subset_block["order_policy"] = order_policy
+    subset_material = json.dumps(
+        subset_block,
         sort_keys=True,
         separators=(",", ":"),
     )
@@ -328,6 +335,7 @@ def build_affine_smoke_manifest(
             "parameters_hash": parameters_hash(
                 levels=DEFAULT_SMOKE_LEVELS,
                 items_per_level=DEFAULT_SMOKE_ITEMS_PER_LEVEL,
+                order_policy=order_policy,
             ),
         },
         "analysis_contract": {
@@ -336,7 +344,7 @@ def build_affine_smoke_manifest(
             "allowed_aggregation_levels": ["level", "suite"],
         },
         "execution_policy": {
-            "order_policy": "manifest_order",
+            "order_policy": order_policy,
             "within_bundle_repeats": 1,
             "cooldown_policy": "bundle_only",
             "cache_policy": "warm_cache",
@@ -411,6 +419,7 @@ def write_affine_smoke_files(
     sidecar_path: str | Path | None = None,
     *,
     suite_seed: str = DEFAULT_SMOKE_SUITE_SEED,
+    order_policy: str = ORDER_POLICY_MANIFEST,
 ) -> tuple[Path, Path, str]:
     manifest_file = Path(manifest_path)
     sidecar_file = (
@@ -418,7 +427,10 @@ def write_affine_smoke_files(
         if sidecar_path is not None
         else manifest_file.with_name(manifest_file.stem + "_annotations.json")
     )
-    manifest = build_affine_smoke_manifest(suite_seed=suite_seed)
+    manifest = build_affine_smoke_manifest(
+        suite_seed=suite_seed,
+        order_policy=order_policy,
+    )
     annotations = build_affine_smoke_annotations(manifest)
     manifest_file.parent.mkdir(parents=True, exist_ok=True)
     sidecar_file.parent.mkdir(parents=True, exist_ok=True)

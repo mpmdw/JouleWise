@@ -462,6 +462,7 @@ class MockRuntimeTests(unittest.TestCase):
         base_keys = {
             "item_id",
             "item_index",
+            "position",
             "status",
             "prompt_source",
             "bos_present",

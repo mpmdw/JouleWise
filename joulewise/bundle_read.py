@@ -61,6 +61,8 @@ from joulewise.suite import (
     SUITE_START,
     SuiteManifest,
     canonical_effective_manifest,
+    order_seed,
+    realized_order,
     suite_manifest_sha256,
 )
 from joulewise.validation import finite_float, is_finite_number
@@ -775,8 +777,29 @@ def _suite_problems(
     problems.extend(_item_marker_pair_problems(events))
     problems.extend(_suite_summary_metrics_problems(summary))
 
+    suite_start_metadata = _first_marker_metadata(events, SUITE_START)
+    order_row, order_row_problems = _suite_order_row_for_validation(
+        manifest, suite_metadata, suite_start_metadata
+    )
+    problems.extend(order_row_problems)
+    if order_row is not None and isinstance(suite_metadata, dict):
+        expected_order_seed = order_seed(
+            manifest.suite_seed,
+            manifest.execution_policy.order_policy,
+            order_row,
+        )
+        if suite_metadata.get("order_seed") != expected_order_seed:
+            problems.append(
+                "metadata.suite.order_seed does not match derived order seed: "
+                f"expected {expected_order_seed!r} from suite_seed, order_policy, "
+                f"and order_row {order_row!r}; got {suite_metadata.get('order_seed')!r}"
+            )
+
     item_start_indices: list[int] = []
+    item_start_positions: list[int] = []
+    item_start_order: list[dict[str, Any]] = []
     start_by_index: dict[int, dict[str, Any]] = {}
+    start_by_position: dict[int, dict[str, Any]] = {}
     for event in events:
         if event.get("event_type") != ITEM_START:
             continue
@@ -791,8 +814,67 @@ def _suite_problems(
         if index in start_by_index:
             problems.append(f"item_index is duplicated in item_start markers: {index}")
         start_by_index[index] = metadata
-    if item_start_indices != sorted(item_start_indices):
-        problems.append("item_index values are not monotonic in item_start order")
+        position = metadata.get("position")
+        if isinstance(position, bool) or not isinstance(position, int):
+            problems.append(f"item_start.position is not an integer: {position!r}")
+            continue
+        item_start_positions.append(position)
+        item_start_order.append(metadata)
+        if position in start_by_position:
+            problems.append(f"position is duplicated in item_start markers: {position}")
+        start_by_position[position] = metadata
+    expected_positions = list(range(len(manifest.items)))
+    if item_start_positions != expected_positions:
+        problems.append(
+            "item_start.position values are not the realized execution order "
+            f"0..{len(manifest.items) - 1}: {item_start_positions!r}"
+        )
+    if set(start_by_position) != set(expected_positions):
+        missing_positions = sorted(set(expected_positions) - set(start_by_position))
+        extra_positions = sorted(set(start_by_position) - set(expected_positions))
+        if missing_positions:
+            problems.append(f"item_start marker position(s) missing: {missing_positions}")
+        if extra_positions:
+            problems.append(f"item_start marker position(s) outside range: {extra_positions}")
+
+    expected_item_indices_for_order: list[int] | None = None
+    if order_row is not None or manifest.execution_policy.order_policy == "manifest_order":
+        try:
+            expected_order = realized_order(manifest, order_row=order_row)
+        except SchemaError as exc:
+            problems.append(f"suite realized order cannot be derived: {exc}")
+            expected_order = []
+        if expected_order:
+            expected_item_indices = [entry.item_index for entry in expected_order]
+            expected_item_indices_for_order = expected_item_indices
+            actual_item_indices = [
+                metadata.get("item_index") for metadata in item_start_order
+            ]
+            if actual_item_indices != expected_item_indices:
+                problems.append(
+                    "realized item_start order mismatch: expected manifest item_index "
+                    f"sequence {expected_item_indices!r}, got {actual_item_indices!r}"
+                )
+            expected_by_position = {entry.position: entry for entry in expected_order}
+            for metadata in item_start_order:
+                position = metadata.get("position")
+                if not isinstance(position, int) or isinstance(position, bool):
+                    continue
+                expected_entry = expected_by_position.get(position)
+                if expected_entry is None:
+                    continue
+                if metadata.get("item_id") != expected_entry.item.item_id:
+                    problems.append(
+                        f"item_start position {position} item_id mismatch: expected "
+                        f"{expected_entry.item.item_id!r}, got {metadata.get('item_id')!r}"
+                    )
+            for position, metadata in enumerate(item_start_order):
+                expected_prev = None if position == 0 else item_start_order[position - 1].get("item_id")
+                if metadata.get("prev_item") != expected_prev:
+                    problems.append(
+                        f"item_start position {position} prev_item mismatch: expected "
+                        f"{expected_prev!r}, got {metadata.get('prev_item')!r}"
+                    )
 
     measured_window = reader.measured_window()
     paired_items = {window.item_index: window for window in reader.item_windows()}
@@ -827,6 +909,8 @@ def _suite_problems(
     problems.extend(record_problems)
     if suite_item_records is not None:
         records_by_index: dict[int, dict[str, Any]] = {}
+        record_positions: list[int] = []
+        record_item_indices: list[int] = []
         for line_index, record in enumerate(suite_item_records, start=1):
             item_index = record.get("item_index")
             if isinstance(item_index, bool) or not isinstance(item_index, int):
@@ -835,7 +919,41 @@ def _suite_problems(
                     f"{line_index} item_index is not an integer: {item_index!r}"
                 )
                 continue
+            if item_index in records_by_index:
+                problems.append(
+                    "outputs/suite_items.jsonl duplicates item_index "
+                    f"{item_index}"
+                )
             records_by_index[item_index] = record
+            record_item_indices.append(item_index)
+            position = record.get("position")
+            if position is not None:
+                if isinstance(position, bool) or not isinstance(position, int):
+                    problems.append(
+                        "outputs/suite_items.jsonl line "
+                        f"{line_index} position is not an integer: {position!r}"
+                    )
+                else:
+                    record_positions.append(position)
+        if manifest.execution_policy.order_policy != "manifest_order":
+            if len(record_positions) != len(suite_item_records):
+                problems.append(
+                    "outputs/suite_items.jsonl records must include position under "
+                    f"order_policy {manifest.execution_policy.order_policy!r}"
+                )
+            elif record_positions != expected_positions:
+                problems.append(
+                    "outputs/suite_items.jsonl position values are not realized "
+                    f"execution order 0..{len(manifest.items) - 1}: {record_positions!r}"
+                )
+            if (
+                expected_item_indices_for_order is not None
+                and record_item_indices != expected_item_indices_for_order
+            ):
+                problems.append(
+                    "outputs/suite_items.jsonl realized item_index order mismatch: "
+                    f"expected {expected_item_indices_for_order!r}, got {record_item_indices!r}"
+                )
         for item_index, item in enumerate(manifest.items):
             if item.source.prompt_token_ids is None and item.source.prompt_text is None:
                 continue
@@ -873,13 +991,18 @@ def _suite_problems(
                     )
 
     if isinstance(suite_metadata, dict):
-        suite_start_metadata = _first_marker_metadata(events, SUITE_START)
         if isinstance(suite_start_metadata, dict):
             if suite_metadata.get("order_seed") != suite_start_metadata.get("order_seed"):
                 problems.append(
                     "metadata.suite.order_seed mismatch: metadata has "
                     f"{suite_metadata.get('order_seed')!r}, suite_start metadata has "
                     f"{suite_start_metadata.get('order_seed')!r}"
+                )
+            if suite_metadata.get("order_row") != suite_start_metadata.get("order_row"):
+                problems.append(
+                    "metadata.suite.order_row mismatch: metadata has "
+                    f"{suite_metadata.get('order_row')!r}, suite_start metadata has "
+                    f"{suite_start_metadata.get('order_row')!r}"
                 )
         suite_end_metadata = _first_marker_metadata(events, SUITE_END)
         if isinstance(suite_end_metadata, dict):
@@ -918,6 +1041,24 @@ def _suite_problems(
                 problems.append(
                     f"item_index {window.item_index} item_id mismatch: "
                     f"manifest has {expected.item_id!r}, events have {window.item_id!r}"
+                )
+            start_position = window.start_metadata.get("position")
+            end_position = window.end_metadata.get("position")
+            if manifest.execution_policy.order_policy != "manifest_order":
+                if isinstance(start_position, bool) or not isinstance(start_position, int):
+                    problems.append(
+                        f"item_start.position for item_index {window.item_index} "
+                        f"is not an integer: {start_position!r}"
+                    )
+                if isinstance(end_position, bool) or not isinstance(end_position, int):
+                    problems.append(
+                        f"item_end.position for item_index {window.item_index} "
+                        f"is not an integer: {end_position!r}"
+                    )
+            if start_position is not None and end_position is not None and start_position != end_position:
+                problems.append(
+                    f"item_index {window.item_index} position mismatch between "
+                    f"item_start ({start_position!r}) and item_end ({end_position!r})"
                 )
             if (
                 window.start_metadata.get("output_policy") == "fixed_budget_exact"
@@ -1004,7 +1145,49 @@ def _metadata_suite_problems(
                 f"metadata.suite.{key} mismatch: metadata has {actual!r}, "
                 f"suite_manifest.json has {expected!r}"
             )
+    order_policy = suite_metadata.get("order_policy")
+    if order_policy is not None:
+        if not isinstance(order_policy, str) or not order_policy:
+            problems.append(f"metadata.suite.order_policy is not a non-empty string: {order_policy!r}")
+        elif order_policy != manifest.execution_policy.order_policy:
+            problems.append(
+                "metadata.suite.order_policy mismatch: metadata has "
+                f"{order_policy!r}, suite_manifest.json has "
+                f"{manifest.execution_policy.order_policy!r}"
+            )
+    order_row = suite_metadata.get("order_row")
+    if order_row is not None and (
+        isinstance(order_row, bool) or not isinstance(order_row, int) or order_row < 0
+    ):
+        problems.append(f"metadata.suite.order_row is not an integer >= 0: {order_row!r}")
     return problems
+
+
+def _suite_order_row_for_validation(
+    manifest: SuiteManifest,
+    suite_metadata: Any,
+    suite_start_metadata: Any,
+) -> tuple[int | None, list[str]]:
+    problems: list[str] = []
+    metadata_row = (
+        suite_metadata.get("order_row") if isinstance(suite_metadata, dict) else None
+    )
+    start_row = (
+        suite_start_metadata.get("order_row")
+        if isinstance(suite_start_metadata, dict)
+        else None
+    )
+    row = metadata_row if metadata_row is not None else start_row
+    policy = manifest.execution_policy.order_policy
+    if policy != "manifest_order" and row is None:
+        problems.append(f"order_row is required for order_policy {policy!r}")
+        return None, problems
+    if row is None:
+        return None, problems
+    if isinstance(row, bool) or not isinstance(row, int) or row < 0:
+        problems.append(f"order_row is not an integer >= 0: {row!r}")
+        return None, problems
+    return row, problems
 
 
 def _suite_summary_metrics_problems(summary: Any) -> list[str]:
