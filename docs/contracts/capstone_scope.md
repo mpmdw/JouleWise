@@ -15,7 +15,7 @@ two-track framing and Q1-Q6; `docs/contracts/claims_ladder.md`;
 energy characterization on named hardware/runtime/model/workload stacks.
 
 This headline is an umbrella scope statement, not a global L2/L3 ceiling.
-Per-result ceilings: instrument cells are L1; qualifying same-boundary
+Per-result ceilings: instrument cells may reach L1 when the L1 evidence rule is met (n >= 3 strict-valid bundles, or single runs explicitly labeled smoke/capability), otherwise L0 capability language; qualifying same-boundary
 contrasts may reach L2; fitted fixed/marginal matrix claims may reach L3
 only when the full L3 evidence rule is met; generalized claims require L4
 replication and calibration evidence.
@@ -33,7 +33,7 @@ Fallback claims, in cut order:
 
 | Claim | Allowed level | When to use |
 |---|---|---|
-| JouleWise produces strict-valid, boundary-labeled instrument results for local LLM inference on named stacks, including request energy, latency, token provenance, and measurement-quality fields. | L1, with L2 only for same-boundary contrasts that meet n, order, uncertainty, and detection-floor gates. | Use when the corpus is too small or too single-target to support a filled comparative matrix. |
+| JouleWise produces strict-valid, boundary-labeled instrument results for local LLM inference on named stacks, including request energy, latency, token provenance, and measurement-quality fields. | L0-L1 per the ladder evidence rules, with L2 only for same-boundary contrasts that meet n, order, uncertainty, and detection-floor gates. | Use when the corpus is too small or too single-target to support a filled comparative matrix. |
 | JouleWise is an auditable local-inference energy measurement instrument whose split-inference path is reported as feasibility evidence or analytical scenario analysis, not as a measured crossover result. | L0-L1 for split capability or feasibility; L1-L2 for the local measurement cells that satisfy their own gates. | Use if live split replay, target access, interconnect control, or calibration does not clear before the capstone cut line. |
 
 ## Contribution Ladder
