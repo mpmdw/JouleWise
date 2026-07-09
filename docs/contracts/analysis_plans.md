@@ -27,7 +27,7 @@ remain L0/L1 capability or instrument-result language under D-037.
 | Inclusion/exclusion + quality-flag waiver rules | Strict-validation rule, exclusion causes, and any quality-flag waiver rule allowed by D-014/D-037. |
 | Order/blocking/covariates | Manifest order, blocking variables, drift terms, covariates, and any limits on covariate count. |
 | Floor gate | `max(floor_abs_j, floor_cmp_j)` from the P2-015 calibration artifact for the same metric/window class. |
-| MDE/n sizing + predeclared top-up rule | Planned n, MDE arithmetic, and the rule for adding repetitions before claims are written. |
+| MDE/n sizing + predeclared top-up rule | Planned n, MDE arithmetic, and the rule for adding repetitions before claims are written. Top-up rules are governed by D-062 (frozen n; demotion on outcome-dependent growth). |
 | Denominator provenance requirement | Runtime-observed, config fallback, scored denominator, or source-manifest denominator; config fallback cannot carry L2/L3 per-token claims under D-037. |
 | Holdout cells (L3 only) | Named holdout cells and prediction-error rule for L3 plans; write `not applicable` for L2 plans. |
 | Claim ceiling + exact forbidden upgrade | Maximum allowed claim level and the exact stronger claim that remains forbidden. |
@@ -107,7 +107,7 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only; D-014 quality flags excluded unless the report names and justifies a waiver; capped cells are excluded from prompt-slope/rank claims unless realized prompt lengths match. |
 | Order/blocking/covariates | Interleaved or recorded manifest order; block/session and drift sentinel terms available as covariates; no curvature term promoted unless categorical residuals and holdouts clear the floor. |
 | Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for request windows and any reported phase window. |
-| MDE/n sizing + predeclared top-up rule | n=5 provisional; top up to n=10 for near-floor cells or contrasts before L3 wording (C-014). |
+| MDE/n sizing + predeclared top-up rule | n frozen at registry freeze (D-062): n=10 for near-floor cells/contrasts, n=5 elsewhere, sized from Window-A variance/MDE. Per D-062: confirmatory n is FROZEN at registry freeze from Window-A variance/MDE evidence (nearer 10 than 5 for near-floor contrasts); technically invalid runs are replaced under the predeclared replacement rule and are not top-ups; any outcome-dependent top-up permanently DEMOTES the contrast to exploratory — the original fixed-n analysis is reported regardless of direction, pooled estimates never carry nominal confirmatory coverage, and no later re-promotion occurs. |
 | Denominator provenance requirement | Runtime-observed output tokens for per-token companion tables; request-energy fit does not use config-token denominators. |
 | Holdout cells (L3 only) | `(512,256)` and `(4096,512)` held-out in-grid corner predictions (interaction/additivity validation — both factor levels occur in the training grid, so neither is statistical extrapolation); prediction errors must clear the AP-1 floor gate. No extrapolation claim is available from this grid. |
 | Claim ceiling + exact forbidden upgrade | Ceiling L3. Forbidden upgrade: no curvature, universal scaling law, or architecture-wide conclusion from this grid. |
@@ -129,7 +129,7 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only; quality-flag waivers must be named; capped prompt cells handled by the standing capped-cell rule. |
 | Order/blocking/covariates | Counterbalanced order manifest; drift sentinel at start/end of each model block with block position recorded as a covariate (C-014/P2-021). |
 | Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for request and gross phase windows. |
-| MDE/n sizing + predeclared top-up rule | n=5 from D-014; no top-up required for L2 descriptive contrasts unless the observed contrast is near-floor. |
+| MDE/n sizing + predeclared top-up rule | n frozen at registry freeze (D-062): n=5 from D-014, raised to n=10 at freeze time only if Window-A evidence marks the contrast near-floor. Per D-062: confirmatory n is FROZEN at registry freeze from Window-A variance/MDE evidence (nearer 10 than 5 for near-floor contrasts); technically invalid runs are replaced under the predeclared replacement rule and are not top-ups; any outcome-dependent top-up permanently DEMOTES the contrast to exploratory — the original fixed-n analysis is reported regardless of direction, pooled estimates never carry nominal confirmatory coverage, and no later re-promotion occurs. |
 | Denominator provenance requirement | Runtime-observed output tokens and stop reasons for per-token/per-output tables; config fallback remains QA-only. |
 | Holdout cells (L3 only) | not applicable. |
 | Claim ceiling + exact forbidden upgrade | Ceiling L2. Forbidden upgrade: no L3 fixed+prefill+decode fit from the four-cell 2M matrix. |
@@ -151,7 +151,7 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only; exclusions and waivers follow D-014/D-037 and must be row-linked in the claims index. |
 | Order/blocking/covariates | Same manifest order where possible; block/session drift covariate from sentinels; no cross-boundary rank upgrade without D-018 calibration evidence. |
 | Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for each metric/window class. |
-| MDE/n sizing + predeclared top-up rule | n follows the source campaign; near-MDE gaps may top up before ranking language, otherwise report `unresolved tie`. |
+| MDE/n sizing + predeclared top-up rule | n follows the source campaign and is frozen at registry freeze (D-062); gaps that remain near-MDE at the frozen n are reported `unresolved tie`, not topped up. Per D-062: confirmatory n is FROZEN at registry freeze from Window-A variance/MDE evidence (nearer 10 than 5 for near-floor contrasts); technically invalid runs are replaced under the predeclared replacement rule and are not top-ups; any outcome-dependent top-up permanently DEMOTES the contrast to exploratory — the original fixed-n analysis is reported regardless of direction, pooled estimates never carry nominal confirmatory coverage, and no later re-promotion occurs. |
 | Denominator provenance requirement | Runtime-observed token denominators for token-normalized ranks; request-energy ranks do not need token denominators. |
 | Holdout cells (L3 only) | not applicable. |
 | Claim ceiling + exact forbidden upgrade | Ceiling L2 within boundary. Forbidden upgrade: cross-device/device ranking unless hardware and boundary calibration gates are met. |
@@ -173,7 +173,7 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid common-shape synthetic + realistic items only; source manifest and output policy required; waivers named in text. |
 | Order/blocking/covariates | Round-robin category order; source type and item/block may be blocking factors; no category ranking from the starter suite before common-shape residuals clear the floor. |
 | Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for request windows. |
-| MDE/n sizing + predeclared top-up rule | n/items sized to the 2% equivalence margin after Window A; if Window A MDE exceeds the margin, report `not resolvable` or top up before L2 language. |
+| MDE/n sizing + predeclared top-up rule | n/items sized to the 2% equivalence margin after Window A; if Window A MDE exceeds the margin, report `not resolvable` or top up before L2 language. Top-up rules are governed by D-062 (frozen n; demotion on outcome-dependent growth). |
 | Denominator provenance requirement | Runtime-observed emitted tokens and stop reasons; source-manifest hashes and `fixed_budget_exact` policy recorded per item. |
 | Holdout cells (L3 only) | not applicable. |
 | Claim ceiling + exact forbidden upgrade | Ceiling L2. Forbidden upgrade: no category energy-ranking or category mechanism claim from unmatched shapes. |
@@ -195,7 +195,7 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles; envelope-validation smoke gate must pass before any scored campaign; correctness remains quarantined annotation under C-004. |
 | Order/blocking/covariates | Level/block markers and session order recorded; adjacent levels may merge when the denominator guard requires it. |
 | Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for level windows. |
-| MDE/n sizing + predeclared top-up rule | Smoke ladder first; full n deferred until C5-1.9 has claims-index/figure consumer; top-up or merge adjacent levels before energy-per-correct claims. |
+| MDE/n sizing + predeclared top-up rule | Smoke ladder first; full n deferred until C5-1.9 has claims-index/figure consumer; top-up or merge adjacent levels before energy-per-correct claims. Top-up rules are governed by D-062 (frozen n; demotion on outcome-dependent growth). |
 | Denominator provenance requirement | Exact scorer output plus emitted-token/stop-reason audit; binomial lower-bound must be >=3 correct per level, else merge adjacent levels or report `not estimable`. Amendment 2026-07-08 (D-047.3/D-047.6): the scored-campaign accuracy denominator is distinct scored items per level; malformed items count as incorrect for that denominator and are reported alongside emitted-token and stop-reason audits. |
 | Holdout cells (L3 only) | not applicable. |
 | Claim ceiling + exact forbidden upgrade | Ceiling L2 descriptive/scored workload result. Forbidden upgrade: no intelligence-per-joule or "difficulty causes energy" claim. |
@@ -217,7 +217,7 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only; conditions are repeated-seed, random-token, natural prose, code-like, and multilingual at equal shape. Amendment 2026-07-08 (D-046): inclusion requires ids-native `prompt_source="token_ids"`, BOS-less delivery, and literal equal realized shape across all five AP-6 conditions. |
 | Order/blocking/covariates | Window-B block order recorded; randomized or balanced condition order where practical. |
 | Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for request windows. |
-| MDE/n sizing + predeclared top-up rule | n=5 per content condition provisional; Window A MDE may resize n before Window B. |
+| MDE/n sizing + predeclared top-up rule | n=5 per content condition provisional; Window A MDE may resize n before Window B. Top-up rules are governed by D-062 (frozen n; demotion on outcome-dependent growth). |
 | Denominator provenance requirement | Runtime-observed token counts, stop reasons, content-condition labels, prompt/source hashes, and, amended 2026-07-08 (D-046), recorded `prompt_source` plus `bos_present` for each condition. |
 | Holdout cells (L3 only) | not applicable. |
 | Claim ceiling + exact forbidden upgrade | Ceiling L2 validity/sentinel result. Forbidden upgrade: no broad content-neutrality claim outside the five tested equal-shape conditions. Amendment 2026-07-08 (D-046): AP-6 ids-native/no-BOS results do not generalize to the AP-4 text path because `prompt_source` and BOS handling differ; AP-6b text bridge is the named option before making that upgrade. |
