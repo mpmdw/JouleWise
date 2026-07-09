@@ -87,7 +87,6 @@ class ClaimsLintError(RuntimeError):
 
 class ClaimsArgumentParser(argparse.ArgumentParser):
     def error(self, message: str) -> None:  # pragma: no cover - argparse plumbing
-        self.print_usage(sys.stderr)
         raise ClaimsLintError(message)
 
 
@@ -595,6 +594,25 @@ def lint_packs(pack_dir: Path, required_fields: Sequence[str]) -> list[Finding]:
     return findings
 
 
+def word_count(value: str) -> int:
+    return len(re.findall(r"\b[\w-]+\b", value))
+
+
+def normalize_forbidden_term(value: str) -> str:
+    return value.strip().strip("`").lower()
+
+
+def forbidden_cell_is_clause_style(parts: Sequence[str]) -> bool:
+    if len(parts) < 3:
+        return False
+    lead, *tail = parts
+    if word_count(lead) <= 3:
+        return False
+    if any(word_count(part.removeprefix("or ").removeprefix("and ")) > 3 for part in tail):
+        return False
+    return tail[-1].startswith(("or ", "and "))
+
+
 def forbidden_terms_from_claims_ladder(path: Path) -> set[str]:
     text = read_text(path)
     tables = iter_markdown_tables(path, text)
@@ -606,8 +624,14 @@ def forbidden_terms_from_claims_ladder(path: Path) -> set[str]:
     for row in table.rows:
         if len(row.cells) <= index:
             continue
-        cleaned = row.cells[index].strip().strip("`").lower()
-        if cleaned:
+        cleaned = normalize_forbidden_term(row.cells[index])
+        if not cleaned:
+            continue
+        parts = [normalize_forbidden_term(part) for part in cleaned.split(",")]
+        parts = [part for part in parts if part]
+        if len(parts) > 1 and not forbidden_cell_is_clause_style(parts):
+            terms.update(parts)
+        else:
             terms.add(cleaned)
     return terms
 
@@ -748,11 +772,12 @@ def run(args: argparse.Namespace) -> tuple[int, list[Finding]]:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args: argparse.Namespace | None = None
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
     try:
-        args = parser.parse_args(argv)
+        args = parser.parse_args(raw_argv)
         exit_code, findings = run(args)
     except ClaimsLintError as exc:
-        if args is not None and args.json:
+        if (args is not None and args.json) or "--json" in raw_argv:
             payload = {
                 "ok": False,
                 "errors": 1,
@@ -770,6 +795,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
             print(json.dumps(payload, indent=2, sort_keys=True))
             return EXIT_USAGE_PARSE
+        if args is None:
+            parser.print_usage(sys.stderr)
         print(f"claims_lint: {exc}", file=sys.stderr)
         return EXIT_USAGE_PARSE
 

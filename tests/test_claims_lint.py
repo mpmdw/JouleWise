@@ -165,6 +165,18 @@ def claims_ladder_document(forbidden: str = "known forbidden wording") -> str:
 """
 
 
+def claims_ladder_with_list_and_clause_terms() -> str:
+    return """# Claims Ladder
+
+## Ladder
+
+| Level | Allowed Claim Shape | Required Evidence | Forbidden Language |
+|---|---|---|---|
+| L2 | shape | evidence | cross-boundary winner without calibration, universal, architecture-wide conclusion, extrapolated crossover |
+| L4 | shape | evidence | unqualified claims outside tested hardware, workloads, runtime versions, policies, or calibration scope |
+"""
+
+
 def run_cli(args: list[str], cwd: Path = ROOT) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(SCRIPT), *args],
@@ -367,15 +379,15 @@ class ClaimsLintFixtureTests(unittest.TestCase):
                 payload,
             )
 
-    def test_forbidden_terms_keep_comma_clause_whole(self) -> None:
+    def test_forbidden_terms_split_list_cells_and_keep_comma_clause_whole(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = write(
                 Path(tmp) / "claims_ladder.md",
-                claims_ladder_document(
-                    "unqualified claims outside tested hardware, workloads, runtime versions, policies, or calibration scope"
-                ),
+                claims_ladder_with_list_and_clause_terms(),
             )
             terms = claims_lint.forbidden_terms_from_claims_ladder(path)
+            self.assertIn("universal", terms)
+            self.assertIn("cross-boundary winner without calibration", terms)
             self.assertIn(
                 "unqualified claims outside tested hardware, workloads, runtime versions, policies, or calibration scope",
                 terms,
@@ -383,8 +395,37 @@ class ClaimsLintFixtureTests(unittest.TestCase):
             self.assertNotIn("workloads", terms)
             self.assertNotIn("policies", terms)
 
+    def test_forbidden_cli_warns_list_terms_not_clause_fragments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            contracts = tmp_path / "docs" / "contracts"
+            contracts.mkdir(parents=True)
+            write(contracts / "claims_ladder.md", claims_ladder_with_list_and_clause_terms())
+            write(
+                tmp_path / "README.md",
+                """
+                This line makes a universal claim.
+                These workloads are listed without the L4 clause.
+                These policies are listed without the L4 clause.
+                """,
+            )
+            result = run_cli(["--mode", "forbidden", "--root", str(tmp_path), "--json"])
+            payload = json.loads(result.stdout)
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+            messages = [finding["message"] for finding in payload["findings"]]
+            self.assertTrue(any("`universal`" in message for message in messages), payload)
+            self.assertFalse(any("`workloads`" in message for message in messages), payload)
+            self.assertFalse(any("`policies`" in message for message in messages), payload)
+
     def test_json_error_envelope_for_claims_lint_error(self) -> None:
         result = run_cli(["--mode", "ap", "--analysis-plans", "missing.md", "--json"])
+        payload = json.loads(result.stdout)
+        self.assertEqual(result.returncode, 3, result.stderr + result.stdout)
+        self.assertEqual(payload["errors"], 1, payload)
+        self.assertEqual(payload["findings"][0]["code"], "CLAIMS_LINT_ERROR")
+
+    def test_json_error_envelope_for_argparse_error(self) -> None:
+        result = run_cli(["--mode", "nope", "--json"])
         payload = json.loads(result.stdout)
         self.assertEqual(result.returncode, 3, result.stderr + result.stdout)
         self.assertEqual(payload["errors"], 1, payload)
