@@ -53,26 +53,43 @@ The calibration manifest produces one row per
   rail manifest, stack identity, sampling requested/observed, and the exact
   workload/profile condition.
 
+`n` is defined once for this document: it always counts strict-valid bundles
+for absolute cells, or strict-valid ABBA blocks for comparative cells. It never
+counts raw samples, traces, phases, suite levels, or suite items. Item-window
+floors must use bundle/block-clustered uncertainty by repeated item shape or
+item position; item windows inside one suite bundle are not independent
+replicates and must not be used for pseudo-replication.
+
 Estimator rule:
 
-- For each absolute cell, compute residuals against the cell mean and set
-  `floor_abs_j` to the one-sided 95% upper confidence bound (UCB) on the
-  95th percentile of `abs(residual_j)`.
-- For each comparative cell, compute same-condition contrast residuals
-  from matched ABBA blocks and set `floor_cmp_j` to the one-sided 95% UCB on
-  the 95th percentile of `abs(delta_j)`.
-- Use a nonparametric bootstrap UCB when `n >= 10`; use the largest observed
-  absolute residual multiplied by a small-sample guard factor when
-  `5 <= n < 10`. Cells with `n < 5` are smoke evidence only and cannot support
-  L2/L3 claim gates.
+- The floor is named a false-effect guard floor. It is a practical prediction
+  bound on false observed effects in this backend/metric/window/profile family,
+  not an estimate of a population percentile.
+- For each absolute cell, compute residuals `r_i = E_i - mean(E)` across
+  strict-valid bundles. Set
+  `floor_abs_j = max(max_i(abs(r_i)), t_0.975,df=n-1 * s_r * sqrt(1 + 1/n))`,
+  with `s_r` the sample standard deviation of residuals.
+- For each comparative cell, compute same-condition contrast deltas `delta_i`
+  from matched ABBA blocks. Set
+  `floor_cmp_j = max(max_i(abs(delta_i)), abs(mean(delta)) + t_0.975,df=n-1 * s_delta * sqrt(1 + 1/n))`.
+- Bootstrap summaries may be reported as sensitivity diagnostics only. They do
+  not define the primary floor and must not be described as confidence coverage
+  for a percentile floor.
+- When `5 <= n < 10`, multiply the applicable false-effect guard floor by the
+  pre-registered small-sample guard factor recorded in the manifest. Cells with
+  `n < 5` are smoke evidence only and cannot support L2/L3 claim gates.
 
-Rationale: the floor is a guardrail, not an estimate of the mean noise. A
-one-sided UCB on an absolute residual percentile is intentionally conservative:
-it answers "how large can a false observed effect plausibly be in this
-metric/window class?" The bootstrap avoids assuming normal residuals in a
-small, thermal/autocorrelated measurement setting. The largest-residual
-fallback prevents underestimating the floor when a Window-B-start revalidation
-cell or hardware-limited cell cannot reach `n >= 10`.
+Rationale: the previous population-percentile floor target at `n = 10` is not
+identifiable enough for this campaign. With 10 samples, even the sample maximum
+exceeds the true 95th percentile only `1 - 0.95^10 = 40.1%` of the time. A
+nonparametric one-sided 95/95 tolerance bound needs
+`ceil(log(0.05) / log(0.95)) = 59` samples before the maximum has 95% coverage.
+The false-effect guard floor instead combines the largest observed false effect
+with a Student-t prediction bound for one new observation or contrast. It gives
+an operational guard against repeatability and ordering artifacts under the
+calibrated condition family. It does not promise nonparametric 95/95 coverage,
+does not validate unobserved thermal/controller states, and does not replace
+backend systematic or drift bounds.
 
 ### Cell List
 
@@ -88,6 +105,10 @@ cells and cannot unlock suite-window L2/L3 claims.
 | DF-RQ-IDLE-MID | `energy_request_j`, `idle_subtracted_energy_j` | idle-sub request | same bundles as DF-RQ-GROSS-MID, using recorded idle baseline | 10 | `floor_abs_j` |
 | DF-RQ-GROSS-SHORT | `gross_energy_j` | gross request | short request profile used to expose request-window sampling edge cases | 10 | `floor_abs_j` |
 | DF-RQ-IDLE-SHORT | `energy_request_j`, `idle_subtracted_energy_j` | idle-sub request | same bundles as DF-RQ-GROSS-SHORT | 10 | `floor_abs_j` |
+| DF-RQ-GROSS-LONG-PROMPT | `gross_energy_j` | gross request | optional long-prompt/short-decode request profile for AP-2 `long_short` request floors | 10 if economics permit | `floor_abs_j` |
+| DF-RQ-IDLE-LONG-PROMPT | `energy_request_j`, `idle_subtracted_energy_j` | idle-sub request | same bundles as DF-RQ-GROSS-LONG-PROMPT | 10 if economics permit | `floor_abs_j` |
+| DF-RQ-GROSS-LONG-DECODE | `gross_energy_j` | gross request | optional short-prompt/long-decode request profile for AP-2 `short_long` request floors | 10 if economics permit | `floor_abs_j` |
+| DF-RQ-IDLE-LONG-DECODE | `energy_request_j`, `idle_subtracted_energy_j` | idle-sub request | same bundles as DF-RQ-GROSS-LONG-DECODE | 10 if economics permit | `floor_abs_j` |
 | DF-PH-PREFILL | `phase_energy_j.prefill` | phase window | long-prompt/short-decode profile to lengthen prefill while keeping decode small | 10 | `floor_abs_j` |
 | DF-PH-DECODE | `phase_energy_j.decode` | phase window | short-prompt/long-decode profile to lengthen decode while keeping prefill small | 10 | `floor_abs_j` |
 | DF-PH-SHORT-PREFILL | `phase_energy_j.prefill` | phase window | short-prefill stress cell expected to produce under-resolved windows on fast stacks | 10 | identifiability verdict plus floor if eligible |
@@ -107,6 +128,70 @@ coverage and staleness detection, not primary floor discovery. Any `n = 5`
 floor is claim-conservative by the estimator rule and should be topped up
 before it becomes the sole gate for L2/L3 suite claims.
 
+### Campaign Economics
+
+Bundle counts below count strict-valid bundles. For ABBA rows, one block is
+four bundles in A/B/B/A order. Runtime estimates use accepted Tier-1 throughput
+after ordinary cooldown and harness overhead; they are sizing estimates, not a
+promise that cooldown gates will stay open.
+
+| Group | Cells covered | Primary? | Incremental bundles | Shared bundles and notes | Runtime @30/h | Runtime @75/h |
+|---|---|---:|---:|---|---:|---:|
+| Mid request repeat | DF-RQ-GROSS-MID, DF-RQ-IDLE-MID | yes | 10 | idle-sub floor reuses gross request bundles and recorded idle baseline | 0.33 h | 0.13 h |
+| Short request repeat | DF-RQ-GROSS-SHORT, DF-RQ-IDLE-SHORT | yes | 10 | idle-sub floor reuses gross request bundles | 0.33 h | 0.13 h |
+| Primary phase repeats | DF-PH-PREFILL, DF-PH-DECODE, DF-PH-SHORT-PREFILL | yes | 30 | one 10-bundle repeat cell per phase stress profile | 1.00 h | 0.40 h |
+| Request ABBA | DF-CMP-ABBA-RQ | yes | 40 | 10 ABBA blocks x 4 bundles | 1.33 h | 0.53 h |
+| Phase ABBA | DF-CMP-ABBA-PH | yes | 40 | 10 ABBA blocks x 4 bundles across phase calibration profiles | 1.33 h | 0.53 h |
+| Extra-sampler perturbation | DF-TELEM-ONOFF | yes if extra sampler enabled | 40 | 10 ABBA blocks x 4 bundles; otherwise optional | 1.33 h | 0.53 h |
+| Suite absolute | DF-SU-ITEM, DF-SU-LEVEL | conditional | 10 | shared tiny-suite bundles; primary only for suite-window L2/L3 claims | 0.33 h | 0.13 h |
+| Suite ABBA | DF-CMP-ABBA-SU | conditional | 40 | 10 ABBA blocks x 4 bundles; primary only for suite-window L2/L3 claims | 1.33 h | 0.53 h |
+| Long-prompt request repeat | DF-RQ-GROSS-LONG-PROMPT, DF-RQ-IDLE-LONG-PROMPT | optional | 10 | shared gross/idle-sub bundles for AP-2 `long_short` request floors | 0.33 h | 0.13 h |
+| Long-decode request repeat | DF-RQ-GROSS-LONG-DECODE, DF-RQ-IDLE-LONG-DECODE | optional | 10 | shared gross/idle-sub bundles for AP-2 `short_long` request floors | 0.33 h | 0.13 h |
+| Window-B sentinel minimum | DF-WB-REVAL | yes before Window B | 10 | 5 mid request bundles plus 5 primary phase-profile bundles | 0.33 h | 0.13 h |
+| Window-B sentinel full | DF-WB-REVAL | time-permitting | 20 | 10 mid request bundles plus 10 primary phase-profile bundles | 0.67 h | 0.27 h |
+
+Window-A primary request/phase sizing is 170 bundles when the extra sampler is
+enabled, or 130 bundles when it is not. Adding suite-window claim coverage makes
+Window A 220 bundles with the extra sampler enabled, or 180 bundles without it.
+The optional AP-2 long-prompt and long-decode request floors add 20 bundles.
+Window-B adds 10 bundles for the required stale-floor sentinel, or 20 bundles
+when topped up to full `n = 10` repeats. Therefore total Window-A plus Window-B
+sizing ranges from 140 bundles for request/phase without extra sampler and
+minimum Window-B, to 260 bundles for suite coverage, optional long request
+floors, extra sampler, and full Window-B revalidation.
+
+Cooldown assumptions: the runtime columns assume the normal cooldown gate clears
+without repeatedly hitting the configured cap. If a bundle or ABBA member hits
+the cooldown cap, preserve the manifest order, record the cap-hit flag, and
+carry the resulting drift/cap-hit term into the error budget. Repeated cap hits
+invalidate the throughput estimate; use at most 12 bundles/hour plus workload
+duration for queue sizing until thermal state stabilizes, and do not use the
+affected cell for L2/L3 floors unless the drift term clears.
+
+### Request-Floor Condition-Family Mapping
+
+Conservative mapping rule: a claim consumes the maximum floor across all named
+calibration cells for the same backend, metric, and window class whose
+duration, cadence, and drift stress is no easier than the consumer profile. If
+no named calibration cell is at least as stressful on the relevant axes, the
+floor row is missing for L2/L3 purposes and the claim is capped until a stronger
+calibration cell or AP-specific bound is named. When stress dominance is
+ambiguous, include every plausible harder cell and take the maximum floor.
+
+AP-2 floor consumption:
+
+| AP-2 profile | Request-window floor cells | Phase-window floor cells |
+|---|---|---|
+| `short_short` | DF-RQ-GROSS-SHORT and DF-RQ-IDLE-SHORT | DF-PH-SHORT-PREFILL when sample/cadence eligible; otherwise `not resolvable` |
+| `mid_mid` | DF-RQ-GROSS-MID and DF-RQ-IDLE-MID | maximum of eligible primary phase floors for the reported phase metric |
+| `long_short` | DF-RQ-GROSS-LONG-PROMPT and DF-RQ-IDLE-LONG-PROMPT if run; otherwise no L2/L3 request floor for that long-profile claim | DF-PH-PREFILL for prefill metrics |
+| `short_long` | DF-RQ-GROSS-LONG-DECODE and DF-RQ-IDLE-LONG-DECODE if run; otherwise no L2/L3 request floor for that long-profile claim | DF-PH-DECODE for decode metrics |
+
+The optional long-prompt and long-decode request cells are not required to start
+Window A, but they are the clean path for AP-2 request-window L2/L3 wording on
+long profiles. Without them, AP-2 may still report lower-level descriptive
+results or phase-window claims whose own phase floors clear.
+
 ### Comparative Floors
 
 Same-condition repeats estimate repeatability; ABBA estimates false
@@ -116,7 +201,8 @@ comparative effects under the ordering policy. ABBA block construction:
   prompt/content, sampler, runtime, and output policy.
 - Blocks use A/B/B/A order with ordinary cooldown and manifest-order recording.
 - The contrast is computed within block, then aggregated across blocks.
-- `floor_cmp_j` is the UCB rule above applied to `abs(delta_j)`.
+- `floor_cmp_j` is the false-effect guard floor rule above applied to the
+  matched block deltas.
 
 This floor is allowed to exceed the absolute floor. That is expected when
 ordering, cooldown hysteresis, drift, or controller interactions create a
@@ -128,14 +214,20 @@ At the start of Window B, rerun DF-WB-REVAL before Window-B claim-bearing data.
 The Window-A floor remains usable only if all of the following hold for each
 revalidated metric/window class:
 
-- the revalidation floor UCB is `<= 1.25 * Window-A floor_gate_j`, or
-- the revalidation estimate is higher but its 95% UCB overlaps the Window-A
-  floor UCB and no quality flag explains a new instrument state.
+- the revalidation false-effect guard floor is `<= 1.25 * Window-A floor_gate_j`;
+- the largest observed residual/contrast component does not newly exceed the
+  Window-A `floor_gate_j`; and
+- no quality flag, cooldown cap-hit pattern, sampling change, or manifest change
+  explains a new instrument state.
 
-If neither tolerance is met, Window-A floors are marked stale for Window B.
+If any condition is not met, Window-A floors are marked stale for Window B.
 Operation may continue, but Window-B L2/L3 claims for affected
 metric/window classes are capped until the cell is topped up to `n >= 10` and
 a new floor artifact is named.
+
+This 1.25x rule is an operational stale-floor sentinel. It is not a statistical
+overlap test and carries no percentile-bound interpretation, especially when
+the Window-B sentinel runs only `n = 5`.
 
 ### Telemetry Perturbation Component
 
@@ -167,7 +259,7 @@ do not block L0/L1 operation or raw bundle reduction.
 |---|---|---|---|
 | Sensor systematic | all energy/power metrics | vendor spec when available; otherwise wall/PD calibration runbook delta by backend and load shape | absolute-energy claims capped at L1; cross-boundary quantitative claims forbidden |
 | Quantization/resolution | all sampled backends | minimum nonzero power-step in raw trace and documented adapter precision | phase/item claims capped when step energy exceeds floor |
-| Sampling cadence | all window classes | observed median gap, max gap, dropped-sample count, requested Hz | under-cadence windows are `not resolvable` for L2/L3 |
+| Sampling cadence | all window classes | window-local p95 sample gap, bracketing max sample gap, dropped-sample count, requested Hz | under-cadence windows are `not resolvable` for L2/L3 |
 | Timestamp-anchor uncertainty | request, phase, item, level windows | sampler readiness anchor, plist anchor offset where present, event-marker uncertainty | short-window claims capped or `not resolvable` when anchor bound is too large |
 | Interpolation/aliasing bound | all integrated windows | perturb window edges by half observed sample gap and recompute; for burst loads use calibration burst residual | if bound exceeds effect, claim is `not resolvable` |
 | Idle-baseline SE | idle-subtracted metrics | `idle_power_w_stddev / sqrt(idle_sample_count)` propagated by duration | idle-sub claims capped until propagated |
@@ -224,9 +316,12 @@ instrument-result language only when labeled accordingly.
 
 ### Idle-Subtracted Request Propagation
 
-At minimum, aggregators must compute idle-subtracted request uncertainty as:
+At minimum, aggregators must keep stochastic variance terms separate from
+deterministic bounds for idle-subtracted request uncertainty:
 
-`Var(E_idle_sub) = Var(E_gross) + duration_s^2 * Var(P_idle_mean) + Var(E_drift)`
+`Var(E_idle_sub) = Var(E_gross) + duration_s^2 * Var(P_idle_mean) + sum(explicit_stochastic_variance_terms_j2)`
+
+`E_drift_bound_j = duration_s * bound(abs(P_idle_during - P_idle_pre))`
 
 where:
 
@@ -236,9 +331,14 @@ where:
 - `Var(P_idle_mean)` is estimated from each bundle's idle baseline as
   `idle_power_w_stddev^2 / idle_sample_count`, then carried through the
   duration of the measured window.
-- `Var(E_drift)` comes from start/end idle sentinels, drift cells, or a
-  conservative calibration-bound placeholder. If no drift evidence exists,
-  the term is `unknown` and the claim ceiling applies.
+- `E_drift_bound_j` comes from start/end idle sentinels, drift cells, cooldown
+  cap-hit evidence, or a conservative calibration bound and is stored in
+  `energy_bound_terms_j`. If no drift evidence exists, the term is `unknown`
+  and the claim ceiling applies.
+- A drift bound may be converted into a variance term only when the analysis
+  names and justifies a distributional model for that drift. Without that model,
+  it remains a deterministic bound and must not be added to
+  `energy_variance_terms_j2`.
 
 For condition contrasts, the preferred estimator is a paired/block contrast
 when the manifest supplies ABBA or interleaved order. Marginal interval
@@ -248,13 +348,15 @@ tooling exists.
 ### Claim-Gate Thresholds
 
 Claim tooling must enforce these minimum thresholds before allowing
-phase-window, item-window, or level-window L2/L3 language:
+request-window, phase-window, item-window, or level-window L2/L3 language:
 
 - Sample count: at least 3 in-window samples for any phase/item/level point
   estimate to be claim-eligible; below that, `not resolvable`.
-- Duration/cadence ratio: `window_duration_s / observed_median_sample_gap_s >= 2.0`
-  for any short-window claim; request-window L2/L3 claims should target
-  `>= 4.0` unless the AP row names a stronger calibration bound.
+- Duration/cadence ratio:
+  `window_duration_s / max(observed_window_p95_sample_gap_s, observed_bracketing_max_sample_gap_s) >= 2.0`
+  for any short-window claim, plus the interpolation bound below.
+  Request-window L2/L3 claims must satisfy the same local-gap ratio at `>= 4.0`
+  unless the AP row names a stronger calibration bound.
 - Clock bound: for any attributed window, recorded clock/anchor uncertainty
   must be `<= 0.25 * window_duration_s`; cross-node windows also must satisfy
   the existing D-003 rule that intervals shorter than the offset bound are not
@@ -284,7 +386,9 @@ preventing under-resolved windows from becoming claim-bearing numbers.
 
 Execute when a wall meter is available. Each run records simultaneous
 JouleWise platform telemetry and wall-meter trace with a shared marker plan or
-manual synchronization notes.
+manual synchronization notes. The run artifact must record the external
+meter's calibration date/status, stated accuracy, resolution, sampling cadence,
+logging mode, and synchronization method.
 
 Load shapes:
 
@@ -297,13 +401,20 @@ Load shapes:
   aliasing.
 - suite-shaped: tiny production-shaped suite path after C-019 shakedown.
 
-Acceptance thresholds:
+Bridge model and acceptance thresholds:
 
-- Sustained platform-vs-wall ratio is stable across repeated sustained blocks
-  with CV `<= 5%`, or the bridge is descriptive only.
-- Request-energy deltas between same-boundary platform telemetry and wall
-  trace are within `<= 10%` for sustained/request loads after boundary
-  exclusions are named.
+- Use matched idle/active blocks. For each block, compute the workload-induced
+  platform delta and wall-meter delta after applying the same boundary
+  exclusions and window definitions.
+- Fit a bridge model
+  `delta_external_j = alpha + beta * delta_platform_j + residual_j` by backend
+  and load-shape family. At least three active load levels are required before
+  quantitative bridge language is allowed.
+- The quantitative bridge is accepted only when every held-out or
+  cross-validated residual satisfies
+  `abs(residual_j) <= max(floor_gate_j, 0.05 * abs(delta_external_j))`. Failing
+  that residual threshold makes the bridge descriptive only for the affected
+  backend/load shape.
 - Burst and phase windows are accepted only if synchronization and cadence
   bounds clear the Section 3 thresholds; otherwise they remain request-level
   calibration only.
@@ -323,7 +434,9 @@ Claim ceilings while absent:
 ### USB-C PD / DC Analyzer Runbook
 
 Execute when a USB-C PD meter or DC analyzer is available for portable,
-single-board, or externally powered targets.
+single-board, or externally powered targets. The run artifact must record the
+meter/analyzer calibration date/status, stated accuracy, resolution, sampling
+cadence, logging mode, cable/port path, and synchronization method.
 
 Load shapes:
 
@@ -334,12 +447,23 @@ Load shapes:
 - simultaneous PD plus platform telemetry capture where the target also
   exposes rails.
 
-Acceptance thresholds:
+Bridge model and acceptance thresholds:
 
-- PD/DC input trace and platform rail trace agree on direction and relative
-  ordering for all step levels.
-- Sustained platform-to-DC ratio CV is `<= 5%`; if `5-10%`, allow L1 bridge
-  language only; if `> 10%`, no quantitative bridge.
+- Use matched idle/active blocks. For each block, compute the workload-induced
+  platform delta and PD/DC input delta after applying the same boundary labels
+  and window definitions.
+- Fit a bridge model
+  `delta_external_j = alpha + beta * delta_platform_j + residual_j` by backend,
+  power path, and load-shape family. At least three active load levels are
+  required before quantitative bridge language is allowed.
+- The quantitative bridge is accepted only when every held-out or
+  cross-validated residual satisfies
+  `abs(residual_j) <= max(floor_gate_j, 0.05 * abs(delta_external_j))`. Failing
+  that residual threshold makes the bridge descriptive only for the affected
+  backend/power path/load shape.
+- PD/DC input trace and platform rail trace direction and relative ordering are
+  smoke criteria only. They can detect sign, ordering, or synchronization
+  failures, but they do not establish a quantitative bridge.
 - Short-window bridge requires recorded meter cadence sufficient for Section 3
   thresholds. Otherwise the PD runbook calibrates request/session windows only.
 - Battery charge/discharge state must be stable or explicitly modeled; mixed
