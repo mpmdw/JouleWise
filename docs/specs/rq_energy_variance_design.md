@@ -90,8 +90,11 @@ Estimator choices:
   and 16; `N = 100` gives P90 between order 85 and 97, and P10 between order 6
   and 18. This is why `N = 30` is a pilot, not a tail-metric result.
 - Variance components use ANOVA/method-of-moments on replay means when enough
-  paths are replayed. With only three selected paths, report a diagnostic
-  range, not a population decomposition.
+  paths are replayed under a probability selection design. Claim-bearing
+  decomposition requires either a random sample of Phase-A paths, or a
+  decile-stratified random sample with explicit stratum weights and a declared
+  target estimand. With only deterministic landmark paths, report a diagnostic
+  range or approximation, not a population decomposition.
 
 ## Replay-Decomposition Protocol
 
@@ -136,18 +139,32 @@ Selection rule:
 - Minimal diagnostic selection: shortest, median, and longest natural-EOS
   paths by emitted-token length, tie-broken by Phase-A manifest order. This is
   easy to explain and directly addresses the "lucky short path" intuition.
-- Minimal credible decomposition: select at least nine paths: shortest, P10,
-  P25, median, P75, P90, longest, plus two randomly selected interior paths
-  from the frozen Phase-A order. Replay each `k = 6` times. This reduces the
-  bias from replaying only extremes selected after seeing the data.
-- Fuller decomposition: stratify Phase-A paths by emitted-token-length decile
-  and replay two paths per decile, `k = 5` each. This supports a
-  length-conditioned residual estimate and exposes same-length content spread.
+- Quantile diagnostic/approximation: select at least nine landmark paths:
+  shortest, P10, P25, median, P75, P90, longest, plus two randomly selected
+  interior paths from the frozen Phase-A order. Replay each `k = 6` times. This
+  is useful for showing the length-facing shape of the energy curve, but it is
+  not a minimal credible decomposition because deterministic quantile/extreme
+  paths do not define a probability sample from the empirical path distribution.
+- Minimal claim-bearing decomposition: replay a simple random sample of at
+  least nine natural-EOS Phase-A paths, selected after freezing the Phase-A
+  manifest and before inspecting replay energy. The target estimand is the
+  variance decomposition over the empirical Phase-A natural-EOS path
+  distribution, with equal path weights. Replay each selected path `k = 6`
+  times.
+- Fuller claim-bearing decomposition: stratify Phase-A paths by
+  emitted-token-length decile, randomly select two paths per non-empty decile,
+  and replay `k = 5` each. Declare stratum weights in advance as
+  `W_d = M_d / M`, where `M_d` is the number of eligible Phase-A paths in decile
+  `d` and `M` is the eligible Phase-A path count. The target estimand is the
+  same empirical Phase-A natural-EOS path distribution, estimated with the
+  predeclared decile weights. This supports a length-conditioned residual
+  estimate and exposes same-length content spread.
 
 Bias note: shortest/median/longest are order statistics selected because they
 are extreme. Their replay means are valid for those realized paths, but they
 do not by themselves estimate the average residual variance across the sampled
-path distribution. Use stratified replay for claim-bearing decomposition.
+path distribution. Use random Phase-A path replay or decile-stratified random
+replay with explicit weights for claim-bearing decomposition.
 
 Combine Phase A and B:
 
@@ -159,11 +176,14 @@ Combine Phase A and B:
    floor for the same metric/window class. If replay residuals are below floor,
    report residual as `not resolvable` and bound the residual term by the
    floor rather than over-interpreting the point estimate.
-4. Estimate the exact-path between component from replay means, weighted by
-   the Phase-A selection design. For the nine-path design this is a
-   quantile-stratified approximation; for the decile design it is a
-   stratified estimator. For shortest/median/longest only, report a diagnostic
-   contrast: `mu_longest - mu_shortest`, not a full variance decomposition.
+4. Estimate the exact-path between component from replay means only under the
+   declared probability selection design. For simple random path replay, use
+   equal empirical-path weights. For decile-stratified random replay, use the
+   predeclared `W_d = M_d / M` stratum weights. For the nine-landmark quantile
+   design, report a quantile diagnostic/approximation, not a claim-bearing
+   variance decomposition. For shortest/median/longest only, report a
+   diagnostic contrast: `mu_longest - mu_shortest`, not a full variance
+   decomposition.
 5. Compare the Phase-A natural sampled `E_i ~ L_i` relationship to Phase-B
    replay means. A mismatch indicates thermal/order drift, runtime state, or
    forced-replay non-equivalence.
@@ -245,6 +265,10 @@ Stop-reason censoring:
 - A high cap-hit fraction means the upper tail is not estimable. Recommended
   rule: if cap hits exceed 5% at the chosen cap, P90 is suspect; if cap hits
   exceed 10%, P90/P10 and energy-at-risk cannot carry L2 natural-EOS wording.
+  Increasing `N` at the same cap narrows sampling error but does not recover the
+  censored upper tail. The remedy is to raise/redeclare the cap under the
+  predeclared cap policy and rerun or augment compatibly, or to downgrade the
+  claim to capped-policy/censored wording.
 
 N sizing:
 
@@ -281,11 +305,11 @@ candidate.
 | multiplicity_rule | For a one-cell campaign, Holm across predeclared claim-bearing tail and decomposition contrasts: `P90/P10`, `P90 - median`, between-path variance component, and shortest-vs-longest replay contrast. Exploratory plots and unplanned thresholds carry no confirmatory inference. For multi-prompt/model sweeps, freeze the exact Holm denominator across all prompt/model cells or use BH at a declared q level for exploratory tail screening. |
 | Metric + exact window class | `gross_energy_j` and `energy_request_j` on gross and idle-subtracted request windows; companion emitted-token length and stop reason. No item/phase energy claim unless a separate phase AP row is written. |
 | Unit of analysis + dependence structure | Phase-A bundle is the sampled-path unit; Phase-B replay bundle is nested within selected emitted-token path. Uncertainty for the natural distribution is across sampled seeds; replay residual uncertainty is within path and must not be pooled as independent sampled paths. |
-| Estimator/formula | Empirical CDF and quantiles for Phase A; nonparametric order-statistic quantile CIs; exact-path decomposition `Var(E)=E_path[Var(E|Y)] + Var_path(E[E|Y])` using replay means and within-path variances; shortest/median/longest only supports diagnostic contrasts, not full decomposition. |
+| Estimator/formula | Empirical CDF and quantiles for Phase A; nonparametric order-statistic quantile CIs; exact-path decomposition `Var(E)=E_path[Var(E|Y)] + Var_path(E[E|Y])` using replay means and within-path variances only under a declared random or decile-stratified random Phase-B path-selection design with explicit weights and target estimand; shortest/median/longest or nine-landmark quantile replay supports diagnostic contrasts/approximations, not full decomposition. |
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only. Missing sampler seed, missing emitted-token IDs, unverified sampler pin, replay-token mismatch, or missing stop reason excludes a bundle from claim-bearing analysis. Quality-flag waivers must be named; cap-hit bundles are retained as censored observations and reported separately. |
 | Order/blocking/covariates | Phase A sampled runs and Phase B replay blocks interleaved where practical; replay order balanced/randomized across selected path lengths; session/block, manifest order, cooldown cap hit, thermal state, and stop reason recorded. Length is the primary explanatory covariate; content-sentinel status is a required threat-control covariate when making length-luck language. |
 | Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for the same backend, metric, and request-window class; replay residual and replay contrasts must clear the relevant floor or be reported `not resolvable`/`unresolved` under the standing three-way rule. |
-| MDE/n sizing + predeclared top-up rule | Minimal credible: Phase A `N = 80` sampled bundles plus Phase B `9 paths x k = 6` replays. Top up Phase A to `N = 100` if P90/P10 CI is too wide for the planned figure or if cap hits exceed 5%; top up replay to `k = 10` for any selected path whose replay CI or floor status controls the headline. |
+| MDE/n sizing + predeclared top-up rule | Minimal credible: Phase A `N = 80` sampled bundles plus Phase B `9 randomly selected paths x k = 6` replays for claim-bearing decomposition; the nine-landmark quantile replay is diagnostic/approximate unless separately randomized and weighted. Top up Phase A to `N = 100` only if P90/P10 CI is too wide for the planned figure. If cap hits exceed 5%, do not treat larger `N` as a cure; raise/redeclare the cap under the predeclared cap policy and rerun/augment compatibly, or downgrade to capped-policy/censored wording. Top up replay to `k = 10` for any selected path whose replay CI or floor status controls the headline. |
 | Denominator provenance requirement | Runtime-observed emitted-token counts, emitted output token IDs, stop reason, output policy label, sampler config, and sampler seed per bundle. Config fallback cannot support token-normalized companion claims. |
 | Holdout cells (L3 only) | not applicable; ceiling is L2 within boundary. |
 | Claim ceiling + exact forbidden upgrade | Ceiling L2 within the named boundary and frozen sampler. Forbidden upgrades: no intelligence-per-joule; no correctness-causal claim; no model-family or architecture-wide variance law; no cross-boundary comparison without calibration. |
@@ -321,22 +345,25 @@ Minimal credible one-cell version:
 
 - Scope: one model, one hard prompt, one sampler config.
 - Phase A: `N = 80` natural sampled bundles.
-- Phase B: nine selected paths, `k = 6` each: 54 replay bundles.
+- Phase B: nine randomly selected natural-EOS Phase-A paths, `k = 6` each: 54
+  replay bundles.
 - Total: 134 bundles, or 148 with 10% buffer.
 - Runtime: 1.79 to 4.47 hours without buffer; 1.97 to 4.93 hours with buffer.
-- Claim use: candidate L2 within-boundary distribution and approximate
-  replay-based decomposition if floors, quantile CIs, cap-hit audit, and replay
-  equivalence all pass.
+- Claim use: candidate L2 within-boundary distribution and replay-based
+  decomposition over the empirical Phase-A path distribution if floors,
+  quantile CIs, cap-hit audit, and replay equivalence all pass. Deterministic
+  nine-landmark quantile replay remains a diagnostic/approximation.
 
 Stronger one-cell version:
 
 - Phase A: `N = 100` natural sampled bundles.
-- Phase B: ten length-decile paths plus ten interior/duplicate-bin paths,
-  `20 x k = 5`: 100 replay bundles.
+- Phase B: decile-stratified random replay with two paths per non-empty length
+  decile and predeclared `W_d = M_d / M` weights, `20 x k = 5`: 100 replay
+  bundles when all deciles are populated.
 - Total: 200 bundles, or 220 with 10% buffer.
 - Runtime: 2.67 to 6.67 hours without buffer; 2.93 to 7.33 hours with buffer.
-- Claim use: cleaner P90/P10 reporting and stratified length/content residual
-  diagnostics.
+- Claim use: cleaner P90/P10 reporting, weighted stratified decomposition, and
+  length/content residual diagnostics.
 
 Fuller version:
 
