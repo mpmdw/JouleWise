@@ -202,6 +202,7 @@ class WorkloadProfile:
     dataset_ref: str | None = None
     suite_manifest_ref: str | None = None
     suite_manifest_sha256: str | None = None
+    generator_sidecar_ref: str | None = None
     repetitions: int = 1
     warmup_runs: int = 1
 
@@ -229,6 +230,10 @@ class WorkloadProfile:
             suite_manifest_sha256=_optional_string(
                 data.get("suite_manifest_sha256"),
                 "workload_profile.suite_manifest_sha256",
+            ),
+            generator_sidecar_ref=_optional_string(
+                data.get("generator_sidecar_ref"),
+                "workload_profile.generator_sidecar_ref",
             ),
             repetitions=_positive_int(repetitions, "workload_profile.repetitions"),
             warmup_runs=_positive_int(warmup_runs, "workload_profile.warmup_runs"),
@@ -388,6 +393,8 @@ class BenchmarkConfig:
             del workload["suite_manifest_ref"]
         if workload.get("suite_manifest_sha256") is None:
             del workload["suite_manifest_sha256"]
+        if workload.get("generator_sidecar_ref") is None:
+            del workload["generator_sidecar_ref"]
         return data
 
     @staticmethod
@@ -471,6 +478,7 @@ class BenchmarkConfig:
                         "dataset_ref": nullable_string,
                         "suite_manifest_ref": nullable_string,
                         "suite_manifest_sha256": nullable_string,
+                        "generator_sidecar_ref": nullable_string,
                         "repetitions": {"type": "integer", "minimum": 1},
                         "warmup_runs": {"type": "integer", "minimum": 1},
                     },

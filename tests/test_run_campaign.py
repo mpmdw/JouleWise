@@ -14,6 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "run_campaign.py"
 BASE_CONFIG = ROOT / "configs" / "examples" / "mock_local.json"
+SUITE_CONFIG = ROOT / "configs" / "examples" / "mock_suite_local.json"
 COMMAND_TIMEOUT_S = 60
 
 
@@ -66,6 +67,57 @@ def write_config(config_dir: Path, filename: str, run_id: str, repetitions: int 
     payload["workload_profile"]["repetitions"] = repetitions
     path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
     return path
+
+
+def write_suite_config(
+    config_dir: Path,
+    filename: str,
+    run_id: str,
+    *,
+    sidecar: str | Path | None = None,
+    suite_manifest: str | Path | None = None,
+) -> Path:
+    path = config_dir / filename
+    payload = json.loads(SUITE_CONFIG.read_text(encoding="utf-8"))
+    payload["run_id"] = run_id
+    if suite_manifest is not None:
+        payload["workload_profile"]["suite_manifest_ref"] = str(suite_manifest)
+    if sidecar is not None:
+        payload["workload_profile"]["generator_sidecar_ref"] = str(sidecar)
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+    return path
+
+
+def write_prompt_sidecar(
+    path: Path,
+    *,
+    item_003_hash: str,
+    subset_sha256: str = "mock-subset",
+    include_item_003: bool = True,
+) -> None:
+    items: dict[str, dict[str, str]] = {
+        "mock_item_002": {
+            "prompt_source": "token_ids",
+            "token_ids_sha256": "5d7c51bfa697d3e72c8b79b97ba7396ffd399406ccb332b028bd38f44557a284",
+        },
+    }
+    if include_item_003:
+        items["mock_item_003"] = {"token_ids_sha256": item_003_hash}
+    path.write_text(
+        json.dumps(
+            {
+                "suite": "jw_mixed_v1",
+                "source_manifest": {
+                    "source_id": "mock_suite_source",
+                    "subset_sha256": subset_sha256,
+                },
+                "tokenizer": {"tokenizer_id": "mock"},
+                "items": items,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def write_single_bundle(
@@ -791,6 +843,303 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(all_rows[-1]["verdict"], "publishable")
             self.assertEqual(all_rows[-1]["usable"], ["one"])
             self.assertEqual(all_rows[-1]["failed"], [])
+
+    def test_prompt_hash_sidecar_match_records_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            sidecar = tmp_path / "mixed.annotations.json"
+            config_dir.mkdir()
+            write_prompt_sidecar(
+                sidecar,
+                item_003_hash="059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10",
+            )
+            write_suite_config(config_dir, "suite.json", "suite-match", sidecar=sidecar)
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(rows[0]["status"], "ok")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check["status"], "matched")
+            self.assertEqual(check["checked_items"], 1)
+            self.assertEqual(
+                [match["item_id"] for match in check["matches"]],
+                ["mock_item_003"],
+            )
+
+    def test_prompt_hash_sidecar_can_be_inferred_next_to_suite_manifest(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            manifest = tmp_path / "mock_suite_manifest.json"
+            sidecar = tmp_path / "mock_suite_manifest_annotations.json"
+            config_dir.mkdir()
+            manifest.write_text(
+                (ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json").read_text(
+                    encoding="utf-8"
+                ),
+                encoding="utf-8",
+            )
+            write_prompt_sidecar(
+                sidecar,
+                item_003_hash="059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10",
+            )
+            write_suite_config(config_dir, "suite.json", "suite-inferred", suite_manifest=manifest)
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check["status"], "matched")
+            self.assertEqual(check["sidecar_path"], str(sidecar))
+            self.assertEqual(check["checked_items"], 1)
+
+    def test_prompt_hash_sidecar_top_level_alias_resolves_relative_to_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            sidecar_dir = config_dir / "sidecars"
+            sidecar = sidecar_dir / "mixed.annotations.json"
+            config_dir.mkdir()
+            sidecar_dir.mkdir()
+            write_prompt_sidecar(
+                sidecar,
+                item_003_hash="059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10",
+            )
+            config = write_suite_config(config_dir, "suite.json", "suite-relative-sidecar")
+            payload = json.loads(config.read_text(encoding="utf-8"))
+            payload["suite_sidecar_ref"] = str(Path("sidecars") / sidecar.name)
+            config.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check["status"], "matched")
+            self.assertEqual(check["sidecar_path"], str(sidecar))
+
+    def test_prompt_hash_sidecar_single_item_mismatch_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            sidecar = tmp_path / "mixed.annotations.json"
+            config_dir.mkdir()
+            write_prompt_sidecar(sidecar, item_003_hash="0" * 64)
+            write_suite_config(config_dir, "suite.json", "suite-mismatch", sidecar=sidecar)
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("prompt_hash_mismatch", result.stderr)
+            self.assertIn("mock_item_003", result.stderr)
+            self.assertIn("expected", result.stderr)
+            self.assertIn("realized", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(rows[0]["status"], "failed")
+            member = rows[0]["members"][0]
+            self.assertTrue(member["strict_valid"])
+            self.assertEqual(member["quality_flags"], ["prompt_hash_mismatch"])
+            check = member["prompt_hash_check"]
+            self.assertEqual(check["status"], "mismatch")
+            self.assertEqual(check["checked_items"], 1)
+            self.assertIn("mock_item_003", check["problems"][0])
+
+    def test_prompt_hash_sidecar_error_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            sidecar = tmp_path / "mixed.annotations.json"
+            config_dir.mkdir()
+            write_prompt_sidecar(
+                sidecar,
+                item_003_hash="059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10",
+                include_item_003=False,
+            )
+            write_suite_config(config_dir, "suite.json", "suite-sidecar-error", sidecar=sidecar)
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("prompt_hash_check_error", result.stderr)
+            self.assertIn("missing from generator sidecar", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(rows[0]["status"], "failed")
+            member = rows[0]["members"][0]
+            self.assertEqual(member["quality_flags"], ["prompt_hash_check_error"])
+            check = member["prompt_hash_check"]
+            self.assertEqual(check["status"], "error")
+            self.assertEqual(check["checked_items"], 0)
+
+    def test_prompt_hash_sidecar_pairing_mismatch_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            sidecar = tmp_path / "mixed.annotations.json"
+            config_dir.mkdir()
+            write_prompt_sidecar(
+                sidecar,
+                item_003_hash="059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10",
+                subset_sha256="wrong-subset",
+            )
+            write_suite_config(config_dir, "suite.json", "suite-pairing-error", sidecar=sidecar)
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("prompt_hash_check_error", result.stderr)
+            self.assertIn("source_manifest.subset_sha256 mismatch", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check["status"], "error")
+            self.assertEqual(check["checked_items"], 1)
+
+    def test_prompt_hash_error_can_be_waived_to_partial(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            sidecar = tmp_path / "mixed.annotations.json"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            write_config(config_dir, "01-good.json", "good")
+            write_prompt_sidecar(
+                sidecar,
+                item_003_hash="059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10",
+                include_item_003=False,
+            )
+            write_suite_config(config_dir, "02-suite.json", "suite-waived-error", sidecar=sidecar)
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "run_id": "suite-waived-error",
+                            "reason": "manual prompt-sidecar audit accepted",
+                            "approver": "council",
+                            "timestamp": "2026-07-08T00:00:00Z",
+                            "scope": "prompt_hash_check_error",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            result = run_campaign(config_dir, runs_dir, waivers=waivers)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("verdict: partial", result.stdout)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual([row["status"] for row in rows], ["ok", "waived"])
+            member = rows[1]["members"][0]
+            self.assertEqual(member["classification"], "waived")
+            self.assertEqual(member["waiver"]["scope"], "prompt_hash_check_error")
+
+    def test_sidecarless_campaign_records_prompt_hash_check_not_applicable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_suite_config(config_dir, "suite.json", "suite-no-sidecar")
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertNotIn("prompt_hash", result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            check = rows[0]["members"][0]["prompt_hash_check"]
+            self.assertEqual(check, {"status": "not_applicable", "checked_items": 0})
+
+    def test_post_hoc_prompt_hash_check_flag_on_fixture_pair(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            sidecar = tmp_path / "mixed.annotations.json"
+            config_dir.mkdir()
+            write_prompt_sidecar(
+                sidecar,
+                item_003_hash="059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10",
+            )
+            write_suite_config(config_dir, "suite.json", "suite-posthoc")
+            campaign = run_campaign(config_dir, runs_dir)
+            self.assertEqual(campaign.returncode, 0, campaign.stderr)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--check-prompt-hashes",
+                    str(runs_dir / "suite-posthoc"),
+                    str(sidecar),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=COMMAND_TIMEOUT_S,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            check = json.loads(result.stdout)
+            self.assertEqual(check["status"], "matched")
+            self.assertEqual(check["checked_items"], 1)
+
+    def test_post_hoc_prompt_hash_check_nonzero_statuses(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            sidecar = tmp_path / "mixed.annotations.json"
+            config_dir.mkdir()
+            write_prompt_sidecar(sidecar, item_003_hash="0" * 64)
+            write_suite_config(config_dir, "suite.json", "suite-posthoc-nonzero")
+            campaign = run_campaign(config_dir, runs_dir)
+            self.assertEqual(campaign.returncode, 0, campaign.stderr)
+
+            mismatch = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--check-prompt-hashes",
+                    str(runs_dir / "suite-posthoc-nonzero"),
+                    str(sidecar),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=COMMAND_TIMEOUT_S,
+            )
+            error = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--check-prompt-hashes",
+                    str(runs_dir / "suite-posthoc-nonzero"),
+                    str(tmp_path / "missing-sidecar.json"),
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=COMMAND_TIMEOUT_S,
+            )
+
+            self.assertEqual(mismatch.returncode, 1, mismatch.stderr)
+            self.assertEqual(json.loads(mismatch.stdout)["status"], "mismatch")
+            self.assertEqual(error.returncode, 2, error.stderr)
+            self.assertEqual(json.loads(error.stdout)["status"], "error")
 
     def test_partial_experiment_is_incomplete_and_does_not_invoke_cli(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -29,7 +29,7 @@ import subprocess
 import sys
 import time
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -60,6 +60,8 @@ class ConfigInfo:
     run_id: str
     raw_run_id: str
     repetitions: int
+    generator_sidecar_ref: str | None = None
+    suite_manifest_ref: str | None = None
 
 
 @dataclass(frozen=True)
@@ -90,6 +92,35 @@ class Waiver:
 
 
 @dataclass(frozen=True)
+class PromptHashCheck:
+    status: str
+    sidecar_path: str | None = None
+    checked_items: int = 0
+    matches: tuple[dict[str, Any], ...] = ()
+    problems: tuple[str, ...] = ()
+
+    def quality_flags(self) -> tuple[str, ...]:
+        if self.status == "mismatch":
+            return ("prompt_hash_mismatch",)
+        if self.status == "error":
+            return ("prompt_hash_check_error",)
+        return ()
+
+    def to_log(self) -> dict[str, Any]:
+        row: dict[str, Any] = {
+            "status": self.status,
+            "checked_items": self.checked_items,
+        }
+        if self.sidecar_path is not None:
+            row["sidecar_path"] = self.sidecar_path
+        if self.matches:
+            row["matches"] = list(self.matches)
+        if self.problems:
+            row["problems"] = list(self.problems)
+        return row
+
+
+@dataclass(frozen=True)
 class MemberEvaluation:
     bundle_id: str
     bundle_path: Path
@@ -98,6 +129,9 @@ class MemberEvaluation:
     strict_valid: bool
     validation_problems: tuple[str, ...] = ()
     quality_flags: tuple[str, ...] = ()
+    prompt_hash_check: PromptHashCheck = field(
+        default_factory=lambda: PromptHashCheck("not_applicable")
+    )
     waiver: Waiver | None = None
 
     def failure_classes(self) -> tuple[str, ...]:
@@ -142,6 +176,7 @@ class MemberEvaluation:
             "strict_valid": self.strict_valid,
             "validation_problems": list(self.validation_problems),
             "quality_flags": list(self.quality_flags),
+            "prompt_hash_check": self.prompt_hash_check.to_log(),
             "classification": (
                 "usable" if self.usable else "waived" if self.waived else "failed"
             ),
@@ -197,12 +232,14 @@ VALID_WAIVER_SCOPES = {
     "status_failed",
     "strict_invalid",
     "idle_window_suspect",
+    "prompt_hash_mismatch",
+    "prompt_hash_check_error",
 }
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("config_dir", help="Directory containing generated JSON configs")
+    parser.add_argument("config_dir", nargs="?", help="Directory containing generated JSON configs")
     parser.add_argument("--runs-dir", default="runs", help="Bundle output directory")
     parser.add_argument("--log", help="JSONL campaign log path")
     parser.add_argument("--dry-run", action="store_true", help="Print plan without invoking benchmarks")
@@ -221,7 +258,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--waivers",
         help="Optional JSON file listing campaign waivers; waivers are never written into bundles",
     )
-    return parser.parse_args(argv)
+    parser.add_argument(
+        "--check-prompt-hashes",
+        nargs=2,
+        metavar=("BUNDLE_DIR", "SIDECAR_JSON"),
+        help="Post-hoc expected-vs-realized prompt-hash check for one suite bundle",
+    )
+    args = parser.parse_args(argv)
+    if args.config_dir is None and args.check_prompt_hashes is None:
+        parser.error("config_dir is required unless --check-prompt-hashes is used")
+    if args.config_dir is not None and args.check_prompt_hashes is not None:
+        parser.error("config_dir cannot be combined with --check-prompt-hashes")
+    return args
 
 
 def utc_timestamp() -> str:
@@ -237,6 +285,36 @@ def best_effort_run_id(config_path: Path) -> str | None:
         return None
     run_id = data.get("run_id")
     return run_id if isinstance(run_id, str) else None
+
+
+def generator_sidecar_ref_from_config(data: dict[str, Any]) -> str | None:
+    candidate_keys = (
+        "generator_sidecar_ref",
+        "suite_annotations_ref",
+        "suite_sidecar_ref",
+        "suite_generator_sidecar_ref",
+    )
+    for key in candidate_keys:
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    workload_profile = data.get("workload_profile")
+    if isinstance(workload_profile, dict):
+        for key in candidate_keys:
+            value = workload_profile.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return None
+
+
+def suite_manifest_ref_from_config(data: dict[str, Any]) -> str | None:
+    workload_profile = data.get("workload_profile")
+    if not isinstance(workload_profile, dict):
+        return None
+    value = workload_profile.get("suite_manifest_ref")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def load_config_info(config_path: Path) -> ConfigInfo:
@@ -265,7 +343,14 @@ def load_config_info(config_path: Path) -> ConfigInfo:
     repetitions = workload_profile.get("repetitions", 1)
     if isinstance(repetitions, bool) or not isinstance(repetitions, int) or repetitions < 1:
         raise ValueError(f"workload_profile.repetitions must be a positive integer: {config_path}")
-    return ConfigInfo(path=config_path, run_id=sanitized_run_id, raw_run_id=run_id, repetitions=repetitions)
+    return ConfigInfo(
+        path=config_path,
+        run_id=sanitized_run_id,
+        raw_run_id=run_id,
+        repetitions=repetitions,
+        generator_sidecar_ref=generator_sidecar_ref_from_config(data),
+        suite_manifest_ref=suite_manifest_ref_from_config(data),
+    )
 
 
 def command_for(config_path: Path, runs_dir: Path, cli_cmd: str | None) -> list[str]:
@@ -440,6 +525,265 @@ def matching_waiver(
     return None
 
 
+def resolve_sidecar_path(config_path: Path, sidecar_ref: str | None) -> Path | None:
+    if sidecar_ref is None:
+        return None
+    path = Path(sidecar_ref)
+    if path.is_absolute():
+        return path
+    root_relative = ROOT / path
+    if root_relative.is_file():
+        return root_relative
+    config_relative = config_path.parent / path
+    if config_relative.is_file():
+        return config_relative
+    return root_relative
+
+
+def resolve_config_ref_path(config_path: Path, ref: str | None) -> Path | None:
+    if ref is None:
+        return None
+    path = Path(ref)
+    if path.is_absolute():
+        return path
+    root_relative = ROOT / path
+    if root_relative.is_file():
+        return root_relative
+    config_relative = config_path.parent / path
+    if config_relative.is_file():
+        return config_relative
+    return root_relative
+
+
+def _is_prompt_hash_sidecar(path: Path) -> bool:
+    raw, problem = _load_json_object(path, "generator sidecar")
+    return problem is None and isinstance(raw, dict) and isinstance(raw.get("items"), dict)
+
+
+def inferred_prompt_sidecar_path(config_path: Path, suite_manifest_ref: str | None) -> Path | None:
+    manifest_path = resolve_config_ref_path(config_path, suite_manifest_ref)
+    if manifest_path is None:
+        return None
+    candidate = manifest_path.with_name(f"{manifest_path.stem}_annotations.json")
+    if candidate.is_file() and _is_prompt_hash_sidecar(candidate):
+        return candidate
+    return None
+
+
+def prompt_sidecar_path_for_config(info: ConfigInfo) -> Path | None:
+    explicit = resolve_sidecar_path(info.path, info.generator_sidecar_ref)
+    if explicit is not None:
+        return explicit
+    return inferred_prompt_sidecar_path(info.path, info.suite_manifest_ref)
+
+
+def _load_json_object(path: Path, label: str) -> tuple[dict[str, Any] | None, str | None]:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return None, f"{label} cannot be read: {exc}"
+    except json.JSONDecodeError as exc:
+        return None, f"{label} is not valid JSON: {exc}"
+    if not isinstance(raw, dict):
+        return None, f"{label} is not a JSON object"
+    return raw, None
+
+
+def _load_suite_item_records_for_prompt_check(
+    bundle_dir: Path,
+) -> tuple[list[dict[str, Any]] | None, list[str]]:
+    path = bundle_dir / "outputs" / "suite_items.jsonl"
+    if not path.is_file():
+        return None, ["outputs/suite_items.jsonl is missing for prompt-hash check"]
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, [f"outputs/suite_items.jsonl cannot be read: {exc}"]
+    records: list[dict[str, Any]] = []
+    problems: list[str] = []
+    for line_index, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            problems.append(
+                f"outputs/suite_items.jsonl line {line_index} is not valid JSON: {exc}"
+            )
+            continue
+        if not isinstance(record, dict):
+            problems.append(
+                f"outputs/suite_items.jsonl line {line_index} is not a JSON object"
+            )
+            continue
+        records.append(record)
+    return records, problems
+
+
+def _manifest_text_items(
+    bundle_dir: Path,
+) -> tuple[dict[str, Any] | None, list[tuple[int, str]] | None, list[str]]:
+    manifest, problem = _load_json_object(bundle_dir / "suite_manifest.json", "suite_manifest.json")
+    if problem is not None:
+        return None, None, [problem]
+    assert manifest is not None
+    raw_items = manifest.get("items")
+    if not isinstance(raw_items, list):
+        return manifest, None, ["suite_manifest.json items is not a list"]
+    text_items: list[tuple[int, str]] = []
+    problems: list[str] = []
+    for item_index, raw_item in enumerate(raw_items):
+        if not isinstance(raw_item, dict):
+            problems.append(f"suite_manifest.json items[{item_index}] is not an object")
+            continue
+        item_id = raw_item.get("item_id")
+        if not isinstance(item_id, str) or not item_id:
+            problems.append(f"suite_manifest.json items[{item_index}].item_id is missing")
+            continue
+        source = raw_item.get("source")
+        if not isinstance(source, dict):
+            problems.append(f"suite_manifest.json items[{item_index}].source is not an object")
+            continue
+        if source.get("prompt_token_ids") is not None or raw_item.get("item_type") == "ids_prompt":
+            continue
+        if source.get("prompt_text") is None and raw_item.get("item_type") != "text_prompt":
+            continue
+        text_items.append((item_index, item_id))
+    return manifest, text_items, problems
+
+
+def _sidecar_manifest_pairing_problems(
+    sidecar: dict[str, Any],
+    manifest: dict[str, Any],
+) -> list[str]:
+    sidecar_source = sidecar.get("source_manifest")
+    if sidecar_source is None:
+        return []
+    if not isinstance(sidecar_source, dict):
+        return ["generator sidecar source_manifest is not an object"]
+    manifest_source = manifest.get("source_manifest")
+    if not isinstance(manifest_source, dict):
+        return ["suite_manifest.json source_manifest is not an object"]
+    problems: list[str] = []
+    for key in ("source_id", "subset_sha256"):
+        sidecar_value = sidecar_source.get(key)
+        manifest_value = manifest_source.get(key)
+        if not isinstance(sidecar_value, str) or not sidecar_value:
+            problems.append(f"generator sidecar source_manifest.{key} is missing")
+        elif sidecar_value != manifest_value:
+            problems.append(
+                f"generator sidecar source_manifest.{key} mismatch: "
+                f"sidecar has {sidecar_value!r}, suite_manifest.json has {manifest_value!r}"
+            )
+    return problems
+
+
+def check_prompt_hashes_for_bundle(bundle_dir: Path, sidecar_path: Path | None) -> PromptHashCheck:
+    if sidecar_path is None:
+        return PromptHashCheck("not_applicable")
+    sidecar_label = str(sidecar_path)
+    sidecar, sidecar_problem = _load_json_object(sidecar_path, "generator sidecar")
+    if sidecar_problem is not None:
+        return PromptHashCheck("error", sidecar_label, problems=(sidecar_problem,))
+    assert sidecar is not None
+    expected_items = sidecar.get("items")
+    if not isinstance(expected_items, dict):
+        return PromptHashCheck(
+            "error",
+            sidecar_label,
+            problems=("generator sidecar items is not an object",),
+        )
+
+    records, record_problems = _load_suite_item_records_for_prompt_check(bundle_dir)
+    manifest, text_items, manifest_problems = _manifest_text_items(bundle_dir)
+    problems = [*record_problems, *manifest_problems]
+    if records is None or text_items is None:
+        return PromptHashCheck("error", sidecar_label, problems=tuple(problems))
+    assert manifest is not None
+    problems.extend(_sidecar_manifest_pairing_problems(sidecar, manifest))
+
+    records_by_index: dict[int, dict[str, Any]] = {}
+    for line_index, record in enumerate(records, start=1):
+        item_index = record.get("item_index")
+        if isinstance(item_index, bool) or not isinstance(item_index, int):
+            problems.append(
+                f"outputs/suite_items.jsonl line {line_index} item_index is not an integer"
+            )
+            continue
+        if item_index in records_by_index:
+            problems.append(f"outputs/suite_items.jsonl duplicates item_index {item_index}")
+            continue
+        records_by_index[item_index] = record
+
+    matches: list[dict[str, Any]] = []
+    mismatches: list[str] = []
+    for item_index, item_id in text_items:
+        expected_row = expected_items.get(item_id)
+        if not isinstance(expected_row, dict):
+            problems.append(
+                f"item {item_id!r} index {item_index} is missing from generator sidecar"
+            )
+            continue
+        expected_hash = expected_row.get("token_ids_sha256")
+        if not isinstance(expected_hash, str) or not expected_hash:
+            problems.append(
+                f"item {item_id!r} index {item_index} sidecar token_ids_sha256 is missing"
+            )
+            continue
+        record = records_by_index.get(item_index)
+        if record is None:
+            problems.append(
+                f"item {item_id!r} index {item_index} is missing from outputs/suite_items.jsonl"
+            )
+            continue
+        realized_item_id = record.get("item_id")
+        if realized_item_id != item_id:
+            problems.append(
+                f"item index {item_index} item_id mismatch: manifest has {item_id!r}, "
+                f"outputs/suite_items.jsonl has {realized_item_id!r}"
+            )
+            continue
+        prompt = record.get("prompt")
+        realized_hash = prompt.get("token_ids_sha256") if isinstance(prompt, dict) else None
+        if realized_hash != expected_hash:
+            mismatches.append(
+                f"item {item_id!r} index {item_index} prompt.token_ids_sha256 mismatch: "
+                f"expected {expected_hash!r}, realized {realized_hash!r}"
+            )
+            continue
+        matches.append(
+            {
+                "item_id": item_id,
+                "item_index": item_index,
+                "expected": expected_hash,
+                "realized": realized_hash,
+            }
+        )
+
+    if problems:
+        return PromptHashCheck(
+            "error",
+            sidecar_label,
+            checked_items=len(matches) + len(mismatches),
+            matches=tuple(matches),
+            problems=tuple([*problems, *mismatches]),
+        )
+    if mismatches:
+        return PromptHashCheck(
+            "mismatch",
+            sidecar_label,
+            checked_items=len(matches) + len(mismatches),
+            matches=tuple(matches),
+            problems=tuple(mismatches),
+        )
+    return PromptHashCheck(
+        "matched",
+        sidecar_label,
+        checked_items=len(matches),
+        matches=tuple(matches),
+    )
+
+
 def quality_flags(summary: dict[str, Any] | None) -> tuple[str, ...]:
     if not isinstance(summary, dict):
         return ()
@@ -479,6 +823,10 @@ def evaluate_member(
                 summary = parsed
         except (OSError, json.JSONDecodeError):
             summary = None
+    prompt_hash_check = check_prompt_hashes_for_bundle(
+        bundle_dir,
+        prompt_sidecar_path_for_config(info),
+    )
     waiver = matching_waiver(
         waivers,
         bundle_id=bundle_dir.name,
@@ -493,7 +841,10 @@ def evaluate_member(
         status=status,
         strict_valid=strict_valid,
         validation_problems=tuple(problems),
-        quality_flags=quality_flags(summary),
+        quality_flags=tuple(
+            dict.fromkeys([*quality_flags(summary), *prompt_hash_check.quality_flags()])
+        ),
+        prompt_hash_check=prompt_hash_check,
         waiver=waiver,
     )
 
@@ -760,6 +1111,18 @@ def classify_campaign_members(
     return categories
 
 
+def evaluation_failure_detail(evaluation: MemberEvaluation) -> str:
+    parts = [
+        f"{evaluation.bundle_id}: status={evaluation.status!r}",
+        f"strict_valid={evaluation.strict_valid}",
+        f"quality_flags={list(evaluation.quality_flags)}",
+        f"validation_problems={list(evaluation.validation_problems)}",
+    ]
+    if evaluation.prompt_hash_check.status != "not_applicable":
+        parts.append(f"prompt_hash_check={evaluation.prompt_hash_check.to_log()!r}")
+    return ", ".join(parts)
+
+
 def verdict_for(categories: dict[str, list[str]]) -> tuple[str, list[str]]:
     usable = categories["usable"]
     waived = categories["waived"]
@@ -828,6 +1191,7 @@ def append_verdict(
 
 
 def run_campaign(args: argparse.Namespace) -> int:
+    assert args.config_dir is not None
     config_dir = Path(args.config_dir)
     runs_dir = Path(args.runs_dir)
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
@@ -929,13 +1293,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                 if failed:
                     failures += 1
                     status = "failed"
-                    details = "; ".join(
-                        f"{evaluation.bundle_id}: status={evaluation.status!r}, "
-                        f"strict_valid={evaluation.strict_valid}, "
-                        f"quality_flags={list(evaluation.quality_flags)}, "
-                        f"validation_problems={list(evaluation.validation_problems)}"
-                        for evaluation in failed
-                    )
+                    details = "; ".join(evaluation_failure_detail(evaluation) for evaluation in failed)
                     print(
                         f"failed {info.run_id}: existing bundle(s) are not skippable: "
                         f"{details}; inspect or move those bundle(s), or provide an "
@@ -1049,10 +1407,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                 failures += 1
                 if exit_code == 0:
                     details = "; ".join(
-                        f"{evaluation.bundle_id}: status={evaluation.status!r}, "
-                        f"strict_valid={evaluation.strict_valid}, "
-                        f"quality_flags={list(evaluation.quality_flags)}, "
-                        f"validation_problems={list(evaluation.validation_problems)}"
+                        evaluation_failure_detail(evaluation)
                         for evaluation in failed_members
                     )
                     if missing_after_run:
@@ -1114,9 +1469,22 @@ def run_campaign(args: argparse.Namespace) -> int:
     return 1 if failures or verdict in {"blocked", "invalid"} else 0
 
 
+def run_prompt_hash_check(args: argparse.Namespace) -> int:
+    bundle_text, sidecar_text = args.check_prompt_hashes
+    result = check_prompt_hashes_for_bundle(Path(bundle_text), Path(sidecar_text))
+    print(json.dumps(result.to_log(), sort_keys=True))
+    if result.status in {"matched", "not_applicable"}:
+        return 0
+    if result.status == "mismatch":
+        return 1
+    return 2
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
+        if args.check_prompt_hashes is not None:
+            return run_prompt_hash_check(args)
         return run_campaign(args)
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
