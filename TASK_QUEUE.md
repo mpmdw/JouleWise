@@ -12,16 +12,19 @@ For every new user task:
 3. Check `git status --short --branch`.
 4. Review the last 2-3 commits with `git log --oneline --decorate -3`.
 5. Check relevant handoffs in `docs/run_reports/`.
-6. Decide whether the task is:
+6. If `RUN_STATE.md` contains an ACTIVE `ACTIVE_STOP_CARD`, that card
+   outranks this queue. Execute or preserve the card's resume/cleanup
+   instructions before considering any lower-ranked work.
+7. Decide whether the task is:
    - urgent workspace hygiene,
    - Phase 1 evidence work,
    - Phase 2 implementation prep,
    - later-phase research work,
    - documentation/reporting,
    - or unrelated/new scope.
-7. Place or update the task in the queue with priority, rationale, evidence,
+8. Place or update the task in the queue with priority, rationale, evidence,
    and blockers.
-8. If executing it now, say why it outranks the current top task.
+9. If executing it now, say why it outranks the current top task.
 
 ## Priority Scale
 
@@ -54,6 +57,21 @@ Rank lower when a task:
 - Adds polish before a runnable vertical slice exists.
 - Produces code without a clear run-bundle or test artifact.
 
+## Ready/Shelf Rule
+
+A partially built or proposed task is **READY** only when it has:
+
+- one authority document or stream-log pointer,
+- bounded files/modules or a bounded artifact target,
+- explicit acceptance evidence or a verification command,
+- no hidden hardware/user/token-budget dependency, and
+- a named lane (`[AGENT]`, `[QUIET-MAC]`, or `[ED-EXTERNAL]`).
+
+If any of those are missing, keep the item as a shelved concept or
+planning note instead of letting it compete with executable queue work.
+Half-finished work should be resumed only through its authority pointer
+and stop-card/checkpoint state, not by inference from prose summaries.
+
 ## Machine-State Lanes (adopted C-007, 2026-07-07)
 
 Every task carries a lane; a session picks the top task COMPATIBLE with
@@ -67,6 +85,10 @@ its machine state, not the top task absolutely:
   purchases, destinations.
 
 ## Current Queue
+
+`RUN_STATE.md` currently has an ACTIVE `ACTIVE_STOP_CARD`. Until it is
+cleared, rank 0 is the only executable queue item unless Ed explicitly
+asks for unrelated docs/meta work that does not touch CP-5 artifacts.
 
 | Rank | ID | Priority | Status | Task | Evidence / Acceptance |
 |---:|---|---|---|---|---|

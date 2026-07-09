@@ -2449,3 +2449,52 @@ boundary docs get the transfer-stage label when the split schema lands
 
 Revisit when: the wall/USB-C calibration (Q6) bounds the host-side gap
 tightly enough to model it instead of measuring per leg.
+
+---
+
+## D-050: Active stop cards and process-trace manifests
+
+- Date: 2026-07-09
+- Status: accepted (user-directed meta-process cleanup after CP-5 pause)
+- Phase: cross-project process
+
+Context: CP-5 intentionally paused a live pre-campaign review session
+after token spend ran out. The project preserved the necessary resume
+facts, but they were split across `RUN_STATE.md`, `TASK_QUEUE.md`, a
+stream log, off-repo checkpoint artifacts, and older run-report restart
+pointers. That made the handoff recoverable but too easy to bypass.
+
+Options considered:
+
+1. Leave the existing pointers alone. Con: normal "what next" prose can
+   compete with an active checkpoint and lead a future agent into lower
+   queue work.
+2. Move all checkpoint details into the queue. Con: the queue is too
+   compact to own dirty worktree/PR/artifact inventory safely.
+3. Add an active stop-card layer to `RUN_STATE.md`, with the queue and
+   run-report intake explicitly subordinated to it, plus lightweight
+   manifests for future delegated runs.
+
+Decision: option 3. An ACTIVE `ACTIVE_STOP_CARD` in `RUN_STATE.md` is
+the single restart authority wrapper and overrides normal next-work
+sections, queue ranking, playbook missions, and latest-run-report
+defaults until cleared. Stop cards must preserve the resume authority,
+reason for stop, paused work inventory, status terms, artifact pointers,
+first resume action, and clearance criteria. Substantial delegated,
+skill, council, or worktree-heavy runs must leave a process trace and,
+when large enough, an `invocation_manifest.jsonl`-style pointer map tying
+prompts, sessions, outputs, dispositions, and commits/PRs together.
+
+Consequences: CP-5 remains paused and untouched, but future intake now
+routes to its exact stream-log authority first. Half-finished work is
+not executable unless it has an authority pointer, bounded scope,
+acceptance evidence, and a lane. Councils retain their role for
+methodology/measurement/claim/hardware decisions but must report yield,
+dispositions, and downstream closures. `scripts/codex-bridge` now
+implements a local invocation manifest with prompt snapshots, response
+snapshots, logs, status files, prompt/output/log hashes, session-id
+capture when present, and pending disposition fields.
+
+Revisit when: one full stopped-and-resumed session completes under the
+new stop-card rule, or the invocation manifest proves too heavy for
+ordinary delegated runs.

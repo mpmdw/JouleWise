@@ -1,8 +1,9 @@
 # JouleWise Run State
 
-Last updated: 2026-07-08 (suite BUILD close + alignment fix PR #21 +
-meta-reassessment; adjudication D-044..D-047; PRs #17..#21 merged;
-suite 734; C-017/C-018/C-019)
+Last updated: 2026-07-09 (meta-process cleanup + codex-bridge audit
+manifest; CP-5 preserved untouched; suite BUILD close + alignment fix
+PR #21 + meta-reassessment; adjudication D-044..D-047; PRs #17..#21
+merged; suite 734; C-017/C-018/C-019)
 
 ## Start Here For Every Big Run
 
@@ -24,6 +25,8 @@ Before starting substantial work:
     report and no recorded break, start with a milestones + risk review.
 11. Live MLX gates use the repo venv: `.venv/bin/python -m joulewise ...`
     (system python3 lacks mlx → `runtime_unavailable`).
+12. If an `ACTIVE_STOP_CARD` exists below, it overrides every normal
+    "restart", "next", queue, and mission pointer until explicitly cleared.
 
 At the end of substantial work:
 
@@ -48,6 +51,39 @@ At the end of substantial work:
 9. Call out any dirty working-tree state that should not be accidentally
    committed.
 
+## ACTIVE_STOP_CARD
+
+Status: **ACTIVE — CP-5 must resume first.**
+
+Authority: `docs/stream_logs/2026-07-08-precampaign-review.md`, CP-5
+section near the bottom. This card is only a pointer and safety wrapper;
+do not treat it as a replacement for the exact CP-5 sequence.
+
+Reason: Ed intentionally stopped the pre-campaign review session because
+token spend ran out. The work is paused, not abandoned.
+
+Do not start normal queue work, quiet-window campaigns, suite follow-ons,
+or cleanup of CP-5 worktrees until this card is cleared by a CP-5 resume
+session.
+
+Paused work inventory:
+
+| Item | State | Resume handling |
+|---|---|---|
+| `jw-wt-envgate` | `APPLIED_UNVERIFIED`; uncommitted fix-round diff reported by implementer | Lead-gate diff first; live-gate against real affine mock bundle as CP-5 specifies; then commit/PR if accepted. |
+| `jw-wt-hashcheck` | `APPLIED_UNVERIFIED`; uncommitted fix-round diff reported by implementer | Lead-gate diff first; commit/PR only after accepted gates. |
+| `jw-wt-bundlepack` | `APPLIED_UNVERIFIED`; uncommitted fix-round diff reported by implementer | Lead-gate diff first; commit/PR only after accepted gates. |
+| `strict-era-fix` / PR #22 | `PR_OPEN_CI_GREEN`; unmerged | Re-check final head and merge only inside the CP-5 sequence. |
+| Methodology synthesis | `UNREAD_UNADJUDICATED` | Read/adjudicate after code gates; land accepted pre-campaign changes; deliver Ed's four-part answer and Window-A go/no-go. |
+
+Durable artifact pointer: `~/.claude/projects/-Users-edr-code-JouleWise/ae807c57-7163-4f10-8532-42e8cfacdaff/checkpoint-2026-07-08/`.
+
+Clearance criteria: CP-5 worktrees gated and either landed or explicitly
+rejected; PR #22 handled; methodology synthesis adjudicated; accepted
+pre-campaign changes landed; post-merge integration review run if any
+CP-5 code merges; `TASK_QUEUE.md` rank 0 updated/closed; this card
+removed or marked CLEARED with a run-report pointer.
+
 ## Current Project Status
 
 **Suite BUILD session COMPLETE and MERGED (2026-07-08; C-017;
@@ -63,35 +99,24 @@ live-only defects caught and fixed at the lead gate. Post-merge
 integration review: zero cross-stream defects.
 
 **PAUSED AT STABLE CHECKPOINT CP-5 (2026-07-08, pre-campaign
-review session — RESUME THIS FIRST on "start again"):** the workload/
-methodology review and four pre-campaign implementation streams are
-complete-but-ungated: three worktrees hold applied-but-uncommitted fix
-rounds (jw-wt-envgate/hashcheck/bundlepack), PR #22 is open/CI-green/
-unmerged, and the finished methodology synthesis (determinism verdict,
-pre-campaign changes, askable-question list) is UNREAD and
-unadjudicated. THE resume authority with the exact step sequence is
-`docs/stream_logs/2026-07-08-precampaign-review.md` (CP-5, bottom);
-durable artifacts: `~/.claude/projects/-Users-edr-code-JouleWise/
-ae807c57-7163-4f10-8532-42e8cfacdaff/checkpoint-2026-07-08/`.
-Do not start other queue work until CP-5's sequence is finished.
+review session — RESUME THIS FIRST on "start again"):** see
+`ACTIVE_STOP_CARD` above. The exact resume authority remains
+`docs/stream_logs/2026-07-08-precampaign-review.md` (CP-5, bottom).
 
 **RESTART HERE (next agent):**
-1. Read `docs/run_reports/2026-07-08-suite-build.md` (session record +
-   restart detail).
-2. **Suite follow-ons [AGENT]:** envelope-gate analysis script (queue
-   P2-010 row), lead-side real-tokenizer manifest generation (P2-012
-   row), campaign-runner text-item hash check (P2-025).
-3. **Quiet Window A [QUIET-MAC], next machine-quiet opportunity:**
-   P2-015 expanded floors FIRST (incl. lead-run tasks-sampler + settle
-   smoke), then P2-006 2M with drift sentinels; fail-closed runner +
-   order manifest; claims per `docs/contracts/claims_ladder.md` +
-   `docs/contracts/analysis_plans.md`; no-agent quiet lock (C-009 T5);
-   corpus backed up per R-016. The affine smoke campaign (B=5,
-   ~10-25 min) may ride a quiet-window tail after P2-015.
-4. Window B (P2-019 q4 grid + P2-020 campaign) with n sized from A.
+1. If `ACTIVE_STOP_CARD` is ACTIVE, resume CP-5 first from
+   `docs/stream_logs/2026-07-08-precampaign-review.md`.
+2. Only after CP-5 is cleared, read
+   `docs/run_reports/2026-07-08-suite-build.md` for the normal
+   suite-build session record and restart details.
+3. Only after CP-5 is cleared, return to `TASK_QUEUE.md` for suite
+   follow-ons, Quiet Window A, and later campaign work.
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-09 meta-process stop-card + codex-bridge audit cleanup
+  (D-050; CP-5 preserved untouched):
+  `docs/run_reports/2026-07-09-meta-process-stop-card-cleanup.md`
 - 2026-07-08 suite build (C-017; adjudication + PRs #17/#18/#20/#19;
   D-044..D-047): `docs/run_reports/2026-07-08-suite-build.md`
 - 2026-07-08 suite-science + expansion (C-014/C-015; PRs #14/#15/#16;
@@ -108,6 +133,10 @@ Do not start other queue work until CP-5's sequence is finished.
 
 ## Current Verification
 
+- 2026-07-09 meta-process/tooling cleanup: `bash -n
+  scripts/codex-bridge` green; `CODEX_BIN=/bin/echo
+  scripts/codex-bridge new audit smoke prompt` wrote a manifest row with
+  prompt/output/log hashes; Python test suite not run.
 - Merged main (49c5b66 + reassessment batch): `python3 -m unittest
   discover -s tests` → `Ran 734 tests, OK (skipped=10)` (post PRs
   #17..#21; #21 = D-013 alignment-capture window fix, C-018).
@@ -123,14 +152,24 @@ Do not start other queue work until CP-5's sequence is finished.
 
 ## Known Workspace State
 
-- `main` is pushed and current (through this session's bookkeeping).
+- Before the 2026-07-09 meta-process/tooling cleanup, `main` was pushed
+  and current through prior bookkeeping. This cleanup leaves local docs
+  plus `scripts/codex-bridge` changes until committed.
+- CP-5 paused work may exist in `jw-wt-envgate`, `jw-wt-hashcheck`,
+  `jw-wt-bundlepack`, and branch/PR `strict-era-fix` / #22. Do not
+  clean, remove, rebase, or merge these outside the CP-5 resume
+  sequence.
 - Worktrees `jw-wt-suite`, `jw-wt-affine`, `jw-wt-gens` may remain
   (branches merged; safe to remove with `git worktree remove`).
 - `/tmp/jw-lead-verify/` holds disposable lead-verification artifacts.
 
 ## What Is Next
 
-Follow `TASK_QUEUE.md` (lane-annotated). In order:
+While `ACTIVE_STOP_CARD` is ACTIVE, the only next task is
+`TASK_QUEUE.md` rank 0 (`RESUME-CP5`). The normal list below is
+temporarily blocked.
+
+After CP-5 is cleared, follow `TASK_QUEUE.md` (lane-annotated). In order:
 
 1. **P2-015 then P2-006 in quiet Window A** [QUIET-MAC] (unchanged top;
    affine smoke campaign may ride the window tail).

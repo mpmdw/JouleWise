@@ -10,17 +10,51 @@ Usage:
 
 Prompt text may also be piped on stdin. The last Codex response is mirrored to
 .codex-bridge/last-message.md for Claude Code to read or quote back.
+
+Each invocation also writes a durable local audit trail under .codex-bridge/:
+prompt snapshots, response snapshots, logs, status files, and
+invocation_manifest.jsonl rows with prompt/output hashes and session ids.
 USAGE
+}
+
+json_quote() {
+  printf '"'
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+  printf '"'
+}
+
+now_utc() {
+  date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+sha256_file() {
+  if [[ -f "$1" ]]; then
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+session_id_from_log() {
+  if [[ -f "$log_file" ]]; then
+    sed -n 's/^session id: //p' "$log_file" 2>/dev/null | tail -n 1
+  fi
+}
+
+prompt_preview() {
+  if [[ -f "$prompt_file" ]]; then
+    LC_ALL=C head -c 240 "$prompt_file" | tr '\n\r\t' '   '
+  fi
 }
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 bridge_dir="${CODEX_BRIDGE_DIR:-"$repo_root/.codex-bridge"}"
-mkdir -p "$bridge_dir"
+prompt_dir="$bridge_dir/prompts"
+response_dir="$bridge_dir/responses"
+mkdir -p "$bridge_dir" "$prompt_dir" "$response_dir"
 
 codex_bin="${CODEX_BIN:-codex}"
 last_message="$bridge_dir/last-message.md"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-log_file="$bridge_dir/$stamp.log"
+manifest_file="$bridge_dir/invocation_manifest.jsonl"
 
 if [[ $# -lt 1 ]]; then
   usage
@@ -29,44 +63,163 @@ fi
 
 mode="$1"
 shift
+run_id="$stamp-$$-$mode"
+log_file="$bridge_dir/$run_id.log"
+status_file="$bridge_dir/$run_id.status"
+prompt_file="$prompt_dir/$run_id.prompt.txt"
+response_file="$response_dir/$run_id.response.md"
+target_session_id=""
+prompt_source="none"
+prompt_arg_count=0
+started_at="$(now_utc)"
+
+write_prompt_from_args() {
+  prompt_source="argv"
+  prompt_arg_count="$#"
+  printf '%s\n' "$*" > "$prompt_file"
+}
+
+write_prompt_from_stdin() {
+  prompt_source="stdin"
+  prompt_arg_count=0
+  cat > "$prompt_file"
+}
+
+write_empty_prompt() {
+  prompt_source="none"
+  prompt_arg_count=0
+  : > "$prompt_file"
+}
 
 run_codex() {
-  (cd "$repo_root" && "$codex_bin" "$@") 2>&1 | tee "$log_file"
+  local stdin_file="$1"
+  shift
+  local rc
+
+  set +e
+  if [[ -n "$stdin_file" ]]; then
+    (cd "$repo_root" && "$codex_bin" "$@" < "$stdin_file") 2>&1 | tee "$log_file"
+    rc=${PIPESTATUS[0]}
+  else
+    (cd "$repo_root" && "$codex_bin" "$@") 2>&1 | tee "$log_file"
+    rc=${PIPESTATUS[0]}
+  fi
+  set -e
+  return "$rc"
+}
+
+finish_invocation() {
+  local rc="$1"
+  local finished_at status prompt_sha output_sha log_sha session_id preview
+
+  finished_at="$(now_utc)"
+  if [[ "$rc" -eq 0 ]]; then
+    status="OK"
+  else
+    status="FAILED rc=$rc"
+  fi
+  printf '%s\n' "$status" > "$status_file"
+
+  if [[ -f "$response_file" ]]; then
+    cp "$response_file" "$last_message"
+  else
+    : > "$response_file"
+    : > "$last_message"
+  fi
+
+  prompt_sha="$(sha256_file "$prompt_file")"
+  output_sha="$(sha256_file "$response_file")"
+  log_sha="$(sha256_file "$log_file")"
+  session_id="$(session_id_from_log)"
+  preview="$(prompt_preview)"
+
+  {
+    printf '{"schema_version":1'
+    printf ',"run_id":%s' "$(json_quote "$run_id")"
+    printf ',"tool":%s' "$(json_quote "scripts/codex-bridge")"
+    printf ',"mode":%s' "$(json_quote "$mode")"
+    printf ',"started_at":%s' "$(json_quote "$started_at")"
+    printf ',"finished_at":%s' "$(json_quote "$finished_at")"
+    printf ',"status":%s' "$(json_quote "$status")"
+    printf ',"exit_code":%s' "$(json_quote "$rc")"
+    printf ',"repo_root":%s' "$(json_quote "$repo_root")"
+    printf ',"codex_bin":%s' "$(json_quote "$codex_bin")"
+    printf ',"session_id":%s' "$(json_quote "$session_id")"
+    printf ',"target_session_id":%s' "$(json_quote "$target_session_id")"
+    printf ',"prompt_source":%s' "$(json_quote "$prompt_source")"
+    printf ',"prompt_arg_count":%s' "$(json_quote "$prompt_arg_count")"
+    printf ',"prompt_path":%s' "$(json_quote "$prompt_file")"
+    printf ',"prompt_sha256":%s' "$(json_quote "$prompt_sha")"
+    printf ',"prompt_preview":%s' "$(json_quote "$preview")"
+    printf ',"output_path":%s' "$(json_quote "$response_file")"
+    printf ',"output_sha256":%s' "$(json_quote "$output_sha")"
+    printf ',"last_message_path":%s' "$(json_quote "$last_message")"
+    printf ',"log_path":%s' "$(json_quote "$log_file")"
+    printf ',"log_sha256":%s' "$(json_quote "$log_sha")"
+    printf ',"status_file":%s' "$(json_quote "$status_file")"
+    printf ',"consumed_by":%s' "$(json_quote "")"
+    printf ',"disposition":%s' "$(json_quote "pending")"
+    printf ',"commit_or_pr":%s' "$(json_quote "")"
+    printf '}\n'
+  } >> "$manifest_file"
+}
+
+run_and_record() {
+  local rc
+  if run_codex "$@"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  finish_invocation "$rc"
+  return "$rc"
 }
 
 case "$mode" in
   new)
     if [[ $# -gt 0 ]]; then
-      run_codex exec -C "$repo_root" -s workspace-write -o "$last_message" "$*"
+      write_prompt_from_args "$@"
+      run_and_record "" exec -C "$repo_root" -s workspace-write -o "$response_file" "$*"
     else
-      run_codex exec -C "$repo_root" -s workspace-write -o "$last_message" -
+      write_prompt_from_stdin
+      run_and_record "$prompt_file" exec -C "$repo_root" -s workspace-write -o "$response_file" -
     fi
     ;;
   resume)
     if [[ $# -eq 0 ]]; then
-      run_codex exec resume --last -o "$last_message"
+      target_session_id="--last"
+      write_empty_prompt
+      run_and_record "" exec resume --last -o "$response_file"
     elif [[ "$1" == "--last" ]]; then
       shift
+      target_session_id="--last"
       if [[ $# -gt 0 ]]; then
-        run_codex exec resume --last -o "$last_message" "$*"
+        write_prompt_from_args "$@"
+        run_and_record "" exec resume --last -o "$response_file" "$*"
       else
-        run_codex exec resume --last -o "$last_message" -
+        write_prompt_from_stdin
+        run_and_record "$prompt_file" exec resume --last -o "$response_file" -
       fi
     else
       session_id="$1"
       shift
+      target_session_id="$session_id"
       if [[ $# -gt 0 ]]; then
-        run_codex exec resume -o "$last_message" "$session_id" "$*"
+        write_prompt_from_args "$@"
+        run_and_record "" exec resume -o "$response_file" "$session_id" "$*"
       else
-        run_codex exec resume -o "$last_message" "$session_id" -
+        write_prompt_from_stdin
+        run_and_record "$prompt_file" exec resume -o "$response_file" "$session_id" -
       fi
     fi
     ;;
   review)
     if [[ $# -gt 0 ]]; then
-      run_codex exec review -o "$last_message" "$*"
+      write_prompt_from_args "$@"
+      run_and_record "" exec review -o "$response_file" "$*"
     else
-      run_codex exec review -o "$last_message" -
+      write_prompt_from_stdin
+      run_and_record "$prompt_file" exec review -o "$response_file" -
     fi
     ;;
   help|-h|--help)

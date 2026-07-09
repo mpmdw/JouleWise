@@ -105,6 +105,38 @@ Every substantial session runs one conductor procedure:
     post-large-workload meta-reassessment (owned by operation-loop §10)
     always fires, and it runs LAST.
 
+### Stop cards and paused work
+
+When a session stops with live work in progress, the lead creates or
+updates an `ACTIVE_STOP_CARD` at the top of `RUN_STATE.md`. While active,
+that card is the single restart authority and overrides every lower
+"what next" list, queue rank, mission guide, and run-report default.
+
+A stop card must name:
+
+- the resume authority and exact artifact pointer,
+- the reason for stopping,
+- worktrees, branches, PRs, and off-repo artifacts that must not be
+  cleaned accidentally,
+- status terms for each paused item,
+- the first resume action, and
+- the clearance criteria.
+
+Use these status terms for paused work:
+
+| Term | Meaning |
+|---|---|
+| `APPLIED_UNVERIFIED` | A worker reports code or docs are applied, but the lead has not gated the diff. Not merge-safe. |
+| `LEAD_GATED` | The lead has reviewed and run the required local/live checks for the item. |
+| `PR_OPEN_CI_GREEN` | A PR exists and CI is green, but merge authority has not yet fired. |
+| `MERGED` | The accepted work has landed on main. |
+| `UNREAD_UNADJUDICATED` | A report/synthesis exists but has not been consumed into decisions, queue rows, or rejected findings. |
+| `ADJUDICATED` | Findings have explicit accept/reject/defer disposition and downstream artifacts are updated. |
+
+Before an intentional pause, do the minimal stop sync even if full
+bookkeeping cannot fit: update only `RUN_STATE.md`'s stop card and the
+rank-0 queue row. That is enough to prevent accidental bypass.
+
 ## The artifact system (where rigor becomes auditable)
 
 Each fact has exactly one home; everything else points at it:
@@ -120,7 +152,7 @@ Each fact has exactly one home; everything else points at it:
 | `RUN_STATE.md` | Intake pointer only: current state, latest report, next action. History lives in run reports. |
 | `docs/risk_register.md` | Live risks with triggers and mitigation states. |
 
-Two instrumentation ledgers close the loop on the process itself:
+Instrumentation ledgers close the loop on the process itself:
 
 - **Per-layer yield:** every review layer's unique catches are
   attributed and tallied per session. A layer with zero unique catches
@@ -134,7 +166,35 @@ Two instrumentation ledgers close the loop on the process itself:
   vibes. Current signal: pinned-spec delegation runs essentially
   defect-free; the serious defects cluster in volunteered additions and
   design-freedom wire contracts — which is exactly where the full lens
-  tier is now mandatory.
+- **Invocation manifest:** substantial delegated/tool/skill runs get a
+  lightweight manifest row per invocation. Minimum fields:
+  `run_id`, `parent_report`, `role_or_lens`, `model`, `wrapper`,
+  `session_id`, `prompt_sha256`, `prompt_path`, `output_path`, `status`,
+  `consumed_by`, `disposition`, and `commit_or_pr`. Raw logs can stay
+  out of git; every ephemeral artifact still needs a committed pointer
+  row with `path`, `sha256` or stable id, `promoted_to`, and
+  `not_promoted_reason`.
+
+## Council discipline
+
+Councils are expensive instruments. Use a full council for methodology,
+measurement validity, schema/contract changes, claim boundaries, hardware
+protocols, or explicit user requests. For ordinary implementation, use a
+small number of targeted lenses plus lead adjudication.
+
+Every high-impact council must leave a durable scorecard:
+
+- unique catches by severity,
+- accepted/rejected/deferred/false-positive counts,
+- lead triage and rework time when practical,
+- shipped artifacts,
+- queue rows created or re-ranked,
+- decision-log IDs promoted, and
+- a disposition table: finding → ruling → owner → artifact/queue/decision
+  target → closure check.
+
+Deferred decision-log promotion is itself a tracked obligation, not
+ambient prose in a report.
 
 ## Topology: how it evolved (an example of the loop improving itself)
 
@@ -188,7 +248,10 @@ Pointer map only; mechanics stay in their owning files.
 - Committed invocation wrapper: `scripts/codex-run`.
   Usage: `codex-run <out.md> [--timeout SEC] [-C DIR] [-s SANDBOX] [--resume] '<prompt>'`.
   It writes `<out>.status`.
-- Project bridge: `scripts/codex-bridge`.
+- Project bridge: `scripts/codex-bridge`; writes prompt snapshots,
+  response snapshots, logs, status files, and
+  `.codex-bridge/invocation_manifest.jsonl` rows with prompt/output/log
+  hashes.
 - Skill-only mechanics on the operator's machine live under
   `~/.claude/skills`: `operation-loop` is the conductor,
   `codex-delegation` is the invocation/consumption contract,

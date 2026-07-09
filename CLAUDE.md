@@ -10,5 +10,9 @@ This repository has a local Codex bridge for second-agent work.
   launches must be installed locally). Machine-local conveniences that
   may be absent on a clean clone: the Claude Code subagent named `codex`
   and any Codex-related global skills.
-- Codex runs from this repository root and mirrors its final response to `.codex-bridge/last-message.md`.
+- Codex runs from this repository root and mirrors its final response to
+  `.codex-bridge/last-message.md`. `scripts/codex-bridge` also keeps
+  per-run prompt/response/log snapshots and appends
+  `.codex-bridge/invocation_manifest.jsonl` rows with prompt/output/log
+  hashes and session ids when present.
 - For ordinary JouleWise implementation sessions, follow `docs/agent_playbook.md` Mission M0 before choosing work from `TASK_QUEUE.md`.

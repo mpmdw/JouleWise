@@ -49,8 +49,10 @@ needs 2M baselines:     M10 later pairing-feasibility matrix + split runs
 
 ## Mission M0: Preflight (every session)
 
-1. Read only the targeted `RUN_STATE.md` sections: "Current Project
-   Status", "Known Workspace State", and "What Is Next".
+1. Read only the targeted `RUN_STATE.md` sections: `ACTIVE_STOP_CARD`
+   if present, "Current Project Status", "Known Workspace State", and
+   "What Is Next". If the stop card is ACTIVE, it overrides this
+   playbook and the task queue until cleared.
 2. Read `TASK_QUEUE.md`'s Current Queue and Do-Not-Do-Yet list.
 3. Read the selected mission's own read-first list. Read `AGENT_PLAN.md`
    only at phase starts or when the project structure changes. Consult
