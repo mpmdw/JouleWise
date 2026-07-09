@@ -104,3 +104,43 @@ RESUME (if interrupted here): read wf_c5294fe5-a32 results → triage →
 fix rounds where needed → lead gates → commit per worktree → 4 small
 PRs (base main); re-verify strictfix-r2 against the REAL corpus
 (all 6 must pass strict; tamper test must fail) before its PR.
+
+### CP-4 — quota clarification + full resume via direct codex-run
+- CORRECTION (Ed): the 10:10pm session limit is CLAUDE-side (workflow
+  wrapper agents), NOT Codex — Codex is near-unlimited. All paused work
+  resumed immediately via direct codex-run (no Claude-side wrappers):
+  (a) envgate fix round — 2 lead-confirmed defects pinned (fail-open
+  verdict without profile/level-set pin; uncaught BundleReadError
+  breaching D-036) + all sustained lens findings; (b) hashcheck fix
+  round; (c) bundlepack fix round — both self-triage sustained findings
+  from the extracted lens JSON; (d) methodology-review COMPLETION —
+  codex self-verifies unverified high-materiality findings against the
+  repo and writes the 5-section synthesis (the Workflow's 36 failed
+  verify agents + synthesis are NOT being re-run Claude-side).
+- Key verified finding already in hand (methodology review, narrowed by
+  refuter): text-item realized-vs-manifest hash never compared at run or
+  verify time (bundle_read skips text items) — fix must be
+  HASH-DOMAIN-AWARE (affine source_sha256 is a TEXT hash; jw_mixed's is
+  a token-ids hash; naive comparison malforms every affine item) + a
+  realized-vs-planned count check. Gating gap, not capture gap (drift is
+  post-hoc detectable; harm = silently succeeded off-grid campaign).
+- Strictfix: PR #22 OPEN, CI green both legs, live-gated both
+  directions (6/6 corpus valid; tamper fails named). Awaiting merge
+  gate (fresh reviewer pass) with the other three PRs.
+- Durable artifact copies (survive /tmp cleaning):
+  ~/.claude/projects/-Users-edr-code-JouleWise/<session>/checkpoint-2026-07-08/
+  (codex out-files, debate papers, extracted workflow results,
+  trace-notes). Workflow journals (authoritative):
+  .../subagents/workflows/wf_c5294fe5-a32/journal.jsonl (lens rounds,
+  complete) and wf_efd7d9d2-c85/journal.jsonl (methodology, 20/56 —
+  completion delegated to codex, do NOT resume the workflow).
+
+RESUME (if interrupted here): read scratchpad/codex/{envgate-fix,
+hashcheck-fix,bundlepack-fix,methodology-synthesis}.md (or the durable
+copies); lead-gate each stream diff (suite green + live checks where
+relevant: envgate against a real affine mock bundle), commit per
+worktree, small PRs base=main; merge gate for PRs #22 + the three new
+ones = fresh codex final-head passes + CI; then adjudicate the
+methodology synthesis (dispositions as CP entries), land accepted
+pre-campaign changes, and write Ed's four-part answer (queue fit /
+determinism verdict / capture changes / askable questions).
