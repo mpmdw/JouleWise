@@ -5,10 +5,12 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import os
 import re
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from joulewise.bundle import (
     BundleError,
@@ -514,6 +516,38 @@ class ExperimentManifestTests(unittest.TestCase):
     def test_missing_experiment_id_raises(self) -> None:
         with self.assertRaises(BundleError):
             write_experiment_manifest(self.runs_root, {"members": []})
+
+    def test_overwrite_is_atomic_replace(self) -> None:
+        # P2-040 FIX-6 (ARC-5): the rewrite goes through a same-directory temp
+        # file + os.replace, so a failure mid-rewrite leaves the previous
+        # manifest intact rather than a truncated JSON file.
+        first = {"experiment_id": "exp-001", "members": ["exp-001__r1"]}
+        extended = {"experiment_id": "exp-001", "members": ["exp-001__r1", "exp-001__r2"]}
+        path = write_experiment_manifest(self.runs_root, first)
+
+        def failing_replace(src: object, dst: object) -> None:
+            raise OSError("simulated crash during manifest replacement")
+
+        with mock.patch("joulewise.bundle.os.replace", side_effect=failing_replace):
+            with self.assertRaises(OSError):
+                write_experiment_manifest(self.runs_root, extended)
+
+        # Destination untouched by the failed rewrite; no temp litter left.
+        self.assertEqual(json.loads(path.read_text()), first)
+        leftovers = [
+            entry.name
+            for entry in (self.runs_root / "experiments").iterdir()
+            if entry.name != path.name
+        ]
+        self.assertEqual(leftovers, [])
+
+    def test_successful_overwrite_leaves_no_temp_files(self) -> None:
+        write_experiment_manifest(self.runs_root, {"experiment_id": "exp-001", "members": []})
+        write_experiment_manifest(
+            self.runs_root, {"experiment_id": "exp-001", "members": ["exp-001__r1"]}
+        )
+        entries = sorted(p.name for p in (self.runs_root / "experiments").iterdir())
+        self.assertEqual(entries, ["exp-001.json"])
 
 
 if __name__ == "__main__":
