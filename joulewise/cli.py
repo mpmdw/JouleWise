@@ -351,6 +351,8 @@ _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
     "idle_baseline.gpu_freq_hz_mean",
     "idle_baseline.idle_window_suspect",
     "measurement_quality.idle_window_suspect",
+    # P2-040 FIX-8: local cleanup quality is additive over legacy summaries.
+    "measurement_quality.runtime_cleanup_ok",
 }
 
 _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE = _STRICT_ADDITIVE_ABSENT_TOLERANCE | {

@@ -4,6 +4,7 @@ __version__ = "0.1.0"
 
 from joulewise.schemas import (
     BenchmarkConfig,
+    ConfigKeyWarning,
     FailureReason,
     HardwareTarget,
     InterconnectConfig,
@@ -18,6 +19,7 @@ from joulewise.schemas import (
 
 __all__ = [
     "BenchmarkConfig",
+    "ConfigKeyWarning",
     "FailureReason",
     "HardwareTarget",
     "InterconnectConfig",

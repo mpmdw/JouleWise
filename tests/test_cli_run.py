@@ -639,6 +639,7 @@ class StrictValidateTests(CliRunTestCase):
         del summary["idle_baseline"]["gpu_idle_ratio_min"]
         del summary["idle_baseline"]["idle_window_suspect"]
         del summary["measurement_quality"]["idle_window_suspect"]
+        del summary["measurement_quality"]["runtime_cleanup_ok"]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
@@ -747,6 +748,7 @@ class StrictValidateTests(CliRunTestCase):
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         del summary["measurement_quality"]["token_counts_source"]
         del summary["measurement_quality"]["phase_identifiability"]
+        del summary["measurement_quality"]["runtime_cleanup_ok"]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
@@ -756,6 +758,7 @@ class StrictValidateTests(CliRunTestCase):
         self.assertEqual(len(problems), 1)
         self.assertIn("measurement_quality.token_counts_source", problems[0])
         self.assertIn("measurement_quality.phase_identifiability", problems[0])
+        self.assertIn("measurement_quality.runtime_cleanup_ok", problems[0])
 
     def test_legacy_summary_missing_honesty_fields_keeps_strict_tolerance(self) -> None:
         bundle = self.make_bundle("strict-legacy-missing-honesty")
@@ -763,6 +766,7 @@ class StrictValidateTests(CliRunTestCase):
         del summary["summary_provenance"]
         del summary["measurement_quality"]["token_counts_source"]
         del summary["measurement_quality"]["phase_identifiability"]
+        del summary["measurement_quality"]["runtime_cleanup_ok"]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )

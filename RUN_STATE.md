@@ -62,6 +62,14 @@ implementation fan-out ran. This card is the resume authority.
 
 **Completed this arc:**
 
+- P2-040 REMAINDER IMPLEMENTED (uncommitted on
+  `impl/p2040-remainder`, awaiting lead pathspec commit + retained-corpus
+  gate): FIX-7a deterministic unknown-key stderr/metadata warnings, FIX-7b
+  adjudicated post-active-warmup settling, and FIX-8/ARC-6 local cleanup
+  quality propagation. Canonical suite 924 OK/12 skipped; local corpus test
+  produced the required loud skip. Report:
+  `docs/run_reports/2026-07-10-p2040-remainder.md`.
+
 - PR #40 (C-027 council review) MERGED to main; site regenerated and
   committed; SITE DEPLOY still pending (permission-gated):
   `cd site_capsule && npx lakebed deploy`.
@@ -212,6 +220,9 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-10 P2-040 remainder implementation (uncommitted, pending lead
+  pathspec commit/corpus gate):
+  `docs/run_reports/2026-07-10-p2040-remainder.md`
 - 2026-07-10 P2-040 / RETRO-001 fix round (committed on c027-int-p2040
   after lead review): `docs/run_reports/2026-07-10-p2040-fix-round.md`
 - 2026-07-09 C-027 whole-project council review (7 gpt-5.6-sol lenses +
@@ -255,6 +266,12 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
+- P2-040 remainder worktree: pre-change baseline `Ran 910 tests in 34.584s`,
+  `OK (skipped=12)`; post-change focused affected modules `Ran 256 tests in
+  3.744s`, `OK (skipped=1)`; canonical `Ran 924 tests in 32.812s`, `OK
+  (skipped=12)`; compileall and `git diff --check` clean. The unchanged
+  six-corpus test produced its required loud skip because `runs/` is absent;
+  lead 6/6 strict read-only rerun remains the landing gate.
 - P2-040 / RETRO-001 fix-round worktree: canonical suite `Ran 908 tests in
   32.723s`, `OK (skipped=11)`; focused 211 tests OK; claims lint exit 0 with
   no errors; `git diff --check` clean. The absent `runs/` corpus produced the
@@ -308,6 +325,11 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
+- Worktree `/Users/edr/code/JouleWise-wt/p2040rem` on
+  `impl/p2040-remainder` is intentionally dirty with the uncommitted P2-040
+  remainder implementation, tests, contracts, checklist/queue handoff, and
+  dated run report. The lead commits by pathspec; do not discard or commit
+  unrelated paths wholesale.
 - `main` and `origin/main` contain the user-directed Claude Code → Codex
   bridge hardening from commit `1d7c415` (pushed direct as a bounded
   tooling change, closeout `ef34cc9`). Branch `c027-council-review`
@@ -323,9 +345,9 @@ queue owns ordering (C-027):**
 
 ## What Is Next
 
-See **RESTART HERE** above — that block and `TASK_QUEUE.md` are the only
-next-action authorities. (C-027 removed the duplicated ranking that
-previously lived here after it drifted stale against the queue.)
+Lead-review the uncommitted P2-040 remainder diff, run the retained six-bundle
+strict read-only gate, and commit by pathspec. Once landed, P2-038 is the next
+`[AGENT]` correctness row. `TASK_QUEUE.md` remains the ordering authority.
 
 Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
 C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),
