@@ -413,9 +413,10 @@ class StrictValidateTests(CliRunTestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("valid bundle:", out)
 
-    def test_missing_p2029_additive_uncertainty_fields_pass_strict(self) -> None:
+    def test_legacy_dispatch_tolerates_governed_additive_absence(self) -> None:
         bundle = self.make_bundle("strict-p2029-additive-absent")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary.pop("summary_provenance")
         for key in (
             "energy_uncertainty_status",
             "energy_variance_terms_j2",
@@ -426,8 +427,53 @@ class StrictValidateTests(CliRunTestCase):
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
+        self.mark_allowlisted_legacy_identity(bundle)
 
+        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+            self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_reducer_0_3_0_dispatch_requires_exact_summary(self) -> None:
+        bundle = self.make_bundle("strict-v030-exact")
         self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_reducer_0_2_x_dispatch_requires_re_reduction(self) -> None:
+        bundle = self.make_bundle("strict-v02-rejected")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.2.9"
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.assertIn(
+            "strict: unsupported reducer version; re-reduction required",
+            validate_bundle(bundle, strict=True),
+        )
+
+    def test_unknown_reducer_version_dispatch_requires_re_reduction(self) -> None:
+        bundle = self.make_bundle("strict-vunknown-rejected")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "future"
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.assertIn(
+            "strict: unsupported reducer version; re-reduction required",
+            validate_bundle(bundle, strict=True),
+        )
+
+    def test_claimed_0_3_0_missing_governed_field_fails_exact_dispatch(self) -> None:
+        bundle = self.make_bundle("strict-v030-governed-absence")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["claim_eligibility"]["gross_request"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("claim_eligibility.gross_request" in problem for problem in problems),
+            problems,
+        )
 
     def test_mock_suite_bundle_passes_strict(self) -> None:
         exit_code, stdout, stderr = self.run_verb(
