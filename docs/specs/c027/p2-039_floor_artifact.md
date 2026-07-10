@@ -10,6 +10,8 @@ can consume. It is an `[AGENT]` prerequisite: P2-015 may run its named SMOKE
 preconditions, but it must not collect claim-facing floor cells until this
 spec's guard rule and artifact contract have been lead-adjudicated and landed.
 
+**Validator boundary (v1).** The v1 validator validates schema, arithmetic re-derivation, identity-hash recomputation, and claim-readiness invariants; it does not yet bind source provenance to actual bundle bytes or the frozen campaign order log. That binding lands with the typed loader in the pre-P2-015 integration unit, and until then floor artifacts are not claim-consumable. The existing fences remain: no CLI integration and no `reduce.py` hooks.
+
 Authority, in descending order for this specification:
 
 1. D-054 and its 2026-07-09 C-027 amendment in `docs/decision_log.md`.

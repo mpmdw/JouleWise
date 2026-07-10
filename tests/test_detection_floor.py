@@ -10,9 +10,11 @@ import math
 import unittest
 
 from joulewise.detection_floor import (
+    CONDITION_FAMILY_DOMAIN,
     GUARD_MINIMUM_N,
     GUARD_REFERENCE_N,
     SCHEMA_VERSION,
+    STACK_IDENTITY_DOMAIN,
     TRANSPORT_REASON_CODES,
     TRANSPORT_RULE_ID,
     abba_delta,
@@ -22,6 +24,7 @@ from joulewise.detection_floor import (
     build_floor_artifact,
     build_floor_cell,
     build_transport_group,
+    canonical_domain_sha256,
     compose_transport_group,
     comparative_false_effect_floor,
     small_sample_guard_factor,
@@ -33,6 +36,38 @@ TOL = 1e-12
 HEX_A = "a" * 64
 HEX_B = "b" * 64
 HEX_C = "c" * 64
+
+
+def condition_family(condition_id):
+    definition = {
+        "condition_id": condition_id,
+        "comparison_policy": "same_condition_repeat",
+    }
+    return {
+        "condition_family_id": condition_id,
+        "condition_family_definition": definition,
+        "condition_family_sha256": canonical_domain_sha256(
+            CONDITION_FAMILY_DOMAIN, definition
+        ),
+    }
+
+
+def make_stack_identity(**overrides):
+    identity = {
+        "hardware_unit": "mac-unit-1 / Apple M3 Max",
+        "os_version": "macOS 15.5 (24F74)",
+        "runtime_version": "mlx 1.0",
+        "kernel_library": "metal/default",
+        "model_artifact_sha256": HEX_C,
+        "quantization": "none",
+        "tokenizer_identity": "qwen2.5/revision-test/class-test/vocab-test",
+        "sampler_output_policy": "greedy/max_new_tokens=64",
+        "batching_concurrency_policy": "single-request sequential",
+        "measurement_boundary_label": "wall-d018",
+        "telemetry_backend": "powermetrics 14.0",
+    }
+    identity.update(overrides)
+    return identity
 
 # Spec Unit 9.1 (also the C-027 worked example).
 FIXTURE_A_ENERGIES = [10.0, 10.0, 10.0, 10.0, 20.0]
@@ -204,7 +239,7 @@ class TestComparativeFloor(unittest.TestCase):
 
 
 def make_regime(
-    stack_sha=HEX_A,
+    stack_identity=None,
     power=(5.0, 10.0),
     duration=(1.0, 4.0),
     p95_gap=0.3,
@@ -217,22 +252,12 @@ def make_regime(
     def term(pair):
         return {"applicability": pair[0], "maximum": pair[1]}
 
+    stack = stack_identity or make_stack_identity()
     return {
-        "stack_identity": {
-            "stack_identity_sha256": stack_sha,
-            "measurement_boundary_id": "wall-d018",
-            "target_unit_id": "mac-unit-1",
-            "hardware_fingerprint_sha256": HEX_C,
-            "os_build": "24F74",
-            "runtime_backend": "mlx",
-            "runtime_version": "1.0",
-            "model_artifact_sha256": HEX_C,
-            "tokenizer_artifact_sha256": HEX_C,
-            "telemetry_backend": "powermetrics",
-            "telemetry_version": "14.0",
-            "rail_manifest_sha256": HEX_C,
-            "sampler_config_sha256": HEX_C,
-        },
+        "stack_identity": stack,
+        "stack_identity_sha256": canonical_domain_sha256(
+            STACK_IDENTITY_DOMAIN, stack
+        ),
         "stress_observed": {
             "mean_power_w_min": power[0],
             "mean_power_w_max": power[1],
@@ -290,8 +315,7 @@ def make_cell(cell_id="cell-1", energies=None, deltas=None, regime=None, conditi
             "backend": "powermetrics",
             "metric": "energy_wall_j",
             "window_class": "request",
-            "condition_family_id": condition,
-            "condition_family_sha256": HEX_B,
+            **condition_family(condition),
         },
         eligibility={
             "use_role": "primary_claim_gate",
@@ -320,11 +344,11 @@ def make_artifact(cells=None):
         backend="powermetrics",
         metric="energy_wall_j",
         window_class="request",
-        stack_identity_sha256=HEX_A,
+        stack_identity=cells[0]["source_regime"]["stack_identity"],
         source_cells=cells,
         allowed_consumer_condition_families=[
-            {"condition_family_id": "cf-1", "condition_family_sha256": HEX_B},
-            {"condition_family_id": "cf-2", "condition_family_sha256": HEX_B},
+            condition_family("cf-1"),
+            condition_family("cf-2"),
         ],
     )
     return build_floor_artifact(
@@ -357,6 +381,11 @@ class TestArtifactEmitValidate(unittest.TestCase):
         self.assertTrue(close(cell["floor_abs_j"], FIXTURE_A_GUARDED))
         self.assertTrue(close(cell["floor_cmp_j"], FIXTURE_B_GUARDED))
         self.assertTrue(close(cell["floor_gate_j"], FIXTURE_A_GUARDED))
+
+    def test_method_uses_neutral_t_quantile_parameter(self):
+        method = make_artifact()["method"]
+        self.assertEqual(method["t_quantile"], 0.975)
+        self.assertNotIn("confidence", method)
 
     def assert_invalid(self, artifact, fragment):
         errors = validate_floor_artifact(artifact)
@@ -444,15 +473,178 @@ class TestArtifactEmitValidate(unittest.TestCase):
         drift["applicability"] = "required"  # required must carry a numeric max
         self.assert_invalid(bad, "idle_drift_bound_j")
 
+    def test_hash_derived_identity_objects_match(self):
+        artifact = make_artifact()
+        stack = artifact["cells"][0]["source_regime"]["stack_identity"]
+        self.assertEqual(
+            artifact["cells"][0]["source_regime"]["stack_identity_sha256"],
+            canonical_domain_sha256(STACK_IDENTITY_DOMAIN, stack),
+        )
+        family = artifact["cells"][0]["key"]
+        self.assertEqual(
+            family["condition_family_sha256"],
+            canonical_domain_sha256(
+                CONDITION_FAMILY_DOMAIN, family["condition_family_definition"]
+            ),
+        )
+        self.assertEqual(validate_floor_artifact(artifact), [])
+
+    def test_analyst_supplied_hash_label_stuffing_rejected(self):
+        artifact = make_artifact()
+        artifact["cells"][0]["source_regime"]["stack_identity_sha256"] = HEX_C
+        self.assert_invalid(artifact, "does not match recomputed joulewise.stack_identity.v1")
+
+    def test_stack_identity_single_field_mutation_rejected(self):
+        artifact = make_artifact()
+        artifact["cells"][0]["source_regime"]["stack_identity"][
+            "runtime_version"
+        ] = "mlx 1.0-mutated"
+        self.assert_invalid(artifact, "does not match recomputed joulewise.stack_identity.v1")
+
+    def test_condition_family_definition_mutation_rejected(self):
+        artifact = make_artifact()
+        artifact["cells"][0]["key"]["condition_family_definition"][
+            "comparison_policy"
+        ] = "post_hoc_wildcard"
+        self.assert_invalid(artifact, "does not match recomputed joulewise.condition_family.v1")
+
+    def test_claim_ready_rejects_smoke_only_role(self):
+        artifact = make_artifact()
+        artifact["cells"][0]["eligibility"]["use_role"] = "smoke_only"
+        self.assert_invalid(artifact, "claim_ready requires primary_claim_gate")
+
+    def test_claim_ready_rejects_minimum_n_above_stored_n(self):
+        artifact = make_artifact()
+        artifact["cells"][0]["eligibility"]["minimum_claim_n"] = 6
+        self.assert_invalid(artifact, "absolute n is below minimum_claim_n")
+        self.assert_invalid(artifact, "comparative n is below minimum_claim_n")
+
+    def test_claim_ready_rejects_duplicate_source_bundles(self):
+        artifact = make_artifact()
+        bundle_ids = artifact["cells"][0]["provenance"]["bundle_ids"]
+        bundle_ids[1] = bundle_ids[0]
+        self.assert_invalid(artifact, "source bundle_ids must be unique")
+
+    def test_claim_ready_rejects_duplicate_observation_bundle_ids(self):
+        artifact = make_artifact()
+        observations = artifact["cells"][0]["absolute"]["bundle_observations"]
+        observations[1]["bundle_id"] = observations[0]["bundle_id"]
+        self.assert_invalid(artifact, "absolute: source bundle_ids must be unique")
+
+    def test_claim_ready_rejects_unknown_regime_term(self):
+        artifact = make_artifact()
+        term = artifact["cells"][0]["source_regime"]["stress_observed"][
+            "bound_terms"
+        ]["clock_anchor_bound_s"]
+        term.update({"applicability": "unknown", "maximum": None})
+        self.assert_invalid(artifact, "claim_ready forbids unknown regime terms")
+
+    def test_claim_ready_rejects_incomplete_transport_membership(self):
+        artifact = make_artifact()
+        artifact["transport_groups"][0]["source_cell_ids"] = ["missing-cell"]
+        self.assert_invalid(artifact, "source cell 'missing-cell' not found")
+        self.assert_invalid(artifact, "claim_ready requires complete transport membership")
+
+    def test_claim_ready_rejects_condition_missing_from_transport_group(self):
+        artifact = make_artifact()
+        artifact["transport_groups"][0]["allowed_consumer_condition_families"] = [
+            condition_family("cf-2")
+        ]
+        self.assert_invalid(artifact, "condition family missing from transport group")
+
+    def test_claim_usable_is_derived_from_ready_and_staleness(self):
+        artifact = make_artifact()
+        artifact["cells"][0]["eligibility"]["claim_usable"] = False
+        self.assert_invalid(artifact, "claim_usable must equal claim_ready and not stale")
+
+        artifact = make_artifact()
+        artifact["cells"][0]["eligibility"].update(
+            {"status": "stale", "claim_usable": True}
+        )
+        self.assert_invalid(artifact, "claim_usable must equal claim_ready and not stale")
+
+    def test_absolute_n_zero_is_named_validation_error_not_exception(self):
+        artifact = make_artifact()
+        record = artifact["cells"][0]["absolute"]
+        record.update({"n": 0, "residuals_j": [], "bundle_observations": []})
+        self.assert_invalid(artifact, "absolute: n must be at least 2")
+
+    def test_absolute_n_one_is_named_validation_error_not_exception(self):
+        artifact = make_artifact()
+        record = artifact["cells"][0]["absolute"]
+        record.update(
+            {
+                "n": 1,
+                "residuals_j": record["residuals_j"][:1],
+                "bundle_observations": record["bundle_observations"][:1],
+            }
+        )
+        self.assert_invalid(artifact, "absolute: n must be at least 2")
+
+    def test_absolute_empty_arrays_are_named_validation_errors(self):
+        artifact = make_artifact()
+        artifact["cells"][0]["absolute"]["residuals_j"] = []
+        artifact["cells"][0]["absolute"]["bundle_observations"] = []
+        self.assert_invalid(artifact, "residuals_j must be a nonempty array")
+        self.assert_invalid(artifact, "bundle_observations must be a nonempty array")
+
+    def test_comparative_count_length_mismatch_is_named_validation_error(self):
+        artifact = make_artifact()
+        artifact["cells"][0]["comparative"]["blocks"].pop()
+        self.assert_invalid(artifact, "n_blocks, block_deltas_j, and blocks lengths disagree")
+
+    def test_large_magnitude_one_joule_alteration_rejected(self):
+        artifact = make_artifact(
+            [
+                make_cell(
+                    energies=[
+                        1e12,
+                        1e12 + 1.0,
+                        1e12 - 1.0,
+                        1e12 + 2.0,
+                        1e12 - 2.0,
+                    ]
+                )
+            ]
+        )
+        self.assertEqual(validate_floor_artifact(artifact), [])
+        artifact["cells"][0]["absolute"]["mean_j"] += 1.0
+        self.assert_invalid(artifact, "stored mean_j does not match observations")
+
+    def test_idle_drift_guard_pending_and_calibrated_shapes(self):
+        pending = make_artifact()
+        self.assertEqual(validate_floor_artifact(pending), [])
+
+        calibrated = make_artifact()
+        calibrated["idle_drift_guard"] = {
+            "calibration_status": "calibrated",
+            "method": "p2_015_prediction_guard_v1",
+            "guard_w": 0.25,
+            "n_bundles": 2,
+            "bundle_sha256": [HEX_A, HEX_B],
+            "cell_id": "idle-cell-1",
+            "artifact_sha256": HEX_C,
+        }
+        self.assertEqual(validate_floor_artifact(calibrated), [])
+
+    def test_idle_drift_guard_internal_inconsistency_rejected(self):
+        artifact = make_artifact()
+        artifact["idle_drift_guard"]["n_bundles"] = 1
+        self.assert_invalid(artifact, "n_bundles and bundle_sha256 length disagree")
+
 
 def make_consumer(**overrides):
+    stack = make_stack_identity()
+    family = condition_family("cf-2")
     consumer = {
         "backend": "powermetrics",
         "metric": "energy_wall_j",
         "window_class": "request",
-        "stack_identity_sha256": HEX_A,
-        "condition_family_id": "cf-2",
-        "condition_family_sha256": HEX_B,
+        "stack_identity_sha256": canonical_domain_sha256(
+            STACK_IDENTITY_DOMAIN, stack
+        ),
+        "condition_family_id": family["condition_family_id"],
+        "condition_family_sha256": family["condition_family_sha256"],
         "mean_power_w_min": 6.0,
         "mean_power_w_max": 9.0,
         "window_duration_s_min": 1.5,
@@ -484,6 +676,25 @@ class TestTransportRule(unittest.TestCase):
 
     def test_predeclared_in_envelope_consumer_is_allowed(self):
         self.check(make_consumer())
+
+    def test_artifact_hash_mismatch_reason_is_reachable(self):
+        reasons = transport_refusal_reasons(
+            make_consumer(),
+            self.group,
+            self.cells_by_id,
+            artifact_sha256=HEX_A,
+            expected_artifact_sha256=HEX_B,
+        )
+        self.assertEqual(set(reasons), {"artifact_hash_mismatch"})
+
+    def test_artifact_schema_invalid_reason_is_reachable(self):
+        reasons = transport_refusal_reasons(
+            make_consumer(),
+            self.group,
+            self.cells_by_id,
+            artifact_schema_valid=False,
+        )
+        self.assertEqual(set(reasons), {"artifact_schema_invalid"})
 
     def test_stack_mismatch_1p5b_vs_122b(self):
         # Same Mac, same telemetry backend, different model artifact ->

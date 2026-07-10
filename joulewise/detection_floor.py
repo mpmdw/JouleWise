@@ -1,6 +1,7 @@
 """P2-039 detection-floor calculator (D-054 false-effect guard).
 
-Implements the P2-039 DRAFT spec (``docs/specs/c027/p2-039_floor_artifact.md``):
+Implements the accepted P2-039 operational spec
+(``docs/specs/c027/p2-039_floor_artifact.md``):
 
 - the absolute and comparative D-054 false-effect floors with the frozen
   small-sample guard factor;
@@ -10,12 +11,20 @@ Implements the P2-039 DRAFT spec (``docs/specs/c027/p2-039_floor_artifact.md``):
 - the pure conservative regime-transport refusal rule
   (``same_stack_componentwise_worst_case.v1``).
 
-Pure calculation module: no I/O, no CLI integration (integration into
-``cli.py``/``reduce.py`` is deferred to lead adjudication of the DRAFT spec).
+Validator boundary (v1): this module validates schema, arithmetic
+re-derivation, identity-hash recomputation, and claim-readiness invariants. It
+does not yet bind source provenance to actual bundle bytes or the frozen
+campaign order log; that binding lands with the typed loader in the pre-P2-015
+integration unit, and until then floor artifacts are not claim-consumable.
+
+Pure calculation module: no I/O, no CLI integration and no ``reduce.py``
+hooks; those remain deferred to the typed-loader integration unit.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from dataclasses import dataclass
 from typing import Mapping, Optional, Sequence
@@ -30,6 +39,8 @@ __all__ = [
     "GUARD_REFERENCE_N",
     "GUARD_MINIMUM_N",
     "TRANSPORT_REASON_CODES",
+    "STACK_IDENTITY_DOMAIN",
+    "CONDITION_FAMILY_DOMAIN",
     "FloorEstimate",
     "small_sample_guard_factor",
     "absolute_false_effect_floor",
@@ -44,21 +55,24 @@ __all__ = [
     "compose_transport_group",
     "validate_floor_artifact",
     "transport_refusal_reasons",
+    "canonical_domain_sha256",
 ]
 
 SCHEMA_VERSION = "joulewise.detection_floor_artifact.v1"
 METHOD_ID = "d054_false_effect_guard.v1"
 GUARD_RULE_ID = "residual_df_ratio_to_n10.v1"
 TRANSPORT_RULE_ID = "same_stack_componentwise_worst_case.v1"
+STACK_IDENTITY_DOMAIN = "joulewise.stack_identity.v1"
+CONDITION_FAMILY_DOMAIN = "joulewise.condition_family.v1"
 
-# ADJUDICATION-PENDING (P2-039 DRAFT spec Unit 2.3): the small-sample guard
-# below is the spec's frozen *proposal* — g(n) = max(1, sqrt((10-1)/(n-1)))
-# for n >= 5, i.e. the square root of the residual-degrees-of-freedom deficit
-# relative to the n=10 design point (g(5) = 1.5, joining exactly to 1.0 at
-# n=10). It has NOT yet been lead-adjudicated into D-054; do not treat it as
-# an accepted rule or describe it as a coverage/confidence guarantee.
+# Frozen operational safety factor, ACCEPTED by C-028 ADJUDICATION.md:
+# g(n) = max(1, sqrt((10-1)/(n-1))) for n >= 5. It is the square root of
+# the residual-degrees-of-freedom deficit relative to the n=10 design point.
+# It is not a tolerance, percentile-coverage, confidence, or power guarantee.
 GUARD_REFERENCE_N = 10
 GUARD_MINIMUM_N = 5
+_MAX_FLOOR_J = 1e6
+_MAX_RECOMPUTATION_ABS_DELTA_J = 1e-6
 
 _CALIBRATION_SCOPES = ("window_a", "window_b_revalidation", "smoke")
 _WINDOW_CLASSES = ("request", "phase", "item", "level", "session")
@@ -74,6 +88,35 @@ _ENVELOPE_MAX_FIELDS = (
     "bracketing_sample_gap_s_max",
 )
 _ENVELOPE_FIELDS = _ENVELOPE_MIN_FIELDS + _ENVELOPE_MAX_FIELDS
+_STACK_IDENTITY_FIELDS = (
+    "hardware_unit",
+    "os_version",
+    "runtime_version",
+    "kernel_library",
+    "model_artifact_sha256",
+    "quantization",
+    "tokenizer_identity",
+    "sampler_output_policy",
+    "batching_concurrency_policy",
+    "measurement_boundary_label",
+    "telemetry_backend",
+)
+_STACK_IDENTITY_KEYS = set(_STACK_IDENTITY_FIELDS)
+_CONDITION_FAMILY_KEYS = {
+    "condition_family_id",
+    "condition_family_definition",
+    "condition_family_sha256",
+}
+_IDLE_DRIFT_GUARD_KEYS = {
+    "calibration_status",
+    "method",
+    "guard_w",
+    "n_bundles",
+    "bundle_sha256",
+    "cell_id",
+    "artifact_sha256",
+}
+_IDLE_DRIFT_GUARD_METHOD = "p2_015_prediction_guard_v1"
 
 # Closed v1 reason set (spec Unit 6.3).
 TRANSPORT_REASON_CODES = (
@@ -93,6 +136,18 @@ TRANSPORT_REASON_CODES = (
     "consumer_term_unknown",
     "transport_group_incomplete",
 )
+
+
+def canonical_domain_sha256(domain: str, value: Mapping) -> str:
+    """Hash canonical JSON under a NUL-separated UTF-8 domain prefix."""
+    canonical = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(domain.encode("utf-8") + b"\0" + canonical).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -118,7 +173,7 @@ class FloorEstimate:
 
 
 def small_sample_guard_factor(n: int) -> float:
-    """Frozen (ADJUDICATION-PENDING) small-sample guard g(n) for n >= 5."""
+    """Frozen, accepted operational safety factor g(n) for n >= 5."""
     if isinstance(n, bool) or not isinstance(n, int):
         raise TypeError("n must be an int (bool rejected)")
     if n < GUARD_MINIMUM_N:
@@ -206,7 +261,7 @@ def abba_delta(a1_j: float, b1_j: float, b2_j: float, a2_j: float) -> float:
 def build_method_block() -> dict:
     return {
         "method_id": METHOD_ID,
-        "confidence": 0.95,
+        "t_quantile": 0.975,
         "t_critical_source": "joulewise.aggregate.student_t_critical_95.v1",
         "absolute_formula": "max(max_abs_residual_j,t_critical*sample_stddev_j*sqrt(1+1/n))",
         "comparative_formula": "max(max_abs_delta_j,abs(mean_delta_j)+t_critical*sample_stddev_j*sqrt(1+1/n))",
@@ -273,6 +328,18 @@ def build_floor_cell(
     transport_group_id: str,
     provenance: Mapping,
 ) -> dict:
+    key_record = dict(key)
+    definition = key_record.get("condition_family_definition")
+    if isinstance(definition, Mapping):
+        key_record["condition_family_sha256"] = canonical_domain_sha256(
+            CONDITION_FAMILY_DOMAIN, definition
+        )
+    regime_record = dict(source_regime)
+    stack_identity = regime_record.get("stack_identity")
+    if isinstance(stack_identity, Mapping):
+        regime_record["stack_identity_sha256"] = canonical_domain_sha256(
+            STACK_IDENTITY_DOMAIN, stack_identity
+        )
     floor_abs = absolute.get("guarded_floor_j") if absolute is not None else None
     floor_cmp = comparative.get("guarded_floor_j") if comparative is not None else None
     if floor_abs is not None and floor_cmp is not None:
@@ -281,14 +348,14 @@ def build_floor_cell(
         floor_gate = None
     return {
         "cell_id": cell_id,
-        "key": dict(key),
+        "key": key_record,
         "eligibility": dict(eligibility),
         "floor_abs_j": floor_abs,
         "floor_cmp_j": floor_cmp,
         "floor_gate_j": floor_gate,
         "absolute": dict(absolute) if absolute is not None else None,
         "comparative": dict(comparative) if comparative is not None else None,
-        "source_regime": dict(source_regime),
+        "source_regime": regime_record,
         "transport_group_id": transport_group_id,
         "provenance": dict(provenance),
     }
@@ -337,18 +404,21 @@ def build_transport_group(
     backend: str,
     metric: str,
     window_class: str,
-    stack_identity_sha256: str,
+    stack_identity: Mapping,
     source_cells: Sequence[Mapping],
     allowed_consumer_condition_families: Sequence[Mapping],
 ) -> dict:
     composed = compose_transport_group(source_cells)
+    stack = dict(stack_identity)
+    stack_hash = canonical_domain_sha256(STACK_IDENTITY_DOMAIN, stack)
     return {
         "transport_group_id": transport_group_id,
         "rule_id": TRANSPORT_RULE_ID,
         "backend": backend,
         "metric": metric,
         "window_class": window_class,
-        "stack_identity_sha256": stack_identity_sha256,
+        "stack_identity": stack,
+        "stack_identity_sha256": stack_hash,
         "source_cell_ids": [cell["cell_id"] for cell in source_cells],
         "allowed_consumer_condition_families": [dict(f) for f in allowed_consumer_condition_families],
         "composed_floor_abs_j": composed["composed_floor_abs_j"],
@@ -365,13 +435,25 @@ def build_floor_artifact(
     provenance: Mapping,
     cells: Sequence[Mapping],
     transport_groups: Sequence[Mapping],
+    idle_drift_guard: Optional[Mapping] = None,
 ) -> dict:
+    if idle_drift_guard is None:
+        idle_drift_guard = {
+            "calibration_status": "pending_calibration",
+            "method": _IDLE_DRIFT_GUARD_METHOD,
+            "guard_w": None,
+            "n_bundles": 0,
+            "bundle_sha256": [],
+            "cell_id": None,
+            "artifact_sha256": None,
+        }
     return {
         "schema_version": SCHEMA_VERSION,
         "artifact_id": artifact_id,
         "calibration_scope": calibration_scope,
         "method": build_method_block(),
         "provenance": dict(provenance),
+        "idle_drift_guard": dict(idle_drift_guard),
         "cells": [dict(cell) for cell in cells],
         "transport_groups": [dict(group) for group in transport_groups],
     }
@@ -387,6 +469,7 @@ _TOP_KEYS = {
     "calibration_scope",
     "method",
     "provenance",
+    "idle_drift_guard",
     "cells",
     "transport_groups",
 }
@@ -403,7 +486,14 @@ _CELL_KEYS = {
     "transport_group_id",
     "provenance",
 }
-_KEY_KEYS = {"backend", "metric", "window_class", "condition_family_id", "condition_family_sha256"}
+_KEY_KEYS = {
+    "backend",
+    "metric",
+    "window_class",
+    "condition_family_id",
+    "condition_family_definition",
+    "condition_family_sha256",
+}
 _ELIGIBILITY_KEYS = {"use_role", "minimum_claim_n", "status", "claim_usable", "reason_codes"}
 _ABS_KEYS = {
     "n",
@@ -434,12 +524,19 @@ _CMP_KEYS = {
 _OBS_KEYS = {"bundle_id", "bundle_sha256", "config_sha256", "metric_value_j"}
 _BLOCK_KEYS = {"block_id", "executed_labels", "members", "delta_j"}
 _MEMBER_KEYS = {"position", "bundle_id", "bundle_sha256", "config_sha256", "metric_value_j"}
+_CELL_PROVENANCE_KEYS = {
+    "absolute_calibration_cell_id",
+    "comparative_calibration_cell_id",
+    "bundle_ids",
+    "bundle_sha256s",
+}
 _GROUP_KEYS = {
     "transport_group_id",
     "rule_id",
     "backend",
     "metric",
     "window_class",
+    "stack_identity",
     "stack_identity_sha256",
     "source_cell_ids",
     "allowed_consumer_condition_families",
@@ -459,7 +556,9 @@ def _close(actual, expected) -> bool:
         return actual is None and expected is None
     if not _is_number(actual):
         return False
-    return abs(actual - expected) <= max(1e-12, 1e-12 * abs(expected))
+    delta = abs(actual - expected)
+    relative_limit = max(1e-12, 1e-12 * abs(expected))
+    return delta <= min(relative_limit, _MAX_RECOMPUTATION_ABS_DELTA_J)
 
 
 def _is_hex(value, length: int = 64) -> bool:
@@ -468,6 +567,10 @@ def _is_hex(value, length: int = 64) -> bool:
         and len(value) == length
         and all(c in "0123456789abcdef" for c in value)
     )
+
+
+def _has_duplicates(values) -> bool:
+    return any(value in values[:index] for index, value in enumerate(values))
 
 
 def _check_keys(mapping, allowed, where, errors) -> bool:
@@ -483,6 +586,105 @@ def _check_keys(mapping, allowed, where, errors) -> bool:
     return not missing
 
 
+def _validate_hashed_object(
+    identity,
+    *,
+    object_keys,
+    stored_hash,
+    hash_name,
+    domain,
+    where,
+    errors,
+) -> bool:
+    if not _check_keys(identity, object_keys, where, errors):
+        return False
+    if not _is_hex(stored_hash):
+        errors.append(f"{where}: {hash_name} must be 64 lowercase hex chars")
+        return False
+    if any(not isinstance(value, (str, Mapping)) or not value for value in identity.values()):
+        errors.append(f"{where}: identity fields must be nonempty strings or objects")
+        return False
+    try:
+        expected_hash = canonical_domain_sha256(domain, identity)
+    except (TypeError, ValueError):
+        errors.append(f"{where}: identity object is not canonical-JSON serializable")
+        return False
+    if stored_hash != expected_hash:
+        errors.append(f"{where}: {hash_name} does not match recomputed {domain} hash")
+        return False
+    return True
+
+
+def _validate_condition_family(container, where, errors) -> bool:
+    if not _check_keys(container, _CONDITION_FAMILY_KEYS, where, errors):
+        return False
+    if not isinstance(container["condition_family_id"], str) or not container["condition_family_id"]:
+        errors.append(f"{where}.condition_family_id: must be a nonempty string")
+    definition = container["condition_family_definition"]
+    if not isinstance(definition, Mapping) or not definition:
+        errors.append(f"{where}.condition_family_definition: must be a nonempty object")
+        return False
+    stored_hash = container["condition_family_sha256"]
+    if not _is_hex(stored_hash):
+        errors.append(f"{where}.condition_family_sha256: must be 64 lowercase hex chars")
+        return False
+    try:
+        expected_hash = canonical_domain_sha256(CONDITION_FAMILY_DOMAIN, definition)
+    except (TypeError, ValueError):
+        errors.append(f"{where}.condition_family_definition: is not canonical-JSON serializable")
+        return False
+    if stored_hash != expected_hash:
+        errors.append(
+            f"{where}.condition_family_sha256: does not match recomputed "
+            f"{CONDITION_FAMILY_DOMAIN} hash"
+        )
+        return False
+    return True
+
+
+def _is_floor_j(value) -> bool:
+    return _is_number(value) and 0 <= value < _MAX_FLOOR_J
+
+
+def _validate_idle_drift_guard(guard, where, errors) -> None:
+    if not _check_keys(guard, _IDLE_DRIFT_GUARD_KEYS, where, errors):
+        return
+    status = guard["calibration_status"]
+    if guard["method"] != _IDLE_DRIFT_GUARD_METHOD:
+        errors.append(f"{where}.method: must be {_IDLE_DRIFT_GUARD_METHOD!r}")
+    hashes = guard["bundle_sha256"]
+    if not isinstance(hashes, list):
+        errors.append(f"{where}.bundle_sha256: must be an array")
+        return
+    if any(not _is_hex(value) for value in hashes):
+        errors.append(f"{where}.bundle_sha256: entries must be 64 lowercase hex chars")
+    if _has_duplicates(hashes):
+        errors.append(f"{where}.bundle_sha256: entries must be unique")
+    n = guard["n_bundles"]
+    if not isinstance(n, int) or isinstance(n, bool) or n < 0:
+        errors.append(f"{where}.n_bundles: must be a nonnegative integer")
+        return
+    if n != len(hashes):
+        errors.append(f"{where}: n_bundles and bundle_sha256 length disagree")
+    if status == "pending_calibration":
+        if n != 0 or hashes:
+            errors.append(f"{where}: pending_calibration must have no bundles")
+        for key in ("guard_w", "cell_id", "artifact_sha256"):
+            if guard[key] is not None:
+                errors.append(f"{where}.{key}: must be null while pending_calibration")
+    elif status == "calibrated":
+        if n < 2:
+            errors.append(f"{where}: calibrated guard requires at least two bundles")
+        if not _is_number(guard["guard_w"]) or guard["guard_w"] < 0:
+            errors.append(f"{where}.guard_w: must be a finite nonnegative number")
+        if not isinstance(guard["cell_id"], str) or not guard["cell_id"]:
+            errors.append(f"{where}.cell_id: must be a nonempty string")
+        if not _is_hex(guard["artifact_sha256"]):
+            errors.append(f"{where}.artifact_sha256: must be 64 lowercase hex chars")
+    else:
+        errors.append(f"{where}.calibration_status: invalid status {status!r}")
+
+
 def _validate_estimate_math(record, where, deviations, mean, prediction_extra, errors) -> None:
     n = len(deviations)
     est = _floor_estimate("absolute", list(deviations), mean, prediction_extra)
@@ -493,6 +695,15 @@ def _validate_estimate_math(record, where, deviations, mean, prediction_extra, e
         ("prediction_component_j", est.prediction_component_j),
         ("unguarded_floor_j", est.unguarded_floor_j),
     ]
+    for key in (
+        "sample_stddev_j",
+        "prediction_component_j",
+        "unguarded_floor_j",
+        "guarded_floor_j",
+    ):
+        value = record.get(key)
+        if value is not None and not _is_floor_j(value):
+            errors.append(f"{where}: {key} must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
     for key, expected in checks:
         if not _close(record.get(key), expected):
             errors.append(f"{where}: stored {key} does not match recomputed value")
@@ -549,10 +760,23 @@ def _validate_absolute(record, where, errors) -> None:
     if not isinstance(residuals, list) or not isinstance(observations, list):
         errors.append(f"{where}: residuals_j and bundle_observations must be arrays")
         return
+    structural_error = False
+    if n < 2:
+        errors.append(f"{where}: n must be at least 2")
+        structural_error = True
+    if not residuals:
+        errors.append(f"{where}: residuals_j must be a nonempty array")
+        structural_error = True
+    if not observations:
+        errors.append(f"{where}: bundle_observations must be a nonempty array")
+        structural_error = True
     if not (n == len(residuals) == len(observations)):
         errors.append(f"{where}: n, residuals_j, and bundle_observations lengths disagree")
+        structural_error = True
+    if structural_error:
         return
     values = []
+    bundle_ids = []
     for i, obs in enumerate(observations):
         obs_where = f"{where}.bundle_observations[{i}]"
         if not _check_keys(obs, _OBS_KEYS, obs_where, errors):
@@ -563,6 +787,9 @@ def _validate_absolute(record, where, errors) -> None:
             errors.append(f"{obs_where}: metric_value_j must be finite")
             return
         values.append(obs["metric_value_j"])
+        bundle_ids.append(obs["bundle_id"])
+    if _has_duplicates(bundle_ids):
+        errors.append(f"{where}: source bundle_ids must be unique")
     if any(not _is_number(r) for r in residuals):
         errors.append(f"{where}: residuals_j must all be finite numbers")
         return
@@ -574,6 +801,8 @@ def _validate_absolute(record, where, errors) -> None:
         errors.append(f"{where}: stored residuals_j do not match observations")
     if not _close(record["max_abs_residual_j"], max(abs(r) for r in expected_residuals)):
         errors.append(f"{where}: stored max_abs_residual_j does not match recomputed value")
+    if not _is_floor_j(record["max_abs_residual_j"]):
+        errors.append(f"{where}: max_abs_residual_j must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
     _validate_estimate_math(record, where, expected_residuals, mean, 0.0, errors)
 
 
@@ -589,10 +818,23 @@ def _validate_comparative(record, where, errors) -> None:
     if not isinstance(deltas, list) or not isinstance(blocks, list):
         errors.append(f"{where}: block_deltas_j and blocks must be arrays")
         return
+    structural_error = False
+    if n < 2:
+        errors.append(f"{where}: n_blocks must be at least 2")
+        structural_error = True
+    if not deltas:
+        errors.append(f"{where}: block_deltas_j must be a nonempty array")
+        structural_error = True
+    if not blocks:
+        errors.append(f"{where}: blocks must be a nonempty array")
+        structural_error = True
     if not (n == len(deltas) == len(blocks)):
         errors.append(f"{where}: n_blocks, block_deltas_j, and blocks lengths disagree")
+        structural_error = True
+    if structural_error:
         return
     expected_deltas = []
+    source_bundle_ids = []
     for i, block in enumerate(blocks):
         block_where = f"{where}.blocks[{i}]"
         if not _check_keys(block, _BLOCK_KEYS, block_where, errors):
@@ -614,6 +856,7 @@ def _validate_comparative(record, where, errors) -> None:
                 errors.append(f"{member_where}: metric_value_j must be finite")
                 return
             by_position[member["position"]] = member["metric_value_j"]
+            source_bundle_ids.append(member["bundle_id"])
         if [m["position"] for m in members] != ["A1", "B1", "B2", "A2"]:
             errors.append(f"{block_where}: member positions must be A1/B1/B2/A2 in order")
             return
@@ -623,6 +866,8 @@ def _validate_comparative(record, where, errors) -> None:
             errors.append(f"{block_where}: stored delta_j does not match members")
         if not _close(deltas[i], expected):
             errors.append(f"{where}: block_deltas_j[{i}] does not match block members")
+    if _has_duplicates(source_bundle_ids):
+        errors.append(f"{where}: source bundle_ids must be unique")
     if any(not _is_number(d) for d in deltas):
         errors.append(f"{where}: block_deltas_j must all be finite numbers")
         return
@@ -631,6 +876,8 @@ def _validate_comparative(record, where, errors) -> None:
         errors.append(f"{where}: stored mean_delta_j does not match blocks")
     if not _close(record["max_abs_delta_j"], max(abs(d) for d in expected_deltas)):
         errors.append(f"{where}: stored max_abs_delta_j does not match recomputed value")
+    if not _is_floor_j(record["max_abs_delta_j"]):
+        errors.append(f"{where}: max_abs_delta_j must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
     _validate_estimate_math(record, where, expected_deltas, mean, abs(mean), errors)
 
 
@@ -640,9 +887,18 @@ def _validate_cell(cell, where, errors) -> None:
     if _check_keys(cell["key"], _KEY_KEYS, f"{where}.key", errors):
         if cell["key"]["window_class"] not in _WINDOW_CLASSES:
             errors.append(f"{where}.key: invalid window_class")
-        if not _is_hex(cell["key"]["condition_family_sha256"]):
-            errors.append(f"{where}.key: condition_family_sha256 must be 64 lowercase hex chars")
-    if _check_keys(cell["eligibility"], _ELIGIBILITY_KEYS, f"{where}.eligibility", errors):
+        _validate_condition_family(
+            {
+                key: cell["key"][key]
+                for key in _CONDITION_FAMILY_KEYS
+            },
+            f"{where}.key",
+            errors,
+        )
+    eligibility_valid = _check_keys(
+        cell["eligibility"], _ELIGIBILITY_KEYS, f"{where}.eligibility", errors
+    )
+    if eligibility_valid:
         eligibility = cell["eligibility"]
         if eligibility["use_role"] not in _USE_ROLES:
             errors.append(f"{where}.eligibility: invalid use_role")
@@ -654,14 +910,24 @@ def _validate_cell(cell, where, errors) -> None:
             errors.append(f"{where}.eligibility: minimum_claim_n must be an integer >= {GUARD_MINIMUM_N}")
         if not isinstance(eligibility["claim_usable"], bool):
             errors.append(f"{where}.eligibility: claim_usable must be a boolean")
+        elif eligibility["claim_usable"] != (eligibility["status"] == "claim_ready"):
+            errors.append(
+                f"{where}.eligibility: claim_usable must equal claim_ready and not stale"
+            )
 
-    if cell["absolute"] is not None:
+    absolute = cell["absolute"]
+    comparative = cell["comparative"]
+    if absolute is not None:
         _validate_absolute(cell["absolute"], f"{where}.absolute", errors)
-    if cell["comparative"] is not None:
+    if comparative is not None:
         _validate_comparative(cell["comparative"], f"{where}.comparative", errors)
 
-    expected_abs = None if cell["absolute"] is None else cell["absolute"].get("guarded_floor_j")
-    expected_cmp = None if cell["comparative"] is None else cell["comparative"].get("guarded_floor_j")
+    expected_abs = absolute.get("guarded_floor_j") if isinstance(absolute, Mapping) else None
+    expected_cmp = comparative.get("guarded_floor_j") if isinstance(comparative, Mapping) else None
+    for key in ("floor_abs_j", "floor_cmp_j", "floor_gate_j"):
+        value = cell[key]
+        if value is not None and not _is_floor_j(value):
+            errors.append(f"{where}: {key} must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
     if not _close(cell["floor_abs_j"], expected_abs):
         errors.append(f"{where}: floor_abs_j does not equal the absolute guarded floor")
     if not _close(cell["floor_cmp_j"], expected_cmp):
@@ -673,18 +939,64 @@ def _validate_cell(cell, where, errors) -> None:
         errors.append(f"{where}: floor_gate_j must be null when either component is null")
 
     regime = cell["source_regime"]
-    if _check_keys(regime, {"stack_identity", "stress_observed"}, f"{where}.source_regime", errors):
+    if _check_keys(
+        regime,
+        {"stack_identity", "stack_identity_sha256", "stress_observed"},
+        f"{where}.source_regime",
+        errors,
+    ):
         stack = regime["stack_identity"]
-        if isinstance(stack, Mapping):
-            for field, value in stack.items():
-                if field.endswith("_sha256") and not _is_hex(value):
-                    errors.append(f"{where}.source_regime.stack_identity.{field}: must be 64 lowercase hex chars")
-        else:
-            errors.append(f"{where}.source_regime.stack_identity: expected an object")
+        _validate_hashed_object(
+            stack,
+            object_keys=_STACK_IDENTITY_KEYS,
+            stored_hash=regime["stack_identity_sha256"],
+            hash_name="stack_identity_sha256",
+            domain=STACK_IDENTITY_DOMAIN,
+            where=f"{where}.source_regime.stack_identity",
+            errors=errors,
+        )
         _validate_stress_observed(regime["stress_observed"], f"{where}.source_regime.stress_observed", errors)
 
     if not isinstance(cell["transport_group_id"], str) or not cell["transport_group_id"]:
         errors.append(f"{where}: transport_group_id must be a nonempty string")
+
+    provenance = cell["provenance"]
+    if _check_keys(provenance, _CELL_PROVENANCE_KEYS, f"{where}.provenance", errors):
+        bundle_ids = provenance["bundle_ids"]
+        bundle_hashes = provenance["bundle_sha256s"]
+        if not isinstance(bundle_ids, list) or not isinstance(bundle_hashes, list):
+            errors.append(f"{where}.provenance: bundle_ids and bundle_sha256s must be arrays")
+        else:
+            if len(bundle_ids) != len(bundle_hashes):
+                errors.append(f"{where}.provenance: bundle_ids and bundle_sha256s lengths disagree")
+            if _has_duplicates(bundle_ids):
+                errors.append(f"{where}.provenance: source bundle_ids must be unique")
+            if any(not isinstance(value, str) or not value for value in bundle_ids):
+                errors.append(f"{where}.provenance: bundle_ids must be nonempty strings")
+            if any(not _is_hex(value) for value in bundle_hashes):
+                errors.append(f"{where}.provenance: bundle_sha256s must be 64 lowercase hex chars")
+
+    if eligibility_valid and cell["eligibility"]["status"] == "claim_ready":
+        eligibility = cell["eligibility"]
+        if eligibility["use_role"] != "primary_claim_gate":
+            errors.append(f"{where}.eligibility: claim_ready requires primary_claim_gate use_role")
+        minimum_n = eligibility["minimum_claim_n"]
+        if isinstance(minimum_n, int) and not isinstance(minimum_n, bool):
+            absolute_n = absolute.get("n") if isinstance(absolute, Mapping) else None
+            comparative_n = comparative.get("n_blocks") if isinstance(comparative, Mapping) else None
+            if not isinstance(absolute_n, int) or absolute_n < minimum_n:
+                errors.append(f"{where}.eligibility: claim_ready absolute n is below minimum_claim_n")
+            if not isinstance(comparative_n, int) or comparative_n < minimum_n:
+                errors.append(f"{where}.eligibility: claim_ready comparative n is below minimum_claim_n")
+        if expected_abs is None or expected_cmp is None:
+            errors.append(f"{where}.eligibility: claim_ready requires both floor components")
+        if isinstance(regime, Mapping):
+            terms = regime.get("stress_observed", {}).get("bound_terms", {})
+            if isinstance(terms, Mapping) and any(
+                isinstance(entry, Mapping) and entry.get("applicability") == "unknown"
+                for entry in terms.values()
+            ):
+                errors.append(f"{where}.eligibility: claim_ready forbids unknown regime terms")
 
 
 def _validate_transport_group(group, where, cells_by_id, errors) -> None:
@@ -692,12 +1004,21 @@ def _validate_transport_group(group, where, cells_by_id, errors) -> None:
         return
     if group["rule_id"] != TRANSPORT_RULE_ID:
         errors.append(f"{where}: rule_id must be {TRANSPORT_RULE_ID!r}")
-    if not _is_hex(group["stack_identity_sha256"]):
-        errors.append(f"{where}: stack_identity_sha256 must be 64 lowercase hex chars")
+    _validate_hashed_object(
+        group["stack_identity"],
+        object_keys=_STACK_IDENTITY_KEYS,
+        stored_hash=group["stack_identity_sha256"],
+        hash_name="stack_identity_sha256",
+        domain=STACK_IDENTITY_DOMAIN,
+        where=f"{where}.stack_identity",
+        errors=errors,
+    )
     source_ids = group["source_cell_ids"]
     if not isinstance(source_ids, list) or not source_ids:
         errors.append(f"{where}: source_cell_ids must be a nonempty array")
         return
+    if _has_duplicates(source_ids):
+        errors.append(f"{where}: source_cell_ids must be unique")
     sources = []
     for cell_id in source_ids:
         cell = cells_by_id.get(cell_id)
@@ -708,7 +1029,7 @@ def _validate_transport_group(group, where, cells_by_id, errors) -> None:
         for field in ("backend", "metric", "window_class"):
             if cell["key"].get(field) != group[field]:
                 errors.append(f"{where}: source cell {cell_id!r} {field} differs from group")
-        stack_sha = cell["source_regime"]["stack_identity"].get("stack_identity_sha256")
+        stack_sha = cell["source_regime"].get("stack_identity_sha256")
         if stack_sha != group["stack_identity_sha256"]:
             errors.append(f"{where}: source cell {cell_id!r} stack identity differs from group")
     if any(not _is_number(cell.get("floor_gate_j")) for cell in sources):
@@ -716,6 +1037,8 @@ def _validate_transport_group(group, where, cells_by_id, errors) -> None:
         return
     composed = compose_transport_group(sources)
     for field in ("composed_floor_abs_j", "composed_floor_cmp_j", "composed_floor_gate_j"):
+        if not _is_floor_j(group[field]):
+            errors.append(f"{where}: {field} must be finite, nonnegative, and < {_MAX_FLOOR_J:g} J")
         if not _close(group[field], composed[field]):
             errors.append(f"{where}: stored {field} does not match recomputed composition")
     envelope = group["stress_envelope"]
@@ -737,9 +1060,7 @@ def _validate_transport_group(group, where, cells_by_id, errors) -> None:
     else:
         for i, family in enumerate(families):
             family_where = f"{where}.allowed_consumer_condition_families[{i}]"
-            if _check_keys(family, {"condition_family_id", "condition_family_sha256"}, family_where, errors):
-                if not _is_hex(family["condition_family_sha256"]):
-                    errors.append(f"{family_where}: condition_family_sha256 must be 64 lowercase hex chars")
+            _validate_condition_family(family, family_where, errors)
 
 
 def validate_floor_artifact(value: Mapping) -> list:
@@ -763,11 +1084,14 @@ def validate_floor_artifact(value: Mapping) -> list:
         errors.append("artifact: method block does not match the canonical v1 method")
     if not isinstance(value["provenance"], Mapping):
         errors.append("artifact: provenance must be an object")
+    _validate_idle_drift_guard(value["idle_drift_guard"], "artifact.idle_drift_guard", errors)
 
     cells = value["cells"]
     if not isinstance(cells, list):
         errors.append("artifact: cells must be an array")
         return errors
+    if not cells:
+        errors.append("artifact: cells must be a nonempty array")
     cells_by_id: dict = {}
     seen_keys = set()
     for i, cell in enumerate(cells):
@@ -790,6 +1114,8 @@ def validate_floor_artifact(value: Mapping) -> list:
     if not isinstance(groups, list):
         errors.append("artifact: transport_groups must be an array")
         return errors
+    if not groups:
+        errors.append("artifact: transport_groups must be a nonempty array")
     group_ids = set()
     for i, group in enumerate(groups):
         where = f"transport_groups[{i}]"
@@ -802,6 +1128,36 @@ def validate_floor_artifact(value: Mapping) -> list:
     for i, cell in enumerate(cells):
         if isinstance(cell, Mapping) and cell.get("transport_group_id") not in group_ids:
             errors.append(f"cells[{i}]: transport_group_id references no transport group")
+            continue
+        if not isinstance(cell, Mapping):
+            continue
+        group = next(
+            (
+                candidate
+                for candidate in groups
+                if isinstance(candidate, Mapping)
+                and candidate.get("transport_group_id") == cell.get("transport_group_id")
+            ),
+            None,
+        )
+        if group is None:
+            continue
+        eligibility = cell.get("eligibility", {})
+        if eligibility.get("status") != "claim_ready":
+            continue
+        if cell.get("cell_id") not in (group.get("source_cell_ids") or []):
+            errors.append(f"cells[{i}].eligibility: claim_ready requires complete transport membership")
+        key = cell.get("key", {})
+        if not any(
+            isinstance(family, Mapping)
+            and family.get("condition_family_id") == key.get("condition_family_id")
+            and family.get("condition_family_sha256") == key.get("condition_family_sha256")
+            and family.get("condition_family_definition") == key.get("condition_family_definition")
+            for family in (group.get("allowed_consumer_condition_families") or [])
+        ):
+            errors.append(
+                f"cells[{i}].eligibility: claim_ready condition family missing from transport group"
+            )
     return errors
 
 
@@ -822,6 +1178,10 @@ def transport_refusal_reasons(
     consumer: Mapping,
     group: Mapping,
     source_cells_by_id: Optional[Mapping] = None,
+    *,
+    artifact_sha256: Optional[str] = None,
+    expected_artifact_sha256: Optional[str] = None,
+    artifact_schema_valid: bool = True,
 ) -> tuple:
     """Pure Unit 6.2 transport check; empty tuple means transport is allowed.
 
@@ -831,13 +1191,19 @@ def transport_refusal_reasons(
     and consumer cadence/clock/interpolation/drift evidence no worse than the
     composed calibration envelope. Missing or unknown consumer evidence
     refuses (``consumer_term_unknown``); nothing is extrapolated and no ad hoc
-    margin is added.
+    margin is added. Optional artifact hash and schema-validation inputs make
+    the two artifact-level refusal codes reachable before transport checks.
     """
     reasons: list = []
 
     def refuse(reason: str) -> None:
         if reason not in reasons:
             reasons.append(reason)
+
+    if not artifact_schema_valid:
+        refuse("artifact_schema_invalid")
+    if expected_artifact_sha256 is not None and artifact_sha256 != expected_artifact_sha256:
+        refuse("artifact_hash_mismatch")
 
     # Group completeness / source health (when the source cells are supplied).
     source_ids = group.get("source_cell_ids") or []
