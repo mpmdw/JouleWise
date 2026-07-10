@@ -48,6 +48,7 @@ from joulewise.schemas import (
     RunStatus,
     RuntimeBackend,
     SchemaError,
+    SUMMARY_REDUCER_VERSION,
     SummaryMetrics,
     TelemetryBackend,
 )
@@ -291,7 +292,15 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     except BundleReadError as exc:
         problems.append(f"strict: {exc}")
         return problems
-    if window.duration_s > 0:
+    if window.duration_s <= 0:
+        # P2-040 FIX-1 (ARC-3): independent of the fresh-summary comparison, a
+        # succeeded bundle over a nonpositive measured window is never
+        # strict-valid.
+        problems.append(
+            "strict: succeeded bundle measured window duration must be > 0 s; "
+            f"got {window.duration_s}"
+        )
+    else:
         in_window = sum(
             1 for point in curve if window.start_s <= point.t <= window.end_s
         )
@@ -301,23 +310,39 @@ def _strict_problems(reader: BundleReader) -> list[str]:
                 "measured window; a succeeded summary needs a "
                 "reducer-consumable curve"
             )
-    problems.extend(_strict_summary_provenance_problems(reader, summary))
+    version_problems, absent_tolerance, tolerate_fresh_nulls = (
+        _strict_reducer_version_dispatch(reader, summary)
+    )
+    problems.extend(version_problems)
     problems.extend(_strict_workload_provenance_problems(reader, summary))
     problems.extend(_strict_emitted_token_ids_problems(reader))
     problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
     problems.extend(_strict_raw_to_trace_problems(reader))
-    fresh = reduce_bundle(reader.path).to_dict()
-    differing = _strict_summary_differences(fresh, summary)
-    if differing:
-        problems.append(
-            "strict: summary_metrics.json does not match a fresh re-reduction "
-            f"of the raw artifacts (differing keys: {', '.join(differing)})"
+    if not version_problems:
+        fresh = reduce_bundle(reader.path).to_dict()
+        differing = _strict_summary_differences(
+            fresh,
+            summary,
+            absent_tolerance=absent_tolerance,
+            tolerate_fresh_nulls=tolerate_fresh_nulls,
         )
+        if differing:
+            problems.append(
+                "strict: summary_metrics.json does not match a fresh re-reduction "
+                f"of the raw artifacts (differing keys: {', '.join(differing)})"
+            )
     return problems
 
 
 _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
     "claim_eligibility",
+    # P2-040 FIX-2: metric-specific request gates are additive over pre-0.3.0
+    # summaries whose claim_eligibility carried only the deprecated alias.
+    "claim_eligibility.gross_request",
+    "claim_eligibility.idle_subtracted_request",
+    # P2-040 FIX-3: joint interpolation bound is additive over pre-0.3.0
+    # summaries.
+    "energy_bound_terms_j.E_interpolation_joint_edge_bound_j",
     "energy_bound_terms_j",
     "energy_uncertainty_status",
     "energy_variance_terms_j2",
@@ -340,6 +365,7 @@ def _strict_summary_differences(
     path: str = "",
     *,
     absent_tolerance: set[str] | None = None,
+    tolerate_fresh_nulls: bool = False,
 ) -> list[str]:
     """Compare fresh vs stored summaries with legacy-additive null tolerance.
 
@@ -348,25 +374,24 @@ def _strict_summary_differences(
     stored extras, remain exact claims and must match the fresh reduction.
     """
     if absent_tolerance is None:
-        stored_new_era = (
-            isinstance(stored, dict)
-            and isinstance(stored.get("summary_provenance"), dict)
-        )
-        absent_tolerance = (
-            _STRICT_ADDITIVE_ABSENT_TOLERANCE
-            if stored_new_era
-            else _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE
-        )
+        absent_tolerance = set()
     if isinstance(fresh, dict) and isinstance(stored, dict):
         differences: list[str] = []
         for key in sorted(set(fresh) | set(stored)):
             child = f"{path}.{key}" if path else str(key)
             if key not in stored:
-                if child == "summary_provenance":
+                if child == "summary_provenance" and tolerate_fresh_nulls:
                     continue
                 if child in absent_tolerance:
                     continue
-                if fresh[key] is not None:
+                # P2-040 FIX-3: nested joint-interpolation fields are additive
+                # for pre-0.3.0 summaries at every (dynamic) precheck path.
+                if (
+                    tolerate_fresh_nulls
+                    and child.endswith(".interpolation_joint_edge_bound_j")
+                ):
+                    continue
+                if not tolerate_fresh_nulls or fresh[key] is not None:
                     differences.append(child)
                 continue
             if key not in fresh:
@@ -378,6 +403,7 @@ def _strict_summary_differences(
                     stored[key],
                     child,
                     absent_tolerance=absent_tolerance,
+                    tolerate_fresh_nulls=tolerate_fresh_nulls,
                 )
             )
         return differences
@@ -508,17 +534,27 @@ def _strict_workload_provenance_problems(
     return problems
 
 
-def _strict_summary_provenance_problems(
+def _strict_reducer_version_dispatch(
     reader: BundleReader, summary: dict[str, Any]
-) -> list[str]:
-    if _strict_legacy_bundle_metadata(reader.raw_metadata()):
-        return []
-    if isinstance(summary.get("summary_provenance"), dict):
-        return []
+) -> tuple[list[str], set[str], bool]:
+    """Select strict comparison semantics solely from recorded provenance."""
+    provenance = summary.get("summary_provenance")
+    if (
+        _strict_legacy_bundle_metadata(reader.raw_metadata())
+        and "summary_provenance" not in summary
+    ):
+        return [], _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE, True
+    if not isinstance(provenance, dict):
+        return [
+            "strict: summary_metrics.summary_provenance is missing or not an "
+            "object for current-era bundle"
+        ], set(), False
+    reducer_version = provenance.get("reducer_version")
+    if reducer_version == SUMMARY_REDUCER_VERSION:
+        return [], set(), False
     return [
-        "strict: summary_metrics.summary_provenance is missing or not an "
-        "object for current-era bundle"
-    ]
+        "strict: unsupported reducer version; re-reduction required"
+    ], set(), False
 
 
 def _strict_legacy_bundle_metadata(metadata: Any) -> bool:

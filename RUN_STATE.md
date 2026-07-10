@@ -212,6 +212,8 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-10 P2-040 / RETRO-001 fix round (committed on c027-int-p2040
+  after lead review): `docs/run_reports/2026-07-10-p2040-fix-round.md`
 - 2026-07-09 C-027 whole-project council review (7 gpt-5.6-sol lenses +
   counterreview + independent final examiner):
   `docs/reviews/2026-07-09-c027-whole-project-review.md` (compact run
@@ -253,6 +255,12 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
+- P2-040 / RETRO-001 fix-round worktree: canonical suite `Ran 908 tests in
+  32.723s`, `OK (skipped=11)`; focused 211 tests OK; claims lint exit 0 with
+  no errors; `git diff --check` clean. The absent `runs/` corpus produced the
+  required loud six-bundle acceptance-gate skip; the lead corpus gate then
+  PASSED (6/6 strict via corpus symlink), plus mock e2e run+strict+reduce
+  and the post-merge full suite (OK, skipped=12).
 - Claude Code 2.1.205 approved the project `codex` MCP server; Codex CLI
   0.144.0 protocol handshake exposed `codex` + `codex-reply` with the
   expected full-session controls. A real Claude → Codex read-only call

@@ -588,13 +588,21 @@ class CooldownThroughExperimentTests(unittest.TestCase):
         note = manifest["cooldown"][0]
         self.assertEqual(note["result"], "cap_hit")
         self.assertEqual(note["after_member"], "exp-caphit__r1")
+        self.assertEqual(note["reference_power_w"], 5.0)
+        self.assertEqual(note["tolerance_fraction"], 0.1)
+        self.assertEqual(note["decision_rolling_mean_power_w"], 7.5)
+        self.assertAlmostEqual(note["waited_s"], 300.0)
         self.assertIn("raw_artifact", note)
         trace_path = manifest_path.parent / note["raw_artifact"]
         self.assertTrue(trace_path.is_file())
         trace_records = [
             json.loads(line) for line in trace_path.read_text().splitlines() if line.strip()
         ]
-        self.assertGreater(len(trace_records), 0)
+        self.assertEqual(len(trace_records), 60)
+        self.assertEqual(
+            [round(record["waited_s"], 9) for record in trace_records],
+            [float(value) for value in range(5, 301, 5)],
+        )
         self.assertEqual(trace_records[-1]["rolling_mean_power_w"], 7.5)
 
     def test_cooldown_trace_write_error_is_manifest_metadata_not_campaign_failure(self) -> None:
