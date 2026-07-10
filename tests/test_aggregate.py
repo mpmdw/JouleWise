@@ -116,7 +116,7 @@ class ConfidenceIntervalTests(AggregateTestCase):
         self.assertEqual(metric["upper"], 7.5)
         self.assertEqual(metric["interval_status"], "computed")
         self.assertTrue(metric["interval_available"])
-        self.assertEqual(metric["outlier_method_status"], "mad_zero_not_computable")
+        self.assertEqual(metric["outlier_method_status"], "mad_zero_all_equal")
         self.assertEqual(metric["outliers"], [])
 
     def test_negative_and_mixed_sign_values_aggregate_normally(self) -> None:
@@ -237,12 +237,43 @@ class OutlierTests(AggregateTestCase):
         self.assertLess(metric["outliers"][0]["modified_z"], -3.5)
 
     def test_mad_zero_path_records_status_without_fake_z_scores(self) -> None:
+        # P2-040 FIX-5: MAD zero with an off-median point emits a review-only
+        # flag with modified_z=null instead of hiding it.
         aggregate = self.aggregate_values([5.0, 5.0, 5.0, 100.0])
         metric = aggregate["metrics"]["energy_request_j"]
 
-        self.assertEqual(metric["outlier_method_status"], "mad_zero_not_computable")
-        self.assertEqual(metric["outlier_count"], 0)
-        self.assertEqual(metric["outliers"], [])
+        self.assertEqual(metric["outlier_method_status"], "mad_zero_fallback_applied")
+        self.assertEqual(metric["outlier_count"], 1)
+        flag = metric["outliers"][0]
+        self.assertEqual(flag["member"], "r4")
+        self.assertEqual(flag["value"], 100.0)
+        self.assertIsNone(flag["modified_z"])
+        self.assertEqual(flag["flag_basis"], "mad_zero_off_median_review")
+        self.assertIs(flag["review_only"], True)
+        self.assertTrue(metric["headline_includes_outliers"])
+
+    def test_zero_mad_fallback_flags_off_median_point_but_keeps_it_in_headline(self) -> None:
+        # P2-040 FIX-5 mutation test: [5,5,5,5,100] flags r5 for review while
+        # the headline aggregate keeps every point.
+        aggregate = self.aggregate_values([5.0, 5.0, 5.0, 5.0, 100.0])
+        metric = aggregate["metrics"]["energy_request_j"]
+
+        self.assertEqual(metric["outlier_method_status"], "mad_zero_fallback_applied")
+        self.assertEqual(metric["outlier_count"], 1)
+        flag = metric["outliers"][0]
+        self.assertEqual(flag["member"], "r5")
+        self.assertEqual(flag["value"], 100.0)
+        self.assertIsNone(flag["modified_z"])
+        self.assertEqual(flag["flag_basis"], "mad_zero_off_median_review")
+        self.assertIs(flag["review_only"], True)
+        self.assertTrue(metric["headline_includes_outliers"])
+        self.assertAlmostEqual(metric["mean"], 24.0, places=12)
+        self.assertEqual(metric["repetitions"], 5)
+        # Keep-all interval: computed over all five points, flag excluded from
+        # nothing.
+        self.assertEqual(metric["interval_status"], "computed")
+        self.assertLess(metric["lower"], 24.0)
+        self.assertGreater(metric["upper"], 24.0)
 
     def test_extreme_outlier_modified_z_stays_finite(self) -> None:
         aggregate = self.aggregate_values([0.0, 1.0, 2.0, 3.0, 1.0e100])

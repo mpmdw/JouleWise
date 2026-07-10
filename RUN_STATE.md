@@ -159,6 +159,15 @@ rank 0 closed. Full record:
 
 ## Current Project Status
 
+**RPT-001 targeted review fix round COMPLETE in worktree (2026-07-10;
+awaiting lead pathspec commit).** FIX-1..FIX-9 are implemented: Phase-4
+claims lint/projection, adjudicated 1P5B identity and regenerated artifacts,
+full/offline atomic build with hash verification, real pipeline regressions,
+D-058 T1 scope, expanded claim-language tripwires, boundary-honest prose,
+LF byte stability, and evidence-bootstrap gating. Real-corpus regeneration
+used `/Users/edr/code/JouleWise/runs`; focused 37 OK and canonical 890 OK
+(skipped=10). Report: `docs/run_reports/2026-07-10-rpt001-fix-round.md`.
+
 **Suite BUILD session COMPLETE and MERGED (2026-07-08; C-017;
 D-044..D-047).** The workload suite is now CODE, not contracts: P2-010a
 generic substrate (PR #17: suite.py, run_suite protocol, mock+MLX
@@ -212,6 +221,8 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-10 P2-040 / RETRO-001 fix round (committed on c027-int-p2040
+  after lead review): `docs/run_reports/2026-07-10-p2040-fix-round.md`
 - 2026-07-09 C-027 whole-project council review (7 gpt-5.6-sol lenses +
   counterreview + independent final examiner):
   `docs/reviews/2026-07-09-c027-whole-project-review.md` (compact run
@@ -253,14 +264,20 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
-- P2-042 emitter worktree `impl/p2042` (uncommitted; lead pathspec commit
-  pending): baseline `Ran 879 tests in 31.425s, OK (skipped=11)`; focused
+- P2-042 emitter branch `impl/p2042` (lead-committed; draft PR #46,
+  targeted review pending): baseline `Ran 879 tests in 31.425s, OK (skipped=11)`; focused
   manifest/generator/sidecar/lint checks green; final canonical suite `Ran
   891 tests in 33.592s, OK (skipped=11)`. Deterministic one/two-model
   analysis-manifest shape, exact AP-2 contrast enumeration, reversed
   invocation byte identity, semantic block IDs, source/link hashes, and
   mutation failures are covered. Report:
   `docs/run_reports/2026-07-10-p2042-analysis-manifest.md`.
+- P2-040 / RETRO-001 fix-round worktree: canonical suite `Ran 908 tests in
+  32.723s`, `OK (skipped=11)`; focused 211 tests OK; claims lint exit 0 with
+  no errors; `git diff --check` clean. The absent `runs/` corpus produced the
+  required loud six-bundle acceptance-gate skip; the lead corpus gate then
+  PASSED (6/6 strict via corpus symlink), plus mock e2e run+strict+reduce
+  and the post-merge full suite (OK, skipped=12).
 - Claude Code 2.1.205 approved the project `codex` MCP server; Codex CLI
   0.144.0 protocol handshake exposed `codex` + `codex-reply` with the
   expected full-session controls. A real Claude → Codex read-only call

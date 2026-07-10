@@ -1,0 +1,26 @@
+{
+  "schema": "joulewise.report_profile.v1",
+  "source_format": "pandoc_markdown",
+  "default_target": "assembled_markdown",
+  "bibliography": "references.csl.json",
+  "chapters": [
+    "chapters/00_abstract.md",
+    "chapters/01_introduction.md",
+    "chapters/02_problem_and_scope.md",
+    "chapters/03_background_and_related_work.md",
+    "chapters/04_contributions.md",
+    "chapters/05_harness_design.md",
+    "chapters/06_methodology.md",
+    "chapters/07_results.md",
+    "chapters/08_discussion_and_limitations.md",
+    "chapters/09_conclusion.md",
+    "appendices/A_reproducibility.md",
+    "appendices/B_claims_index.md",
+    "appendices/C_stack_identity.md"
+  ],
+  "format_adapter": {
+    "status": "pending-P1-008",
+    "renderer": null,
+    "template": null
+  }
+}

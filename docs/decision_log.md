@@ -1544,6 +1544,23 @@ pinned as tests (manifest emptied, summary tampered), along with the
 powermetrics raw-to-trace gate; Phase 5 Stage 5.2 should adopt
 `--strict` for the published sample bundles.
 
+Amendment (2026-07-10, P2-040 / C-027 adjudication H2): reducer `0.3.0`
+defines the corrected nonpositive-window, metric-specific request-gate,
+joint-edge-bound, and runtime-observed token-denominator semantics. An
+inventory of `runs/` (including the retained main-checkout corpus), test
+fixtures, and docs found no retained or published summary artifact recording
+reducer `0.2.0`; all `0.2.0` matches were historical or specification prose.
+Accordingly there is no `0.2.0` compatibility projection. Strict validation
+dispatches solely on the reducer version recorded in the stored summary:
+the frozen pre-D-033 legacy identity allowlist retains its existing
+provenance-less additive-absence tolerance; recorded `0.3.0` summaries are
+compared exactly; recorded `0.2.x` and unknown versions fail with
+`unsupported reducer version; re-reduction required`. The presence of a
+`summary_provenance` object alone never selects compatibility tolerance.
+Succeeded bundles with a nonpositive measured window fail strict admission;
+honest failed summaries remain structurally and strictly valid because they
+make no successful-measurement claim.
+
 Revisit when: bundle schema v0.2 lands (composite summaries need their
 own strict semantics), or a reducer version bump makes historical
 summaries legitimately differ from fresh reductions (then strict needs
@@ -2781,6 +2798,17 @@ machine-readably, never silently pass.
 
 Consequences: claim tooling and the analysis registry consume these codes;
 P2-015 floor artifacts plug into the same gate fields.
+
+Amendment (2026-07-10, P2-040 / C-027 adjudication): the stable reason
+vocabulary adds `nonpositive_window_duration` (the evaluated window has
+duration `<= 0` and cannot bear a claim) and `idle_baseline_unrecorded` (an
+idle-subtracted metric was requested without a valid recorded idle baseline).
+Request gating is metric-specific: `gross_request` governs
+`gross_energy_j` without idle-baseline or drift requirements, while
+`idle_subtracted_request` governs `idle_subtracted_energy_j` and requires
+both. The `request` gate remains a deprecated alias of
+`idle_subtracted_request` through summary schema v0.1; removal waits for
+schema v0.2.
 
 ## D-058: Token-normalization and stack-identity contract adopted
 
