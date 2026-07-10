@@ -1642,6 +1642,33 @@ mirrored per R-014.
 self-merge-with-review authority, recorded in C-010; the gate shape
 lives in the resume-merge run report and `docs/orchestration.md`.)
 
+Breach addendum (2026-07-09, C-027 whole-project review, MET-001):
+
+Four commits landed directly on main in violation of this decision's PR
+convention (only single-commit bookkeeping may bypass a PR):
+
+- a05e54d — campaign scripts + tests (code+tests; 108 insertions).
+- 8856c04 — controller/environment implementation + tests (code+tests;
+  158 test lines).
+- a835c73 — claims linter + 38 test lines inside a 26-file
+  "bookkeeping + integration fixes" commit (code+tests mixed into
+  bookkeeping).
+- 36d5641 — 33-line scripts/build_site.py behavior change, NO tests,
+  mixed with deployment output; postdates the then-recorded
+  verification head c095c83, so main carried unverified code.
+
+Content classes: three code+tests commits, one untested site-script
+change (counterreview corrected the lead's earlier "all four contain
+code+tests" overstatement — see review §6 item 2).
+
+Remediation: retroactive independent review queued as RETRO-001
+(result file: `docs/reviews/c027/retro_b6_review.md`, pending at the
+time of this addendum). Recoverability evidence table:
+`docs/reviews/c027/invocation_recoverability_audit.md`. Rule going
+forward: integration fixes and site-script behavior changes require
+their own PR; this addendum does not amend D-031's text, it records
+its breach. History is not rewritten; the commits stand.
+
 ---
 
 ## D-032: `phase_energy_j` is gross-only in summary v0.1
@@ -2537,6 +2564,24 @@ capture when present, and pending disposition fields.
 Revisit when: one full stopped-and-resumed session completes under the
 new stop-card rule, or the invocation manifest proves too heavy for
 ordinary delegated runs.
+
+Stop-card override addendum (2026-07-09, C-027, MET-001 / REV-5):
+during the ACTIVE CP-5 stop card (RUN_STATE at 2c8b267: "Do not start
+other queue work"), advisor-site commits bf9ffc5, a1ac0a7, fda79c1,
+e6cf431 were produced before CP-5 resumed (later landed via PR #28).
+User direction for that work existed and is recorded at
+docs/run_reports/2026-07-09-advisor-status-site.md:13, but no override
+was recorded on the stop card at the time. Disposition: recorded
+retroactively as a USER-DIRECTED OVERRIDE (scope: advisor status site
+only; CP-5 state untouched), plus a recording failure — the override
+should have been appended to the stop card when work began. Rule
+restated: undocumented supersession of an active stop card is
+indistinguishable from bypass; overrides are recorded on the card
+before the first commit of overriding work. A second override
+precedent is recorded here for the same reason: Ed's 2026-07-09 live
+directive to begin implementation before spec adjudication (C-027 spec
+wave) superseded the recorded DRAFT-pending-adjudication gate —
+recorded so undocumented supersession does not recur.
 
 ---
 

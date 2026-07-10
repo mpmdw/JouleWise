@@ -25,6 +25,11 @@ For every new user task:
 8. Place or update the task in the queue with priority, rationale, evidence,
    and blockers.
 9. If executing it now, say why it outranks the current top task.
+10. Closure rule (D-023): a row may move to Completed only after the
+    corresponding phase exit-checklist matrix row already shows the same
+    status with dated evidence, and the Completed row's evidence cell
+    must cite that matrix row (file + item id). If no matrix row exists
+    for the work, say so explicitly in the evidence cell.
 
 ## Priority Scale
 

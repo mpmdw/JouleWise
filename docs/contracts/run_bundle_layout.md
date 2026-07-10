@@ -367,9 +367,16 @@ merged-event interpretation, and cross-node summary semantics:
 runs/<run_id>/
   config.json                  (split config, v0.2)
   metadata.json                (composite; per-node clock-offset bounds)
-  events.jsonl                 (controller + merged node events, node field)
+  events.jsonl                 (controller + merged node events; node role/identity in each event's `metadata`, five-key schema unchanged)
   summary_metrics.json         (composite per-stage energy decomposition)
   transfer/payload_manifest.json
   nodes/prefill/               (standard bundle artifacts for node A)
   nodes/decode/                (standard bundle artifacts for node B)
 ```
+
+Merged node events in the composite `events.jsonl` are derived artifacts in
+the controller clock domain (node timestamps converted by subtracting the
+recorded `offset_estimate_s`); the raw node-domain event and telemetry files
+remain verbatim under `nodes/<role>/` per D-002, so the conversion is always
+re-derivable. Cross-node intervals shorter than the recorded offset bound are
+flagged, not attributed.
