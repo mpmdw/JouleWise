@@ -258,8 +258,9 @@ queue owns ordering (C-027):**
 - P2-040 / RETRO-001 fix-round worktree: canonical suite `Ran 908 tests in
   32.723s`, `OK (skipped=11)`; focused 211 tests OK; claims lint exit 0 with
   no errors; `git diff --check` clean. The absent `runs/` corpus produced the
-  required loud six-bundle acceptance-gate skip; the lead corpus gate runs
-  in the corpus-bearing main checkout before the PR merges.
+  required loud six-bundle acceptance-gate skip; the lead corpus gate then
+  PASSED (6/6 strict via corpus symlink), plus mock e2e run+strict+reduce
+  and the post-merge full suite (OK, skipped=12).
 - Claude Code 2.1.205 approved the project `codex` MCP server; Codex CLI
   0.144.0 protocol handshake exposed `codex` + `codex-reply` with the
   expected full-session controls. A real Claude → Codex read-only call
