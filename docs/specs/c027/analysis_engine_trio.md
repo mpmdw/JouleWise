@@ -1,6 +1,6 @@
 # C-027 Analysis Engine Trio Specification
 
-Status: DRAFT pending lead adjudication (C-027 spec wave)
+Status: ADJUDICATED 2026-07-09 (C-028) — rulings in `ADJUDICATION.md` in this directory AMEND this spec wherever they conflict with its body text
 
 Queue scope: P2-042 (frozen analysis manifest), P2-037 (contrast/claim
 engine), and P2-041 (campaign verdict split). These are one design because the
