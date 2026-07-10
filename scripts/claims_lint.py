@@ -43,6 +43,9 @@ TOKEN_NORMALIZATION_RE = re.compile(
     re.IGNORECASE,
 )
 RUNTIME_OBSERVED_RE = re.compile(r"\bruntime-observed\b", re.IGNORECASE)
+# Pack-directory Markdown that is metadata rather than a pack/AP artifact.
+# Every other .md file must expose recognizable pack structure and lint it.
+PACK_METADATA_FILES = frozenset({"README.md"})
 
 PHASE4_REQUIRED_FIELDS = {
     "schema", "claim_id", "claim_text", "claim_level", "claim_role",
@@ -609,11 +612,21 @@ def lint_packs(pack_dir: Path, required_fields: Sequence[str]) -> list[Finding]:
         raise ClaimsLintError(f"{pack_dir} exists but is not a directory")
     findings: list[Finding] = []
     for path in sorted(pack_dir.glob("*.md")):
-        if path.name == "README.md":
+        if path.name in PACK_METADATA_FILES:
             continue
         text = read_text(path)
         tables = iter_markdown_tables(path, text)
         if not list(iter_ap_tables(tables)) and "Plan ID / RQ consumer" not in text:
+            findings.append(
+                Finding(
+                    "error",
+                    "pack",
+                    str(path),
+                    1,
+                    "PACK_STRUCTURE_MISSING",
+                    "non-metadata Markdown lacks a recognizable pack/AP structure",
+                )
+            )
             continue
         path_findings, _ = lint_ap_document(path, "pack", required_fields)
         findings.extend(path_findings)

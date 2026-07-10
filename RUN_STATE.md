@@ -56,6 +56,97 @@ At the end of substantial work:
 
 ## ACTIVE_STOP_CARD
 
+Status: **ACTIVE (2026-07-09 evening, C-027 implementation-blitz
+checkpoint).** Ed paused after the spec wave COMPLETED and the
+implementation fan-out ran. This card is the resume authority.
+
+**Completed this arc:**
+
+- PR #40 (C-027 council review) MERGED to main; site regenerated and
+  committed; SITE DEPLOY still pending (permission-gated):
+  `cd site_capsule && npx lakebed deploy`.
+- SPEC WAVE COMPLETE: branch `c027-spec-wave` (pushed, NO PR yet) holds
+  all TEN C-027 spec sheets under `docs/specs/c027/` (~345 KB): P2-040,
+  P2-038, P2-039, analysis_engine_trio (P2-042/041/037), RPT-001,
+  DOC-008 kernel, NV-GATE-2, MET-001/RETRO-001, SPLIT-AP/AP-EDIT,
+  DOC-009/REPRO-001. ALL headers say DRAFT pending lead adjudication.
+- IMPLEMENTATION BLITZ (Ed-directed override of the earlier
+  specs-merge-first line; override recorded in the D-050 addendum on
+  impl/met001): nine worktrees under `../JouleWise-wt/<name>`, branches
+  `impl/*` all PUSHED, all branched from c027-spec-wave@f7f866d:
+  - impl/doc009 — DONE (4 commits): checklist reconciliation + queue
+    closure rule. 2 flagged follow-ups: queue evidence-cell cross-refs,
+    decision-log line for the convention.
+  - impl/repro001 — DONE: env/ lockfiles (analysis + mac-measurement),
+    README, lock test, 3-bundle ~52 MiB pack selection doc.
+  - impl/ap-edit — DONE (7 commits): all SPLIT-1..3 + AP-1..6 text
+    amendments, lint clean; 1 adaptation beyond spec text (residual
+    better-monolithic phrases) flagged.
+  - impl/met001 — DONE (5 commits): MET-1/2/3/6 addenda + the
+    recoverability AUDIT (headline: 103/106 observer-index rows have
+    surviving artifacts covering ~all claimed DIRECT invocations; only
+    the 46 C-025 Workflow agents unattributable from that index).
+    MET-4 (D-050 adjudication) deliberately left for the lead.
+  - impl/p2040-io-nv2 — DONE: atomic manifest writes + NVIDIA
+    cooldown-context fix (failing-first proven; suite 880 OK there).
+    ARC-6 cleanup-into-quality SKIPPED (fence conflict) — route to
+    integration or the p2040-core owner.
+  - impl/p2040-core — DONE (5 commits, all pushed): FIX-1 zero-window
+    fail-closed (+ strict gate + reducer version 0.3.0 — the version
+    bump WITHOUT a 0.2.0 projection is the main design call to
+    ratify), FIX-2 metric-specific gates, FIX-3 joint-edge bound,
+    FIX-4 D-058 token precedence, FIX-5 zero-MAD review flags. All
+    red/green mutation-proven; suite 884 OK there; all six corpus
+    bundles still pass strict read-only. FIX-6/7/8 remain (see io-nv2
+    + fence skips).
+  - impl/rpt001 — DONE (2 commits): report skeleton (10 chapters,
+    Pandoc-markdown, format-swap seam) + gated byte-stable
+    bundle→figure/table/claims-row→report-page pipeline; claims-row
+    means match spec golden values exactly.
+  - impl/p2039 — DONE: floor calculator (guard g(n)=max(1,sqrt(9/(n-1))),
+    ADJUDICATION-PENDING), artifact emit/validate w/ 16 tamper
+    rejections, transport refusal; 29 tests, 906 OK there. CLI +
+    integration hooks deferred.
+  - impl/doc008-kernel — DONE (2 commits): 39-task kernel (parity
+    verified vs queue), stdlib generator --check/--stdout byte-stable,
+    24 tests, orchestration inserts staged as a spec-dir doc. Live
+    RUN_STATE/TASK_QUEUE conversion deliberately NOT done
+    (adjudication-gated).
+
+**Resume procedure (in order):**
+
+1. Deploy the site if Ed hasn't (command above).
+2. For EACH of the four in-flight worktrees: `git -C
+   ../JouleWise-wt/<name> log origin/impl/<name>..HEAD` — push any
+   commits the agents landed after the checkpoint push; read their
+   final reports if present (the agents' return notes did not all
+   arrive before pause; their commits are self-describing).
+3. LEAD ADJUDICATION of the ten DRAFT specs (known strikes: MET-001
+   spec's D-054 amendment item is already applied; each spec has a
+   DEVIATIONS/OPEN QUESTIONS section needing decisions — notably
+   P2-039's proposed guard factor and the engine trio's campaign-level
+   cooldown fail-closed unit). Open the c027-spec-wave PR; adjudication
+   edits ride it; merge per the D-031 gate.
+4. INTEGRATION of impl/* per multi-stream-worktrees: rebase/merge each
+   onto the merged spec base, full C-027-style review per stream
+   (lenses + lead gate + final-head), suite green (main baseline 877;
+   +new tests per stream), then PRs. Cross-stream check: p2040-core
+   vs p2040-io-nv2 both touch controller-adjacent seams; ARC-6 needs
+   an owner; the AP-EDIT amendments and the specs must agree post-
+   adjudication.
+5. Then continue the queue order: finish P2-040 remainder → P2-038 →
+   P2-039 integration hooks → RPT-001 skeleton → P2-042 → P2-041 →
+   P2-037 (specs are the pinned authorities).
+6. Bookkeeping debt for the next session: C-028 council entry (spec
+   wave + blitz), run report, MET-4/D-050 adjudication, RETRO-001
+   execution, queue row status updates for everything the impl
+   branches completed, consistency sweep, site regen.
+
+Worktree cleanup: do NOT `git worktree remove` until each branch's
+work is merged or explicitly abandoned.
+
+## Superseded stop card (CP-5)
+
 Status: **CLEARED 2026-07-09** by the CP-5 resume session. Every
 clearance criterion was met: all three worktree diffs lead-gated
 (envgate live-gated against the real affine mock bundle) and merged as
@@ -130,6 +221,8 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-10 P2-040 / RETRO-001 fix round (committed on c027-int-p2040
+  after lead review): `docs/run_reports/2026-07-10-p2040-fix-round.md`
 - 2026-07-09 C-027 whole-project council review (7 gpt-5.6-sol lenses +
   counterreview + independent final examiner):
   `docs/reviews/2026-07-09-c027-whole-project-review.md` (compact run
@@ -171,6 +264,12 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
+- P2-040 / RETRO-001 fix-round worktree: canonical suite `Ran 908 tests in
+  32.723s`, `OK (skipped=11)`; focused 211 tests OK; claims lint exit 0 with
+  no errors; `git diff --check` clean. The absent `runs/` corpus produced the
+  required loud six-bundle acceptance-gate skip; the lead corpus gate then
+  PASSED (6/6 strict via corpus symlink), plus mock e2e run+strict+reduce
+  and the post-merge full suite (OK, skipped=12).
 - Claude Code 2.1.205 approved the project `codex` MCP server; Codex CLI
   0.144.0 protocol handshake exposed `codex` + `codex-reply` with the
   expected full-session controls. A real Claude → Codex read-only call

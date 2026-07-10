@@ -1,4 +1,4 @@
-Status: DRAFT pending lead adjudication (C-027 spec wave)
+Status: ADJUDICATED 2026-07-09 (C-028) — rulings in `ADJUDICATION.md` in this directory AMEND this spec wherever they conflict with its body text
 
 # Spec: MET-001 (governance audit addenda batch) + RETRO-001 (retroactive review of four direct-to-main commits)
 

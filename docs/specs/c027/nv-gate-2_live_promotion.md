@@ -1,6 +1,6 @@
 # NV-GATE-2: NVIDIA Live-Promotion Hard Acceptance Gates
 
-Status: DRAFT pending lead adjudication (C-027 spec wave)
+Status: ADJUDICATED 2026-07-09 (C-028) — rulings in `ADJUDICATION.md` in this directory AMEND this spec wherever they conflict with its body text
 
 Queue anchor: `TASK_QUEUE.md` row P2-005 (NV-GATE-2 list). Source findings:
 `docs/reviews/2026-07-09-c027-whole-project-review.md` §3 B7(b) and §7 rows

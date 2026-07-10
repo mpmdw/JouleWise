@@ -331,6 +331,7 @@ def _idle_subtracted_request_propagation(
     idle_terms: list[float] = []
     drift_bounds: list[float | None] = []
     interpolation_bounds: list[float | None] = []
+    joint_interpolation_bounds: list[float | None] = []
 
     for record in records:
         member = record["member"]
@@ -356,9 +357,14 @@ def _idle_subtracted_request_propagation(
             interpolation_bounds.append(
                 float(interpolation) if _is_finite_number(interpolation) else None
             )
+            joint = bound_terms.get("E_interpolation_joint_edge_bound_j")
+            joint_interpolation_bounds.append(
+                float(joint) if _is_finite_number(joint) else None
+            )
         else:
             drift_bounds.append(None)
             interpolation_bounds.append(None)
+            joint_interpolation_bounds.append(None)
 
     gross_variance = (
         _sample_variance_or_none(gross_values)
@@ -383,6 +389,11 @@ def _idle_subtracted_request_propagation(
         "E_drift_bound_j": _max_bound_or_unknown(drift_bounds, len(points)),
         "E_interpolation_edge_bound_j": _max_bound_or_unknown(
             interpolation_bounds, len(points)
+        ),
+        # P2-040 FIX-3: the governed joint bound propagates by the same
+        # all-members-known maximum rule.
+        "E_interpolation_joint_edge_bound_j": _max_bound_or_unknown(
+            joint_interpolation_bounds, len(points)
         ),
     }
     status = (
@@ -429,7 +440,24 @@ def _outlier_entries(points: list[tuple[str, float]]) -> tuple[list[dict[str, An
     deviations = [abs(value - median) for value in values]
     mad = statistics.median(deviations)
     if mad == 0:
-        return [], "mad_zero_not_computable"
+        # P2-040 FIX-5 (STA-8, D-014): MAD zero does not justify an invented
+        # modified z-score, but off-median points must not be hidden. Flag
+        # each off-median value for review with modified_z=null; every point
+        # stays in the headline aggregate.
+        review_flags = [
+            {
+                "member": member,
+                "value": value,
+                "modified_z": None,
+                "flag_basis": "mad_zero_off_median_review",
+                "review_only": True,
+            }
+            for member, value in points
+            if value != median
+        ]
+        if not review_flags:
+            return [], "mad_zero_all_equal"
+        return review_flags, "mad_zero_fallback_applied"
 
     outliers: list[dict[str, Any]] = []
     for member, value in points:
