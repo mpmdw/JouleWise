@@ -212,6 +212,9 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-10 P2-041 campaign verdict split (implemented in `impl/p2041`,
+  uncommitted pending lead pathspec review):
+  `docs/run_reports/2026-07-10-p2041-campaign-verdict-split.md`
 - 2026-07-10 P2-040 / RETRO-001 fix round (committed on c027-int-p2040
   after lead review): `docs/run_reports/2026-07-10-p2040-fix-round.md`
 - 2026-07-09 C-027 whole-project council review (7 gpt-5.6-sol lenses +
@@ -255,6 +258,12 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
+- P2-041 worktree `impl/p2041`: pre-change baseline `Ran 910 tests in
+  33.321s`, `OK (skipped=12)`; focused campaign/cooldown/reducer set `Ran 99
+  tests in 11.210s`, `OK`; final canonical suite `Ran 916 tests in 33.924s`,
+  `OK (skipped=12)`; claims lint AP+registry clean; `git diff --check` clean.
+  No quiet-machine collection was run. Report:
+  `docs/run_reports/2026-07-10-p2041-campaign-verdict-split.md`.
 - P2-040 / RETRO-001 fix-round worktree: canonical suite `Ran 908 tests in
   32.723s`, `OK (skipped=11)`; focused 211 tests OK; claims lint exit 0 with
   no errors; `git diff --check` clean. The absent `runs/` corpus produced the
@@ -308,6 +317,11 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
+- `impl/p2041` holds the uncommitted P2-041 tranche for lead pathspec review.
+  `origin/main` advanced by nine RPT-001/P2-039 commits during its final
+  verification, so the branch is intentionally behind and was not merged or
+  rebased. The P2-042 producer remains absent at this branch head; see the
+  P2-041 report for the bounded consumer seam and C5/P2-037 ownership conflict.
 - `main` and `origin/main` contain the user-directed Claude Code → Codex
   bridge hardening from commit `1d7c415` (pushed direct as a bounded
   tooling change, closeout `ef34cc9`). Branch `c027-council-review`

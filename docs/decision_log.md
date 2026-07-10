@@ -2810,6 +2810,33 @@ both. The `request` gate remains a deprecated alias of
 `idle_subtracted_request` through summary schema v0.1; removal waits for
 schema v0.2.
 
+Amendment (2026-07-10, P2-041 / C-027 adjudication): the closed v1
+analysis/campaign consumer vocabulary is:
+`analysis_manifest_invalid`, `analysis_manifest_not_frozen`,
+`order_manifest_hash_mismatch`, `config_hash_mismatch`, `bundle_missing`,
+`bundle_strict_invalid`, `bundle_status_not_succeeded`,
+`metric_missing_or_nonfinite`, `paired_block_incomplete`,
+`insufficient_complete_blocks`, `fixed_n_plan_incomplete`,
+`window_evidence_precheck_missing`, `campaign_cooldown_evidence_missing`,
+`idle_window_suspect`, `idle_window_suspect_unknown`,
+`floor_artifact_invalid`, `floor_row_missing`, `floor_row_ambiguous`,
+`floor_row_stale`, `floor_transport_inapplicable`, `floor_abs_missing`,
+`floor_cmp_missing`, `effect_not_above_floor`,
+`interpolation_bound_exceeds_floor`,
+`interpolation_bound_exceeds_half_effect`,
+`deterministic_bound_obscures_direction`, `required_error_term_unknown`,
+`required_covariance_unknown`, `runtime_token_denominator_required`,
+`stop_reason_required`, `output_policy_required`,
+`tokenizer_identity_mismatch`, `multiplicity_family_incomplete`,
+`multiplicity_not_rejected`, `equivalence_margin_not_above_floor`,
+`equivalence_not_supported`, `randomization_check_insufficient_blocks`,
+`randomization_sensitivity_disagrees`, `loo_verdict_influential`,
+`loo_magnitude_influential`, `outcome_dependent_top_up`, and
+`legacy_l1_mechanics_only`. Additions or spelling changes require a
+versioned amendment. P2-041 copies reducer reasons verbatim, uses the
+campaign-specific subset above, and never treats absent/null cooldown state
+as recovery.
+
 ## D-058: Token-normalization and stack-identity contract adopted
 
 - Date: 2026-07-09

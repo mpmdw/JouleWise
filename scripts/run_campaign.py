@@ -22,6 +22,7 @@ campaign log entries; JSONL logging is reserved for actual campaign attempts.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shlex
@@ -52,6 +53,14 @@ STATUSES = (
     "dry_run",
 )
 ORDER_MANIFEST_NAME = "order_manifest.json"
+ANALYSIS_MANIFEST_NAME = "analysis_manifest.json"
+NON_CONFIG_SIDECARS = frozenset({ORDER_MANIFEST_NAME, ANALYSIS_MANIFEST_NAME})
+CAMPAIGN_VERDICT_SCHEMA = "joulewise.campaign_verdict.v2"
+CAMPAIGN_PROVENANCE_SCHEMA = "joulewise.campaign_provenance.v1"
+CLAIM_READINESS_NOTE = (
+    "This verdict checks analysis inputs only; P2-037 decides claim outcomes."
+)
+ACCEPTED_CAMPAIGN_COOLDOWN_RESULTS = frozenset({"recovered", "first_run_exempt"})
 KNOWN_NON_PROMPT_SIDECAR_SCHEMAS = frozenset(
     {
         "affine_smoke_annotations.v1",
@@ -104,7 +113,7 @@ class PromptHashCheck:
     matches: tuple[dict[str, Any], ...] = ()
     problems: tuple[str, ...] = ()
 
-    def quality_flags(self) -> tuple[str, ...]:
+    def collection_integrity_flags(self) -> tuple[str, ...]:
         if self.status == "mismatch":
             return ("prompt_hash_mismatch",)
         if self.status == "error":
@@ -133,7 +142,8 @@ class MemberEvaluation:
     status: str | None
     strict_valid: bool
     validation_problems: tuple[str, ...] = ()
-    quality_flags: tuple[str, ...] = ()
+    collection_integrity_flags: tuple[str, ...] = ()
+    claim_evidence_flags: tuple[str, ...] = ()
     prompt_hash_check: PromptHashCheck = field(
         default_factory=lambda: PromptHashCheck("not_applicable")
     )
@@ -141,6 +151,10 @@ class MemberEvaluation:
     suite_order_row: int | None = None
     suite_order_seed: str | None = None
     waiver: Waiver | None = None
+    summary: dict[str, Any] | None = field(default=None, repr=False, compare=False)
+    preceding_campaign_cooldown: dict[str, Any] | None = field(
+        default=None, repr=False, compare=False
+    )
 
     def failure_classes(self) -> tuple[str, ...]:
         classes: list[str] = []
@@ -148,15 +162,19 @@ class MemberEvaluation:
             classes.append("status_failed")
         if not self.strict_valid:
             classes.append("strict_invalid")
-        classes.extend(self.quality_flags)
+        classes.extend(self.collection_integrity_flags)
         return tuple(dict.fromkeys(classes))
+
+    def waiver_classes(self) -> tuple[str, ...]:
+        collection_classes = self.failure_classes()
+        return collection_classes if collection_classes else self.claim_evidence_flags
 
     @property
     def usable(self) -> bool:
         return (
             self.status == "succeeded"
             and self.strict_valid
-            and not self.quality_flags
+            and not self.collection_integrity_flags
             and self.waiver is None
         )
 
@@ -164,13 +182,16 @@ class MemberEvaluation:
     def waived(self) -> bool:
         if self.waiver is None:
             return False
-        classes = self.failure_classes()
+        classes = self.waiver_classes()
         if not classes:
             return False
         if self.waiver.scope == "any":
             return True
         scopes = {part.strip() for part in self.waiver.scope.split(",") if part.strip()}
-        return all(failure_class in scopes for failure_class in classes)
+        collection_classes = self.failure_classes()
+        if collection_classes:
+            return all(failure_class in scopes for failure_class in collection_classes)
+        return any(claim_class in scopes for claim_class in self.claim_evidence_flags)
 
     @property
     def failed(self) -> bool:
@@ -183,10 +204,14 @@ class MemberEvaluation:
             "status": self.status,
             "strict_valid": self.strict_valid,
             "validation_problems": list(self.validation_problems),
-            "quality_flags": list(self.quality_flags),
+            "collection_integrity_flags": list(self.collection_integrity_flags),
+            "claim_evidence_flags": list(self.claim_evidence_flags),
             "prompt_hash_check": self.prompt_hash_check.to_log(),
-            "classification": (
+            "collection_classification": (
                 "usable" if self.usable else "waived" if self.waived else "failed"
+            ),
+            "claim_evidence_classification": (
+                "flagged" if self.claim_evidence_flags else "clean"
             ),
         }
         if self.waiver is not None:
@@ -204,6 +229,31 @@ class MemberEvaluation:
             row["suite_order_row"] = self.suite_order_row
         if self.suite_order_seed is not None:
             row["suite_order_seed"] = self.suite_order_seed
+        if self.preceding_campaign_cooldown is not None:
+            row["preceding_campaign_cooldown"] = self.preceding_campaign_cooldown
+        return row
+
+
+@dataclass(frozen=True)
+class AnalysisManifestState:
+    path: Path
+    raw: dict[str, Any]
+    manifest_id: str | None
+    file_sha256: str
+    problems: tuple[str, ...] = ()
+
+    @property
+    def valid(self) -> bool:
+        return not self.problems
+
+    def to_log(self) -> dict[str, Any]:
+        row = {
+            "manifest_id": self.manifest_id,
+            "file_sha256": self.file_sha256,
+            "validation": "valid" if self.valid else "invalid",
+        }
+        if self.problems:
+            row["problems"] = list(self.problems)
         return row
 
 
@@ -367,6 +417,141 @@ def load_config_info(config_path: Path) -> ConfigInfo:
     )
 
 
+def _sha256_bytes(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _canonical_manifest_id(raw: dict[str, Any]) -> str:
+    payload = dict(raw)
+    payload.pop("manifest_id", None)
+    canonical = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return "am-" + _sha256_bytes(canonical)
+
+
+def load_analysis_manifest(config_dir: Path) -> AnalysisManifestState | None:
+    """Load the pinned P2-042 sidecar and validate P2-041's consumed links.
+
+    P2-042 is not present on this branch, so this is deliberately a consumer
+    seam rather than a second builder. It checks the frozen identity plus the
+    order/config byte hashes that govern collection and readiness. P2-037 will
+    independently perform the complete schema validation.
+    """
+    path = config_dir / ANALYSIS_MANIFEST_NAME
+    if not path.is_file():
+        return None
+    problems: list[str] = []
+    try:
+        file_bytes = path.read_bytes()
+    except OSError as exc:
+        file_bytes = b""
+        raw: dict[str, Any] = {}
+        problems.append(f"analysis manifest cannot be read: {exc}")
+    else:
+        try:
+            parsed = json.loads(file_bytes)
+        except json.JSONDecodeError as exc:
+            raw = {}
+            problems.append(f"analysis manifest is not valid JSON: {exc}")
+        else:
+            if not isinstance(parsed, dict):
+                raw = {}
+                problems.append("analysis manifest is not a JSON object")
+            else:
+                raw = parsed
+
+    manifest_id = raw.get("manifest_id") if isinstance(raw.get("manifest_id"), str) else None
+    if raw:
+        if raw.get("schema_version") != "joulewise.analysis_manifest.v1":
+            problems.append(
+                "analysis manifest schema_version is not "
+                "joulewise.analysis_manifest.v1"
+            )
+        if raw.get("freeze_status") != "frozen":
+            problems.append("analysis manifest is not frozen")
+        if manifest_id is None or manifest_id != _canonical_manifest_id(raw):
+            problems.append("analysis manifest_id does not match canonical content")
+
+        source = raw.get("source")
+        order_ref = source.get("order_manifest") if isinstance(source, dict) else None
+        expected_order_sha = order_ref.get("sha256") if isinstance(order_ref, dict) else None
+        order_path = config_dir / ORDER_MANIFEST_NAME
+        if not isinstance(expected_order_sha, str):
+            problems.append("analysis manifest order_manifest.sha256 is missing")
+        elif not order_path.is_file():
+            problems.append("analysis manifest references a missing order_manifest.json")
+        else:
+            actual_order_sha = _sha256_bytes(order_path.read_bytes())
+            if actual_order_sha != expected_order_sha:
+                problems.append("analysis manifest order_manifest.sha256 mismatch")
+
+        entries = raw.get("entries")
+        if not isinstance(entries, list):
+            problems.append("analysis manifest entries is not a list")
+        else:
+            seen_run_ids: set[str] = set()
+            seen_entry_ids: set[str] = set()
+            for index, entry in enumerate(entries):
+                if not isinstance(entry, dict):
+                    problems.append(f"analysis manifest entries[{index}] is not an object")
+                    continue
+                run_id = entry.get("run_id")
+                entry_id = entry.get("entry_id")
+                config_name = entry.get("config")
+                config_sha = entry.get("config_sha256")
+                if not isinstance(run_id, str) or not run_id:
+                    problems.append(f"analysis manifest entries[{index}].run_id is missing")
+                elif run_id in seen_run_ids:
+                    problems.append(f"analysis manifest duplicates run_id {run_id!r}")
+                else:
+                    seen_run_ids.add(run_id)
+                if not isinstance(entry_id, str) or not entry_id:
+                    problems.append(f"analysis manifest entries[{index}].entry_id is missing")
+                elif entry_id in seen_entry_ids:
+                    problems.append(f"analysis manifest duplicates entry_id {entry_id!r}")
+                else:
+                    seen_entry_ids.add(entry_id)
+                if (
+                    not isinstance(config_name, str)
+                    or Path(config_name).name != config_name
+                    or config_name in NON_CONFIG_SIDECARS
+                ):
+                    problems.append(f"analysis manifest entries[{index}].config is invalid")
+                    continue
+                config_path = config_dir / config_name
+                if not config_path.is_file():
+                    problems.append(f"analysis manifest config is missing: {config_name}")
+                    continue
+                if (
+                    not isinstance(config_sha, str)
+                    or _sha256_bytes(config_path.read_bytes()) != config_sha
+                ):
+                    problems.append(f"analysis manifest config_sha256 mismatch: {config_name}")
+
+        contrasts = raw.get("contrasts")
+        if not isinstance(contrasts, list):
+            problems.append("analysis manifest contrasts is not a list")
+        else:
+            seen_contrast_ids: set[str] = set()
+            for index, contrast in enumerate(contrasts):
+                contrast_id = contrast.get("contrast_id") if isinstance(contrast, dict) else None
+                if not isinstance(contrast_id, str) or not contrast_id:
+                    problems.append(f"analysis manifest contrasts[{index}].contrast_id is missing")
+                elif contrast_id in seen_contrast_ids:
+                    problems.append(f"analysis manifest duplicates contrast_id {contrast_id!r}")
+                else:
+                    seen_contrast_ids.add(contrast_id)
+
+    return AnalysisManifestState(
+        path=path,
+        raw=raw,
+        manifest_id=manifest_id,
+        file_sha256=_sha256_bytes(file_bytes),
+        problems=tuple(problems),
+    )
+
+
 def command_for(config_path: Path, runs_dir: Path, cli_cmd: str | None) -> list[str]:
     prefix = shlex.split(cli_cmd) if cli_cmd else [sys.executable, "-m", "joulewise"]
     return prefix + ["run", str(config_path), "--runs-dir", str(runs_dir)]
@@ -417,7 +602,9 @@ def print_quiet_machine_warning() -> None:
 def discover_configs(config_dir: Path) -> list[Path]:
     if not config_dir.is_dir():
         raise ValueError(f"config_dir is not a directory: {config_dir}")
-    return sorted(path for path in config_dir.glob("*.json") if path.name != ORDER_MANIFEST_NAME)
+    return sorted(
+        path for path in config_dir.glob("*.json") if path.name not in NON_CONFIG_SIDECARS
+    )
 
 
 def print_config_file_list(configs: list[Path]) -> None:
@@ -840,16 +1027,33 @@ def check_prompt_hashes_for_config_bundle(bundle_dir: Path, info: ConfigInfo) ->
     return check_prompt_hashes_for_bundle(bundle_dir, inferred)
 
 
-def quality_flags(summary: dict[str, Any] | None) -> tuple[str, ...]:
+def _stable_precheck_reasons(value: Any) -> set[str]:
+    reasons: set[str] = set()
+    if isinstance(value, dict):
+        raw_reasons = value.get("reasons")
+        if isinstance(raw_reasons, list):
+            reasons.update(reason for reason in raw_reasons if isinstance(reason, str))
+        for child in value.values():
+            reasons.update(_stable_precheck_reasons(child))
+    elif isinstance(value, list):
+        for child in value:
+            reasons.update(_stable_precheck_reasons(child))
+    return reasons
+
+
+def claim_evidence_flags(summary: dict[str, Any] | None) -> tuple[str, ...]:
     if not isinstance(summary, dict):
         return ()
+    flags = _stable_precheck_reasons(
+        summary.get("window_evidence_precheck", summary.get("claim_eligibility"))
+    )
     quality = summary.get("measurement_quality")
-    if not isinstance(quality, dict):
-        return ()
-    flags: list[str] = []
-    if quality.get("idle_window_suspect") is True:
-        flags.append("idle_window_suspect")
-    return tuple(flags)
+    if isinstance(quality, dict):
+        if quality.get("idle_window_suspect") is True:
+            flags.add("idle_window_suspect")
+        if quality.get("cooldown_cap_hit") is True:
+            flags.add("cooldown_cap_hit")
+    return tuple(sorted(flags))
 
 
 def suite_order_evidence(bundle_dir: Path) -> tuple[str | None, int | None, str | None]:
@@ -883,6 +1087,7 @@ def evaluate_member(
     *,
     info: ConfigInfo,
     waivers: WaiverMap,
+    cooldown_evidence: dict[str, Any] | None = None,
 ) -> MemberEvaluation:
     status, malformed = summary_status(bundle_dir / "summary_metrics.json")
     problems: list[str] = []
@@ -921,22 +1126,32 @@ def evaluate_member(
         status=status,
         strict_valid=strict_valid,
         validation_problems=tuple(problems),
-        quality_flags=tuple(
-            dict.fromkeys([*quality_flags(summary), *prompt_hash_check.quality_flags()])
-        ),
+        collection_integrity_flags=prompt_hash_check.collection_integrity_flags(),
+        claim_evidence_flags=claim_evidence_flags(summary),
         prompt_hash_check=prompt_hash_check,
         suite_order_policy=suite_order_policy,
         suite_order_row=suite_order_row,
         suite_order_seed=suite_order_seed,
         waiver=waiver,
+        summary=summary,
+        preceding_campaign_cooldown=cooldown_evidence,
     )
 
 
 def evaluate_members(
-    info: ConfigInfo, runs_dir: Path, waivers: WaiverMap
+    info: ConfigInfo,
+    runs_dir: Path,
+    waivers: WaiverMap,
+    cooldown_by_bundle: dict[str, dict[str, Any]] | None = None,
 ) -> list[MemberEvaluation]:
+    cooldown_by_bundle = cooldown_by_bundle or {}
     return [
-        evaluate_member(bundle_dir, info=info, waivers=waivers)
+        evaluate_member(
+            bundle_dir,
+            info=info,
+            waivers=waivers,
+            cooldown_evidence=cooldown_by_bundle.get(bundle_dir.name),
+        )
         for bundle_dir in expected_member_dirs(info, runs_dir)
     ]
 
@@ -1169,6 +1384,244 @@ def acquire_campaign_lock(runs_dir: Path) -> Path:
     return lock_path
 
 
+def new_campaign_provenance(
+    config_dir: Path,
+    runs_dir: Path,
+    analysis_manifest: AnalysisManifestState | None,
+) -> tuple[Path, dict[str, Any]]:
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    session_id = f"campaign-{stamp}-p{os.getpid()}"
+    path = runs_dir / "campaign_manifests" / f"{session_id}.json"
+    manifest = {
+        "schema_version": CAMPAIGN_PROVENANCE_SCHEMA,
+        "session_id": session_id,
+        "created_at": utc_timestamp(),
+        "config_dir": str(config_dir),
+        "analysis_manifest_id": (
+            analysis_manifest.manifest_id if analysis_manifest is not None else None
+        ),
+        "first_physical_run_id": None,
+        "members": [],
+        "cooldown_gates": [],
+    }
+    write_campaign_provenance(path, manifest)
+    return path, manifest
+
+
+def write_campaign_provenance(path: Path, manifest: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    tmp.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def prior_campaign_cooldown_evidence(
+    runs_dir: Path, analysis_manifest_id: str | None
+) -> dict[str, dict[str, Any]]:
+    """Recover persistent per-member gate evidence from earlier invocations."""
+    evidence: dict[str, dict[str, Any]] = {}
+    manifest_dir = runs_dir / "campaign_manifests"
+    if not manifest_dir.is_dir():
+        return evidence
+    for path in sorted(manifest_dir.glob("*.json")):
+        raw, problem = _load_json_object(path, "campaign provenance")
+        if problem is not None or raw is None:
+            continue
+        if raw.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA:
+            continue
+        if (
+            analysis_manifest_id is not None
+            and raw.get("analysis_manifest_id") != analysis_manifest_id
+        ):
+            continue
+        members = raw.get("members")
+        if not isinstance(members, list):
+            continue
+        for member in members:
+            if not isinstance(member, dict):
+                continue
+            cooldown = member.get("preceding_campaign_cooldown")
+            bundle_ids = member.get("bundle_ids")
+            if not isinstance(cooldown, dict) or not isinstance(bundle_ids, list):
+                continue
+            cooldown = dict(cooldown)
+            if cooldown.get("result") in {"recovered", "cap_hit"}:
+                raw = cooldown.get("raw_artifact")
+                raw_path_text = raw.get("path") if isinstance(raw, dict) else None
+                raw_sha = raw.get("sha256") if isinstance(raw, dict) else None
+                raw_records = raw.get("records") if isinstance(raw, dict) else None
+                valid_raw = (
+                    isinstance(raw_path_text, str)
+                    and not Path(raw_path_text).is_absolute()
+                    and Path(raw_path_text).name != raw_path_text
+                    and ".." not in Path(raw_path_text).parts
+                    and isinstance(raw_sha, str)
+                    and isinstance(raw_records, int)
+                    and not isinstance(raw_records, bool)
+                    and raw_records > 0
+                )
+                raw_path = path.parent / raw_path_text if valid_raw else None
+                if (
+                    raw_path is None
+                    or not raw_path.is_file()
+                    or _sha256_bytes(raw_path.read_bytes()) != raw_sha
+                ):
+                    cooldown.update(
+                        {
+                            "result": "unknown",
+                            "reason": "raw cooldown provenance missing or hash-invalid",
+                        }
+                    )
+                else:
+                    raw["verified"] = True
+            for bundle_id in bundle_ids:
+                if isinstance(bundle_id, str):
+                    evidence[bundle_id] = cooldown
+    return evidence
+
+
+def _idle_baseline_from_summary(summary: dict[str, Any] | None):
+    if not isinstance(summary, dict):
+        return None
+    raw = summary.get("idle_baseline")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        from joulewise.schemas import IdleBaseline, TelemetryBackend
+
+        return IdleBaseline(
+            power_w_mean=float(raw["power_w_mean"]),
+            power_w_stddev=float(raw["power_w_stddev"]),
+            duration_s=float(raw["duration_s"]),
+            sample_count=int(raw["sample_count"]),
+            telemetry_backend=TelemetryBackend(raw["telemetry_backend"]),
+            gpu_idle_ratio_mean=raw.get("gpu_idle_ratio_mean"),
+            gpu_idle_ratio_min=raw.get("gpu_idle_ratio_min"),
+            gpu_freq_hz_mean=raw.get("gpu_freq_hz_mean"),
+            idle_window_suspect=raw.get("idle_window_suspect"),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _write_campaign_cooldown_trace(
+    provenance_path: Path,
+    following_run_id: str,
+    trace: list[dict[str, Any]],
+) -> dict[str, Any]:
+    raw_dir = provenance_path.parent / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    filename = (
+        f"{provenance_path.stem}__cooldown_before_"
+        f"{sanitize_id_component(following_run_id)}.jsonl"
+    )
+    path = raw_dir / filename
+    payload = "".join(json.dumps(row, sort_keys=True) + "\n" for row in trace)
+    with path.open("x", encoding="utf-8") as handle:
+        handle.write(payload)
+    return {
+        "path": f"raw/{filename}",
+        "sha256": _sha256_bytes(payload.encode("utf-8")),
+        "records": len(trace),
+    }
+
+
+def campaign_cooldown_before_member(
+    *,
+    previous_info: ConfigInfo,
+    previous_evaluation: MemberEvaluation,
+    following_info: ConfigInfo,
+    provenance_path: Path,
+    session_id: str,
+) -> dict[str, Any]:
+    """Measure D-014 recovery and attach its tri-state result to the next run."""
+    note: dict[str, Any] = {
+        "session_id": session_id,
+        "after_bundle_id": previous_evaluation.bundle_id,
+        "following_run_id": following_info.run_id,
+        "recorded_at": utc_timestamp(),
+    }
+    baseline = _idle_baseline_from_summary(previous_evaluation.summary)
+    if baseline is None:
+        note.update({"result": "unknown", "reason": "previous idle baseline unavailable"})
+        return note
+    try:
+        config_raw = json.loads(previous_info.path.read_text(encoding="utf-8"))
+        from joulewise import adapters
+        from joulewise.clock import SystemClock
+        from joulewise.controller import cooldown_gate
+        from joulewise.interfaces import AdapterFailure
+        from joulewise.schemas import BenchmarkConfig, TelemetryBackend
+
+        config = BenchmarkConfig.from_mapping(config_raw)
+        if config.hardware_target.telemetry_backend == TelemetryBackend.MOCK:
+            note.update(
+                {
+                    "result": "unknown",
+                    "reason": "mock telemetry has no thermal recovery evidence",
+                }
+            )
+            return note
+        clock = SystemClock()
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is None:
+            reason = failure.message if failure is not None else "telemetry adapter unavailable"
+            note.update({"result": "unknown", "reason": reason})
+            return note
+        cooldown_run_id = (
+            f"{sanitize_id_component(session_id)}-cooldown-before-"
+            f"{sanitize_id_component(following_info.run_id)}"
+        )
+        note["cooldown_run_id"] = cooldown_run_id
+        try:
+            gate = cooldown_gate(
+                telemetry, baseline, config, clock, run_id=cooldown_run_id
+            )
+        except AdapterFailure as exc:
+            note.update(
+                {
+                    "result": "unknown",
+                    "reason": exc.message,
+                    "failure_reason": exc.failure_reason.value,
+                }
+            )
+            return note
+        trace = gate.pop("_trace", [])
+        note.update(gate)
+        if trace:
+            note["raw_artifact"] = _write_campaign_cooldown_trace(
+                provenance_path, following_info.run_id, trace
+            )
+        else:
+            note.update({"result": "unknown", "reason": "cooldown trace was empty"})
+    except Exception as exc:  # noqa: BLE001 - evidence failure must stay fail-closed.
+        note.update({"result": "unknown", "reason": f"{type(exc).__name__}: {exc}"})
+    return note
+
+
+def record_campaign_member_provenance(
+    path: Path,
+    manifest: dict[str, Any],
+    *,
+    info: ConfigInfo,
+    bundle_ids: list[str],
+    execution: str,
+    cooldown: dict[str, Any] | None,
+) -> None:
+    manifest["members"].append(
+        {
+            "config": info.path.name,
+            "run_id": info.run_id,
+            "bundle_ids": bundle_ids,
+            "execution": execution,
+            "preceding_campaign_cooldown": cooldown,
+        }
+    )
+    if cooldown is not None and cooldown.get("result") != "first_run_exempt":
+        manifest["cooldown_gates"].append(cooldown)
+    write_campaign_provenance(path, manifest)
+
+
 def skipped_log_extra(state: ExistingState) -> dict[str, Any] | None:
     if state.members_total is None:
         return None
@@ -1198,7 +1651,8 @@ def evaluation_failure_detail(evaluation: MemberEvaluation) -> str:
     parts = [
         f"{evaluation.bundle_id}: status={evaluation.status!r}",
         f"strict_valid={evaluation.strict_valid}",
-        f"quality_flags={list(evaluation.quality_flags)}",
+        f"collection_integrity_flags={list(evaluation.collection_integrity_flags)}",
+        f"claim_evidence_flags={list(evaluation.claim_evidence_flags)}",
         f"validation_problems={list(evaluation.validation_problems)}",
     ]
     if evaluation.prompt_hash_check.status != "not_applicable":
@@ -1206,7 +1660,7 @@ def evaluation_failure_detail(evaluation: MemberEvaluation) -> str:
     return ", ".join(parts)
 
 
-def verdict_for(categories: dict[str, list[str]]) -> tuple[str, list[str]]:
+def collection_verdict_for(categories: dict[str, list[str]]) -> tuple[str, list[str]]:
     usable = categories["usable"]
     waived = categories["waived"]
     failed = categories["failed"]
@@ -1225,7 +1679,7 @@ def verdict_for(categories: dict[str, list[str]]) -> tuple[str, list[str]]:
     if failed:
         return "invalid", reasons
     if usable and not waived:
-        return "publishable", ["all campaign members are usable"]
+        return "usable", []
     if usable and waived:
         return "partial", reasons
     if waived:
@@ -1233,40 +1687,311 @@ def verdict_for(categories: dict[str, list[str]]) -> tuple[str, list[str]]:
     return "invalid", reasons or ["no usable members"]
 
 
-def print_verdict(verdict: str, reasons: list[str], categories: dict[str, list[str]]) -> None:
-    print("VERDICT:")
-    print(f"  verdict: {verdict}")
-    for reason in reasons:
+def _manifest_readiness_reasons(state: AnalysisManifestState) -> list[str]:
+    reasons = {"analysis_manifest_invalid"}
+    for problem in state.problems:
+        if "not frozen" in problem:
+            reasons.add("analysis_manifest_not_frozen")
+        if "order_manifest.sha256 mismatch" in problem:
+            reasons.add("order_manifest_hash_mismatch")
+        if "config_sha256 mismatch" in problem:
+            reasons.add("config_hash_mismatch")
+    return sorted(reasons)
+
+
+def _precheck_for_contrast(
+    summary: dict[str, Any] | None, contrast: dict[str, Any]
+) -> dict[str, Any] | None:
+    if not isinstance(summary, dict):
+        return None
+    root = summary.get("window_evidence_precheck")
+    if not isinstance(root, dict):
+        # P2-040 currently emits this stable-reason surface. P2-041 consumes it
+        # until the separately queued reducer-field migration lands.
+        root = summary.get("claim_eligibility")
+    if not isinstance(root, dict):
+        return None
+    metric = contrast.get("metric")
+    if not isinstance(metric, dict):
+        return None
+    window_class = metric.get("window_class")
+    metric_name = metric.get("name")
+    if window_class in {"gross_request", "idle_subtracted_request", "request"}:
+        value = root.get(window_class)
+        return value if isinstance(value, dict) else None
+    if window_class in {"gross_phase", "phase"}:
+        phase = root.get("phase")
+        phase_name = metric_name.rsplit(".", 1)[-1] if isinstance(metric_name, str) else None
+        value = phase.get(phase_name) if isinstance(phase, dict) and phase_name else None
+        return value if isinstance(value, dict) else None
+    value = root.get(window_class) if isinstance(window_class, str) else None
+    return value if isinstance(value, dict) else None
+
+
+def _member_readiness_reasons(
+    evaluation: MemberEvaluation, contrast: dict[str, Any]
+) -> list[str]:
+    reasons: set[str] = set()
+    if not evaluation.strict_valid:
+        reasons.add("bundle_strict_invalid")
+    if evaluation.status != "succeeded":
+        reasons.add("bundle_status_not_succeeded")
+    if evaluation.waiver is not None:
+        reasons.add("bundle_strict_invalid")
+    precheck = _precheck_for_contrast(evaluation.summary, contrast)
+    if precheck is None:
+        reasons.add("window_evidence_precheck_missing")
+    else:
+        embedded = precheck.get("reasons")
+        if isinstance(embedded, list):
+            reasons.update(reason for reason in embedded if isinstance(reason, str))
+        if precheck.get("eligible") is not True and not embedded:
+            reasons.add("window_evidence_precheck_missing")
+
+    cooldown = evaluation.preceding_campaign_cooldown
+    cooldown_result = cooldown.get("result") if isinstance(cooldown, dict) else None
+    raw = cooldown.get("raw_artifact") if isinstance(cooldown, dict) else None
+    raw_present = (
+        isinstance(raw, dict)
+        and isinstance(raw.get("path"), str)
+        and isinstance(raw.get("sha256"), str)
+        and isinstance(raw.get("records"), int)
+        and not isinstance(raw.get("records"), bool)
+        and raw["records"] > 0
+    )
+    if cooldown_result == "cap_hit":
+        reasons.add("cooldown_cap_hit")
+        if not raw_present:
+            reasons.add("campaign_cooldown_evidence_missing")
+    elif cooldown_result == "recovered" and not raw_present:
+        reasons.add("campaign_cooldown_evidence_missing")
+    elif cooldown_result not in ACCEPTED_CAMPAIGN_COOLDOWN_RESULTS:
+        reasons.add("campaign_cooldown_evidence_missing")
+
+    quality = evaluation.summary.get("measurement_quality") if evaluation.summary else None
+    if isinstance(quality, dict) and quality.get("cooldown_cap_hit") is True:
+        reasons.add("cooldown_cap_hit")
+
+    metric = contrast.get("metric")
+    window_class = metric.get("window_class") if isinstance(metric, dict) else None
+    if window_class in {"idle_subtracted_request", "idle_request"}:
+        idle_state = quality.get("idle_window_suspect") if isinstance(quality, dict) else None
+        if idle_state is True:
+            reasons.add("idle_window_suspect")
+        elif idle_state is not False:
+            reasons.add("idle_window_suspect_unknown")
+    return sorted(reasons)
+
+
+def claim_readiness_for(
+    analysis_manifest: AnalysisManifestState | None,
+    collection_verdict: str,
+    evaluations: list[MemberEvaluation],
+) -> dict[str, Any]:
+    base = {
+        "verdict": "not_assessed",
+        "reasons": [],
+        "required_contrast_ids": [],
+        "ready_contrast_ids": [],
+        "not_ready_contrasts": [],
+        "note": CLAIM_READINESS_NOTE,
+    }
+    if analysis_manifest is None:
+        return base
+    contrasts = analysis_manifest.raw.get("contrasts")
+    if not isinstance(contrasts, list) or not contrasts:
+        return base
+    required_ids = [
+        contrast.get("contrast_id")
+        for contrast in contrasts
+        if isinstance(contrast, dict) and isinstance(contrast.get("contrast_id"), str)
+    ]
+    base["required_contrast_ids"] = required_ids
+    if not analysis_manifest.valid:
+        base.update(
+            {
+                "verdict": "not_ready_for_analysis",
+                "reasons": _manifest_readiness_reasons(analysis_manifest),
+            }
+        )
+        return base
+
+    entries = analysis_manifest.raw.get("entries")
+    assert isinstance(entries, list)
+    evaluation_by_bundle = {evaluation.bundle_id: evaluation for evaluation in evaluations}
+    ready_ids: list[str] = []
+    not_ready: list[dict[str, Any]] = []
+    all_reasons: set[str] = set()
+
+    for contrast in contrasts:
+        if not isinstance(contrast, dict):
+            continue
+        contrast_id = contrast.get("contrast_id")
+        if not isinstance(contrast_id, str):
+            continue
+        reasons: set[str] = set()
+        affected: list[str] = []
+        if collection_verdict != "usable":
+            reasons.add("fixed_n_plan_incomplete")
+        block_ids = contrast.get("block_ids")
+        cell_a = contrast.get("cell_a_id")
+        cell_b = contrast.get("cell_b_id")
+        if not isinstance(block_ids, list) or not all(isinstance(item, str) for item in block_ids):
+            reasons.add("fixed_n_plan_incomplete")
+            block_ids = []
+        complete_blocks = 0
+        for block_id in block_ids:
+            pair: list[MemberEvaluation] = []
+            for cell_id in (cell_a, cell_b):
+                matches = [
+                    entry
+                    for entry in entries
+                    if isinstance(entry, dict)
+                    and entry.get("block_id") == block_id
+                    and entry.get("cell_id") == cell_id
+                ]
+                if len(matches) != 1:
+                    reasons.update({"bundle_missing", "paired_block_incomplete"})
+                    continue
+                run_id = matches[0].get("run_id")
+                evaluation = evaluation_by_bundle.get(run_id)
+                if evaluation is None:
+                    reasons.update({"bundle_missing", "paired_block_incomplete"})
+                    if isinstance(run_id, str):
+                        affected.append(run_id)
+                    continue
+                affected.append(evaluation.bundle_id)
+                pair.append(evaluation)
+                reasons.update(_member_readiness_reasons(evaluation, contrast))
+            if len(pair) == 2:
+                complete_blocks += 1
+        design = analysis_manifest.raw.get("design")
+        sampling_plan = design.get("sampling_plan") if isinstance(design, dict) else None
+        planned_n = (
+            sampling_plan.get("planned_n_blocks") if isinstance(sampling_plan, dict) else None
+        )
+        if (
+            isinstance(planned_n, bool)
+            or not isinstance(planned_n, int)
+            or planned_n < 1
+            or len(block_ids) != planned_n
+            or complete_blocks != planned_n
+        ):
+            reasons.add("fixed_n_plan_incomplete")
+        if reasons:
+            ordered = sorted(reasons)
+            all_reasons.update(ordered)
+            not_ready.append(
+                {
+                    "contrast_id": contrast_id,
+                    "affected_member_ids": sorted(set(affected)),
+                    "reasons": ordered,
+                }
+            )
+        else:
+            ready_ids.append(contrast_id)
+
+    base.update(
+        {
+            "verdict": (
+                "ready_for_analysis"
+                if len(ready_ids) == len(required_ids) and required_ids
+                else "not_ready_for_analysis"
+            ),
+            "reasons": sorted(all_reasons),
+            "ready_contrast_ids": ready_ids,
+            "not_ready_contrasts": not_ready,
+        }
+    )
+    return base
+
+
+def sampling_audit_for(analysis_manifest: AnalysisManifestState | None) -> dict[str, Any]:
+    planned_n: int | None = None
+    design_name: str | None = None
+    registered: list[str] = []
+    if analysis_manifest is not None:
+        design = analysis_manifest.raw.get("design")
+        sampling = design.get("sampling_plan") if isinstance(design, dict) else None
+        if isinstance(sampling, dict):
+            design_name = (
+                sampling.get("design")
+                if isinstance(sampling.get("design"), str)
+                else None
+            )
+            value = sampling.get("planned_n_blocks")
+            planned_n = value if isinstance(value, int) and not isinstance(value, bool) else None
+        entries = analysis_manifest.raw.get("entries")
+        if isinstance(entries, list):
+            registered = sorted(
+                entry["run_id"]
+                for entry in entries
+                if isinstance(entry, dict) and isinstance(entry.get("run_id"), str)
+            )
+    return {
+        "design": design_name,
+        "planned_n_blocks": planned_n,
+        "registered_bundle_ids": registered,
+        "unregistered_matching_bundle_ids": [],
+        "valid_replacements": [],
+        "top_up_suspected": False,
+    }
+
+
+def print_verdict(
+    collection_verdict: str,
+    collection_reasons: list[str],
+    categories: dict[str, list[str]],
+    claim_readiness: dict[str, Any],
+) -> None:
+    print("COLLECTION VERDICT:")
+    print(f"  verdict: {collection_verdict}")
+    for reason in collection_reasons:
         print(f"  reason: {reason}")
     for key in ("usable", "waived", "failed", "missing"):
         members = ", ".join(categories[key]) if categories[key] else "<none>"
         print(f"  {key}: {members}")
+    print("CLAIM-INPUT READINESS:")
+    print(f"  verdict: {claim_readiness['verdict']}")
+    for reason in claim_readiness["reasons"]:
+        print(f"  reason: {reason}")
+    print(f"  note: {claim_readiness['note']}")
 
 
 def append_verdict(
     log_path: Path,
     *,
-    verdict: str,
-    reasons: list[str],
+    collection_verdict: str,
+    collection_reasons: list[str],
     categories: dict[str, list[str]],
+    claim_readiness: dict[str, Any],
+    analysis_manifest: AnalysisManifestState | None,
+    sampling_audit: dict[str, Any],
+    members: list[MemberEvaluation],
+    campaign_provenance_path: Path | None,
     warning: str | None,
 ) -> None:
     row: dict[str, Any] = {
+        "schema_version": CAMPAIGN_VERDICT_SCHEMA,
         "timestamp": utc_timestamp(),
         "record_type": "campaign_verdict",
         "status": "verdict",
-        "verdict": verdict,
-        "reasons": reasons,
-        "usable": categories["usable"],
-        "waived": categories["waived"],
-        "failed": categories["failed"],
-        "missing": categories["missing"],
-        "taxonomy": {
-            "publishable": "all members usable",
-            "partial": "at least one usable member and at least one waived or failed member; all-waived is invalid",
-            "blocked": "one or more expected member bundles are missing",
-            "invalid": "one or more invalid unwaived members, or no members were evaluated",
+        "analysis_manifest": (
+            analysis_manifest.to_log() if analysis_manifest is not None else None
+        ),
+        "collection": {
+            "verdict": collection_verdict,
+            "reasons": collection_reasons,
+            "categories": categories,
         },
+        "claim_readiness": claim_readiness,
+        "sampling_audit": sampling_audit,
+        "members": [member.to_log() for member in members],
+        "campaign_provenance": (
+            {"manifest_path": str(campaign_provenance_path)}
+            if campaign_provenance_path is not None
+            else None
+        ),
     }
     if warning is not None:
         row["block_order_warning"] = warning
@@ -1282,6 +2007,7 @@ def run_campaign(args: argparse.Namespace) -> int:
     if args.max_failures < 1:
         raise ValueError("--max-failures must be >= 1")
 
+    analysis_manifest = load_analysis_manifest(config_dir)
     order_entries, order_warning = load_order_entries(config_dir)
     if order_warning is not None:
         print(order_warning, file=sys.stderr)
@@ -1300,12 +2026,39 @@ def run_campaign(args: argparse.Namespace) -> int:
         print(f"error: {duplicate_error}", file=sys.stderr)
         return 2
 
+    if analysis_manifest is not None and not analysis_manifest.valid and not args.dry_run:
+        categories = {"usable": [], "waived": [], "failed": [], "missing": []}
+        collection_reasons = ["analysis manifest validation failed before execution"]
+        readiness = claim_readiness_for(analysis_manifest, "invalid", [])
+        print_verdict("invalid", collection_reasons, categories, readiness)
+        append_verdict(
+            log_path,
+            collection_verdict="invalid",
+            collection_reasons=collection_reasons,
+            categories=categories,
+            claim_readiness=readiness,
+            analysis_manifest=analysis_manifest,
+            sampling_audit=sampling_audit_for(analysis_manifest),
+            members=[],
+            campaign_provenance_path=None,
+            warning=order_warning,
+        )
+        return 1
+
     counts: Counter[str] = Counter()
     failures = 0
     lock_path: Path | None = None
     all_evaluations: list[MemberEvaluation] = []
     missing_members: list[str] = []
     previous_model_tag: str | None = None
+    previous_physical_info: ConfigInfo | None = None
+    previous_physical_evaluation: MemberEvaluation | None = None
+    cooldown_by_bundle = prior_campaign_cooldown_evidence(
+        runs_dir,
+        analysis_manifest.manifest_id if analysis_manifest is not None else None,
+    )
+    campaign_provenance_path: Path | None = None
+    campaign_provenance: dict[str, Any] | None = None
 
     print_quiet_machine_warning()
     if args.dry_run:
@@ -1316,6 +2069,9 @@ def run_campaign(args: argparse.Namespace) -> int:
         except RuntimeError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 2
+        campaign_provenance_path, campaign_provenance = new_campaign_provenance(
+            config_dir, runs_dir, analysis_manifest
+        )
 
     try:
         for item in items:
@@ -1370,13 +2126,17 @@ def run_campaign(args: argparse.Namespace) -> int:
                 continue
 
             if state.action == "skip complete":
-                evaluations = evaluate_members(info, runs_dir, waivers)
+                evaluations = evaluate_members(
+                    info, runs_dir, waivers, cooldown_by_bundle
+                )
                 all_evaluations.extend(evaluations)
                 failed = [evaluation for evaluation in evaluations if evaluation.failed]
                 if failed:
                     failures += 1
                     status = "failed"
-                    details = "; ".join(evaluation_failure_detail(evaluation) for evaluation in failed)
+                    details = "; ".join(
+                        evaluation_failure_detail(evaluation) for evaluation in failed
+                    )
                     print(
                         f"failed {info.run_id}: existing bundle(s) are not skippable: "
                         f"{details}; inspect or move those bundle(s), or provide an "
@@ -1398,7 +2158,11 @@ def run_campaign(args: argparse.Namespace) -> int:
                         f"skipped {info.run_id}: complete experiment already exists "
                         f"({state.members_succeeded}/{state.members_total} members succeeded)"
                     )
-                    waived = [evaluation.bundle_id for evaluation in evaluations if evaluation.waived]
+                    waived = [
+                        evaluation.bundle_id
+                        for evaluation in evaluations
+                        if evaluation.waived
+                    ]
                     if waived:
                         print(
                             f"note: skipped experiment {info.run_id} has waived member(s): "
@@ -1409,7 +2173,22 @@ def run_campaign(args: argparse.Namespace) -> int:
                     **(skipped_log_extra(state) or {}),
                     **order_extra,
                     "members": [evaluation.to_log() for evaluation in evaluations],
+                    "campaign_provenance_manifest": str(campaign_provenance_path),
                 }
+                assert campaign_provenance_path is not None
+                assert campaign_provenance is not None
+                record_campaign_member_provenance(
+                    campaign_provenance_path,
+                    campaign_provenance,
+                    info=info,
+                    bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
+                    execution="existing",
+                    cooldown=(
+                        evaluations[0].preceding_campaign_cooldown
+                        if evaluations
+                        else None
+                    ),
+                )
                 append_log(
                     log_path,
                     log_row(
@@ -1465,12 +2244,39 @@ def run_campaign(args: argparse.Namespace) -> int:
                     break
                 continue
 
+            assert campaign_provenance_path is not None
+            assert campaign_provenance is not None
+            if previous_physical_info is None or previous_physical_evaluation is None:
+                cooldown_note = {
+                    "result": "first_run_exempt",
+                    "session_id": campaign_provenance["session_id"],
+                    "following_run_id": info.run_id,
+                    "recorded_at": utc_timestamp(),
+                }
+                campaign_provenance["first_physical_run_id"] = info.run_id
+                write_campaign_provenance(campaign_provenance_path, campaign_provenance)
+            else:
+                cooldown_note = campaign_cooldown_before_member(
+                    previous_info=previous_physical_info,
+                    previous_evaluation=previous_physical_evaluation,
+                    following_info=info,
+                    provenance_path=campaign_provenance_path,
+                    session_id=campaign_provenance["session_id"],
+                )
+            for bundle_dir in expected_member_dirs(info, runs_dir):
+                cooldown_by_bundle[bundle_dir.name] = cooldown_note
+
             start = time.monotonic()
             result = subprocess.run(command, check=False)
             duration_s = time.monotonic() - start
             exit_code = result.returncode
-            evaluations = evaluate_members(info, runs_dir, waivers)
+            evaluations = evaluate_members(
+                info, runs_dir, waivers, cooldown_by_bundle
+            )
             all_evaluations.extend(evaluations)
+            if evaluations:
+                previous_physical_info = info
+                previous_physical_evaluation = evaluations[-1]
             missing_after_run = [
                 evaluation.bundle_id
                 for evaluation in evaluations
@@ -1505,7 +2311,17 @@ def run_campaign(args: argparse.Namespace) -> int:
             extra = {
                 **order_extra,
                 "members": [evaluation.to_log() for evaluation in evaluations],
+                "preceding_campaign_cooldown": cooldown_note,
+                "campaign_provenance_manifest": str(campaign_provenance_path),
             }
+            record_campaign_member_provenance(
+                campaign_provenance_path,
+                campaign_provenance,
+                info=info,
+                bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
+                execution="invoked",
+                cooldown=cooldown_note,
+            )
             append_log(
                 log_path,
                 log_row(
@@ -1539,17 +2355,31 @@ def run_campaign(args: argparse.Namespace) -> int:
     if args.dry_run:
         return 0
     categories = classify_campaign_members(all_evaluations, missing_members)
-    verdict, reasons = verdict_for(categories)
-    print_verdict(verdict, reasons, categories)
+    collection_verdict, collection_reasons = collection_verdict_for(categories)
+    claim_readiness = claim_readiness_for(
+        analysis_manifest, collection_verdict, all_evaluations
+    )
+    sampling_audit = sampling_audit_for(analysis_manifest)
+    print_verdict(
+        collection_verdict,
+        collection_reasons,
+        categories,
+        claim_readiness,
+    )
     if not args.dry_run:
         append_verdict(
             log_path,
-            verdict=verdict,
-            reasons=reasons,
+            collection_verdict=collection_verdict,
+            collection_reasons=collection_reasons,
             categories=categories,
+            claim_readiness=claim_readiness,
+            analysis_manifest=analysis_manifest,
+            sampling_audit=sampling_audit,
+            members=all_evaluations,
+            campaign_provenance_path=campaign_provenance_path,
             warning=order_warning,
         )
-    return 1 if failures or verdict in {"blocked", "invalid"} else 0
+    return 1 if failures or collection_verdict in {"blocked", "invalid"} else 0
 
 
 def run_prompt_hash_check(args: argparse.Namespace) -> int:

@@ -340,6 +340,31 @@ experiment-level raw JSONL artifact relative to the manifest directory, for
 example `raw/<experiment_id>__cooldown_after_<member>.jsonl`. Each line
 records the sub-window idle baseline and rolling cooldown mean.
 
+## Campaign Provenance And Verdicts
+
+`scripts/run_campaign.py` writes one incremental operational manifest per
+invocation at `runs/campaign_manifests/<session_id>.json` with schema
+`joulewise.campaign_provenance.v1`. For independent matrix configs, the
+campaign runner owns the D-014 gate between physical member invocations. The
+gate uses the preceding member's recorded idle baseline and the same rolling
+30-second/10-percent/300-second recovery rule as the experiment controller.
+Its tri-state result is attached to the following member. Only the first
+physical run in a recorded session may carry `first_run_exempt`; a fixed sleep,
+mock-telemetry skip, adapter failure, absent baseline, or absent evidence is
+`unknown`, not recovery.
+
+Every measured `recovered` or `cap_hit` gate references an immutable JSONL
+trace under `runs/campaign_manifests/raw/` with relative path, SHA-256, and
+record count. Recovered/cap-hit provenance with a missing or hash-invalid raw
+trace is treated as unknown on resume. The campaign JSONL repeats the
+following-member gate object and ends with a
+`joulewise.campaign_verdict.v2` row. That row separates `collection.verdict`
+(`usable`, `partial`, `blocked`, `invalid`) from
+`claim_readiness.verdict` (`ready_for_analysis`,
+`not_ready_for_analysis`, `not_assessed`). Claim readiness has no effect on
+the collection process exit status and is not a statistical claim; P2-037
+independently revalidates all evidence.
+
 MLX runtime adapters may record additive memory snapshots at prepare end and
 cleanup start. These snapshots include process RSS when available and guarded
 MLX Metal memory stats (`active_memory_bytes`, `cache_memory_bytes`,

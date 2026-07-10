@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shlex
 import subprocess
@@ -210,7 +211,9 @@ def _write_bundle(
         writer.write_power_trace(
             [
                 PowerSample(timestamp_s=0.0, power_w=7.5, source="mock", rail="mock"),
+                PowerSample(timestamp_s=0.25, power_w=7.5, source="mock", rail="mock"),
                 PowerSample(timestamp_s=0.5, power_w=7.5, source="mock", rail="mock"),
+                PowerSample(timestamp_s=0.75, power_w=7.5, source="mock", rail="mock"),
                 PowerSample(timestamp_s=1.0, power_w=7.5, source="mock", rail="mock"),
             ]
         )
@@ -227,6 +230,7 @@ def _write_bundle(
             {
                 "device": {"telemetry": "mock", "rail_manifest": ["mock"]},
                 "adapters": {"telemetry": {"name": "mock"}},
+                "clock_anchor_bound_s": 0.0,
                 "idle_baseline": idle,
                 "workload_observed": {"token_count": 34, "output_token_count": 2},
                 "workload_provenance": {
@@ -336,7 +340,9 @@ def make_fake_cli(tmp: Path, sentinel: Path | None = None) -> Path:
                     writer.write_power_trace(
                         [
                             PowerSample(timestamp_s=0.0, power_w=7.5, source="mock", rail="mock"),
+                            PowerSample(timestamp_s=0.25, power_w=7.5, source="mock", rail="mock"),
                             PowerSample(timestamp_s=0.5, power_w=7.5, source="mock", rail="mock"),
+                            PowerSample(timestamp_s=0.75, power_w=7.5, source="mock", rail="mock"),
                             PowerSample(timestamp_s=1.0, power_w=7.5, source="mock", rail="mock"),
                         ]
                     )
@@ -344,6 +350,7 @@ def make_fake_cli(tmp: Path, sentinel: Path | None = None) -> Path:
                         {{
                             "device": {{"telemetry": "mock", "rail_manifest": ["mock"]}},
                             "adapters": {{"telemetry": {{"name": "mock"}}}},
+                            "clock_anchor_bound_s": 0.0,
                             "idle_baseline": {{
                                 "power_w_mean": 5.0,
                                 "power_w_stddev": 0.0,
@@ -475,6 +482,123 @@ def read_all_jsonl(path: Path) -> list[dict]:
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+
+
+def write_two_member_analysis_manifest(config_dir: Path) -> None:
+    configs = [config_dir / "a.json", config_dir / "b.json"]
+    order = {
+        "executed_order": [
+            {"index": index, "config": path.name, "run_id": path.stem}
+            for index, path in enumerate(configs, start=1)
+        ]
+    }
+    order_bytes = (json.dumps(order, indent=2) + "\n").encode("utf-8")
+    (config_dir / "order_manifest.json").write_bytes(order_bytes)
+    entries = []
+    for path, cell_id in zip(configs, ("cell-a", "cell-b"), strict=True):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        entries.append(
+            {
+                "entry_id": f"entry-{path.stem}",
+                "config": path.name,
+                "config_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                "run_id": payload["run_id"],
+                "cell_id": cell_id,
+                "block_id": "block-1",
+            }
+        )
+    manifest = {
+        "schema_version": "joulewise.analysis_manifest.v1",
+        "manifest_id": None,
+        "freeze_status": "frozen",
+        "design": {
+            "sampling_plan": {"design": "fixed_n", "planned_n_blocks": 1}
+        },
+        "source": {
+            "order_manifest": {"sha256": hashlib.sha256(order_bytes).hexdigest()}
+        },
+        "entries": entries,
+        "contrasts": [
+            {
+                "contrast_id": "ctr-b-minus-a",
+                "metric": {
+                    "name": "gross_energy_j",
+                    "window_class": "gross_request",
+                },
+                "cell_a_id": "cell-a",
+                "cell_b_id": "cell-b",
+                "block_ids": ["block-1"],
+            }
+        ],
+    }
+    identity_payload = dict(manifest)
+    identity_payload.pop("manifest_id")
+    canonical = json.dumps(
+        identity_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    manifest["manifest_id"] = "am-" + hashlib.sha256(canonical).hexdigest()
+    (config_dir / "analysis_manifest.json").write_text(
+        json.dumps(manifest, indent=2) + "\n", encoding="utf-8"
+    )
+
+
+def write_prior_campaign_provenance(
+    runs_dir: Path,
+    evidence_by_bundle: dict[str, str],
+    analysis_manifest_id: str,
+) -> None:
+    manifest_dir = runs_dir / "campaign_manifests"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir = manifest_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    raw_payload = json.dumps({"rolling_mean_power_w": 5.0}) + "\n"
+    (raw_dir / "fixture.jsonl").write_text(raw_payload, encoding="utf-8")
+    raw_sha = hashlib.sha256(raw_payload.encode("utf-8")).hexdigest()
+    session_id = "campaign-fixture"
+    members = []
+    for bundle_id, result in evidence_by_bundle.items():
+        cooldown = {
+            "result": result,
+            "session_id": session_id,
+            "following_run_id": bundle_id,
+        }
+        if result in {"recovered", "cap_hit"}:
+            cooldown["raw_artifact"] = {
+                "path": "raw/fixture.jsonl",
+                "sha256": raw_sha,
+                "records": 1,
+            }
+        members.append(
+            {
+                "config": f"{bundle_id}.json",
+                "run_id": bundle_id,
+                "bundle_ids": [bundle_id],
+                "execution": "fixture",
+                "preceding_campaign_cooldown": cooldown,
+            }
+        )
+    (manifest_dir / "fixture.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "joulewise.campaign_provenance.v1",
+                "session_id": session_id,
+                "created_at": "2026-07-10T00:00:00Z",
+                "config_dir": "fixture",
+                "analysis_manifest_id": analysis_manifest_id,
+                "first_physical_run_id": next(iter(evidence_by_bundle), None),
+                "members": members,
+                "cooldown_gates": [],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def analysis_manifest_id(config_dir: Path) -> str:
+    return json.loads(
+        (config_dir / "analysis_manifest.json").read_text(encoding="utf-8")
+    )["manifest_id"]
 
 
 class RunCampaignTests(unittest.TestCase):
@@ -622,19 +746,19 @@ class RunCampaignTests(unittest.TestCase):
             )
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("VERDICT:", result.stdout)
+            self.assertIn("COLLECTION VERDICT:", result.stdout)
             self.assertIn("verdict: partial", result.stdout)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual([row["status"] for row in rows], ["skipped", "waived"])
             all_rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
             verdict = all_rows[-1]
             self.assertEqual(verdict["record_type"], "campaign_verdict")
-            self.assertEqual(verdict["verdict"], "partial")
-            self.assertEqual(verdict["usable"], ["good"])
-            self.assertEqual(verdict["waived"], ["idle"])
-            self.assertIn("all-waived is invalid", verdict["taxonomy"]["partial"])
+            self.assertEqual(verdict["collection"]["verdict"], "partial")
+            self.assertEqual(verdict["collection"]["categories"]["usable"], ["good"])
+            self.assertEqual(verdict["collection"]["categories"]["waived"], ["idle"])
+            self.assertEqual(verdict["claim_readiness"]["verdict"], "not_assessed")
 
-    def test_waiver_target_namespace_is_exact_and_typed(self) -> None:
+    def test_waiver_target_namespace_is_exact_and_does_not_poison_collection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -667,10 +791,9 @@ class RunCampaignTests(unittest.TestCase):
                 waivers=waivers,
             )
 
-            self.assertEqual(result.returncode, 1)
-            self.assertIn("not skippable", result.stderr)
+            self.assertEqual(result.returncode, 0, result.stderr)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
-            self.assertEqual(rows[0]["status"], "failed")
+            self.assertEqual(rows[0]["status"], "skipped")
             self.assertIsNone(rows[0]["members"][0].get("waiver"))
 
     def test_waiver_unknown_scope_class_fails_at_load(self) -> None:
@@ -741,7 +864,10 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual(rows[0]["status"], "failed")
-            self.assertEqual(rows[0]["members"][0]["quality_flags"], ["idle_window_suspect"])
+            self.assertIn(
+                "idle_window_suspect",
+                rows[0]["members"][0]["claim_evidence_flags"],
+            )
 
     def test_duplicate_waiver_targets_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -766,7 +892,7 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("duplicate waiver target", result.stderr)
 
-    def test_idle_suspect_existing_member_requires_waiver(self) -> None:
+    def test_idle_suspect_member_is_collection_usable_but_claim_evidence_flagged(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -778,11 +904,14 @@ class RunCampaignTests(unittest.TestCase):
 
             result = run_campaign(config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli))
 
-            self.assertEqual(result.returncode, 1)
-            self.assertIn("idle_window_suspect", result.stderr)
+            self.assertEqual(result.returncode, 0, result.stderr)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
-            self.assertEqual(rows[0]["status"], "failed")
-            self.assertEqual(rows[0]["members"][0]["quality_flags"], ["idle_window_suspect"])
+            self.assertEqual(rows[0]["status"], "skipped")
+            member = rows[0]["members"][0]
+            self.assertEqual(member["collection_classification"], "usable")
+            self.assertEqual(member["claim_evidence_classification"], "flagged")
+            self.assertEqual(member["collection_integrity_flags"], [])
+            self.assertIn("idle_window_suspect", member["claim_evidence_flags"])
 
     def test_all_waived_campaign_is_invalid_not_partial(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -798,7 +927,7 @@ class RunCampaignTests(unittest.TestCase):
                     [
                         {
                             "bundle_id": "idle",
-                            "reason": "all waived is not publishable evidence",
+                            "reason": "all waived is not claim evidence",
                             "approver": "council",
                             "timestamp": "2026-07-08T00:00:00Z",
                             "scope": "idle_window_suspect",
@@ -820,11 +949,10 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             all_rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
             verdict = all_rows[-1]
-            self.assertEqual(verdict["verdict"], "invalid")
-            self.assertEqual(verdict["waived"], ["idle"])
-            self.assertIn("all-waived is invalid", verdict["taxonomy"]["partial"])
+            self.assertEqual(verdict["collection"]["verdict"], "invalid")
+            self.assertEqual(verdict["collection"]["categories"]["waived"], ["idle"])
 
-    def test_verdict_block_content_for_publishable_campaign(self) -> None:
+    def test_one_bundle_campaign_is_usable_and_claim_readiness_not_assessed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -836,13 +964,180 @@ class RunCampaignTests(unittest.TestCase):
             result = run_campaign(config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli))
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("VERDICT:", result.stdout)
-            self.assertIn("verdict: publishable", result.stdout)
+            self.assertIn("COLLECTION VERDICT:", result.stdout)
+            self.assertIn("CLAIM-INPUT READINESS:", result.stdout)
+            self.assertNotIn("publish" + "able", result.stdout)
             all_rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual(all_rows[-1]["record_type"], "campaign_verdict")
-            self.assertEqual(all_rows[-1]["verdict"], "publishable")
-            self.assertEqual(all_rows[-1]["usable"], ["one"])
-            self.assertEqual(all_rows[-1]["failed"], [])
+            self.assertEqual(
+                all_rows[-1]["schema_version"], "joulewise.campaign_verdict.v2"
+            )
+            self.assertEqual(all_rows[-1]["collection"]["verdict"], "usable")
+            self.assertEqual(
+                all_rows[-1]["claim_readiness"]["verdict"], "not_assessed"
+            )
+            self.assertEqual(
+                all_rows[-1]["collection"]["categories"]["usable"], ["one"]
+            )
+            self.assertEqual(
+                all_rows[-1]["collection"]["categories"]["failed"], []
+            )
+
+    def test_missing_campaign_cooldown_evidence_fails_closed_with_named_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "a.json", "a")
+            write_config(config_dir, "b.json", "b")
+            write_two_member_analysis_manifest(config_dir)
+            write_single_bundle(runs_dir, "a")
+            write_single_bundle(runs_dir, "b", idle_window_suspect=True)
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(verdict["collection"]["verdict"], "usable")
+            readiness = verdict["claim_readiness"]
+            self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+            self.assertIn("campaign_cooldown_evidence_missing", readiness["reasons"])
+            self.assertNotIn("idle_window_suspect", readiness["reasons"])
+            self.assertEqual(readiness["ready_contrast_ids"], [])
+
+    def test_cooldown_cap_hit_propagates_without_poisoning_collection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "a.json", "a")
+            write_config(config_dir, "b.json", "b")
+            write_two_member_analysis_manifest(config_dir)
+            write_single_bundle(runs_dir, "a")
+            write_single_bundle(runs_dir, "b", idle_window_suspect=True)
+            write_prior_campaign_provenance(
+                runs_dir,
+                {"a": "first_run_exempt", "b": "cap_hit"},
+                analysis_manifest_id(config_dir),
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(verdict["collection"]["verdict"], "usable")
+            self.assertEqual(
+                verdict["claim_readiness"]["verdict"], "not_ready_for_analysis"
+            )
+            self.assertIn("cooldown_cap_hit", verdict["claim_readiness"]["reasons"])
+
+    def test_explicit_campaign_cooldown_evidence_allows_ready_for_analysis(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "a.json", "a")
+            write_config(config_dir, "b.json", "b")
+            write_two_member_analysis_manifest(config_dir)
+            write_single_bundle(runs_dir, "a")
+            write_single_bundle(runs_dir, "b", idle_window_suspect=True)
+            write_prior_campaign_provenance(
+                runs_dir,
+                {"a": "first_run_exempt", "b": "recovered"},
+                analysis_manifest_id(config_dir),
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(
+                verdict["claim_readiness"]["verdict"], "ready_for_analysis"
+            )
+            self.assertEqual(
+                verdict["claim_readiness"]["ready_contrast_ids"],
+                ["ctr-b-minus-a"],
+            )
+
+    def test_recovered_cooldown_without_raw_provenance_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "a.json", "a")
+            write_config(config_dir, "b.json", "b")
+            write_two_member_analysis_manifest(config_dir)
+            write_single_bundle(runs_dir, "a")
+            write_single_bundle(runs_dir, "b")
+            write_prior_campaign_provenance(
+                runs_dir,
+                {"a": "first_run_exempt", "b": "recovered"},
+                analysis_manifest_id(config_dir),
+            )
+            (runs_dir / "campaign_manifests" / "raw" / "fixture.jsonl").unlink()
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            readiness = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1][
+                "claim_readiness"
+            ]
+            self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+            self.assertIn("campaign_cooldown_evidence_missing", readiness["reasons"])
+
+    def test_analysis_manifest_config_hash_mismatch_refuses_execution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            sentinel = tmp_path / "invoked"
+            config_dir.mkdir()
+            write_config(config_dir, "a.json", "a")
+            write_config(config_dir, "b.json", "b")
+            write_two_member_analysis_manifest(config_dir)
+            payload = json.loads((config_dir / "b.json").read_text(encoding="utf-8"))
+            payload["run_metadata"]["notes"] = "tampered after freeze"
+            (config_dir / "b.json").write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            fake_cli = make_fake_cli(tmp_path, sentinel=sentinel)
+
+            result = run_campaign(
+                config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli)
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertFalse(sentinel.exists())
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(verdict["collection"]["verdict"], "invalid")
+            self.assertIn("config_hash_mismatch", verdict["claim_readiness"]["reasons"])
+
+    def test_campaign_provenance_records_first_run_exemption_and_unknown_mock_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "a.json", "a")
+            write_config(config_dir, "b.json", "b")
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifests = list((runs_dir / "campaign_manifests").glob("*.json"))
+            self.assertEqual(len(manifests), 1)
+            provenance = json.loads(manifests[0].read_text(encoding="utf-8"))
+            self.assertEqual(provenance["first_physical_run_id"], "a")
+            self.assertEqual(
+                provenance["members"][0]["preceding_campaign_cooldown"]["result"],
+                "first_run_exempt",
+            )
+            second = provenance["members"][1]["preceding_campaign_cooldown"]
+            self.assertEqual(second["result"], "unknown")
+            self.assertIn("mock telemetry", second["reason"])
 
     def test_prompt_hash_sidecar_match_records_matches(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1183,7 +1478,7 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(rows[0]["status"], "failed")
             member = rows[0]["members"][0]
             self.assertTrue(member["strict_valid"])
-            self.assertEqual(member["quality_flags"], ["prompt_hash_mismatch"])
+            self.assertEqual(member["collection_integrity_flags"], ["prompt_hash_mismatch"])
             check = member["prompt_hash_check"]
             self.assertEqual(check["status"], "mismatch")
             self.assertEqual(check["checked_items"], 1)
@@ -1211,7 +1506,7 @@ class RunCampaignTests(unittest.TestCase):
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual(rows[0]["status"], "failed")
             member = rows[0]["members"][0]
-            self.assertEqual(member["quality_flags"], ["prompt_hash_check_error"])
+            self.assertEqual(member["collection_integrity_flags"], ["prompt_hash_check_error"])
             check = member["prompt_hash_check"]
             self.assertEqual(check["status"], "error")
             self.assertEqual(check["checked_items"], 0)
@@ -1344,7 +1639,7 @@ class RunCampaignTests(unittest.TestCase):
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual([row["status"] for row in rows], ["ok", "waived"])
             member = rows[1]["members"][0]
-            self.assertEqual(member["classification"], "waived")
+            self.assertEqual(member["collection_classification"], "waived")
             self.assertEqual(member["waiver"]["scope"], "prompt_hash_check_error")
 
     def test_sidecarless_campaign_records_prompt_hash_check_not_applicable(self) -> None:
