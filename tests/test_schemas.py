@@ -156,7 +156,7 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertEqual(suite_summary["properties"]["floor_cmp_j"], {"type": ["number", "null"]})
         payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()
         self.assertIsNone(payload["suite_metrics"])
-        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.2.0")
+        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.3.0")
 
     def test_summary_metrics_schema_has_idle_gpu_quality_fields(self) -> None:
         schema = SummaryMetrics.json_schema()

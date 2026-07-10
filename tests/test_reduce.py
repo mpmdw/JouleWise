@@ -403,7 +403,8 @@ class DegenerateTests(ReduceTestCase):
         self.assertEqual(summary.status, RunStatus.FAILED)
         self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
 
-    def test_zero_length_window_is_zero_energy_not_failure(self) -> None:
+    def test_zero_length_window_is_structured_failure(self) -> None:
+        # P2-040 FIX-1 (ARC-3): a nonpositive measured window fails closed.
         builder = self.builder()
         builder.measured_window(5.0, 5.0)
         builder.write_trace(
@@ -411,26 +412,34 @@ class DegenerateTests(ReduceTestCase):
         )
         builder.write_metadata(rail_manifest=["mock"])
         summary = reduce_module.reduce_bundle(builder.path)
-        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-        self.assertAlmostEqual(summary.gross_energy_j, 0.0, places=9)
-        self.assertAlmostEqual(summary.idle_subtracted_energy_j, 0.0, places=9)
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertTrue(
+            summary.failure_message.startswith(
+                "measured_run window duration must be > 0 s; got "
+            ),
+            summary.failure_message,
+        )
+        self.assertIsNone(summary.gross_energy_j)
+        self.assertIsNone(summary.idle_subtracted_energy_j)
+        self.assertIsNone(summary.energy_request_j)
+        self.assertIsNone(summary.energy_token_j)
+        # Schema-valid failure summary (status/failure_reason consistent).
+        summary.to_dict()
 
-    def test_zero_length_window_keeps_real_phase_energy(self) -> None:
-        # A zero-length measured window must zero the window-scoped energies but
-        # NOT phase energy over a real trace: a prefill phase [0, 2] over a
-        # constant 7.5 W trace integrates to 7.5 * 2 = 15.0 J. (The bug used an
-        # empty curve for phase attribution, wrongly yielding 0.0 J.)
+    def test_zero_length_window_emits_no_derived_phase_metrics(self) -> None:
+        # P2-040 FIX-1: an invalid measured window must not carry derived
+        # phase/suite metrics into the structured failure summary.
         builder = self.builder()
         builder.measured_window(5.0, 5.0)  # stage_started ts == stage_completed ts
         builder.add_phase("prefill", 0.0, 2.0)
         builder.write_trace(constant_samples(0.0, 10.0, hz=1.0, power_w=7.5))
         builder.write_metadata(rail_manifest=["mock"])
         summary = reduce_module.reduce_bundle(builder.path)
-        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-        self.assertAlmostEqual(summary.gross_energy_j, 0.0, places=9)
-        self.assertIsNotNone(summary.phase_energy_j)
-        self.assertEqual(set(summary.phase_energy_j), {"prefill"})
-        self.assertAlmostEqual(summary.phase_energy_j["prefill"], 15.0, places=9)
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertIsNone(summary.phase_energy_j)
+        self.assertIsNone(summary.suite_metrics)
 
 
 class MockEndToEndTests(ReduceTestCase):
@@ -562,7 +571,9 @@ class TokenFallbackTests(ReduceTestCase):
         builder.write_metadata(rail_manifest=["mock"], workload_observed=workload_observed)
         return reduce_module.reduce_bundle(builder.path)
 
-    def test_prompt_text_only_falls_back_to_observed_counts(self) -> None:
+    def test_prompt_text_only_uses_runtime_observed_total(self) -> None:
+        # D-058: runtime observation is the authoritative denominator, not a
+        # fallback.
         summary = self.build(
             workload_profile=self.PROMPT_TEXT_PROFILE,
             workload_observed={"token_count": 20, "output_token_count": 4},
@@ -574,14 +585,29 @@ class TokenFallbackTests(ReduceTestCase):
             summary.measurement_quality.token_count_source, "runtime_observed"
         )
 
-    def test_config_supplied_counts_still_win(self) -> None:
-        # The example config pins prompt_tokens=32; 4 token events observed.
+    def test_runtime_observed_total_wins_over_configured_counts(self) -> None:
+        # D-058 (P2-040 FIX-4): the example config pins prompt_tokens=32 and 4
+        # token events are observed, but the runtime-observed total (999) is
+        # the only governed denominator.
         summary = self.build(
             workload_observed={"token_count": 999, "output_token_count": 4},
         )
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-        self.assertAlmostEqual(summary.energy_token_j, 25.0 / (32 + 4), places=9)
-        self.assertEqual(summary.measurement_quality.token_count_source, "config")
+        self.assertAlmostEqual(summary.energy_token_j, 25.0 / 999.0, places=9)
+        self.assertEqual(
+            summary.measurement_quality.token_count_source, "runtime_observed"
+        )
+
+    def test_config_plus_output_events_does_not_fabricate_total_denominator(self) -> None:
+        # P2-040 FIX-4 mutation test: configured prompt count plus output
+        # events must not fabricate a governed total without a
+        # runtime-observed total.
+        summary = self.build()
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNone(summary.energy_token_j)
+        self.assertIsNone(summary.measurement_quality.token_count_source)
+        # The per-output-token metric keeps its runtime-observed denominator.
+        self.assertAlmostEqual(summary.energy_output_token_j, 25.0 / 4.0, places=9)
 
     def test_neither_source_yields_none_unchanged(self) -> None:
         summary = self.build(workload_profile=self.PROMPT_TEXT_PROFILE)
@@ -754,7 +780,7 @@ class SuiteReduceTests(ReduceTestCase):
         self.assertIn("block_a/level_1", {level.group_id for level in suite.levels})
         self.assertIn("block_b/level_1", {level.group_id for level in suite.levels})
 
-    def test_zero_window_suite_bundle_retains_degenerate_suite_metrics(self) -> None:
+    def test_zero_window_suite_bundle_is_structured_failure(self) -> None:
         bundle_path, _ = run_benchmark(
             load_suite_config("reduce-suite-zero-window"),
             self.runs_root,
@@ -771,20 +797,18 @@ class SuiteReduceTests(ReduceTestCase):
         write_jsonl(events_path, events)
 
         summary = reduce_module.reduce_bundle(bundle_path)
-        suite = summary.suite_metrics
 
-        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-        self.assertAlmostEqual(summary.gross_energy_j, 0.0, places=9)
-        self.assertIsNotNone(suite)
-        self.assertEqual(suite.executed_item_count, 5)
+        # P2-040 FIX-1: a zero-length measured window is a structured failure,
+        # never a succeeded suite summary with degenerate metrics.
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
         self.assertTrue(
-            all(item.energy_gross_j == 0.0 for item in suite.items),
-            [item.energy_gross_j for item in suite.items],
+            summary.failure_message.startswith(
+                "measured_run window duration must be > 0 s; got "
+            ),
+            summary.failure_message,
         )
-        self.assertTrue(
-            all(block.energy_gross_j == 0.0 for block in suite.blocks),
-            [block.energy_gross_j for block in suite.blocks],
-        )
+        self.assertIsNone(summary.suite_metrics)
 
     def test_single_prompt_reduction_has_null_suite_metrics(self) -> None:
         bundle_path, _ = run_benchmark(

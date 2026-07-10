@@ -17,7 +17,7 @@ from joulewise.validation import finite_float
 CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
-SUMMARY_REDUCER_VERSION = "0.2.0"
+SUMMARY_REDUCER_VERSION = "0.3.0"
 
 
 class SchemaError(ValueError):
