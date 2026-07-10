@@ -20,6 +20,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -34,15 +35,18 @@ LEGACY_LABEL = "legacy L1 (manual review; pre-2M)"
 INCLUDE_RE = re.compile(r'^\{\{jw:include path="([^"]+)"\}\}\s*$', re.MULTILINE)
 
 REGEN_COMMAND = (
-    "python3 scripts/make_figures.py --runs-root runs "
-    "--input-manifest analysis/rpt001-v1/input_manifest.json "
-    "&& python3 scripts/build_capstone.py --profile rpt001"
+    "python3 scripts/build_capstone.py --profile rpt001 --full --offline "
+    "--runs-root /Users/edr/code/JouleWise/runs"
 )
 
-FORBIDDEN_PHRASES = [
-    "more efficient", "less efficient", "scales with model size",
-    "statistically significant", "clears the detection floor",
-]
+# This report-text scan is only a tripwire; claims_lint phase4 is the gate of record.
+FORBIDDEN_PHRASES = [re.compile(p, re.IGNORECASE) for p in (
+    r"\b(?:more|less)\s+efficient\b", r"\bscales?\s+with\s+model\s+size\b",
+    r"\bstatistically\s+significant\b", r"\bclears?\s+the\s+detection\s+floor\b",
+    r"\buses?\s+less\s+energy\b", r"\blower\s+energy\s+consumption\b",
+    r"\b(?:\d+(?:\.\d+)?\s*[x×]\s+)?energy\s+savings?\b", r"\boutperforms?\b",
+    r"\benergy\s+consumption\s+increases?\s+with\s+parameter\s+count\b",
+)]
 
 
 def fail(msg: str) -> None:
@@ -155,11 +159,36 @@ def assemble(profile: dict) -> str:
             fail(f"unresolved include directive remains in {chapter}")
         parts.append(text.rstrip("\n") + "\n\n")
     doc = "".join(parts).rstrip("\n") + "\n"
-    lowered = doc.lower()
     for phrase in FORBIDDEN_PHRASES:
-        if phrase in lowered:
-            fail(f"forbidden phrase in assembled report: {phrase!r}")
+        if phrase.search(doc):
+            fail(f"forbidden phrase in assembled report: {phrase.pattern!r}")
     return doc
+
+
+def verify_artifact_manifest() -> None:
+    path = ANALYSIS / "artifact_manifest.json"
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    if manifest.get("schema") != "joulewise.report_artifact_manifest.v1":
+        fail("unknown artifact manifest schema")
+    for rel, expected in manifest.get("outputs", {}).items():
+        target = REPO_ROOT / rel
+        if not target.is_file():
+            fail(f"artifact manifest output missing: {rel}")
+        actual = hashlib.sha256(target.read_bytes()).hexdigest()
+        if actual != expected:
+            fail(f"artifact manifest hash mismatch: {rel}")
+
+
+def run_full(runs_root: Path, offline: bool) -> None:
+    # All steps are local and stdlib-only; --offline makes that contract explicit.
+    figure_cmd = [sys.executable, "scripts/make_figures.py", "--runs-root", str(runs_root),
+                  "--input-manifest", "analysis/rpt001-v1/input_manifest.json"]
+    if offline:
+        figure_cmd.append("--offline")
+    subprocess.run(figure_cmd, cwd=REPO_ROOT, check=True)
+    subprocess.run([sys.executable, "scripts/claims_lint.py", "--mode", "phase4",
+                    "--write-projection"], cwd=REPO_ROOT, check=True)
+    verify_artifact_manifest()
 
 
 def main() -> int:
@@ -167,10 +196,18 @@ def main() -> int:
     ap.add_argument("--profile", default="rpt001")
     ap.add_argument("--check", action="store_true",
                     help="Compare regenerated outputs against committed/built files; exit 2 on drift.")
+    ap.add_argument("--full", action="store_true",
+                    help="Regenerate analysis, lint claims, verify hashes, then assemble.")
+    ap.add_argument("--offline", action="store_true",
+                    help="Run only the explicitly network-free build path.")
+    ap.add_argument("--runs-root", type=Path, default=Path("runs"))
     args = ap.parse_args()
     if args.profile != "rpt001":
         fail(f"unknown profile: {args.profile}")
 
+    if args.full:
+        run_full(args.runs_root, args.offline)
+    verify_artifact_manifest()
     profile = load_profile()
     results_page = generate_results_page()
     gen_path = SRC / "generated" / "rpt001_vertical_slice.md"
@@ -190,11 +227,11 @@ def main() -> int:
         return 0
 
     gen_path.parent.mkdir(parents=True, exist_ok=True)
-    gen_path.write_text(results_page, encoding="utf-8")
+    gen_path.write_text(results_page, encoding="utf-8", newline="\n")
     assembled = assemble(profile)
     out_path = REPO_ROOT / "build" / "capstone" / "rpt001" / "report.md"
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(assembled, encoding="utf-8")
+    out_path.write_text(assembled, encoding="utf-8", newline="\n")
     digest = hashlib.sha256(assembled.encode("utf-8")).hexdigest()
     print(f"build_capstone: assembled build/capstone/rpt001/report.md sha256={digest}")
     return 0

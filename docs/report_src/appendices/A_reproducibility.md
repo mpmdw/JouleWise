@@ -13,9 +13,8 @@ bundles under `runs/` via committed, versioned artifacts:
 Full regeneration (requires the local bundle corpus; ~110 MB, not in Git):
 
 ```sh
-python3 scripts/make_figures.py --runs-root runs \
-  --input-manifest analysis/rpt001-v1/input_manifest.json \
-  && python3 scripts/build_capstone.py --profile rpt001
+python3 scripts/build_capstone.py --profile rpt001 --full --offline \
+  --runs-root /Users/edr/code/JouleWise/runs
 ```
 
 Release/packaging details land with REPRO-001.

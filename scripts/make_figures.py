@@ -17,9 +17,10 @@ Deterministic: sorted keys, fixed precision, no timestamps, no absolute
 paths in outputs. Read-only over ``runs/``.
 
 Usage:
-    python3 scripts/make_figures.py --runs-root runs \
+    python3 scripts/make_figures.py --runs-root /Users/edr/code/JouleWise/runs \
         --input-manifest analysis/rpt001-v1/input_manifest.json
-    python3 scripts/make_figures.py --runs-root runs --write-input-manifest
+    python3 scripts/make_figures.py --runs-root /Users/edr/code/JouleWise/runs \
+        --bootstrap-input-manifest
 """
 
 from __future__ import annotations
@@ -29,7 +30,10 @@ import csv
 import hashlib
 import io
 import json
+import os
+import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -47,7 +51,7 @@ BOUNDARY_LABEL = "Apple SoC CPU + GPU + ANE package power"
 
 EXPERIMENTS = ["example-mac-mlx-local", "example-mac-mlx-qwen35-122b-512t"]
 STACK_IDS = {
-    "example-mac-mlx-local": "LEGACY-M3MAX-QWEN25-15B-MLX",
+    "example-mac-mlx-local": "LEGACY-M3MAX-QWEN25-1P5B-MLX",
     "example-mac-mlx-qwen35-122b-512t": "LEGACY-M3MAX-QWEN35-122B-A10B-MLX",
 }
 
@@ -384,7 +388,7 @@ T1_COLUMNS = [
     "idlesub_j_request_mean", "idlesub_j_request_sd", "idlesub_j_request_min_max",
     "idlesub_mj_output_token_mean", "idlesub_mj_output_token_sd", "idlesub_mj_output_token_min_max",
     "throughput_tokens_s_mean", "ttft_ms_mean",
-    "boundary", "evidence_label", "quality_waiver",
+    "token_denominator_scope", "boundary", "evidence_label", "quality_waiver",
 ]
 
 
@@ -408,6 +412,7 @@ def t1_rows(stacks: dict, waivers: dict) -> list[dict]:
             "idlesub_mj_output_token_min_max": f"{t['min'] * 1000:.1f}–{t['max'] * 1000:.1f}",
             "throughput_tokens_s_mean": f"{m['throughput_tokens_s']['mean']:.1f}",
             "ttft_ms_mean": f"{m['ttft_s']['mean'] * 1000:.1f}",
+            "token_denominator_scope": "runtime-observed output tokens; tokenizer identity unknown (legacy bundle)",
             "boundary": BOUNDARY_LABEL,
             "evidence_label": LEGACY_LABEL,
             "quality_waiver": waivers.get(stack_id, "none"),
@@ -536,24 +541,35 @@ def main() -> int:
     ap.add_argument("--runs-root", default="runs", type=Path)
     ap.add_argument("--input-manifest",
                     default=Path("analysis/rpt001-v1/input_manifest.json"), type=Path)
-    ap.add_argument("--write-input-manifest", action="store_true",
-                    help="Bootstrap: compute hashes and (re)write the pinned input manifest.")
+    ap.add_argument("--bootstrap-input-manifest", action="store_true",
+                    help="DANGEROUS bootstrap: re-baseline evidence hashes in the pinned input manifest.")
+    ap.add_argument("--offline", action="store_true",
+                    help="Explicitly prohibit network-dependent steps (this pipeline is fully offline).")
     ap.add_argument("--out-root", default=Path("."), type=Path,
                     help="Repository root to write analysis/figures outputs under.")
     args = ap.parse_args()
 
     runs_root = args.runs_root
     out_root = args.out_root
-    analysis_dir = out_root / ANALYSIS_DIR
+    if args.bootstrap_input_manifest:
+        print("WARNING: --bootstrap-input-manifest RE-BASELINES EVIDENCE; review every changed hash.",
+              file=sys.stderr)
+        manifest = build_input_manifest(runs_root)
+        target = out_root / args.input_manifest
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(dump_json(manifest), encoding="utf-8", newline="\n")
+        print(f"make_figures: wrote {args.input_manifest}")
+
+    # Build the complete publication in a sibling staging tree. No destination
+    # artifact is touched until every input gate, render, and hash succeeds.
+    stage_base = out_root.resolve()
+    stage_base.mkdir(parents=True, exist_ok=True)
+    stage_tmp = Path(tempfile.mkdtemp(prefix=".rpt001-stage-", dir=stage_base))
+    analysis_dir = stage_tmp / ANALYSIS_DIR
     tables_dir = analysis_dir / "tables"
-    figures_dir = out_root / FIGURES_DIR
+    figures_dir = stage_tmp / FIGURES_DIR
     for d in (analysis_dir, tables_dir, figures_dir):
         d.mkdir(parents=True, exist_ok=True)
-
-    if args.write_input_manifest:
-        manifest = build_input_manifest(runs_root)
-        (out_root / args.input_manifest).write_text(dump_json(manifest), encoding="utf-8")
-        print(f"make_figures: wrote {args.input_manifest}")
 
     input_manifest = json.loads((out_root / args.input_manifest).read_text())
     manifests = gate_inputs(runs_root, input_manifest)
@@ -574,7 +590,7 @@ def main() -> int:
                 "figure deliberately renders raw points + mean + min-max, not "
                 "the Student-t interval (spec §4.2).",
         "experiments": aggregates,
-    }), encoding="utf-8")
+    }), encoding="utf-8", newline="\n")
 
     stacks = per_stack_metrics(rows)
 
@@ -586,32 +602,33 @@ def main() -> int:
             fail(f"aggregate/table mean mismatch for {stack_id}")
 
     figures_path = figures_dir / FIGURE_NAME
-    figures_path.write_text(render_figure(stacks), encoding="utf-8")
+    figures_path.write_text(render_figure(stacks), encoding="utf-8", newline="\n")
 
     waivers = {
         STACK_IDS["example-mac-mlx-local"]:
             "cooldown cap hit recorded before r2; point retained and reported (legacy manual-review carve-out)",
     }
     t1 = t1_rows(stacks, waivers)
-    (tables_dir / "T1_legacy_l1_results.csv").write_text(csv_table(T1_COLUMNS, t1), encoding="utf-8")
+    (tables_dir / "T1_legacy_l1_results.csv").write_text(csv_table(T1_COLUMNS, t1), encoding="utf-8", newline="\n")
     (tables_dir / "T1_legacy_l1_results.md").write_text(
         f"Table T1: per-stack instrument results — {LEGACY_LABEL}. Values are mean, "
         "sample SD, and observed min–max over n=3 sequential repetitions per exact stack. "
         "No cross-stack comparison is made.\n\n"
-        + markdown_table(T1_COLUMNS, t1), encoding="utf-8")
+        "Output-token columns use runtime-observed counts; tokenizer identity is unknown (legacy bundle).\n\n"
+        + markdown_table(T1_COLUMNS, t1), encoding="utf-8", newline="\n")
 
     s1 = s1_rows(stacks)
     s1_columns = ["stack_id"] + S1_FIELDS
-    (tables_dir / "S1_legacy_stack_identity.csv").write_text(csv_table(s1_columns, s1), encoding="utf-8")
+    (tables_dir / "S1_legacy_stack_identity.csv").write_text(csv_table(s1_columns, s1), encoding="utf-8", newline="\n")
     (tables_dir / "S1_legacy_stack_identity.md").write_text(
         f"Table S1: full D-058 stack identity for both legacy stacks — {LEGACY_LABEL}. "
         "Every cell is a concrete recorded value or an explicit unknown.\n\n"
-        + markdown_table(s1_columns, s1), encoding="utf-8")
+        + markdown_table(s1_columns, s1), encoding="utf-8", newline="\n")
 
     mean_by_stack = {sid: stacks[sid]["metrics"]["energy_request_j"]["mean"] for sid in stacks}
     row = claims_row(stacks, mean_by_stack)
     (analysis_dir / "claims_index.jsonl").write_text(
-        json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+        json.dumps(row, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
     outputs = [
         ANALYSIS_DIR / "dataset.csv",
@@ -627,8 +644,7 @@ def main() -> int:
         "schema": "joulewise.report_artifact_manifest.v1",
         "artifact_version": ARTIFACT_VERSION,
         "build_mode": "real-bundles",
-        "input_manifest_sha256": hashlib.sha256(
-            (out_root / args.input_manifest).read_bytes()).hexdigest(),
+        "input_manifest_sha256": hashlib.sha256((out_root / args.input_manifest).read_bytes()).hexdigest(),
         "experiment_manifest_sha256": {
             e["experiment_id"]: e["manifest_sha256"]
             for e in input_manifest["experiments"]
@@ -637,9 +653,17 @@ def main() -> int:
         "generator_sha256": {
             "scripts/make_figures.py": sha256_file(Path(__file__)),
         },
-        "outputs": {str(p): sha256_file(out_root / p) for p in sorted(outputs, key=str)},
+        "outputs": {str(p): sha256_file(stage_tmp / p) for p in sorted(outputs, key=str)},
     }
-    (analysis_dir / "artifact_manifest.json").write_text(dump_json(manifest_out), encoding="utf-8")
+    (analysis_dir / "artifact_manifest.json").write_text(dump_json(manifest_out), encoding="utf-8", newline="\n")
+    try:
+        for rel in outputs + [ANALYSIS_DIR / "artifact_manifest.json"]:
+            source = stage_tmp / rel
+            target = out_root / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(source, target)
+    finally:
+        shutil.rmtree(stage_tmp, ignore_errors=True)
     print("make_figures: OK — dataset, aggregates, figure, T1, S1, claims row, artifact manifest")
     return 0
 

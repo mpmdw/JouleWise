@@ -27,10 +27,12 @@ Full stack identities: Table S1.
 
 Table T1: per-stack instrument results — legacy L1 (manual review; pre-2M). Values are mean, sample SD, and observed min–max over n=3 sequential repetitions per exact stack. No cross-stack comparison is made.
 
-| stack_id | model_display_name | n | gross_j_request_mean | gross_j_request_sd | gross_j_request_min_max | idlesub_j_request_mean | idlesub_j_request_sd | idlesub_j_request_min_max | idlesub_mj_output_token_mean | idlesub_mj_output_token_sd | idlesub_mj_output_token_min_max | throughput_tokens_s_mean | ttft_ms_mean | boundary | evidence_label | quality_waiver |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| LEGACY-M3MAX-QWEN25-15B-MLX | Qwen2.5-1.5B-Instruct-4bit | 3 | 47.2 | 0.7 | 46.6–48.0 | 44.4 | 3.3 | 40.7–46.3 | 86.8 | 6.4 | 79.4–90.5 | 257.4 | 94.1 | Apple SoC CPU + GPU + ANE package power | legacy L1 (manual review; pre-2M) | cooldown cap hit recorded before r2; point retained and reported (legacy manual-review carve-out) |
-| LEGACY-M3MAX-QWEN35-122B-A10B-MLX | Qwen3.5-122B-A10B-4bit | 3 | 304.0 | 0.9 | 303.5–305.1 | 298.7 | 0.6 | 298.1–299.3 | 583.4 | 1.2 | 582.2–584.5 | 46.2 | 271.7 | Apple SoC CPU + GPU + ANE package power | legacy L1 (manual review; pre-2M) | none |
+Output-token columns use runtime-observed counts; tokenizer identity is unknown (legacy bundle).
+
+| stack_id | model_display_name | n | gross_j_request_mean | gross_j_request_sd | gross_j_request_min_max | idlesub_j_request_mean | idlesub_j_request_sd | idlesub_j_request_min_max | idlesub_mj_output_token_mean | idlesub_mj_output_token_sd | idlesub_mj_output_token_min_max | throughput_tokens_s_mean | ttft_ms_mean | token_denominator_scope | boundary | evidence_label | quality_waiver |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| LEGACY-M3MAX-QWEN25-1P5B-MLX | Qwen2.5-1.5B-Instruct-4bit | 3 | 47.2 | 0.7 | 46.6–48.0 | 44.4 | 3.3 | 40.7–46.3 | 86.8 | 6.4 | 79.4–90.5 | 257.4 | 94.1 | runtime-observed output tokens; tokenizer identity unknown (legacy bundle) | Apple SoC CPU + GPU + ANE package power | legacy L1 (manual review; pre-2M) | cooldown cap hit recorded before r2; point retained and reported (legacy manual-review carve-out) |
+| LEGACY-M3MAX-QWEN35-122B-A10B-MLX | Qwen3.5-122B-A10B-4bit | 3 | 304.0 | 0.9 | 303.5–305.1 | 298.7 | 0.6 | 298.1–299.3 | 583.4 | 1.2 | 582.2–584.5 | 46.2 | 271.7 | runtime-observed output tokens; tokenizer identity unknown (legacy bundle) | Apple SoC CPU + GPU + ANE package power | legacy L1 (manual review; pre-2M) | none |
 
 ### Quality waivers
 
@@ -43,7 +45,7 @@ Table S1: full D-058 stack identity for both legacy stacks — legacy L1 (manual
 
 | stack_id | hardware_unit | os_version | runtime_version | kernel_library | model_artifact_hash | quantization | tokenizer_identity | sampler_output_policy | batching_concurrency_policy | measurement_boundary | telemetry_backend |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| LEGACY-M3MAX-QWEN25-15B-MLX | macbook_m3_max (Mac15,9); physical unit id: unknown (legacy bundle) | macOS (kern.osversion 24G720 recorded in bundle metadata) | MLX 0.31.2 / mlx-lm 0.31.3 (from adapter prepare metadata) | unknown (legacy bundle) | unavailable (not captured); repo revision 8b403126fc14f14cfc99bb4cfa72ecbc129ea677 (revision, not a byte hash) | int4 (bits=4, group_size=unknown (legacy bundle)) | unknown (legacy bundle); prompt source/BOS handling: unavailable (not captured) | unknown (legacy bundle) | unknown (legacy bundle) | Apple SoC CPU + GPU + ANE package power | powermetrics |
+| LEGACY-M3MAX-QWEN25-1P5B-MLX | macbook_m3_max (Mac15,9); physical unit id: unknown (legacy bundle) | macOS (kern.osversion 24G720 recorded in bundle metadata) | MLX 0.31.2 / mlx-lm 0.31.3 (from adapter prepare metadata) | unknown (legacy bundle) | unavailable (not captured); repo revision 8b403126fc14f14cfc99bb4cfa72ecbc129ea677 (revision, not a byte hash) | int4 (bits=4, group_size=unknown (legacy bundle)) | unknown (legacy bundle); prompt source/BOS handling: unavailable (not captured) | unknown (legacy bundle) | unknown (legacy bundle) | Apple SoC CPU + GPU + ANE package power | powermetrics |
 | LEGACY-M3MAX-QWEN35-122B-A10B-MLX | macbook_m3_max (Mac15,9); physical unit id: unknown (legacy bundle) | macOS (kern.osversion 24G720 recorded in bundle metadata) | MLX 0.31.2 / mlx-lm 0.31.3 (from adapter prepare metadata) | unknown (legacy bundle) | unavailable (not captured); repo revision e9c67b08899964be5fdd069bb1b4bc8907fe68f5 (revision, not a byte hash) | int4 (bits=4, group_size=64) | unknown (legacy bundle); prompt source/BOS handling: unavailable (not captured) | unknown (legacy bundle) | unknown (legacy bundle) | Apple SoC CPU + GPU + ANE package power | powermetrics |
 
 ### Limitations carried by this page
@@ -61,7 +63,7 @@ Claims row: `CLM-RPT001-LEGACY-L1-001` in `analysis/rpt001-v1/claims_index.jsonl
 ### Regeneration
 
 ```sh
-python3 scripts/make_figures.py --runs-root runs --input-manifest analysis/rpt001-v1/input_manifest.json && python3 scripts/build_capstone.py --profile rpt001
+python3 scripts/build_capstone.py --profile rpt001 --full --offline --runs-root /Users/edr/code/JouleWise/runs
 ```
 
 Artifact hashes: `analysis/rpt001-v1/artifact_manifest.json`.

@@ -68,6 +68,15 @@ rank 0 closed. Full record:
 
 ## Current Project Status
 
+**RPT-001 targeted review fix round COMPLETE in worktree (2026-07-10;
+awaiting lead pathspec commit).** FIX-1..FIX-9 are implemented: Phase-4
+claims lint/projection, adjudicated 1P5B identity and regenerated artifacts,
+full/offline atomic build with hash verification, real pipeline regressions,
+D-058 T1 scope, expanded claim-language tripwires, boundary-honest prose,
+LF byte stability, and evidence-bootstrap gating. Real-corpus regeneration
+used `/Users/edr/code/JouleWise/runs`; focused 37 OK and canonical 890 OK
+(skipped=10). Report: `docs/run_reports/2026-07-10-rpt001-fix-round.md`.
+
 **Suite BUILD session COMPLETE and MERGED (2026-07-08; C-017;
 D-044..D-047).** The workload suite is now CODE, not contracts: P2-010a
 generic substrate (PR #17: suite.py, run_suite protocol, mock+MLX

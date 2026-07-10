@@ -3,10 +3,12 @@
 Contributions are staged as a ladder (D-052), and each rung is claimed only
 when its evidence exists:
 
-- **Rung 1 — instrument and methodology (claimed):** a validated harness that
+- **Rung 1 — instrument and methodology (implemented, provisional):** a validated harness that
   produces immutable run bundles, strict structural validation, an
   idle-subtracted energy basis with explicit uncertainty terms, and an
-  auditable path from raw powermetrics samples to every reported number.
+  auditable path from raw powermetrics samples to governed energy metrics.
+  Promotion from provisional awaits P2-038 production uncertainty evidence
+  and the Phase-4 claims-index gate.
 - **Rung 2 — scoped empirical coverage (conditional):** per-request energy
   observations across a filled stack matrix on named Apple-silicon stacks,
   claimed only once the production corpus and related-work positioning

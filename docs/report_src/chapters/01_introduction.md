@@ -16,10 +16,12 @@ an exact, named stack — not vendor TDP figures or cloud-scale averages.
 Latency and throughput alone are insufficient for this decision: two stacks
 can deliver similar tokens per second at very different package power, and
 idle draw can dominate short requests. Energy per request, with an explicit
-idle-subtracted basis, is the quantity that maps to battery and cost.
+idle-subtracted basis, attributes the measured compute-package contribution.
+Mapping that boundary to battery depletion or monetary cost requires an
+additional whole-system boundary model and is not claimed here.
 
 Auditability is this project's warrant rather than its empirical
-contribution: every reported number traces to an immutable run bundle, a
+contribution: every indexed governed energy metric traces to an immutable run bundle, a
 validation verdict, and a claims-index row, so a reader can independently
 verify what was measured before deciding whether to believe it. The
 empirical findings themselves are deliberately scoped by the claims ladder

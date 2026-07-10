@@ -20,9 +20,8 @@ One command re-derives the dataset, aggregates, figure F1, tables T1/S1, the
 claims-index row, the generated results page, and the assembled report:
 
 ```sh
-python3 scripts/make_figures.py --runs-root runs \
-  --input-manifest analysis/rpt001-v1/input_manifest.json \
-  && python3 scripts/build_capstone.py --profile rpt001
+python3 scripts/build_capstone.py --profile rpt001 --full --offline \
+  --runs-root /Users/edr/code/JouleWise/runs
 ```
 
 Requires the six pinned legacy bundles under `runs/` (local-only, ~110 MB,
@@ -36,7 +35,8 @@ To re-pin input hashes after an intentional corpus change (this is a
 versioning event — see the spec's rpt001-v2 rule):
 
 ```sh
-python3 scripts/make_figures.py --runs-root runs --write-input-manifest
+python3 scripts/make_figures.py --runs-root /Users/edr/code/JouleWise/runs \
+  --bootstrap-input-manifest
 ```
 
 ## Evidence boundary
