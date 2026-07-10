@@ -581,8 +581,6 @@ class ClaimsLintRepoTests(unittest.TestCase):
             findings = claims_lint.lint_phase4(root, index, projection)
             self.assertIn("PROJECTION_DRIFT", {f.code for f in findings})
 
-    def test_real_analysis_plans_and_registry_lint_clean(self) -> None:
-
     def test_real_analysis_plans_and_registries_lint_clean(self) -> None:
         result = subprocess.run(
             [
