@@ -1118,6 +1118,14 @@ round 4 (effective-hash identity gap the standout); integration 0
 (retarget missed); recovered same session via promotion PR #20; lesson
 folded into multi-stream-worktrees skill.
 
+Addendum (2026-07-09, C-027 review, MET-001 / REV-4): the PR #18 merge
+fdcf800 landed into suite-substrate, not main, and required promotion
+PR #20 (84a70ca) to recover. Reclassified from operational "slip" to a
+MERGE-GATE BREACH: D-031 requires PRs to land to main, and the merge
+gate requires sibling merge-order simulation, which would have caught
+the wrong base. Code outcome was fully recovered; the gate failure
+stands as recorded. No history rewrite.
+
 ## C-018: D-013 alignment-capture window fix (2026-07-08)
 
 Shape: background-chip session for the C-017 oversight spin-off
@@ -1375,6 +1383,17 @@ blocker resolved by supersession annotation per the history rule, not
 rewrite; R4's bank-cited un-merge of C5-W.3 from Q5 overrode the original
 C-023 lens's duplicate call.
 
+Addendum (2026-07-09, C-027, MET-001 / REV-12): C-024 records "3 fix
+rounds" while its run report records fix units F1-F6 ("6 fix
+rounds", counted as 6 in the session total). Clarification: the
+records do not conflict — the session ran 3 chronological fix ROUNDS
+comprising 6 fix UNITS: round 1 = F1-F4, one per-stream fix pass
+after the four counterreview lenses (scope, p2015, stats, rqreg, run
+in parallel); round 2 = F5, the p2015 tail fix; round 3 = F6, the
+integration fixes (per the wave-1 report's F1-F6 row, "6/6 one-shot
+clean", and its yield line "6 fix rounds incl. integration").
+Convention going forward: council log counts ROUNDS; run reports may
+additionally count UNITS and must label which they are counting.
 
 ## C-025: Wave 2 — ultracode workflow build (2026-07-09)
 
