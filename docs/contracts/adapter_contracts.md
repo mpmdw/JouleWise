@@ -159,8 +159,8 @@ Required behavior:
 - Load or initialize model.
 - Warm up workload.
 - Run full request.
-- Run prefill-only workload when supported.
-- Run decode-only or replay workload when supported.
+- Run prefill-only workload when supported (Phase-3-future: no shipped RuntimeAdapter implements or is required to implement this yet; binding form lands with Phase 3 Stage 3.1/3.2 schema v0.2).
+- Run decode-only or replay workload when supported (Phase-3-future: same gating as prefill-only; the contract does not promise split modes the current adapters cannot express).
 - Emit phase events.
 - Emit output artifacts.
 - Cleanup.

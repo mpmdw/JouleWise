@@ -1,6 +1,6 @@
 # Spec: SPLIT-AP (split pre-registration freeze) + AP-EDIT (AP/contract text corrections)
 
-Status: DRAFT pending lead adjudication (C-027 spec wave)
+Status: ADJUDICATED 2026-07-09 (C-028) — rulings in `ADJUDICATION.md` in this directory AMEND this spec wherever they conflict with its body text
 
 Queue rows: TASK_QUEUE.md 0o (SPLIT-AP) and 0p (AP-EDIT).
 Sources: whole-project review §3 B8(b)/(c) and §7 rows RIG-4/5/10/11/12,

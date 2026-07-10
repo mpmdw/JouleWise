@@ -1,6 +1,6 @@
 # Spec: DOC-009 status-authority reconciliation + REPRO-001 environment lock & external re-reduction
 
-Status: DRAFT pending lead adjudication (C-027 spec wave)
+Status: ADJUDICATED 2026-07-09 (C-028) — rulings in `ADJUDICATION.md` in this directory AMEND this spec wherever they conflict with its body text
 
 Queue rows: 0r (DOC-009, P4, TOP-5/REV-8) and 0u (REPRO-001, P2, NEG-9; extends P2-027 row 11c).
 Sources: `docs/reviews/2026-07-09-c027-whole-project-review.md` §7 rows TOP-5/REV-8/NEG-9;

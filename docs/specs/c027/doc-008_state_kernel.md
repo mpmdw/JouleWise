@@ -1,6 +1,6 @@
 # DOC-008: Process Architecture v2, Stage 1 — State Kernel
 
-Status: DRAFT pending lead adjudication (C-027 spec wave)
+Status: ADJUDICATED 2026-07-09 (C-028) — rulings in `ADJUDICATION.md` in this directory AMEND this spec wherever they conflict with its body text
 
 Authority: D-063 (binding architecture and staging), D-061 (process-layer evaluation semantics), C-027 review §5-Q1 and disposition table, C-027 counterreview position Q1, and `docs/reviews/c027/lens-meta.md` findings 1, 5, 8, and 9 plus its design-judgment table. Where this draft makes a migration choice not fixed by those authorities, it labels the choice as design judgment.
 

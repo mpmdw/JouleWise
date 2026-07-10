@@ -1,6 +1,6 @@
 # P2-039 Executable Detection-Floor Artifact Specification
 
-Status: DRAFT pending lead adjudication (C-027 spec wave)
+Status: ADJUDICATED 2026-07-09 (C-028) — rulings in `ADJUDICATION.md` in this directory AMEND this spec wherever they conflict with its body text
 
 ## 1. Purpose, authority, and outcome
 
