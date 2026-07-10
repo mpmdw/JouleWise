@@ -556,6 +556,31 @@ class ClaimsLintFixtureTests(unittest.TestCase):
 
 
 class ClaimsLintRepoTests(unittest.TestCase):
+    def test_phase4_repo_projection_is_current(self) -> None:
+        findings = claims_lint.lint_phase4(
+            ROOT, Path("analysis/rpt001-v1/claims_index.jsonl"),
+            Path("docs/phase_4/claims_index.md"), False)
+        self.assertFalse([f for f in findings if f.severity == "error"], findings)
+
+    def test_phase4_malformed_forbidden_and_projection_drift_fail(self) -> None:
+        canonical = json.loads((ROOT / "analysis/rpt001-v1/claims_index.jsonl").read_text())
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            index = Path("claims.jsonl")
+            projection = Path("claims.md")
+            write(root / index, "not-json\n")
+            findings = claims_lint.lint_phase4(root, index, projection)
+            self.assertIn("MALFORMED_JSONL", {f.code for f in findings})
+            canonical["claim_text"] = "The smaller stack uses less energy."
+            write(root / index, json.dumps(canonical) + "\n")
+            findings = claims_lint.lint_phase4(root, index, projection)
+            self.assertIn("FORBIDDEN_CLAIM_UPGRADE", {f.code for f in findings})
+            canonical["claim_text"] = "Separate stack-specific L1 observations only."
+            write(root / index, json.dumps(canonical) + "\n")
+            write(root / projection, "stale\n")
+            findings = claims_lint.lint_phase4(root, index, projection)
+            self.assertIn("PROJECTION_DRIFT", {f.code for f in findings})
+
     def test_real_analysis_plans_and_registry_lint_clean(self) -> None:
         result = subprocess.run(
             [
