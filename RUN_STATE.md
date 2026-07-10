@@ -253,6 +253,14 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
+- P2-042 emitter worktree `impl/p2042` (uncommitted; lead pathspec commit
+  pending): baseline `Ran 879 tests in 31.425s, OK (skipped=11)`; focused
+  manifest/generator/sidecar/lint checks green; final canonical suite `Ran
+  891 tests in 33.592s, OK (skipped=11)`. Deterministic one/two-model
+  analysis-manifest shape, exact AP-2 contrast enumeration, reversed
+  invocation byte identity, semantic block IDs, source/link hashes, and
+  mutation failures are covered. Report:
+  `docs/run_reports/2026-07-10-p2042-analysis-manifest.md`.
 - Claude Code 2.1.205 approved the project `codex` MCP server; Codex CLI
   0.144.0 protocol handshake exposed `codex` + `codex-reply` with the
   expected full-session controls. A real Claude → Codex read-only call

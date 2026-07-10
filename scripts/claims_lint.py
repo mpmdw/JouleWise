@@ -12,6 +12,18 @@ from pathlib import Path
 from typing import Iterable, Sequence
 
 
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from joulewise.analysis_manifest import (  # noqa: E402
+    AnalysisManifestError,
+    REGISTRY_RELATIVE_PATH,
+    extract_analysis_plan_row,
+    validate_analysis_registry,
+)
+
+
 EXIT_CLEAN = 0
 EXIT_FINDINGS = 2
 EXIT_USAGE_PARSE = 3
@@ -20,6 +32,7 @@ DEFAULT_AP_PATH = Path("docs/contracts/analysis_plans.md")
 DEFAULT_REGISTRY_PATH = Path("docs/research_question_registry.md")
 DEFAULT_PACK_DIR = Path("docs/campaign_packs")
 DEFAULT_CLAIMS_LADDER_PATH = Path("docs/contracts/claims_ladder.md")
+DEFAULT_ANALYSIS_REGISTRY_PATH = REGISTRY_RELATIVE_PATH
 
 CLAIM_ROLES = {"primary", "secondary", "exploratory"}
 REQUIRED_FIELDS_EXPECTED_COUNT = 17
@@ -711,10 +724,10 @@ def print_human(findings: Sequence[Finding], json_mode: bool) -> None:
 
 def selected_modes(values: Sequence[str] | None) -> set[str]:
     if not values:
-        return {"ap", "registry", "pack", "forbidden"}
+        return {"ap", "registry", "analysis-registry", "pack", "forbidden"}
     modes = set(values)
     if "all" in modes:
-        return {"ap", "registry", "pack", "forbidden"}
+        return {"ap", "registry", "analysis-registry", "pack", "forbidden"}
     return modes
 
 
@@ -729,13 +742,18 @@ def build_parser() -> ClaimsArgumentParser:
     parser.add_argument(
         "--mode",
         action="append",
-        choices=("all", "ap", "registry", "pack", "forbidden"),
+        choices=("all", "ap", "registry", "analysis-registry", "pack", "forbidden"),
         help="mode to run; may be repeated (default: all current modes)",
     )
     parser.add_argument("--analysis-plans", type=Path, default=DEFAULT_AP_PATH)
     parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY_PATH)
     parser.add_argument("--campaign-packs", type=Path, default=DEFAULT_PACK_DIR)
     parser.add_argument("--claims-ladder", type=Path, default=DEFAULT_CLAIMS_LADDER_PATH)
+    parser.add_argument(
+        "--analysis-registry",
+        type=Path,
+        default=DEFAULT_ANALYSIS_REGISTRY_PATH,
+    )
     parser.add_argument("--root", type=Path, default=Path("."))
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     return parser
@@ -750,6 +768,7 @@ def run(args: argparse.Namespace) -> tuple[int, list[Finding]]:
     registry_path = root / args.registry
     campaign_packs = root / args.campaign_packs
     claims_ladder_path = root / args.claims_ladder
+    analysis_registry_path = root / args.analysis_registry
 
     required_fields: list[str] | None = None
     if modes & {"ap", "pack"}:
@@ -766,6 +785,27 @@ def run(args: argparse.Namespace) -> tuple[int, list[Finding]]:
         findings.extend(ap_findings)
     if "registry" in modes:
         findings.extend(lint_registry(registry_path, analysis_plans_path))
+    if "analysis-registry" in modes:
+        try:
+            registry_value = json.loads(read_text(analysis_registry_path))
+            if not isinstance(registry_value, dict):
+                raise ClaimsLintError("analysis registry top level must be an object")
+            ap_row = extract_analysis_plan_row(analysis_plans_path)
+            for message in validate_analysis_registry(registry_value, ap_row=ap_row):
+                findings.append(
+                    Finding(
+                        "error",
+                        "analysis-registry",
+                        str(analysis_registry_path),
+                        1,
+                        "analysis_registry_invalid",
+                        message,
+                    )
+                )
+        except json.JSONDecodeError as exc:
+            raise ClaimsLintError(f"analysis registry is not valid JSON: {exc}") from exc
+        except AnalysisManifestError as exc:
+            raise ClaimsLintError(f"analysis registry AP linkage is invalid: {exc}") from exc
     if "pack" in modes:
         findings.extend(lint_packs(campaign_packs, required_fields or []))
     if "forbidden" in modes:

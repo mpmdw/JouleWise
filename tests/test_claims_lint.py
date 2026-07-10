@@ -541,7 +541,7 @@ class ClaimsLintFixtureTests(unittest.TestCase):
 
 
 class ClaimsLintRepoTests(unittest.TestCase):
-    def test_real_analysis_plans_and_registry_lint_clean(self) -> None:
+    def test_real_analysis_plans_and_registries_lint_clean(self) -> None:
         result = subprocess.run(
             [
                 sys.executable,
@@ -550,6 +550,8 @@ class ClaimsLintRepoTests(unittest.TestCase):
                 "ap",
                 "--mode",
                 "registry",
+                "--mode",
+                "analysis-registry",
                 "--json",
             ],
             cwd=ROOT,

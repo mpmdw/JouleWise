@@ -41,6 +41,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from joulewise.schemas import BenchmarkConfig  # noqa: E402
+from joulewise.analysis_manifest import (  # noqa: E402
+    ANALYSIS_MANIFEST_NAME,
+    build_slice_2m_analysis_manifest,
+    write_manifest_atomic,
+)
 
 
 PROFILE_MATRIX = (
@@ -249,7 +254,7 @@ def model_order_for_rep(model_tags: list[str], rep: int) -> list[str]:
 def generated_matrix_entries(out_dir: Path) -> list[tuple[Path, str, int, str, str]]:
     entries: list[tuple[Path, str, int, str, str]] = []
     for path in sorted(out_dir.glob("*.json")):
-        if path.name == ORDER_MANIFEST_NAME:
+        if path.name in {ORDER_MANIFEST_NAME, ANALYSIS_MANIFEST_NAME}:
             continue
         parsed = parse_generated_filename(path.name)
         if parsed is None:
@@ -394,7 +399,14 @@ def build_order_manifest(out_dir: Path) -> dict[str, Any]:
 def write_order_manifest(out_dir: Path) -> Path:
     manifest = build_order_manifest(out_dir)
     path = out_dir / ORDER_MANIFEST_NAME
-    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    write_manifest_atomic(path, manifest)
+    return path
+
+
+def write_analysis_manifest(out_dir: Path) -> Path:
+    manifest = build_slice_2m_analysis_manifest(out_dir, repository_root=ROOT)
+    path = out_dir / ANALYSIS_MANIFEST_NAME
+    write_manifest_atomic(path, manifest)
     return path
 
 
@@ -444,6 +456,7 @@ def main(argv: list[str] | None = None) -> int:
                 write_config(path, config)
                 written.append(path)
         manifest_path = write_order_manifest(out_dir)
+        analysis_manifest_path = write_analysis_manifest(out_dir)
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -451,6 +464,7 @@ def main(argv: list[str] | None = None) -> int:
     for path in written:
         print(path)
     print(manifest_path)
+    print(analysis_manifest_path)
     return 0
 
 
