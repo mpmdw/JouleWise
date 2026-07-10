@@ -539,8 +539,9 @@ def _strict_reducer_version_dispatch(
 ) -> tuple[list[str], set[str], bool]:
     """Select strict comparison semantics solely from recorded provenance."""
     provenance = summary.get("summary_provenance")
-    if _strict_legacy_bundle_metadata(reader.raw_metadata()) and not isinstance(
-        provenance, dict
+    if (
+        _strict_legacy_bundle_metadata(reader.raw_metadata())
+        and "summary_provenance" not in summary
     ):
         return [], _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE, True
     if not isinstance(provenance, dict):

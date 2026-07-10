@@ -524,6 +524,7 @@ class ExperimentManifestTests(unittest.TestCase):
         first = {"experiment_id": "exp-001", "members": ["exp-001__r1"]}
         extended = {"experiment_id": "exp-001", "members": ["exp-001__r1", "exp-001__r2"]}
         path = write_experiment_manifest(self.runs_root, first)
+        original_bytes = path.read_bytes()
 
         def failing_replace(src: object, dst: object) -> None:
             raise OSError("simulated crash during manifest replacement")
@@ -534,12 +535,79 @@ class ExperimentManifestTests(unittest.TestCase):
 
         # Destination untouched by the failed rewrite; no temp litter left.
         self.assertEqual(json.loads(path.read_text()), first)
+        self.assertEqual(path.read_bytes(), original_bytes)
         leftovers = [
             entry.name
             for entry in (self.runs_root / "experiments").iterdir()
             if entry.name != path.name
         ]
         self.assertEqual(leftovers, [])
+
+    def test_atomic_manifest_durability_order_and_same_directory_temp(self) -> None:
+        events: list[str] = []
+        real_fdopen = os.fdopen
+        real_fsync = os.fsync
+        real_replace = os.replace
+
+        class TrackedHandle:
+            def __init__(self, handle):
+                self.handle = handle
+
+            def __enter__(self):
+                self.handle.__enter__()
+                return self
+
+            def __exit__(self, *args):
+                return self.handle.__exit__(*args)
+
+            def write(self, value):
+                return self.handle.write(value)
+
+            def flush(self):
+                events.append("flush")
+                return self.handle.flush()
+
+            def fileno(self):
+                return self.handle.fileno()
+
+        def tracked_fdopen(*args, **kwargs):
+            return TrackedHandle(real_fdopen(*args, **kwargs))
+
+        def tracked_fsync(fd):
+            events.append("fsync")
+            return real_fsync(fd)
+
+        def tracked_replace(src, dst):
+            events.append("replace")
+            self.assertEqual(Path(src).parent, Path(dst).parent)
+            return real_replace(src, dst)
+
+        with mock.patch("joulewise.bundle.os.fdopen", side_effect=tracked_fdopen), mock.patch(
+            "joulewise.bundle.os.fsync", side_effect=tracked_fsync
+        ), mock.patch("joulewise.bundle.os.replace", side_effect=tracked_replace):
+            write_experiment_manifest(self.runs_root, {"experiment_id": "durable"})
+
+        self.assertLess(events.index("flush"), events.index("fsync"))
+        self.assertLess(events.index("fsync"), events.index("replace"))
+        self.assertEqual(events[-1], "fsync")  # directory fsync after replace
+
+    def test_directory_fsync_is_best_effort_after_replace(self) -> None:
+        real_fsync = os.fsync
+        calls = 0
+
+        def fail_second_fsync(fd):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("directory fsync unsupported")
+            return real_fsync(fd)
+
+        with mock.patch("joulewise.bundle.os.fsync", side_effect=fail_second_fsync):
+            path = write_experiment_manifest(
+                self.runs_root, {"experiment_id": "best-effort"}
+            )
+        self.assertTrue(path.is_file())
+        self.assertEqual(calls, 2)
 
     def test_successful_overwrite_leaves_no_temp_files(self) -> None:
         write_experiment_manifest(self.runs_root, {"experiment_id": "exp-001", "members": []})

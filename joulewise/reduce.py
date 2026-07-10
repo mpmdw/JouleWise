@@ -492,6 +492,7 @@ def _claim_eligibility(
             require_drift=True,
             require_cooldown=True,
             bound_terms_j=request_bound_terms_j,
+            legacy_interpolation_edge=True,
         ),
         "gross_request": gross_request,
         "idle_subtracted_request": idle_subtracted_request,
@@ -596,6 +597,7 @@ def _window_claim_eligibility(
     require_idle_baseline: bool = False,
     idle_baseline: IdleBaseline | None = None,
     bound_terms_j: dict[str, float | None] | None = None,
+    legacy_interpolation_edge: bool = False,
 ) -> dict[str, Any]:
     reasons: list[str] = []
     if window.duration_s <= 0.0:
@@ -633,8 +635,15 @@ def _window_claim_eligibility(
         joint_interpolation_bound_j = bound_terms_j.get(
             "E_interpolation_joint_edge_bound_j"
         )
-    # P2-040 FIX-3: recorded/unrecorded status is governed by the joint bound.
-    if joint_interpolation_bound_j is None:
+    # The deprecated schema-0.1 ``request`` alias retains its byte-identical
+    # pre-0.3 field shape and one-edge eligibility recipe. Only the new
+    # metric-specific gates consume the governed joint-edge bound.
+    governed_interpolation_bound_j = (
+        interpolation_bound_j
+        if legacy_interpolation_edge
+        else joint_interpolation_bound_j
+    )
+    if governed_interpolation_bound_j is None:
         reasons.append("interpolation_bound_unrecorded")
 
     drift_bound_j = (
@@ -650,7 +659,7 @@ def _window_claim_eligibility(
     if require_cooldown and _cooldown_cap_hit(metadata) is True:
         reasons.append("cooldown_cap_hit")
 
-    return {
+    result = {
         "eligible": not reasons,
         "reasons": sorted(reasons),
         "window_duration_s": window.duration_s,
@@ -661,8 +670,10 @@ def _window_claim_eligibility(
         "cadence_ratio_min": cadence_ratio_min,
         "clock_anchor_bound_s": clock_bound_s,
         "interpolation_edge_bound_j": interpolation_bound_j,
-        "interpolation_joint_edge_bound_j": joint_interpolation_bound_j,
     }
+    if not legacy_interpolation_edge:
+        result["interpolation_joint_edge_bound_j"] = joint_interpolation_bound_j
+    return result
 
 
 def _clock_anchor_bound_s(metadata: dict[str, Any]) -> float | None:

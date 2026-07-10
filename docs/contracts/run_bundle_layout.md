@@ -283,10 +283,12 @@ In strict mode, a succeeded bundle is legacy only when
 `(metadata.run_id, metadata.config_sha256)` is one of the six frozen
 pre-D-033 corpus identities. Every other succeeded bundle is current-era and
 must carry both `summary_provenance` and `metadata.workload_provenance`.
-This allowlist is an identity clause, not a cryptographic guarantee: a bundle
-spoofing a legacy identity is detectable by content divergence from the
-published corpus (`bundle-pack` manifest hashes). Within a single local
-`validate-bundle` invocation, that is the accepted limit.
+The allowlist identity is a compatibility classification, not proof of
+historical origin. Strict validation proves internal re-derivability of the
+recorded evidence, not artifact authenticity: coordinated edits to evidence
+and its derived summary are out of scope. Publication integrity is supplied by
+the bundle-pack hash chain (P2-027/REPRO-001), outside a single local
+`validate-bundle` invocation.
 
 Reducer `0.3.0` summaries use exact strict comparison. The legacy allowlist
 keeps its provenance-less additive-absence tolerance; recorded `0.2.x` and

@@ -325,7 +325,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
         summary = reduce_module.reduce_bundle(builder.path)
 
         # Deprecated alias plus both P2-040 metric-specific entries.
-        for key in ("request", "gross_request", "idle_subtracted_request"):
+        for key in ("gross_request", "idle_subtracted_request"):
             entry = (summary.claim_eligibility or {})[key]
             self.assertTrue(entry["eligible"], key)
             self.assertEqual(entry["reasons"], [], key)
@@ -466,13 +466,77 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
             8.0,
             places=12,
         )
-        # The request prechecks expose and consume the joint field.
-        for key in ("request", "gross_request", "idle_subtracted_request"):
+        # The new metric-specific prechecks expose and consume the joint field.
+        for key in ("gross_request", "idle_subtracted_request"):
             entry = (summary.claim_eligibility or {})[key]
             self.assertAlmostEqual(
                 entry["interpolation_joint_edge_bound_j"], 8.0, places=12, msg=key
             )
             self.assertNotIn("interpolation_bound_unrecorded", entry["reasons"])
+        request = (summary.claim_eligibility or {})["request"]
+        self.assertNotIn("interpolation_joint_edge_bound_j", request)
+        self.assertAlmostEqual(request["interpolation_edge_bound_j"], 4.0, places=12)
+
+    def test_deprecated_request_uses_one_edge_when_joint_bound_is_unrecorded(self) -> None:
+        curve = [
+            reduce_module.TracePoint(0.0, 10.0),
+            reduce_module.TracePoint(1.0, 10.0),
+            reduce_module.TracePoint(1.1, 10.0),
+            reduce_module.TracePoint(3.0, 10.0),
+        ]
+        window = reduce_module.Window(0.75, 1.25)
+        terms = {
+            "E_interpolation_edge_bound_j": 10.0,
+            "E_interpolation_joint_edge_bound_j": None,
+            "E_drift_bound_j": 1.0,
+        }
+        legacy = reduce_module._window_claim_eligibility(
+            curve,
+            {"clock_anchor_bound_s": 0.0},
+            window,
+            cadence_ratio_min=0.0,
+            require_sample_count=False,
+            require_drift=True,
+            bound_terms_j=terms,
+            legacy_interpolation_edge=True,
+        )
+        current = reduce_module._window_claim_eligibility(
+            curve,
+            {"clock_anchor_bound_s": 0.0},
+            window,
+            cadence_ratio_min=0.0,
+            require_sample_count=False,
+            require_drift=True,
+            bound_terms_j=terms,
+        )
+        self.assertTrue(legacy["eligible"])
+        self.assertNotIn("interpolation_joint_edge_bound_j", legacy)
+        self.assertFalse(current["eligible"])
+        self.assertIn("interpolation_bound_unrecorded", current["reasons"])
+
+    def test_asymmetric_joint_edge_fixture_recomputes_thirty_joules(self) -> None:
+        builder = self.builder()
+        builder.measured_window(2.0, 8.0)
+        builder.write_trace(
+            [PowerSample(t, 10.0, "mock", "mock") for t in (0.0, 2.0, 4.0, 8.0, 12.0)]
+        )
+        builder.write_metadata(idle_drift_bound_w=0.1)
+        terms = reduce_module.reduce_bundle(builder.path).energy_bound_terms_j or {}
+        self.assertEqual(terms["E_interpolation_edge_bound_j"], 20.0)
+        self.assertEqual(terms["E_interpolation_joint_edge_bound_j"], 30.0)
+
+    def test_negative_measured_window_is_structured_reducer_failure(self) -> None:
+        builder = self.builder()
+        builder.measured_window(2.0, 1.0)
+        builder.write_trace(constant_samples(0.0, 3.0, hz=2.0, power_w=8.0))
+        builder.write_metadata()
+        summary = reduce_module.reduce_bundle(builder.path)
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertTrue(
+            (summary.failure_message or "").startswith(
+                "measured_run window duration must be > 0 s; got "
+            )
+        )
 
     def test_request_without_drift_evidence_is_ineligible(self) -> None:
         builder = self.builder()
@@ -640,6 +704,34 @@ class AggregatorPropagationTests(unittest.TestCase):
             math.isclose(
                 metric["energy_bound_terms_j"]["E_interpolation_edge_bound_j"], 0.1
             )
+        )
+
+    def test_joint_edge_bound_uses_max_when_all_members_present(self) -> None:
+        members = []
+        for index, bound in enumerate((0.2, 0.7), start=1):
+            member = f"joint-r{index}"
+            members.append(member)
+            _write_summary(
+                self.runs_root,
+                member,
+                {
+                    "status": "succeeded",
+                    "energy_request_j": float(index),
+                    "idle_subtracted_energy_j": float(index),
+                    "gross_energy_j": float(index + 10),
+                    "energy_variance_terms_j2": {"E_idle_mean_j2": 1.0},
+                    "energy_bound_terms_j": {
+                        "E_drift_bound_j": 0.1,
+                        "E_interpolation_edge_bound_j": 0.1,
+                        "E_interpolation_joint_edge_bound_j": bound,
+                    },
+                },
+            )
+        aggregate = aggregate_experiment(self.runs_root, {"members": members})
+        self.assertEqual(
+            aggregate["metrics"]["energy_request_j"]["energy_bound_terms_j"]
+            ["E_interpolation_joint_edge_bound_j"],
+            0.7,
         )
 
     def test_request_uncertainty_is_not_estimable_without_all_idle_terms(self) -> None:

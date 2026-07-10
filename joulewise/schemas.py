@@ -553,12 +553,11 @@ class MeasurementQuality:
     #: against the following rep via ``run_benchmark(extra_metadata=...)`` and
     #: the reducer copies the flag back out of ``metadata.json``.
     cooldown_cap_hit: bool | None = None
-    #: Which source supplied the total token count behind ``energy_token_j``
-    #: (additive Slice 2N.3 field, R-015): ``"config"`` when
-    #: ``workload_profile.prompt_tokens`` was set, ``"runtime_observed"`` when
-    #: the reducer fell back to the runtime's observed counts recorded in
-    #: ``metadata.json`` (``workload_observed.token_count``), ``None`` when
-    #: neither was available (``energy_token_j`` is then ``None`` too).
+    #: Which source supplied the total token count behind ``energy_token_j``.
+    #: Per D-058, a positive runtime-observed total recorded in metadata wins;
+    #: configured token counts are workload intent and are not a fallback
+    #: denominator. ``None`` means no eligible runtime total was available and
+    #: ``energy_token_j`` is therefore ``None`` too.
     token_count_source: str | None = None
     #: True when the pre-run idle powermetrics window shows GPU activity high
     #: enough to make the baseline suspect. ``None`` means the telemetry did

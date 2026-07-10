@@ -987,9 +987,23 @@ def cooldown_gate(
             }
         )
         if _within_tolerance(rolling_mean, reference, COOLDOWN_TOLERANCE):
-            return {"result": "recovered", "waited_s": waited_s, "_trace": trace}
+            return {
+                "result": "recovered",
+                "waited_s": waited_s,
+                "reference_power_w": reference,
+                "tolerance_fraction": COOLDOWN_TOLERANCE,
+                "decision_rolling_mean_power_w": rolling_mean,
+                "_trace": trace,
+            }
         if waited_s >= COOLDOWN_CAP_S:
-            return {"result": "cap_hit", "waited_s": waited_s, "_trace": trace}
+            return {
+                "result": "cap_hit",
+                "waited_s": waited_s,
+                "reference_power_w": reference,
+                "tolerance_fraction": COOLDOWN_TOLERANCE,
+                "decision_rolling_mean_power_w": rolling_mean,
+                "_trace": trace,
+            }
 
 
 def _within_tolerance(value: float, reference: float, tolerance: float) -> bool:
