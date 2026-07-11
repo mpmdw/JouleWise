@@ -76,7 +76,6 @@ skeleton + gated vertical slice; lead re-ran the full build), PR #45
 RETRO-001 ran (2 SHOULD-FIX, both fixed in #43); Current Verification
 may advance past 36d5641 after the NEXT session's fresh site
 regen+diff (RETRO-1's remaining condition).
-<<<<<<< HEAD
 
 - P2-040 REVIEW BLOCKER FIXED (uncommitted): governed output-shape additions
   now bump the reducer patch version. Current output is 0.3.1 exact; frozen
@@ -143,9 +142,7 @@ regen+diff (RETRO-1's remaining condition).
     24 tests, orchestration inserts staged as a spec-dir doc. Live
     RUN_STATE/TASK_QUEUE conversion deliberately NOT done
     (adjudication-gated).
-=======
 
->>>>>>> origin/main
 **OPEN work, exact states:**
 
 - PR #46 DRAFT (impl/p2042 frozen analysis manifest): implementation
@@ -161,7 +158,6 @@ regen+diff (RETRO-1's remaining condition).
 - impl/p2040-remainder (pushed, NO PR): FIX-7a/7b/FIX-8 complete; lead
   corpus gate + full suite ALREADY GREEN. NEEDS: targeted review
   (cheap), PR, CI, merge.
-<<<<<<< HEAD
 - impl/nvgate2-codenow: implementation and lead-accepted review fix round are
   COMPLETE but uncommitted. Main content and the P2-040 0.3.1 dispatch were
   integrated in order with state/queue/schema unions; the sandbox required a
@@ -169,14 +165,12 @@ regen+diff (RETRO-1's remaining condition).
   pathspec commit. Focused 229 OK/2 skipped; canonical 1022 OK/13 skipped;
   report `docs/run_reports/2026-07-10-nvgate2-fix-round.md`. NEEDS: lead diff
   gate, localhost-enabled NV-5 run, commit, PR, CI, merge.
-=======
 - impl/nvgate2-codenow: session died at capacity twice; a codex-run-v2
   RESUME with --retries 3 was IN FLIGHT at checkpoint (out-file
   scratchpad/nvgate2-impl2.md). If it completed: commit by pathspec in
   ../JouleWise-wt/nvgate2, review, PR. If it died with the session:
   the worktree holds partial state — resume again via
   `codex-run-v2 <out> --resume ...` in that worktree.
->>>>>>> origin/main
 - impl/p2038 (production uncertainty evidence, stacked on the merged
   P2-040): Sol session was IN FLIGHT at checkpoint (out-file
   scratchpad/p2038-impl.md). Same recovery pattern as nvgate2.
@@ -340,7 +334,6 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
-<<<<<<< HEAD
 - NV-GATE-2 accepted-findings fix round: focused node-worker/subprocess,
   controller, reducer, strict-dispatch, and schema surface `Ran 229 tests in
   4.995s`, `OK (skipped=2)`; the historic fake-sampler test passed three
@@ -355,8 +348,6 @@ queue owns ordering (C-027):**
   `py_compile` clean. The added skip is loud and specific: this managed
   sandbox denied localhost socket bind for NV-5. No live NVIDIA evidence or
   de-provisionalization was claimed.
-=======
->>>>>>> origin/main
 - P2-042 emitter branch `impl/p2042` (lead-committed base; draft PR #46;
   targeted-review fix round complete in the worktree, no fix-round commit):
   FIX-1 fail-closed typed identity/linkage validation, FIX-2 semantic
@@ -367,7 +358,6 @@ queue owns ordering (C-027):**
   at each manifest object layer, a fully rehashed coherent rename, and a CRLF
   AP fixture. Report:
   `docs/run_reports/2026-07-10-p2042-analysis-manifest.md`.
-<<<<<<< HEAD
 - P2-040 reducer-version review fix: focused strict/reducer run
   `Ran 84 tests in 1.908s`, `OK`; extended strict/reducer/schema run
   `Ran 104 tests in 1.997s`, `OK (skipped=1)`. Canonical run reached
@@ -381,8 +371,6 @@ queue owns ordering (C-027):**
   (skipped=12)`; compileall and `git diff --check` clean. The unchanged
   six-corpus test produced its required loud skip because `runs/` is absent;
   lead 6/6 strict read-only rerun remains the landing gate.
-=======
->>>>>>> origin/main
 - P2-040 / RETRO-001 fix-round worktree: canonical suite `Ran 908 tests in
   32.723s`, `OK (skipped=11)`; focused 211 tests OK; claims lint exit 0 with
   no errors; `git diff --check` clean. The absent `runs/` corpus produced the
