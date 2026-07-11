@@ -89,15 +89,17 @@ docs/reviews/2026-07-10-hardening-adjudication.md).
    the ROOT-CAUSE fix for the historic fake-nvidia-smi flake (worker
    idle deadline now starts at sampler readiness) — after it merges,
    that flake class is dead everywhere.
-2. impl/p2041: a Sol ULTRA-effort fix session (contract in scratchpad
-   p2041-ultra-fix prompt; 6 FIXes incl. merging P2-042's real
-   validator, re-derived cooldown evidence, order-manifest-derived
-   first_run_exempt, C5 metric composition, C4 detection,
-   claim_readiness→analysis_readiness rename) was RUNNING at handoff
-   (out-file scratchpad/p2041-ultra-fix.md; worktree
-   ../JouleWise-wt/p2041). If finished: verify per-FIX, commit,
-   merge main in, review the readiness-path enumeration, PR, gates,
-   merge. If dead: resume via codex-run-v2 --resume in that worktree.
+2. impl/p2041 — ULTRA ROUND FINISHED RED (post-checkpoint update): the
+   session exited OK but wrote an EMPTY report; its tree (branch fixes
+   + main-post-#48 content PRE-UNIONED without merge ancestry + the C5
+   window_evidence_precheck renames) is snapshot-committed as a
+   clearly-labeled WIP [RED] head on impl/p2041 (pushed). Suite there:
+   FAILED 6F/1E, all test_run_campaign — the composition with main's
+   P2-042 sidecar/verdict changes is incomplete. Fresh thread:
+   diagnose the 7 failures (likely a bounded Sol fix round with the
+   failure list), REBUILD proper ancestry (safest: new branch off
+   origin/main + apply the WIP diff), then the full review stack.
+   Treat every claim of that session as uncorroborated (empty report).
 3. DOC-008 kernel (LAST, per adjudication): refresh at final
    integrated head + NOT-AUTHORITATIVE header, targeted review, PR.
 4. Cross-stream integration review (Sol) over final main: interaction
