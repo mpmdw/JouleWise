@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -18,10 +19,22 @@ if str(ROOT) not in sys.path:
 
 from joulewise.bundle_read import BundleReader
 from joulewise.cli import validate_bundle
+from joulewise.publication_privacy import (
+    POLICY_SCHEMA,
+    TRANSFORMATION_SCHEMA,
+    PrivacyAuditError,
+    audit_private_bundle,
+    classification_for_path,
+    public_bundle_id,
+    transform_public_bundle,
+    tree_sha256,
+    verify_public_bundle,
+)
 from joulewise.suite import suite_manifest_sha256
 
-PACK_SCHEMA = "joulewise.bundle_pack.v1"
+PACK_SCHEMA = "joulewise.public_bundle_pack.v2"
 MANIFEST_NAME = "MANIFEST.json"
+TRANSFORMATION_MANIFEST_NAME = "TRANSFORMATION_MANIFEST.json"
 README_NAME = "README.md"
 GITHUB_REPO = "https://github.com/mpmdw/JouleWise"
 TREE_STATE_CLEAN = "clean"
@@ -181,24 +194,20 @@ def _preflight_bundle(bundle: Path) -> dict[str, Any]:
             f"bundle summary status must be succeeded for publication packs: "
             f"{bundle}: {summary_status}"
         )
+    try:
+        privacy_audit = audit_private_bundle(bundle)
+    except PrivacyAuditError as exc:
+        raise BundlePackError(f"bundle failed publication privacy audit: {bundle}: {exc}") from exc
     return {
-        "bundle_id": _bundle_id(bundle),
+        "source_bundle_id": _bundle_id(bundle),
+        "bundle_id": public_bundle_id(privacy_audit.source_bundle_sha256),
         "source_path": str(bundle),
-        "config_sha256": sha256_file(bundle / "config.json"),
+        "source_bundle_sha256": privacy_audit.source_bundle_sha256,
+        "source_config_sha256": sha256_file(bundle / "config.json"),
         "effective_manifest_sha256": _suite_effective_manifest_sha256(bundle),
         "summary_status": summary_status,
         "files": _file_entries(bundle),
-    }
-
-
-def _copy_bundle(source: Path, destination: Path) -> None:
-    shutil.copytree(source, destination, symlinks=False)
-
-
-def _file_entry_set(entry: dict[str, Any]) -> set[tuple[str, str, int]]:
-    return {
-        (item["path"], item["sha256"], item["size_bytes"])
-        for item in entry["files"]
+        "classification_counts": privacy_audit.classification_counts,
     }
 
 
@@ -206,17 +215,12 @@ def _readme(manifest: dict[str, Any]) -> str:
     commit = manifest["project_commit"]
     bundles_dir_name = manifest.get("bundles_dir", "bundles")
     bundle_list = "\n".join(
-        f"- `{bundles_dir_name}/{entry['bundle_id']}`: status `{entry['summary_status']}`, "
-        f"config `{entry['config_sha256']}`"
+        f"- `{bundles_dir_name}/{entry['bundle_id']}`: source status "
+        f"`{entry['summary_status']}`, public tree `{entry['public_bundle_sha256']}`"
         for entry in manifest["bundles"]
     )
     if not bundle_list:
         bundle_list = "- No bundles."
-    first_bundle = (
-        f"{bundles_dir_name}/{manifest['bundles'][0]['bundle_id']}"
-        if manifest["bundles"]
-        else f"{bundles_dir_name}/<bundle-id>"
-    )
     tree_state = manifest.get("project_tree_state")
     clean_provenance = commit != "unknown" and tree_state == TREE_STATE_CLEAN
     if clean_provenance:
@@ -233,17 +237,17 @@ git checkout {commit}
         one_command_source = "From the exact JouleWise source tree used to build this pack, run:"
         source_checkout = f"""This pack was built from project commit `{commit}` with tree state `{tree_state}`. A plain checkout of `project_commit` may not contain the exact packager or validation code that produced this pack, so use the exact source tree recorded by the publisher rather than treating the commit as clean provenance.
 """
-    return f"""# JouleWise Bundle Pack
+    return f"""# JouleWise Transformed Public Bundle Pack
 
-A JouleWise bundle is a self-contained run evidence directory: normalized configuration, run metadata, lifecycle events, raw telemetry evidence, derived power trace, outputs/logs, and `summary_metrics.json`. The summary is derived from the recorded artifacts, while the raw evidence remains the audit source of truth.
+This is a privacy-transformed publication artifact, not a byte-identical copy of a private run bundle. The private source bundles remain immutable and are not included. Reviewed numeric power traces and transformed config/metadata/event/summary projections remain; prompt and response content, token streams, suite source manifests, logs, worker logs, backend-native raw captures, and rich telemetry are omitted.
 
 ## Contents
 
 {bundle_list}
 
-`MANIFEST.json` records each bundle id, config SHA-256, suite effective-manifest SHA-256 when present, summary status, and SHA-256 for every file in each packed bundle.
+`MANIFEST.json` records every public file hash and binds `TRANSFORMATION_MANIFEST.json`. The transformation manifest records each private source file hash, its reviewed classification and operation, its public output hash (or `null` for an omission), and explicit non-byte-identity. It contains no private source path or private run id.
 
-Powermetrics raw plists are included verbatim when present, including `raw/powermetrics.plist` and `raw/powermetrics_idle.plist` (D-002). Derived powermetrics files and `power_trace.csv` are not substitutes for those raw plists.
+The transformed directories are intentionally not strict-valid private bundles and must not be described as independently re-reducible raw evidence. `power_trace.csv` is retained as a reviewed measurement projection; omitted backend-native artifacts remain available only under the private evidence controls.
 
 ## One-command pack verification
 
@@ -253,27 +257,11 @@ Powermetrics raw plists are included verbatim when present, including `raw/power
 python3 scripts/package_bundle_pack.py --verify /path/to/this-pack
 ```
 
-The verifier checks the manifest's exact file list and SHA-256 values, then runs strict bundle validation on every packed bundle.
+The verifier checks both manifest hash chains, the exact public file set, every source/output transformation record, explicit non-byte-identity, and the fail-closed public privacy policy. It does not claim strict re-reduction of omitted private evidence.
 
-## Manual bundle verification
+## Source provenance
 
 {source_checkout}
-
-```sh
-python3 -m joulewise validate-bundle --strict /path/to/this-pack/{first_bundle}
-```
-
-To re-derive the summary without mutating the packed evidence, work on a scratch copy:
-
-```sh
-cp -R /path/to/this-pack/{first_bundle} /tmp/jw-bundle-check
-cp /tmp/jw-bundle-check/summary_metrics.json /tmp/jw-summary-original.json
-python3 -m joulewise reduce /tmp/jw-bundle-check
-```
-
-`validate-bundle --strict` is the authoritative re-derivation check. It compares the stored summary against a fresh reduction with the project's legacy additive-key tolerance; a byte-for-byte `cmp` can differ for older strict-valid bundles when the current reducer materializes additive summary keys.
-
-Strict validation proves re-derivation of the recorded evidence, not independent rerunning of the hardware session. It checks that succeeded summaries follow from the bundle artifacts and, for powermetrics bundles, that `power_trace.csv` is re-derived from the raw plist evidence.
 
 ## License
 
@@ -284,6 +272,7 @@ JouleWise is distributed under the MIT License. See the project's `LICENSE` file
 def build_manifest(
     bundle_entries: list[dict[str, Any]],
     provenance: dict[str, str],
+    transformation_manifest_sha256: str,
     readme_sha256: str | None = None,
 ) -> dict[str, Any]:
     manifest: dict[str, Any] = {
@@ -291,13 +280,18 @@ def build_manifest(
         "tool": "scripts/package_bundle_pack.py",
         "project_commit": provenance["project_commit"],
         "project_tree_state": provenance["project_tree_state"],
+        "privacy_policy_schema": POLICY_SCHEMA,
+        "transformation_schema": TRANSFORMATION_SCHEMA,
+        "transformation_manifest": TRANSFORMATION_MANIFEST_NAME,
+        "transformation_manifest_sha256": transformation_manifest_sha256,
+        "byte_identical_to_private_sources": False,
         "bundles_dir": "bundles",
         "bundle_count": len(bundle_entries),
         "bundles": [
             {
                 key: value
                 for key, value in entry.items()
-                if key != "source_path"
+                if key not in {"source_path", "source_bundle_id"}
             }
             for entry in bundle_entries
         ],
@@ -316,7 +310,7 @@ def package_bundles(bundle_dirs: list[Path], output_dir: Path) -> dict[str, Any]
     seen: set[str] = set()
     duplicates: set[str] = set()
     for entry in entries:
-        bundle_id = entry["bundle_id"]
+        bundle_id = entry["source_bundle_id"]
         if bundle_id in seen:
             duplicates.add(bundle_id)
         seen.add(bundle_id)
@@ -332,27 +326,64 @@ def package_bundles(bundle_dirs: list[Path], output_dir: Path) -> dict[str, Any]
     try:
         bundles_dir = output_dir / "bundles"
         bundles_dir.mkdir()
-        copied_entries: list[dict[str, Any]] = []
+        public_entries: list[dict[str, Any]] = []
+        transformation_entries: list[dict[str, Any]] = []
         for entry in entries:
             destination = bundles_dir / entry["bundle_id"]
-            _copy_bundle(Path(entry["source_path"]), destination)
-            copied_entry = _preflight_bundle(destination)
-            if copied_entry["bundle_id"] != entry["bundle_id"]:
-                raise BundlePackError(
-                    f"copied bundle id changed during packaging: "
-                    f"{entry['bundle_id']} -> {copied_entry['bundle_id']}"
+            try:
+                transformation = transform_public_bundle(
+                    Path(entry["source_path"]), destination
                 )
-            if _file_entry_set(copied_entry) != _file_entry_set(entry):
+            except PrivacyAuditError as exc:
                 raise BundlePackError(
-                    f"copied bundle files diverged from preflight manifest: "
-                    f"{entry['bundle_id']}"
+                    f"privacy transformation failed for {entry['source_bundle_id']}: {exc}"
+                ) from exc
+            if transformation["public_bundle_id"] != entry["bundle_id"]:
+                raise BundlePackError(
+                    "privacy transformation public id diverged from preflight: "
+                    f"{entry['bundle_id']} -> {transformation['public_bundle_id']}"
                 )
-            copied_entry["source_path"] = entry["source_path"]
-            copied_entries.append(copied_entry)
-        manifest_without_readme = build_manifest(copied_entries, provenance)
+            public_files = _file_entries(destination)
+            if tree_sha256(public_files) != transformation["output_bundle_sha256"]:
+                raise BundlePackError(
+                    f"public output tree diverged after transformation: {entry['bundle_id']}"
+                )
+            public_entries.append(
+                {
+                    "bundle_id": entry["bundle_id"],
+                    "source_path": entry["source_path"],
+                    "source_bundle_id": entry["source_bundle_id"],
+                    "source_bundle_sha256": entry["source_bundle_sha256"],
+                    "public_bundle_sha256": transformation["output_bundle_sha256"],
+                    "source_config_sha256": entry["source_config_sha256"],
+                    "config_sha256": sha256_file(destination / "config.json"),
+                    "effective_manifest_sha256": entry["effective_manifest_sha256"],
+                    "summary_status": entry["summary_status"],
+                    "classification_counts": entry["classification_counts"],
+                    "files": public_files,
+                }
+            )
+            transformation_entries.append(transformation)
+        transformation_manifest = {
+            "schema": TRANSFORMATION_SCHEMA,
+            "privacy_policy_schema": POLICY_SCHEMA,
+            "byte_identical_to_private_sources": False,
+            "bundle_count": len(transformation_entries),
+            "bundles": transformation_entries,
+        }
+        transformation_bytes = (
+            json.dumps(transformation_manifest, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        transformation_sha256 = hashlib.sha256(transformation_bytes).hexdigest()
+        (output_dir / TRANSFORMATION_MANIFEST_NAME).write_bytes(transformation_bytes)
+        manifest_without_readme = build_manifest(
+            public_entries, provenance, transformation_sha256
+        )
         readme = _readme(manifest_without_readme)
         readme_sha256 = hashlib.sha256(readme.encode("utf-8")).hexdigest()
-        manifest = build_manifest(copied_entries, provenance, readme_sha256)
+        manifest = build_manifest(
+            public_entries, provenance, transformation_sha256, readme_sha256
+        )
         (output_dir / MANIFEST_NAME).write_text(
             json.dumps(manifest, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
@@ -400,6 +431,160 @@ def _readme_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _transformation_bundle_map(
+    value: Any,
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    problems: list[str] = []
+    if not isinstance(value, dict):
+        return {}, [f"{TRANSFORMATION_MANIFEST_NAME} is not a JSON object"]
+    if value.get("schema") != TRANSFORMATION_SCHEMA:
+        problems.append(
+            f"transformation schema is not {TRANSFORMATION_SCHEMA!r}: {value.get('schema')!r}"
+        )
+    if value.get("privacy_policy_schema") != POLICY_SCHEMA:
+        problems.append("transformation privacy policy schema does not match the packer")
+    if value.get("byte_identical_to_private_sources") is not False:
+        problems.append("transformation manifest must assert non-byte-identity")
+    bundles = value.get("bundles")
+    if not isinstance(bundles, list):
+        return {}, problems + ["transformation manifest bundles is not a list"]
+    if value.get("bundle_count") != len(bundles):
+        problems.append("transformation manifest bundle_count does not match bundles length")
+    result: dict[str, dict[str, Any]] = {}
+    for index, item in enumerate(bundles):
+        if not isinstance(item, dict):
+            problems.append(f"transformation bundles[{index}] is not an object")
+            continue
+        bundle_id = item.get("public_bundle_id")
+        if not isinstance(bundle_id, str) or not bundle_id:
+            problems.append(f"transformation bundles[{index}].public_bundle_id is invalid")
+            continue
+        if bundle_id in result:
+            problems.append(f"duplicate transformation public_bundle_id: {bundle_id}")
+            continue
+        result[bundle_id] = item
+    return result, problems
+
+
+def _verify_transformation_entry(
+    bundle_id: str,
+    bundle_path: Path,
+    pack_entry: dict[str, Any],
+    transformation: dict[str, Any],
+) -> list[str]:
+    problems: list[str] = []
+    if transformation.get("schema") != TRANSFORMATION_SCHEMA:
+        problems.append(f"{bundle_id}: transformation entry schema is invalid")
+    if transformation.get("privacy_policy_schema") != POLICY_SCHEMA:
+        problems.append(f"{bundle_id}: transformation privacy policy is invalid")
+    if transformation.get("byte_identical_to_private_source") is not False:
+        problems.append(f"{bundle_id}: transformation must assert source non-byte-identity")
+    if transformation.get("source_bundle_sha256") != pack_entry.get("source_bundle_sha256"):
+        problems.append(f"{bundle_id}: source bundle hash differs across manifests")
+    if transformation.get("output_bundle_sha256") != pack_entry.get("public_bundle_sha256"):
+        problems.append(f"{bundle_id}: public bundle hash differs across manifests")
+    files = transformation.get("files")
+    if not isinstance(files, list):
+        return problems + [f"{bundle_id}: transformation files is not a list"]
+    actual_files = {
+        path.relative_to(bundle_path).as_posix(): path
+        for path in bundle_path.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    }
+    expected_outputs: set[str] = set()
+    seen_sources: set[str] = set()
+    source_entries: list[dict[str, Any]] = []
+    classification_counts: dict[str, int] = {}
+    saw_non_identity = False
+    for index, item in enumerate(files):
+        if not isinstance(item, dict):
+            problems.append(f"{bundle_id}: transformation file {index} is not an object")
+            continue
+        rel = item.get("path")
+        operation = item.get("operation")
+        source_hash = item.get("source_sha256")
+        source_size = item.get("source_size_bytes")
+        output_hash = item.get("output_sha256")
+        byte_identical = item.get("byte_identical")
+        if not isinstance(rel, str) or not rel:
+            problems.append(f"{bundle_id}: transformation file {index} path is invalid")
+            continue
+        if rel in seen_sources:
+            problems.append(f"{bundle_id}: duplicate transformation source path: {rel}")
+            continue
+        seen_sources.add(rel)
+        if not isinstance(source_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", source_hash):
+            problems.append(f"{bundle_id}: transformation source hash is invalid for {rel}")
+        if not isinstance(source_size, int) or source_size < 0:
+            problems.append(f"{bundle_id}: transformation source size is invalid for {rel}")
+        policy = classification_for_path(rel)
+        if policy is None:
+            problems.append(f"{bundle_id}: unclassified transformation source path: {rel}")
+        else:
+            expected_classification, expected_operation = policy
+            if item.get("classification") != expected_classification:
+                problems.append(f"{bundle_id}: transformation classification is wrong for {rel}")
+            if operation != expected_operation:
+                problems.append(f"{bundle_id}: transformation operation is wrong for {rel}")
+            classification_counts[expected_classification] = (
+                classification_counts.get(expected_classification, 0) + 1
+            )
+        if isinstance(source_hash, str) and isinstance(source_size, int) and source_size >= 0:
+            source_entries.append(
+                {"path": rel, "sha256": source_hash, "size_bytes": source_size}
+            )
+        if operation == "omit":
+            saw_non_identity = True
+            if output_hash is not None or item.get("output_size_bytes") is not None:
+                problems.append(f"{bundle_id}: omitted {rel} has an output hash or size")
+            if byte_identical is not False:
+                problems.append(f"{bundle_id}: omitted {rel} claims byte identity")
+            if rel in actual_files:
+                problems.append(f"{bundle_id}: omitted source path is present: {rel}")
+            continue
+        expected_outputs.add(rel)
+        if rel not in actual_files:
+            problems.append(f"{bundle_id}: transformed output is missing: {rel}")
+            continue
+        actual_hash = sha256_file(actual_files[rel])
+        actual_size = actual_files[rel].stat().st_size
+        if output_hash != actual_hash:
+            problems.append(
+                f"{bundle_id}: transformation output hash mismatch for {rel}: "
+                f"record has {output_hash}, file hashes to {actual_hash}"
+            )
+        if item.get("output_size_bytes") != actual_size:
+            problems.append(f"{bundle_id}: transformation output size mismatch for {rel}")
+        actual_identity = (
+            source_hash == actual_hash
+            and source_size == actual_size
+        )
+        if byte_identical is not actual_identity:
+            problems.append(f"{bundle_id}: byte-identity flag is wrong for {rel}")
+        if not actual_identity:
+            saw_non_identity = True
+    if expected_outputs != set(actual_files):
+        problems.append(f"{bundle_id}: transformation output path set does not match public files")
+    public_entries = [
+        {"path": rel, "sha256": sha256_file(path), "size_bytes": path.stat().st_size}
+        for rel, path in actual_files.items()
+    ]
+    if tree_sha256(public_entries) != transformation.get("output_bundle_sha256"):
+        problems.append(f"{bundle_id}: transformed public tree hash mismatch")
+    source_tree_hash = tree_sha256(source_entries)
+    if source_tree_hash != transformation.get("source_bundle_sha256"):
+        problems.append(f"{bundle_id}: transformed source inventory hash mismatch")
+    if public_bundle_id(source_tree_hash) != bundle_id:
+        problems.append(f"{bundle_id}: public id does not derive from source inventory hash")
+    if transformation.get("classification_counts") != dict(sorted(classification_counts.items())):
+        problems.append(f"{bundle_id}: transformation classification counts are wrong")
+    if pack_entry.get("classification_counts") != dict(sorted(classification_counts.items())):
+        problems.append(f"{bundle_id}: pack classification counts are wrong")
+    if not saw_non_identity:
+        problems.append(f"{bundle_id}: transformation does not prove non-byte-identity")
+    return problems
+
+
 def verify_pack(pack_dir: Path) -> list[str]:
     pack_dir = Path(pack_dir)
     problems: list[str] = []
@@ -414,6 +599,36 @@ def verify_pack(pack_dir: Path) -> list[str]:
         return [f"{MANIFEST_NAME} is not a JSON object"]
     if manifest.get("schema") != PACK_SCHEMA:
         problems.append(f"manifest schema is not {PACK_SCHEMA!r}: {manifest.get('schema')!r}")
+    if manifest.get("privacy_policy_schema") != POLICY_SCHEMA:
+        problems.append("manifest privacy_policy_schema does not match the packer")
+    if manifest.get("transformation_schema") != TRANSFORMATION_SCHEMA:
+        problems.append("manifest transformation_schema does not match the packer")
+    if manifest.get("transformation_manifest") != TRANSFORMATION_MANIFEST_NAME:
+        problems.append("manifest transformation_manifest filename is invalid")
+    if manifest.get("byte_identical_to_private_sources") is not False:
+        problems.append("manifest must explicitly assert private-source non-byte-identity")
+    transformation_path = pack_dir / TRANSFORMATION_MANIFEST_NAME
+    transformation_map: dict[str, dict[str, Any]] = {}
+    if not transformation_path.is_file() or transformation_path.is_symlink():
+        problems.append(f"missing {TRANSFORMATION_MANIFEST_NAME}: {transformation_path}")
+    else:
+        try:
+            transformation_bytes = transformation_path.read_bytes()
+            transformation_value = json.loads(transformation_bytes)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            problems.append(f"{TRANSFORMATION_MANIFEST_NAME} is not readable JSON: {exc}")
+        else:
+            expected_transform_hash = manifest.get("transformation_manifest_sha256")
+            actual_transform_hash = hashlib.sha256(transformation_bytes).hexdigest()
+            if expected_transform_hash != actual_transform_hash:
+                problems.append(
+                    f"{TRANSFORMATION_MANIFEST_NAME} hash mismatch: manifest has "
+                    f"{expected_transform_hash}, file hashes to {actual_transform_hash}"
+                )
+            transformation_map, transformation_problems = _transformation_bundle_map(
+                transformation_value
+            )
+            problems.extend(transformation_problems)
     bundles_dir_name = _validate_bundles_dir_name(manifest.get("bundles_dir", "bundles"))
     if bundles_dir_name is None:
         return problems + [
@@ -448,7 +663,11 @@ def verify_pack(pack_dir: Path) -> list[str]:
     for child in pack_dir.iterdir():
         if child.is_symlink():
             problems.append(f"unexpected symlink at pack root: {child.name}")
-        elif child.is_file() and child.name not in {MANIFEST_NAME, README_NAME}:
+        elif child.is_file() and child.name not in {
+            MANIFEST_NAME,
+            TRANSFORMATION_MANIFEST_NAME,
+            README_NAME,
+        }:
             problems.append(f"unexpected file at pack root: {child.name}")
         elif child.is_dir() and child.name != bundles_dir_name:
             problems.append(f"unexpected directory at pack root: {child.name}")
@@ -508,8 +727,15 @@ def verify_pack(pack_dir: Path) -> list[str]:
                     f"{bundle_id}: size mismatch for {rel}: "
                     f"manifest has {expected[rel]['size_bytes']}, file size is {actual_size}"
                 )
-        for problem in validate_bundle(bundle_path, strict=True):
-            problems.append(f"{bundle_id}: strict validation failed: {problem}")
+        for problem in verify_public_bundle(bundle_path, bundle_id):
+            problems.append(f"{bundle_id}: privacy verification failed: {problem}")
+        transformation = transformation_map.get(bundle_id)
+        if transformation is None:
+            problems.append(f"{bundle_id}: missing transformation manifest entry")
+        else:
+            problems.extend(
+                _verify_transformation_entry(bundle_id, bundle_path, entry, transformation)
+            )
     if bundles_dir.is_dir():
         for child in bundles_dir.iterdir():
             if child.is_symlink():
@@ -525,23 +751,30 @@ def verify_pack(pack_dir: Path) -> list[str]:
             f"manifest.bundle_count {manifest.get('bundle_count')!r} does not match "
             f"bundles length {len(bundles)}"
         )
+    for bundle_id in sorted(set(transformation_map) - expected_bundle_ids):
+        problems.append(f"unexpected transformation entry not listed in manifest: {bundle_id}")
     return problems
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Package strict-valid JouleWise bundles or verify a bundle pack."
+        description=(
+            "Audit strict-valid private JouleWise bundles, create a transformed "
+            "public pack, or verify a transformed pack."
+        )
     )
     parser.add_argument(
         "--verify",
         metavar="PACK_DIR",
-        help="verify an existing bundle pack manifest, hashes, and strict bundle validity",
+        help="verify public privacy, transformation records, and pack hash chains",
     )
     parser.add_argument(
         "--output",
         help="output directory for a new bundle pack",
     )
-    parser.add_argument("bundles", nargs="*", help="strict-valid bundle directories to pack")
+    parser.add_argument(
+        "bundles", nargs="*", help="strict-valid private bundle directories to audit and transform"
+    )
     return parser
 
 

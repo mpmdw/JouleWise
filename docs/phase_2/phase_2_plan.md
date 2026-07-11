@@ -140,8 +140,15 @@ Metric formulas (reducer; also added to the methodology doc):
 - `energy_token_j` = energy_request_j / (prompt_tokens + output_tokens);
   `energy_output_token_j` = energy_request_j / output_tokens.
 - `ttft_s`: first `token` event timestamp − measured_run stage start.
-- `throughput_tokens_s`: output_tokens / (last token ts − first token ts),
-  None when output_tokens < 2.
+- `throughput_tokens_s` (legacy convention): runtime-observed output tokens /
+  (last decode-token timestamp − first decode-token timestamp). It counts N
+  tokens over the N−1 inter-token intervals and is retained under its frozen
+  name for compatibility; it is not the steady-state decode estimand.
+- `inter_token_throughput_tokens_s`: (N−1) / (last decode-token timestamp −
+  first decode-token timestamp), where N is the runtime-observed output-token
+  count. This is the governed steady-state decode/inter-token throughput; it
+  is None when N is below two, fewer than two decode timestamps exist, or their
+  span is zero.
 
 Clock rule (D-003, D-019): all timestamps are epoch UTC floats from the
 injected clock; nothing calls `time.time()` directly except `SystemClock`.
@@ -262,7 +269,10 @@ Design notes:
 - Idle baseline: `telemetry.measure_idle` for `sampling.idle_seconds`;
   result stored in summary and used by the reducer.
 - Warmup: `workload_profile.warmup_runs` invocations of the runtime warmup,
-  strictly before `start_sampling`.
+  followed by a `sampling.warmup_seconds` post-active-warmup settling wait,
+  strictly before the measured-run and `start_sampling` markers. The wait uses
+  the injected clock, is recorded on warmup completion and in the runtime log,
+  and is a no-op at zero.
 - Measured window: `start_sampling` -> `run_workload` -> `stop_sampling`.
   During the window the controller only blocks on the runtime (D-013):
   log records buffer in memory and flush after `stop_sampling`.
@@ -272,6 +282,10 @@ Design notes:
   the incomplete-bundle signal D-011 defines).
 - Single-run scope: repetitions handled in 2F; this slice runs exactly one
   measured run regardless of `repetitions`.
+- Cleanup quality: local cleanup failures remain post-window quality evidence,
+  not retroactive run failures. The reducer copies boolean cleanup-completion
+  evidence to nullable `measurement_quality.runtime_cleanup_ok`; later
+  campaign policy decides how a false value affects following repetitions.
 
 Actions: implement `controller.py` + tests using mocks/FakeClock: happy
 path; runtime-unsupported path (`mock-unsupported` => status unsupported,

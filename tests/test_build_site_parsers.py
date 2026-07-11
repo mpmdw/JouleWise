@@ -219,6 +219,51 @@ Text.
             build_site.MARKED_UNAVAILABLE = previous_unavailable
             build_site.MARKED_FALLBACK_WARNED = previous_warned
 
+    def test_trim_log_fewer_equal_and_more_than_six_entries(self):
+        pattern = build_site.re.compile(r"(?m)^## D-\d")
+        for count in (5, 6):
+            md = "# Log\n\n" + "".join(
+                f"## D-{index:03d}: Entry\nbody {index}\n\n"
+                for index in range(1, count + 1)
+            )
+            self.assertEqual(
+                build_site.trim_log_markdown(md, pattern, 6, "docs/decision_log.md"),
+                md,
+            )
+
+        md = "# Log\n\nindex preamble\n\n" + "".join(
+            f"## D-{index:03d}: Entry\nbody {index}\n\n" for index in range(1, 9)
+        ) + "trailing content\n"
+        trimmed = build_site.trim_log_markdown(
+            md, pattern, 6, "docs/decision_log.md"
+        )
+        self.assertNotIn("## D-001", trimmed)
+        self.assertNotIn("## D-002", trimmed)
+        self.assertIn("## D-003", trimmed)
+        self.assertIn("## D-008", trimmed)
+        self.assertIn("2 older full entries are omitted", trimmed)
+        self.assertIn("github.com/mpmdw/JouleWise/blob/main/docs/decision_log.md", trimmed)
+        self.assertTrue(trimmed.endswith("trailing content\n"))
+        self.assertEqual(
+            [text for text, _ in build_site.markdown_h2_toc(trimmed)],
+            [f"D-{index:03d}: Entry" for index in range(3, 9)],
+        )
+
+    def test_trim_note_is_escaped_by_offline_fallback_renderer(self):
+        md = "# Log\n\n" + "".join(
+            f"## D-{index:03d}: <Entry & {index}>\nbody\n\n"
+            for index in range(1, 8)
+        )
+        trimmed = build_site.trim_log_markdown(
+            md,
+            build_site.re.compile(r"(?m)^## D-\d"),
+            6,
+            "docs/decision_log.md",
+        )
+        rendered = build_site.render_basic_markdown(trimmed)
+        self.assertIn("&lt;Entry &amp; 2&gt;", rendered)
+        self.assertNotIn("<Entry & 2>", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

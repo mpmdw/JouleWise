@@ -275,3 +275,47 @@ class BundleValidationBugPins(BundleAuditCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StrictValidateZeroWindowTests(BundleAuditCase):
+    """P2-040 FIX-1 (ARC-3): strict admission of succeeded zero-window bundles."""
+
+    def make_succeeded_zero_window_bundle(self, run_id: str) -> Path:
+        from joulewise.schemas import RunStatus, SummaryMetrics
+
+        writer = RunBundleWriter.create(self.runs_root, load_config(run_id), self.clock)
+        writer.append_event(RuntimeEvent(2.0, "stage_started", "measured_run", "start"))
+        writer.append_event(RuntimeEvent(2.0, "stage_completed", "measured_run", "end"))
+        writer.write_power_trace(
+            [
+                PowerSample(0.0, 7.0, "mock", "mock"),
+                PowerSample(1.0, 7.0, "mock", "mock"),
+                PowerSample(2.0, 7.0, "mock", "mock"),
+            ]
+        )
+        writer.write_metadata(
+            {
+                "device": {"telemetry": "mock", "rail_manifest": ["mock"]},
+                "adapters": {"telemetry": {"name": "mock"}},
+            }
+        )
+        # A (wrongly) succeeded stored summary over the zero window.
+        writer.write_summary(
+            SummaryMetrics(status=RunStatus.SUCCEEDED, gross_energy_j=0.0)
+        )
+        self.clock.sleep(3.0)
+        return writer.finalize()
+
+    def test_succeeded_zero_window_is_rejected_even_when_fresh_summary_comparison_is_stubbed_equal(
+        self,
+    ) -> None:
+        bundle = self.make_succeeded_zero_window_bundle("strict-zero-window")
+        with mock.patch(
+            "joulewise.cli._strict_summary_differences", return_value=[]
+        ):
+            problems = validate_bundle(bundle, strict=True)
+        self.assertIn(
+            "strict: succeeded bundle measured window duration must be > 0 s; "
+            "got 0.0",
+            problems,
+        )

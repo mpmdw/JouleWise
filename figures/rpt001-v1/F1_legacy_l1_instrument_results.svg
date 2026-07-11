@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 940 560" font-family="sans-serif" font-size="12">
+<rect x="0" y="0" width="940" height="560" fill="white"/>
+<text x="70.0" y="30" font-size="16" font-weight="bold">Per-request energy by exact stack — legacy L1 (manual review; pre-2M)</text>
+<text x="70.0" y="48" font-size="12" fill="#444">Points: three retained sequential repetitions; marker: arithmetic mean; whisker: observed min–max range (not a confidence interval).</text>
+<line x1="70.00" y1="400.00" x2="590.00" y2="400.00" stroke="black"/>
+<line x1="70.00" y1="70.00" x2="70.00" y2="400.00" stroke="black"/>
+<line x1="66.00" y1="400.00" x2="70.00" y2="400.00" stroke="black"/>
+<text x="62.00" y="404.00" text-anchor="end">0</text>
+<line x1="66.00" y1="334.00" x2="70.00" y2="334.00" stroke="black"/>
+<text x="62.00" y="338.00" text-anchor="end">67</text>
+<line x1="66.00" y1="268.00" x2="70.00" y2="268.00" stroke="black"/>
+<text x="62.00" y="272.00" text-anchor="end">134</text>
+<line x1="66.00" y1="202.00" x2="70.00" y2="202.00" stroke="black"/>
+<text x="62.00" y="206.00" text-anchor="end">201</text>
+<line x1="66.00" y1="136.00" x2="70.00" y2="136.00" stroke="black"/>
+<text x="62.00" y="140.00" text-anchor="end">268</text>
+<line x1="66.00" y1="70.00" x2="70.00" y2="70.00" stroke="black"/>
+<text x="62.00" y="74.00" text-anchor="end">336</text>
+<text x="330.00" y="62.00" text-anchor="middle" font-weight="bold">Panel A: request energy (primary)</text>
+<text x="26.00" y="235.00" text-anchor="middle" transform="rotate(-90 26.00 235.00)">J per request</text>
+<line x1="660.00" y1="400.00" x2="910.00" y2="400.00" stroke="black"/>
+<line x1="660.00" y1="70.00" x2="660.00" y2="400.00" stroke="black"/>
+<line x1="656.00" y1="400.00" x2="660.00" y2="400.00" stroke="black"/>
+<text x="652.00" y="404.00" text-anchor="end">0</text>
+<line x1="656.00" y1="334.00" x2="660.00" y2="334.00" stroke="black"/>
+<text x="652.00" y="338.00" text-anchor="end">129</text>
+<line x1="656.00" y1="268.00" x2="660.00" y2="268.00" stroke="black"/>
+<text x="652.00" y="272.00" text-anchor="end">257</text>
+<line x1="656.00" y1="202.00" x2="660.00" y2="202.00" stroke="black"/>
+<text x="652.00" y="206.00" text-anchor="end">386</text>
+<line x1="656.00" y1="136.00" x2="660.00" y2="136.00" stroke="black"/>
+<text x="652.00" y="140.00" text-anchor="end">514</text>
+<line x1="656.00" y1="70.00" x2="660.00" y2="70.00" stroke="black"/>
+<text x="652.00" y="74.00" text-anchor="end">643</text>
+<text x="785.00" y="62.00" text-anchor="middle" font-weight="bold">Panel B: per-token companion</text>
+<text x="616.00" y="235.00" text-anchor="middle" transform="rotate(-90 616.00 235.00)">mJ per runtime-observed output token</text>
+<text x="200.00" y="416.00" text-anchor="middle" font-size="11">LEGACY-M3MAX-QWEN25-1P5B-MLX</text>
+<text x="200.00" y="430.00" text-anchor="middle" font-size="10" fill="#444">n=3</text>
+<line x1="175.00" y1="360.02" x2="175.00" y2="354.45" stroke="#555" stroke-width="1.5"/>
+<line x1="163.00" y1="356.31" x2="187.00" y2="356.31" stroke="black" stroke-width="2.5"/>
+<circle cx="167.00" cy="360.02" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="175.00" cy="354.45" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="183.00" cy="354.46" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
+<line x1="225.00" y1="354.13" x2="225.00" y2="352.81" stroke="#555" stroke-width="1.5"/>
+<line x1="213.00" y1="353.56" x2="237.00" y2="353.56" stroke="black" stroke-width="2.5"/>
+<circle cx="217.00" cy="352.81" r="4" fill="white" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="225.00" cy="353.74" r="4" fill="white" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="233.00" cy="354.13" r="4" fill="white" stroke="#1f6f8b" stroke-width="1.5"/>
+<text x="460.00" y="416.00" text-anchor="middle" font-size="11">LEGACY-M3MAX-QWEN35-122B-A10B-MLX</text>
+<text x="460.00" y="430.00" text-anchor="middle" font-size="10" fill="#444">n=3</text>
+<line x1="435.00" y1="106.85" x2="435.00" y2="105.69" stroke="#555" stroke-width="1.5"/>
+<line x1="423.00" y1="106.26" x2="447.00" y2="106.26" stroke="black" stroke-width="2.5"/>
+<circle cx="427.00" cy="105.69" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="435.00" cy="106.25" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="443.00" cy="106.85" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
+<line x1="485.00" y1="101.56" x2="485.00" y2="100.00" stroke="#555" stroke-width="1.5"/>
+<line x1="473.00" y1="101.02" x2="497.00" y2="101.02" stroke="black" stroke-width="2.5"/>
+<circle cx="477.00" cy="101.50" r="4" fill="white" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="485.00" cy="101.56" r="4" fill="white" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="493.00" cy="100.00" r="4" fill="white" stroke="#1f6f8b" stroke-width="1.5"/>
+<text x="722.50" y="416.00" text-anchor="middle" font-size="11">QWEN25-1P5B-MLX</text>
+<text x="722.50" y="430.00" text-anchor="middle" font-size="10" fill="#444">n=3</text>
+<line x1="722.50" y1="359.25" x2="722.50" y2="353.57" stroke="#555" stroke-width="1.5"/>
+<line x1="710.50" y1="355.47" x2="734.50" y2="355.47" stroke="black" stroke-width="2.5"/>
+<circle cx="714.50" cy="359.25" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="722.50" cy="353.57" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="730.50" cy="353.58" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
+<text x="847.50" y="416.00" text-anchor="middle" font-size="11">QWEN35-122B-A10B-MLX</text>
+<text x="847.50" y="430.00" text-anchor="middle" font-size="10" fill="#444">n=3</text>
+<line x1="847.50" y1="101.19" x2="847.50" y2="100.00" stroke="#555" stroke-width="1.5"/>
+<line x1="835.50" y1="100.59" x2="859.50" y2="100.59" stroke="black" stroke-width="2.5"/>
+<circle cx="839.50" cy="100.00" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="847.50" cy="100.58" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="855.50" cy="101.19" r="4" fill="#1f6f8b" stroke="#1f6f8b" stroke-width="1.5"/>
+<circle cx="80.00" cy="450" r="4" fill="#1f6f8b" stroke="#1f6f8b"/>
+<text x="90.00" y="454">idle-subtracted energy_request_j (primary basis)</text>
+<circle cx="400.00" cy="450" r="4" fill="white" stroke="#1f6f8b"/>
+<text x="410.00" y="454">gross gross_energy_j (context basis)</text>
+<text x="660.00" y="454" font-size="11" fill="#444">idle-subtracted basis; mJ/runtime-observed output token</text>
+<text x="70.00" y="490" font-size="11">legacy L1 (manual review; pre-2M) · n=3 per exact stack · Apple SoC CPU+GPU+ANE package-power boundary ·</text>
+<text x="70.00" y="506" font-size="11">descriptive stack-specific observations; no cross-stack efficiency or scaling claim · full identities: Table S1</text>
+<text x="70.00" y="530" font-size="11" fill="#444">Output-token values use runtime-observed counts. Tokenizer identity was not captured in these</text>
+<text x="70.00" y="544" font-size="11" fill="#444">legacy bundles; values are tokenizer-scoped descriptors, not comparable work units.</text>
+</svg>

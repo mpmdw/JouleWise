@@ -690,7 +690,9 @@ class MockTelemetryTests(unittest.TestCase):
 
     def test_stop_sampling_zero_length_span_single_sample_degenerate(self) -> None:
         # start == end (no clock advance): degenerate single sample at end.
-        # The reducer's zero-length-window path never reaches the >= 2 guard.
+        # Since P2-040 FIX-1 the reducer fails a zero-length measured window
+        # closed before the >= 2 sample guard; this pins only the telemetry
+        # adapter's degenerate-span behavior.
         self.telemetry.start_sampling(self.config)
         samples = self.telemetry.stop_sampling(self.config)
         self.assertEqual([sample.timestamp_s for sample in samples], [1000.0])

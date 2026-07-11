@@ -108,6 +108,7 @@ _SUCCEEDED_NULLABLE_NUMBER_FIELDS = {
     "ttft_s",
     "decode_latency_s",
     "throughput_tokens_s",
+    "inter_token_throughput_tokens_s",
 }
 
 
@@ -264,6 +265,27 @@ class BundleReader:
         ]
         return self._cache["summed_curve"]
 
+    def raw_artifact_bytes(self, name: str) -> bytes | None:
+        """Return one immutable ``raw/`` artifact, or ``None`` when absent.
+
+        Reducer-owned raw derivations use this strict read boundary so an I/O
+        failure remains distinguishable from an artifact that was never
+        captured.  Only a basename is accepted; callers cannot traverse out of
+        the bundle's raw directory.
+        """
+        if not name or Path(name).name != name:
+            raise BundleReadError("raw artifact name must be a basename")
+        key = f"raw-bytes:{name}"
+        if key not in self._cache:
+            path = self._path / "raw" / name
+            if not path.is_file():
+                return None
+            try:
+                self._cache[key] = path.read_bytes()
+            except OSError as exc:
+                raise BundleReadError(f"raw/{name} cannot be read: {exc}") from exc
+        return self._cache[key]
+
     # ------------------------------------------------------------------
     # Tolerant accessors (None on damage, used by the report)
 
@@ -328,6 +350,31 @@ class BundleReader:
         if stage_start is None or stage_end is None:
             return None
         return Window(start_s=stage_start, end_s=stage_end)
+
+    def runtime_cleanup_ok(self) -> bool | None:
+        """Local runtime-cleanup result from cleanup completion events.
+
+        A recorded ``False`` dominates because one failed cleanup is enough to
+        contaminate the following repetition. Otherwise every matching value
+        must be the boolean ``True``; absent or malformed evidence is unknown.
+        """
+        values: list[Any] = []
+        for event in self.events():
+            if (
+                event.get("event_type") != "stage_completed"
+                or event.get("phase") != "cleanup"
+            ):
+                continue
+            metadata = event.get("metadata")
+            if not isinstance(metadata, dict):
+                values.append(None)
+                continue
+            values.append(metadata.get("cleanup_ok"))
+        if any(value is False for value in values):
+            return False
+        if not values or any(not isinstance(value, bool) for value in values):
+            return None
+        return True
 
     def phase_windows(self) -> dict[str, list[Window]]:
         """Pair ``phase_start``/``phase_end`` events by phase name in order.

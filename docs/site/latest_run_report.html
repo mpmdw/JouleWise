@@ -26,52 +26,63 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#what-happened">What happened</a>
-<a href="#session-mechanics-evidence">Session mechanics / evidence</a>
-<a href="#next-best-task">Next best task</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-09-c027-council-review-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-09-c027-council-review.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-09-c027-council-review.md · commit c0f8f48"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-09-c027-council-review.md</span><span class="source-commit">commit c0f8f48</span></span></div>
-    <h1>Run Report: C-027 Whole-Project Council Review (2026-07-09)</h1>
-<p>Compact session record. The adjudicated substance — verdict, blockers,
-per-finding disposition table, deliberation traces, calibration record —
-lives in ONE place: <code>docs/reviews/2026-07-09-c027-whole-project-review.md</code>
-(raw lens/counterreview/examiner outputs under <code>docs/reviews/c027/</code>).
-This report intentionally does not restate it (C-027 itself adjudicated
-against duplicated session narrative).</p>
-<h2 id="what-happened">What happened</h2>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#root-cause">Root cause</a>
+<a href="#fix">Fix</a>
+<a href="#verification">Verification</a>
+<a href="#handoff">Handoff</a></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-10-nvgate2-idle-capture-fix-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md · commit cd6e2cb"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-10-nvgate2-idle-capture-fix.md</span><span class="source-commit">commit cd6e2cb</span></span></div>
+    <h1>NV-GATE-2 Idle-Capture Regression Fix</h1>
+<p>Date: 2026-07-10
+Branch/worktree: <code>impl/nvgate2-codenow</code>
+Lane: <code>[AGENT]</code>; no live NVIDIA or quiet-machine measurement was performed.
+Authority: lead-directed targeted DEBUG+FIX; no commits requested.</p>
+<h2 id="root-cause">Root cause</h2>
+<p><code>handle_nvidia_smi_measure_idle</code> started the requested idle-duration deadline
+immediately after <code>subprocess.Popen</code>, before the worker had observed any
+sampler output. Under child-start or scheduling delay, the complete idle
+interval could expire before the fake (or real) sampler ran. The worker then
+terminated the sampler and only afterward checked the CSV, producing the
+observed zero-byte artifact and structured <code>telemetry_unavailable</code> result.</p>
+<p>The FIX-1 PID-fingerprint path was ruled out as the direct cause: idle capture
+uses its local <code>Popen</code> object and never calls <code>_pidfile_matches_live_process</code>.
+PATH was also correct: the worker metadata carried the expected command and a
+direct capture with the same environment resolved and ran the fake sampler.
+The defect was the ordering at the old deadline assignment (pre-fix
+<code>joulewise/adapters/node_worker.py:803</code>), not the fake executable.</p>
+<h2 id="fix">Fix</h2>
+<p>Idle capture now uses the existing first-parseable-row NVIDIA readiness gate,
+records its diagnostics in worker metadata, and starts <code>idle_seconds</code> only
+after readiness succeeds. A readiness failure is returned with the gate&#39;s
+specific diagnostic. The requested 80 ms NV-5 measurement duration is
+unchanged; sampler startup is no longer charged against it.</p>
+<p>A regression test delays the sampler&#39;s first output by 100 ms while requesting
+a 10 ms idle capture. It proves the worker waits for readiness and then runs
+the requested duration; the old ordering terminates before the first row.</p>
+<h2 id="verification">Verification</h2>
 <ul>
-<li>Ed directed a thorough whole-project council review with the new Codex
-model (gpt-5.6-sol, xhigh). The old CLI (0.143.0) rejected the model;
-upgraded to 0.144.0; smoke test confirmed model + effort in the
-session header.</li>
-<li>7 parallel read-only Sol lenses (topdocs, rigor-examiner, stats, meta,
-reverse-orchestration, arch, negspace) → lead verification of every
-blocker-class claim → Sol counterreview of the lead synthesis + 4
-design questions → independent Fable-tier final examiner
-(PASS-conditional; all conditions applied).</li>
-<li>Outcome: 8 confirmed blocker clusters; claim-surface corrections
-landed same session (README, PROJECT_STATUS, RUN_STATE, milestones,
-AGENT_PLAN, risk register, 2026-07-06 addendum); 14 follow-up queue rows (+ NV-GATE-2 additions to P2-005); D-060 PROPOSED (awaiting Ed) + D-061/D-062/D-063 accepted;
-R-018 registered.</li>
+<li>The historic in-process fake-sampler test and the delayed-readiness
+regression passed together in three consecutive fresh Python processes.</li>
+<li>The exact localhost contract test was attempted in each of the three runs,
+but this managed sandbox denied its initial localhost bind with
+<code>PermissionError: [Errno 1] Operation not permitted</code>; all three invocations
+loudly skipped before worker execution. This is not recorded as a pass.</li>
+<li>Canonical unpiped suite:</li>
 </ul>
-<h2 id="session-mechanics-evidence">Session mechanics / evidence</h2>
+<pre><code class="language-text">Ran 1023 tests in 35.164s
+
+OK (skipped=13)
+</code></pre>
 <ul>
-<li>10 Codex invocations via codex-run (1 failed pre-upgrade smoke, 9 OK),
-appended to <code>.codex-bridge/invocation_manifest.jsonl</code> with archived
-output paths — the first D-050-compliant rows; 1 Fable-tier examiner
-subagent.</li>
-<li>Tests: docs-only session; suite not run (no code touched). Site
-regenerated + redeployed at close-out.</li>
-<li>Landed as branch <code>c027-council-review</code> + PR (multi-commit series per
-D-031 — a rule this very review found the lead breaching; the branch
-also carries the previously uncommitted user-directed CODEX-BRIDGE
-unit as its own labeled commit).</li>
+<li><code>python3 -m py_compile joulewise/adapters/node_worker.py tests/test_node_worker.py</code> passed.</li>
+<li><code>git diff --check</code> passed.</li>
 </ul>
-<h2 id="next-best-task">Next best task</h2>
-<p>Per the corrected RUN_STATE restart block: [ED-EXTERNAL] P0-003 backup
-destination (hard pre-Window-A gate) + P1-008 rubric/calendar;
-[AGENT] P2-040 → P2-038 → P2-039 → RPT-001 → P2-037.</p>
+<h2 id="handoff">Handoff</h2>
+<p>The lead&#39;s next exact NV-GATE-2 step is to run both named tests three
+consecutive times in a socket-capable session, then review and land the three
+code/test/report/bookkeeping file groups by pathspec. Live NVIDIA promotion
+remains gated by P1-006.</p>
 
 
   </div>
@@ -80,7 +91,7 @@ destination (hard pre-Window-A gate) + P1-008 rubric/calendar;
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-09-c027-council-review.md · commit c0f8f48 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md · commit cd6e2cb · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

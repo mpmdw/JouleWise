@@ -83,6 +83,14 @@ class ProtocolFakeTransport:
             for path in command[2:]:
                 Path(path).mkdir(parents=True, exist_ok=True)
             return AdapterResult(ok=True, metadata={"returncode": 0, "stdout": ""})
+        if command[:3] == ["rm", "-rf", "--"]:
+            for raw_path in command[3:]:
+                path = Path(raw_path)
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink(missing_ok=True)
+            return AdapterResult(ok=True, metadata={"returncode": 0, "stdout": ""})
         if "--clock-echo" in command:
             if not self.clock_echoes:
                 raise AssertionError("clock echo sequence exhausted")

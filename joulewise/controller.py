@@ -69,11 +69,13 @@ from joulewise.bundle import (
     sanitize_id_component,
     write_experiment_manifest,
 )
-from joulewise.clock import Clock, FakeClock
+from joulewise.clock import Clock, ClockStamp, FakeClock
 from joulewise.environment import collect_environment_snapshot, empty_environment_snapshot
 from joulewise.interfaces import (
     AdapterFailure,
     AdapterResult,
+    BoundedTelemetryAdapter,
+    IdleDriftEvidenceProvider,
     PowerSample,
     RunContext,
     RuntimeAdapter,
@@ -134,6 +136,7 @@ STATUS_BY_REASON: dict[FailureReason, RunStatus] = {
     FailureReason.TELEMETRY_UNAVAILABLE: RunStatus.UNSUPPORTED,
     FailureReason.PERMISSION_DENIED: RunStatus.FAILED,
     FailureReason.TRANSPORT_UNAVAILABLE: RunStatus.FAILED,
+    FailureReason.CLEANUP_FAILED: RunStatus.FAILED,
     FailureReason.UNKNOWN_ERROR: RunStatus.FAILED,
 }
 
@@ -226,6 +229,16 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
+def _clock_stamp(clock: Clock) -> ClockStamp:
+    """Use the paired API, with an exact synthetic bracket for old test clocks."""
+
+    stamp = getattr(clock, "stamp", None)
+    if callable(stamp):
+        return stamp()
+    epoch_s = clock.now()
+    return ClockStamp(epoch_s, epoch_s, epoch_s, 0.0, 0.0)
+
+
 class _Execution:
     """One run's lifecycle state: buffered events/logs and collected evidence."""
 
@@ -293,6 +306,8 @@ class _Execution:
         self._suite_order_seed: str | None = None
         self._suite_order_row: int | None = None
         self._samples: list[PowerSample] = []
+        self._uncertainty_evidence: dict[str, Any] | None = None
+        self._sampling_started_stamp: ClockStamp | None = None
         self._sampling_active = False
         # Idempotence flags so the failure path writes only what is missing.
         self._outputs_written = False
@@ -342,6 +357,7 @@ class _Execution:
         self._stage_idle_baseline()
         self._stage_warmup()
         self._stage_measured_run()
+        self._stage_idle_drift_sentinel()
         self._stage_cleanup()
         return self._stage_reduce()
 
@@ -431,7 +447,17 @@ class _Execution:
             self._check(result, "warmup", f"runtime warmup run {index} failed")
             self._capture_adapter_alignments()
         self._log(self._runtime_log, f"completed {warmup_runs} warmup run(s)")
-        self._complete_stage("warmup", {"warmup_runs": warmup_runs})
+        warmup_seconds = self._config.sampling.warmup_seconds
+        if warmup_seconds > 0.0:
+            self._log(
+                self._runtime_log,
+                f"post-warmup settling for {warmup_seconds} s before sampling",
+            )
+            self._clock.sleep(warmup_seconds)
+        self._complete_stage(
+            "warmup",
+            {"warmup_runs": warmup_runs, "warmup_seconds": warmup_seconds},
+        )
 
     def _stage_measured_run(self) -> None:
         self._begin_stage("measured_run")
@@ -449,8 +475,16 @@ class _Execution:
         # first sample) and stop-side parsing stay outside the window. The
         # start marker is stamped only after start_sampling confirms; the stop
         # marker is stamped before stop_sampling is asked to wind down.
-        self._buffer_event(
-            "sampling_started", "measured_run", "telemetry sampling confirmed active"
+        sampling_started_stamp = _clock_stamp(self._clock)
+        self._sampling_started_stamp = sampling_started_stamp
+        self._events.append(
+            RuntimeEvent(
+                timestamp_s=sampling_started_stamp.epoch_s,
+                event_type="sampling_started",
+                phase="measured_run",
+                message="telemetry sampling confirmed active",
+                metadata={},
+            )
         )
         # D-013 quiescent window: between the sampling_started stamp and the
         # sampling_stopped stamp the controller only blocks on the runtime -
@@ -473,9 +507,19 @@ class _Execution:
         # sampler's wind-down (process stop, plist parsing) stay outside the
         # window; the event itself is appended after the runtime events so
         # the stable flush-sort keeps it bracketing them.
-        sampling_stopped_s = self._clock.now()
+        sampling_stopped_stamp = _clock_stamp(self._clock)
         self._capture_adapter_alignments()
-        self._samples = self._telemetry.stop_sampling(self._config, self._context)
+        if isinstance(self._telemetry, BoundedTelemetryAdapter):
+            stop_result = self._telemetry.stop_sampling_with_evidence(
+                self._config,
+                self._context,
+                sampling_started=sampling_started_stamp,
+                sampling_stopped=sampling_stopped_stamp,
+            )
+            self._samples = stop_result.samples
+            self._uncertainty_evidence = dict(stop_result.uncertainty_evidence)
+        else:
+            self._samples = self._telemetry.stop_sampling(self._config, self._context)
         self._capture_adapter_alignments()
         self._capture_adapter_metadata()
         self._sampling_active = False
@@ -484,7 +528,7 @@ class _Execution:
         self._events.extend(runtime_result.events)
         self._events.append(
             RuntimeEvent(
-                timestamp_s=sampling_stopped_s,
+                timestamp_s=sampling_stopped_stamp.epoch_s,
                 event_type="sampling_stopped",
                 phase="measured_run",
                 message="telemetry sampling stopped",
@@ -502,6 +546,51 @@ class _Execution:
             {
                 "sample_count": len(self._samples),
                 "runtime_event_count": len(runtime_result.events),
+            },
+        )
+
+    def _stage_idle_drift_sentinel(self) -> None:
+        """Collect the short post-run idle sentinel outside the measured window."""
+
+        if not isinstance(self._telemetry, IdleDriftEvidenceProvider):
+            return
+        self._begin_stage("idle_drift_sentinel")
+        assert self._baseline is not None
+        try:
+            result = self._telemetry.measure_post_run_idle(
+                self._config, self._baseline, self._context
+            )
+        except Exception as exc:  # noqa: BLE001 - unknown drift preserves L0/L1
+            result = {
+                "idle_drift": {
+                    "status": "unknown",
+                    "reason": "post_idle_unavailable",
+                }
+            }
+            self._log(
+                self._telemetry_log,
+                f"post-run idle sentinel unavailable: {type(exc).__name__}: {exc}",
+            )
+        if self._uncertainty_evidence is None:
+            self._uncertainty_evidence = {
+                "schema_version": "p2-038.1",
+                "telemetry_backend": self._telemetry.name,
+            }
+        for key in ("idle_drift", "idle_drift_guard"):
+            if key in result:
+                self._uncertainty_evidence[key] = _jsonable(result[key])
+        if "idle_drift_bound_w" in result:
+            self._uncertainty_evidence["idle_drift_bound_w"] = result[
+                "idle_drift_bound_w"
+            ]
+        self._capture_adapter_metadata()
+        self._complete_stage(
+            "idle_drift_sentinel",
+            {
+                "status": self._uncertainty_evidence.get("idle_drift", {}).get(
+                    "status"
+                ),
+                "duration_requested_s": result.get("post_idle_duration_requested_s"),
             },
         )
 
@@ -529,6 +618,12 @@ class _Execution:
             if result.metadata:
                 self._runtime_cleanup_metadata = dict(result.metadata)
             if not result.ok:
+                if result.failure_reason == FailureReason.CLEANUP_FAILED:
+                    raise _StageFailure(
+                        "cleanup",
+                        FailureReason.CLEANUP_FAILED,
+                        result.message or "worker-started runtime process survived cleanup",
+                    )
                 metadata = {
                     "cleanup_ok": False,
                     "failure_reason": (
@@ -600,11 +695,33 @@ class _Execution:
         # D-026: even on the failure path the sampling window gets its closing
         # marker, stamped before the stop call, so post-hoc re-reduction sees
         # the same window semantics as a successful run.
-        self._buffer_event(
-            "sampling_stopped", "measured_run", "telemetry sampling stopping (failure path)"
+        sampling_stopped_stamp = _clock_stamp(self._clock)
+        self._events.append(
+            RuntimeEvent(
+                timestamp_s=sampling_stopped_stamp.epoch_s,
+                event_type="sampling_stopped",
+                phase="measured_run",
+                message="telemetry sampling stopping (failure path)",
+                metadata={},
+            )
         )
         try:
-            self._samples = self._telemetry.stop_sampling(self._config, self._context)
+            if (
+                isinstance(self._telemetry, BoundedTelemetryAdapter)
+                and self._sampling_started_stamp is not None
+            ):
+                result = self._telemetry.stop_sampling_with_evidence(
+                    self._config,
+                    self._context,
+                    sampling_started=self._sampling_started_stamp,
+                    sampling_stopped=sampling_stopped_stamp,
+                )
+                self._samples = result.samples
+                self._uncertainty_evidence = dict(result.uncertainty_evidence)
+            else:
+                self._samples = self._telemetry.stop_sampling(
+                    self._config, self._context
+                )
             self._capture_adapter_alignments()
         except Exception:  # noqa: BLE001 - evidence salvage must not mask the failure
             self._log(
@@ -656,6 +773,7 @@ class _Execution:
         if self._metadata_written:
             return
         extra: dict[str, Any] = {}
+        extra["config_warnings"] = [dict(item) for item in self._config.config_warnings]
         extra["model"] = _jsonable(asdict(self._config.model))
         extra["quantization"] = _jsonable(asdict(self._config.quantization))
         if self._device_metadata is not None:
@@ -693,11 +811,40 @@ class _Execution:
             extra["thermal_pre"] = _jsonable(asdict(self._thermal_pre))
         if self._thermal_post is not None:
             extra["thermal_post"] = _jsonable(asdict(self._thermal_post))
+        if self._uncertainty_evidence is not None:
+            evidence = dict(self._uncertainty_evidence)
+            idle_bound_w = evidence.pop("idle_drift_bound_w", None)
+            extra["uncertainty_evidence"] = _jsonable(evidence)
+            clock_anchor = evidence.get("clock_anchor")
+            if isinstance(clock_anchor, dict) and clock_anchor.get("status") == "bounded":
+                extra["clock_anchor_bound_s"] = clock_anchor.get(
+                    "effective_clock_anchor_bound_s"
+                )
+            sample_phase = evidence.get("sample_phase")
+            if isinstance(sample_phase, dict) and sample_phase.get("status") == "bounded":
+                extra["marker_to_first_sample_phase_bound_s"] = sample_phase.get(
+                    "marker_to_first_sample_phase_bound_s"
+                )
+                extra["marker_to_last_sample_phase_bound_s"] = sample_phase.get(
+                    "marker_to_last_sample_phase_bound_s"
+                )
+            if idle_bound_w is not None:
+                extra["idle_drift_bound_w"] = idle_bound_w
         if self._runtime_result is not None:
             extra["workload_observed"] = {
                 "token_count": self._runtime_result.token_count,
                 "output_token_count": self._runtime_result.output_token_count,
             }
+            token_count_source = self._runtime_result.metadata.get(
+                "token_count_source"
+            )
+            if token_count_source in {
+                "server_usage",
+                "stream_chunk_fallback",
+            }:
+                extra["workload_observed"]["token_count_source"] = (
+                    token_count_source
+                )
             if self._runtime_result.workload_provenance is not None:
                 extra["workload_provenance"] = _jsonable(
                     self._runtime_result.workload_provenance
@@ -714,12 +861,19 @@ class _Execution:
                 "order_seed": self._suite_order_seed,
                 "order_row": self._suite_order_row,
             }
+        node_cleanup = [
+            *_adapter_cleanup_report(self._runtime),
+            *_adapter_cleanup_report(self._telemetry),
+        ]
         # Caller-supplied metadata (Slice 2F: the experiment runner records a
         # cooldown cap-hit against the following rep here). Lands under the
         # dedicated "extra" key so it never collides with controller fields and
         # the reducer reads it from one known place.
-        if self._extra_metadata:
-            extra["extra"] = _jsonable(self._extra_metadata)
+        controller_extra = dict(self._extra_metadata)
+        if node_cleanup:
+            controller_extra["node_cleanup"] = node_cleanup
+        if controller_extra:
+            extra["extra"] = _jsonable(controller_extra)
         self._writer.write_metadata(extra)
         self._metadata_written = True
 
@@ -785,6 +939,18 @@ class _Execution:
     # Summaries
 
     def _minimal_quality(self) -> MeasurementQuality:
+        cleanup_failed = sorted(
+            {
+                str(item["path"])
+                for item in (
+                    _adapter_cleanup_report(self._runtime)
+                    + _adapter_cleanup_report(self._telemetry)
+                )
+                if item.get("removed") is False
+                and item.get("eventually_removed") is not True
+                and isinstance(item.get("path"), str)
+            }
+        )
         return MeasurementQuality(
             requested_sampling_hz=self._config.sampling.power_hz,
             idle_power_w_stddev=(
@@ -794,6 +960,7 @@ class _Execution:
             idle_window_suspect=(
                 self._baseline.idle_window_suspect if self._baseline is not None else None
             ),
+            remote_cleanup_failed=cleanup_failed or None,
         )
 
     # ------------------------------------------------------------------
@@ -937,6 +1104,7 @@ def cooldown_gate(
     reference_baseline: IdleBaseline,
     config: BenchmarkConfig,
     clock: Clock,
+    run_id: str | None = None,
 ) -> dict[str, Any]:
     """Hold until idle power recovers to within 10% of ``reference_baseline``.
 
@@ -951,10 +1119,17 @@ def cooldown_gate(
 
     All blocking is via ``telemetry.measure_idle`` (which sleeps on the clock),
     so a ``FakeClock`` makes the gate instant and exact in tests.
+
+    ``run_id`` (NV-2/ARC-7): the gate calls ``measure_idle`` out-of-run with
+    no ``RunContext``, so adapters that need a run id for node-side isolation
+    fall back to ``config.run_id`` - which is ``None`` for generated-id
+    experiments. When given, ``run_id`` is stamped onto the sub-window config
+    so those adapters see a cooldown-scoped id instead of failing.
     """
     reference = reference_baseline.power_w_mean
     sub_config = replace(
         config,
+        run_id=run_id if run_id is not None else config.run_id,
         sampling=replace(config.sampling, idle_seconds=COOLDOWN_SUBWINDOW_S),
     )
     start_s = clock.now()
@@ -979,9 +1154,23 @@ def cooldown_gate(
             }
         )
         if _within_tolerance(rolling_mean, reference, COOLDOWN_TOLERANCE):
-            return {"result": "recovered", "waited_s": waited_s, "_trace": trace}
+            return {
+                "result": "recovered",
+                "waited_s": waited_s,
+                "reference_power_w": reference,
+                "tolerance_fraction": COOLDOWN_TOLERANCE,
+                "decision_rolling_mean_power_w": rolling_mean,
+                "_trace": trace,
+            }
         if waited_s >= COOLDOWN_CAP_S:
-            return {"result": "cap_hit", "waited_s": waited_s, "_trace": trace}
+            return {
+                "result": "cap_hit",
+                "waited_s": waited_s,
+                "reference_power_w": reference,
+                "tolerance_fraction": COOLDOWN_TOLERANCE,
+                "decision_rolling_mean_power_w": rolling_mean,
+                "_trace": trace,
+            }
 
 
 def _within_tolerance(value: float, reference: float, tolerance: float) -> bool:
@@ -1021,6 +1210,21 @@ def _adapter_metadata(adapter: Any) -> dict[str, Any]:
     if not isinstance(metadata, dict):
         return {}
     return dict(metadata)
+
+
+def _adapter_cleanup_report(adapter: Any) -> list[dict[str, Any]]:
+    if adapter is None:
+        return []
+    getter = getattr(adapter, "cleanup_report", None)
+    if not callable(getter):
+        return []
+    try:
+        report = getter()
+    except Exception:  # noqa: BLE001 - cleanup evidence must not disturb lifecycle.
+        return []
+    if not isinstance(report, list):
+        return []
+    return [dict(item) for item in report if isinstance(item, dict)]
 
 
 def _merge_adapter_metadata(target: dict[str, Any], metadata: dict[str, Any]) -> None:
@@ -1224,8 +1428,18 @@ def _cooldown_between_reps(
         note.update({"result": "skipped", "reason": reason})
         return note, False
 
+    # NV-2 (ARC-7): generated-id experiments have config.run_id == None, and
+    # the gate's out-of-run measure_idle passes no RunContext, so adapters
+    # that require a run id for node-side task isolation (nvidia_smi) would
+    # fail and silently downgrade every cooldown to "skipped". Thread a
+    # cooldown-scoped run id, unique per gate invocation, and record it so
+    # the manifest is auditable against node-side artifacts.
+    cooldown_run_id = f"{experiment_id}-cooldown-{after_member}"
+    note["cooldown_run_id"] = cooldown_run_id
     try:
-        gate = cooldown_gate(telemetry, summary.idle_baseline, config, clock)
+        gate = cooldown_gate(
+            telemetry, summary.idle_baseline, config, clock, run_id=cooldown_run_id
+        )
     except AdapterFailure as failure:
         note.update(
             {

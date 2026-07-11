@@ -197,3 +197,15 @@ Capsule deploy ID: `dep_2I04CG6tQ4t0mzY7`. Live app:
   (2) the deploy error should include actual size, limit, and top-3
   largest embedded modules; (3) document the runtime overhead budget so
   authors know their real payload allowance (~550KB, not 1 MiB).
+
+## 2026-07-11 (advisor-refresh deploy, C-028 arc)
+- Deploy succeeded first try (build c9acfc5; freshness API confirms live).
+  Friction observed:
+  1. `npx lakebed deploy` human output prints the deploy id/URL header FIRST,
+     then a long limits/env block — scripted invocations that tail output lose
+     the URL/id. Consider a stable final summary line (id + URL + bytes), or
+     we standardize on `--json`.
+  2. No `lakebed status` subcommand for a deployed capsule (only `auth
+     status`); verifying a deploy requires curling the live app's freshness
+     endpoint. A `lakebed status [capsule-dir]` reporting live deploy id +
+     baked commit would close the loop.

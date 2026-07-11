@@ -1,0 +1,95 @@
+{
+  "analysis": {
+    "center_definition": "median_offset_by_direction",
+    "conservative_bound_definition": "max_abs_response_support_endpoint_from_marker",
+    "method_id": "plateau_midpoint_sample_support.v1",
+    "minimum_plateau_samples_per_state": 2,
+    "minimum_transitions_per_direction": 4,
+    "offset_definition": "response_sample_midpoint_s-marker_epoch_s",
+    "plateau_definition": "median_of_declared_stable_state_samples",
+    "required_consecutive_target_samples": 2,
+    "residual_definition": "offset_s-direction_center_offset_s",
+    "target_threshold_rule": "midpoint(low_plateau_w,high_plateau_w)"
+  },
+  "evidence_status": "PROVISIONAL_PRE_EXECUTION",
+  "execution_plan": [
+    {
+      "block_id": "p2046-block-01",
+      "direction": "idle_to_load",
+      "execution_index": 1,
+      "position_in_block": 1,
+      "precondition": "stable_idle",
+      "transition_id": "p2046-t01"
+    },
+    {
+      "block_id": "p2046-block-01",
+      "direction": "load_to_idle",
+      "execution_index": 2,
+      "position_in_block": 2,
+      "precondition": "stable_load",
+      "transition_id": "p2046-t02"
+    },
+    {
+      "block_id": "p2046-block-02",
+      "direction": "load_to_idle",
+      "execution_index": 3,
+      "position_in_block": 1,
+      "precondition": "stable_load",
+      "transition_id": "p2046-t03"
+    },
+    {
+      "block_id": "p2046-block-02",
+      "direction": "idle_to_load",
+      "execution_index": 4,
+      "position_in_block": 2,
+      "precondition": "stable_idle",
+      "transition_id": "p2046-t04"
+    },
+    {
+      "block_id": "p2046-block-03",
+      "direction": "idle_to_load",
+      "execution_index": 5,
+      "position_in_block": 1,
+      "precondition": "stable_idle",
+      "transition_id": "p2046-t05"
+    },
+    {
+      "block_id": "p2046-block-03",
+      "direction": "load_to_idle",
+      "execution_index": 6,
+      "position_in_block": 2,
+      "precondition": "stable_load",
+      "transition_id": "p2046-t06"
+    },
+    {
+      "block_id": "p2046-block-04",
+      "direction": "load_to_idle",
+      "execution_index": 7,
+      "position_in_block": 1,
+      "precondition": "stable_load",
+      "transition_id": "p2046-t07"
+    },
+    {
+      "block_id": "p2046-block-04",
+      "direction": "idle_to_load",
+      "execution_index": 8,
+      "position_in_block": 2,
+      "precondition": "stable_idle",
+      "transition_id": "p2046-t08"
+    }
+  ],
+  "freeze_status": "frozen_pre_execution",
+  "manifest_id": "p2-046-load-transition-alignment-v1",
+  "refusal_policy": {
+    "malformed_transition": "transition_malformed",
+    "missing_planned_transition": "transition_set_mismatch",
+    "unobserved_transition": "transition_not_observed"
+  },
+  "schema_version": "joulewise.load_transition_manifest.v1",
+  "scope": {
+    "lane": "A_AGENT_B_QUIET_MAC",
+    "part": "P2-046A_PREP_FOR_P2-046B",
+    "physical_claims_allowed": false,
+    "quiet_mac_execution_status": "NOT_EXECUTED_REQUIRES_LEAD_CONTROLLED_QUIET_MAC"
+  }
+}

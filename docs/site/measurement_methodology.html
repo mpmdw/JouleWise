@@ -41,7 +41,7 @@
 <a href="#statistical-protocol">Statistical Protocol</a></aside>
   <div class="doc-wrap doc-source-docs-contracts-measurement-methodology-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/contracts/measurement_methodology.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/measurement_methodology.md · commit 8197b05"><span class="source-file">docs/<wbr>contracts/<wbr>measurement_methodology.md</span><span class="source-commit">commit 8197b05</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/measurement_methodology.md · commit 6578464"><span class="source-file">docs/<wbr>contracts/<wbr>measurement_methodology.md</span><span class="source-commit">commit 6578464</span></span></div>
     <h1>Measurement Methodology</h1>
 <p>Living cross-phase contract, drafted in Phase 1. Changes require a
 decision-log entry when they bind later work.</p>
@@ -65,12 +65,20 @@ metrics are derived outputs, not the source of truth.</p>
 <li>Collect device metadata.</li>
 <li>Measure idle baseline.</li>
 <li>Warm up runtime.</li>
+<li>Wait the configured post-warmup settling interval
+(<code>sampling.warmup_seconds</code>; zero means no wait).</li>
 <li>Start measured telemetry.</li>
 <li>Run workload.</li>
 <li>Stop measured telemetry.</li>
 <li>Cleanup runtime.</li>
 <li>Reduce raw artifacts into summary metrics.</li>
 </ol>
+<p>The post-warmup settling interval begins only after all active
+<code>workload_profile.warmup_runs</code> calls and their clock-alignment captures have
+completed. It ends before the measured-run stage and sampling-active markers,
+so it is never integrated into the measured window. Controller events record
+the configured value on the warmup completion event and the runtime log records
+positive waits.</p>
 <h2 id="idle-subtraction">Idle Subtraction</h2>
 <p>Energy metrics must report both gross and idle-subtracted values when possible.
 The idle baseline is measured before each run and stored in the run bundle.</p>
@@ -110,6 +118,10 @@ Repeated runs should report:</p>
 <li>Idle variance.</li>
 <li>Thermal drift.</li>
 <li>Telemetry source.</li>
+<li>Local runtime cleanup result (<code>runtime_cleanup_ok</code>: true/false/null). Cleanup
+occurs after the measured window, so failure is a quality concern for the
+following repetition and does not retroactively change current-run status or
+energy.</li>
 <li>Wall-meter comparison delta, when available.</li>
 </ul>
 <h2 id="phase-labels">Phase Labels</h2>
@@ -244,7 +256,7 @@ correlation can be audited (Phase 4 Stage 4.5 does this audit).</li>
 </ul>
 <h2 id="statistical-protocol">Statistical Protocol</h2>
 <p>Per decision D-014 (draft to be ratified against observed variance at
-Phase 4 Stage 4.0), amended 2026-07-09 pending ratification (C-023 S3):</p>
+Phase 4 Stage 4.0), amended 2026-07-09 (C-023 S3; amendments ratified by D-053):</p>
 <ul>
 <li>Repetitions: n &gt;= 5 for headline comparisons; n &gt;= 3 minimum elsewhere;
 the n is recorded per experiment.</li>
@@ -254,7 +266,7 @@ and reports both where they materially disagree.</li>
 <li>Outliers: flagged by modified z-score on MAD &gt; 3.5; never silently
 dropped; reported with-and-without only when a physical cause is
 identified and documented; otherwise kept in headline numbers. Amendment
-2026-07-09 (pending ratification, C-023 S3): at n &lt;= 10, reports also run
+2026-07-09 (C-023 S3, ratified by D-053): at n &lt;= 10, reports also run
 a leave-one-out influence check on every claim-bearing contrast. The
 report lists the full-data estimate/CI/verdict and each leave-one-out
 estimate/CI/verdict. An omitted point is influential if it changes the
@@ -263,7 +275,7 @@ estimate by more than 0.25 x the active threshold: MDE for rank/MDE-gated
 claims, otherwise the floor gate. Influential points are reported as
 sensitivity evidence, not silently removed.</li>
 <li>Figures always show raw points alongside aggregates.</li>
-<li>Amendment 2026-07-09 (pending ratification, C-023 S3): differences are
+<li>Amendment 2026-07-09 (C-023 S3, ratified by D-053): differences are
 claimed from the confidence interval of the paired/block difference, or
 from the named model contrast, not by visual separation of marginal
 intervals. Where execution order was randomized, the analysis includes a
@@ -289,7 +301,7 @@ contrast CI lies entirely within that margin.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/contracts/measurement_methodology.md · commit 8197b05 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/contracts/measurement_methodology.md · commit 6578464 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

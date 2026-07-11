@@ -14,6 +14,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from joulewise import reduce as reduce_module
 from joulewise.bundle import RunBundleWriter
@@ -200,6 +201,29 @@ class RectangleTests(ReduceTestCase):
 
                 self.assertEqual(summary.status, RunStatus.FAILED)
                 self.assertIn("idle_baseline.sample_count must be an integer", summary.failure_message)
+
+
+class IdleDependencePropagationTests(ReduceTestCase):
+    def test_reducer_uses_governed_variance_for_corrected_energy_term(self) -> None:
+        builder = self.builder()
+        builder.measured_window(0.0, 3.0)
+        builder.write_trace(constant_samples(0.0, 3.0, hz=1.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"])
+        governed = {
+            "status": "estimated",
+            "governed_variance_of_mean_w2": 5 / 18,
+        }
+
+        with patch(
+            "joulewise.reduce.derive_idle_mean_uncertainty",
+            return_value=governed,
+        ):
+            summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertIs(summary.idle_mean_uncertainty, governed)
+        self.assertEqual(
+            summary.energy_variance_terms_j2["E_idle_mean_j2"], 5 / 2
+        )
 
 
 class RampTests(ReduceTestCase):
@@ -403,7 +427,8 @@ class DegenerateTests(ReduceTestCase):
         self.assertEqual(summary.status, RunStatus.FAILED)
         self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
 
-    def test_zero_length_window_is_zero_energy_not_failure(self) -> None:
+    def test_zero_length_window_is_structured_failure(self) -> None:
+        # P2-040 FIX-1 (ARC-3): a nonpositive measured window fails closed.
         builder = self.builder()
         builder.measured_window(5.0, 5.0)
         builder.write_trace(
@@ -411,26 +436,51 @@ class DegenerateTests(ReduceTestCase):
         )
         builder.write_metadata(rail_manifest=["mock"])
         summary = reduce_module.reduce_bundle(builder.path)
-        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-        self.assertAlmostEqual(summary.gross_energy_j, 0.0, places=9)
-        self.assertAlmostEqual(summary.idle_subtracted_energy_j, 0.0, places=9)
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertTrue(
+            summary.failure_message.startswith(
+                "measured_run window duration must be > 0 s; got "
+            ),
+            summary.failure_message,
+        )
+        self.assertIsNone(summary.gross_energy_j)
+        self.assertIsNone(summary.idle_subtracted_energy_j)
+        self.assertIsNone(summary.energy_request_j)
+        self.assertIsNone(summary.energy_token_j)
+        # Schema-valid failure summary (status/failure_reason consistent).
+        summary.to_dict()
 
-    def test_zero_length_window_keeps_real_phase_energy(self) -> None:
-        # A zero-length measured window must zero the window-scoped energies but
-        # NOT phase energy over a real trace: a prefill phase [0, 2] over a
-        # constant 7.5 W trace integrates to 7.5 * 2 = 15.0 J. (The bug used an
-        # empty curve for phase attribution, wrongly yielding 0.0 J.)
+    def test_runtime_cleanup_quality_is_copied_from_bundle_events(self) -> None:
+        builder = self.builder()
+        builder.measured_window(0.0, 2.0)
+        builder.add_event(
+            "stage_completed",
+            "cleanup",
+            3.0,
+            metadata={"cleanup_ok": False},
+        )
+        builder.write_trace(constant_samples(0.0, 2.0, hz=2.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"])
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIs(summary.measurement_quality.runtime_cleanup_ok, False)
+
+    def test_zero_length_window_emits_no_derived_phase_metrics(self) -> None:
+        # P2-040 FIX-1: an invalid measured window must not carry derived
+        # phase/suite metrics into the structured failure summary.
         builder = self.builder()
         builder.measured_window(5.0, 5.0)  # stage_started ts == stage_completed ts
         builder.add_phase("prefill", 0.0, 2.0)
         builder.write_trace(constant_samples(0.0, 10.0, hz=1.0, power_w=7.5))
         builder.write_metadata(rail_manifest=["mock"])
         summary = reduce_module.reduce_bundle(builder.path)
-        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-        self.assertAlmostEqual(summary.gross_energy_j, 0.0, places=9)
-        self.assertIsNotNone(summary.phase_energy_j)
-        self.assertEqual(set(summary.phase_energy_j), {"prefill"})
-        self.assertAlmostEqual(summary.phase_energy_j["prefill"], 15.0, places=9)
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertIsNone(summary.phase_energy_j)
+        self.assertIsNone(summary.suite_metrics)
 
 
 class MockEndToEndTests(ReduceTestCase):
@@ -498,9 +548,14 @@ class MockEndToEndTests(ReduceTestCase):
         self.assertAlmostEqual(summary.ttft_s, tokens[0] - start_s, places=9)
         self.assertAlmostEqual(summary.ttft_s, 32 * 0.001 + 0.010, places=6)
 
-        # throughput == 8 / (last token - first token).
+        # The legacy convention counts 8 tokens over the 7 inter-token
+        # intervals. The governed steady-state metric counts those 7
+        # intervals over the same first-to-last span.
         span = tokens[-1] - tokens[0]
         self.assertAlmostEqual(summary.throughput_tokens_s, 8 / span, places=9)
+        self.assertAlmostEqual(
+            summary.inter_token_throughput_tokens_s, 7 / span, places=9
+        )
         self.assertAlmostEqual(summary.decode_latency_s, span, places=9)
 
         self.assertAlmostEqual(
@@ -509,6 +564,31 @@ class MockEndToEndTests(ReduceTestCase):
         self.assertAlmostEqual(
             summary.phase_energy_j["decode"], 7.5 * durations["decode"], places=9
         )
+
+    def test_throughput_conventions_match_hand_computed_extremes(self) -> None:
+        # Integer timestamps make both hand-computed fixtures exact. At N=8,
+        # legacy exceeds inter-token throughput by 1/7 = 14.2857%; at N=512,
+        # the excess is 1/511 = 0.1957%.
+        for token_count in (8, 512):
+            with self.subTest(token_count=token_count):
+                timestamps = [float(index) for index in range(token_count)]
+                span = float(token_count - 1)
+                legacy = reduce_module._throughput_tokens_s(
+                    timestamps, token_count
+                )
+                inter_token = reduce_module._inter_token_throughput_tokens_s(
+                    timestamps, token_count
+                )
+
+                expected_legacy = {8: 8 / 7, 512: 512 / 511}[token_count]
+                expected_excess = {8: 1 / 7, 512: 1 / 511}[token_count]
+                self.assertEqual(legacy, expected_legacy)
+                self.assertEqual(inter_token, 1.0)
+                self.assertAlmostEqual(
+                    legacy / inter_token - 1.0,
+                    expected_excess,
+                    places=15,
+                )
 
     def test_mock_bundle_reducer_is_default_and_events_intact(self) -> None:
         # The controller's default reducer produced real energy numbers (not
@@ -562,7 +642,9 @@ class TokenFallbackTests(ReduceTestCase):
         builder.write_metadata(rail_manifest=["mock"], workload_observed=workload_observed)
         return reduce_module.reduce_bundle(builder.path)
 
-    def test_prompt_text_only_falls_back_to_observed_counts(self) -> None:
+    def test_prompt_text_only_uses_runtime_observed_total(self) -> None:
+        # D-058: runtime observation is the authoritative denominator, not a
+        # fallback.
         summary = self.build(
             workload_profile=self.PROMPT_TEXT_PROFILE,
             workload_observed={"token_count": 20, "output_token_count": 4},
@@ -574,14 +656,85 @@ class TokenFallbackTests(ReduceTestCase):
             summary.measurement_quality.token_count_source, "runtime_observed"
         )
 
-    def test_config_supplied_counts_still_win(self) -> None:
-        # The example config pins prompt_tokens=32; 4 token events observed.
+    def test_runtime_observed_total_wins_over_configured_counts(self) -> None:
+        # D-058 (P2-040 FIX-4): the example config pins prompt_tokens=32 and 4
+        # token events are observed, but the runtime-observed total (999) is
+        # the only governed denominator.
         summary = self.build(
             workload_observed={"token_count": 999, "output_token_count": 4},
         )
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-        self.assertAlmostEqual(summary.energy_token_j, 25.0 / (32 + 4), places=9)
-        self.assertEqual(summary.measurement_quality.token_count_source, "config")
+        self.assertAlmostEqual(summary.energy_token_j, 25.0 / 999.0, places=9)
+        self.assertEqual(
+            summary.measurement_quality.token_count_source, "runtime_observed"
+        )
+
+    def test_server_usage_is_eligible_and_wins_over_chunk_event_count(self) -> None:
+        summary = self.build(
+            workload_observed={
+                "token_count": 20,
+                "output_token_count": 3,
+                "token_count_source": "server_usage",
+            },
+        )
+
+        self.assertAlmostEqual(summary.energy_token_j, 25.0 / 20.0, places=9)
+        self.assertAlmostEqual(summary.energy_output_token_j, 25.0 / 3.0, places=9)
+        self.assertAlmostEqual(summary.throughput_tokens_s, 3.0 / 6.0, places=9)
+        self.assertAlmostEqual(
+            summary.inter_token_throughput_tokens_s, 2.0 / 6.0, places=9
+        )
+        self.assertEqual(summary.measurement_quality.token_count_source, "server_usage")
+        self.assertEqual(summary.measurement_quality.token_counts_source, "server_usage")
+        self.assertEqual(
+            summary.window_evidence_precheck["per_token"],
+            {
+                "eligible": True,
+                "reasons": [],
+                "token_count_source": "server_usage",
+            },
+        )
+
+    def test_stream_chunk_fallback_nulls_per_token_metrics_and_is_ineligible(self) -> None:
+        summary = self.build(
+            workload_observed={
+                "token_count": 20,
+                "output_token_count": 4,
+                "token_count_source": "stream_chunk_fallback",
+            },
+        )
+
+        self.assertIsNone(summary.energy_token_j)
+        self.assertIsNone(summary.energy_output_token_j)
+        self.assertIsNone(summary.throughput_tokens_s)
+        self.assertIsNone(summary.inter_token_throughput_tokens_s)
+        self.assertEqual(
+            summary.measurement_quality.token_count_source,
+            "stream_chunk_fallback",
+        )
+        self.assertEqual(
+            summary.measurement_quality.token_counts_source,
+            "stream_chunk_fallback",
+        )
+        self.assertEqual(
+            summary.window_evidence_precheck["per_token"],
+            {
+                "eligible": False,
+                "reasons": ["stream_chunk_fallback"],
+                "token_count_source": "stream_chunk_fallback",
+            },
+        )
+
+    def test_config_plus_output_events_does_not_fabricate_total_denominator(self) -> None:
+        # P2-040 FIX-4 mutation test: configured prompt count plus output
+        # events must not fabricate a governed total without a
+        # runtime-observed total.
+        summary = self.build()
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNone(summary.energy_token_j)
+        self.assertIsNone(summary.measurement_quality.token_count_source)
+        # The per-output-token metric keeps its runtime-observed denominator.
+        self.assertAlmostEqual(summary.energy_output_token_j, 25.0 / 4.0, places=9)
 
     def test_neither_source_yields_none_unchanged(self) -> None:
         summary = self.build(workload_profile=self.PROMPT_TEXT_PROFILE)
@@ -626,6 +779,7 @@ class TokenFallbackTests(ReduceTestCase):
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         self.assertIsNone(summary.energy_output_token_j)
         self.assertIsNone(summary.throughput_tokens_s)
+        self.assertIsNone(summary.inter_token_throughput_tokens_s)
         self.assertEqual(summary.measurement_quality.token_counts_source, "config_fallback")
         self.assertEqual(summary.measurement_quality.token_count_source, "runtime_observed")
 
@@ -754,7 +908,7 @@ class SuiteReduceTests(ReduceTestCase):
         self.assertIn("block_a/level_1", {level.group_id for level in suite.levels})
         self.assertIn("block_b/level_1", {level.group_id for level in suite.levels})
 
-    def test_zero_window_suite_bundle_retains_degenerate_suite_metrics(self) -> None:
+    def test_zero_window_suite_bundle_is_structured_failure(self) -> None:
         bundle_path, _ = run_benchmark(
             load_suite_config("reduce-suite-zero-window"),
             self.runs_root,
@@ -771,20 +925,18 @@ class SuiteReduceTests(ReduceTestCase):
         write_jsonl(events_path, events)
 
         summary = reduce_module.reduce_bundle(bundle_path)
-        suite = summary.suite_metrics
 
-        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-        self.assertAlmostEqual(summary.gross_energy_j, 0.0, places=9)
-        self.assertIsNotNone(suite)
-        self.assertEqual(suite.executed_item_count, 5)
+        # P2-040 FIX-1: a zero-length measured window is a structured failure,
+        # never a succeeded suite summary with degenerate metrics.
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
         self.assertTrue(
-            all(item.energy_gross_j == 0.0 for item in suite.items),
-            [item.energy_gross_j for item in suite.items],
+            summary.failure_message.startswith(
+                "measured_run window duration must be > 0 s; got "
+            ),
+            summary.failure_message,
         )
-        self.assertTrue(
-            all(block.energy_gross_j == 0.0 for block in suite.blocks),
-            [block.energy_gross_j for block in suite.blocks],
-        )
+        self.assertIsNone(summary.suite_metrics)
 
     def test_single_prompt_reduction_has_null_suite_metrics(self) -> None:
         bundle_path, _ = run_benchmark(

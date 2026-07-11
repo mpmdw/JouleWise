@@ -172,6 +172,14 @@ metadata records `prompt_token_ids_unavailable_reason` with `source`,
 `endpoint`, `error_class`, and `message`; adapters must not synthesize token
 IDs for the D-033 v1 prompt-token hash.
 
+The streamed completion first requests
+`stream_options: {"include_usage": true}`. A terminal server usage count is
+recorded with `token_count_source=server_usage`; `tokens.jsonl` remains an SSE
+chunk-arrival artifact and each row records `record_unit=sse_chunk`. An
+explicit unknown-field rejection is retried once without `stream_options` and
+records `token_count_source=stream_chunk_fallback`. That fallback is not an
+eligible denominator for per-token metrics.
+
 ## Failure Taxonomy
 
 The controller remains the only `FailureReason` to run-status mapper. Remote
@@ -184,6 +192,7 @@ worker and transport code report the following D-012 strings:
 | vLLM launcher missing, `ModuleNotFoundError`, or `ImportError` during readiness | `unsupported` | `runtime_unavailable` |
 | CUDA/vLLM out of memory while loading or running | `unsupported` | `did_not_fit` |
 | Runner crash, malformed or missing `status.json`, malformed task JSON, invalid protocol version, missing required field | `failed` | `unknown_error` |
+| A worker-started process (vLLM server or nvidia-smi sampler) remains alive after its stop/cleanup operation | `failed` | `cleanup_failed` |
 | Task type or operation not known to this worker build | `unsupported` | `unsupported_workload` |
 
 SSH authentication details stay in message/metadata, for example
@@ -257,6 +266,14 @@ Each task's `run_id` derives isolated per-run directories:
 
 There is no `pending-run-id` fallback. The bundle-created run id carried in
 task JSON is authoritative.
+
+After artifact collection and status parsing, the client removes its local
+collection staging directory and the remote task JSON/artifacts directory. A
+final successful runtime cleanup removes the run-scoped directory. Every
+attempt is accumulated under `metadata.extra.node_cleanup`; surviving files or
+directories populate measurement quality `remote_cleanup_failed` but do not
+demote a successful run. Process survival is distinct and uses the
+`cleanup_failed` failure above.
 
 ## nvidia-smi Timestamp And CSV Rules
 

@@ -20,16 +20,40 @@ The source of truth for a run is the run bundle:
 
 ## Run Lifecycle
 
+Before a campaign creates a run bundle, the operator runs the read-only doctor
+preflight described in `docs/contracts/doctor_preflight.md`. Schema-0.1 parsing
+continues to warn-and-ignore unknown keys for compatibility, but campaign
+execution fails before the first bundle when those warnings have not been
+explicitly acknowledged. The terminal campaign-verdict JSONL row records the
+exact warning set and acknowledgement; acknowledgement does not alter config
+bytes, collection evidence, claim readiness, or claim outcomes.
+
+Doctor also exposes architecture/version, configured model and tokenizer
+identity, requested sampler fields, inspect-only powermetrics privilege policy,
+thermal pressure, backup capacity, and quiet-machine warnings. These are
+preflight observations, not substitutes for per-bundle provenance or live
+measurement gates. In particular, doctor never starts powermetrics and never
+certifies that a machine is quiet.
+
 1. Validate config.
 2. Create run directory.
 3. Collect device metadata.
 4. Measure idle baseline.
 5. Warm up runtime.
-6. Start measured telemetry.
-7. Run workload.
-8. Stop measured telemetry.
-9. Cleanup runtime.
-10. Reduce raw artifacts into summary metrics.
+6. Wait the configured post-warmup settling interval
+   (`sampling.warmup_seconds`; zero means no wait).
+7. Start measured telemetry.
+8. Run workload.
+9. Stop measured telemetry.
+10. Cleanup runtime.
+11. Reduce raw artifacts into summary metrics.
+
+The post-warmup settling interval begins only after all active
+`workload_profile.warmup_runs` calls and their clock-alignment captures have
+completed. It ends before the measured-run stage and sampling-active markers,
+so it is never integrated into the measured window. Controller events record
+the configured value on the warmup completion event and the runtime log records
+positive waits.
 
 ## Idle Subtraction
 
@@ -76,6 +100,10 @@ Each run summary should include:
 - Idle variance.
 - Thermal drift.
 - Telemetry source.
+- Local runtime cleanup result (`runtime_cleanup_ok`: true/false/null). Cleanup
+  occurs after the measured window, so failure is a quality concern for the
+  following repetition and does not retroactively change current-run status or
+  energy.
 - Wall-meter comparison delta, when available.
 
 ## Phase Labels
@@ -187,7 +215,7 @@ Per decisions D-005 and D-014:
 ## Statistical Protocol
 
 Per decision D-014 (draft to be ratified against observed variance at
-Phase 4 Stage 4.0), amended 2026-07-09 pending ratification (C-023 S3):
+Phase 4 Stage 4.0), amended 2026-07-09 (C-023 S3; amendments ratified by D-053):
 
 - Repetitions: n >= 5 for headline comparisons; n >= 3 minimum elsewhere;
   the n is recorded per experiment.
@@ -197,7 +225,7 @@ Phase 4 Stage 4.0), amended 2026-07-09 pending ratification (C-023 S3):
 - Outliers: flagged by modified z-score on MAD > 3.5; never silently
   dropped; reported with-and-without only when a physical cause is
   identified and documented; otherwise kept in headline numbers. Amendment
-  2026-07-09 (pending ratification, C-023 S3): at n <= 10, reports also run
+  2026-07-09 (C-023 S3, ratified by D-053): at n <= 10, reports also run
   a leave-one-out influence check on every claim-bearing contrast. The
   report lists the full-data estimate/CI/verdict and each leave-one-out
   estimate/CI/verdict. An omitted point is influential if it changes the
@@ -206,7 +234,7 @@ Phase 4 Stage 4.0), amended 2026-07-09 pending ratification (C-023 S3):
   claims, otherwise the floor gate. Influential points are reported as
   sensitivity evidence, not silently removed.
 - Figures always show raw points alongside aggregates.
-- Amendment 2026-07-09 (pending ratification, C-023 S3): differences are
+- Amendment 2026-07-09 (C-023 S3, ratified by D-053): differences are
   claimed from the confidence interval of the paired/block difference, or
   from the named model contrast, not by visual separation of marginal
   intervals. Where execution order was randomized, the analysis includes a

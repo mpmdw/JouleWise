@@ -227,11 +227,16 @@ class NodeClientTests(unittest.TestCase):
             self.assertIsNotNone(result.offset_estimate_s)
             self.assertIsNotNone(result.offset_bound_s)
             self.assertIsNotNone(transport.clock_alignment)
-            self.assertIsNotNone(result.artifacts_path)
-            assert result.artifacts_path is not None
-            self.assertTrue((result.artifacts_path / "status.json").exists())
-            self.assertTrue((result.artifacts_path / "worker.log").exists())
+            self.assertIsNone(result.artifacts_path)
+            self.assertIn("status.json", result.artifacts)
+            self.assertIn("worker.log", result.artifacts)
             self.assertEqual(result.raw_status["artifacts"]["status_json"], "status.json")
+            cleanup = client.cleanup_report()
+            self.assertTrue(cleanup)
+            self.assertTrue(all(row["removed"] for row in cleanup), cleanup)
+            local_rows = [row for row in cleanup if row["scope"] == "local"]
+            self.assertEqual(len(local_rows), 1)
+            self.assertFalse(Path(local_rows[0]["path"]).exists())
 
     def test_run_task_transport_failures_are_structured(self) -> None:
         cases = [

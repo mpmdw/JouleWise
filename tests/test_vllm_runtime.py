@@ -247,6 +247,7 @@ class VllmRuntimeAdapterTests(unittest.TestCase):
             self.assertEqual(result.output_artifacts["response.txt"], "AB")
             self.assertEqual(result.output_token_count, 2)
             self.assertEqual(result.token_count, 5)
+            self.assertEqual(result.metadata["token_count_source"], "stream_chunk_fallback")
             prompt = result.workload_provenance["prompt"]
             self.assertEqual(prompt["realized_token_count"], 3)
             self.assertEqual(
@@ -274,6 +275,27 @@ class VllmRuntimeAdapterTests(unittest.TestCase):
             self.assertEqual(task["workload"]["sampling_params"]["top_p"], 1.0)
             self.assertEqual(task["workload"]["sampling_params"]["seed"], 0)
             self.assertEqual(task["workload"]["sampling_params"]["max_tokens"], 3)
+
+    def test_server_usage_count_wins_over_coalesced_stream_chunk_count(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            task = runtime_artifacts(root / "artifacts")
+            assert task.raw_status is not None
+            task.raw_status["metadata"].update(
+                {
+                    "emitted_tokens": 3,
+                    "stream_chunk_count": 2,
+                    "token_count_source": "server_usage",
+                }
+            )
+            adapter = VllmRuntimeAdapter(FakeClock(), FakeClient([task]))  # type: ignore[arg-type]
+
+            result = adapter.run_workload(make_config())
+
+            self.assertEqual(result.output_token_count, 3)
+            self.assertEqual(result.token_count, 6)
+            self.assertEqual(result.metadata["token_count_source"], "server_usage")
+            self.assertEqual(result.metadata["stream_chunk_count"], 2)
 
     def test_run_workload_failure_raises_adapter_failure(self) -> None:
         adapter = VllmRuntimeAdapter(

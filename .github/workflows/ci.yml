@@ -17,17 +17,62 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Compile Python sources
+        run: python -m compileall -q joulewise tests
       - name: Unit tests (stdlib core only, per D-009/D-017)
         run: python -m unittest discover -s tests -v
       - name: CLI smoke - validate example configs
         run: |
           python -m joulewise validate-config configs/examples/mock_local.json
           python -m joulewise validate-config configs/examples/mac_mlx_local.json
-      - name: Mock end-to-end run + validate-bundle (slice 2E, D-017)
+      - name: Strict mock run, validate, reduce, and revalidate
         run: |
           set -euo pipefail
           line=$(python -m joulewise run configs/examples/mock_local.json --runs-dir ci-runs)
           echo "$line"
           bundle=${line#bundle: }
           bundle=${bundle%% *}
-          python -m joulewise validate-bundle "$bundle"
+          python -m joulewise validate-bundle --strict "$bundle"
+          python -m joulewise reduce "$bundle"
+          python -m joulewise validate-bundle --strict "$bundle"
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install build frontend
+        run: python -m pip install build
+      - name: Build wheel and source distribution
+        run: python -m build
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/
+          if-no-files-found: error
+
+  installed-wheel:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-distributions
+          path: dist
+      - name: Install wheel in a clean environment and smoke outside the repo
+        run: |
+          set -euo pipefail
+          python -m venv "$RUNNER_TEMP/joulewise-venv"
+          source "$RUNNER_TEMP/joulewise-venv/bin/activate"
+          wheel=$(find "$GITHUB_WORKSPACE/dist" -maxdepth 1 -type f -name '*.whl' -print -quit)
+          test -n "$wheel"
+          python -m pip install --no-deps "$wheel"
+          cd "$RUNNER_TEMP"
+          python -m joulewise --help

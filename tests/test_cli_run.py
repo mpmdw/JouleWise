@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import re
 import subprocess
 import tempfile
@@ -20,10 +21,16 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from joulewise.adapters.powermetrics import RAW_SAMPLES_NAME
+from joulewise.adapters.powermetrics import (
+    RAW_IDLE_NAME,
+    RAW_SAMPLES_NAME,
+    parse_powermetrics_records,
+)
 from joulewise.clock import FakeClock
 from joulewise.cli import _STRICT_LEGACY_BUNDLE_IDENTITIES, main, validate_bundle
+from joulewise.bundle_read import Window
 from joulewise.controller import run_benchmark
+from joulewise.reduce import reduce_bundle
 from joulewise.schemas import BenchmarkConfig, RunStatus
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -399,12 +406,52 @@ class StrictValidateTests(CliRunTestCase):
         self.assertEqual(exit_code, 0)
         return self.bundle_path_from_line(out.splitlines()[0])
 
-    def mark_allowlisted_legacy_identity(self, bundle: Path) -> None:
+    def mark_allowlisted_legacy_identity(
+        self, bundle: Path, identity: tuple[str, str] = LEGACY_ALLOWLIST_PAIR
+    ) -> None:
         metadata = json.loads((bundle / "metadata.json").read_text())
-        metadata["run_id"], metadata["config_sha256"] = LEGACY_ALLOWLIST_PAIR
+        metadata["run_id"], metadata["config_sha256"] = identity
         (bundle / "metadata.json").write_text(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n"
         )
+
+    def make_synchronized_idle_metadata_mismatch_bundle(
+        self, run_id: str
+    ) -> Path:
+        """Build a stored summary synchronized to mismatching idle metadata."""
+        bundle = self.make_bundle(run_id)
+        raw = POWERMETRICS_FIXTURE.read_bytes()
+        (bundle / "raw" / RAW_IDLE_NAME).write_bytes(raw)
+        records = parse_powermetrics_records(raw)
+        powers_w = [record.combined_power_w for record in records]
+        mean_w = math.fsum(powers_w) / len(powers_w)
+        stddev_w = math.sqrt(
+            math.fsum((power_w - mean_w) ** 2 for power_w in powers_w)
+            / (len(powers_w) - 1)
+        )
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["idle_baseline"].update(
+            {
+                "power_w_mean": mean_w,
+                "power_w_stddev": stddev_w,
+                "duration_s": math.fsum(
+                    record.elapsed_ns / 1_000_000_000.0 for record in records
+                ),
+                # Deliberately disagree with the five-record raw artifact.
+                "sample_count": len(records) + 1,
+                "telemetry_backend": "powermetrics",
+            }
+        )
+        (bundle / "metadata.json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+        )
+        # Synchronize every stored governed field to the mismatching metadata;
+        # strict must still reject based on the fresh raw derivation itself.
+        summary = reduce_bundle(bundle).to_dict()
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        return bundle
 
     def test_fresh_succeeded_bundle_passes_strict(self) -> None:
         bundle = self.make_bundle("strict-clean")
@@ -413,21 +460,216 @@ class StrictValidateTests(CliRunTestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("valid bundle:", out)
 
-    def test_missing_p2029_additive_uncertainty_fields_pass_strict(self) -> None:
+    def test_negative_succeeded_measured_window_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-negative-window")
+        # A negative interpreted window cannot be serialized by the normal
+        # ordered-event writer, so pin strict's independent guard at its reader
+        # boundary while the reducer fixture covers the on-disk failure path.
+        with patch(
+            "joulewise.cli.BundleReader.measured_window",
+            return_value=Window(start_s=2.0, end_s=1.0),
+        ):
+            problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("measured window duration must be > 0 s" in p for p in problems),
+            problems,
+        )
+
+    def test_legacy_dispatch_tolerates_governed_additive_absence(self) -> None:
         bundle = self.make_bundle("strict-p2029-additive-absent")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary.pop("summary_provenance")
         for key in (
             "energy_uncertainty_status",
+            "idle_mean_uncertainty",
             "energy_variance_terms_j2",
             "energy_bound_terms_j",
-            "claim_eligibility",
+            "window_evidence_precheck",
+            "inter_token_throughput_tokens_s",
         ):
             summary.pop(key)
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
+        self.mark_allowlisted_legacy_identity(bundle)
+
+        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+            self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_reducer_0_4_2_dispatch_requires_exact_summary(self) -> None:
+        bundle = self.make_bundle("strict-v042-exact")
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_reducer_0_4_2_missing_new_metric_fails_exact_summary(self) -> None:
+        bundle = self.make_bundle("strict-v042-new-metric-absent")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary.pop("inter_token_throughput_tokens_s")
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("inter_token_throughput_tokens_s" in problem for problem in problems),
+            problems,
+        )
+
+    def test_reducer_0_4_1_tolerates_only_new_metric_absence(self) -> None:
+        bundle = self.make_bundle("strict-v041-new-metric-absent")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.4.1"
+        summary.pop("inter_token_throughput_tokens_s")
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
 
         self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_reducer_0_4_1_stored_new_metric_remains_exact_claim(self) -> None:
+        bundle = self.make_bundle("strict-v041-new-metric-wrong")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.4.1"
+        summary["inter_token_throughput_tokens_s"] += 1.0
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("inter_token_throughput_tokens_s" in problem for problem in problems),
+            problems,
+        )
+
+    def test_current_era_reducer_0_4_0_requires_re_reduction(self) -> None:
+        bundle = self.make_bundle("strict-v040-rejected")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.4.0"
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        self.assertIn(
+            "strict: unsupported reducer version; re-reduction required",
+            validate_bundle(bundle, strict=True),
+        )
+
+    def test_current_era_reducer_0_3_0_requires_re_reduction(self) -> None:
+        bundle = self.make_bundle("strict-v030-rejected")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.3.0"
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        self.assertIn(
+            "strict: unsupported reducer version; re-reduction required",
+            validate_bundle(bundle, strict=True),
+        )
+
+    def test_current_era_reducer_0_3_1_requires_re_reduction(self) -> None:
+        bundle = self.make_bundle("strict-v031-rejected")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.3.1"
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        self.assertIn(
+            "strict: unsupported reducer version; re-reduction required",
+            validate_bundle(bundle, strict=True),
+        )
+
+    def test_reducer_0_4_2_old_field_only_fails_exact_comparison(self) -> None:
+        bundle = self.make_bundle("strict-v042-old-field")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["claim_eligibility"] = summary.pop("window_evidence_precheck")
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("claim_eligibility" in problem for problem in problems),
+            problems,
+        )
+        self.assertTrue(
+            any("window_evidence_precheck" in problem for problem in problems),
+            problems,
+        )
+
+    def test_reducer_0_2_x_dispatch_requires_re_reduction(self) -> None:
+        bundle = self.make_bundle("strict-v02-rejected")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.2.9"
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.assertIn(
+            "strict: unsupported reducer version; re-reduction required",
+            validate_bundle(bundle, strict=True),
+        )
+
+    def test_exact_reducer_0_2_0_is_rejected(self) -> None:
+        bundle = self.make_bundle("strict-v020-rejected")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.2.0"
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.assertIn(
+            "strict: unsupported reducer version; re-reduction required",
+            validate_bundle(bundle, strict=True),
+        )
+
+    def test_missing_null_and_non_string_reducer_versions_are_rejected(self) -> None:
+        for value in ("missing", None, ["0.4.0"]):
+            with self.subTest(value=value):
+                bundle = self.make_bundle(f"strict-bad-version-{str(value)}")
+                summary = json.loads((bundle / "summary_metrics.json").read_text())
+                if value == "missing":
+                    del summary["summary_provenance"]["reducer_version"]
+                else:
+                    summary["summary_provenance"]["reducer_version"] = value
+                (bundle / "summary_metrics.json").write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                )
+                self.assertIn(
+                    "strict: unsupported reducer version; re-reduction required",
+                    validate_bundle(bundle, strict=True),
+                )
+
+    def test_unknown_reducer_version_dispatch_requires_re_reduction(self) -> None:
+        bundle = self.make_bundle("strict-vunknown-rejected")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "future"
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.assertIn(
+            "strict: unsupported reducer version; re-reduction required",
+            validate_bundle(bundle, strict=True),
+        )
+
+    def test_claimed_0_4_2_missing_governed_field_fails_exact_dispatch(self) -> None:
+        bundle = self.make_bundle("strict-v042-governed-absence")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["window_evidence_precheck"]["gross_request"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any(
+                "window_evidence_precheck.gross_request" in problem
+                for problem in problems
+            ),
+            problems,
+        )
 
     def test_mock_suite_bundle_passes_strict(self) -> None:
         exit_code, stdout, stderr = self.run_verb(
@@ -548,6 +790,8 @@ class StrictValidateTests(CliRunTestCase):
         del summary["idle_baseline"]["gpu_idle_ratio_min"]
         del summary["idle_baseline"]["idle_window_suspect"]
         del summary["measurement_quality"]["idle_window_suspect"]
+        del summary["measurement_quality"]["remote_cleanup_failed"]
+        del summary["measurement_quality"]["runtime_cleanup_ok"]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
@@ -570,11 +814,40 @@ class StrictValidateTests(CliRunTestCase):
             problems,
         )
 
-    def test_allowlisted_legacy_bundle_missing_provenance_passes_strict(self) -> None:
-        self.assertIn(LEGACY_ALLOWLIST_PAIR, _STRICT_LEGACY_BUNDLE_IDENTITIES)
-        bundle = self.make_bundle("strict-allowlisted-legacy-provenance")
+    def test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics(self) -> None:
+        self.assertEqual(len(_STRICT_LEGACY_BUNDLE_IDENTITIES), 6)
+        for index, identity in enumerate(sorted(_STRICT_LEGACY_BUNDLE_IDENTITIES)):
+            with self.subTest(identity=identity):
+                bundle = self.make_bundle(f"strict-allowlisted-legacy-{index}")
+                summary = json.loads((bundle / "summary_metrics.json").read_text())
+                summary.pop("summary_provenance")
+                summary.pop("idle_mean_uncertainty")
+                (bundle / "summary_metrics.json").write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                )
+                metadata = json.loads((bundle / "metadata.json").read_text())
+                metadata.pop("workload_provenance")
+                (bundle / "metadata.json").write_text(
+                    json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+                )
+                self.mark_allowlisted_legacy_identity(bundle, identity)
+
+                with patch(
+                    "joulewise.bundle_read._check_config_sha256", return_value=[]
+                ):
+                    self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_allowlisted_legacy_fresh_idle_metadata_mismatch_fails_strict(self) -> None:
+        bundle = self.make_synchronized_idle_metadata_mismatch_bundle(
+            "strict-legacy-fresh-idle-mismatch"
+        )
         summary = json.loads((bundle / "summary_metrics.json").read_text())
+        self.assertEqual(
+            summary["idle_mean_uncertainty"]["reason_codes"],
+            ["idle_trace_span_below_three_bandwidths", "idle_metadata_mismatch"],
+        )
         summary.pop("summary_provenance")
+        summary.pop("idle_mean_uncertainty")
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
@@ -586,13 +859,129 @@ class StrictValidateTests(CliRunTestCase):
         self.mark_allowlisted_legacy_identity(bundle)
 
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+            problems = validate_bundle(bundle, strict=True)
+
+        self.assertEqual(
+            problems,
+            [
+                "strict: raw idle trace does not match metadata.idle_baseline "
+                "(idle_metadata_mismatch)"
+            ],
+        )
+
+    def test_current_idle_metadata_mismatch_diagnostic_is_deduplicated(self) -> None:
+        bundle = self.make_synchronized_idle_metadata_mismatch_bundle(
+            "strict-current-fresh-idle-mismatch"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertEqual(
+            problems,
+            [
+                "strict: raw idle trace does not match metadata.idle_baseline "
+                "(idle_metadata_mismatch)"
+            ],
+        )
+
+    def test_idle_metadata_mismatch_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-idle-metadata-mismatch")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["idle_mean_uncertainty"]["reason_codes"] = [
+            "idle_metadata_mismatch"
+        ]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("idle_metadata_mismatch" in problem for problem in problems),
+            problems,
+        )
+
+    def test_allowlisted_legacy_present_null_provenance_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-legacy-present-null-provenance")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"] = None
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.mark_allowlisted_legacy_identity(bundle)
+        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+            problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(any("missing or not an object" in p for p in problems), problems)
+
+    def test_allowlisted_legacy_present_non_object_provenance_fails_strict(self) -> None:
+        for value in ("legacy", ["legacy"]):
+            with self.subTest(value=value):
+                bundle = self.make_bundle(f"strict-legacy-present-{type(value).__name__}")
+                summary = json.loads((bundle / "summary_metrics.json").read_text())
+                summary["summary_provenance"] = value
+                (bundle / "summary_metrics.json").write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                )
+                self.mark_allowlisted_legacy_identity(bundle)
+                with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+                    problems = validate_bundle(bundle, strict=True)
+                self.assertTrue(any("missing or not an object" in p for p in problems), problems)
+
+    def test_allowlisted_legacy_recorded_value_mutations_fail_strict(self) -> None:
+        mutations = (
+            ("energy_token_j", lambda s: s.__setitem__("energy_token_j", 999.0)),
+            (
+                "measurement_quality.token_count_source",
+                lambda s: s["measurement_quality"].__setitem__(
+                    "token_count_source", "edited"
+                ),
+            ),
+            ("gross_energy_j", lambda s: s.__setitem__("gross_energy_j", 999.0)),
+        )
+        for label, mutate in mutations:
+            with self.subTest(field=label):
+                bundle = self.make_bundle(f"strict-legacy-mutation-{label}")
+                summary = json.loads((bundle / "summary_metrics.json").read_text())
+                del summary["summary_provenance"]
+                mutate(summary)
+                (bundle / "summary_metrics.json").write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                )
+                self.mark_allowlisted_legacy_identity(bundle)
+                with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+                    problems = validate_bundle(bundle, strict=True)
+                self.assertTrue(any(label in p for p in problems), problems)
+
+    def test_current_bundle_spoofed_as_legacy_with_absent_provenance_passes(self) -> None:
+        """Pin the adjudicated identity-classification boundary (FIX-B4)."""
+        bundle = self.make_bundle("strict-mixed-era-spoof")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["summary_provenance"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.mark_allowlisted_legacy_identity(bundle)
+        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
             self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_new_era_summary_missing_honesty_fields_fails_strict(self) -> None:
-        bundle = self.make_bundle("strict-new-era-missing-honesty")
+    def test_reducer_0_4_1_missing_either_added_field_fails_strict(self) -> None:
+        for field in ("remote_cleanup_failed", "runtime_cleanup_ok"):
+            with self.subTest(field=field):
+                bundle = self.make_bundle("strict-v041-missing-" + field)
+                summary = json.loads((bundle / "summary_metrics.json").read_text())
+                del summary["measurement_quality"][field]
+                (bundle / "summary_metrics.json").write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                )
+
+                problems = validate_bundle(bundle, strict=True)
+
+                self.assertEqual(len(problems), 1)
+                self.assertIn("measurement_quality." + field, problems[0])
+
+    def test_tampered_reducer_0_4_1_summary_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-v041-tampered")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
-        del summary["measurement_quality"]["token_counts_source"]
-        del summary["measurement_quality"]["phase_identifiability"]
+        summary["energy_request_j"] = 999999.0
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
@@ -600,8 +989,7 @@ class StrictValidateTests(CliRunTestCase):
         problems = validate_bundle(bundle, strict=True)
 
         self.assertEqual(len(problems), 1)
-        self.assertIn("measurement_quality.token_counts_source", problems[0])
-        self.assertIn("measurement_quality.phase_identifiability", problems[0])
+        self.assertIn("energy_request_j", problems[0])
 
     def test_legacy_summary_missing_honesty_fields_keeps_strict_tolerance(self) -> None:
         bundle = self.make_bundle("strict-legacy-missing-honesty")
@@ -609,6 +997,8 @@ class StrictValidateTests(CliRunTestCase):
         del summary["summary_provenance"]
         del summary["measurement_quality"]["token_counts_source"]
         del summary["measurement_quality"]["phase_identifiability"]
+        del summary["measurement_quality"]["remote_cleanup_failed"]
+        del summary["measurement_quality"]["runtime_cleanup_ok"]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
@@ -779,7 +1169,7 @@ class StrictValidateTests(CliRunTestCase):
         )
         self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_raw_to_trace_subcheck_skips_non_powermetrics_bundle(self) -> None:
+    def test_raw_to_trace_mock_backend_has_explicit_strict_exemption(self) -> None:
         bundle = self.make_bundle("strict-non-pm-skip")
         self.assertFalse((bundle / "raw" / RAW_SAMPLES_NAME).exists())
         rows = self._trace_rows(bundle)
@@ -789,6 +1179,26 @@ class StrictValidateTests(CliRunTestCase):
         )
         problems = validate_bundle(bundle, strict=True)
         self.assertFalse(any("raw-to-trace" in p for p in problems), problems)
+
+    def test_raw_to_trace_unregistered_production_backend_hard_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-unregistered-production")
+        config = json.loads((bundle / "config.json").read_text(encoding="utf-8"))
+        config["hardware_target"]["telemetry_backend"] = "jetson_rails"
+        (bundle / "config.json").write_text(
+            json.dumps(config, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any(
+                problem
+                == "strict: raw-to-trace: no verifier registered for production backend jetson_rails"
+                for problem in problems
+            ),
+            problems,
+        )
 
     def test_new_summary_missing_workload_provenance_fails_strict(self) -> None:
         bundle = self.make_bundle("strict-missing-workload-provenance")

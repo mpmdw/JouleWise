@@ -37,6 +37,7 @@ FAILURE_FORMAT_UNAVAILABLE = "format_unavailable"
 FAILURE_PERMISSION_DENIED = "permission_denied"
 FAILURE_TRANSPORT_UNAVAILABLE = "transport_unavailable"
 FAILURE_UNSUPPORTED_WORKLOAD = "unsupported_workload"
+FAILURE_CLEANUP_FAILED = "cleanup_failed"
 FAILURE_UNKNOWN_ERROR = "unknown_error"
 
 STATUS_JSON = "status.json"
@@ -101,7 +102,18 @@ class WorkerValidationError(ValueError):
 class VllmHttpError(RuntimeError):
     """HTTP error carrying vLLM response body text for classification."""
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int = 500,
+        path: str = "",
+        body: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = int(status_code)
+        self.path = path
+        self.body = message if body is None else body
 
 
 def handle_vllm_prepare(
@@ -314,6 +326,7 @@ def handle_vllm_run_workload(
         "model": server.get("served_model_name"),
         "prompt": prompt,
         "stream": True,
+        "stream_options": {"include_usage": True},
     }
     request_payload.update(sampling_params)
     metadata: Dict[str, Any] = {
@@ -323,6 +336,8 @@ def handle_vllm_run_workload(
         "sampling_params": sampling_params,
         "requested_output_tokens": max_tokens,
         "phase_boundary_method": "first_stream_chunk",
+        "include_usage_requested": True,
+        "token_timestamp_record_unit": "sse_chunk",
     }
     try:
         prompt_token_ids = _vllm_tokenize_prompt(
@@ -344,6 +359,8 @@ def handle_vllm_run_workload(
     events: List[Dict[str, Any]] = []
     token_count = 0
     text_parts: List[str] = []
+    stream_usage: Dict[str, Any] = {}
+    include_usage_rejected = False
 
     try:
         _append_runtime_event(
@@ -358,41 +375,74 @@ def handle_vllm_run_workload(
             },
         )
         with open(tokens_path, "w", encoding="utf-8") as tokens_handle:
-            for piece in _vllm_stream_completion(
-                int(server["port"]),
-                VLLM_COMPLETIONS_PATH,
-                request_payload,
-                timeout_s=VLLM_RUN_TIMEOUT_S,
-            ):
-                timestamp_s = time.time()
-                if token_count == 0:
-                    _append_runtime_event(
-                        events,
-                        "phase_end",
-                        "prefill",
-                        "vLLM prefill completed",
-                        {"phase_boundary_method": "first_stream_chunk"},
-                        timestamp_s=timestamp_s,
-                    )
-                    _append_runtime_event(
-                        events,
-                        "phase_start",
-                        "decode",
-                        "vLLM decode started",
-                        {
-                            "phase_boundary_method": "first_stream_chunk",
-                            "requested_output_tokens": max_tokens,
-                        },
-                        timestamp_s=timestamp_s,
-                    )
-                text_parts.append(piece)
-                token_record = {
-                    "index": token_count,
-                    "timestamp_s": timestamp_s,
-                    "text": piece,
-                }
-                tokens_handle.write(json.dumps(token_record, sort_keys=True) + "\n")
-                token_count += 1
+            while True:
+                try:
+                    for piece in _vllm_stream_completion(
+                        int(server["port"]),
+                        VLLM_COMPLETIONS_PATH,
+                        request_payload,
+                        timeout_s=VLLM_RUN_TIMEOUT_S,
+                        usage_out=stream_usage,
+                    ):
+                        timestamp_s = time.time()
+                        if token_count == 0:
+                            _append_runtime_event(
+                                events,
+                                "phase_end",
+                                "prefill",
+                                "vLLM prefill completed",
+                                {"phase_boundary_method": "first_stream_chunk"},
+                                timestamp_s=timestamp_s,
+                            )
+                            _append_runtime_event(
+                                events,
+                                "phase_start",
+                                "decode",
+                                "vLLM decode started",
+                                {
+                                    "phase_boundary_method": "first_stream_chunk",
+                                    "requested_output_tokens": max_tokens,
+                                },
+                                timestamp_s=timestamp_s,
+                            )
+                        text_parts.append(piece)
+                        token_record = {
+                            "index": token_count,
+                            "timestamp_s": timestamp_s,
+                            "text": piece,
+                            "record_unit": "sse_chunk",
+                        }
+                        tokens_handle.write(json.dumps(token_record, sort_keys=True) + "\n")
+                        token_count += 1
+                    break
+                except VllmHttpError as exc:
+                    if (
+                        token_count == 0
+                        and not include_usage_rejected
+                        and _is_include_usage_unknown_field_rejection(exc)
+                    ):
+                        include_usage_rejected = True
+                        request_payload = dict(request_payload)
+                        request_payload.pop("stream_options", None)
+                        metadata["include_usage_rejected"] = {
+                            "status_code": exc.status_code,
+                            "path": exc.path,
+                            "body": exc.body,
+                        }
+                        metadata["include_usage_retry_without_field"] = True
+                        stream_usage.clear()
+                        log("vLLM rejected stream_options.include_usage; retrying without it")
+                        continue
+                    raise
+        usage_completion_tokens = _nonnegative_int_or_none(
+            stream_usage.get("completion_tokens")
+        )
+        if usage_completion_tokens is not None and not include_usage_rejected:
+            emitted_tokens = usage_completion_tokens
+            token_count_source = "server_usage"
+        else:
+            emitted_tokens = token_count
+            token_count_source = "stream_chunk_fallback"
         if token_count == 0:
             timestamp_s = time.time()
             _append_runtime_event(
@@ -421,7 +471,9 @@ def handle_vllm_run_workload(
             "vLLM decode completed",
             {
                 "phase_boundary_method": "first_stream_chunk",
-                "emitted_tokens": token_count,
+                "emitted_tokens": emitted_tokens,
+                "stream_chunk_count": token_count,
+                "token_count_source": token_count_source,
                 "requested_output_tokens": max_tokens,
             },
         )
@@ -448,8 +500,15 @@ def handle_vllm_run_workload(
             metadata,
         )
 
-    metadata["emitted_tokens"] = token_count
-    log("vLLM workload completed tokens=%s" % token_count)
+    metadata["emitted_tokens"] = emitted_tokens
+    metadata["stream_chunk_count"] = token_count
+    metadata["token_count_source"] = token_count_source
+    if usage_completion_tokens is not None:
+        metadata["server_usage_completion_tokens"] = usage_completion_tokens
+    log(
+        "vLLM workload completed emitted_tokens=%s stream_chunks=%s source=%s"
+        % (emitted_tokens, token_count, token_count_source)
+    )
     return (
         STATUS_SUCCEEDED,
         None,
@@ -505,7 +564,16 @@ def handle_vllm_cleanup(
             {},
             metadata,
         )
-    _terminate_vllm_pid(pid, metadata)
+    metadata["process_survived"] = _terminate_vllm_pid(pid_payload, metadata)
+    if metadata["process_survived"]:
+        log("vLLM cleanup failed; pid=%s survived" % pid)
+        return (
+            STATUS_FAILED,
+            FAILURE_CLEANUP_FAILED,
+            "vLLM server process survived cleanup (pid=%s)" % pid,
+            {},
+            metadata,
+        )
     _remove_if_exists(pid_path)
     log("vLLM cleanup requested pid=%s" % pid)
     return (
@@ -659,8 +727,17 @@ def handle_nvidia_smi_stop_sampling(
             artifacts,
             metadata,
         )
-    _terminate_pid(pid, metadata)
+    metadata["process_survived"] = _terminate_pid(pid_payload, metadata)
     log("nvidia-smi sampler stop requested pid=%s" % pid)
+
+    if metadata["process_survived"]:
+        return (
+            STATUS_FAILED,
+            FAILURE_CLEANUP_FAILED,
+            "nvidia-smi sampler process survived stop_sampling (pid=%s)" % pid,
+            artifacts,
+            metadata,
+        )
 
     if not os.path.exists(raw_path):
         artifacts.update(_copy_pidfile_artifact(pid_path, artifacts_dir))
@@ -684,6 +761,7 @@ def handle_nvidia_smi_stop_sampling(
             artifacts,
             metadata,
         )
+    _remove_if_exists(pid_path)
     return (
         STATUS_SUCCEEDED,
         None,
@@ -722,14 +800,17 @@ def handle_nvidia_smi_measure_idle(
                 stderr=stderr_handle,
                 stdin=subprocess.DEVNULL,
             )
-            deadline = time.monotonic() + max(0.0, idle_seconds)
-            while time.monotonic() < deadline:
-                if process.poll() is not None:
-                    break
-                remaining_s = deadline - time.monotonic()
-                if remaining_s <= 0:
-                    break
-                time.sleep(min(0.05, remaining_s))
+            ready = _wait_for_nvidia_smi_csv(process, raw_path)
+            metadata["readiness"] = ready
+            if ready.get("ok"):
+                deadline = time.monotonic() + max(0.0, idle_seconds)
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        break
+                    remaining_s = deadline - time.monotonic()
+                    if remaining_s <= 0:
+                        break
+                    time.sleep(min(0.05, remaining_s))
             _terminate_process_object(process)
     except FileNotFoundError as exc:
         _remove_if_exists(raw_path)
@@ -749,12 +830,15 @@ def handle_nvidia_smi_measure_idle(
             metadata,
         )
 
-    if not _csv_file_has_parseable_row(raw_path):
+    if not metadata.get("readiness", {}).get("ok"):
         metadata["stderr_tail"] = _read_tail(stderr_path)
         return (
             STATUS_UNSUPPORTED,
             FAILURE_TELEMETRY_UNAVAILABLE,
-            "nvidia-smi idle capture did not produce a parseable CSV row",
+            metadata.get("readiness", {}).get(
+                "message",
+                "nvidia-smi idle capture did not produce a parseable CSV row",
+            ),
             {"nvidia_smi_idle_csv": NVIDIA_SMI_IDLE_CSV},
             metadata,
         )
@@ -938,7 +1022,12 @@ def _vllm_json_post(port: int, path: str, payload: Dict[str, Any]) -> Dict[str, 
             body = response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        raise VllmHttpError("HTTP %s from vLLM %s: %s" % (exc.code, path, body)) from exc
+        raise VllmHttpError(
+            "HTTP %s from vLLM %s: %s" % (exc.code, path, body),
+            status_code=exc.code,
+            path=path,
+            body=body,
+        ) from exc
     if not body:
         return {}
     parsed = json.loads(body)
@@ -990,6 +1079,7 @@ def _vllm_stream_completion(
     payload: Dict[str, Any],
     *,
     timeout_s: float,
+    usage_out: Optional[Dict[str, Any]] = None,
 ) -> Iterator[str]:
     data = json.dumps(payload, sort_keys=True).encode("utf-8")
     request = urllib.request.Request(
@@ -1002,7 +1092,12 @@ def _vllm_stream_completion(
         response = urllib.request.urlopen(request, timeout=timeout_s)
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
-        raise VllmHttpError("HTTP %s from vLLM %s: %s" % (exc.code, path, body)) from exc
+        raise VllmHttpError(
+            "HTTP %s from vLLM %s: %s" % (exc.code, path, body),
+            status_code=exc.code,
+            path=path,
+            body=body,
+        ) from exc
     with response:
         for raw_line in response:
             line = raw_line.decode("utf-8", errors="replace").strip()
@@ -1015,6 +1110,13 @@ def _vllm_stream_completion(
             payload_obj = json.loads(line)
             if not isinstance(payload_obj, dict):
                 continue
+            usage = payload_obj.get("usage")
+            if usage_out is not None and isinstance(usage, dict):
+                completion_tokens = _nonnegative_int_or_none(
+                    usage.get("completion_tokens")
+                )
+                if completion_tokens is not None:
+                    usage_out["completion_tokens"] = completion_tokens
             for piece in _completion_text_pieces(payload_obj):
                 if piece:
                     yield piece
@@ -1031,6 +1133,30 @@ def _completion_text_pieces(payload: Dict[str, Any]) -> Iterator[str]:
             yield str(choice.get("text") or "")
         elif isinstance(choice.get("delta"), dict):
             yield str(choice["delta"].get("content") or "")
+
+
+def _is_include_usage_unknown_field_rejection(exc: VllmHttpError) -> bool:
+    if exc.status_code not in {400, 404, 422}:
+        return False
+    text = exc.body.lower()
+    field_named = "include_usage" in text or "stream_options" in text
+    rejection_named = any(
+        term in text
+        for term in (
+            "unknown field",
+            "unrecognized",
+            "unexpected",
+            "extra inputs are not permitted",
+            "not allowed",
+        )
+    )
+    return field_named and rejection_named
+
+
+def _nonnegative_int_or_none(value: Any) -> Optional[int]:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
 
 
 def _workload_prompt(workload: Dict[str, Any]) -> str:
@@ -1119,36 +1245,47 @@ def _terminate_process_object_with_timeouts(
         process.communicate()
 
 
-def _terminate_vllm_pid(pid: int, metadata: Dict[str, Any]) -> None:
+def _terminate_vllm_pid(
+    pid_payload: Dict[str, Any],
+    metadata: Dict[str, Any],
+) -> bool:
+    pid = int(pid_payload["pid"])
     cached_process = _DETACHED_VLLM_PROCESSES.pop(pid, None)
     if cached_process is not None:
         _terminate_process_object_with_timeouts(cached_process, VLLM_STOP_TIMEOUT_S)
         metadata["termination"] = "cached_popen"
-        return
+        return cached_process.poll() is None
 
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         metadata["termination"] = "already_exited"
-        return
+        return False
     except OSError as exc:
         metadata["termination_error"] = str(exc)
-        return
+        return _pidfile_matches_live_process(pid_payload, metadata)
 
-    if _wait_for_pid_exit(pid, VLLM_STOP_TIMEOUT_S):
+    if _wait_for_pidfile_identity_exit(pid_payload, VLLM_STOP_TIMEOUT_S, metadata):
         metadata["termination"] = "sigterm"
-        return
+        return False
+    if not _pidfile_matches_live_process(pid_payload, metadata):
+        metadata["termination"] = "sigterm_identity_changed"
+        return False
     try:
         os.kill(pid, signal.SIGKILL)
     except ProcessLookupError:
         metadata["termination"] = "sigterm"
-        return
+        return False
     except OSError as exc:
         metadata["termination_error"] = str(exc)
-        return
+        return _pidfile_matches_live_process(pid_payload, metadata)
     metadata["termination"] = "sigkill"
-    if not _wait_for_pid_exit(pid, VLLM_KILL_TIMEOUT_S):
+    survived = not _wait_for_pidfile_identity_exit(
+        pid_payload, VLLM_KILL_TIMEOUT_S, metadata
+    )
+    if survived:
         metadata["termination_warning"] = "pid still visible after SIGKILL"
+    return survived
 
 
 def _wait_for_nvidia_smi_csv(
@@ -1427,57 +1564,62 @@ def _float_or_none(value: Any) -> Optional[float]:
         return None
 
 
-def _terminate_pid(pid: int, metadata: Dict[str, Any]) -> None:
+def _terminate_pid(
+    pid_payload: Dict[str, Any],
+    metadata: Dict[str, Any],
+) -> bool:
+    pid = int(pid_payload["pid"])
     cached_process = _DETACHED_NVIDIA_SMI_PROCESSES.pop(pid, None)
     if cached_process is not None:
         _terminate_process_object(cached_process)
         metadata["termination"] = "cached_popen"
-        return
+        return cached_process.poll() is None
 
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         metadata["termination"] = "already_exited"
-        return
+        return False
     except OSError as exc:
         metadata["termination_error"] = str(exc)
-        return
+        return _pidfile_matches_live_process(pid_payload, metadata)
 
-    if _wait_for_pid_exit(pid, NVIDIA_SMI_STOP_TIMEOUT_S):
+    if _wait_for_pidfile_identity_exit(
+        pid_payload, NVIDIA_SMI_STOP_TIMEOUT_S, metadata
+    ):
         metadata["termination"] = "sigterm"
-        return
+        return False
+    if not _pidfile_matches_live_process(pid_payload, metadata):
+        metadata["termination"] = "sigterm_identity_changed"
+        return False
     try:
         os.kill(pid, signal.SIGKILL)
     except ProcessLookupError:
         metadata["termination"] = "sigterm"
-        return
+        return False
     except OSError as exc:
         metadata["termination_error"] = str(exc)
-        return
+        return _pidfile_matches_live_process(pid_payload, metadata)
     metadata["termination"] = "sigkill"
-    if not _wait_for_pid_exit(pid, NVIDIA_SMI_KILL_TIMEOUT_S):
+    survived = not _wait_for_pidfile_identity_exit(
+        pid_payload, NVIDIA_SMI_KILL_TIMEOUT_S, metadata
+    )
+    if survived:
         metadata["termination_warning"] = "pid still visible after SIGKILL"
+    return survived
 
 
-def _wait_for_pid_exit(pid: int, timeout_s: float) -> bool:
+def _wait_for_pidfile_identity_exit(
+    pid_payload: Dict[str, Any],
+    timeout_s: float,
+    metadata: Dict[str, Any],
+) -> bool:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
+        if not _pidfile_matches_live_process(pid_payload, metadata):
             return True
-        except OSError:
-            return False
         time.sleep(0.05)
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return True
-    except OSError:
-        return False
-    return False
-
-
+    return not _pidfile_matches_live_process(pid_payload, metadata)
 def _read_tail(path: str, limit: int = 2000) -> str:
     try:
         with open(path, "rb") as handle:

@@ -17,7 +17,7 @@ import joulewise.adapters as adapters
 from joulewise.adapters.nvidia_smi import parse_nvidia_smi_csv
 from joulewise.clock import Clock
 from joulewise.cli import validate_bundle
-from joulewise.controller import run_benchmark
+from joulewise.controller import run_benchmark, run_experiment
 from joulewise.interfaces import AdapterResult
 from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus
 
@@ -153,6 +153,16 @@ class StubNode:
     def _runtime_task(self, local_dir: Path, task: dict[str, Any], clock: AutoClock) -> int:
         operation = task["operation"]
         artifacts: dict[str, str] = {}
+        if operation == "cleanup" and self.mode == "runtime_cleanup_survives":
+            self._write_status(
+                local_dir,
+                task,
+                "failed",
+                FailureReason.CLEANUP_FAILED,
+                "vLLM server process survived cleanup",
+                metadata={"pid": 4242, "process_survived": True},
+            )
+            return 1
         if operation == "run_workload":
             base = clock.last_value - 0.05
             self.power_sample_controller_times = [base + 0.05, base + 0.15, base + 0.25]
@@ -207,6 +217,16 @@ class StubNode:
                     "tokens_jsonl": "tokens.jsonl",
                 }
             )
+            workload_metadata: dict[str, Any] = {
+                "prompt_token_ids": [701, 702, 703, 704, 705, 706, 707, 708, 709]
+            }
+            if self.mode == "usage_omitted":
+                workload_metadata.update(
+                    {
+                        "emitted_tokens": 3,
+                        "token_count_source": "stream_chunk_fallback",
+                    }
+                )
             self._write_status(
                 local_dir,
                 task,
@@ -214,7 +234,7 @@ class StubNode:
                 None,
                 "ok",
                 artifacts,
-                metadata={"prompt_token_ids": [701, 702, 703, 704, 705, 706, 707, 708, 709]},
+                metadata=workload_metadata,
             )
             return 0
         self._write_status(local_dir, task, "succeeded", None, "ok", artifacts)
@@ -229,6 +249,20 @@ class StubNode:
             (local_dir / "nvidia_smi_idle.csv").write_text(text, encoding="utf-8")
             artifacts["nvidia_smi_idle_csv"] = "nvidia_smi_idle.csv"
         elif operation == "stop_sampling":
+            if self.mode == "sampler_survives":
+                self._write_status(
+                    local_dir,
+                    task,
+                    "failed",
+                    FailureReason.CLEANUP_FAILED,
+                    "nvidia-smi sampler process survived stop_sampling",
+                    metadata={
+                        "pid": 4343,
+                        "process_survived": True,
+                        "node_utc_offset_s": NODE_UTC_OFFSET_S,
+                    },
+                )
+                return 1
             controller_times = self.power_sample_controller_times or [
                 clock.last_value,
                 clock.last_value + 0.1,
@@ -311,6 +345,21 @@ class StubSshTransport:
     def run(self, command: list[str], *, timeout_s: float | None = None) -> AdapterResult:
         del timeout_s
         if command[:2] == ["mkdir", "-p"]:
+            return AdapterResult(ok=True, metadata={"returncode": 0, "stdout": ""})
+        if command[:3] == ["rm", "-rf", "--"]:
+            if self.node.mode == "directory_cleanup_failure":
+                return AdapterResult(
+                    ok=False,
+                    failure_reason=FailureReason.UNKNOWN_ERROR,
+                    message="injected remote directory cleanup failure",
+                )
+            for target in command[3:]:
+                for path in list(self.node.remote_files):
+                    if path == target or path.startswith(target.rstrip("/") + "/"):
+                        self.node.remote_files.pop(path, None)
+                for path in list(self.node.remote_artifacts):
+                    if path == target or path.startswith(target.rstrip("/") + "/"):
+                        self.node.remote_artifacts.pop(path, None)
             return AdapterResult(ok=True, metadata={"returncode": 0, "stdout": ""})
         if "--clock-echo" in command:
             assert isinstance(self.clock, AutoClock)
@@ -499,6 +548,70 @@ class NvidiaNodeIntegrationTests(unittest.TestCase):
         self.assertTrue(all(f"/{generated_run_id}/tasks/" in path for path in node.task_paths))
         self.assertTrue(all(f"/{generated_run_id}/artifacts/" in path for path in node.artifact_paths))
 
+    def test_nvidia_smi_raw_tamper_fails_strict_lineage(self) -> None:
+        node = StubNode()
+        bundle_path, summary = self.run_with_node(
+            load_config("nvidia-node-raw-tamper"),
+            node,
+        )
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        tampered = self.runs_root / "nvidia-node-raw-tamper-copy"
+        shutil.copytree(bundle_path, tampered)
+        raw_path = tampered / "raw" / "nvidia_smi.csv"
+        rows = raw_path.read_text(encoding="utf-8").splitlines()
+        cells = [cell.strip() for cell in rows[0].split(",")]
+        cells[1] = str(float(cells[1]) + 1.0)
+        rows[0] = ", ".join(cells)
+        raw_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+        problems = validate_bundle(tampered, strict=True)
+
+        raw_problem = next(
+            problem for problem in problems if "strict: raw-to-trace:" in problem
+        )
+        self.assertIn("nvidia_smi", raw_problem)
+        self.assertIn("power_w", raw_problem)
+
+    def test_generated_id_multi_rep_experiment_executes_cooldown(self) -> None:
+        # NV-2 (ARC-7): a generated-experiment-id config has run_id == None,
+        # and the D-014 cooldown gate calls measure_idle with no RunContext.
+        # Before the fix nvidia_smi's run-id requirement raised AdapterFailure
+        # and every cooldown was silently recorded as "skipped". The gate must
+        # EXECUTE (result in the executed vocabulary) and record the
+        # cooldown-scoped run id it used for node-side task isolation.
+        payload = json.loads(EXAMPLE.read_text(encoding="utf-8"))
+        payload.pop("run_id", None)
+        payload["hardware_target"]["host"] = "fake-nvidia-node"
+        payload["workload_profile"]["repetitions"] = 2
+        config = BenchmarkConfig.from_mapping(payload)
+
+        node = StubNode()
+        self.addCleanup(node.cleanup)
+
+        def factory(clock: Clock, destination: str, **kwargs: Any) -> StubSshTransport:
+            del kwargs
+            return StubSshTransport(clock, destination, node=node)
+
+        with patch("joulewise.adapters.ssh_transport.SshTransport", side_effect=factory):
+            manifest_path, results = run_experiment(config, self.runs_root, AutoClock())
+
+        self.assertEqual(
+            [summary.status for _, summary in results],
+            [RunStatus.SUCCEEDED, RunStatus.SUCCEEDED],
+        )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        cooldown = manifest["cooldown"]
+        self.assertEqual(len(cooldown), 1)
+        note = cooldown[0]
+        self.assertIn(note["result"], {"recovered", "cap_hit"})
+        expected_cooldown_run_id = (
+            f"{manifest['experiment_id']}-cooldown-{note['after_member']}"
+        )
+        self.assertEqual(note["cooldown_run_id"], expected_cooldown_run_id)
+        # The node actually received tasks under the cooldown-scoped id, so
+        # the manifest is auditable against node-side artifacts.
+        self.assertIn(expected_cooldown_run_id, node.task_run_ids)
+
     def test_missing_vllm_launcher_surfaces_structured_unsupported(self) -> None:
         bundle_path, summary = self.run_with_node(
             load_config("nvidia-node-missing-vllm"),
@@ -520,6 +633,71 @@ class NvidiaNodeIntegrationTests(unittest.TestCase):
         self.assertEqual(summary.failure_reason, FailureReason.TELEMETRY_UNAVAILABLE)
         self.assertIn("nvidia-smi unavailable", summary.failure_message)
         self.assertFalse((bundle_path / "power_trace.csv").exists())
+
+    def test_surviving_runtime_process_demotes_run_to_cleanup_failed(self) -> None:
+        bundle_path, summary = self.run_with_node(
+            load_config("nvidia-node-runtime-cleanup-survives"),
+            StubNode(mode="runtime_cleanup_survives"),
+        )
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.CLEANUP_FAILED)
+        self.assertIn("survived cleanup", summary.failure_message)
+        metadata = json.loads((bundle_path / "metadata.json").read_text(encoding="utf-8"))
+        self.assertTrue(
+            metadata["adapters"]["runtime"]["cleanup_metadata"]["worker_metadata"][
+                "process_survived"
+            ]
+        )
+
+    def test_surviving_sampler_process_demotes_run_to_cleanup_failed(self) -> None:
+        _, summary = self.run_with_node(
+            load_config("nvidia-node-sampler-survives"),
+            StubNode(mode="sampler_survives"),
+        )
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.CLEANUP_FAILED)
+        self.assertIn("sampler process survived", summary.failure_message)
+
+    def test_usage_omission_propagates_null_metrics_and_per_token_ineligibility(self) -> None:
+        _, summary = self.run_with_node(
+            load_config("nvidia-node-usage-omitted"),
+            StubNode(mode="usage_omitted"),
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNone(summary.energy_token_j)
+        self.assertIsNone(summary.energy_output_token_j)
+        self.assertIsNone(summary.throughput_tokens_s)
+        self.assertEqual(
+            summary.measurement_quality.token_count_source,
+            "stream_chunk_fallback",
+        )
+        self.assertEqual(
+            summary.window_evidence_precheck["per_token"],
+            {
+                "eligible": False,
+                "reasons": ["stream_chunk_fallback"],
+                "token_count_source": "stream_chunk_fallback",
+            },
+        )
+
+    def test_directory_cleanup_failure_is_quality_only(self) -> None:
+        bundle_path, summary = self.run_with_node(
+            load_config("nvidia-node-directory-cleanup-fails"),
+            StubNode(mode="directory_cleanup_failure"),
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNotNone(summary.measurement_quality.remote_cleanup_failed)
+        self.assertTrue(summary.measurement_quality.remote_cleanup_failed)
+        metadata = json.loads((bundle_path / "metadata.json").read_text(encoding="utf-8"))
+        report = metadata["extra"]["node_cleanup"]
+        self.assertTrue(any(item["removed"] is False for item in report))
+        self.assertTrue(
+            all(item["scope"] in {"local", "remote"} for item in report)
+        )
 
     def test_example_config_validates_and_resolves_through_registry(self) -> None:
         config = BenchmarkConfig.from_mapping(json.loads(EXAMPLE.read_text(encoding="utf-8")))

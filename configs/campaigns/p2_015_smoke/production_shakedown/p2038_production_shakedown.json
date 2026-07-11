@@ -1,0 +1,44 @@
+{
+  "schema_version": "0.1",
+  "run_id": "p2038-production-shakedown",
+  "model": {
+    "name": "Qwen2.5-1.5B-Instruct-4bit",
+    "family": "qwen2.5",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+    "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+    "weight_format": "mlx",
+    "context_window": 32768
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "P2-038 plumbing shakedown only; true powermetrics run is lead-controlled on a quiet machine."
+  },
+  "workload_profile": {
+    "name": "p2038_production_shakedown",
+    "repetitions": 1,
+    "suite_manifest_ref": "configs/suite_manifests/jw_sentinel_v1_qwen25_15b.json",
+    "suite_manifest_sha256": "0316283dde8afd5fc0dea66b56037a1aea34b42d415aec57af4831a119af8471",
+    "warmup_runs": 1
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "tags": ["phase2", "p2-038", "production-shakedown"]
+  }
+}

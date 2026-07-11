@@ -17,16 +17,29 @@ import json
 import shlex
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from joulewise.adapters.nvidia_smi import (
+    RAW_SAMPLES_NAME as NVIDIA_SMI_RAW_SAMPLES_NAME,
+    samples_from_raw_nvidia_smi,
+)
 
 from joulewise.adapters.powermetrics import (
+    RAW_IDLE_NAME,
+    RAW_IDLE_POST_NAME,
     RAW_SAMPLES_NAME,
+    decode_rich_telemetry,
+    idle_window_gpu_quality,
+    parse_powermetrics_records,
     samples_from_raw_powermetrics,
 )
 from joulewise.bundle import BundleError
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.clock import Clock, FakeClock, SystemClock
 from joulewise.controller import run_benchmark, run_experiment
+from joulewise.doctor import doctor_report, exit_code as doctor_exit_code
+from joulewise.doctor import render_human as render_doctor_human
+from joulewise.doctor import render_json as render_doctor_json
 from joulewise.kv_size import (
     KVSizeError,
     KVSizeParams,
@@ -48,10 +61,17 @@ from joulewise.schemas import (
     RunStatus,
     RuntimeBackend,
     SchemaError,
+    SUMMARY_REDUCER_VERSION,
     SummaryMetrics,
     TelemetryBackend,
 )
 from joulewise.validation import finite_float
+from joulewise.uncertainty_evidence import (
+    SCHEMA_VERSION as P2038_SCHEMA_VERSION,
+    derive_idle_drift_evidence,
+    derive_powermetrics_clock_evidence,
+    stamp_from_mapping,
+)
 
 _PROMPT_TOKEN_IDS_HASH_DOMAIN = PROMPT_TOKEN_IDS_HASH_DOMAIN
 _SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN = SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN
@@ -124,6 +144,22 @@ def _cmd_print_config_schema(args: argparse.Namespace) -> int:
 
 def _cmd_print_output_schema(args: argparse.Namespace) -> int:
     return _write_or_print_schema(SummaryMetrics.json_schema(), args.output, "output schema")
+
+
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    report = doctor_report(
+        [Path(path) for path in args.configs],
+        backup_destination=(
+            Path(args.backup_destination).expanduser()
+            if args.backup_destination is not None
+            else None
+        ),
+        mode="campaign" if args.campaign else "inspection",
+        acknowledge_config_warnings=args.ack_config_warnings,
+    )
+    rendered = render_doctor_json(report) if args.json_output else render_doctor_human(report)
+    print(rendered, end="")
+    return doctor_exit_code(report)
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +327,15 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     except BundleReadError as exc:
         problems.append(f"strict: {exc}")
         return problems
-    if window.duration_s > 0:
+    if window.duration_s <= 0:
+        # P2-040 FIX-1 (ARC-3): independent of the fresh-summary comparison, a
+        # succeeded bundle over a nonpositive measured window is never
+        # strict-valid.
+        problems.append(
+            "strict: succeeded bundle measured window duration must be > 0 s; "
+            f"got {window.duration_s}"
+        )
+    else:
         in_window = sum(
             1 for point in curve if window.start_s <= point.t <= window.end_s
         )
@@ -301,23 +345,55 @@ def _strict_problems(reader: BundleReader) -> list[str]:
                 "measured window; a succeeded summary needs a "
                 "reducer-consumable curve"
             )
-    problems.extend(_strict_summary_provenance_problems(reader, summary))
+    (
+        version_problems,
+        absent_tolerance,
+        tolerate_fresh_nulls,
+        comparison_reducer_version,
+    ) = (
+        _strict_reducer_version_dispatch(reader, summary)
+    )
+    problems.extend(version_problems)
+    stored_idle_problems = _strict_idle_mean_uncertainty_problems(summary)
+    problems.extend(stored_idle_problems)
     problems.extend(_strict_workload_provenance_problems(reader, summary))
     problems.extend(_strict_emitted_token_ids_problems(reader))
     problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
+    problems.extend(_strict_uncertainty_evidence_problems(reader))
     problems.extend(_strict_raw_to_trace_problems(reader))
-    fresh = reduce_bundle(reader.path).to_dict()
-    differing = _strict_summary_differences(fresh, summary)
-    if differing:
-        problems.append(
-            "strict: summary_metrics.json does not match a fresh re-reduction "
-            f"of the raw artifacts (differing keys: {', '.join(differing)})"
+    if not version_problems:
+        fresh = reduce_bundle(reader.path).to_dict()
+        # The fresh 0.4.2 derivation is the raw/metadata authority.  Inspect it
+        # before legacy additive-absence projection can hide the governed
+        # object, while retaining the stored-summary check for unsupported
+        # versions and tampered current-era summaries.  Exact diagnostics are
+        # de-duplicated when both views independently report the mismatch.
+        for problem in _strict_idle_mean_uncertainty_problems(fresh):
+            if problem not in problems:
+                problems.append(problem)
+        if comparison_reducer_version is not None:
+            fresh["summary_provenance"]["reducer_version"] = (
+                comparison_reducer_version
+            )
+        differing = _strict_summary_differences(
+            fresh,
+            summary,
+            absent_tolerance=absent_tolerance,
+            tolerate_fresh_nulls=tolerate_fresh_nulls,
         )
+        if differing:
+            problems.append(
+                "strict: summary_metrics.json does not match a fresh re-reduction "
+                f"of the raw artifacts (differing keys: {', '.join(differing)})"
+            )
     return problems
 
 
 _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
-    "claim_eligibility",
+    "window_evidence_precheck",
+    # P2-040 FIX-3: joint interpolation bound is additive over pre-0.3.0
+    # summaries.
+    "energy_bound_terms_j.E_interpolation_joint_edge_bound_j",
     "energy_bound_terms_j",
     "energy_uncertainty_status",
     "energy_variance_terms_j2",
@@ -328,10 +404,40 @@ _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
     "measurement_quality.idle_window_suspect",
 }
 
-_STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE = _STRICT_ADDITIVE_ABSENT_TOLERANCE | {
-    "measurement_quality.token_counts_source",
-    "measurement_quality.phase_identifiability",
-}
+ADDED_SINCE_0_3_0 = frozenset(
+    {
+        "measurement_quality.remote_cleanup_failed",
+        "measurement_quality.runtime_cleanup_ok",
+    }
+)
+
+ADDED_SINCE_0_4_1 = frozenset({"inter_token_throughput_tokens_s"})
+
+_STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE = (
+    _STRICT_ADDITIVE_ABSENT_TOLERANCE
+    | ADDED_SINCE_0_3_0
+    | ADDED_SINCE_0_4_1
+    | {
+        "idle_mean_uncertainty",
+        "measurement_quality.token_counts_source",
+        "measurement_quality.phase_identifiability",
+    }
+)
+
+
+def _strict_idle_mean_uncertainty_problems(
+    summary: dict[str, Any],
+) -> list[str]:
+    uncertainty = summary.get("idle_mean_uncertainty")
+    if not isinstance(uncertainty, dict):
+        return []
+    reasons = uncertainty.get("reason_codes")
+    if isinstance(reasons, list) and "idle_metadata_mismatch" in reasons:
+        return [
+            "strict: raw idle trace does not match metadata.idle_baseline "
+            "(idle_metadata_mismatch)"
+        ]
+    return []
 
 
 def _strict_summary_differences(
@@ -340,6 +446,7 @@ def _strict_summary_differences(
     path: str = "",
     *,
     absent_tolerance: set[str] | None = None,
+    tolerate_fresh_nulls: bool = False,
 ) -> list[str]:
     """Compare fresh vs stored summaries with legacy-additive null tolerance.
 
@@ -348,25 +455,24 @@ def _strict_summary_differences(
     stored extras, remain exact claims and must match the fresh reduction.
     """
     if absent_tolerance is None:
-        stored_new_era = (
-            isinstance(stored, dict)
-            and isinstance(stored.get("summary_provenance"), dict)
-        )
-        absent_tolerance = (
-            _STRICT_ADDITIVE_ABSENT_TOLERANCE
-            if stored_new_era
-            else _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE
-        )
+        absent_tolerance = set()
     if isinstance(fresh, dict) and isinstance(stored, dict):
         differences: list[str] = []
         for key in sorted(set(fresh) | set(stored)):
             child = f"{path}.{key}" if path else str(key)
             if key not in stored:
-                if child == "summary_provenance":
+                if child == "summary_provenance" and tolerate_fresh_nulls:
                     continue
                 if child in absent_tolerance:
                     continue
-                if fresh[key] is not None:
+                # P2-040 FIX-3: nested joint-interpolation fields are additive
+                # for pre-0.3.0 summaries at every (dynamic) precheck path.
+                if (
+                    tolerate_fresh_nulls
+                    and child.endswith(".interpolation_joint_edge_bound_j")
+                ):
+                    continue
+                if not tolerate_fresh_nulls or fresh[key] is not None:
                     differences.append(child)
                 continue
             if key not in fresh:
@@ -378,6 +484,7 @@ def _strict_summary_differences(
                     stored[key],
                     child,
                     absent_tolerance=absent_tolerance,
+                    tolerate_fresh_nulls=tolerate_fresh_nulls,
                 )
             )
         return differences
@@ -508,17 +615,29 @@ def _strict_workload_provenance_problems(
     return problems
 
 
-def _strict_summary_provenance_problems(
+def _strict_reducer_version_dispatch(
     reader: BundleReader, summary: dict[str, Any]
-) -> list[str]:
-    if _strict_legacy_bundle_metadata(reader.raw_metadata()):
-        return []
-    if isinstance(summary.get("summary_provenance"), dict):
-        return []
+) -> tuple[list[str], set[str], bool, str | None]:
+    """Select strict comparison semantics solely from recorded provenance."""
+    provenance = summary.get("summary_provenance")
+    if (
+        _strict_legacy_bundle_metadata(reader.raw_metadata())
+        and "summary_provenance" not in summary
+    ):
+        return [], _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE, True, None
+    if not isinstance(provenance, dict):
+        return [
+            "strict: summary_metrics.summary_provenance is missing or not an "
+            "object for current-era bundle"
+        ], set(), False, None
+    reducer_version = provenance.get("reducer_version")
+    if reducer_version == SUMMARY_REDUCER_VERSION:
+        return [], set(), False, None
+    if reducer_version == "0.4.1":
+        return [], ADDED_SINCE_0_4_1, False, "0.4.1"
     return [
-        "strict: summary_metrics.summary_provenance is missing or not an "
-        "object for current-era bundle"
-    ]
+        "strict: unsupported reducer version; re-reduction required"
+    ], set(), False, None
 
 
 def _strict_legacy_bundle_metadata(metadata: Any) -> bool:
@@ -710,40 +829,360 @@ def _strict_required_object_keys(
     ]
 
 
-def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
-    raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
-    telemetry_backend = _validated_config_telemetry_backend(reader)
-    if telemetry_backend != TelemetryBackend.POWERMETRICS and not raw_path.is_file():
+RawToTraceVerifier = Callable[[BundleReader], list[str]]
+
+
+def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
+    """Re-derive P2-038 evidence for current-era successful powermetrics runs."""
+
+    if _validated_config_telemetry_backend(reader) != TelemetryBackend.POWERMETRICS:
         return []
+    metadata = reader.raw_metadata()
+    if _strict_legacy_bundle_metadata(metadata):
+        return []
+    if not isinstance(metadata, dict):
+        return ["strict: uncertainty evidence: metadata.json is missing or invalid"]
+    evidence = metadata.get("uncertainty_evidence")
+    if not isinstance(evidence, dict):
+        return [
+            "strict: uncertainty evidence: metadata.uncertainty_evidence is "
+            "missing for current-era powermetrics bundle"
+        ]
+    problems: list[str] = []
+    if evidence.get("schema_version") != P2038_SCHEMA_VERSION:
+        problems.append(
+            "strict: uncertainty evidence: unsupported or missing schema_version"
+        )
+    if evidence.get("telemetry_backend") != "powermetrics":
+        problems.append(
+            "strict: uncertainty evidence: telemetry_backend must be 'powermetrics'"
+        )
+    clock_anchor = evidence.get("clock_anchor")
+    sample_phase = evidence.get("sample_phase")
+    raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
+    if not isinstance(clock_anchor, dict) or not isinstance(sample_phase, dict):
+        return problems + [
+            "strict: uncertainty evidence: clock_anchor and sample_phase must be objects"
+        ]
+    stamp_rows = clock_anchor.get("clock_stamps")
+    if not isinstance(stamp_rows, dict):
+        return problems + [
+            "strict: uncertainty evidence: clock_anchor.clock_stamps is missing"
+        ]
+    try:
+        stamps = {
+            name: stamp_from_mapping(value)
+            for name, value in stamp_rows.items()
+            if isinstance(value, dict)
+        }
+        raw_records = parse_powermetrics_records(raw_path.read_bytes())
+        expected, _point = derive_powermetrics_clock_evidence(
+            stamps=stamps,
+            elapsed_s=[record.elapsed_ns / 1_000_000_000.0 for record in raw_records],
+            plist_timestamp_s=[
+                float(record.metadata["plist_timestamp_s"]) for record in raw_records
+            ],
+        )
+    except (KeyError, OSError, TypeError, ValueError) as exc:
+        return problems + [
+            f"strict: uncertainty evidence: cannot re-derive clock evidence: {exc}"
+        ]
+    if clock_anchor != expected["clock_anchor"]:
+        problems.append(
+            "strict: uncertainty evidence: clock_anchor does not match paired-clock/raw-plist derivation"
+        )
+    if sample_phase != expected["sample_phase"]:
+        problems.append(
+            "strict: uncertainty evidence: sample_phase does not match paired-clock/raw-plist derivation"
+        )
+    events = _strict_suite_item_records_from_path(reader.path / "events.jsonl")
+    marker_epochs: dict[str, float] = {}
+    for _line, event in events:
+        event_type = event.get("event_type")
+        if event_type in {"sampling_started", "sampling_stopped"}:
+            try:
+                marker_epochs[str(event_type)] = finite_float(
+                    event.get("timestamp_s"), f"events.{event_type}.timestamp_s"
+                )
+            except ValueError as exc:
+                problems.append(f"strict: uncertainty evidence: {exc}")
+    if sample_phase.get("status") == "bounded":
+        for event_type, field in (
+            ("sampling_started", "sampling_started_epoch_s"),
+            ("sampling_stopped", "sampling_stopped_epoch_s"),
+        ):
+            if marker_epochs.get(event_type) != sample_phase.get(field):
+                problems.append(
+                    f"strict: uncertainty evidence: {field} does not match events.jsonl"
+                )
+
+    _strict_uncertainty_scalar(
+        problems,
+        metadata,
+        "clock_anchor_bound_s",
+        clock_anchor,
+        "effective_clock_anchor_bound_s",
+    )
+    _strict_uncertainty_scalar(
+        problems,
+        metadata,
+        "marker_to_first_sample_phase_bound_s",
+        sample_phase,
+        "marker_to_first_sample_phase_bound_s",
+    )
+    _strict_uncertainty_scalar(
+        problems,
+        metadata,
+        "marker_to_last_sample_phase_bound_s",
+        sample_phase,
+        "marker_to_last_sample_phase_bound_s",
+    )
+
+    idle = evidence.get("idle_drift")
+    guard = evidence.get("idle_drift_guard")
+    if not isinstance(idle, dict) or not isinstance(guard, dict):
+        problems.append(
+            "strict: uncertainty evidence: idle_drift and separate idle_drift_guard must be objects"
+        )
+        return problems
+    pre_path = reader.path / "raw" / RAW_IDLE_NAME
+    post_path = reader.path / "raw" / RAW_IDLE_POST_NAME
+    if post_path.is_file() and pre_path.is_file():
+        try:
+            pre_data = pre_path.read_bytes()
+            post_data = post_path.read_bytes()
+            pre_records = parse_powermetrics_records(pre_data)
+            post_records = parse_powermetrics_records(post_data)
+            idle_baseline = metadata.get("idle_baseline")
+            if not isinstance(idle_baseline, dict):
+                raise ValueError("metadata.idle_baseline is missing")
+            pre_mean = finite_float(
+                idle_baseline.get("power_w_mean"),
+                "metadata.idle_baseline.power_w_mean",
+            )
+            pre_quality = idle_window_gpu_quality(decode_rich_telemetry(pre_data))
+            post_quality = idle_window_gpu_quality(decode_rich_telemetry(post_data))
+            expected_idle, expected_guard, expected_bound = derive_idle_drift_evidence(
+                pre_power_w=[record.combined_power_w for record in pre_records],
+                post_power_w=[record.combined_power_w for record in post_records],
+                pre_power_w_mean=pre_mean,
+                pre_idle_window_suspect=pre_quality["idle_window_suspect"],
+                post_idle_window_suspect=post_quality["idle_window_suspect"],
+                calibration_guard=guard,
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            problems.append(
+                f"strict: uncertainty evidence: cannot re-derive idle drift: {exc}"
+            )
+        else:
+            if idle != expected_idle:
+                problems.append(
+                    "strict: uncertainty evidence: idle_drift does not match pre/post raw sentinel derivation"
+                )
+            if guard != expected_guard:
+                problems.append(
+                    "strict: uncertainty evidence: idle_drift_guard does not match recorded guard provenance"
+                )
+            if metadata.get("idle_drift_bound_w") != expected_bound:
+                problems.append(
+                    "strict: uncertainty evidence: idle_drift_bound_w does not match effective drift derivation"
+                )
+    elif idle != {"status": "unknown", "reason": "post_idle_unavailable"}:
+        problems.append(
+            "strict: uncertainty evidence: missing post-idle raw artifact is not recorded as post_idle_unavailable"
+        )
+    elif "idle_drift_bound_w" in metadata:
+        problems.append(
+            "strict: uncertainty evidence: unknown idle drift must omit idle_drift_bound_w"
+        )
+
+    extra = metadata.get("extra")
+    if isinstance(extra, dict):
+        for key in ("clock_anchor_bound_s", "idle_drift_bound_w"):
+            if key in extra and key in metadata:
+                problems.append(
+                    f"strict: uncertainty evidence: metadata.extra.{key} cannot override controller evidence"
+                )
+    return problems
+
+
+def _strict_uncertainty_scalar(
+    problems: list[str],
+    metadata: dict[str, Any],
+    top_key: str,
+    component: dict[str, Any],
+    derived_key: str,
+) -> None:
+    if component.get("status") == "bounded":
+        if metadata.get(top_key) != component.get(derived_key):
+            problems.append(
+                f"strict: uncertainty evidence: metadata.{top_key} does not match derivation"
+            )
+    elif top_key in metadata:
+        problems.append(
+            f"strict: uncertainty evidence: unknown component must omit metadata.{top_key}"
+        )
+
+
+def _strict_suite_item_records_from_path(path: Path) -> list[tuple[int, dict[str, Any]]]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    records: list[tuple[int, dict[str, Any]]] = []
+    for index, line in enumerate(text.splitlines(), start=1):
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            records.append((index, value))
+    return records
+
+
+def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
+    telemetry_backend = _validated_config_telemetry_backend(reader)
+    if telemetry_backend is None:
+        return ["strict: raw-to-trace: telemetry backend is unavailable from config.json"]
+    verifier = RAW_TO_TRACE_VERIFIERS.get(telemetry_backend)
+    if verifier is not None:
+        return verifier(reader)
+    return [
+        "strict: raw-to-trace: no verifier registered for production backend "
+        f"{telemetry_backend.value}"
+    ]
+
+
+def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
+    raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
     if not raw_path.is_file():
         return [f"strict: raw-to-trace: missing raw/{RAW_SAMPLES_NAME}"]
     metadata = reader.raw_metadata()
     if not isinstance(metadata, dict):
         return ["strict: raw-to-trace: metadata.json is missing or invalid"]
-    device = metadata.get("device")
-    if not isinstance(device, dict):
-        return ["strict: raw-to-trace: metadata.device is missing or not an object"]
     try:
-        anchor_offset_s = finite_float(
-            device.get("plist_anchor_offset_s"),
-            "metadata.device.plist_anchor_offset_s",
-        )
-    except ValueError as exc:
-        return [f"strict: raw-to-trace: {exc}"]
-    try:
-        expected = samples_from_raw_powermetrics(
-            raw_path.read_bytes(),
-            plist_anchor_offset_s=anchor_offset_s,
-        )
+        if _strict_legacy_bundle_metadata(metadata):
+            device = metadata.get("device")
+            if not isinstance(device, dict):
+                return [
+                    "strict: raw-to-trace: metadata.device is missing or not an object"
+                ]
+            anchor_offset_s = finite_float(
+                device.get("plist_anchor_offset_s"),
+                "metadata.device.plist_anchor_offset_s",
+            )
+            expected = samples_from_raw_powermetrics(
+                raw_path.read_bytes(),
+                plist_anchor_offset_s=anchor_offset_s,
+            )
+        else:
+            evidence = metadata.get("uncertainty_evidence")
+            clock_anchor = (
+                evidence.get("clock_anchor") if isinstance(evidence, dict) else None
+            )
+            if not isinstance(clock_anchor, dict):
+                return [
+                    "strict: raw-to-trace: current-era clock_anchor evidence is missing"
+                ]
+            point_s = finite_float(
+                clock_anchor.get("first_sample_end_point_epoch_s"),
+                "metadata.uncertainty_evidence.clock_anchor.first_sample_end_point_epoch_s",
+            )
+            expected = samples_from_raw_powermetrics(
+                raw_path.read_bytes(),
+                first_record_endpoint_s=point_s,
+            )
     except (OSError, ValueError) as exc:
         return [f"strict: raw-to-trace: cannot derive raw/{RAW_SAMPLES_NAME}: {exc}"]
+    return _compare_raw_derived_samples(reader, expected)
+
+
+def _verify_mock_raw_to_trace_exemption(reader: BundleReader) -> list[str]:
+    """Explicit fixture-only exemption: mock telemetry has no native raw file."""
+
+    del reader
+    return []
+
+
+def _verify_nvidia_smi_raw_to_trace(reader: BundleReader) -> list[str]:
+    raw_path = reader.path / "raw" / NVIDIA_SMI_RAW_SAMPLES_NAME
+    if not raw_path.is_file():
+        return [
+            "strict: raw-to-trace: nvidia_smi missing "
+            f"raw/{NVIDIA_SMI_RAW_SAMPLES_NAME}"
+        ]
+    metadata = reader.raw_metadata()
+    if not isinstance(metadata, dict):
+        return ["strict: raw-to-trace: nvidia_smi metadata.json is missing or invalid"]
+    adapters = metadata.get("adapters")
+    telemetry = adapters.get("telemetry") if isinstance(adapters, dict) else None
+    if not isinstance(telemetry, dict):
+        return [
+            "strict: raw-to-trace: nvidia_smi metadata.adapters.telemetry "
+            "is missing or not an object"
+        ]
+    worker_metadata = telemetry.get("worker_metadata")
+    if not isinstance(worker_metadata, dict):
+        return [
+            "strict: raw-to-trace: nvidia_smi telemetry worker_metadata "
+            "is missing or not an object"
+        ]
+    try:
+        node_utc_offset_s = finite_float(
+            worker_metadata.get("node_utc_offset_s"),
+            "metadata.adapters.telemetry.worker_metadata.node_utc_offset_s",
+        )
+    except ValueError as exc:
+        return [f"strict: raw-to-trace: nvidia_smi {exc}"]
+    alignments = telemetry.get("clock_alignments")
+    stop_alignment = None
+    if isinstance(alignments, list):
+        stop_alignment = next(
+            (
+                item
+                for item in reversed(alignments)
+                if isinstance(item, dict)
+                and item.get("stage") == "telemetry.stop_sampling"
+            ),
+            None,
+        )
+    if not isinstance(stop_alignment, dict):
+        return [
+            "strict: raw-to-trace: nvidia_smi telemetry.stop_sampling "
+            "clock alignment is missing"
+        ]
+    try:
+        offset_estimate_s = finite_float(
+            stop_alignment.get("offset_estimate_s"),
+            "metadata.adapters.telemetry.clock_alignments.stop_sampling.offset_estimate_s",
+        )
+        expected = samples_from_raw_nvidia_smi(
+            raw_path.read_bytes(),
+            node_utc_offset_s=node_utc_offset_s,
+            offset_estimate_s=offset_estimate_s,
+        )
+    except (OSError, ValueError) as exc:
+        return [
+            "strict: raw-to-trace: nvidia_smi cannot derive "
+            f"raw/{NVIDIA_SMI_RAW_SAMPLES_NAME}: {exc}"
+        ]
+    return _compare_raw_derived_samples(reader, expected, backend="nvidia_smi")
+
+
+def _compare_raw_derived_samples(
+    reader: BundleReader,
+    expected: list[Any],
+    *,
+    backend: str | None = None,
+) -> list[str]:
+    prefix = f"{backend} " if backend else ""
     try:
         rows = reader.trace_rows()
     except BundleReadError as exc:
-        return [f"strict: raw-to-trace: {exc}"]
+        return [f"strict: raw-to-trace: {prefix}{exc}"]
     if len(rows) != len(expected):
         return [
-            "strict: raw-to-trace: power_trace.csv row count "
+            f"strict: raw-to-trace: {prefix}power_trace.csv row count "
             f"{len(rows)} does not match raw-derived {len(expected)}"
         ]
     for index, (row, sample) in enumerate(zip(rows, expected), start=2):
@@ -763,29 +1202,36 @@ def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
         expected_rail = sample.rail or ""
         if timestamp_s != sample.timestamp_s:
             return [
-                "strict: raw-to-trace: power_trace.csv row "
+                f"strict: raw-to-trace: {prefix}power_trace.csv row "
                 f"{index} rail {rail!r} timestamp_s {timestamp_s!r} "
                 f"does not match raw-derived {sample.timestamp_s!r}"
             ]
         if power_w != sample.power_w:
             return [
-                "strict: raw-to-trace: power_trace.csv row "
+                f"strict: raw-to-trace: {prefix}power_trace.csv row "
                 f"{index} rail {rail!r} power_w {power_w!r} "
                 f"does not match raw-derived {sample.power_w!r}"
             ]
         if source != sample.source:
             return [
-                "strict: raw-to-trace: power_trace.csv row "
+                f"strict: raw-to-trace: {prefix}power_trace.csv row "
                 f"{index} rail {rail!r} source {source!r} "
                 f"does not match raw-derived {sample.source!r}"
             ]
         if rail != expected_rail:
             return [
-                "strict: raw-to-trace: power_trace.csv row "
+                f"strict: raw-to-trace: {prefix}power_trace.csv row "
                 f"{index} rail {rail!r} does not match raw-derived "
                 f"{expected_rail!r}"
             ]
     return []
+
+
+RAW_TO_TRACE_VERIFIERS: dict[TelemetryBackend, RawToTraceVerifier] = {
+    TelemetryBackend.MOCK: _verify_mock_raw_to_trace_exemption,
+    TelemetryBackend.POWERMETRICS: _verify_powermetrics_raw_to_trace,
+    TelemetryBackend.NVIDIA_SMI: _verify_nvidia_smi_raw_to_trace,
+}
 
 
 def _validated_config_telemetry_backend(reader: BundleReader) -> TelemetryBackend | None:
@@ -851,6 +1297,44 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# P2-037 deterministic contrast/claim derivation.
+
+
+def _cmd_analyze_claims(args: argparse.Namespace) -> int:
+    # Lazy import avoids a cycle: the engine receives this module's shared
+    # strict validator by injection rather than importing/duplicating it.
+    from joulewise.analysis_engine import AnalysisInputError, analyze_claims
+    from joulewise.analysis_engine.artifact import ClaimArtifactError
+
+    try:
+        artifact = analyze_claims(
+            Path(args.analysis_manifest),
+            Path(args.runs_root),
+            Path(args.floor_artifact),
+            strict_validator=validate_bundle,
+            output_path=Path(args.output),
+            legacy_l1_mechanics=args.legacy_l1_mechanics,
+            legacy_allowlist=_STRICT_LEGACY_BUNDLE_IDENTITIES,
+        )
+    except (AnalysisInputError, ClaimArtifactError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"error: cannot write claim-verdict artifact: {exc}", file=sys.stderr)
+        return 3
+    outcomes: dict[str, int] = {}
+    for contrast in artifact["contrasts"]:
+        outcome = contrast["claim_evaluation"]["outcome"]
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+    counts = ",".join(f"{key}={outcomes[key]}" for key in sorted(outcomes))
+    print(
+        f"claim-verdicts: {args.output} id={artifact['claim_verdicts_id']} "
+        f"contrasts={len(artifact['contrasts'])} outcomes={counts}"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # report verb (Slice 2J) - static HTML run browser (D-006), [analysis] extra
 
 
@@ -910,6 +1394,36 @@ def build_parser() -> argparse.ArgumentParser:
     output_schema.add_argument("--output", help="optional path to write schema JSON")
     output_schema.set_defaults(func=_cmd_print_output_schema)
 
+    doctor = subparsers.add_parser(
+        "doctor", help="run a read-only configuration and machine preflight"
+    )
+    doctor.add_argument(
+        "configs",
+        nargs="*",
+        help="JSON benchmark config path(s), in any order",
+    )
+    doctor.add_argument(
+        "--campaign",
+        action="store_true",
+        help="apply campaign gates, including config-warning acknowledgement",
+    )
+    doctor.add_argument(
+        "--ack-config-warnings",
+        action="store_true",
+        help="record acknowledgement of ignored config keys for campaign mode",
+    )
+    doctor.add_argument(
+        "--backup-destination",
+        help="existing backup destination to inspect for presence and free space",
+    )
+    doctor.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="emit stable machine-readable JSON instead of the human table",
+    )
+    doctor.set_defaults(func=_cmd_doctor)
+
     kv_size = subparsers.add_parser("kv-size", help="compute KV-cache size from model config")
     kv_size.add_argument("config", nargs="?", help="path to a HF config.json")
     kv_size.add_argument("--layers", type=int, help="number of hidden layers")
@@ -958,6 +1472,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reduce_parser.add_argument("path", help="path to a run bundle directory")
     reduce_parser.set_defaults(func=_cmd_reduce)
+
+    analyze = subparsers.add_parser(
+        "analyze-claims",
+        help="derive paired contrast and claim verdicts from frozen evidence",
+    )
+    analyze.add_argument(
+        "--analysis-manifest", required=True, help="frozen analysis_manifest.json path"
+    )
+    analyze.add_argument(
+        "--runs-root", required=True, help="directory containing registered run bundles"
+    )
+    analyze.add_argument(
+        "--floor-artifact", required=True, help="validated P2-039 floor artifact JSON"
+    )
+    analyze.add_argument(
+        "--output", required=True, help="claim_verdicts.json output path"
+    )
+    analyze.add_argument(
+        "--legacy-l1-mechanics",
+        action="store_true",
+        help="mechanics-only legacy mode; frozen six-bundle allowlist and L1 ceiling",
+    )
+    analyze.set_defaults(func=_cmd_analyze_claims)
 
     report = subparsers.add_parser(
         "report", help="render a static HTML run browser (needs the [analysis] extra)"

@@ -8,6 +8,7 @@ semantics.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
@@ -17,11 +18,98 @@ from joulewise.validation import finite_float
 CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
-SUMMARY_REDUCER_VERSION = "0.2.0"
+SUMMARY_REDUCER_VERSION = "0.4.2"
 
 
 class SchemaError(ValueError):
     """Raised when a benchmark schema cannot be validated."""
+
+
+class ConfigKeyWarning(UserWarning):
+    """Schema-0.1 diagnostic for an ignored, unknown configuration key."""
+
+    code = "unknown_config_key"
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+        super().__init__(
+            f"unknown config key {path!r} ignored by schema {CONFIG_SCHEMA_VERSION}"
+        )
+
+    def to_dict(self) -> dict[str, str]:
+        return {"code": self.code, "path": self.path, "message": str(self)}
+
+
+_CONFIG_KEYS_BY_PATH: dict[str, frozenset[str]] = {
+    "": frozenset(
+        {
+            "schema_version",
+            "run_id",
+            "model",
+            "quantization",
+            "hardware_target",
+            "workload_profile",
+            "interconnect",
+            "sampling",
+            "run_metadata",
+        }
+    ),
+    "model": frozenset(
+        {
+            "name",
+            "family",
+            "source",
+            "revision",
+            "weight_format",
+            "context_window",
+        }
+    ),
+    "quantization": frozenset({"name", "bits", "group_size"}),
+    "hardware_target": frozenset(
+        {
+            "id",
+            "transport",
+            "runtime_backend",
+            "telemetry_backend",
+            "host",
+            "device_kind",
+            "notes",
+        }
+    ),
+    "workload_profile": frozenset(
+        {
+            "name",
+            "prompt_tokens",
+            "output_tokens",
+            "prompt_text",
+            "dataset_ref",
+            "suite_manifest_ref",
+            "suite_manifest_sha256",
+            "generator_sidecar_ref",
+            "repetitions",
+            "warmup_runs",
+        }
+    ),
+    "interconnect": frozenset({"name", "link_speed_mbps", "notes"}),
+    "sampling": frozenset({"power_hz", "idle_seconds", "warmup_seconds"}),
+    "run_metadata": frozenset(
+        {"project", "operator", "ambient_temp_c", "notes", "tags"}
+    ),
+}
+
+
+def _unknown_config_key_warnings(data: dict[str, Any]) -> tuple[ConfigKeyWarning, ...]:
+    paths = [str(key) for key in data if key not in _CONFIG_KEYS_BY_PATH[""]]
+    for section, allowed in _CONFIG_KEYS_BY_PATH.items():
+        if not section:
+            continue
+        value = data.get(section)
+        if not isinstance(value, dict):
+            # The owning from_mapping method raises SchemaError; do not inspect
+            # child keys of a value that is not a typed object.
+            continue
+        paths.extend(f"{section}.{key}" for key in value if key not in allowed)
+    return tuple(ConfigKeyWarning(path) for path in sorted(paths))
 
 
 class TransportKind(str, Enum):
@@ -59,6 +147,7 @@ class FailureReason(str, Enum):
     PERMISSION_DENIED = "permission_denied"
     TRANSPORT_UNAVAILABLE = "transport_unavailable"
     UNSUPPORTED_WORKLOAD = "unsupported_workload"
+    CLEANUP_FAILED = "cleanup_failed"
     UNKNOWN_ERROR = "unknown_error"
 
 
@@ -354,10 +443,19 @@ class BenchmarkConfig:
     sampling: SamplingConfig = field(default_factory=SamplingConfig)
     run_metadata: RunMetadata = field(default_factory=lambda: RunMetadata(project="joulewise"))
     run_id: str | None = None
+    # Diagnostic-only construction state. It is deliberately excluded from
+    # comparison, repr, and normalized config serialization so unknown values
+    # cannot change D-001/D-022 identity or leak into config.json.
+    config_warnings: tuple[dict[str, str], ...] = field(
+        default_factory=tuple, compare=False, repr=False
+    )
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "BenchmarkConfig":
         data = _require_mapping(data, "benchmark config")
+        unknown_warnings = _unknown_config_key_warnings(data)
+        for warning in unknown_warnings:
+            warnings.warn(warning, stacklevel=2)
         schema_version = _require_string(data.get("schema_version"), "schema_version")
         if schema_version != CONFIG_SCHEMA_VERSION:
             raise SchemaError(
@@ -373,6 +471,7 @@ class BenchmarkConfig:
             interconnect=InterconnectConfig.from_mapping(data.get("interconnect")),
             sampling=SamplingConfig.from_mapping(data.get("sampling")),
             run_metadata=RunMetadata.from_mapping(data.get("run_metadata")),
+            config_warnings=tuple(warning.to_dict() for warning in unknown_warnings),
         )
         config.validate()
         return config
@@ -383,7 +482,9 @@ class BenchmarkConfig:
             raise SchemaError("hardware_target.host is required when transport is ssh")
 
     def to_dict(self) -> dict[str, Any]:
-        data = _enum_to_value(asdict(self))
+        data = asdict(self)
+        data.pop("config_warnings")
+        data = _enum_to_value(data)
         # D-044: suite_manifest_ref/suite_manifest_sha256 are the scoped
         # omission-serialized optionals. Existing non-suite configs keep their
         # byte-identical normalized JSON while every pre-existing optional keeps
@@ -410,6 +511,7 @@ class BenchmarkConfig:
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "title": "JouleWise BenchmarkConfig",
             "type": "object",
+            "x-joulewise-unknown-key-policy": "warn-and-ignore",
             "required": [
                 "schema_version",
                 "model",
@@ -553,12 +655,11 @@ class MeasurementQuality:
     #: against the following rep via ``run_benchmark(extra_metadata=...)`` and
     #: the reducer copies the flag back out of ``metadata.json``.
     cooldown_cap_hit: bool | None = None
-    #: Which source supplied the total token count behind ``energy_token_j``
-    #: (additive Slice 2N.3 field, R-015): ``"config"`` when
-    #: ``workload_profile.prompt_tokens`` was set, ``"runtime_observed"`` when
-    #: the reducer fell back to the runtime's observed counts recorded in
-    #: ``metadata.json`` (``workload_observed.token_count``), ``None`` when
-    #: neither was available (``energy_token_j`` is then ``None`` too).
+    #: Which source supplied the total token count behind ``energy_token_j``.
+    #: Per D-058, a positive runtime-observed total recorded in metadata wins;
+    #: configured token counts are workload intent and are not a fallback
+    #: denominator. ``None`` means no eligible runtime total was available and
+    #: ``energy_token_j`` is therefore ``None`` too.
     token_count_source: str | None = None
     #: True when the pre-run idle powermetrics window shows GPU activity high
     #: enough to make the baseline suspect. ``None`` means the telemetry did
@@ -574,6 +675,15 @@ class MeasurementQuality:
     #: power curve. Values are ``"identifiable"`` or
     #: ``"not_resolvable_sample_count"``.
     phase_identifiability: dict[str, str] | None = None
+    #: Paths whose worker task file/directory cleanup failed. This is a
+    #: quality-only hygiene signal; surviving worker-started processes use the
+    #: cleanup_failed FailureReason and demote the run instead.
+    remote_cleanup_failed: list[str] | None = None
+    #: Result of local runtime cleanup after the measured window. False is a
+    #: quality concern for the next repetition but never retroactively changes
+    #: the current run's success or energy result. None means no boolean cleanup
+    #: completion evidence was recorded (legacy/post-hoc/failure-before-cleanup).
+    runtime_cleanup_ok: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -635,15 +745,17 @@ class SummaryMetrics:
     ttft_s: float | None = None
     decode_latency_s: float | None = None
     throughput_tokens_s: float | None = None
+    inter_token_throughput_tokens_s: float | None = None
     idle_baseline: IdleBaseline | None = None
     uncertainty: UncertaintyInterval | None = None
     measurement_quality: MeasurementQuality | None = None
     phase_energy_j: dict[str, float] | None = None
     suite_metrics: SuiteSummary | None = None
     energy_uncertainty_status: str | None = None
+    idle_mean_uncertainty: dict[str, Any] | None = None
     energy_variance_terms_j2: dict[str, float | None] | None = None
     energy_bound_terms_j: dict[str, float | None] | None = None
-    claim_eligibility: dict[str, Any] | None = None
+    window_evidence_precheck: dict[str, Any] | None = None
     summary_provenance: dict[str, str] | None = field(
         default_factory=lambda: {
             "summary_schema_version": SUMMARY_SCHEMA_VERSION,
@@ -684,6 +796,7 @@ class SummaryMetrics:
                 "ttft_s": nullable_number,
                 "decode_latency_s": nullable_number,
                 "throughput_tokens_s": nullable_number,
+                "inter_token_throughput_tokens_s": nullable_number,
                 "idle_baseline": {
                     "anyOf": [{"$ref": "#/$defs/idle_baseline"}, {"type": "null"}]
                 },
@@ -699,9 +812,15 @@ class SummaryMetrics:
                     "type": ["string", "null"],
                     "enum": ["not_estimable", "estimated", "bounded", None],
                 },
+                "idle_mean_uncertainty": {
+                    "anyOf": [
+                        {"$ref": "#/$defs/idle_mean_uncertainty"},
+                        {"type": "null"},
+                    ]
+                },
                 "energy_variance_terms_j2": {"type": ["object", "null"]},
                 "energy_bound_terms_j": {"type": ["object", "null"]},
-                "claim_eligibility": {"type": ["object", "null"]},
+                "window_evidence_precheck": {"type": ["object", "null"]},
                 "summary_provenance": {
                     "anyOf": [{"$ref": "#/$defs/summary_provenance"}, {"type": "null"}]
                 },
@@ -732,6 +851,81 @@ class SummaryMetrics:
                         "idle_window_suspect": nullable_bool,
                     },
                 },
+                "idle_mean_uncertainty": {
+                    "type": "object",
+                    "required": [
+                        "status",
+                        "method",
+                        "source_artifact",
+                        "source_sha256",
+                        "raw_sample_count",
+                        "median_sample_interval_s",
+                        "cadence_p95_p05_ratio",
+                        "bandwidth_s",
+                        "lag_count",
+                        "sample_variance_w2",
+                        "iid_variance_of_mean_w2",
+                        "hac_variance_of_mean_w2",
+                        "governed_variance_of_mean_w2",
+                        "effective_sample_size",
+                        "correlation_scope",
+                        "reason_codes",
+                    ],
+                    "properties": {
+                        "status": {
+                            "type": "string",
+                            "enum": ["estimated", "not_estimable"],
+                        },
+                        "method": {
+                            "type": "string",
+                            "const": "newey_west_bartlett_10s_iid_floor_v1",
+                        },
+                        "source_artifact": {
+                            "type": "string",
+                            "const": "raw/powermetrics_idle.plist",
+                        },
+                        "source_sha256": {
+                            "type": ["string", "null"],
+                            "pattern": "^[0-9a-f]{64}$",
+                        },
+                        "raw_sample_count": {
+                            "type": ["integer", "null"],
+                            "minimum": 0,
+                        },
+                        "median_sample_interval_s": nullable_number,
+                        "cadence_p95_p05_ratio": nullable_number,
+                        "bandwidth_s": {"type": "number", "const": 10.0},
+                        "lag_count": {
+                            "type": ["integer", "null"],
+                            "minimum": 0,
+                        },
+                        "sample_variance_w2": nullable_number,
+                        "iid_variance_of_mean_w2": nullable_number,
+                        "hac_variance_of_mean_w2": nullable_number,
+                        "governed_variance_of_mean_w2": nullable_number,
+                        "effective_sample_size": nullable_number,
+                        "correlation_scope": {
+                            "type": "string",
+                            "const": "independent_run",
+                        },
+                        "reason_codes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "raw_idle_trace_unavailable",
+                                    "raw_idle_trace_invalid",
+                                    "nonfinite_idle_power",
+                                    "insufficient_idle_samples",
+                                    "idle_trace_span_below_three_bandwidths",
+                                    "idle_cadence_irregular",
+                                    "idle_metadata_mismatch",
+                                    "backend_policy_not_frozen",
+                                ],
+                            },
+                        },
+                    },
+                },
                 "measurement_quality": {
                     "type": "object",
                     "required": ["requested_sampling_hz"],
@@ -747,6 +941,11 @@ class SummaryMetrics:
                         "idle_window_suspect": nullable_bool,
                         "token_counts_source": {"type": ["string", "null"]},
                         "phase_identifiability": {"type": ["object", "null"]},
+                        "remote_cleanup_failed": {
+                            "type": ["array", "null"],
+                            "items": {"type": "string"},
+                        },
+                        "runtime_cleanup_ok": nullable_bool,
                     },
                 },
                 "summary_provenance": {

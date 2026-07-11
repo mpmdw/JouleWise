@@ -38,7 +38,7 @@
 <a href="#queue-maintenance">Queue Maintenance</a></aside>
   <div class="doc-wrap doc-source-task-queue-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 0a5c5e6"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 0a5c5e6</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 10e0ad2"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 10e0ad2</span></span></div>
     <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -65,6 +65,11 @@ instructions before considering any lower-ranked work.</li>
 <li>Place or update the task in the queue with priority, rationale, evidence,
 and blockers.</li>
 <li>If executing it now, say why it outranks the current top task.</li>
+<li>Closure rule (D-023): a row may move to Completed only after the
+corresponding phase exit-checklist matrix row already shows the same
+status with dated evidence, and the Completed row&#39;s evidence cell
+must cite that matrix row (file + item id). If no matrix row exists
+for the work, say so explicitly in the evidence cell.</li>
 </ol>
 <h2 id="priority-scale">Priority Scale</h2>
 <ul>
@@ -203,9 +208,25 @@ Normal ranking applies.</p>
 <td align="right">0h</td>
 <td>P2-040</td>
 <td>P2 Next Slice</td>
-<td>NEW (C-027; pre-Window-A) [AGENT]</td>
+<td>FIX ROUND COMMITTED on c027-int-p2040 2026-07-10; lead gates PASSED (corpus 6/6 strict, mock e2e run+strict+reduce, suite OK post-merge); final-head clean on code (C-027; pre-Window-A) [AGENT]</td>
 <td>Reducer/gate correctness batch: zero-length measured window must FAIL strict/claim paths (ARC-3); metric-specific evidence gates (gross request must not require idle-drift evidence, STA-5); joint-edge interpolation bound (STA-6); D-058 runtime-observed token denominator wins over config (STA-7, update the locking test); zero-MAD fallback review flag (STA-8); atomic experiment-manifest writes (ARC-5); unknown-config-key warning + delete-or-implement <code>warmup_seconds</code> (ARC-8); local cleanup-failure surfaced into run quality (ARC-6)</td>
-<td>Each item lands with a test that FAILS against current behavior (mutation-style per STA-11); C-027 disposition table is the authority: <code>docs/reviews/2026-07-09-c027-whole-project-review.md</code></td>
+<td>Fix round: 908 OK/11 skipped, lint errors=0; absent <code>runs/</code> makes the loud six-corpus acceptance gate pending. Lead-committed by pathspec; report <code>docs/run_reports/2026-07-10-p2040-fix-round.md</code>. Broader P2-040 remainder status remains governed by adjudication.</td>
+</tr>
+<tr>
+<td align="right">0i</td>
+<td>P2-038</td>
+<td>P2 Next Slice</td>
+<td>SOFTWARE + ACCEPTED-FINDINGS FIX ROUND COMPLETE on impl/p2038 2026-07-10 (uncommitted); LIVE CLOSURE OPEN (C-027/C-028; HARD pre-Window-A gate) [AGENT + QUIET-MAC tail]</td>
+<td>Production uncertainty evidence path: current-era powermetrics writes re-derived clock/phase/drift bounds plus the separate idle-drift guard handoff; campaign shakedown asserts strict → reduce → strict → request gate → backup</td>
+<td>FIX-1..FIX-6 green: tri-state contamination, P2-039 pending-guard cross-contract, backup launch failure, sentinel energy-leak mutation, child invocation, and literal phase arithmetic. Focused 70 OK; canonical 992 OK (skipped=12); six-corpus worktree gate loud-skipped because retained <code>runs/</code> is absent. NOT CLOSED until lead runs true MLX + <code>/usr/bin/powermetrics</code> on a quiet machine and backup succeeds; reports <code>docs/run_reports/2026-07-10-p2038-production-uncertainty.md</code> and <code>docs/run_reports/2026-07-10-p2038-fix-round.md</code></td>
+</tr>
+<tr>
+<td align="right">0h</td>
+<td>P2-040</td>
+<td>P2 Next Slice</td>
+<td>REMAINDER COMMITTED on <code>impl/p2040-remainder</code>; VERSIONING REVIEW FIX UNCOMMITTED 2026-07-10; awaiting lead pathspec commit + retained-corpus gate (C-027; pre-Window-A) [AGENT]</td>
+<td>Reducer/gate correctness batch: zero-length measured window must FAIL strict/claim paths (ARC-3); metric-specific evidence gates (gross request must not require idle-drift evidence, STA-5); joint-edge interpolation bound (STA-6); D-058 runtime-observed token denominator wins over config (STA-7, update the locking test); zero-MAD fallback review flag (STA-8); atomic experiment-manifest writes (ARC-5); deterministic unknown-config-key stderr + metadata warnings; adjudicated post-active-warmup settling; local cleanup failure surfaced into run quality (ARC-6)</td>
+<td>Review blocker fixed by reducer 0.3.1 plus frozen-0.3.0 named absence projection; focused strict/reducer 84 OK; extended strict/reducer/schema 104 OK/1 skipped. Canonical 926-test rerun has one unrelated pre-existing node-worker 0.2-second fake-process timing failure; reducer/version tests pass. Lead must review, run 6/6 strict read-only, and commit by pathspec. Reports: <code>docs/run_reports/2026-07-10-p2040-fix-round.md</code>, <code>docs/run_reports/2026-07-10-p2040-remainder.md</code>, <code>docs/run_reports/2026-07-10-p2040-versioning-fix.md</code>.</td>
 </tr>
 <tr>
 <td align="right">0i</td>
@@ -227,9 +248,9 @@ Normal ranking applies.</p>
 <td align="right">0k</td>
 <td>RPT-001</td>
 <td>P1 Phase Gate</td>
-<td>NEW (C-027/NEGSPACE; capstone-critical) [AGENT]</td>
+<td>FIX ROUND COMPLETE 2026-07-10 (awaiting lead pathspec commit) [AGENT]</td>
 <td>Report skeleton + end-to-end vertical slice: create the submission-format report source (intro/problem/contribution/harness/methodology stubs) and drive ONE reproducible bundle→analysis artifact→figure/table→claims-index row→report page path using the six legacy bundles (labeled legacy L1)</td>
-<td>Report source builds; one report-shaped figure + table + claims row exist and are regenerable by command; legacy-L1 labels present</td>
+<td>FIX-1..FIX-9 implemented; full offline regeneration against <code>/Users/edr/code/JouleWise/runs</code>; Phase-4 projection + manifest hash gates; focused 37 OK, canonical 890 OK (skipped=10); <code>docs/run_reports/2026-07-10-rpt001-fix-round.md</code></td>
 </tr>
 <tr>
 <td align="right">0l</td>
@@ -238,6 +259,22 @@ Normal ranking applies.</p>
 <td>NEW (C-027) [AGENT]</td>
 <td>Frozen analysis manifest from matrix generation: cell_id/block_id/condition_id per entry, sentinel linkage, enumerated contrasts with <code>contrast_id</code> (STA-10)</td>
 <td>Manifest emitted deterministically beside the order manifest; P2-037 consumes it</td>
+</tr>
+<tr>
+<td align="right">0k</td>
+<td>RPT-001</td>
+<td>P1 Phase Gate</td>
+<td>DONE 2026-07-10 (PR #44 merged; lead re-ran the gated build) [AGENT]</td>
+<td>Report skeleton + end-to-end vertical slice: create the submission-format report source (intro/problem/contribution/harness/methodology stubs) and drive ONE reproducible bundle→analysis artifact→figure/table→claims-index row→report page path using the six legacy bundles (labeled legacy L1)</td>
+<td>FIX-1..FIX-9 implemented; full offline regeneration against <code>/Users/edr/code/JouleWise/runs</code>; Phase-4 projection + manifest hash gates; focused 37 OK, canonical 890 OK (skipped=10); <code>docs/run_reports/2026-07-10-rpt001-fix-round.md</code></td>
+</tr>
+<tr>
+<td align="right">0l</td>
+<td>P2-042</td>
+<td>P2 Next Slice</td>
+<td>FIX ROUND COMPLETE in worktree 2026-07-10 (draft PR #46; awaiting lead commit/review) [AGENT]</td>
+<td>Frozen analysis manifest from matrix generation: cell_id/block_id/condition_id per entry, sentinel linkage, enumerated contrasts with <code>contrast_id</code> (STA-10)</td>
+<td>Targeted FIX-1..FIX-3 complete: typed fail-closed identities, semantic run IDs, byte-exact AP hashes/LF configs; focused 82 OK, canonical 989 OK (skipped=12); report <code>docs/run_reports/2026-07-10-p2042-analysis-manifest.md</code></td>
 </tr>
 <tr>
 <td align="right">0m</td>
@@ -310,6 +347,78 @@ Normal ranking applies.</p>
 <td>NEW (C-027/NEGSPACE-9; extends P2-027) [AGENT prep, ED-EXTERNAL tail]</td>
 <td>Exact environment lock (analysis + Mac measurement env), publish the bundle pack, one demonstrated external re-reduction by an uninvolved party</td>
 <td>Lockfiles committed; pack published; external re-reduction documented</td>
+</tr>
+<tr>
+<td align="right">0v</td>
+<td>P2-043</td>
+<td>P1 Phase Gate</td>
+<td>NEW (hardening adjudication 2026-07-10; pre-Window-A) [AGENT]</td>
+<td>Read-only <code>joulewise doctor</code> preflight: machine+human output for config warnings (fails campaign mode unless acknowledged — realizes the warn-vs-reject reconciliation), versions/arch, model+tokenizer identity, powermetrics presence + <code>sudo -n</code>, sampler fields, thermal pressure, backup destination + free space, quiet-machine warnings; never mutates (sudoers inspect-only per D-004)</td>
+<td>Deterministic fixture tests; campaign preflight consumes it; authority <code>docs/reviews/2026-07-10-hardening-adjudication.md</code> C1</td>
+</tr>
+<tr>
+<td align="right">0w</td>
+<td>P2-044</td>
+<td>P0 Safety</td>
+<td>NEW (hardening adjudication; REQUIRED before P2-037 claim integration) [AGENT]</td>
+<td>Idle dependence + effective sample size: predeclared block-mean or autocorrelation-adjusted variance/ESS from retained idle traces; raw adjacent-sample count never used as independent n; governed variance propagates</td>
+<td>Closed-form + highly-correlated fixtures; P2-037 consumes the corrected term; authority C3</td>
+</tr>
+<tr>
+<td align="right">0x</td>
+<td>P2-045</td>
+<td>P2 Next Slice</td>
+<td>NEW (hardening adjudication; before throughput enters any governed figure) [AGENT]</td>
+<td>Throughput convention versioning: reducer implements N/(t_last-t_first) which overstates steady-state decode throughput by N/(N-1) (14.3% at 8 tokens, ~0.2% at 512); add/version an unambiguous inter-token metric or rename the legacy convention; preserve old-bundle dispatch per the D-030 frozen-version rule</td>
+<td>Contract + tests updated; authority C5</td>
+</tr>
+<tr>
+<td align="right">0y</td>
+<td>CI-002</td>
+<td>P1 Phase Gate</td>
+<td>NEW (hardening adjudication; D-017 amended narrowly) [AGENT]</td>
+<td>Core packaging/strictness hardening: build wheel/sdist, clean-env install, python -m joulewise, compileall, canonical tests, STRICT mock run→validate→reduce in CI; zero-dependency core preserved; NO console script or macOS job (deferred to CI-003 post-G6 per C-011 sequencing)</td>
+<td>CI green with the new jobs; authority C4</td>
+</tr>
+<tr>
+<td align="right">0z</td>
+<td>REPRO-002</td>
+<td>P1 Phase Gate</td>
+<td>NEW (hardening adjudication; REQUIRED before any public bundle release) [AGENT]</td>
+<td>Publication privacy audit: enumerate prompts/responses/paths/user+host identifiers/logs/env fields; fail closed on unreviewed fields; immutable private bundle vs transformed public pack with transformation manifest + hashes; never claim byte identity after transformation</td>
+<td>Audit tool + tests; REPRO-001 publication gated on it; authority C2</td>
+</tr>
+<tr>
+<td align="right">1a-h</td>
+<td>P2-046</td>
+<td>P1 Phase Gate</td>
+<td>NEW (hardening adjudication; A=[AGENT] prep now, B=[QUIET-MAC] Window A)</td>
+<td>Load-transition marker/sample alignment characterization: A frozen harness+analysis emitting offset/residual/bound artifacts; B real-Mac counterbalanced execution validating (or widening) P2-038&#39;s conservative interval-support bound</td>
+<td>Artifacts versioned; P2-038 bound cited or amended; authority C6</td>
+</tr>
+<tr>
+<td align="right">1b-h</td>
+<td>P2-047</td>
+<td>P2 Next Slice</td>
+<td>NEW (hardening adjudication; A=[AGENT] after floors, B=[QUIET-MAC])</td>
+<td>Controller capture-overhead ABBA: standard vs buffered/minimal-marker path, identical outputs/hashes, frozen manifest; default disposition scope-to-instrumented-stack (subtraction only via separately justified model)</td>
+<td>Frozen ABBA manifest + analysis; authority C7</td>
+</tr>
+<tr>
+<td align="right">1c-h</td>
+<td>RPT-002</td>
+<td>P1 Phase Gate</td>
+<td>NEW (hardening adjudication) [AGENT]</td>
+<td>2026 related-work refresh: independently verify the proposal&#39;s Appendix C sources + §11 anchors from primary papers; update related_work_draft, bibliography, source map, chapter; novelty language revised (no origination claim for energy-aware disaggregation)</td>
+<td>Verified citations; claims_lint clean; authority C8 + Appendix C</td>
+</tr>
+<tr>
+<td align="right">1d-h</td>
+<td>P2-048</td>
+<td>P2 Next Slice</td>
+<td>SHELF (hardening adjudication; conditional on P1-003 meter decision) [AGENT]</td>
+<td>External-meter importer + boundary-calibrate CLI implementing the EXISTING Q6/D-018/detection-floor bridge design (no new design doc)</td>
+<td>Importer + CLI + refusal reasons per the designed gates; authority C9</td>
 </tr>
 <tr>
 <td align="right">1</td>
@@ -442,10 +551,10 @@ Normal ranking applies.</p>
 <tr>
 <td align="right">E0</td>
 <td>P0-003</td>
-<td>P0 Safety (user-deferred 2026-07-06 — interim same-disk backup accepted for now; C-026 meeting ESCALATION: becomes REQUIRED before Window-A data accumulates — campaign bundles on one disk are unrecoverable evidence; C-027: external-lane rank E0, the top ED-EXTERNAL item)</td>
-<td>waiting-user, PRE-WINDOW-A [ED-EXTERNAL]</td>
+<td>P0 Safety</td>
+<td>DONE 2026-07-10 (Ed chose iCloud Drive live in C-028; lead executed + fresh restore test) [ED-EXTERNAL]</td>
 <td>Replace interim backup destination (R-016) with external/cloud location</td>
-<td>User names the destination; one fresh restore test; R-016 → fully mitigated</td>
+<td>Destination <code>~/Library/Mobile Documents/com~apple~CloudDocs/JouleWise-backup</code> (6 bundles, backup.log); fresh restore test: strict-valid on restored 1.5B+122B bundles, byte-identical diff vs source; CAVEAT recorded in R-016: iCloud eviction (R-017 history) — re-run backup + verify before each measurement window; keep the folder pinned/downloaded</td>
 </tr>
 <tr>
 <td align="right">12</td>
@@ -483,15 +592,15 @@ Normal ranking applies.</p>
 <td align="right">16</td>
 <td>P2-005</td>
 <td>P2 Next Slice</td>
-<td>2K fixture-first MERGED (PR #11, 2026-07-08); ALL protocol pins PROVISIONAL; live validation gated (P1-006, evidence script ready: <code>docs/phase_1/2k_live_verification_checklist.md</code>); 2L Orin open; before 2K live: pin richer nvidia-smi query fields (clocks/pstate/throttle-reasons/memory; C-015/R2); NV-GATE-2 (C-027) hard acceptance gates at live promotion: pin vLLM stream-chunk-vs-token semantics against live protocol (ARC-1), fix NVIDIA cooldown skipping under generated experiment ids (ARC-7), extend strict raw-to-trace lineage to nvidia_smi (ARC-2, overlaps P2-016d), remote temp-artifact cleanup surfaced (ARC-6), one localhost subprocess client↔real-worker integration test (ARC-11)</td>
+<td>2K fixture-first MERGED (PR #11, 2026-07-08); NV-GATE-2 CODE-NOW units plus the lead-accepted FIX-1..FIX-5/fake-readiness round are COMPLETE uncommitted 2026-07-10 on <code>impl/nvgate2-codenow</code>; idle capture now gates on its first parseable row before starting the requested duration, closing the zero-byte worker regression; PID cleanup is identity-aware, 0.3.1 compatibility unions both cleanup fields, real stubborn subprocess coverage and exact NV-5 sampler maps are present, usage omission is locked controller→reducer, and the historic idle test plus delayed-readiness regression passed 3 consecutive runs; PR #49&#39;s unrelated main-side P2-038 rail-only flake was root-caused and fixed test-fixture-only (100/100 exact test green; main reproduced independently); localhost NV-5 lead gate PASSED (2026-07-11 socket-capable 3/3 OK; canonical suite exercises it, skipped=12); ALL protocol pins remain PROVISIONAL; live validation gated (P1-006, evidence script ready: <code>docs/phase_1/2k_live_verification_checklist.md</code>); 2L Orin open; before 2K live: pin richer nvidia-smi query fields (clocks/pstate/throttle-reasons/memory; C-015/R2); NV-GATE-2 live-window acceptance remains: capture stream-vs-token semantics and execute live rows 16–20</td>
 <td>Remote targets (slices 2K NVIDIA/vLLM/ssh, 2L Orin)</td>
-<td>Remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide.</td>
+<td>Evidence: <code>docs/run_reports/2026-07-10-nvgate2-codenow.md</code>, <code>docs/run_reports/2026-07-10-nvgate2-fix-round.md</code>, <code>docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md</code>, and <code>docs/run_reports/2026-07-10-pr49-p2038-flake-root-cause.md</code>; canonical 1041 OK/13 skipped after flake fix; remote bundle or documented access blocker; applicability table updated. Spec in the hardware-slice guide.</td>
 </tr>
 <tr>
 <td align="right">17</td>
 <td>P2-016</td>
 <td>P2 Next Slice</td>
-<td>NEW (C-011 deferred batch; post-2M / with-2K-live) [AGENT]</td>
+<td>NEW (C-011 deferred batch; post-2M / with-2K-live) [AGENT] (d) SUPERSEDED for powermetrics-era backends by NV-GATE-2/NV-3 ruling (ADJUDICATION.md)</td>
 <td>Critique-adjudicated queue batch: (a) post-2M controller split (experiment loop/cooldown/env capture out of controller.py); (b) node-worker protocol parity tests + table-driven validation (with 2K live); (c) NVIDIA [N/A]-row skip counts surfaced into measurement quality (with 2K live); (d) per-backend raw-to-trace strict generalization (with 2K live); (e) claims-to-evidence index seeded once 2M corpus exists; (f) schema v0.2 loader/export parity acceptance rule; (g) boundary labels propagated into report index/chart titles before any cross-boundary claims; (h) require <code>summary_provenance</code> in the strict succeeded-summary key list (C-014 scout); (i) align <code>token_count_source</code> value naming with the claims ladder&#39;s <code>config fallback</code> vocabulary (C-014 scout)</td>
 <td>Each item lands with its named gate; dispositions + rejected items (RemoteNodeSession per B-1, run-ID randomization per D-010/D-022, console script pre-2M) recorded in C-011</td>
 </tr>
@@ -785,15 +894,23 @@ Normal ranking applies.</p>
 <p>Previously promised follow-ups whose queue rows had silently died; each
 now has an explicit disposition:</p>
 <ul>
-<li>D-013 SSH-controlled vs co-resident controller comparison — SHELF,
-trigger: first 2K live session (validation cell rides that session).</li>
-<li>Empirical corpus for the 0.40 GPU-idle contamination threshold — SHELF,
-trigger: Window-A calibration data exists (P2-015 output feeds it).</li>
-<li><code>dvfm_states</code> slimming option — SHELF, trigger: bundle-size pain during
-the 2M campaign; otherwise declined as premature.</li>
-<li>Cold-load / model-load-energy capture — DECLINED for the capstone scope
+<li><p>D-013 SSH-controlled vs co-resident controller comparison — SHELF,
+trigger: first 2K live session (validation cell rides that session).</p>
+</li>
+<li><p>Empirical corpus for the 0.40 GPU-idle contamination threshold — SHELF,
+trigger: Window-A calibration data exists (P2-015 output feeds it).</p>
+</li>
+<li><p><code>dvfm_states</code> slimming option — SHELF, trigger: bundle-size pain during
+the 2M campaign; otherwise declined as premature.</p>
+</li>
+<li><p>Cold-load / model-load-energy capture — DECLINED for the capstone scope
 (CP-5 deferral made permanent unless an AP row claims it; warm-cache
-protocol is the declared scope).</li>
+protocol is the declared scope).</p>
+</li>
+<li><p>CI-003 developer polish (console script, macOS CI job, Ruff, coverage thresholds) — SHELF, trigger: G6-equivalent reference release (hardening adjudication C10).</p>
+</li>
+<li><p>DOC-010 historical-archive audit — SHELF, trigger: DOC-008 state kernel proven in use (hardening adjudication C11).</p>
+</li>
 </ul>
 <h2 id="current-do-not-do-yet-list">Current Do-Not-Do-Yet List</h2>
 <ul>
@@ -839,7 +956,7 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit 0a5c5e6 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit 10e0ad2 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

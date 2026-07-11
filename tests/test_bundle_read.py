@@ -23,7 +23,12 @@ from joulewise.cli import (
 )
 from joulewise.clock import FakeClock
 from joulewise.interfaces import PowerSample, RuntimeEvent
-from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus
+from joulewise.schemas import (
+    BenchmarkConfig,
+    FailureReason,
+    RunStatus,
+    SummaryMetrics,
+)
 from joulewise.suite import (
     BLOCK_END,
     BLOCK_START,
@@ -244,6 +249,27 @@ class CompletionStateTests(ReaderTestCase):
         self.assertFalse(reader.is_complete())
         self.assertIsNone(reader.raw_summary())
 
+    def test_inter_token_throughput_must_be_null_or_finite(self) -> None:
+        writer = self.make_bundle("nonfinite-inter-token-throughput")
+        summary = SummaryMetrics(
+            status=RunStatus.SUCCEEDED,
+            energy_request_j=1.0,
+            gross_energy_j=1.0,
+            inter_token_throughput_tokens_s=float("inf"),
+        ).to_dict()
+        (writer.path / "summary_metrics.json").write_text(json.dumps(summary))
+
+        problems = BundleReader(writer.path).problems()
+
+        self.assertTrue(
+            any(
+                "inter_token_throughput_tokens_s is not null or finite"
+                in problem
+                for problem in problems
+            ),
+            problems,
+        )
+
 
 class ProblemCollectionTests(ReaderTestCase):
     def test_invalid_utf8_json_artifact_is_reported_not_raised(self) -> None:
@@ -280,6 +306,39 @@ class MeasuredWindowTests(ReaderTestCase):
     def test_no_window_when_events_missing(self) -> None:
         writer = self.make_bundle("no-window")
         self.assertIsNone(BundleReader(writer.path).measured_window())
+
+
+class RuntimeCleanupQualityTests(ReaderTestCase):
+    def add_cleanup(self, writer: RunBundleWriter, value: object) -> None:
+        writer.append_event(
+            RuntimeEvent(
+                timestamp_s=self.clock.now(),
+                event_type="stage_completed",
+                phase="cleanup",
+                message="cleanup complete",
+                metadata={"cleanup_ok": value},
+            )
+        )
+
+    def test_runtime_cleanup_ok_is_none_without_boolean_evidence(self) -> None:
+        writer = self.make_bundle("cleanup-unknown")
+        self.assertIsNone(BundleReader(writer.path).runtime_cleanup_ok())
+        self.add_cleanup(writer, True)
+        self.add_cleanup(writer, "true")
+        self.assertIsNone(BundleReader(writer.path).runtime_cleanup_ok())
+
+    def test_runtime_cleanup_ok_is_true_when_all_completions_are_true(self) -> None:
+        writer = self.make_bundle("cleanup-true")
+        self.add_cleanup(writer, True)
+        self.add_cleanup(writer, True)
+        self.assertIs(BundleReader(writer.path).runtime_cleanup_ok(), True)
+
+    def test_runtime_cleanup_ok_is_false_when_any_completion_is_false(self) -> None:
+        writer = self.make_bundle("cleanup-false")
+        self.add_cleanup(writer, True)
+        self.add_cleanup(writer, False)
+        self.add_cleanup(writer, "damaged")
+        self.assertIs(BundleReader(writer.path).runtime_cleanup_ok(), False)
 
 
 class RailAlignmentTests(ReaderTestCase):

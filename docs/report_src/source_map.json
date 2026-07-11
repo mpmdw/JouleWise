@@ -1,0 +1,192 @@
+{
+  "schema": "joulewise.report_source_map.v1",
+  "scope": "RPT-002 seven-source 2026 positioning intake",
+  "status_transition": {
+    "field": "verification_status",
+    "current": "VERIFIED_AGAINST_PRIMARY",
+    "verified_value": "VERIFIED_AGAINST_PRIMARY",
+    "rule": "All seven records were checked by the lead against the listed primary records on 2026-07-11; the findings below bind report wording."
+  },
+  "retrieval_date": "2026-07-11",
+  "sources": [
+    {
+      "id": "revisiting-disaggregation-energy-2026",
+      "primary_url": "https://doi.org/10.1145/3805621.3807662",
+      "verified_primary_urls": [
+        "https://doi.org/10.1145/3805621.3807662",
+        "https://arxiv.org/abs/2601.08833"
+      ],
+      "claim_role": "Performance-sensitivity comparator for load, colocated-baseline choice, and KV-transfer medium; its measured disaggregation energy penalty is unconditional rather than sensitivity-dependent.",
+      "scope_boundary": "Single node with two A100 GPUs on PCIe Gen3; energy combines pynvml, RAPL, and IPMI and is reported in J/token.",
+      "artifact_status": "not assessed by the binding verification handoff",
+      "verification_result": "Batch sizes 2-64, the two-full-vLLM-instance colocated baseline, KV transfer through PCIe P2P, CPU DRAM/Redis, or NVMe, and higher disaggregation energy were confirmed. Load, baseline, and transfer sensitivity attach to performance, not energy direction.",
+      "evidence_locations": [
+        {"path": "docs/JouleWise_Hardening_Proposal.md", "locator": "section 11.1, Relevant anchors"},
+        {"path": "docs/JouleWise_Hardening_Proposal.md", "locator": "Appendix C, Positioning update"}
+      ],
+      "feeds": [
+        "docs/phase_4/related_work_draft.md#6-primary-verified-2026-positioning-intake",
+        "docs/report_src/chapters/03_background_and_related_work.md#2026-positioning-intake-and-novelty-boundary"
+      ],
+      "retrieval_date": "2026-07-11",
+      "verification_status": "VERIFIED_AGAINST_PRIMARY",
+      "lead_verification_required": [
+        "COMPLETED: confirmed the five-author EuroMLSys '26 proceedings record, DOI, pages, and publication date.",
+        "COMPLETED: checked the load, colocated-baseline, transfer-medium, topology, accounting-boundary, and energy-direction claims.",
+        "COMPLETED: corrected the role wording so sensitivity attaches to performance while the energy penalty remains unconditional."
+      ]
+    },
+    {
+      "id": "dualscale-2026",
+      "primary_url": "https://arxiv.org/abs/2602.18755v3",
+      "verified_primary_urls": [
+        "https://arxiv.org/abs/2602.18755v3"
+      ],
+      "claim_role": "Phase-aware placement and per-phase DVFS comparator for homogeneous disaggregated serving, with a GPU-only energy boundary.",
+      "scope_boundary": "Sixteen H100 GPUs across two homogeneous nodes connected by InfiniBand; NVML instantaneous GPU power sampled at 10 ms, not node- or cluster-level energy.",
+      "artifact_status": "not assessed by the binding verification handoff",
+      "verification_result": "ILP placement, MPC prefill control, slack-aware decode control, and reported 39%/48% energy savings against DistServe under P99 SLOs were confirmed; the BiScale-to-DualScale v3 rename was recorded.",
+      "evidence_locations": [
+        {"path": "docs/JouleWise_Hardening_Proposal.md", "locator": "section 11.1, Relevant anchors"},
+        {"path": "docs/JouleWise_Hardening_Proposal.md", "locator": "Appendix C, Positioning update"}
+      ],
+      "feeds": [
+        "docs/phase_4/related_work_draft.md#6-primary-verified-2026-positioning-intake",
+        "docs/report_src/chapters/03_background_and_related_work.md#2026-positioning-intake-and-novelty-boundary"
+      ],
+      "retrieval_date": "2026-07-11",
+      "verification_status": "VERIFIED_AGAINST_PRIMARY",
+      "lead_verification_required": [
+        "COMPLETED: confirmed title, four authors, arXiv v3 date, rename, and preprint-only status.",
+        "COMPLETED: checked phase placement, DVFS mechanisms, hardware class, baseline, and headline savings.",
+        "COMPLETED: bounded every energy statement to homogeneous H100 GPU-only NVML measurement."
+      ]
+    },
+    {
+      "id": "prima-cpp-2025",
+      "primary_url": "https://arxiv.org/abs/2504.08791v3",
+      "verified_primary_urls": [
+        "https://arxiv.org/abs/2504.08791v3"
+      ],
+      "claim_role": "Closest local heterogeneous multi-device energy comparator; v3 establishes whole-run energy evidence but not per-stage prefill/decode energy.",
+      "scope_boundary": "Appendix A.13 reports whole-run Wh per 1K output tokens using PowerMetrics, NVIDIA counters, RAPL, and Ludashi; communication energy is inside device-side accounting, with no wall-power boundary.",
+      "artifact_status": "not assessed by the binding verification handoff",
+      "verification_result": "The v3 energy evaluation is factual and belongs to the ICLR 2026 record; v2 has no energy content. Distributed versus single-device llama.cpp per-device energy falls 91-99%, total energy falls 57-90%, and cloud total energy is about 28% lower than the local cluster. JouleWise's niche is per-stage both-end split, boundary-labeled discipline, re-reducible bundles.",
+      "evidence_locations": [
+        {"path": "docs/JouleWise_Hardening_Proposal.md", "locator": "Appendix C, Positioning update"}
+      ],
+      "feeds": [
+        "docs/phase_4/related_work_draft.md#6-primary-verified-2026-positioning-intake",
+        "docs/report_src/chapters/03_background_and_related_work.md#2026-positioning-intake-and-novelty-boundary"
+      ],
+      "retrieval_date": "2026-07-11",
+      "verification_status": "VERIFIED_AGAINST_PRIMARY",
+      "lead_verification_required": [
+        "COMPLETED: replaced the title placeholder, recorded all eleven authors, and cited v3/ICLR 2026.",
+        "COMPLETED: confirmed that only v3 contains Appendix A.13's energy evaluation.",
+        "COMPLETED: verified the energy boundary, baselines, communication accounting, lack of per-stage energy, and surviving JouleWise niche."
+      ]
+    },
+    {
+      "id": "splitzip-2026",
+      "primary_url": "https://arxiv.org/abs/2605.01708v3",
+      "verified_primary_urls": [
+        "https://arxiv.org/abs/2605.01708v3",
+        "https://github.com/Intelligent-Microsystems-Lab/SplitZip"
+      ],
+      "claim_role": "Lossless KV-compression and online codec/transfer performance comparator; it provides no codec or system energy measurement.",
+      "scope_boundary": "Bitwise-lossless KV transfer; reported online time is 5.7% encode, 92.9% transfer, and 1.4% decode. Those are performance shares, not energy shares.",
+      "artifact_status": "released under CC BY 4.0",
+      "verification_result": "Losslessness and the online codec-cost breakdown were confirmed. The paper contains no energy measurement, so it cannot support an energy claim.",
+      "evidence_locations": [
+        {"path": "docs/JouleWise_Hardening_Proposal.md", "locator": "section 11.1, Relevant anchors"}
+      ],
+      "feeds": [
+        "docs/phase_4/related_work_draft.md#6-primary-verified-2026-positioning-intake",
+        "docs/report_src/chapters/03_background_and_related_work.md#2026-positioning-intake-and-novelty-boundary"
+      ],
+      "retrieval_date": "2026-07-11",
+      "verification_status": "VERIFIED_AGAINST_PRIMARY",
+      "lead_verification_required": [
+        "COMPLETED: confirmed title, two authors, arXiv v3 date, and preprint-only status.",
+        "COMPLETED: confirmed bitwise losslessness and the encode/transfer/decode performance shares.",
+        "COMPLETED: confirmed the absence of energy measurement and the released CC BY 4.0 code artifact."
+      ]
+    },
+    {
+      "id": "systematic-quantization-2025",
+      "primary_url": "https://arxiv.org/abs/2508.16712",
+      "verified_primary_urls": [
+        "https://arxiv.org/abs/2508.16712"
+      ],
+      "claim_role": "Datacenter-GPU comparator for task-, workload-, method-, and GPU-dependent quantization effects on performance, GPU energy, and quality.",
+      "scope_boundary": "A100/H100 GPU-only telemetry in J/token; CPU and host energy are excluded, so the study does not directly establish edge or consumer-system effects.",
+      "artifact_status": "none released; qMeter is described without an availability statement",
+      "verification_result": "Three tasks, eleven PTQ methods, Llama-2 7B-70B and CodeLlama-34B, TensorRT-LLM v0.19.0, A100/H100 interactions, and weight/activation/KV bit-width tuples were confirmed.",
+      "evidence_locations": [
+        {"path": "docs/JouleWise_Hardening_Proposal.md", "locator": "section 11.1, Relevant anchors"}
+      ],
+      "feeds": [
+        "docs/phase_4/related_work_draft.md#6-primary-verified-2026-positioning-intake",
+        "docs/report_src/chapters/03_background_and_related_work.md#2026-positioning-intake-and-novelty-boundary"
+      ],
+      "retrieval_date": "2026-07-11",
+      "verification_status": "VERIFIED_AGAINST_PRIMARY",
+      "lead_verification_required": [
+        "COMPLETED: confirmed the exact title, two authors, v1 date, and arXiv-only preprint status.",
+        "COMPLETED: checked task, model, method, runtime, GPU, energy, quality, and quantization-tuple claims.",
+        "COMPLETED: bounded the study to datacenter GPU-only energy and confirmed that no artifact was released."
+      ]
+    },
+    {
+      "id": "sustainable-edge-ai-2025",
+      "primary_url": "https://arxiv.org/abs/2504.03360",
+      "verified_primary_urls": [
+        "https://arxiv.org/abs/2504.03360"
+      ],
+      "claim_role": "Single-device edge comparator for quantization, accuracy, latency, and whole-device hardware energy on a Raspberry Pi 4 CPU.",
+      "scope_boundary": "One Raspberry Pi 4 with 4 GB RAM, CPU-only; Joulescope JS110 at 2 MHz on the DC input gives a whole-device hardware boundary.",
+      "artifact_status": "datasets and scripts stated available, but the referenced repository was not resolvable during verification",
+      "verification_result": "Twenty-eight Ollama models, weight-only PTQ from FP16 through q3, and accuracy on five benchmarks were confirmed. Uncertainty reporting is mean plus/minus standard deviation; run count is unstated and no confidence intervals are reported, so no rigorous-UQ claim is supported.",
+      "evidence_locations": [
+        {"path": "docs/JouleWise_Hardening_Proposal.md", "locator": "section 11.1, Relevant anchors"}
+      ],
+      "feeds": [
+        "docs/phase_4/related_work_draft.md#6-primary-verified-2026-positioning-intake",
+        "docs/report_src/chapters/03_background_and_related_work.md#2026-positioning-intake-and-novelty-boundary"
+      ],
+      "retrieval_date": "2026-07-11",
+      "verification_status": "VERIFIED_AGAINST_PRIMARY",
+      "lead_verification_required": [
+        "COMPLETED: confirmed the full title, eight authors, v1 date, and arXiv-only preprint status.",
+        "COMPLETED: checked the single Pi 4 CPU-only device, model/quantization set, accuracy benchmarks, and DC-input energy boundary.",
+        "COMPLETED: recorded mean-plus/minus-SD-only uncertainty and stated-available-but-unverified artifacts without a rigorous-UQ or release-verification claim."
+      ]
+    },
+    {
+      "id": "silicon-showdown-2026",
+      "primary_url": "https://arxiv.org/abs/2605.00519v2",
+      "verified_primary_urls": [
+        "https://arxiv.org/abs/2605.00519v2"
+      ],
+      "claim_role": "Ecosystem-as-deployed Apple/NVIDIA consumer-stack comparison with unmatched runtimes, artifacts, numerical formats, and asymmetric energy boundaries.",
+      "scope_boundary": "NVIDIA uses PyNVML GPU-board power while Apple uses powermetrics whole-SoC power; TensorRT-LLM plus NVFP4 or llama.cpp GGUF is not matched to MLX native 4-bit.",
+      "artifact_status": "none released",
+      "verification_result": "The RTX 5090/5080/4090/4050/3050 and M3 Ultra/M4 Pro/M2 Max/M2 Air/M1 systems were confirmed. The up-to-23x Apple efficiency headline crosses unmatched measurement boundaries and stacks; no accuracy/quality evaluation is present.",
+      "evidence_locations": [
+        {"path": "docs/JouleWise_Hardening_Proposal.md", "locator": "section 11.1, Relevant anchors"}
+      ],
+      "feeds": [
+        "docs/phase_4/related_work_draft.md#6-primary-verified-2026-positioning-intake",
+        "docs/report_src/chapters/03_background_and_related_work.md#2026-positioning-intake-and-novelty-boundary"
+      ],
+      "retrieval_date": "2026-07-11",
+      "verification_status": "VERIFIED_AGAINST_PRIMARY",
+      "lead_verification_required": [
+        "COMPLETED: confirmed the title, two authors, v2 record, v1 date, and arXiv-only preprint status.",
+        "COMPLETED: checked the system list, runtime/artifact/precision mismatch, asymmetric telemetry boundaries, and absence of accuracy evaluation.",
+        "COMPLETED: classified the comparison as ecosystem-as-deployed, flagged the 23x headline as crossing unmatched boundaries, and confirmed that no artifact was released."
+      ]
+    }
+  ]
+}

@@ -21,9 +21,9 @@ every phase start.
 Every external gate needs a hard evidence-by date with an automatic cut
 rule: if the gate is not proven by its date, the project moves
 permanently to the Mac + synthetic-transfer/analytical-composition
-floor for that dependency. Dates to be filled with P1-008. The automatic cut rule TAKES EFFECT
-only if/when Ed ratifies D-060 (currently PROPOSED); it is recorded
-now so the schedule risk and the intended mechanism are visible.
+floor for that dependency. Dates to be filled with P1-008. D-060 was RATIFIED 2026-07-10, so the
+automatic cut rule is ACTIVE once evidence-by dates are set with
+P1-008.
 
 ## Phase Targets
 

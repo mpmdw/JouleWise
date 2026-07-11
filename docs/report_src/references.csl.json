@@ -1,0 +1,268 @@
+[
+  {
+    "id": "joulesort2007",
+    "type": "paper-conference",
+    "title": "JouleSort: A Balanced Energy-Efficiency Benchmark",
+    "author": [
+      {"family": "Rivoire"},
+      {"family": "Shah"},
+      {"family": "Ranganathan"},
+      {"family": "Kozyrakis"}
+    ],
+    "container-title": "Proceedings of the 2007 ACM SIGMOD International Conference on Management of Data",
+    "issued": {"date-parts": [[2007]]},
+    "DOI": "10.1145/1247480.1247522",
+    "URL": "https://doi.org/10.1145/1247480.1247522"
+  },
+  {
+    "id": "splitwise-isca2024",
+    "type": "paper-conference",
+    "title": "Splitwise: Efficient Generative LLM Inference Using Phase Splitting",
+    "author": [
+      {"family": "Patel"}, {"family": "Choukse"}, {"family": "Zhang"},
+      {"family": "Shah"}, {"family": "Goiri"}, {"family": "Maleki"},
+      {"family": "Bianchini"}
+    ],
+    "container-title": "2024 ACM/IEEE 51st Annual International Symposium on Computer Architecture",
+    "issued": {"date-parts": [[2024]]},
+    "DOI": "10.1109/ISCA59077.2024.00019",
+    "URL": "https://arxiv.org/abs/2311.18677"
+  },
+  {
+    "id": "distserve",
+    "type": "paper-conference",
+    "title": "DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving",
+    "author": [
+      {"family": "Zhong"}, {"family": "Liu"}, {"family": "Chen"},
+      {"family": "Hu"}, {"family": "Zhu"}, {"family": "Liu"},
+      {"family": "Jin"}, {"family": "Zhang"}
+    ],
+    "container-title": "18th USENIX Symposium on Operating Systems Design and Implementation",
+    "issued": {"date-parts": [[2024]]},
+    "URL": "https://arxiv.org/abs/2401.09670"
+  },
+  {
+    "id": "mooncake",
+    "type": "paper-conference",
+    "title": "Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving",
+    "author": [
+      {"family": "Qin"}, {"family": "Li"}, {"family": "He"},
+      {"family": "Zhang"}, {"family": "Wu"}, {"family": "Zheng"},
+      {"family": "Xu"}
+    ],
+    "container-title": "23rd USENIX Conference on File and Storage Technologies",
+    "issued": {"date-parts": [[2025]]},
+    "URL": "https://arxiv.org/abs/2407.00079",
+    "note": "The related-work draft also notes an ACM Transactions on Storage extension; confirm final camera-ready citation before submission."
+  },
+  {
+    "id": "mlperf_power",
+    "type": "article-journal",
+    "title": "MLPerf Power: Benchmarking the Energy Efficiency of Machine Learning Systems from Microwatts to Megawatts for Sustainable AI",
+    "author": [
+      {"family": "Tschand"}, {"family": "Rajan"}, {"family": "Idgunji"},
+      {"literal": "MLCommons Power Working Group"}
+    ],
+    "container-title": "arXiv",
+    "issued": {"date-parts": [[2024]]},
+    "URL": "https://arxiv.org/abs/2410.12032",
+    "note": "Confirm the final venue; the inherited draft records a companion artifact labeled HPCA 2025."
+  },
+  {
+    "id": "zeus",
+    "type": "paper-conference",
+    "title": "Zeus: Understanding and Optimizing GPU Energy Consumption of DNN Training",
+    "author": [
+      {"family": "You"}, {"family": "Chung"}, {"family": "Chowdhury"}
+    ],
+    "container-title": "20th USENIX Symposium on Networked Systems Design and Implementation",
+    "issued": {"date-parts": [[2023]]},
+    "URL": "https://arxiv.org/abs/2208.06102"
+  },
+  {
+    "id": "tokenpowerbench",
+    "type": "article-journal",
+    "title": "TokenPowerBench: Benchmarking the Power Consumption of LLM Inference",
+    "author": [
+      {"family": "Niu"}, {"family": "Zhang"}, {"family": "Li"},
+      {"family": "Zhao"}, {"family": "Wang"}, {"family": "Wang"},
+      {"family": "Chen"}
+    ],
+    "container-title": "arXiv",
+    "issued": {"date-parts": [[2025]]},
+    "URL": "https://arxiv.org/abs/2512.03024",
+    "note": "Inherited draft labels this AAAI 2026 Main Track; retain as a camera-ready venue check."
+  },
+  {
+    "id": "mlenergy_benchmark",
+    "type": "paper-conference",
+    "title": "The ML.ENERGY Benchmark: Toward Automated Inference Energy Measurement and Optimization",
+    "author": [
+      {"family": "Chung"}, {"family": "Ma"}, {"family": "Wu"},
+      {"family": "Liu"}, {"family": "Kweon"}, {"family": "Xia"},
+      {"family": "Wu"}, {"family": "Chowdhury"}
+    ],
+    "container-title": "Advances in Neural Information Processing Systems, Datasets and Benchmarks Track",
+    "issued": {"date-parts": [[2025]]},
+    "URL": "https://arxiv.org/abs/2505.06371"
+  },
+  {
+    "id": "intelligence_per_watt",
+    "type": "article-journal",
+    "title": "Intelligence per Watt: Measuring Intelligence Efficiency of Local AI",
+    "author": [
+      {"family": "Saad-Falcon"}, {"family": "Narayan"},
+      {"literal": "and collaborators"}
+    ],
+    "container-title": "arXiv",
+    "issued": {"date-parts": [[2025]]},
+    "URL": "https://arxiv.org/abs/2511.07885"
+  },
+  {
+    "id": "bench360",
+    "type": "article-journal",
+    "title": "Bench360: Benchmarking Local LLM Inference from 360 Degrees",
+    "author": [
+      {"family": "Stuhlmann"}, {"family": "Argerich"}, {"family": "Fürst"}
+    ],
+    "container-title": "arXiv",
+    "issued": {"date-parts": [[2025]]},
+    "URL": "https://arxiv.org/abs/2511.16682"
+  },
+  {
+    "id": "chung2026joules",
+    "type": "article-journal",
+    "title": "Where Do the Joules Go? Diagnosing Inference Energy Consumption",
+    "author": [
+      {"family": "Chung"}, {"family": "Wu"}, {"family": "Ma"},
+      {"family": "Chowdhury"}
+    ],
+    "container-title": "arXiv",
+    "issued": {"date-parts": [[2026]]},
+    "URL": "https://arxiv.org/abs/2601.22076"
+  },
+  {
+    "id": "revisiting-disaggregation-energy-2026",
+    "type": "paper-conference",
+    "title": "Revisiting Disaggregated Large Language Model Serving for Performance and Energy Implications",
+    "author": [
+      {"given": "Jiaxi", "family": "Li"},
+      {"given": "Yue", "family": "Zhu"},
+      {"given": "Bo", "family": "Chen"},
+      {"given": "Eun Kyung", "family": "Lee"},
+      {"given": "Klara", "family": "Nahrstedt"}
+    ],
+    "container-title": "Proceedings of the 2026 European Workshop on Machine Learning and Systems (EuroMLSys '26)",
+    "page": "397-406",
+    "issued": {"date-parts": [[2026, 4, 27]]},
+    "DOI": "10.1145/3805621.3807662",
+    "URL": "https://doi.org/10.1145/3805621.3807662",
+    "note": "Published EuroMLSys '26 proceedings record; arXiv:2601.08833 is the preprint record."
+  },
+  {
+    "id": "dualscale-2026",
+    "type": "article",
+    "title": "DualScale: Energy-Efficient Disaggregated LLM Serving via Phase-Aware Placement and DVFS",
+    "author": [
+      {"given": "Omar", "family": "Basit"},
+      {"given": "Yunzhao", "family": "Liu"},
+      {"given": "Z. Jonny", "family": "Kong"},
+      {"given": "Y. Charlie", "family": "Hu"}
+    ],
+    "container-title": "arXiv",
+    "genre": "preprint",
+    "version": "v3",
+    "issued": {"date-parts": [[2026, 4, 3]]},
+    "URL": "https://arxiv.org/abs/2602.18755v3",
+    "note": "arXiv-only preprint; the system was renamed BiScale to DualScale in v3."
+  },
+  {
+    "id": "prima-cpp-2025",
+    "type": "paper-conference",
+    "title": "Prima.cpp: Fast 30-70B LLM Inference on Heterogeneous and Low-Resource Home Clusters",
+    "author": [
+      {"given": "Zonghang", "family": "Li"},
+      {"given": "Tao", "family": "Li"},
+      {"given": "Wenjiao", "family": "Feng"},
+      {"given": "Rongxing", "family": "Xiao"},
+      {"given": "Jianshu", "family": "She"},
+      {"given": "Hong", "family": "Huang"},
+      {"given": "Mohsen", "family": "Guizani"},
+      {"given": "Hongfang", "family": "Yu"},
+      {"given": "Qirong", "family": "Ho"},
+      {"given": "Wei", "family": "Xiang"},
+      {"given": "Xue", "family": "Liu"}
+    ],
+    "container-title": "The Fourteenth International Conference on Learning Representations (ICLR 2026)",
+    "version": "v3",
+    "issued": {"date-parts": [[2026, 7, 4]]},
+    "URL": "https://arxiv.org/abs/2504.08791v3",
+    "note": "Cites arXiv v3, which adds Appendix A.13's energy evaluation; v2 contains no energy evaluation. Published as a conference paper at ICLR 2026."
+  },
+  {
+    "id": "splitzip-2026",
+    "type": "article",
+    "title": "SplitZip: Ultra Fast Lossless KV Compression for Disaggregated LLM Serving",
+    "author": [
+      {"given": "Yipin", "family": "Guo"},
+      {"given": "Siddharth", "family": "Joshi"}
+    ],
+    "container-title": "arXiv",
+    "genre": "preprint",
+    "version": "v3",
+    "issued": {"date-parts": [[2026, 6, 23]]},
+    "URL": "https://arxiv.org/abs/2605.01708v3",
+    "note": "arXiv-only preprint; code is released under CC BY 4.0."
+  },
+  {
+    "id": "systematic-quantization-2025",
+    "type": "article",
+    "title": "Systematic Characterization of LLM Quantization: A Performance, Energy, and Quality Perspective",
+    "author": [
+      {"given": "Tianyao", "family": "Shi"},
+      {"given": "Yi", "family": "Ding"}
+    ],
+    "container-title": "arXiv",
+    "genre": "preprint",
+    "version": "v1",
+    "issued": {"date-parts": [[2025, 8, 22]]},
+    "URL": "https://arxiv.org/abs/2508.16712",
+    "note": "arXiv-only preprint (cs.PF); qMeter is described, but no artifact release or availability statement is provided."
+  },
+  {
+    "id": "sustainable-edge-ai-2025",
+    "type": "article",
+    "title": "Sustainable LLM Inference for Edge AI: Evaluating Quantized LLMs for Energy Efficiency, Output Accuracy, and Inference Latency",
+    "author": [
+      {"given": "Erik Johannes", "family": "Husom"},
+      {"given": "Arda", "family": "Goknil"},
+      {"given": "Merve", "family": "Astekin"},
+      {"given": "Lwin Khin", "family": "Shar"},
+      {"given": "Andre", "family": "Kåsen"},
+      {"given": "Sagar", "family": "Sen"},
+      {"given": "Benedikt Andreas", "family": "Mithassel"},
+      {"given": "Ahmet", "family": "Soylu"}
+    ],
+    "container-title": "arXiv",
+    "genre": "preprint",
+    "version": "v1",
+    "issued": {"date-parts": [[2025, 4, 4]]},
+    "URL": "https://arxiv.org/abs/2504.03360",
+    "note": "arXiv-only preprint; datasets and scripts are stated available, but the referenced repository was not resolvable during verification."
+  },
+  {
+    "id": "silicon-showdown-2026",
+    "type": "article",
+    "title": "Silicon Showdown: Performance, Efficiency, and Ecosystem Barriers in Consumer-Grade LLM Inference",
+    "author": [
+      {"given": "Abdurrahman", "family": "Javat"},
+      {"given": "Allan", "family": "Kazakov"}
+    ],
+    "container-title": "arXiv",
+    "genre": "preprint",
+    "version": "v2",
+    "issued": {"date-parts": [[2026, 5, 1]]},
+    "URL": "https://arxiv.org/abs/2605.00519v2",
+    "note": "arXiv-only preprint; no artifacts are released. Cross-stack results are ecosystem-as-deployed comparisons with unmatched runtimes, formats, precisions, and asymmetric energy boundaries."
+  }
+]

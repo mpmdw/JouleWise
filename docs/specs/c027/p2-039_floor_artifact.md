@@ -1,6 +1,6 @@
 # P2-039 Executable Detection-Floor Artifact Specification
 
-Status: DRAFT pending lead adjudication (C-027 spec wave)
+Status: ADJUDICATED 2026-07-09 (C-028) — rulings in `ADJUDICATION.md` in this directory AMEND this spec wherever they conflict with its body text
 
 ## 1. Purpose, authority, and outcome
 
@@ -9,6 +9,8 @@ versioned artifact that P2-015 can produce and the future P2-037 claim engine
 can consume. It is an `[AGENT]` prerequisite: P2-015 may run its named SMOKE
 preconditions, but it must not collect claim-facing floor cells until this
 spec's guard rule and artifact contract have been lead-adjudicated and landed.
+
+**Validator boundary (v1).** The v1 validator validates schema, arithmetic re-derivation, identity-hash recomputation, and claim-readiness invariants; it does not yet bind source provenance to actual bundle bytes or the frozen campaign order log. That binding lands with the typed loader in the pre-P2-015 integration unit, and until then floor artifacts are not claim-consumable. The existing fences remain: no CLI integration and no `reduce.py` hooks.
 
 Authority, in descending order for this specification:
 
@@ -278,6 +280,14 @@ status rules below, and unrecognized keys are rejected at every level.
         "status": "claim_ready|smoke_only|incomplete|stale",
         "claim_usable": "<boolean>",
         "reason_codes": ["<stable reason code>"]
+      },
+      "idle_drift_guard": {
+        "method": "p2_015_prediction_guard_v1",
+        "guard_w": "<finite nonnegative number>",
+        "n_bundles": "<integer >= 2>",
+        "bundle_sha256": ["<64 lowercase hex>"],
+        "cell_id": "<same stable cell id>",
+        "artifact_sha256": "<64 lowercase hex>"
       },
       "floor_abs_j": "<finite nonnegative number|null>",
       "floor_cmp_j": "<finite nonnegative number|null>",
