@@ -14,6 +14,7 @@ from joulewise.clock import FakeClock
 from joulewise.cli import main as joulewise_main
 from joulewise.cli import validate_bundle
 from joulewise.controller import run_benchmark
+from joulewise.publication_privacy import verify_public_bundle
 from joulewise.schemas import BenchmarkConfig, RunStatus
 from joulewise.suite import suite_manifest_sha256
 from scripts import package_bundle_pack
@@ -136,17 +137,24 @@ class BundlePackTests(unittest.TestCase):
         self.assertEqual(validate_bundle(bundle, strict=True), [])
         return bundle
 
-    def test_pack_mock_bundle_manifest_hashes_and_strict_validity(self) -> None:
+    def test_pack_mock_bundle_manifest_hashes_privacy_and_source_immutability(self) -> None:
         source_bundle = self.make_bundle("pack-mock")
         pack_dir = self.tmp / "pack"
+        source_hashes_before = {
+            path.relative_to(source_bundle).as_posix(): _sha256(path)
+            for path in source_bundle.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        }
 
         manifest = package_bundle_pack.package_bundles([source_bundle], pack_dir)
 
         self.assertEqual(manifest["schema"], package_bundle_pack.PACK_SCHEMA)
         self.assertEqual(manifest["bundle_count"], 1)
         entry = manifest["bundles"][0]
-        self.assertEqual(entry["bundle_id"], "pack-mock")
-        self.assertEqual(manifest["schema"], "joulewise.bundle_pack.v1")
+        self.assertTrue(entry["bundle_id"].startswith("public-"))
+        self.assertNotIn("pack-mock", json.dumps(manifest))
+        self.assertEqual(manifest["schema"], "joulewise.public_bundle_pack.v2")
+        self.assertIs(manifest["byte_identical_to_private_sources"], False)
         self.assertNotEqual(manifest["project_commit"], "unknown")
         self.assertIn(
             manifest["project_tree_state"],
@@ -156,36 +164,49 @@ class BundlePackTests(unittest.TestCase):
                 package_bundle_pack.TREE_STATE_UNKNOWN,
             },
         )
-        self.assertEqual(entry["config_sha256"], _sha256(source_bundle / "config.json"))
+        self.assertEqual(
+            entry["source_config_sha256"], _sha256(source_bundle / "config.json")
+        )
+        self.assertNotEqual(entry["config_sha256"], entry["source_config_sha256"])
         self.assertIsNone(entry["effective_manifest_sha256"])
         self.assertEqual(entry["summary_status"], "succeeded")
 
-        packed_bundle = pack_dir / "bundles" / "pack-mock"
-        self.assertEqual(validate_bundle(packed_bundle, strict=True), [])
+        packed_bundle = pack_dir / "bundles" / entry["bundle_id"]
+        self.assertEqual(verify_public_bundle(packed_bundle, entry["bundle_id"]), [])
         by_path = {item["path"]: item for item in entry["files"]}
         self.assertIn("config.json", by_path)
         self.assertIn("summary_metrics.json", by_path)
-        source_hashes_before = {
-            path.relative_to(source_bundle).as_posix(): _sha256(path)
-            for path in source_bundle.rglob("*")
-            if path.is_file() and not path.is_symlink()
-        }
+        self.assertIn("power_trace.csv", by_path)
+        self.assertNotIn("outputs/response.txt", by_path)
+        self.assertNotIn("outputs/tokens.jsonl", by_path)
+        self.assertNotIn("logs/controller.log", by_path)
+        self.assertNotIn("raw/mock_samples.json", by_path)
         for rel, item in by_path.items():
             self.assertEqual(item["sha256"], _sha256(packed_bundle / rel), rel)
             self.assertEqual(item["size_bytes"], (packed_bundle / rel).stat().st_size)
-            self.assertEqual(source_hashes_before[rel], _sha256(source_bundle / rel), rel)
-            self.assertEqual(source_hashes_before[rel], _sha256(packed_bundle / rel), rel)
+        for rel, digest in source_hashes_before.items():
+            self.assertEqual(digest, _sha256(source_bundle / rel), rel)
 
         disk_manifest = json.loads((pack_dir / "MANIFEST.json").read_text(encoding="utf-8"))
         self.assertEqual(disk_manifest, manifest)
+        transformation = json.loads(
+            (pack_dir / package_bundle_pack.TRANSFORMATION_MANIFEST_NAME).read_text(
+                encoding="utf-8"
+            )
+        )
+        transform_entry = transformation["bundles"][0]
+        self.assertEqual(transform_entry["source_bundle_sha256"], entry["source_bundle_sha256"])
+        self.assertEqual(transform_entry["output_bundle_sha256"], entry["public_bundle_sha256"])
+        self.assertIs(transform_entry["byte_identical_to_private_source"], False)
+        self.assertTrue(
+            all("source_path" not in item for item in transform_entry["files"])
+        )
         self.assertEqual(manifest["readme_sha256"], _sha256(pack_dir / "README.md"))
         readme = (pack_dir / "README.md").read_text(encoding="utf-8")
-        self.assertIn("validate-bundle --strict", readme)
-        self.assertIn("python3 -m joulewise reduce", readme)
-        self.assertIn("raw/powermetrics.plist", readme)
+        self.assertIn("privacy-transformed", readme)
+        self.assertIn("TRANSFORMATION_MANIFEST.json", readme)
+        self.assertIn("not strict-valid", readme)
         self.assertIn("MIT License", readme)
-        self.assertIn("not independent rerunning", readme)
-        self.assertIn("legacy additive-key tolerance", readme)
         if manifest["project_tree_state"] == package_bundle_pack.TREE_STATE_CLEAN:
             self.assertIn(f"git checkout {manifest['project_commit']}", readme)
         else:
@@ -209,9 +230,10 @@ class BundlePackTests(unittest.TestCase):
     def test_verify_pack_catches_tampered_packed_file(self) -> None:
         source_bundle = self.make_bundle("pack-tamper")
         pack_dir = self.tmp / "pack"
-        package_bundle_pack.package_bundles([source_bundle], pack_dir)
+        manifest = package_bundle_pack.package_bundles([source_bundle], pack_dir)
+        public_id = manifest["bundles"][0]["bundle_id"]
 
-        config_path = pack_dir / "bundles" / "pack-tamper" / "config.json"
+        config_path = pack_dir / "bundles" / public_id / "config.json"
         config = json.loads(config_path.read_text(encoding="utf-8"))
         config["run_id"] = "pack-tampered"
         config_path.write_text(json.dumps(config, indent=2, sort_keys=True) + "\n")
@@ -223,11 +245,45 @@ class BundlePackTests(unittest.TestCase):
             problems,
         )
 
+    def test_verify_pack_catches_tamper_even_if_pack_manifest_is_rehashed(self) -> None:
+        source_bundle = self.make_bundle("pack-transform-tamper")
+        pack_dir = self.tmp / "transform-tamper-pack"
+        built = package_bundle_pack.package_bundles([source_bundle], pack_dir)
+        public_id = built["bundles"][0]["bundle_id"]
+        trace_path = pack_dir / "bundles" / public_id / "power_trace.csv"
+        trace_path.write_text(
+            trace_path.read_text(encoding="utf-8").replace(",7.5,", ",99.0,", 1),
+            encoding="utf-8",
+        )
+
+        manifest_path = pack_dir / package_bundle_pack.MANIFEST_NAME
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        entry = manifest["bundles"][0]
+        trace_entry = next(item for item in entry["files"] if item["path"] == "power_trace.csv")
+        trace_entry["sha256"] = _sha256(trace_path)
+        trace_entry["size_bytes"] = trace_path.stat().st_size
+        entry["public_bundle_sha256"] = package_bundle_pack.tree_sha256(entry["files"])
+        readme = package_bundle_pack._readme(package_bundle_pack._readme_manifest(manifest))
+        (pack_dir / package_bundle_pack.README_NAME).write_text(readme, encoding="utf-8")
+        manifest["readme_sha256"] = _sha256(pack_dir / package_bundle_pack.README_NAME)
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+        problems = package_bundle_pack.verify_pack(pack_dir)
+
+        self.assertTrue(
+            any(
+                "transformation output hash mismatch for power_trace.csv" in problem
+                or "public bundle hash differs across manifests" in problem
+                for problem in problems
+            ),
+            problems,
+        )
+
     def test_verify_pack_catches_readme_that_does_not_match_manifest(self) -> None:
         first = self.make_bundle("pack-readme-a")
         second = self.make_bundle("pack-readme-b")
         pack_dir = self.tmp / "pack-readme"
-        package_bundle_pack.package_bundles([first, second], pack_dir)
+        built = package_bundle_pack.package_bundles([first, second], pack_dir)
 
         manifest_path = pack_dir / "MANIFEST.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -235,7 +291,7 @@ class BundlePackTests(unittest.TestCase):
         manifest["bundle_count"] = 1
         manifest["readme_sha256"] = _sha256(pack_dir / "README.md")
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-        shutil.rmtree(pack_dir / "bundles" / "pack-readme-b")
+        shutil.rmtree(pack_dir / "bundles" / built["bundles"][1]["bundle_id"])
 
         problems = package_bundle_pack.verify_pack(pack_dir)
 
@@ -247,7 +303,8 @@ class BundlePackTests(unittest.TestCase):
     def test_verify_pack_accepts_readme_with_non_default_bundles_dir(self) -> None:
         source_bundle = self.make_bundle("pack-custom-bundles-dir")
         pack_dir = self.tmp / "pack-custom-bundles-dir"
-        package_bundle_pack.package_bundles([source_bundle], pack_dir)
+        built = package_bundle_pack.package_bundles([source_bundle], pack_dir)
+        public_id = built["bundles"][0]["bundle_id"]
 
         custom_bundles_dir = "published-bundles"
         shutil.move(str(pack_dir / "bundles"), str(pack_dir / custom_bundles_dir))
@@ -259,16 +316,8 @@ class BundlePackTests(unittest.TestCase):
         manifest["readme_sha256"] = _sha256(pack_dir / "README.md")
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
-        self.assertIn("published-bundles/pack-custom-bundles-dir", readme)
-        self.assertIn(
-            "/path/to/this-pack/published-bundles/pack-custom-bundles-dir",
-            readme,
-        )
-        self.assertNotIn("`bundles/pack-custom-bundles-dir`", readme)
-        self.assertNotIn(
-            "/path/to/this-pack/bundles/pack-custom-bundles-dir",
-            readme,
-        )
+        self.assertIn(f"published-bundles/{public_id}", readme)
+        self.assertNotIn(f"`bundles/{public_id}`", readme)
         self.assertEqual(package_bundle_pack.verify_pack(pack_dir), [])
 
     def test_existing_output_dir_is_refused_and_preserved(self) -> None:
@@ -331,18 +380,24 @@ class BundlePackTests(unittest.TestCase):
         )
         self.assertEqual(package_bundle_pack.verify_pack(pack_dir), [])
 
-    def test_powermetrics_raw_plist_is_copied_verbatim(self) -> None:
+    def test_powermetrics_raw_plist_is_omitted_but_source_hash_is_recorded(self) -> None:
         source_bundle = self.make_powermetrics_bundle("pack-powermetrics")
         pack_dir = self.tmp / "powermetrics-pack"
 
         manifest = package_bundle_pack.package_bundles([source_bundle], pack_dir)
 
         rel = f"raw/{RAW_SAMPLES_NAME}"
-        packed_raw = pack_dir / "bundles" / "pack-powermetrics" / rel
         by_path = {item["path"]: item for item in manifest["bundles"][0]["files"]}
-        self.assertIn(rel, by_path)
-        self.assertEqual((source_bundle / rel).read_bytes(), packed_raw.read_bytes())
-        self.assertEqual(_sha256(source_bundle / rel), by_path[rel]["sha256"])
+        self.assertNotIn(rel, by_path)
+        transformation = json.loads(
+            (pack_dir / package_bundle_pack.TRANSFORMATION_MANIFEST_NAME).read_text()
+        )
+        by_source_path = {
+            item["path"]: item for item in transformation["bundles"][0]["files"]
+        }
+        self.assertEqual(by_source_path[rel]["operation"], "omit")
+        self.assertEqual(by_source_path[rel]["source_sha256"], _sha256(source_bundle / rel))
+        self.assertIsNone(by_source_path[rel]["output_sha256"])
         self.assertEqual(package_bundle_pack.verify_pack(pack_dir), [])
 
     def test_multi_bundle_duplicate_and_later_invalid_refusals(self) -> None:
@@ -353,13 +408,13 @@ class BundlePackTests(unittest.TestCase):
         manifest = package_bundle_pack.package_bundles([first, second], pack_dir)
 
         self.assertEqual(manifest["bundle_count"], 2)
-        self.assertEqual(
-            [entry["bundle_id"] for entry in manifest["bundles"]],
-            ["pack-multi-a", "pack-multi-b"],
-        )
+        public_ids = [entry["bundle_id"] for entry in manifest["bundles"]]
+        self.assertEqual(len(set(public_ids)), 2)
+        self.assertTrue(all(value.startswith("public-") for value in public_ids))
         readme = (pack_dir / "README.md").read_text(encoding="utf-8")
-        self.assertIn("bundles/pack-multi-a", readme)
-        self.assertIn("bundles/pack-multi-b", readme)
+        self.assertTrue(all(f"bundles/{value}" in readme for value in public_ids))
+        self.assertNotIn("pack-multi-a", readme)
+        self.assertNotIn("pack-multi-b", readme)
         self.assertEqual(package_bundle_pack.verify_pack(pack_dir), [])
 
         duplicate = self.tmp / "duplicate-source"
@@ -384,17 +439,17 @@ class BundlePackTests(unittest.TestCase):
             package_bundle_pack.package_bundles([first, invalid], invalid_out)
         self.assertFalse(invalid_out.exists())
 
-    def test_post_preflight_copy_divergence_is_refused_and_cleaned_up(self) -> None:
-        source_bundle = self.make_bundle("pack-copy-divergence")
+    def test_post_preflight_transformation_failure_is_cleaned_up(self) -> None:
+        source_bundle = self.make_bundle("pack-transform-failure")
         pack_dir = self.tmp / "divergent-pack"
-        original_copy = package_bundle_pack._copy_bundle
-
-        def mutate_then_copy(source: Path, destination: Path) -> None:
-            (source / "post_preflight_extra.txt").write_text("late mutation", encoding="utf-8")
-            original_copy(source, destination)
-
-        with patch.object(package_bundle_pack, "_copy_bundle", side_effect=mutate_then_copy):
-            with self.assertRaisesRegex(package_bundle_pack.BundlePackError, "diverged"):
+        with patch.object(
+            package_bundle_pack,
+            "transform_public_bundle",
+            side_effect=package_bundle_pack.PrivacyAuditError("injected refusal"),
+        ):
+            with self.assertRaisesRegex(
+                package_bundle_pack.BundlePackError, "privacy transformation failed"
+            ):
                 package_bundle_pack.package_bundles([source_bundle], pack_dir)
 
         self.assertFalse(pack_dir.exists())
@@ -428,13 +483,14 @@ class BundlePackTests(unittest.TestCase):
     def test_verify_pack_catches_missing_extra_count_readme_and_cli_statuses(self) -> None:
         source_bundle = self.make_bundle("pack-negative")
         pack_dir = self.tmp / "negative-pack"
-        package_bundle_pack.package_bundles([source_bundle], pack_dir)
+        built = package_bundle_pack.package_bundles([source_bundle], pack_dir)
+        public_id = built["bundles"][0]["bundle_id"]
 
         code, stdout, stderr = _run_packager(["--verify", str(pack_dir)])
         self.assertEqual(code, 0, stderr)
         self.assertIn("valid bundle pack", stdout)
 
-        missing_path = pack_dir / "bundles" / "pack-negative" / "events.jsonl"
+        missing_path = pack_dir / "bundles" / public_id / "events.jsonl"
         missing_path.unlink()
         problems = package_bundle_pack.verify_pack(pack_dir)
         self.assertTrue(
@@ -443,7 +499,7 @@ class BundlePackTests(unittest.TestCase):
         )
         missing_path.write_text("", encoding="utf-8")
 
-        extra_path = pack_dir / "bundles" / "pack-negative" / "extra.txt"
+        extra_path = pack_dir / "bundles" / public_id / "extra.txt"
         extra_path.write_text("extra", encoding="utf-8")
         problems = package_bundle_pack.verify_pack(pack_dir)
         self.assertTrue(
@@ -482,7 +538,8 @@ class BundlePackTests(unittest.TestCase):
     def test_verify_pack_rejects_duplicate_bundle_ids_and_file_paths(self) -> None:
         source_bundle = self.make_bundle("pack-duplicate-manifest")
         pack_dir = self.tmp / "duplicate-manifest-pack"
-        package_bundle_pack.package_bundles([source_bundle], pack_dir)
+        built = package_bundle_pack.package_bundles([source_bundle], pack_dir)
+        public_id = built["bundles"][0]["bundle_id"]
 
         manifest_path = pack_dir / "MANIFEST.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -496,7 +553,7 @@ class BundlePackTests(unittest.TestCase):
         problems = package_bundle_pack.verify_pack(pack_dir)
 
         self.assertTrue(
-            any("duplicate manifest bundle_id: pack-duplicate-manifest" in problem for problem in problems),
+            any(f"duplicate manifest bundle_id: {public_id}" in problem for problem in problems),
             problems,
         )
 
@@ -518,14 +575,15 @@ class BundlePackTests(unittest.TestCase):
     def test_verify_pack_catches_pack_root_extras_and_injected_symlinks(self) -> None:
         source_bundle = self.make_bundle("pack-root-extra")
         pack_dir = self.tmp / "root-extra-pack"
-        package_bundle_pack.package_bundles([source_bundle], pack_dir)
+        built = package_bundle_pack.package_bundles([source_bundle], pack_dir)
+        public_id = built["bundles"][0]["bundle_id"]
 
         (pack_dir / "EXTRA.txt").write_text("extra", encoding="utf-8")
         problems = package_bundle_pack.verify_pack(pack_dir)
         self.assertTrue(any("unexpected file at pack root: EXTRA.txt" in problem for problem in problems), problems)
         (pack_dir / "EXTRA.txt").unlink()
 
-        symlink_path = pack_dir / "bundles" / "pack-root-extra" / "link-to-config"
+        symlink_path = pack_dir / "bundles" / public_id / "link-to-config"
         try:
             symlink_path.symlink_to("config.json")
         except OSError as exc:
