@@ -159,10 +159,11 @@ def derive_idle_mean_uncertainty(
     capture_intervals_s = tuple(
         record.elapsed_ns / 1_000_000_000.0 for record in records
     )
-    # Sample cadence is defined by the n-1 differences between observation
-    # timestamps.  In a powermetrics interval stream those are elapsed fields
-    # 0..n-2; the final elapsed field still contributes to capture duration.
-    intervals_s = capture_intervals_s[:-1]
+    # Every powermetrics record is one interval-power observation, so every
+    # elapsed field belongs to the cadence population as well as the capture
+    # duration.  Dropping the final interval biases the frozen percentiles and
+    # can change both cadence eligibility and the median-derived lag count.
+    intervals_s = capture_intervals_s
     n = len(powers_w)
     if any(not math.isfinite(value) for value in powers_w):
         return _not_estimable(

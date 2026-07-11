@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import re
 import subprocess
 import tempfile
@@ -20,11 +21,16 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from joulewise.adapters.powermetrics import RAW_SAMPLES_NAME
+from joulewise.adapters.powermetrics import (
+    RAW_IDLE_NAME,
+    RAW_SAMPLES_NAME,
+    parse_powermetrics_records,
+)
 from joulewise.clock import FakeClock
 from joulewise.cli import _STRICT_LEGACY_BUNDLE_IDENTITIES, main, validate_bundle
 from joulewise.bundle_read import Window
 from joulewise.controller import run_benchmark
+from joulewise.reduce import reduce_bundle
 from joulewise.schemas import BenchmarkConfig, RunStatus
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -409,6 +415,44 @@ class StrictValidateTests(CliRunTestCase):
             json.dumps(metadata, indent=2, sort_keys=True) + "\n"
         )
 
+    def make_synchronized_idle_metadata_mismatch_bundle(
+        self, run_id: str
+    ) -> Path:
+        """Build a stored summary synchronized to mismatching idle metadata."""
+        bundle = self.make_bundle(run_id)
+        raw = POWERMETRICS_FIXTURE.read_bytes()
+        (bundle / "raw" / RAW_IDLE_NAME).write_bytes(raw)
+        records = parse_powermetrics_records(raw)
+        powers_w = [record.combined_power_w for record in records]
+        mean_w = math.fsum(powers_w) / len(powers_w)
+        stddev_w = math.sqrt(
+            math.fsum((power_w - mean_w) ** 2 for power_w in powers_w)
+            / (len(powers_w) - 1)
+        )
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata["idle_baseline"].update(
+            {
+                "power_w_mean": mean_w,
+                "power_w_stddev": stddev_w,
+                "duration_s": math.fsum(
+                    record.elapsed_ns / 1_000_000_000.0 for record in records
+                ),
+                # Deliberately disagree with the five-record raw artifact.
+                "sample_count": len(records) + 1,
+                "telemetry_backend": "powermetrics",
+            }
+        )
+        (bundle / "metadata.json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+        )
+        # Synchronize every stored governed field to the mismatching metadata;
+        # strict must still reject based on the fresh raw derivation itself.
+        summary = reduce_bundle(bundle).to_dict()
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        return bundle
+
     def test_fresh_succeeded_bundle_passes_strict(self) -> None:
         bundle = self.make_bundle("strict-clean")
         self.assertEqual(validate_bundle(bundle, strict=True), [])
@@ -749,6 +793,53 @@ class StrictValidateTests(CliRunTestCase):
                     "joulewise.bundle_read._check_config_sha256", return_value=[]
                 ):
                     self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_allowlisted_legacy_fresh_idle_metadata_mismatch_fails_strict(self) -> None:
+        bundle = self.make_synchronized_idle_metadata_mismatch_bundle(
+            "strict-legacy-fresh-idle-mismatch"
+        )
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        self.assertEqual(
+            summary["idle_mean_uncertainty"]["reason_codes"],
+            ["idle_trace_span_below_three_bandwidths", "idle_metadata_mismatch"],
+        )
+        summary.pop("summary_provenance")
+        summary.pop("idle_mean_uncertainty")
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        metadata = json.loads((bundle / "metadata.json").read_text())
+        metadata.pop("workload_provenance")
+        (bundle / "metadata.json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+        )
+        self.mark_allowlisted_legacy_identity(bundle)
+
+        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
+            problems = validate_bundle(bundle, strict=True)
+
+        self.assertEqual(
+            problems,
+            [
+                "strict: raw idle trace does not match metadata.idle_baseline "
+                "(idle_metadata_mismatch)"
+            ],
+        )
+
+    def test_current_idle_metadata_mismatch_diagnostic_is_deduplicated(self) -> None:
+        bundle = self.make_synchronized_idle_metadata_mismatch_bundle(
+            "strict-current-fresh-idle-mismatch"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertEqual(
+            problems,
+            [
+                "strict: raw idle trace does not match metadata.idle_baseline "
+                "(idle_metadata_mismatch)"
+            ],
+        )
 
     def test_idle_metadata_mismatch_fails_strict(self) -> None:
         bundle = self.make_bundle("strict-idle-metadata-mismatch")

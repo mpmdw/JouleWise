@@ -54,16 +54,34 @@ def baseline(powers_w: list[float], intervals_s: list[float]) -> IdleBaseline:
     )
 
 
+def qwen_r3_shaped_intervals_s() -> list[float]:
+    """Return 300 interval observations with Qwen-r3 cadence quantiles.
+
+    The boundary values are the real trace's order statistics at the type-7
+    p05, median, and p95 interpolation positions.  Repeating the interior
+    values keeps the fixture compact while retaining the real trace's count,
+    cadence scale, exact binding quantiles, and a consequential final record.
+    """
+    intervals_ns = (
+        [116_420_166] * 15
+        + [116_459_875]
+        + [119_000_000] * 133
+        + [119_920_375, 119_929_750]
+        + [121_000_000] * 133
+        + [123_223_541, 123_307_708]
+        + [127_765_750] * 14
+    )
+    return [interval_ns / 1_000_000_000.0 for interval_ns in intervals_ns]
+
+
 class HandComputableFixtureTests(unittest.TestCase):
     def test_iid_floor_fixture_exact_values(self) -> None:
         estimate = estimate_newey_west_bartlett([0.0, 2.0, 0.0, 2.0], 3)
 
-        self.assertAlmostEqual(estimate.sample_variance_w2, 4 / 3, places=15)
-        self.assertAlmostEqual(estimate.iid_variance_of_mean_w2, 1 / 3, places=15)
+        self.assertEqual(estimate.sample_variance_w2, 4 / 3)
+        self.assertEqual(estimate.iid_variance_of_mean_w2, 1 / 3)
         self.assertEqual(estimate.hac_variance_of_mean_w2, 1 / 16)
-        self.assertAlmostEqual(
-            estimate.governed_variance_of_mean_w2, 1 / 3, places=15
-        )
+        self.assertEqual(estimate.governed_variance_of_mean_w2, 1 / 3)
         self.assertEqual(estimate.effective_sample_size, 4.0)
 
     def test_correlated_fixture_exact_values(self) -> None:
@@ -71,13 +89,11 @@ class HandComputableFixtureTests(unittest.TestCase):
             [0.0, 0.0, 0.0, 2.0, 2.0, 2.0], 2
         )
 
-        self.assertAlmostEqual(estimate.sample_variance_w2, 6 / 5, places=15)
-        self.assertAlmostEqual(estimate.iid_variance_of_mean_w2, 1 / 5, places=15)
-        self.assertAlmostEqual(estimate.hac_variance_of_mean_w2, 5 / 18, places=15)
-        self.assertAlmostEqual(
-            estimate.governed_variance_of_mean_w2, 5 / 18, places=15
-        )
-        self.assertAlmostEqual(estimate.effective_sample_size, 108 / 25, places=15)
+        self.assertEqual(estimate.sample_variance_w2, 6 / 5)
+        self.assertEqual(estimate.iid_variance_of_mean_w2, 1 / 5)
+        self.assertEqual(estimate.hac_variance_of_mean_w2, 5 / 18)
+        self.assertEqual(estimate.governed_variance_of_mean_w2, 5 / 18)
+        self.assertEqual(estimate.effective_sample_size, 108 / 25)
 
     def test_correlated_fixture_corrected_energy_variance_is_five_halves(self) -> None:
         estimate = estimate_newey_west_bartlett(
@@ -176,6 +192,49 @@ class GovernedEvidenceTests(unittest.TestCase):
         self.assertEqual(result["lag_count"], 10)
         self.assertEqual(result["effective_sample_size"], 33.0)
         self.assertEqual(result["reason_codes"], [])
+
+    def test_qwen_r3_shaped_trace_uses_all_binding_cadence_intervals(self) -> None:
+        intervals_s = qwen_r3_shaped_intervals_s()
+        powers_w = [5.0] * len(intervals_s)
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            (bundle / "raw").mkdir()
+            (bundle / "raw" / "powermetrics_idle.plist").write_bytes(
+                powermetrics_stream(powers_w, intervals_s)
+            )
+            result = derive_idle_mean_uncertainty(
+                BundleReader(bundle), baseline(powers_w, intervals_s)
+            )
+
+        self.assertEqual(result["status"], "estimated")
+        self.assertEqual(result["raw_sample_count"], 300)
+        self.assertEqual(result["median_sample_interval_s"], 0.1199250625)
+        self.assertEqual(
+            result["cadence_p95_p05_ratio"], 1.0581313969037147
+        )
+        self.assertEqual(round(result["cadence_p95_p05_ratio"], 10), 1.0581313969)
+        self.assertEqual(result["lag_count"], 83)
+
+    def test_final_interval_can_flip_cadence_eligibility(self) -> None:
+        # The first 19 intervals alone are perfectly regular and meet the
+        # three-bandwidth rule at L=2.  The twentieth observation is part of
+        # the population and pushes the frozen type-7 ratio above 1.25.
+        intervals_s = [5.0] * 19 + [100.0]
+        powers_w = [5.0] * len(intervals_s)
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            (bundle / "raw").mkdir()
+            (bundle / "raw" / "powermetrics_idle.plist").write_bytes(
+                powermetrics_stream(powers_w, intervals_s)
+            )
+            result = derive_idle_mean_uncertainty(
+                BundleReader(bundle), baseline(powers_w, intervals_s)
+            )
+
+        self.assertEqual(result["lag_count"], 2)
+        self.assertGreater(result["cadence_p95_p05_ratio"], 1.25)
+        self.assertEqual(result["status"], "not_estimable")
+        self.assertEqual(result["reason_codes"], ["idle_cadence_irregular"])
 
     def test_irregular_cadence_fails_closed_without_resampling(self) -> None:
         powers_w = [5.0] * 33

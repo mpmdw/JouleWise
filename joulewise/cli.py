@@ -330,7 +330,8 @@ def _strict_problems(reader: BundleReader) -> list[str]:
         _strict_reducer_version_dispatch(reader, summary)
     )
     problems.extend(version_problems)
-    problems.extend(_strict_idle_mean_uncertainty_problems(summary))
+    stored_idle_problems = _strict_idle_mean_uncertainty_problems(summary)
+    problems.extend(stored_idle_problems)
     problems.extend(_strict_workload_provenance_problems(reader, summary))
     problems.extend(_strict_emitted_token_ids_problems(reader))
     problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
@@ -338,6 +339,14 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     problems.extend(_strict_raw_to_trace_problems(reader))
     if not version_problems:
         fresh = reduce_bundle(reader.path).to_dict()
+        # The fresh 0.4.1 derivation is the raw/metadata authority.  Inspect it
+        # before legacy additive-absence projection can hide the governed
+        # object, while retaining the stored-summary check for unsupported
+        # versions and tampered current-era summaries.  Exact diagnostics are
+        # de-duplicated when both views independently report the mismatch.
+        for problem in _strict_idle_mean_uncertainty_problems(fresh):
+            if problem not in problems:
+                problems.append(problem)
         differing = _strict_summary_differences(
             fresh,
             summary,
