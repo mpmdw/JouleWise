@@ -47,8 +47,14 @@ is preferable. It supports `new`, `resume --last` or a session id, and
 `.codex-bridge/last-message.md`, and writes the durable local audit trail under
 `.codex-bridge/`.
 
-Use `scripts/codex-run` for the older hardened, timeout-bounded single-call
-protocol used by orchestration harnesses. Do not use Codex's dangerous bypass
+The current orchestration wrapper is `~/.local/bin/codex-run-v3` (personal
+tooling, not tracked here): claude-codex-report/v1 envelope injection via
+--genre, mechanical WRITE_SCOPE enforcement (exit 77 + evidence bundle),
+NEEDS_SCOPE/NEEDS_RULING early-return protocols, D-064 manifest v3 event
+stream, and a codex-usage quota guard. Current model: gpt-5.6-sol
+(effort: ultra only for subagent-spawning sessions, xhigh default, high
+for bounded/mechanical work). `scripts/codex-run` remains the older
+hardened, timeout-bounded single-call protocol. Do not use Codex's dangerous bypass
 flags through either path.
 
 For ordinary implementation work, run `docs/agent_playbook.md` Mission M0
