@@ -264,6 +264,27 @@ class BundleReader:
         ]
         return self._cache["summed_curve"]
 
+    def raw_artifact_bytes(self, name: str) -> bytes | None:
+        """Return one immutable ``raw/`` artifact, or ``None`` when absent.
+
+        Reducer-owned raw derivations use this strict read boundary so an I/O
+        failure remains distinguishable from an artifact that was never
+        captured.  Only a basename is accepted; callers cannot traverse out of
+        the bundle's raw directory.
+        """
+        if not name or Path(name).name != name:
+            raise BundleReadError("raw artifact name must be a basename")
+        key = f"raw-bytes:{name}"
+        if key not in self._cache:
+            path = self._path / "raw" / name
+            if not path.is_file():
+                return None
+            try:
+                self._cache[key] = path.read_bytes()
+            except OSError as exc:
+                raise BundleReadError(f"raw/{name} cannot be read: {exc}") from exc
+        return self._cache[key]
+
     # ------------------------------------------------------------------
     # Tolerant accessors (None on damage, used by the report)
 

@@ -47,6 +47,10 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window
+from joulewise.idle_dependence import (
+    derive_idle_mean_uncertainty,
+    idle_mean_energy_variance_j2,
+)
 from joulewise.schemas import (
     BenchmarkConfig,
     FailureReason,
@@ -358,21 +362,21 @@ def _dropped_samples(curve: list[TracePoint], requested_hz: float) -> int:
 
 
 def _energy_variance_terms_j2(
-    idle_baseline: IdleBaseline | None,
+    idle_mean_uncertainty: dict[str, Any],
     window: Window,
 ) -> dict[str, float | None]:
     """Reducer-level stochastic terms derivable from a single bundle.
 
     Gross-energy repetition variance is unavailable for one bundle, but the
-    idle-baseline mean variance is recorded when the idle baseline supplies its
-    sample standard deviation and sample count.
+    idle-baseline mean variance is recorded only when the governed P2-044 raw
+    trace estimator succeeds.  Metadata never independently selects it.
     """
     idle_term: float | None = None
-    if idle_baseline is not None and idle_baseline.sample_count > 0:
-        idle_power_mean_variance = (
-            idle_baseline.power_w_stddev * idle_baseline.power_w_stddev
-        ) / idle_baseline.sample_count
-        idle_term = window.duration_s * window.duration_s * idle_power_mean_variance
+    governed = idle_mean_uncertainty.get("governed_variance_of_mean_w2")
+    if idle_mean_uncertainty.get("status") == "estimated" and isinstance(
+        governed, int | float
+    ):
+        idle_term = idle_mean_energy_variance_j2(window.duration_s, float(governed))
     return {
         "E_gross_repetition_j2": None,
         "E_idle_mean_j2": idle_term,
@@ -915,7 +919,10 @@ def _reduce(
     phase_energy_j = _phase_energy(phase_windows, curve)
     phase_identifiability = _phase_identifiability(phase_windows, curve)
     suite_metrics = _suite_metrics(reader, curve)
-    energy_variance_terms_j2 = _energy_variance_terms_j2(idle_baseline, window)
+    idle_mean_uncertainty = derive_idle_mean_uncertainty(reader, idle_baseline)
+    energy_variance_terms_j2 = _energy_variance_terms_j2(
+        idle_mean_uncertainty, window
+    )
     energy_bound_terms_j = _energy_bound_terms_j(metadata, curve, window)
     window_evidence_precheck = _window_evidence_precheck(
         reader, metadata, curve, window, energy_bound_terms_j, idle_baseline
@@ -962,6 +969,7 @@ def _reduce(
         phase_energy_j=phase_energy_j,
         suite_metrics=suite_metrics,
         energy_uncertainty_status="not_estimable",
+        idle_mean_uncertainty=idle_mean_uncertainty,
         energy_variance_terms_j2=energy_variance_terms_j2,
         energy_bound_terms_j=energy_bound_terms_j,
         window_evidence_precheck=window_evidence_precheck,
