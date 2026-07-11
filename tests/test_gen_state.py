@@ -21,18 +21,19 @@ sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import gen_state  # noqa: E402
 
 KERNEL_PATH = os.path.join(ROOT, "docs", "process", "state_kernel.json")
+SCHEMA_PATH = os.path.join(ROOT, "docs", "process", "state_kernel.schema.json")
 GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 
 EXPECTED_IDS = {
-    # [AGENT] A0..A24
-    "P2-035", "P2-036", "P2-040", "P2-038", "P2-039", "RPT-001", "P2-042",
-    "P2-041", "P2-037", "SPLIT-AP", "AP-EDIT", "DOC-008", "DOC-009",
-    "MET-001", "RETRO-001", "REPRO-001", "P3-000", "P2-022", "P2-023",
+    # [AGENT]
+    "P2-035", "P2-036", "DOC-008", "P3-000", "P2-022", "P2-023",
     "P2-024", "P2-028", "P3-001b", "P2-004", "P2-005", "P2-016",
-    # [QUIET-MAC] Q0..Q6
-    "P2-015-SMOKE", "P2-015", "P2-006", "P2-010", "P2-019", "P2-020", "P2-012",
-    # [ED-EXTERNAL] E0..E6
-    "P0-003", "P1-008", "P2-027", "P1-001", "P1-003", "P1-004", "P1-006",
+    "P2-047A", "P2-048", "CI-003", "DOC-010",
+    # [QUIET-MAC]
+    "P2-015-SMOKE", "P2-015", "P2-006", "P2-010", "P2-019", "P2-020",
+    "P2-012", "P2-038", "P2-046B", "P2-047B",
+    # [ED-EXTERNAL]
+    "P1-008", "P2-027", "P1-001", "P1-003", "P1-004", "P1-006",
 }
 
 TERMINAL_IDS = {"P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034"}
@@ -50,6 +51,16 @@ def run_gen(*args):
 
 
 class TestKernelValidity(unittest.TestCase):
+    def test_schema_declares_v2_authority_contract(self):
+        with open(SCHEMA_PATH, encoding="utf-8") as fh:
+            schema = json.load(fh)
+        self.assertEqual(schema["properties"]["schema_version"]["const"], 2)
+        self.assertIn("authority", schema["required"])
+        self.assertEqual(
+            schema["properties"]["authority"]["const"],
+            gen_state.AUTHORITY_NOTICE,
+        )
+
     def test_kernel_validates(self):
         gen_state.validate(load_kernel())
 
@@ -62,25 +73,27 @@ class TestKernelValidity(unittest.TestCase):
         base = load_kernel()
         cases = [
             ("unknown top-level field", lambda k: k.update(surprise=1)),
-            ("bad schema_version", lambda k: k.update(schema_version=2)),
-            ("id/key mismatch", lambda k: k["tasks"]["P2-040"].update(id="P2-999")),
-            ("terminal status", lambda k: k["tasks"]["P2-040"].update(status="done")),
-            ("duplicate lane rank", lambda k: k["tasks"]["P2-040"].update(rank=3)),
-            ("blocked without hard start dep", lambda k: k["tasks"]["P2-040"].update(status="blocked")),
-            ("queued with hard start dep", lambda k: k["tasks"]["P2-037"].update(status="queued")),
+            ("bad schema_version", lambda k: k.update(schema_version=1)),
+            ("missing authority", lambda k: k.pop("authority")),
+            ("altered authority", lambda k: k.update(authority="AUTHORITATIVE")),
+            ("id/key mismatch", lambda k: k["tasks"]["DOC-008"].update(id="P2-999")),
+            ("terminal status", lambda k: k["tasks"]["DOC-008"].update(status="done")),
+            ("duplicate lane rank", lambda k: k["tasks"]["DOC-008"].update(rank=0)),
+            ("blocked without hard start dep", lambda k: k["tasks"]["DOC-008"].update(status="blocked")),
+            ("queued with hard start dep", lambda k: k["tasks"]["P2-035"].update(status="queued")),
             ("dangling pending task dep",
-             lambda k: k["tasks"]["P2-037"]["dependencies"][0].update(target="NOPE-1")),
+             lambda k: k["tasks"]["P2-035"]["dependencies"][0].update(target="NOPE-1")),
             ("self-dependency",
-             lambda k: k["tasks"]["P2-037"]["dependencies"][0].update(target="P2-037")),
+             lambda k: k["tasks"]["P2-035"]["dependencies"][0].update(target="P2-035")),
             ("pending dep with evidence",
-             lambda k: k["tasks"]["P2-037"]["dependencies"][0].update(
+             lambda k: k["tasks"]["P2-035"]["dependencies"][0].update(
                  evidence={"path": "docs/decision_log.md", "label": "x"})),
             ("missing pointer target",
-             lambda k: k["tasks"]["P2-040"]["authority"].update(path="docs/does_not_exist.md")),
+             lambda k: k["tasks"]["DOC-008"]["authority"].update(path="docs/does_not_exist.md")),
             ("absolute pointer path",
-             lambda k: k["tasks"]["P2-040"]["authority"].update(path="/etc/passwd")),
-            ("pipe in goal", lambda k: k["tasks"]["P2-040"].update(goal="a | b")),
-            ("unknown flag", lambda k: k["tasks"]["P2-040"].update(flags=["nope"])),
+             lambda k: k["tasks"]["DOC-008"]["authority"].update(path="/etc/passwd")),
+            ("pipe in goal", lambda k: k["tasks"]["DOC-008"].update(goal="a | b")),
+            ("unknown flag", lambda k: k["tasks"]["DOC-008"].update(flags=["nope"])),
             ("quiet_mac without lead_only",
              lambda k: k["tasks"]["P2-019"].update(flags=[])),
             ("blocked_post_2m without P2-006 dep",
@@ -96,26 +109,31 @@ class TestKernelValidity(unittest.TestCase):
 
     def test_cycle_rejected(self):
         kernel = copy.deepcopy(load_kernel())
-        kernel["tasks"]["P2-042"]["dependencies"] = [
-            {"kind": "task", "target": "P2-037", "required": "cycle",
+        kernel["tasks"]["P2-015"]["dependencies"] = [
+            {"kind": "task", "target": "P2-035", "required": "cycle",
              "state": "pending", "strength": "hard", "scope": "start",
              "evidence": None}
         ]
-        kernel["tasks"]["P2-042"]["status"] = "blocked"
         with self.assertRaises(gen_state.KernelError):
             gen_state.validate(kernel)
 
 
-class TestMigrationFidelity(unittest.TestCase):
-    """Spec §5.6 assertions against the migrated kernel."""
+class TestRefreshedStateFidelity(unittest.TestCase):
+    """Assertions against the final C-028 live-state refresh."""
 
     def setUp(self):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_39(self):
+    def test_exact_live_id_set_32(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 39)
+        self.assertEqual(len(self.tasks), 32)
+
+    def test_schema_v2_authority_notice(self):
+        self.assertEqual(self.kernel["schema_version"], 2)
+        self.assertEqual(
+            self.kernel["authority"], gen_state.AUTHORITY_NOTICE
+        )
 
     def test_terminal_ids_absent_from_kernel_present_in_completed_table(self):
         self.assertFalse(TERMINAL_IDS & set(self.tasks))
@@ -139,23 +157,16 @@ class TestMigrationFidelity(unittest.TestCase):
             and d["state"] == "pending" and d["kind"] == "task"
         }
 
-    def test_p2_037_hard_start_depends_on_p2_042(self):
-        self.assertIn("P2-042", self._hard_start_targets("P2-037"))
-
-    def test_c027_recorded_agent_order(self):
-        # P2-040 -> P2-038 -> P2-039 -> RPT-001 -> P2-042 -> P2-041 -> P2-037
-        order = ["P2-040", "P2-038", "P2-039", "RPT-001", "P2-042", "P2-041", "P2-037"]
-        ranks = [self.tasks[t]["rank"] for t in order]
-        self.assertEqual(ranks, sorted(ranks))
-        self.assertLess(self.tasks["P2-041"]["rank"], self.tasks["P2-037"]["rank"])
-
     def test_p2_015_dependency_set(self):
         self.assertEqual(
             self._hard_start_targets("P2-015"),
-            {"P0-003", "P2-015-SMOKE", "P2-038", "P2-039"} - {"P0-003"},
+            {"P2-015-SMOKE", "P2-038"},
         )
         all_targets = {d["target"] for d in self.tasks["P2-015"]["dependencies"]}
-        self.assertTrue({"P0-003", "P2-015-SMOKE", "P2-038", "P2-039"} <= all_targets)
+        self.assertEqual(
+            all_targets,
+            {"P0-003", "P2-015-SMOKE", "P2-038", "P2-039", "P2-043"},
+        )
 
     def test_p2_006_gates(self):
         self.assertIn("P2-015", self._hard_start_targets("P2-006"))
@@ -163,7 +174,11 @@ class TestMigrationFidelity(unittest.TestCase):
             d["target"] for d in self.tasks["P2-006"]["dependencies"]
             if d["scope"] == "interpret" and d["strength"] == "hard"
         }
-        self.assertEqual(interpret, {"P2-037", "P2-041"})
+        self.assertEqual(interpret, {"P2-037", "P2-041", "P2-044", "P2-045"})
+        for dep in self.tasks["P2-006"]["dependencies"]:
+            if dep["target"] in interpret:
+                self.assertEqual(dep["state"], "satisfied")
+                self.assertIsNotNone(dep["evidence"])
 
     def test_post_2m_flags_and_p2_023_chain(self):
         for tid in ("P2-022", "P2-023"):
@@ -177,24 +192,40 @@ class TestMigrationFidelity(unittest.TestCase):
         self.assertEqual(self.tasks["P2-016"]["status"], "blocked")
         self.assertIn("P2-006", self._hard_start_targets("P2-016"))
 
-    def test_p2_027_is_external_successor_of_repro_001(self):
+    def test_p2_027_has_satisfied_repro_predecessors(self):
         self.assertEqual(self.tasks["P2-027"]["lane"], "ed_external")
-        self.assertEqual(self.tasks["REPRO-001"]["lane"], "agent")
-        self.assertIn("mixed_lane_migrated", self.tasks["REPRO-001"]["flags"])
-        self.assertIn("REPRO-001", self._hard_start_targets("P2-027"))
+        deps = {
+            d["target"]: d for d in self.tasks["P2-027"]["dependencies"]
+        }
+        self.assertEqual(set(deps), {"REPRO-001", "REPRO-002"})
+        for dep in deps.values():
+            self.assertEqual(dep["state"], "satisfied")
+            self.assertIsNotNone(dep["evidence"])
 
-    def test_e0_sorts_before_e1(self):
-        self.assertLess(self.tasks["P0-003"]["rank"], self.tasks["P1-008"]["rank"])
-        self.assertEqual(self.tasks["P0-003"]["rank"], 0)
+    def test_p1_008_is_first_external_record(self):
+        external = [
+            task for task in self.tasks.values() if task["lane"] == "ed_external"
+        ]
+        self.assertEqual(min(task["rank"] for task in external), 1)
+        self.assertEqual(self.tasks["P1-008"]["rank"], 1)
 
     def test_quiet_mac_all_lead_only_and_smoke_first(self):
         quiet = [t for t in self.tasks.values() if t["lane"] == "quiet_mac"]
-        self.assertEqual(len(quiet), 7)
+        self.assertEqual(len(quiet), 10)
         for task in quiet:
             self.assertIn("lead_only", task["flags"])
         self.assertLess(
             self.tasks["P2-015-SMOKE"]["rank"], self.tasks["P2-015"]["rank"]
         )
+        self.assertEqual(self.tasks["P2-038"]["status"], "partial")
+
+    def test_new_hardening_followups(self):
+        self.assertIn("P2-038", self._hard_start_targets("P2-046B"))
+        self.assertEqual(
+            self._hard_start_targets("P2-047B"), {"P2-015", "P2-047A"}
+        )
+        for tid in ("P2-048", "CI-003", "DOC-010"):
+            self.assertEqual(self.tasks[tid]["status"], "shelved")
 
     def test_lane_inference_flags(self):
         for tid in ("P2-004", "P2-005"):

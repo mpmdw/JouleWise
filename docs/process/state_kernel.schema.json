@@ -1,14 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "docs/process/state_kernel.schema.json",
-  "title": "JouleWise state kernel (DOC-008 Stage 1, schema_version 1)",
+  "title": "JouleWise state kernel (DOC-008 Stage 1, schema_version 2)",
   "description": "Editor/tooling schema only; scripts/gen_state.py is the runtime validator (stdlib, no jsonschema dependency). Cross-record invariants (lane-rank uniqueness, blocked/status consistency, pointer resolution, acyclicity, stop-card agreement) live in the generator.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "schema_version", "updated", "latest_report", "active_stop_card", "tasks"],
+  "required": ["schema", "schema_version", "authority", "updated", "latest_report", "active_stop_card", "tasks"],
   "properties": {
     "schema": { "const": "docs/process/state_kernel.schema.json" },
-    "schema_version": { "const": 1 },
+    "schema_version": { "const": 2 },
+    "authority": { "const": "NOT_AUTHORITATIVE_DERIVED_VIEW" },
     "updated": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
     "latest_report": { "$ref": "#/$defs/pointer" },
     "active_stop_card": {

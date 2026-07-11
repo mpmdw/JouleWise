@@ -31,6 +31,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 KERNEL_REL = "docs/process/state_kernel.json"
 SCHEMA_REL = "docs/process/state_kernel.schema.json"
+AUTHORITY_NOTICE = "NOT_AUTHORITATIVE_DERIVED_VIEW"
 
 RS_BEGIN = "<!-- BEGIN GENERATED: state-kernel run-state-intake -->"
 RS_END = "<!-- END GENERATED: state-kernel run-state-intake -->"
@@ -199,14 +200,19 @@ FENCE_SORT_KEY = lambda f: (f["rule"], f["authority"]["path"], f["authority"]["l
 def validate(kernel) -> None:
     _check_keys(
         kernel,
-        {"schema", "schema_version", "updated", "latest_report", "active_stop_card", "tasks"},
+        {
+            "schema", "schema_version", "authority", "updated", "latest_report",
+            "active_stop_card", "tasks",
+        },
         set(),
         "kernel",
     )
     if kernel["schema"] != SCHEMA_REL:
         fail(f"kernel.schema must be {SCHEMA_REL!r}")
-    if kernel["schema_version"] != 1:
-        fail("kernel.schema_version must be 1")
+    if kernel["schema_version"] != 2:
+        fail("kernel.schema_version must be 2")
+    if kernel["authority"] != AUTHORITY_NOTICE:
+        fail(f"kernel.authority must be {AUTHORITY_NOTICE!r}")
     if not isinstance(kernel["updated"], str) or not DATE_RE.match(kernel["updated"]):
         fail("kernel.updated must be YYYY-MM-DD")
     _check_pointer(kernel["latest_report"], "kernel.latest_report", kernel)
