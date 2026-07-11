@@ -95,8 +95,8 @@ authority field, branch impl/doc008-kernel awaiting PR); bookkeeping
 arc complete (run report, C-028 council entry with layer catch-rates
 and ~57-invocation spend record, D-064 ratified incl. manifest v3 +
 claude-codex-report/v1 + WRITE_SCOPE enforcement; queue reconciled;
-consistency sweep; site regen+deploy). Open at clearance, tracked in
-the queue: INT-59 merge, DOC-008 PR, P2-049/P2-050/TOOL-01.
+consistency sweep; site regen+deploy). All clearance-time opens since CLOSED same day: #59 MERGED, DOC-008
+MERGED (#60). Remaining queue heads: P2-049/P2-050/TOOL-01.
 
 ## Superseded stop card (CP-5)
 
