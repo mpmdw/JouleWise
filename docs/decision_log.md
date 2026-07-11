@@ -1702,6 +1702,15 @@ Decision, in three parts:
   (RUN_STATE end-of-work step 7). Higher-level docs (README,
   PROJECT_STATUS, playbook) are in the sweep's scope explicitly.
 
+Application note (2026-07-11, C-028 closeout): advisor and handoff prose must
+separate four states that were conflated during the arc: merged software,
+an open follow-up PR, a satisfied software gate, and completed live
+execution. Test counts are cited with both the exact head and environment
+convention: current main 1,220/`skipped=10`; PR #59 worktree
+1,224/`skipped=12`; restricted managed-sandbox runs may carry
+`skipped=13`. Historical exact tails remain valid only at their recorded
+heads. This is an application of D-023/D-031, not a new status authority.
+
 Revisit when: council overhead exceeds its catch rate (track via council
 log outcomes), or the model roster changes.
 
@@ -3062,6 +3071,15 @@ meta-process growth — until four gates pass:
    contrast/claim path (P2-037) before any L2 interpretation.
 4. One end-to-end vertical slice: report source skeleton + reproducible
    bundle→analysis→figure→claims-row→report-page path (RPT-001).
+
+Application note (2026-07-11, C-028 closeout): gate 2 is satisfied by the
+verified iCloud backup and byte-identical strict-valid restore. The software
+prerequisites inside gate 3 are also satisfied: P2-039, P2-038, and the
+P2-042→P2-041→P2-037 analysis trio are merged, with reducer dispatch current
+through 0.4.2. Gate 3 itself is not complete because Window-A smoke, floors,
+and baselines have not executed. That execution is a quiet-machine + Ed
+action; no landed-software statement raises its claim level or promotes the
+PROVISIONAL NVIDIA pins.
 
 Work that CLOSES these gates, correctness defects, report writing, and
 already-obligated hardware preparation are always permitted.

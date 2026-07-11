@@ -14,12 +14,14 @@ The benchmark is designed around three stable ideas:
   for later audit and analysis.
 
 **Status:** research prototype. The Mac (Apple M3 Max) measurement harness
-has cleared its pre-campaign software review. Window A begins with the
-C-019 shakedown and P2-015-SMOKE once P2-041/P2-037 land, the cross-stream
-integration review passes, and the machine is quiet. The P0-003
-external-backup gate is satisfied. Through
-`main@73489a9` (2026-07-11), PRs #41-#49 are merged; the verified end-user
-quickstart remains a Phase 5 deliverable.
+has cleared its pre-campaign software review. C-028 is closed: PRs #41-#58
+are merged, the analysis trio is complete, and the reducer compatibility
+lattice now terminates at 0.4.2. PR #59 is an open integration-review
+follow-up, not an unlanded Window-A prerequisite. All Window-A software
+gates are satisfied; execution begins with the C-019 shakedown and
+P2-015-SMOKE in a lead-controlled quiet-machine session with Ed. The P0-003
+external-backup gate is satisfied. The verified end-user quickstart remains
+a Phase 5 deliverable.
 
 ## Current State
 
@@ -48,14 +50,17 @@ and identity-aware process-survival handling. The NV-5 localhost lead gate
 passed 3/3, but ALL remote protocol pins remain PROVISIONAL pending first
 live hardware contact; Jetson Orin (2L) remains gated on device access.
 
-The C-028 merge arc also landed P2-042's frozen analysis manifest (PR #46),
-the P2-040 remainder and reducer 0.3.1 (PR #47), and P2-038's production
-uncertainty software path (PR #48). P0-003 closed with an iCloud Drive
-backup and a fresh restore that was strict-valid and byte-identical; Ed
-ratified D-060; and the hardening proposal was adjudicated into nine queue
-rows. P2-041's vetted rebuild and P2-037's contrast/claim engine remain in
-progress on separate branches. No new live NVIDIA or quiet-Mac measurement
-is claimed here.
+The C-028 merge arc landed P2-042's frozen analysis manifest (PR #46), the
+P2-040 remainder and reducer 0.3.1 compatibility arm (PR #47), P2-038's
+production-uncertainty software path (PR #48), P2-041's verdict split and
+reducer 0.4.0 (PR #54), idle-dependence/HAC uncertainty and reducer 0.4.1
+(PR #55), the 0.4.2 inter-token metric (PR #56), doctor preflight (PR #57),
+and the P2-037 contrast/claim engine (PR #58). The analysis trio—manifest,
+verdict split, and contrast/claim engine—is complete. The six frozen legacy
+arms and 0.3.x/0.4.x dispatch rules remain explicit; landed software is not
+being presented as new live evidence. P0-003 closed with an iCloud Drive
+backup and a fresh restore that was strict-valid and byte-identical. No new
+live NVIDIA or quiet-Mac measurement is claimed here.
 
 The repository currently contains:
 
@@ -67,9 +72,10 @@ The repository currently contains:
   (`run`, `validate-bundle`, `reduce`, `report`).
 - Example Mac-local and mock-local configs.
 - Phase 1 methodology, feasibility, and measurement-design docs.
-- A test suite (lead-run at `main@73489a9`: 1,041 tests OK, 12 skipped;
-  current count authority: `RUN_STATE.md` Current Verification) run in CI on
-  every push, including a mock end-to-end run + bundle validation.
+- A test suite (current main: 1,220 tests OK, 10 skipped; PR #59 branch:
+  1,224 tests OK in its worktree convention; count authority:
+  `RUN_STATE.md` Current Verification) run in CI on every push, including a
+  mock end-to-end run + bundle validation.
 
 ## Verify
 
@@ -77,8 +83,8 @@ The repository currently contains:
 python3 -m unittest discover -s tests
 ```
 
-(The lead-run canonical result at `main@73489a9` is 1,041 tests OK with
-12 optional/environment-gated skips and zero expected failures. Both historic
+(The canonical result on current main is 1,220 tests OK with 10
+optional/environment-gated skips and zero expected failures. Both historic
 intermittent failure classes are fixed on main: the fake-nvidia-smi idle
 deadline now begins at sampler readiness, and the P2-038 rail-only fixture
 deterministically supplies the right-edge sample.)

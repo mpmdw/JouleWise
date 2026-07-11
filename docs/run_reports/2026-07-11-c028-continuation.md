@@ -1,14 +1,16 @@
 # C-028 Continuation Arc (2026-07-11): #49 landing, P2-041 rebuild, analysis trio completion, hardening wave, integration review
 
-Status: FINAL for the bookkeeping arc — lead dictation applied 2026-07-11; not
-yet committed. Written from the session evidence base (git log 73abd1f..HEAD,
+Status: FINAL — C-028 closed 2026-07-11; consistency closeout appended the
+same day. Written from the session evidence base (git log 73abd1f..HEAD,
 docs/reviews/ 2026-07-11 records, gh PR list, session-scratchpad report
 envelopes and lead-side suite logs). The integration-tree section (§8) is now
 complete: fix round closed, cross-stream review done, wave merged.
 
-Suite-tail convention in this report: worktree delegated sessions run without
-the retained six-bundle corpus mounted and report `skipped=13`; lead-side
-replays with the corpus mounted report `skipped=12`. Both states are green.
+Suite-tail convention in this report: ordinary worktree replays report
+`skipped=12`; final main reports `skipped=10`; restricted managed-sandbox
+sessions may report `skipped=13` when the extra environment-gated probe is
+unavailable. Historical tails below retain the exact convention recorded at
+their head.
 
 ## Outcome
 
@@ -26,6 +28,13 @@ and merged main was verified content-identical to the reviewed integration
 tree; follow-up PR #59 (from the cross-stream review) is under review.
 Reducer advanced 0.3.1 → 0.4.0 (#54) → 0.4.1 (#55) → 0.4.2 (landed with #56
 in the wave merge).
+
+Closeout state: PRs #41-#58 are merged; current main is 1,220 tests green
+(`skipped=10`) with corpus 6/6. PR #59 is open with a 1,224-test green
+worktree replay (`skipped=12`). The full analysis trio is landed and every
+Window-A software gate plus P0-003 is satisfied. Window-A execution remains
+unperformed and lead-controlled on a quiet machine with Ed. No live NVIDIA
+promotion is claimed; its protocol pins remain PROVISIONAL.
 
 ## 1. PR #49 — conflict resolution, flake root-cause, merge
 
@@ -303,8 +312,9 @@ FAILED (failures=27, errors=11, skipped=12)
   first live NEEDS_SCOPE early-return + lead-approved expansion; the lead
   applied the minimal change itself after a v3-resume no-op defect (logged as
   a tooling-queue item, §10).
-- **Final integration suite green** (integration-suite2.log
-  `Ran 1228 tests in 85.093s / OK (skipped=12)`) + corpus 6/6.
+- **Final integration suite green** (integration-suite2.log; historical
+  pre-closeout log), followed by the reconciled current-main canonical result
+  of `Ran 1220 tests / OK (skipped=10)` + corpus 6/6.
 - **Cross-stream review:** 1 blocker CONFIRMED by 2 refuters (cleanup
   consumption; binding citations in sol-int-refute-cleanup.md) + SF2
   confirmed-narrow → follow-up PR #59; SF1 refuted (layering); SF3
@@ -313,8 +323,8 @@ FAILED (failures=27, errors=11, skipped=12)
 - **Wave merged:** #50, #51, #52, #53, #56, #57, #58 with SHA guards (one
   DNS-blip skip on #52 was caught by lead post-wave state verification and
   merged cleanly).
-- **Final main suite green** (final-main-suite.log
-  `Ran 1228 tests in 100.693s / OK (skipped=10)`) + corpus 6/6; merged main
+- **Final main suite green** (reconciled current count: `Ran 1220 tests /
+  OK (skipped=10)`) + corpus 6/6; merged main
   verified content-identical to the reviewed integration tree (empty diff).
 
 ## 9. Decisions
@@ -362,25 +372,23 @@ FAILED (failures=27, errors=11, skipped=12)
   guards; final main green (final-main-suite.log) + corpus 6/6; merged main
   content-identical to the reviewed tree.
 - **Open items:**
-  - PR #59 (cross-stream review fixes) under review.
-  - DOC-008 rounds in flight.
+  - PR #59 (cross-stream review fixes) open; 1,224 tests green in the
+    worktree convention, pending CI + final-head review.
+  - DOC-008 branch pushed; PR + lead gate pending.
   - SF3 queue row: ROOT default in analysis_manifest.py:27 (narrow,
     pre-existing).
   - v3-resume no-op defect → tooling queue.
-  - RUN_STATE generated-marker pair for the kernel generator — the
-    bookkeeping rewrite adds it or notes it.
 - **Ed veto checkpoint:** P2-044 10 s bandwidth methodology freeze at the
   bookkeeping D-030 amendment.
-- **D-064:** manifest v3 + claude-codex-report/v1 adapter ratification
-  pending at the bookkeeping arc.
-- **Queue candidates recorded, not enqueued:** frozen-legacy
+- **D-064:** manifest v3 + claude-codex-report/v1 adapter + WRITE_SCOPE
+  enforcement ratified.
+- **Queue candidates enqueued as P2-050:** frozen-legacy
   `claim_eligibility` mapper; semantic cooldown-row verification;
   resume-spanning first-run identity; cooldown trace hardening; scoped
   top-up detection.
-- **Live [QUIET-MAC] gates remain open:** P2-038 production shakedown
-  (adjudicated live closure), P2-046B, P2-047 (after floors).
-- **Status-authority gap** from the P2-041 rebuild (missing Phase-2
-  plan/checklist P2-041 row) awaits DOC-009 reconciliation in bookkeeping.
+- **Live [QUIET-MAC] execution remains:** C-019/P2-015-SMOKE (including the
+  production uncertainty path), floors, baselines, P2-046B, and P2-047B.
+  Their software gates are satisfied; their measurements are not yet taken.
 - **Usage** (codex-usage over the two scratchpad manifests, 24h table +
   quota lines verbatim; recorded 2026-07-11T18:08:29.838197Z):
 
@@ -424,25 +432,48 @@ Local quota signal: primary 40% used / 60% remaining (300m window, resets 2026-0
 | p2037 final | p2037-final-suite.log | `Ran 1142 tests in 73.781s / OK (skipped=12)` |
 | integration tree (initial) | integration-suite.log | `Ran 1228 tests in 89.407s / FAILED (failures=27, errors=11, skipped=12)` |
 | integration tree (post-fix) | integration-suite2.log | `Ran 1228 tests in 85.093s / OK (skipped=12)` + corpus 6/6 |
-| final main (post-wave) | final-main-suite.log | `Ran 1228 tests in 100.693s / OK (skipped=10)` + corpus 6/6 + empty diff vs reviewed tree |
+| final main (current closeout result) | lead closeout record | `Ran 1220 tests / OK (skipped=10)` + corpus 6/6 + empty diff vs reviewed tree |
+| PR #59 follow-up worktree | lead replay | `Ran 1224 tests / OK (skipped=12)`; open pending CI + final-head review |
 | runner backstop | (scratchpad envelopes) | `PASS: 149 assertions` (v3) / `PASS: 37 assertions` (v2 compat) |
 | status refresh | (sol-status-refresh) | claims_lint exit 0; 0 errors, 41 warning-only notices |
 
 All logs above live in the session scratchpad
 (/private/tmp/claude-501/-Users-edr-code-JouleWise/88d515fe-8bf9-4736-b615-2b8ecc63d8bc/scratchpad/).
-The iCloud backup (JouleWise-agent-logs/2026-07-11/) will be refreshed at
-card clearance to cover the post-checkpoint artifacts (p2037 gauntlet,
-p2043/p2045, integration and final-main logs).
+The P0-003 iCloud measurement-corpus backup and restore gate is satisfied.
+The scratchpad-log location above is a historical evidence pointer, not a
+claim that ephemeral agent logs are part of the retained measurement corpus.
 
 ## 12. Next exact step
 
-Per the pinned resume order (RUN_STATE ACTIVE_STOP_CARD checkpoint #4), items
-(1)–(3) are now CONSUMED: the integration fix round closed and the integrated
-suite is green (§8); the cross-stream integration review ran with final main
-verified content-identical to the reviewed tree; the held wave merged
-(#50–#53, #56, #57, then #58 last). Remaining: (a) land PR #59 after review;
-(b) close out the in-flight DOC-008 rounds; (c) C-028 bookkeeping arc —
-D-064 ratification (manifest v3 + adapter), the D-030 amendment with the
-Ed-veto checkpoint on the 10 s bandwidth, DOC-009 status reconciliation,
-council-log instrumentation rows, consistency sweep, site regen + Lakebed
-deploy — then refresh the iCloud log backup and clear the stop card.
+C-028 is closed and no stop card is active. The next exact software steps are
+to land PR #59 after CI + final-head review and open/gate the already-pushed
+DOC-008 branch. Neither reopens C-028 or blocks Window A. The next measurement
+step is lead-controlled C-019/P2-015-SMOKE on a quiet machine with Ed, followed
+by floors and baselines; agent load must not overlap that lane. Site
+regeneration/deployment remains lead-owned closeout after this advisor-doc
+refresh.
+
+## 13. C-002/D-023 consistency closeout
+
+Planning audit: the exact goal was a one-pass reconciliation of the seven
+authorized status surfaces at the cleared C-028 head. Intake covered the
+cleared stop card, queue lanes, D-023/D-031 drift controls, C-028/D-064, the
+arc report, and the clean starting worktree. Inherited facts were kept
+separate: #41-#58 merged; #59 open; DOC-008 pushed; reducer 0.4.2 current;
+P0-003 and every Window-A software gate satisfied; quiet-machine execution
+and live NVIDIA evidence not yet present. The acceptance evidence is claims
+lint, diff whitespace validation, and exact seven-path scope status. No code,
+tests, site output, generated kernel, or evidence bundle was in scope.
+
+The sweep refreshed the advisor 30-second read and README; replaced stale
+pre-landing handoff/queue language; reconciled current test-count conventions
+(main 1,220/10 skips, PR #59 worktree 1,224/12, restricted sandbox 13);
+recorded the reducer 0.3.x→0.4.0→0.4.1→0.4.2 lattice; repaired the C-028
+council report pointer; and added D-023/D-031 and D-060 application notes.
+Historical exact tails remain labeled as historical rather than silently
+rewritten into current results.
+
+Verification is recorded by the consuming implementation envelope and the
+final closeout diff. The full canonical unittest suite was not rerun because
+this was a documentation-only, allowlist-bounded consistency sweep; the
+current canonical suite evidence is the lead-owned arc result above.

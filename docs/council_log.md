@@ -1503,11 +1503,12 @@ before delegation-boundary changes.
 
 ## C-028: C-027 adjudication and integration arc — infrastructure wave, PRs #49/#54/#55, and the integration window (2026-07-10/11)
 
-Full record: run report **TODO
-`docs/run_reports/2026-07-11-c028-<name>.md`**; binding rulings:
-`docs/specs/c027/ADJUDICATION.md`; invocation traces: **TODO
-`docs/process_traces/<session>_manifest.jsonl` (v2 snapshot) and
-`<session>_manifest_v3.jsonl` (event stream)** — the D-064 surfaces.
+Full record: `docs/run_reports/2026-07-11-c028-continuation.md`; binding
+rulings: `docs/specs/c027/ADJUDICATION.md`. No tracked
+`docs/process_traces/` artifact is present in this checkout; the run report's
+aggregate invocation record is therefore the durable evidence available for
+this arc, and D-064 governs future tracked event streams. This limitation is
+recorded rather than repaired with an invented pointer.
 The arc's earlier segment (adjudication rounds, PRs #41–#48) is
 recorded in the CP-5/checkpoint records and stop-card history; this
 entry records the 2026-07-10/11 continuation.
@@ -1533,6 +1534,15 @@ and content-identical to the reviewed tree; follow-up PR #59 (from
 the cross-stream review) is under review and DOC-008 rounds remain
 in flight. Delegation infrastructure landed on main: adapter,
 codex-run-v3, usage guard, scope backstop.
+
+Closeout amendment (2026-07-11): C-028 is **CLOSED**. PRs #41-#58 are
+merged; current main's canonical suite is 1,220 OK (`skipped=10`) and the
+corpus gate is 6/6. PR #59 remains open with a 1,224-test green worktree
+replay (`skipped=12`), and `impl/doc008-kernel` is pushed awaiting PR. These
+open follow-ups do not reopen the card. Every Window-A software gate and
+P0-003 are satisfied; quiet-machine execution with Ed remains deliberately
+separate from landed-software status. NVIDIA/Orin protocol pins remain
+PROVISIONAL pending live evidence.
 
 Layer structure: Sol implementation sessions (xhigh; 2 ultra for the
 p2041-vetted composition and the P2-037 engine) → review lenses
