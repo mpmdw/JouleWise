@@ -1,0 +1,12 @@
+{
+  "evidence_status": "PROVISIONAL_FIXTURE_ONLY",
+  "manifest_id": "p2-046-load-transition-alignment-v1",
+  "observation_set_id": "p2046-missing-transition-fixture-v1",
+  "schema_version": "joulewise.load_transition_observations.v1",
+  "source": {
+    "capture_class": "synthetic_fixture",
+    "markers_sha256": null,
+    "raw_samples_sha256": null
+  },
+  "transitions": []
+}
