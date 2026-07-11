@@ -101,7 +101,21 @@ docs/reviews/2026-07-10-hardening-adjudication.md).
    Root-cause + deterministic fix required BEFORE merging #49; do not
    merge on a rerun-green alone, and any fix must preserve fail-closed
    gate semantics (metrology adjudication).
-2. impl/p2041 — ULTRA ROUND FINISHED RED (post-checkpoint update): the
+2. impl/p2041 — TRIAGE DONE, RULINGS ED-APPROVED (2026-07-11): the raw
+   WIP diff must NOT be applied wholesale — it deletes P2-038/P2-040
+   implementations (full audit + vetted rebuild recipe:
+   docs/reviews/2026-07-11-p2041-red-tranche-triage.md). Sol's 7
+   test-fixture fixes in the worktree are valid and retained. Ed
+   approved the lead's rulings on the three C questions: (1)
+   claim_readiness stays, analysis_readiness rename REJECTED; (2)
+   first-run exemption stays per-physical-session; (3) scoped top-up
+   detection + cooldown trace v2 hardening NOT in this landing —
+   items (2)-hardening and (3) become queue candidates with dissent
+   recorded. Rebuild AFTER #49 merges: branch impl/p2041-vetted off
+   post-#49 main, Sol ULTRA composition per the triage recipe (0.4.0
+   must union runtime_cleanup_ok AND #49's remote_cleanup_failed +
+   verifier registry), then lead suite unpiped + full review stack.
+   Original instructions (superseded but kept for context): the
    session exited OK but wrote an EMPTY report; its tree (branch fixes
    + main-post-#48 content PRE-UNIONED without merge ancestry + the C5
    window_evidence_precheck renames) is snapshot-committed as a
