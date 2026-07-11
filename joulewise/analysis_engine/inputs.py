@@ -90,6 +90,8 @@ class BundleEvidence:
     summary_sha256: str | None
     replacement_classification: str
     inclusion_status: str
+    claim_evidence_flags: tuple[str, ...] = ()
+    waiver: Mapping[str, Any] | None = None
     expected_config_sha256: str | None = None
     window_prechecks: dict[str, dict[str, Any]] = field(default_factory=dict)
     campaign_cooldown: Mapping[str, Any] | None = None
@@ -351,6 +353,84 @@ def _campaign_cooldown_evidence(
     return resolved
 
 
+def _campaign_claim_records(
+    runs_root: Path, manifest_id: str
+) -> dict[str, tuple[str, ...]]:
+    """Read runner-recorded cleanup flags for fail-closed comparison.
+
+    Waivers remain campaign-level audit context and are intentionally ignored
+    here. The analysis engine re-derives cleanup flags from immutable bundle
+    evidence; malformed provenance is a process-input error, and disagreement
+    with the recorded cleanup subset fails closed downstream.
+    """
+
+    manifest_dir = runs_root / "campaign_manifests"
+    if not manifest_dir.is_dir():
+        return {}
+    result: dict[str, tuple[str, ...]] = {}
+    cleanup_scopes = {"runtime_cleanup_ok", "remote_cleanup_failed"}
+    for path in sorted(manifest_dir.glob("*.json"), key=lambda item: item.name):
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+        if (
+            not isinstance(raw, Mapping)
+            or raw.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA
+            or raw.get("analysis_manifest_id") != manifest_id
+            or not isinstance(raw.get("members"), list)
+        ):
+            continue
+        for member in raw["members"]:
+            if not isinstance(member, Mapping):
+                continue
+            run_id = member.get("run_id")
+            bundle_ids = member.get("bundle_ids")
+            claim_evidence = member.get("claim_evidence")
+            if (
+                not isinstance(run_id, str)
+                or not run_id
+                or not isinstance(bundle_ids, list)
+                or not isinstance(claim_evidence, list)
+            ):
+                continue
+            valid_bundle_ids = {
+                bundle_id
+                for bundle_id in bundle_ids
+                if isinstance(bundle_id, str)
+                and (
+                    bundle_id == run_id
+                    or (
+                        bundle_id.startswith(f"{run_id}__r")
+                        and bundle_id[len(f"{run_id}__r") :].isdigit()
+                    )
+                )
+            }
+            for row in claim_evidence:
+                if not isinstance(row, Mapping):
+                    continue
+                bundle_id = row.get("bundle_id")
+                flags = row.get("claim_evidence_flags")
+                try:
+                    if not isinstance(bundle_id, str) or not bundle_id:
+                        raise TypeError("bundle_id must be a non-empty string")
+                    if not isinstance(flags, list) or any(
+                        not isinstance(flag, str) or not flag for flag in flags
+                    ):
+                        raise TypeError(
+                            "claim_evidence_flags must contain only non-empty strings"
+                        )
+                    recorded_cleanup = cleanup_scopes.intersection(flags)
+                except TypeError as exc:
+                    raise AnalysisInputError(
+                        f"malformed campaign claim evidence in {path.name}: {exc}"
+                    ) from exc
+                if bundle_id not in valid_bundle_ids:
+                    continue
+                result[bundle_id] = tuple(sorted(recorded_cleanup))
+    return result
+
+
 def _safe_relative(path: Path, root: Path) -> str:
     if path.is_symlink():
         raise AnalysisInputError(f"bundle path must not be a symlink: {path}")
@@ -505,6 +585,38 @@ def _exclude_evidence(evidence: BundleEvidence, reason: str) -> None:
         ordered_reason_codes((*evidence.base_reason_codes, reason))
     )
     evidence.inclusion_status = "excluded"
+
+
+def cleanup_claim_evidence_flags(summary: Mapping[str, Any] | None) -> tuple[str, ...]:
+    """Return exact suspect-cleanup field names from reducer quality evidence."""
+
+    quality = (
+        summary.get("measurement_quality")
+        if isinstance(summary, Mapping)
+        else None
+    )
+    if not isinstance(quality, Mapping):
+        return ()
+    flags: list[str] = []
+    if quality.get("runtime_cleanup_ok") is False:
+        flags.append("runtime_cleanup_ok")
+    remote = quality.get("remote_cleanup_failed")
+    if isinstance(remote, list) and remote:
+        flags.append("remote_cleanup_failed")
+    return tuple(flags)
+
+
+def _apply_cleanup_claim_policy(
+    evidence: BundleEvidence, recorded_flags: Sequence[str] | None
+) -> None:
+    flags = cleanup_claim_evidence_flags(evidence.summary)
+    evidence.claim_evidence_flags = flags
+    if flags or (
+        recorded_flags is not None and set(recorded_flags) != set(flags)
+    ):
+        # Cleanup contamination is an unquantified required error term.  Reuse
+        # the frozen engine vocabulary rather than inventing a cleanup reason.
+        _exclude_evidence(evidence, "required_error_term_unknown")
 
 
 def _replacement_tags(raw_config: Mapping[str, Any]) -> tuple[list[str], list[str]]:
@@ -689,6 +801,7 @@ def _scan_replacements_and_topups(
     strict_validator: StrictValidator,
     registered: Mapping[str, BundleEvidence],
     cohort_identities: Mapping[str, Mapping[str, Any]],
+    cleanup_records: Mapping[str, Sequence[str]],
 ) -> tuple[
     dict[str, BundleEvidence],
     list[BundleEvidence],
@@ -751,6 +864,7 @@ def _scan_replacements_and_topups(
             replacement_classification="replacement_candidate",
             allow_replacement_tags=True,
         )
+        _apply_cleanup_claim_policy(evidence, cleanup_records.get(evidence.bundle_id))
         cohort_identity = cohort_identities.get(entry["model_tag"])
         if (
             cohort_identity is not None
@@ -823,6 +937,9 @@ def load_analysis_inputs(
     manifest, manifest_sha = load_manifest(Path(analysis_manifest_path))
     floor_artifact, floor_sha = load_floor_artifact(Path(floor_artifact_path))
     runs_root = Path(runs_root)
+    cleanup_records = _campaign_claim_records(
+        runs_root, str(manifest["manifest_id"])
+    )
     registered: dict[str, BundleEvidence] = {}
     for entry in manifest["entries"]:
         run_id = entry["run_id"]
@@ -842,6 +959,9 @@ def load_analysis_inputs(
             source_config,
             strict_validator,
         )
+        _apply_cleanup_claim_policy(
+            registered[entry["entry_id"]], cleanup_records.get(run_id)
+        )
     cohort_identities = _enforce_registered_realized_identity(manifest, registered)
     effective, extras, replacements, unregistered, top_up_ids = _scan_replacements_and_topups(
         manifest,
@@ -850,6 +970,7 @@ def load_analysis_inputs(
         strict_validator,
         registered,
         cohort_identities,
+        cleanup_records,
     )
     cooldown_by_bundle = _campaign_cooldown_evidence(
         runs_root, str(manifest["manifest_id"])
@@ -978,9 +1099,12 @@ def window_evidence_precheck(
     return result
 
 
-def token_provenance(evidence: BundleEvidence) -> dict[str, Any]:
-    summary = evidence.summary
-    metadata = evidence.metadata
+def token_provenance_from_artifacts(
+    summary: Mapping[str, Any] | None,
+    metadata: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Extract the exact reducer/engine token gate inputs from bundle artifacts."""
+
     quality = summary.get("measurement_quality") if isinstance(summary, Mapping) else None
     observed = metadata.get("workload_observed") if isinstance(metadata, Mapping) else None
     provenance = metadata.get("workload_provenance") if isinstance(metadata, Mapping) else None
@@ -1006,6 +1130,10 @@ def token_provenance(evidence: BundleEvidence) -> dict[str, Any]:
         "output_policy": policy_identity,
         "tokenizer_identity": dict(tokenizer) if isinstance(tokenizer, Mapping) else None,
     }
+
+
+def token_provenance(evidence: BundleEvidence) -> dict[str, Any]:
+    return token_provenance_from_artifacts(evidence.summary, evidence.metadata)
 
 
 def governed_stochastic_variance(
@@ -1353,6 +1481,7 @@ def unavailable_floor_resolution(
 __all__ = [
     "AnalysisInputError",
     "BundleEvidence",
+    "cleanup_claim_evidence_flags",
     "FloorRequest",
     "FloorResolution",
     "LoadedAnalysisInputs",
@@ -1367,6 +1496,7 @@ __all__ = [
     "replacement_config_identity",
     "scientific_config_identity",
     "token_provenance",
+    "token_provenance_from_artifacts",
     "unavailable_floor_resolution",
     "window_evidence_precheck",
 ]
