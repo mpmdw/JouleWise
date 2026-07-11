@@ -21,7 +21,14 @@ generated artifacts, tidy-tree work, and work believed necessary for completion 
 not expand the allowlist.
 
 If an unlisted write appears necessary, the worker must preserve that path, complete
-independent authorized work, and stop with a blocking scope-expansion request. Only
+independent authorized work, and stop with a blocking scope-expansion request.
+
+The same early-return rule applies to any blocking decision that is not the
+worker's to make — naming, contract semantics, spec conflicts, authority gaps.
+Do not guess and do not invent: finish independent authorized work, then stop
+with a blocking question (the NEEDS_RULING shape: question, options considered,
+recommendation, blocked work). The lead always resumes compliant early-returns
+with an answer; a short round-trip is always cheaper than a wrong guess. Only
 the lead can approve an expansion through a new or resumed prompt. Approval is
 prospective; an already-made out-of-scope edit remains a scope violation.
 
