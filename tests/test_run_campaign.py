@@ -28,6 +28,7 @@ def run_campaign(
     log_path: Path | None = None,
     backup: Path | None = None,
     waivers: Path | None = None,
+    shakedown_gate: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     command = [sys.executable, str(SCRIPT), str(config_dir), "--runs-dir", str(runs_dir)]
     if log_path is not None:
@@ -36,6 +37,8 @@ def run_campaign(
         command.append("--dry-run")
     if backup is not None:
         command.extend(["--backup", str(backup)])
+    if shakedown_gate:
+        command.extend(["--shakedown-gate", "production_uncertainty_v1"])
     if waivers is not None:
         command.extend(["--waivers", str(waivers)])
     if cli_cmd is not None:
@@ -2105,6 +2108,61 @@ class RunCampaignTests(unittest.TestCase):
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual([row["run_id"] for row in rows], ["complete", "partial", "fresh"])
             self.assertEqual([row["status"] for row in rows], ["skipped", "incomplete_existing", "ok"])
+
+    def test_p2038_shakedown_requires_backup_and_exactly_one_config(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "one.json", "one")
+            missing_backup = run_campaign(
+                config_dir, runs_dir, shakedown_gate=True
+            )
+            self.assertEqual(missing_backup.returncode, 2)
+            self.assertIn("requires --backup", missing_backup.stderr)
+
+            write_config(config_dir, "two.json", "two")
+            backup = tmp_path / "backup.sh"
+            backup.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            os.chmod(backup, 0o755)
+            too_many = run_campaign(
+                config_dir,
+                runs_dir,
+                backup=backup,
+                shakedown_gate=True,
+            )
+            self.assertEqual(too_many.returncode, 2)
+            self.assertIn("exactly one", too_many.stderr)
+
+    def test_p2038_shakedown_rejects_mock_backend_with_named_gate_row(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "one.json", "one")
+            fake_cli = make_fake_cli(tmp_path)
+            backup = tmp_path / "backup.sh"
+            backup.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            os.chmod(backup, 0o755)
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                backup=backup,
+                shakedown_gate=True,
+            )
+
+            self.assertEqual(result.returncode, 1)
+            self.assertIn(
+                "SHAKEDOWN_GATE_FAILED[not_production_backend]", result.stderr
+            )
+            rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
+            gate = next(row for row in rows if row.get("record_type") == "shakedown_gate")
+            self.assertEqual(gate["status"], "failed")
+            self.assertEqual(gate["code"], "not_production_backend")
 
 
 if __name__ == "__main__":

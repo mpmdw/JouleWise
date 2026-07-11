@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shlex
 import subprocess
@@ -40,6 +41,8 @@ if str(ROOT) not in sys.path:
 
 from joulewise.bundle import sanitize_id_component  # noqa: E402
 from joulewise.cli import validate_bundle  # noqa: E402
+from joulewise.bundle_read import BundleReader, BundleReadError  # noqa: E402
+from joulewise.schemas import RunStatus, RuntimeBackend, TelemetryBackend  # noqa: E402
 
 
 STATUSES = (
@@ -263,6 +266,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         const="",
         help="Run scripts/backup_runs.sh, or a supplied backup command path, after each success",
     )
+    parser.add_argument(
+        "--shakedown-gate",
+        choices=("production_uncertainty_v1",),
+        help="Require the P2-038 single-bundle strict/reduce/evidence/backup gate",
+    )
     parser.add_argument("--max-failures", type=int, default=1, help="Stop after this many failures")
     parser.add_argument(
         "--cli-cmd",
@@ -435,13 +443,192 @@ def backup_script_path(backup_arg: str) -> Path:
     return Path(__file__).resolve().parent / "backup_runs.sh"
 
 
-def backup_runs(runs_dir: Path, script: Path) -> None:
+def backup_runs(runs_dir: Path, script: Path) -> int:
     result = subprocess.run([str(script), str(runs_dir)], check=False)
     if result.returncode != 0:
         print(
             f"warning: backup command failed with exit {result.returncode}: {script} {runs_dir}",
             file=sys.stderr,
         )
+    return result.returncode
+
+
+class ShakedownGateError(ValueError):
+    def __init__(self, code: str, bundle_id: str, detail: str) -> None:
+        super().__init__(detail)
+        self.code = code
+        self.bundle_id = bundle_id
+        self.detail = detail
+
+
+def _shakedown_fail(code: str, bundle: Path, detail: str) -> ShakedownGateError:
+    return ShakedownGateError(code, bundle.name, detail)
+
+
+def assert_production_uncertainty(
+    bundle_path: Path, *, allow_mock_runtime: bool = False
+) -> dict[str, Any]:
+    """Assert the P2-038 evidence and P2-029/P2-040 request gates."""
+
+    bundle = Path(bundle_path)
+    reader = BundleReader(bundle)
+    try:
+        config = reader.config()
+        metadata = reader.metadata()
+        summary = reader.raw_summary()
+    except BundleReadError as exc:
+        raise _shakedown_fail("strict_pre_reduce_failed", bundle, str(exc)) from exc
+    target = config.hardware_target
+    if target.telemetry_backend != TelemetryBackend.POWERMETRICS:
+        raise _shakedown_fail(
+            "not_production_backend", bundle, "telemetry backend is not powermetrics"
+        )
+    if target.runtime_backend == RuntimeBackend.MOCK and not allow_mock_runtime:
+        raise _shakedown_fail(
+            "not_production_backend", bundle, "runtime backend is mock"
+        )
+    if not isinstance(summary, dict) or summary.get("status") != RunStatus.SUCCEEDED.value:
+        raise _shakedown_fail(
+            "request_ineligible",
+            bundle,
+            f"bundle status is {summary.get('status') if isinstance(summary, dict) else None}",
+        )
+    for name in (
+        "powermetrics_idle.plist",
+        "powermetrics.plist",
+        "powermetrics_idle_post.plist",
+    ):
+        if not (bundle / "raw" / name).is_file():
+            raise _shakedown_fail(
+                "drift_evidence_missing" if "idle" in name else "clock_evidence_missing",
+                bundle,
+                f"missing raw/{name}",
+            )
+    evidence = metadata.get("uncertainty_evidence")
+    if not isinstance(evidence, dict) or evidence.get("schema_version") != "p2-038.1":
+        raise _shakedown_fail(
+            "clock_evidence_missing", bundle, "missing p2-038.1 uncertainty evidence"
+        )
+    clock = evidence.get("clock_anchor")
+    phase = evidence.get("sample_phase")
+    idle = evidence.get("idle_drift")
+    if not isinstance(clock, dict) or clock.get("status") != "bounded":
+        raise _shakedown_fail("clock_evidence_invalid", bundle, "clock evidence is not bounded")
+    if clock.get("method") != "powermetrics_spawn_ready_wall_monotonic_envelope_v1":
+        raise _shakedown_fail("clock_evidence_invalid", bundle, "unexpected clock method")
+    if not isinstance(phase, dict) or phase.get("status") != "bounded":
+        raise _shakedown_fail("phase_evidence_missing", bundle, "phase evidence is not bounded")
+    if not isinstance(idle, dict) or idle.get("status") != "bounded":
+        raise _shakedown_fail("drift_evidence_missing", bundle, "idle drift is not bounded")
+    if idle.get("method") != "pre_post_idle_observed_envelope_v1":
+        raise _shakedown_fail("drift_evidence_missing", bundle, "unexpected drift method")
+    for key in (
+        "clock_anchor_bound_s",
+        "marker_to_first_sample_phase_bound_s",
+        "marker_to_last_sample_phase_bound_s",
+        "idle_drift_bound_w",
+    ):
+        value = metadata.get(key)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int | float)
+            or not math.isfinite(float(value))
+            or float(value) < 0.0
+        ):
+            raise _shakedown_fail(
+                "phase_evidence_missing" if key.startswith("marker") else "clock_evidence_invalid",
+                bundle,
+                f"metadata.{key} is missing or invalid",
+            )
+    extra = metadata.get("extra")
+    if isinstance(extra, dict) and any(
+        key in extra for key in ("clock_anchor_bound_s", "idle_drift_bound_w")
+    ):
+        raise _shakedown_fail(
+            "synthetic_metadata_present", bundle, "caller-supplied uncertainty bound present"
+        )
+    raw_summary = reader.raw_summary()
+    request = (
+        raw_summary.get("claim_eligibility", {}).get("request")
+        if isinstance(raw_summary, dict)
+        else None
+    )
+    if not isinstance(request, dict) or request.get("eligible") is not True or request.get("reasons") != []:
+        raise _shakedown_fail(
+            "request_ineligible", bundle, f"request gate is {request!r}"
+        )
+    drift_j = (
+        raw_summary.get("energy_bound_terms_j", {}).get("E_drift_bound_j")
+        if isinstance(raw_summary, dict)
+        else None
+    )
+    if not isinstance(drift_j, int | float) or not math.isfinite(float(drift_j)):
+        raise _shakedown_fail(
+            "drift_evidence_missing", bundle, "E_drift_bound_j is missing"
+        )
+    return {
+        "bundle_id": bundle.name,
+        "clock_method": clock["method"],
+        "idle_method": idle["method"],
+        "request_eligible": True,
+        "request_reasons": [],
+    }
+
+
+def execute_production_uncertainty_gate(
+    bundle: Path, runs_dir: Path, backup_arg: str
+) -> dict[str, Any]:
+    """Run the strict -> reduce -> strict -> assertion -> backup sequence."""
+
+    pre_problems = validate_bundle(bundle, strict=True)
+    if pre_problems:
+        raise _shakedown_fail(
+            "strict_pre_reduce_failed", bundle, "; ".join(pre_problems)
+        )
+    reduce_result = subprocess.run(
+        [sys.executable, "-m", "joulewise", "reduce", str(bundle)],
+        check=False,
+    )
+    if reduce_result.returncode != 0:
+        raise _shakedown_fail(
+            "reduce_failed", bundle, f"reduce exit {reduce_result.returncode}"
+        )
+    post_problems = validate_bundle(bundle, strict=True)
+    if post_problems:
+        raise _shakedown_fail(
+            "strict_post_reduce_failed", bundle, "; ".join(post_problems)
+        )
+    assertion = assert_production_uncertainty(bundle)
+    backup_script = backup_script_path(backup_arg)
+    backup_exit = backup_runs(runs_dir, backup_script)
+    if backup_exit != 0:
+        raise _shakedown_fail("backup_failed", bundle, f"backup exit {backup_exit}")
+    return {
+        "timestamp": utc_timestamp(),
+        "record_type": "shakedown_gate",
+        "gate": "production_uncertainty_v1",
+        "status": "passed",
+        "strict_pre_reduce": "passed",
+        "reduce_exit": reduce_result.returncode,
+        "strict_post_reduce": "passed",
+        "backup_command": str(backup_script),
+        "backup_exit": backup_exit,
+        **assertion,
+    }
+
+
+def failed_shakedown_record(
+    gate: str, error: ShakedownGateError
+) -> dict[str, Any]:
+    return {
+        "timestamp": utc_timestamp(),
+        "record_type": "shakedown_gate",
+        "gate": gate,
+        "status": "failed",
+        "bundle_id": error.bundle_id,
+        "code": error.code,
+        "detail": error.detail,
+    }
 
 
 def member_bundle_dirs(runs_dir: Path, run_id: str, repetitions: int) -> list[Path]:
@@ -1299,6 +1486,16 @@ def run_campaign(args: argparse.Namespace) -> int:
     if duplicate_error is not None:
         print(f"error: {duplicate_error}", file=sys.stderr)
         return 2
+    if args.shakedown_gate is not None:
+        if args.backup is None:
+            print("error: --shakedown-gate requires --backup", file=sys.stderr)
+            return 2
+        if len(items) != 1 or not isinstance(items[0], ConfigInfo) or items[0].repetitions != 1:
+            print(
+                "error: --shakedown-gate requires exactly one single-repetition config",
+                file=sys.stderr,
+            )
+            return 2
 
     counts: Counter[str] = Counter()
     failures = 0
@@ -1389,6 +1586,27 @@ def run_campaign(args: argparse.Namespace) -> int:
                         if any(evaluation.waived for evaluation in evaluations)
                         else "skipped"
                     )
+                if (
+                    status == "skipped"
+                    and args.shakedown_gate == "production_uncertainty_v1"
+                ):
+                    bundle = evaluations[0].bundle_path
+                    try:
+                        gate_record = execute_production_uncertainty_gate(
+                            bundle, runs_dir, args.backup
+                        )
+                    except ShakedownGateError as exc:
+                        failures += 1
+                        status = "failed"
+                        gate_record = failed_shakedown_record(
+                            args.shakedown_gate, exc
+                        )
+                        print(
+                            f"SHAKEDOWN_GATE_FAILED[{exc.code}] "
+                            f"bundle={exc.bundle_id} detail={exc.detail}",
+                            file=sys.stderr,
+                        )
+                    append_log(log_path, gate_record)
                 exit_code = None
                 duration_s = None
                 if status != "failed" and state.members_total is None:
@@ -1486,6 +1704,24 @@ def run_campaign(args: argparse.Namespace) -> int:
                 )
             else:
                 status = "failed"
+            shakedown_record: dict[str, Any] | None = None
+            if status == "ok" and args.shakedown_gate == "production_uncertainty_v1":
+                bundle = evaluations[0].bundle_path
+                try:
+                    shakedown_record = execute_production_uncertainty_gate(
+                        bundle, runs_dir, args.backup
+                    )
+                except ShakedownGateError as exc:
+                    status = "failed"
+                    shakedown_record = failed_shakedown_record(
+                        args.shakedown_gate, exc
+                    )
+                    print(
+                        f"SHAKEDOWN_GATE_FAILED[{exc.code}] bundle={exc.bundle_id} "
+                        f"detail={exc.detail}",
+                        file=sys.stderr,
+                    )
+                append_log(log_path, shakedown_record)
             if status == "failed":
                 failures += 1
                 if exit_code == 0:
@@ -1520,7 +1756,11 @@ def run_campaign(args: argparse.Namespace) -> int:
             counts[status] += 1
             print(f"{status} {info.run_id}: exit={exit_code} duration_s={duration_s:.3f}")
 
-            if status == "ok" and args.backup is not None:
+            if (
+                status == "ok"
+                and args.backup is not None
+                and args.shakedown_gate is None
+            ):
                 backup_runs(runs_dir, backup_script_path(args.backup))
 
             if failures >= args.max_failures:

@@ -1561,6 +1561,18 @@ Succeeded bundles with a nonpositive measured window fail strict admission;
 honest failed summaries remain structurally and strictly valid because they
 make no successful-measurement claim.
 
+Amendment (2026-07-10, P2-038 / C-028 adjudication): the six exact frozen
+legacy identities continue to reconstruct powermetrics traces with
+`metadata.device.plist_anchor_offset_s` and the original cumulative-elapsed
+algorithm. Current-era powermetrics bundles instead use
+`metadata.uncertainty_evidence.clock_anchor.first_sample_end_point_epoch_s`:
+the point is the midpoint of the recorded controller-monotonic process-spawn
+to first-parse bracket after applying the conservative run wall-minus-
+monotonic envelope. Record zero is timestamped at that interval endpoint;
+records `i>0` advance by elapsed values `1..i`. Strict mode re-derives the
+midpoint and bounds from paired-clock observations and raw plists; plist
+whole-second dates are consistency checks only and never tighten the bound.
+
 Revisit when: bundle schema v0.2 lands (composite summaries need their
 own strict semantics), or a reducer version bump makes historical
 summaries legitimately differ from fresh reductions (then strict needs

@@ -250,6 +250,36 @@ manifest, every timestamp represented for manifest rails must carry exactly
 the manifest rail set; partial per-timestamp rail sets are D-027
 misalignment.
 
+## Production Powermetrics Uncertainty Evidence (P2-038)
+
+A successful current-era powermetrics bundle records these additive metadata
+fields when their components are bounded:
+
+- `clock_anchor_bound_s`: maximum of the spawn/readiness anchor-only bound and
+  the first/last marker-to-sample interval-support bounds;
+- `marker_to_first_sample_phase_bound_s` and
+  `marker_to_last_sample_phase_bound_s`: empirical per-run edge-phase bounds;
+- `idle_drift_bound_w`: the full untrimmed pre/post idle power envelope about
+  the pre-idle mean; and
+- `uncertainty_evidence` with schema `p2-038.1`, the paired clock stamps,
+  intermediate values, plist whole-second consistency result, raw sentinel
+  references/counts/contamination states, and a separate `idle_drift_guard`
+  calibration-handoff block.
+
+Raw evidence adds `raw/powermetrics_idle_post.plist`; the approximately
+five-second sentinel begins after `sampling_stopped` and before runtime
+cleanup, so it is outside measured energy and latency while the prepared
+runtime remains resident. Unknown evidence retains a successful L0/L1 bundle:
+the component records `status=unknown` and its reason, the corresponding
+top-level scalar is omitted, and claim eligibility fails closed.
+
+Strict current-era reconstruction uses
+`uncertainty_evidence.clock_anchor.first_sample_end_point_epoch_s`; record zero
+is that midpoint endpoint and later records advance with elapsed values 1..i.
+Only the six frozen legacy identities retain `plist_anchor_offset_s` and the
+legacy cumulative-elapsed algorithm. Neither schema version, date, directory
+name, nor additive-field absence selects the legacy path.
+
 ## Summary Metrics Minimum Fields
 
 Summary completion is status-specific and enforced by the shared bundle

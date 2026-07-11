@@ -20,7 +20,12 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.adapters.powermetrics import (
+    RAW_IDLE_NAME,
+    RAW_IDLE_POST_NAME,
     RAW_SAMPLES_NAME,
+    decode_rich_telemetry,
+    idle_window_gpu_quality,
+    parse_powermetrics_records,
     samples_from_raw_powermetrics,
 )
 from joulewise.bundle import BundleError
@@ -53,6 +58,12 @@ from joulewise.schemas import (
     TelemetryBackend,
 )
 from joulewise.validation import finite_float
+from joulewise.uncertainty_evidence import (
+    SCHEMA_VERSION as P2038_SCHEMA_VERSION,
+    derive_idle_drift_evidence,
+    derive_powermetrics_clock_evidence,
+    stamp_from_mapping,
+)
 
 _PROMPT_TOKEN_IDS_HASH_DOMAIN = PROMPT_TOKEN_IDS_HASH_DOMAIN
 _SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN = SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN
@@ -317,6 +328,7 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     problems.extend(_strict_workload_provenance_problems(reader, summary))
     problems.extend(_strict_emitted_token_ids_problems(reader))
     problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
+    problems.extend(_strict_uncertainty_evidence_problems(reader))
     problems.extend(_strict_raw_to_trace_problems(reader))
     if not version_problems:
         fresh = reduce_bundle(reader.path).to_dict()
@@ -746,6 +758,214 @@ def _strict_required_object_keys(
     ]
 
 
+def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
+    """Re-derive P2-038 evidence for current-era successful powermetrics runs."""
+
+    if _validated_config_telemetry_backend(reader) != TelemetryBackend.POWERMETRICS:
+        return []
+    metadata = reader.raw_metadata()
+    if _strict_legacy_bundle_metadata(metadata):
+        return []
+    if not isinstance(metadata, dict):
+        return ["strict: uncertainty evidence: metadata.json is missing or invalid"]
+    evidence = metadata.get("uncertainty_evidence")
+    if not isinstance(evidence, dict):
+        return [
+            "strict: uncertainty evidence: metadata.uncertainty_evidence is "
+            "missing for current-era powermetrics bundle"
+        ]
+    problems: list[str] = []
+    if evidence.get("schema_version") != P2038_SCHEMA_VERSION:
+        problems.append(
+            "strict: uncertainty evidence: unsupported or missing schema_version"
+        )
+    if evidence.get("telemetry_backend") != "powermetrics":
+        problems.append(
+            "strict: uncertainty evidence: telemetry_backend must be 'powermetrics'"
+        )
+    clock_anchor = evidence.get("clock_anchor")
+    sample_phase = evidence.get("sample_phase")
+    raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
+    if not isinstance(clock_anchor, dict) or not isinstance(sample_phase, dict):
+        return problems + [
+            "strict: uncertainty evidence: clock_anchor and sample_phase must be objects"
+        ]
+    stamp_rows = clock_anchor.get("clock_stamps")
+    if not isinstance(stamp_rows, dict):
+        return problems + [
+            "strict: uncertainty evidence: clock_anchor.clock_stamps is missing"
+        ]
+    try:
+        stamps = {
+            name: stamp_from_mapping(value)
+            for name, value in stamp_rows.items()
+            if isinstance(value, dict)
+        }
+        raw_records = parse_powermetrics_records(raw_path.read_bytes())
+        expected, _point = derive_powermetrics_clock_evidence(
+            stamps=stamps,
+            elapsed_s=[record.elapsed_ns / 1_000_000_000.0 for record in raw_records],
+            plist_timestamp_s=[
+                float(record.metadata["plist_timestamp_s"]) for record in raw_records
+            ],
+        )
+    except (KeyError, OSError, TypeError, ValueError) as exc:
+        return problems + [
+            f"strict: uncertainty evidence: cannot re-derive clock evidence: {exc}"
+        ]
+    if clock_anchor != expected["clock_anchor"]:
+        problems.append(
+            "strict: uncertainty evidence: clock_anchor does not match paired-clock/raw-plist derivation"
+        )
+    if sample_phase != expected["sample_phase"]:
+        problems.append(
+            "strict: uncertainty evidence: sample_phase does not match paired-clock/raw-plist derivation"
+        )
+    events = _strict_suite_item_records_from_path(reader.path / "events.jsonl")
+    marker_epochs: dict[str, float] = {}
+    for _line, event in events:
+        event_type = event.get("event_type")
+        if event_type in {"sampling_started", "sampling_stopped"}:
+            try:
+                marker_epochs[str(event_type)] = finite_float(
+                    event.get("timestamp_s"), f"events.{event_type}.timestamp_s"
+                )
+            except ValueError as exc:
+                problems.append(f"strict: uncertainty evidence: {exc}")
+    if sample_phase.get("status") == "bounded":
+        for event_type, field in (
+            ("sampling_started", "sampling_started_epoch_s"),
+            ("sampling_stopped", "sampling_stopped_epoch_s"),
+        ):
+            if marker_epochs.get(event_type) != sample_phase.get(field):
+                problems.append(
+                    f"strict: uncertainty evidence: {field} does not match events.jsonl"
+                )
+
+    _strict_uncertainty_scalar(
+        problems,
+        metadata,
+        "clock_anchor_bound_s",
+        clock_anchor,
+        "effective_clock_anchor_bound_s",
+    )
+    _strict_uncertainty_scalar(
+        problems,
+        metadata,
+        "marker_to_first_sample_phase_bound_s",
+        sample_phase,
+        "marker_to_first_sample_phase_bound_s",
+    )
+    _strict_uncertainty_scalar(
+        problems,
+        metadata,
+        "marker_to_last_sample_phase_bound_s",
+        sample_phase,
+        "marker_to_last_sample_phase_bound_s",
+    )
+
+    idle = evidence.get("idle_drift")
+    guard = evidence.get("idle_drift_guard")
+    if not isinstance(idle, dict) or not isinstance(guard, dict):
+        problems.append(
+            "strict: uncertainty evidence: idle_drift and separate idle_drift_guard must be objects"
+        )
+        return problems
+    pre_path = reader.path / "raw" / RAW_IDLE_NAME
+    post_path = reader.path / "raw" / RAW_IDLE_POST_NAME
+    if post_path.is_file() and pre_path.is_file():
+        try:
+            pre_data = pre_path.read_bytes()
+            post_data = post_path.read_bytes()
+            pre_records = parse_powermetrics_records(pre_data)
+            post_records = parse_powermetrics_records(post_data)
+            idle_baseline = metadata.get("idle_baseline")
+            if not isinstance(idle_baseline, dict):
+                raise ValueError("metadata.idle_baseline is missing")
+            pre_mean = finite_float(
+                idle_baseline.get("power_w_mean"),
+                "metadata.idle_baseline.power_w_mean",
+            )
+            pre_quality = idle_window_gpu_quality(decode_rich_telemetry(pre_data))
+            post_quality = idle_window_gpu_quality(decode_rich_telemetry(post_data))
+            expected_idle, expected_guard, expected_bound = derive_idle_drift_evidence(
+                pre_power_w=[record.combined_power_w for record in pre_records],
+                post_power_w=[record.combined_power_w for record in post_records],
+                pre_power_w_mean=pre_mean,
+                pre_idle_window_suspect=bool(pre_quality["idle_window_suspect"]),
+                post_idle_window_suspect=bool(post_quality["idle_window_suspect"]),
+                calibration_guard=guard,
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            problems.append(
+                f"strict: uncertainty evidence: cannot re-derive idle drift: {exc}"
+            )
+        else:
+            if idle != expected_idle:
+                problems.append(
+                    "strict: uncertainty evidence: idle_drift does not match pre/post raw sentinel derivation"
+                )
+            if guard != expected_guard:
+                problems.append(
+                    "strict: uncertainty evidence: idle_drift_guard does not match recorded guard provenance"
+                )
+            if metadata.get("idle_drift_bound_w") != expected_bound:
+                problems.append(
+                    "strict: uncertainty evidence: idle_drift_bound_w does not match effective drift derivation"
+                )
+    elif idle != {"status": "unknown", "reason": "post_idle_unavailable"}:
+        problems.append(
+            "strict: uncertainty evidence: missing post-idle raw artifact is not recorded as post_idle_unavailable"
+        )
+    elif "idle_drift_bound_w" in metadata:
+        problems.append(
+            "strict: uncertainty evidence: unknown idle drift must omit idle_drift_bound_w"
+        )
+
+    extra = metadata.get("extra")
+    if isinstance(extra, dict):
+        for key in ("clock_anchor_bound_s", "idle_drift_bound_w"):
+            if key in extra and key in metadata:
+                problems.append(
+                    f"strict: uncertainty evidence: metadata.extra.{key} cannot override controller evidence"
+                )
+    return problems
+
+
+def _strict_uncertainty_scalar(
+    problems: list[str],
+    metadata: dict[str, Any],
+    top_key: str,
+    component: dict[str, Any],
+    derived_key: str,
+) -> None:
+    if component.get("status") == "bounded":
+        if metadata.get(top_key) != component.get(derived_key):
+            problems.append(
+                f"strict: uncertainty evidence: metadata.{top_key} does not match derivation"
+            )
+    elif top_key in metadata:
+        problems.append(
+            f"strict: uncertainty evidence: unknown component must omit metadata.{top_key}"
+        )
+
+
+def _strict_suite_item_records_from_path(path: Path) -> list[tuple[int, dict[str, Any]]]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    records: list[tuple[int, dict[str, Any]]] = []
+    for index, line in enumerate(text.splitlines(), start=1):
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            records.append((index, value))
+    return records
+
+
 def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
     raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
     telemetry_backend = _validated_config_telemetry_backend(reader)
@@ -756,21 +976,38 @@ def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
     metadata = reader.raw_metadata()
     if not isinstance(metadata, dict):
         return ["strict: raw-to-trace: metadata.json is missing or invalid"]
-    device = metadata.get("device")
-    if not isinstance(device, dict):
-        return ["strict: raw-to-trace: metadata.device is missing or not an object"]
     try:
-        anchor_offset_s = finite_float(
-            device.get("plist_anchor_offset_s"),
-            "metadata.device.plist_anchor_offset_s",
-        )
-    except ValueError as exc:
-        return [f"strict: raw-to-trace: {exc}"]
-    try:
-        expected = samples_from_raw_powermetrics(
-            raw_path.read_bytes(),
-            plist_anchor_offset_s=anchor_offset_s,
-        )
+        if _strict_legacy_bundle_metadata(metadata):
+            device = metadata.get("device")
+            if not isinstance(device, dict):
+                return [
+                    "strict: raw-to-trace: metadata.device is missing or not an object"
+                ]
+            anchor_offset_s = finite_float(
+                device.get("plist_anchor_offset_s"),
+                "metadata.device.plist_anchor_offset_s",
+            )
+            expected = samples_from_raw_powermetrics(
+                raw_path.read_bytes(),
+                plist_anchor_offset_s=anchor_offset_s,
+            )
+        else:
+            evidence = metadata.get("uncertainty_evidence")
+            clock_anchor = (
+                evidence.get("clock_anchor") if isinstance(evidence, dict) else None
+            )
+            if not isinstance(clock_anchor, dict):
+                return [
+                    "strict: raw-to-trace: current-era clock_anchor evidence is missing"
+                ]
+            point_s = finite_float(
+                clock_anchor.get("first_sample_end_point_epoch_s"),
+                "metadata.uncertainty_evidence.clock_anchor.first_sample_end_point_epoch_s",
+            )
+            expected = samples_from_raw_powermetrics(
+                raw_path.read_bytes(),
+                first_record_endpoint_s=point_s,
+            )
     except (OSError, ValueError) as exc:
         return [f"strict: raw-to-trace: cannot derive raw/{RAW_SAMPLES_NAME}: {exc}"]
     try:

@@ -183,6 +183,18 @@ realized-vs-manifest closure), advisor status site + suite_next draft
 specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 `docs/run_reports/2026-07-09-cp5-resume.md`.
 
+**P2-038 SOFTWARE SIDE COMPLETE on `impl/p2038` (2026-07-10; uncommitted
+for lead pathspec review); LIVE CLOSURE REMAINS OPEN.** Current-era real
+powermetrics runs now derive and record paired-clock anchor/phase evidence,
+the interim pre/post idle envelope, and a separate idle-drift guard handoff;
+the post sentinel is outside the measured window. A production-shaped real
+adapter/child-process path passes the P2-029/P2-040 request gate with no
+synthetic metadata and exercises all three required fail-closed reasons.
+Campaign shakedown mode now enforces strict → reduce → strict → assertion →
+backup. True MLX + `/usr/bin/powermetrics` execution and approved backup remain
+lead-owned `[QUIET-MAC]` work. Report:
+`docs/run_reports/2026-07-10-p2038-production-uncertainty.md`.
+
 **RESTART HERE (next agent) — this is the ONLY next-action block; the
 queue owns ordering (C-027):**
 1. Read `docs/reviews/2026-07-09-c027-whole-project-review.md` (latest —
@@ -193,9 +205,8 @@ queue owns ordering (C-027):**
      before any new irreplaceable Window-A evidence is retained; plus
      P1-008 rubric/calendar (provisional-contract fallback per proposed
      D-060).
-   - [AGENT]: the C-027 correctness rows, in queue order — P2-040
-     (reducer/gate fixes incl. zero-window strict), P2-038 (production
-     uncertainty evidence path), P2-039 (frozen floor artifact +
+   - [AGENT]: the C-027 correctness rows, in queue order — finish lead review
+     and landing of P2-038's completed software diff, then P2-039 (frozen floor artifact +
      guard factor), then RPT-001 (report skeleton + vertical slice),
      P2-042 (frozen analysis manifest), P2-041 (campaign verdict
      split), and only then P2-037 (contrast/claim engine, which
@@ -212,6 +223,9 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-10 P2-038 production uncertainty software path (live quiet-machine
+  closure still open):
+  `docs/run_reports/2026-07-10-p2038-production-uncertainty.md`
 - 2026-07-10 P2-040 / RETRO-001 fix round (committed on c027-int-p2040
   after lead review): `docs/run_reports/2026-07-10-p2040-fix-round.md`
 - 2026-07-09 C-027 whole-project council review (7 gpt-5.6-sol lenses +
@@ -255,6 +269,13 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
+- P2-038 software worktree: initial baseline `Ran 910 tests in 32.965s`,
+  `OK (skipped=12)`; required focused set 256 tests OK; post-review focused
+  set 110 tests OK; final canonical `Ran 923 tests in 56.507s`,
+  `OK (skipped=12)`. The production-shaped real powermetrics adapter/child-process path
+  passed strict and `claim_eligibility.request` with no synthetic metadata;
+  negative real-path modes emitted the three required reason codes. The absent
+  worktree `runs/` corpus produced the loud six-bundle acceptance-gate skip.
 - P2-040 / RETRO-001 fix-round worktree: canonical suite `Ran 908 tests in
   32.723s`, `OK (skipped=11)`; focused 211 tests OK; claims lint exit 0 with
   no errors; `git diff --check` clean. The absent `runs/` corpus produced the
@@ -308,6 +329,9 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
+- `impl/p2038` is intentionally dirty with the uncommitted P2-038 software
+  implementation, tests, contracts, config, and run report. The lead owns the
+  pathspec review/commit. No retained run bundle was modified.
 - `main` and `origin/main` contain the user-directed Claude Code → Codex
   bridge hardening from commit `1d7c415` (pushed direct as a bounded
   tooling change, closeout `ef34cc9`). Branch `c027-council-review`

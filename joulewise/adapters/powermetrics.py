@@ -24,22 +24,30 @@ from typing import Any
 from xml.parsers.expat import ExpatError
 
 from joulewise.bundle import BundleError, write_derived_artifact, write_raw_artifact
-from joulewise.clock import Clock
+from joulewise.clock import Clock, ClockStamp
 from joulewise.interfaces import (
     AdapterFailure,
     AdapterResult,
     PowerSample,
     RunContext,
+    TelemetryStopResult,
     ThermalState,
 )
 from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline, TelemetryBackend
 from joulewise.validation import finite_float
+from joulewise.uncertainty_evidence import (
+    derive_idle_drift_evidence,
+    derive_powermetrics_clock_evidence,
+    unknown_component,
+)
 
 POWER_METRICS = "/usr/bin/powermetrics"
 RAW_SAMPLES_NAME = "powermetrics.plist"
 RAW_IDLE_NAME = "powermetrics_idle.plist"
+RAW_IDLE_POST_NAME = "powermetrics_idle_post.plist"
 RICH_TELEMETRY_NAME = "rich_telemetry.jsonl"
 RICH_IDLE_NAME = "rich_telemetry_idle.jsonl"
+RICH_IDLE_POST_NAME = "rich_telemetry_idle_post.jsonl"
 RAIL_MANIFEST = ["cpu_power", "gpu_power", "ane_power"]
 SAMPLERS = "cpu_power,gpu_power,ane_power,thermal"
 READINESS_TIMEOUT_S = 15.0
@@ -48,12 +56,12 @@ IDLE_GPU_IDLE_RATIO_THRESHOLD = 0.80
 IDLE_GPU_LOW_IDLE_FRACTION_THRESHOLD = 0.40
 IDLE_GPU_FREQ_MEAN_MHZ_THRESHOLD = 800.0
 TIMESTAMP_DERIVATION = (
-    "timestamp_s = start_sampling readiness clock.now() UTC epoch seconds + "
-    "cumulative elapsed_ns through the current plist document; start_sampling "
-    "waits until the first plist document is parseable before returning, so "
-    "the reducer's sampling_started marker is emitted only after the sampler "
-    "is producing. The plist timestamp is 1-second resolution and is recorded "
-    "only as plist_anchor_offset_s evidence."
+    "current-era timestamp_s uses the midpoint of a controller-monotonic "
+    "pre-spawn/first-parse bracket mapped through the run wall-minus-monotonic "
+    "envelope; record 0 is that interval endpoint and records i>0 advance by "
+    "elapsed_ns for records 1..i. Whole-second plist dates are consistency-only. "
+    "Exact allowlisted legacy bundles retain plist_anchor_offset_s plus the "
+    "legacy cumulative-elapsed reconstruction."
 )
 
 
@@ -93,14 +101,26 @@ class PowermetricsTelemetryAdapter:
 
     name = "powermetrics"
 
-    def __init__(self, clock: Clock) -> None:
+    def __init__(
+        self,
+        clock: Clock,
+        *,
+        executable: str = POWER_METRICS,
+        privilege_prefix: tuple[str, ...] = ("sudo", "-n"),
+    ) -> None:
         self._clock = clock
+        self._executable = executable
+        self._privilege_prefix = tuple(privilege_prefix)
         self._process: subprocess.Popen[bytes] | None = None
         self._capture_path: Path | None = None
         self._clock_start_s: float | None = None
+        self._pre_spawn_stamp: ClockStamp | None = None
+        self._first_parse_stamp: ClockStamp | None = None
         self._device_metadata = self._base_device_metadata(None)
         self._capability: AdapterResult | None = None
         self._last_records: list[PowermetricsRecord] = []
+        self._pre_idle_records: list[PowermetricsRecord] = []
+        self._pre_idle_quality: dict[str, float | bool | None] | None = None
 
     def device_metadata(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -147,6 +167,8 @@ class PowermetricsTelemetryAdapter:
         totals = [record.combined_power_w for record in records]
         duration_s = sum(record.elapsed_ns for record in records) / 1_000_000_000.0
         idle_quality = idle_window_gpu_quality(rich_records)
+        self._pre_idle_records = list(records)
+        self._pre_idle_quality = dict(idle_quality)
         return IdleBaseline(
             power_w_mean=statistics.mean(totals) if totals else 0.0,
             power_w_stddev=statistics.stdev(totals) if len(totals) > 1 else 0.0,
@@ -173,12 +195,16 @@ class PowermetricsTelemetryAdapter:
             )
 
         self._capture_path = self._new_capture_path()
+        self._pre_spawn_stamp = None
+        self._first_parse_stamp = None
         command = self._command(
             config,
             self._capture_path,
             count=None,
             interval_ms=self._interval_ms(config),
         )
+        pre_spawn_stamp = self._clock.stamp()
+        self._pre_spawn_stamp = pre_spawn_stamp
         try:
             self._process = subprocess.Popen(
                 command,
@@ -200,7 +226,13 @@ class PowermetricsTelemetryAdapter:
             self._capture_path.unlink(missing_ok=True)
             self._capture_path = None
             return ready
-        self._clock_start_s = self._clock.now()
+        if self._first_parse_stamp is None:
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.UNKNOWN_ERROR,
+                message="powermetrics readiness completed without a paired clock stamp",
+            )
+        self._clock_start_s = self._first_parse_stamp.epoch_s
         return AdapterResult(
             ok=True,
             metadata={
@@ -214,6 +246,65 @@ class PowermetricsTelemetryAdapter:
     def stop_sampling(
         self, config: BenchmarkConfig, context: RunContext | None = None
     ) -> list[PowerSample]:
+        """Compatibility stop path used by non-controller callers and legacy tests."""
+
+        data, clock_start_s = self._take_measured_capture()
+        if data is None:
+            return []
+        if context is not None:
+            write_raw_artifact(context, RAW_SAMPLES_NAME, data)
+        records, diagnostic = _parse_powermetrics_records(
+            data, timestamp_anchor_s=clock_start_s
+        )
+        self._preserve_measured_capture(data, records, diagnostic, context)
+        return samples_from_records(records)
+
+    def stop_sampling_with_evidence(
+        self,
+        config: BenchmarkConfig,
+        context: RunContext | None,
+        *,
+        sampling_started: ClockStamp,
+        sampling_stopped: ClockStamp,
+    ) -> TelemetryStopResult:
+        """Stop the real sampler and derive current-era clock/phase evidence."""
+
+        data, _ = self._take_measured_capture()
+        if data is None:
+            evidence, _ = derive_powermetrics_clock_evidence(
+                stamps={}, elapsed_s=[], plist_timestamp_s=[]
+            )
+            return TelemetryStopResult([], evidence)
+        if context is not None:
+            write_raw_artifact(context, RAW_SAMPLES_NAME, data)
+        native_records, diagnostic = _parse_powermetrics_records(data)
+        post_parse_stamp = self._clock.stamp()
+        stamps: dict[str, ClockStamp] = {
+            "sampling_started": sampling_started,
+            "sampling_stopped": sampling_stopped,
+            "post_parse": post_parse_stamp,
+        }
+        if self._pre_spawn_stamp is not None:
+            stamps["pre_spawn"] = self._pre_spawn_stamp
+        if self._first_parse_stamp is not None:
+            stamps["first_parse"] = self._first_parse_stamp
+        evidence, point_anchor_s = derive_powermetrics_clock_evidence(
+            stamps=stamps,
+            elapsed_s=[record.elapsed_ns / 1_000_000_000.0 for record in native_records],
+            plist_timestamp_s=[
+                float(record.metadata["plist_timestamp_s"])
+                for record in native_records
+            ],
+        )
+        records = (
+            parse_powermetrics_records(data, first_record_endpoint_s=point_anchor_s)
+            if point_anchor_s is not None
+            else native_records
+        )
+        self._preserve_measured_capture(data, records, diagnostic, context)
+        return TelemetryStopResult(samples_from_records(records), evidence)
+
+    def _take_measured_capture(self) -> tuple[bytes | None, float | None]:
         process = self._process
         self._process = None
         capture_path = self._capture_path
@@ -223,15 +314,19 @@ class PowermetricsTelemetryAdapter:
         if process is not None:
             self._stop_process(process)
         if capture_path is None or not capture_path.exists():
-            return []
+            return None, clock_start_s
 
         data = capture_path.read_bytes()
         capture_path.unlink(missing_ok=True)
-        if context is not None:
-            write_raw_artifact(context, RAW_SAMPLES_NAME, data)
-        records, diagnostic = _parse_powermetrics_records(
-            data, timestamp_anchor_s=clock_start_s
-        )
+        return data, clock_start_s
+
+    def _preserve_measured_capture(
+        self,
+        data: bytes,
+        records: list[PowermetricsRecord],
+        diagnostic: _DroppedFrameDiagnostic | None,
+        context: RunContext | None,
+    ) -> None:
         self._record_parse_diagnostic(
             diagnostic,
             artifact=f"raw/{RAW_SAMPLES_NAME}",
@@ -249,8 +344,60 @@ class PowermetricsTelemetryAdapter:
                     data=rich_data,
                     error_key="rich_telemetry_error",
                 )
-        self._remember_records(records, timestamp_anchor_s=clock_start_s)
-        return samples_from_records(records)
+        self._remember_records(records)
+
+    def measure_post_run_idle(
+        self,
+        config: BenchmarkConfig,
+        baseline: IdleBaseline,
+        context: RunContext | None,
+    ) -> dict[str, Any]:
+        """Collect the adjudicated short idle sentinel outside the window."""
+
+        interval_s = self._interval_ms(config) / 1000.0
+        duration_s = max(3.0 * interval_s, min(5.0, baseline.duration_s))
+        count = max(3, int(math.ceil(duration_s / interval_s)))
+        try:
+            data = self._run_bounded_capture(config, count=count)
+            records, diagnostic = _parse_powermetrics_records(
+                data, timestamp_anchor_s=self._clock.now()
+            )
+            rich_records = decode_rich_telemetry(data)
+        except Exception:  # noqa: BLE001 - evidence failure must preserve L0/L1
+            return {
+                "idle_drift": unknown_component("post_idle_unavailable"),
+            }
+        if context is not None:
+            write_raw_artifact(context, RAW_IDLE_POST_NAME, data)
+            self._write_rich_artifact(
+                context=context,
+                name=RICH_IDLE_POST_NAME,
+                data=rich_telemetry_jsonl_from_records(rich_records),
+                error_key="rich_telemetry_idle_post_error",
+            )
+        self._record_parse_diagnostic(
+            diagnostic,
+            artifact=f"raw/{RAW_IDLE_POST_NAME}",
+            capture="post_run_idle",
+        )
+        post_quality = idle_window_gpu_quality(rich_records)
+        pre_quality = self._pre_idle_quality or {}
+        evidence, guard, bound_w = derive_idle_drift_evidence(
+            pre_power_w=[record.combined_power_w for record in self._pre_idle_records],
+            post_power_w=[record.combined_power_w for record in records],
+            pre_power_w_mean=baseline.power_w_mean,
+            pre_idle_window_suspect=bool(pre_quality.get("idle_window_suspect", True)),
+            post_idle_window_suspect=bool(post_quality["idle_window_suspect"]),
+        )
+        result: dict[str, Any] = {
+            "idle_drift": evidence,
+            "idle_drift_guard": guard,
+            "post_idle_duration_requested_s": duration_s,
+        }
+        if bound_w is not None:
+            result["idle_drift_bound_w"] = bound_w
+        self._last_records = records
+        return result
 
     def _write_rich_artifact(
         self,
@@ -442,11 +589,7 @@ class PowermetricsTelemetryAdapter:
         count: int | None,
         interval_ms: int | None = None,
     ) -> list[str]:
-        command = [
-            "sudo",
-            "-n",
-            POWER_METRICS,
-        ]
+        command = [*self._privilege_prefix, self._executable]
         if count is not None:
             command.extend(["-n", str(count)])
         command.extend(
@@ -465,12 +608,10 @@ class PowermetricsTelemetryAdapter:
         )
         return command
 
-    @staticmethod
-    def _probe_command(output_path: Path) -> list[str]:
+    def _probe_command(self, output_path: Path) -> list[str]:
         return [
-            "sudo",
-            "-n",
-            POWER_METRICS,
+            *self._privilege_prefix,
+            self._executable,
             "-n",
             "1",
             "-b",
@@ -495,8 +636,8 @@ class PowermetricsTelemetryAdapter:
         path.unlink(missing_ok=True)
         return path
 
-    @staticmethod
     def _wait_until_ready(
+        self,
         process: subprocess.Popen[bytes],
         capture_path: Path,
     ) -> AdapterResult:
@@ -512,6 +653,7 @@ class PowermetricsTelemetryAdapter:
                     except ValueError as exc:
                         last_parse_error = str(exc)
                     else:
+                        self._first_parse_stamp = self._clock.stamp()
                         return AdapterResult(
                             ok=True,
                             metadata={
@@ -555,17 +697,25 @@ class PowermetricsTelemetryAdapter:
 
 
 def parse_powermetrics_records(
-    data: bytes, *, timestamp_anchor_s: float | None = None
+    data: bytes,
+    *,
+    timestamp_anchor_s: float | None = None,
+    first_record_endpoint_s: float | None = None,
 ) -> list[PowermetricsRecord]:
     """Parse a NUL-framed powermetrics plist stream into interval records."""
     records, _diagnostic = _parse_powermetrics_records(
-        data, timestamp_anchor_s=timestamp_anchor_s
+        data,
+        timestamp_anchor_s=timestamp_anchor_s,
+        first_record_endpoint_s=first_record_endpoint_s,
     )
     return records
 
 
 def samples_from_raw_powermetrics(
-    data: bytes, *, plist_anchor_offset_s: float
+    data: bytes,
+    *,
+    plist_anchor_offset_s: float | None = None,
+    first_record_endpoint_s: float | None = None,
 ) -> list[PowerSample]:
     """Re-derive ``power_trace.csv`` samples from raw powermetrics evidence.
 
@@ -573,6 +723,19 @@ def samples_from_raw_powermetrics(
     ``plist_first_timestamp_s - timestamp_anchor_s``. The artifact under test
     is never used to infer the anchor.
     """
+    if (plist_anchor_offset_s is None) == (first_record_endpoint_s is None):
+        raise ValueError(
+            "exactly one raw-to-trace anchor mode is required: legacy "
+            "plist_anchor_offset_s or current first_record_endpoint_s"
+        )
+    if first_record_endpoint_s is not None:
+        endpoint_s = finite_float(
+            first_record_endpoint_s,
+            "metadata.uncertainty_evidence.clock_anchor.first_sample_end_point_epoch_s",
+        )
+        return samples_from_records(
+            parse_powermetrics_records(data, first_record_endpoint_s=endpoint_s)
+        )
     offset_s = finite_float(
         plist_anchor_offset_s,
         "metadata.device.plist_anchor_offset_s",
@@ -580,15 +743,18 @@ def samples_from_raw_powermetrics(
     raw_anchor_records = parse_powermetrics_records(data)
     first_timestamp_s = raw_anchor_records[0].metadata["plist_first_timestamp_s"]
     timestamp_anchor_s = first_timestamp_s - offset_s
-    return samples_from_records(
-        parse_powermetrics_records(data, timestamp_anchor_s=timestamp_anchor_s)
-    )
+    return samples_from_records(parse_powermetrics_records(data, timestamp_anchor_s=timestamp_anchor_s))
 
 
 def _parse_powermetrics_records(
-    data: bytes, *, timestamp_anchor_s: float | None = None
+    data: bytes,
+    *,
+    timestamp_anchor_s: float | None = None,
+    first_record_endpoint_s: float | None = None,
 ) -> tuple[list[PowermetricsRecord], _DroppedFrameDiagnostic | None]:
     """Parse records and return any final-frame drop diagnostic."""
+    if timestamp_anchor_s is not None and first_record_endpoint_s is not None:
+        raise ValueError("powermetrics timestamp anchor modes are mutually exclusive")
     documents, diagnostic = _powermetrics_documents(data)
     if not documents:
         raise ValueError("powermetrics stream contains no complete plist documents")
@@ -597,11 +763,17 @@ def _parse_powermetrics_records(
         _required(documents[0], "timestamp", 0)
     )
     anchor_s = plist_first_timestamp if timestamp_anchor_s is None else timestamp_anchor_s
+    if first_record_endpoint_s is not None:
+        anchor_s = finite_float(first_record_endpoint_s, "first_record_endpoint_s")
     cumulative_elapsed_s = 0.0
     records: list[PowermetricsRecord] = []
     for index, document in enumerate(documents):
         elapsed_ns = _required_int(document, "elapsed_ns", index)
-        if timestamp_anchor_s is None:
+        if first_record_endpoint_s is not None:
+            if index > 0:
+                cumulative_elapsed_s += elapsed_ns / 1_000_000_000.0
+            timestamp_s = anchor_s + cumulative_elapsed_s
+        elif timestamp_anchor_s is None:
             timestamp_s = anchor_s + cumulative_elapsed_s
             cumulative_elapsed_s += elapsed_ns / 1_000_000_000.0
         else:
@@ -639,7 +811,12 @@ def _parse_powermetrics_records(
                     )
                     if key in document
                 }
-                | {"plist_first_timestamp_s": plist_first_timestamp},
+                | {
+                    "plist_first_timestamp_s": plist_first_timestamp,
+                    "plist_timestamp_s": _timestamp_epoch_utc(
+                        _required(document, "timestamp", index)
+                    ),
+                },
             )
         )
     return records, diagnostic
