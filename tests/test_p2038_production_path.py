@@ -120,7 +120,9 @@ class P2038ProductionPathTests(unittest.TestCase):
             self.assertNotIn("clock_anchor_bound_s", metadata.get("extra", {}))
             self.assertNotIn("idle_drift_bound_w", metadata.get("extra", {}))
             self.assertEqual(metadata["uncertainty_evidence"]["schema_version"], "p2-038.1")
-            request_gate = stored["claim_eligibility"]["request"]
+            request_gate = stored["window_evidence_precheck"][
+                "idle_subtracted_request"
+            ]
             self.assertIs(request_gate["eligible"], True)
             self.assertEqual(request_gate["reasons"], [])
             assertion = assert_production_uncertainty(
@@ -140,7 +142,7 @@ class P2038ProductionPathTests(unittest.TestCase):
                 {"status": "unknown", "reason": "contamination_evidence_unknown"},
             )
             gates = json.loads((bundle / "summary_metrics.json").read_text())[
-                "claim_eligibility"
+                "window_evidence_precheck"
             ]
             self.assertIs(gates["gross_request"]["eligible"], True)
             self.assertIs(gates["idle_subtracted_request"]["eligible"], False)
@@ -229,7 +231,9 @@ class P2038ProductionPathTests(unittest.TestCase):
                 self.assertEqual(summary.status.value, "succeeded")
                 self.assertEqual(validate_bundle(bundle, strict=True), [])
                 stored = json.loads((bundle / "summary_metrics.json").read_text())
-                request_gate = stored["claim_eligibility"]["request"]
+                request_gate = stored["window_evidence_precheck"][
+                    "idle_subtracted_request"
+                ]
                 self.assertIs(request_gate["eligible"], False)
                 self.assertIn(reason, request_gate["reasons"])
 

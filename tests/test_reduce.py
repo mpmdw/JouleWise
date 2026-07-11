@@ -14,6 +14,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from joulewise import reduce as reduce_module
 from joulewise.bundle import RunBundleWriter
@@ -200,6 +201,29 @@ class RectangleTests(ReduceTestCase):
 
                 self.assertEqual(summary.status, RunStatus.FAILED)
                 self.assertIn("idle_baseline.sample_count must be an integer", summary.failure_message)
+
+
+class IdleDependencePropagationTests(ReduceTestCase):
+    def test_reducer_uses_governed_variance_for_corrected_energy_term(self) -> None:
+        builder = self.builder()
+        builder.measured_window(0.0, 3.0)
+        builder.write_trace(constant_samples(0.0, 3.0, hz=1.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"])
+        governed = {
+            "status": "estimated",
+            "governed_variance_of_mean_w2": 5 / 18,
+        }
+
+        with patch(
+            "joulewise.reduce.derive_idle_mean_uncertainty",
+            return_value=governed,
+        ):
+            summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertIs(summary.idle_mean_uncertainty, governed)
+        self.assertEqual(
+            summary.energy_variance_terms_j2["E_idle_mean_j2"], 5 / 2
+        )
 
 
 class RampTests(ReduceTestCase):
@@ -629,7 +653,7 @@ class TokenFallbackTests(ReduceTestCase):
         self.assertEqual(summary.measurement_quality.token_count_source, "server_usage")
         self.assertEqual(summary.measurement_quality.token_counts_source, "server_usage")
         self.assertEqual(
-            summary.claim_eligibility["per_token"],
+            summary.window_evidence_precheck["per_token"],
             {
                 "eligible": True,
                 "reasons": [],
@@ -658,7 +682,7 @@ class TokenFallbackTests(ReduceTestCase):
             "stream_chunk_fallback",
         )
         self.assertEqual(
-            summary.claim_eligibility["per_token"],
+            summary.window_evidence_precheck["per_token"],
             {
                 "eligible": False,
                 "reasons": ["stream_chunk_fallback"],

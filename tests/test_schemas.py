@@ -156,16 +156,54 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertEqual(suite_summary["properties"]["floor_cmp_j"], {"type": ["number", "null"]})
         payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()
         self.assertIsNone(payload["suite_metrics"])
-        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.3.1")
+        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.4.1")
 
-    def test_measurement_quality_runtime_cleanup_field_is_additive_nullable(self) -> None:
+    def test_idle_mean_uncertainty_schema_freezes_shape_and_reasons(self) -> None:
+        schema = SummaryMetrics.json_schema()
+        self.assertIn("idle_mean_uncertainty", schema["properties"])
+        idle = schema["$defs"]["idle_mean_uncertainty"]
+        self.assertEqual(
+            set(idle["required"]),
+            set(idle["properties"]),
+        )
+        self.assertEqual(
+            idle["properties"]["method"]["const"],
+            "newey_west_bartlett_10s_iid_floor_v1",
+        )
+        self.assertEqual(idle["properties"]["bandwidth_s"]["const"], 10.0)
+        self.assertEqual(
+            idle["properties"]["correlation_scope"]["const"],
+            "independent_run",
+        )
+        self.assertEqual(
+            idle["properties"]["reason_codes"]["items"]["enum"],
+            [
+                "raw_idle_trace_unavailable",
+                "raw_idle_trace_invalid",
+                "nonfinite_idle_power",
+                "insufficient_idle_samples",
+                "idle_trace_span_below_three_bandwidths",
+                "idle_cadence_irregular",
+                "idle_metadata_mismatch",
+                "backend_policy_not_frozen",
+            ],
+        )
+
+    def test_measurement_quality_cleanup_fields_are_additive_nullable(self) -> None:
         schema = SummaryMetrics.json_schema()
         quality = schema["$defs"]["measurement_quality"]
         self.assertEqual(
             quality["properties"]["runtime_cleanup_ok"],
             {"type": ["boolean", "null"]},
         )
+        self.assertEqual(
+            quality["properties"]["remote_cleanup_failed"],
+            {"type": ["array", "null"], "items": {"type": "string"}},
+        )
         self.assertNotIn("runtime_cleanup_ok", quality["required"])
+        self.assertNotIn("remote_cleanup_failed", quality["required"])
+        self.assertIn("window_evidence_precheck", schema["properties"])
+        self.assertNotIn("claim_eligibility", schema["properties"])
 
     def test_summary_metrics_schema_has_idle_gpu_quality_fields(self) -> None:
         schema = SummaryMetrics.json_schema()

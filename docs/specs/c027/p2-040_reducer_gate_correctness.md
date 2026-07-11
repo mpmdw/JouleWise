@@ -6,6 +6,13 @@ rows STA-5..STA-8, STA-11, ARC-3, ARC-5, ARC-6 (local half), and ARC-8.
 Underlying evidence: `docs/reviews/c027/lens-stats.md` findings 5..8 and
 `docs/reviews/c027/lens-arch.md` findings 3, 5, 6, and 8.
 
+Post-landing supersession (2026-07-10): this sheet owns reducer `0.3.0`'s
+metric-gate semantics, but its no-rename fence is superseded by the later,
+lead-accepted Analysis Trio Component C5 integration. P2-041 advances the
+reducer to `0.4.0` and writes `window_evidence_precheck`; current-era `0.3.0`
+summaries require re-reduction. Historical `claim_eligibility` spellings below
+describe the P2-040 landing and are not the current output contract.
+
 This specification is implementation-grade for P2-040 only. It does not
 implement the P2-037 contrast/claim engine, P2-038 production uncertainty
 capture, P2-039 floor artifacts, P2-041 campaign claim-readiness, or
