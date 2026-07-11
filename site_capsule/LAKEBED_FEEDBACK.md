@@ -209,3 +209,11 @@ Capsule deploy ID: `dep_2I04CG6tQ4t0mzY7`. Live app:
      status`); verifying a deploy requires curling the live app's freshness
      endpoint. A `lakebed status [capsule-dir]` reporting live deploy id +
      baked commit would close the loop.
+
+## 2026-07-11 (final C-028 deploy attempt)
+- Deploy REJECTED: "Artifact exceeds 1048576 bytes" — the site's growth this
+  arc (C-028 docs/reviews/reports) pushed the packed artifact over the 1 MiB
+  cap (content 307,507 B packs over the limit with app wrapper). Live capsule
+  remains at the clearance-state snapshot; freshness banner shows drift
+  honestly. Feedback: a size breakdown in the error (per-chunk) would make
+  trimming targeted; a 2-4 MiB tier would fit doc-heavy capsules.
