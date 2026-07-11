@@ -27,6 +27,8 @@ SENTINEL_POSITIONS = ("start", "end")
 COMMAND_TIMEOUT_S = 60
 REPETITIONS = 5
 ORDER_MANIFEST = "order_manifest.json"
+ANALYSIS_MANIFEST = "analysis_manifest.json"
+MANIFEST_SIDECARS = {ORDER_MANIFEST, ANALYSIS_MANIFEST}
 
 
 def expected_filenames(model_tag: str) -> set[str]:
@@ -52,7 +54,7 @@ def expected_baseline_filenames(model_tag: str) -> set[str]:
 
 
 def expected_json_filenames(model_tag: str) -> set[str]:
-    return expected_filenames(model_tag) | {ORDER_MANIFEST}
+    return expected_filenames(model_tag) | MANIFEST_SIDECARS
 
 
 def run_generator(base: Path, model_tag: str, out_dir: Path) -> subprocess.CompletedProcess[str]:
@@ -79,7 +81,7 @@ def generated_payloads(out_dir: Path) -> dict[str, dict]:
     return {
         path.name: json.loads(path.read_text(encoding="utf-8"))
         for path in sorted(out_dir.glob("*.json"))
-        if path.name != ORDER_MANIFEST
+        if path.name not in MANIFEST_SIDECARS
     }
 
 
@@ -168,7 +170,7 @@ class GenerateMatrixTests(unittest.TestCase):
             self.assertEqual(current.returncode, 0, current.stderr)
             self.assertEqual(
                 {path.name for path in out_dir.glob("*.json")},
-                expected_filenames(other_tag) | expected_filenames(tag) | {ORDER_MANIFEST},
+                expected_filenames(other_tag) | expected_filenames(tag) | MANIFEST_SIDECARS,
             )
 
     def test_both_example_base_configs_produce_sixty_distinct_run_ids(self) -> None:
@@ -255,7 +257,7 @@ class GenerateMatrixTests(unittest.TestCase):
             paths = sorted(out_dir.glob("*.json"))
             self.assertEqual({path.name for path in paths}, expected_json_filenames(BASE_CONFIGS[1][1]))
             for path in paths:
-                if path.name == ORDER_MANIFEST:
+                if path.name in MANIFEST_SIDECARS:
                     continue
                 with self.subTest(path=path.name):
                     config = BenchmarkConfig.from_mapping(json.loads(path.read_text(encoding="utf-8")))

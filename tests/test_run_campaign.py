@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import shlex
@@ -24,6 +25,12 @@ SCRIPT = ROOT / "scripts" / "run_campaign.py"
 BASE_CONFIG = ROOT / "configs" / "examples" / "mock_local.json"
 SUITE_CONFIG = ROOT / "configs" / "examples" / "mock_suite_local.json"
 COMMAND_TIMEOUT_S = 60
+
+spec = importlib.util.spec_from_file_location("run_campaign_module", SCRIPT)
+run_campaign_module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+sys.modules["run_campaign_module"] = run_campaign_module
+spec.loader.exec_module(run_campaign_module)
 
 
 def run_campaign(
@@ -489,6 +496,15 @@ def read_all_jsonl(path: Path) -> list[dict]:
 
 
 class RunCampaignTests(unittest.TestCase):
+    def test_discover_configs_excludes_order_and_analysis_manifest_sidecars(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir = Path(tmp)
+            config = write_config(config_dir, "cell.json", "cell")
+            (config_dir / "order_manifest.json").write_text("{}\n", encoding="utf-8")
+            (config_dir / "analysis_manifest.json").write_text("{}\n", encoding="utf-8")
+
+            self.assertEqual(run_campaign_module.discover_configs(config_dir), [config])
+
     def test_dry_run_executes_nothing_and_reports_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

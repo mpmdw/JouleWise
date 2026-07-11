@@ -273,6 +273,16 @@ queue owns ordering (C-027):**
   the loud six-bundle acceptance-gate skip. Git merge metadata remains absent
   because the managed sandbox cannot write the external worktree admin dir;
   the exact clean three-way `origin/main` content snapshot is applied.
+- P2-042 emitter branch `impl/p2042` (lead-committed base; draft PR #46;
+  targeted-review fix round complete in the worktree, no fix-round commit):
+  FIX-1 fail-closed typed identity/linkage validation, FIX-2 semantic
+  `run_id` derivation, and FIX-3 raw-byte AP hashing/LF config emission are
+  implemented. Focused manifest/generator/campaign checks: `Ran 82 tests in
+  12.317s, OK`; final canonical suite: `Ran 989 tests in 33.405s, OK
+  (skipped=12)`. Review regressions cover `run_id=[]`, one malformed identity
+  at each manifest object layer, a fully rehashed coherent rename, and a CRLF
+  AP fixture. Report:
+  `docs/run_reports/2026-07-10-p2042-analysis-manifest.md`.
 - P2-040 / RETRO-001 fix-round worktree: canonical suite `Ran 908 tests in
   32.723s`, `OK (skipped=11)`; focused 211 tests OK; claims lint exit 0 with
   no errors; `git diff --check` clean. The absent `runs/` corpus produced the
