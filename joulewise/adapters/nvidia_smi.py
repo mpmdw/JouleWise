@@ -76,6 +76,9 @@ class NvidiaSmiTelemetryAdapter:
     def clock_alignments(self) -> list[dict[str, Any]]:
         return [dict(alignment) for alignment in self._clock_alignments]
 
+    def cleanup_report(self) -> list[dict[str, Any]]:
+        return self._client.cleanup_report()
+
     def metadata(self) -> dict[str, Any]:
         return dict(self._last_metadata)
 
@@ -244,16 +247,10 @@ class NvidiaSmiTelemetryAdapter:
         rows: list[NvidiaSmiRow],
         result: NodeTaskResult,
     ) -> list[PowerSample]:
-        offset = self._offset(result)
-        return [
-            PowerSample(
-                timestamp_s=convert_node_timestamp(row.node_timestamp_s, offset),
-                power_w=row.power_w,
-                source=self.name,
-                rail=RAIL_MANIFEST[0],
-            )
-            for row in rows
-        ]
+        return samples_from_nvidia_smi_rows(
+            rows,
+            offset_estimate_s=self._offset(result),
+        )
 
     def _remember_rows(self, rows: list[NvidiaSmiRow], result: NodeTaskResult) -> None:
         self._last_rows = list(rows)
@@ -272,15 +269,17 @@ class NvidiaSmiTelemetryAdapter:
         artifact_key: str,
         fallback_name: str,
     ) -> bytes:
+        artifacts = result.raw_status.get("artifacts", {}) if result.raw_status else {}
+        relative = str(artifacts.get(artifact_key, fallback_name))
+        if relative in result.artifacts:
+            return result.artifacts[relative]
         if result.artifacts_path is None:
             raise AdapterFailure(
                 result.failure_reason or FailureReason.UNKNOWN_ERROR,
                 "node task did not return an artifacts path",
                 self._result_metadata(result),
             )
-        artifacts = result.raw_status.get("artifacts", {}) if result.raw_status else {}
-        relative = artifacts.get(artifact_key, fallback_name)
-        path = Path(result.artifacts_path) / str(relative)
+        path = Path(result.artifacts_path) / relative
         try:
             return path.read_bytes()
         except OSError as exc:
@@ -296,20 +295,26 @@ class NvidiaSmiTelemetryAdapter:
         context: RunContext | None,
         operation: str,
     ) -> None:
-        if context is None or result.artifacts_path is None:
+        if context is None:
             return
         artifacts = result.raw_status.get("artifacts", {}) if result.raw_status else {}
-        relative = artifacts.get("worker_log", WORKER_LOG_NAME)
-        source = Path(result.artifacts_path) / str(relative)
+        relative = str(artifacts.get("worker_log", WORKER_LOG_NAME))
         task_id = (
             str(result.raw_status.get("task_id"))
             if result.raw_status and result.raw_status.get("task_id")
             else "nvidia-smi-%s" % operation
         )
         safe_task_id = task_id.replace("/", "-")
-        try:
-            text = source.read_text(encoding="utf-8")
-        except OSError:
+        if relative in result.artifacts:
+            text = result.artifacts[relative].decode("utf-8", errors="replace")
+        elif result.artifacts_path is not None:
+            try:
+                text = (Path(result.artifacts_path) / relative).read_text(
+                    encoding="utf-8"
+                )
+            except OSError:
+                return
+        else:
             return
         (context.logs_dir / ("%s_worker.log" % safe_task_id)).write_text(
             text,
@@ -429,6 +434,50 @@ def parse_nvidia_smi_csv(
             )
         )
     return rows
+
+
+def samples_from_raw_nvidia_smi(
+    raw: bytes,
+    *,
+    node_utc_offset_s: float | None,
+    offset_estimate_s: float,
+) -> list[PowerSample]:
+    """Re-derive controller-domain samples from verbatim node CSV bytes.
+
+    The live adapter and strict bundle validation share this function so the
+    raw-to-trace gate cannot drift from the production timestamp conversion or
+    rail/source semantics.
+    """
+
+    rows = parse_nvidia_smi_csv(
+        raw.decode("utf-8", errors="replace"),
+        node_utc_offset_s=node_utc_offset_s,
+    )
+    return samples_from_nvidia_smi_rows(
+        rows,
+        offset_estimate_s=offset_estimate_s,
+    )
+
+
+def samples_from_nvidia_smi_rows(
+    rows: list[NvidiaSmiRow],
+    *,
+    offset_estimate_s: float,
+) -> list[PowerSample]:
+    """Apply the production clock/source/rail mapping to parsed CSV rows."""
+
+    return [
+        PowerSample(
+            timestamp_s=convert_node_timestamp(
+                row.node_timestamp_s,
+                offset_estimate_s,
+            ),
+            power_w=row.power_w,
+            source=SOURCE,
+            rail=RAIL_MANIFEST[0],
+        )
+        for row in rows
+    ]
 
 
 def _power_or_none(value: str) -> float | None:

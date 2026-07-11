@@ -933,7 +933,7 @@ class StrictValidateTests(CliRunTestCase):
         )
         self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_raw_to_trace_subcheck_skips_non_powermetrics_bundle(self) -> None:
+    def test_raw_to_trace_mock_backend_has_explicit_strict_exemption(self) -> None:
         bundle = self.make_bundle("strict-non-pm-skip")
         self.assertFalse((bundle / "raw" / RAW_SAMPLES_NAME).exists())
         rows = self._trace_rows(bundle)
@@ -943,6 +943,26 @@ class StrictValidateTests(CliRunTestCase):
         )
         problems = validate_bundle(bundle, strict=True)
         self.assertFalse(any("raw-to-trace" in p for p in problems), problems)
+
+    def test_raw_to_trace_unregistered_production_backend_hard_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-unregistered-production")
+        config = json.loads((bundle / "config.json").read_text(encoding="utf-8"))
+        config["hardware_target"]["telemetry_backend"] = "jetson_rails"
+        (bundle / "config.json").write_text(
+            json.dumps(config, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any(
+                problem
+                == "strict: raw-to-trace: no verifier registered for production backend jetson_rails"
+                for problem in problems
+            ),
+            problems,
+        )
 
     def test_new_summary_missing_workload_provenance_fails_strict(self) -> None:
         bundle = self.make_bundle("strict-missing-workload-provenance")

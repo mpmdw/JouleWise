@@ -59,6 +59,7 @@ class FailureReason(str, Enum):
     PERMISSION_DENIED = "permission_denied"
     TRANSPORT_UNAVAILABLE = "transport_unavailable"
     UNSUPPORTED_WORKLOAD = "unsupported_workload"
+    CLEANUP_FAILED = "cleanup_failed"
     UNKNOWN_ERROR = "unknown_error"
 
 
@@ -573,6 +574,10 @@ class MeasurementQuality:
     #: power curve. Values are ``"identifiable"`` or
     #: ``"not_resolvable_sample_count"``.
     phase_identifiability: dict[str, str] | None = None
+    #: Paths whose worker task file/directory cleanup failed. This is a
+    #: quality-only hygiene signal; surviving worker-started processes use the
+    #: cleanup_failed FailureReason and demote the run instead.
+    remote_cleanup_failed: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -746,6 +751,10 @@ class SummaryMetrics:
                         "idle_window_suspect": nullable_bool,
                         "token_counts_source": {"type": ["string", "null"]},
                         "phase_identifiability": {"type": ["object", "null"]},
+                        "remote_cleanup_failed": {
+                            "type": ["array", "null"],
+                            "items": {"type": "string"},
+                        },
                     },
                 },
                 "summary_provenance": {

@@ -68,6 +68,9 @@ class VllmRuntimeAdapter:
     def clock_alignments(self) -> list[dict[str, Any]]:
         return [dict(alignment) for alignment in self._clock_alignments]
 
+    def cleanup_report(self) -> list[dict[str, Any]]:
+        return self._client.cleanup_report()
+
     def prepare(
         self, config: BenchmarkConfig, context: RunContext | None = None
     ) -> AdapterResult:
@@ -118,7 +121,17 @@ class VllmRuntimeAdapter:
 
         offset = self._offset(result)
         events = parse_vllm_events_jsonl(events_text, offset)
-        converted_tokens_text, output_tokens = convert_vllm_tokens_jsonl(tokens_text, offset)
+        converted_tokens_text, stream_chunk_count = convert_vllm_tokens_jsonl(
+            tokens_text,
+            offset,
+        )
+        worker_metadata = _worker_status_metadata(result)
+        output_tokens = _positive_worker_int(worker_metadata.get("emitted_tokens"))
+        if output_tokens is None:
+            output_tokens = stream_chunk_count
+        token_count_source = worker_metadata.get("token_count_source")
+        if token_count_source not in {"server_usage", "stream_chunk_fallback"}:
+            token_count_source = "stream_chunk_fallback"
         prompt_token_ids = _worker_prompt_token_ids(result)
         prompt_tokens = (
             len(prompt_token_ids)
@@ -138,7 +151,11 @@ class VllmRuntimeAdapter:
                 result,
                 emitted_tokens=output_tokens,
             ),
-            metadata=self._result_metadata(result),
+            metadata={
+                **self._result_metadata(result),
+                "token_count_source": token_count_source,
+                "stream_chunk_count": stream_chunk_count,
+            },
         )
 
     def cleanup(
@@ -233,15 +250,17 @@ class VllmRuntimeAdapter:
         artifact_key: str,
         fallback_name: str,
     ) -> str:
+        artifacts = result.raw_status.get("artifacts", {}) if result.raw_status else {}
+        relative = str(artifacts.get(artifact_key, fallback_name))
+        if relative in result.artifacts:
+            return result.artifacts[relative].decode("utf-8", errors="replace")
         if result.artifacts_path is None:
             raise AdapterFailure(
                 result.failure_reason or FailureReason.UNKNOWN_ERROR,
                 "node task did not return an artifacts path",
                 self._result_metadata(result),
             )
-        artifacts = result.raw_status.get("artifacts", {}) if result.raw_status else {}
-        relative = artifacts.get(artifact_key, fallback_name)
-        path = Path(result.artifacts_path) / str(relative)
+        path = Path(result.artifacts_path) / relative
         try:
             return path.read_text(encoding="utf-8")
         except OSError as exc:
@@ -257,20 +276,26 @@ class VllmRuntimeAdapter:
         context: RunContext | None,
         operation: str,
     ) -> None:
-        if context is None or result.artifacts_path is None:
+        if context is None:
             return
         artifacts = result.raw_status.get("artifacts", {}) if result.raw_status else {}
-        relative = artifacts.get("worker_log", WORKER_LOG_NAME)
-        source = Path(result.artifacts_path) / str(relative)
+        relative = str(artifacts.get("worker_log", WORKER_LOG_NAME))
         task_id = (
             str(result.raw_status.get("task_id"))
             if result.raw_status and result.raw_status.get("task_id")
             else "vllm-%s" % operation
         )
         safe_task_id = task_id.replace("/", "-")
-        try:
-            text = source.read_text(encoding="utf-8")
-        except OSError:
+        if relative in result.artifacts:
+            text = result.artifacts[relative].decode("utf-8", errors="replace")
+        elif result.artifacts_path is not None:
+            try:
+                text = (Path(result.artifacts_path) / relative).read_text(
+                    encoding="utf-8"
+                )
+            except OSError:
+                return
+        else:
             return
         (context.logs_dir / ("%s_worker.log" % safe_task_id)).write_text(
             text,
@@ -455,6 +480,12 @@ def _worker_status_metadata(result: NodeTaskResult) -> dict[str, Any]:
     if result.raw_status and isinstance(result.raw_status.get("metadata"), dict):
         return dict(result.raw_status["metadata"])
     return {}
+
+
+def _positive_worker_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
 
 
 def _prompt_provenance_from_worker(

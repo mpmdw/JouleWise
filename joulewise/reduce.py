@@ -239,6 +239,24 @@ def _cooldown_cap_hit(metadata: dict[str, Any]) -> bool | None:
     return None
 
 
+def _remote_cleanup_failed(metadata: dict[str, Any]) -> list[str] | None:
+    extra = metadata.get("extra")
+    report = extra.get("node_cleanup") if isinstance(extra, dict) else None
+    if not isinstance(report, list):
+        return None
+    paths = sorted(
+        {
+            str(item["path"])
+            for item in report
+            if isinstance(item, dict)
+            and item.get("removed") is False
+            and item.get("eventually_removed") is not True
+            and isinstance(item.get("path"), str)
+        }
+    )
+    return paths or None
+
+
 def _telemetry_source(metadata: dict[str, Any]) -> str | None:
     adapters = metadata.get("adapters")
     if isinstance(adapters, dict):
@@ -275,6 +293,26 @@ def _observed_total_tokens(metadata: dict[str, Any]) -> int | None:
     return None
 
 
+def _runtime_token_count_source(metadata: dict[str, Any]) -> str | None:
+    workload = metadata.get("workload_observed")
+    if not isinstance(workload, dict):
+        return None
+    source = workload.get("token_count_source")
+    if source in {"server_usage", "stream_chunk_fallback"}:
+        return str(source)
+    return None
+
+
+def _observed_output_tokens(metadata: dict[str, Any]) -> int | None:
+    workload = metadata.get("workload_observed")
+    if not isinstance(workload, dict):
+        return None
+    value = workload.get("output_token_count")
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return None
+
+
 def _total_tokens(metadata: dict[str, Any]) -> tuple[int | None, str | None]:
     """``(total token count, source)`` for ``energy_token_j``.
 
@@ -284,9 +322,12 @@ def _total_tokens(metadata: dict[str, Any]) -> tuple[int | None, str | None]:
     from configured prompt tokens plus output events - and the metric stays
     ``None`` with source ``None``. Configured counts remain workload intent.
     """
+    runtime_source = _runtime_token_count_source(metadata)
+    if runtime_source == "stream_chunk_fallback":
+        return None, runtime_source
     observed = _observed_total_tokens(metadata)
     if observed is not None:
-        return observed, "runtime_observed"
+        return observed, runtime_source or "runtime_observed"
     return None, None
 
 
@@ -824,6 +865,7 @@ def _failed_quality(
         telemetry_source=_telemetry_source(metadata),
         cooldown_cap_hit=_cooldown_cap_hit(metadata),
         idle_window_suspect=_idle_window_suspect(idle_baseline),
+        remote_cleanup_failed=_remote_cleanup_failed(metadata),
     )
 
 
@@ -866,7 +908,11 @@ def _reduce(
     energy_request_j = idle_subtracted_energy_j
 
     token_timestamps = reader.token_timestamps()
-    output_token_count, token_counts_source = _output_token_count(config, token_timestamps)
+    output_token_count, token_counts_source = _output_token_count(
+        config,
+        metadata,
+        token_timestamps,
+    )
     total_tokens, token_count_source = _total_tokens(metadata)
 
     energy_token_j = _energy_token_j(energy_request_j, total_tokens)
@@ -885,6 +931,14 @@ def _reduce(
     claim_eligibility = _claim_eligibility(
         reader, metadata, curve, window, energy_bound_terms_j, idle_baseline
     )
+    runtime_token_source = _runtime_token_count_source(metadata)
+    if runtime_token_source is not None:
+        fallback = runtime_token_source == "stream_chunk_fallback"
+        claim_eligibility["per_token"] = {
+            "eligible": not fallback,
+            "reasons": ["stream_chunk_fallback"] if fallback else [],
+            "token_count_source": runtime_token_source,
+        }
 
     quality = MeasurementQuality(
         requested_sampling_hz=config.sampling.power_hz,
@@ -900,6 +954,7 @@ def _reduce(
         idle_window_suspect=_idle_window_suspect(idle_baseline),
         token_counts_source=token_counts_source,
         phase_identifiability=phase_identifiability,
+        remote_cleanup_failed=_remote_cleanup_failed(metadata),
     )
 
     return SummaryMetrics(
@@ -928,7 +983,9 @@ def _reduce(
 
 
 def _output_token_count(
-    config: BenchmarkConfig, token_timestamps: list[float]
+    config: BenchmarkConfig,
+    metadata: dict[str, Any],
+    token_timestamps: list[float],
 ) -> tuple[int | None, str | None]:
     """Return ``(output token count, source)``.
 
@@ -937,6 +994,11 @@ def _output_token_count(
     ``output_tokens`` fallback, report that provenance and leave the
     denominator absent so derived metrics stay ``None``.
     """
+    runtime_source = _runtime_token_count_source(metadata)
+    if runtime_source == "stream_chunk_fallback":
+        return None, runtime_source
+    if runtime_source == "server_usage":
+        return _observed_output_tokens(metadata), runtime_source
     if token_timestamps:
         return len(token_timestamps), "runtime_observed"
     if _config_output_tokens(config) is not None:

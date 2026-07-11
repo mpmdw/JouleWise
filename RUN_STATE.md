@@ -212,6 +212,9 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-10 NV-GATE-2 CODE-NOW implementation (NV-1/NV-3/NV-4/NV-5;
+  live promotion evidence still gated):
+  `docs/run_reports/2026-07-10-nvgate2-codenow.md`
 - 2026-07-10 P2-040 / RETRO-001 fix round (committed on c027-int-p2040
   after lead review): `docs/run_reports/2026-07-10-p2040-fix-round.md`
 - 2026-07-09 C-027 whole-project council review (7 gpt-5.6-sol lenses +
@@ -255,6 +258,13 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
+- NV-GATE-2 CODE-NOW worktree: baseline `Ran 910 tests in 32.549s`,
+  `OK (skipped=12)`; final canonical suite `Ran 922 tests in 33.551s`,
+  `OK (skipped=13)`; focused NV-1/NV-3/NV-4/NV-5 surface `Ran 232 tests
+  in 6.085s`, `OK (skipped=2)`; `git diff --check` and targeted
+  `py_compile` clean. The added skip is loud and specific: this managed
+  sandbox denied localhost socket bind for NV-5. No live NVIDIA evidence or
+  de-provisionalization was claimed.
 - P2-040 / RETRO-001 fix-round worktree: canonical suite `Ran 908 tests in
   32.723s`, `OK (skipped=11)`; focused 211 tests OK; claims lint exit 0 with
   no errors; `git diff --check` clean. The absent `runs/` corpus produced the

@@ -484,6 +484,7 @@ class StatusByReasonTests(unittest.TestCase):
                 FailureReason.TELEMETRY_UNAVAILABLE: RunStatus.UNSUPPORTED,
                 FailureReason.PERMISSION_DENIED: RunStatus.FAILED,
                 FailureReason.TRANSPORT_UNAVAILABLE: RunStatus.FAILED,
+                FailureReason.CLEANUP_FAILED: RunStatus.FAILED,
                 FailureReason.UNKNOWN_ERROR: RunStatus.FAILED,
             },
         )

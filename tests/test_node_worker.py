@@ -400,6 +400,7 @@ class NodeWorkerTests(unittest.TestCase):
             old_wait = node_worker._wait_for_vllm_health
             old_post = node_worker._vllm_json_post
             old_stream = node_worker._vllm_stream_completion
+            stream_payloads: list[dict[str, Any]] = []
             node_worker._wait_for_vllm_health = lambda process, port, stderr_path, timeout_s: {  # type: ignore[assignment]
                 "ok": True,
                 "ready_check": "fake_http_health",
@@ -411,7 +412,21 @@ class NodeWorkerTests(unittest.TestCase):
                 return {"choices": [{"text": "W"}]}
 
             node_worker._vllm_json_post = fake_post  # type: ignore[assignment]
-            node_worker._vllm_stream_completion = lambda port, path, payload, timeout_s: iter(["A", "B", "C"])  # type: ignore[assignment]
+            def fake_stream(
+                port: int,
+                path: str,
+                payload: dict[str, Any],
+                *,
+                timeout_s: float,
+                usage_out: dict[str, Any] | None = None,
+            ):
+                del port, path, timeout_s
+                stream_payloads.append(dict(payload))
+                if usage_out is not None:
+                    usage_out["completion_tokens"] = 3
+                return iter(["AB", "C"])
+
+            node_worker._vllm_stream_completion = fake_stream  # type: ignore[assignment]
             port = 32123
             try:
                 runtime = valid_runtime_task()["runtime"]
@@ -470,13 +485,24 @@ class NodeWorkerTests(unittest.TestCase):
                 self.assertEqual(run_status["metadata"]["prompt_token_ids"], [11, 22])
                 self.assertEqual(run_status["metadata"]["prompt_token_count"], 2)
                 self.assertEqual(run_status["metadata"]["tokenize_path"], "/tokenize")
+                self.assertEqual(run_status["metadata"]["token_count_source"], "server_usage")
+                self.assertEqual(run_status["metadata"]["emitted_tokens"], 3)
+                self.assertEqual(run_status["metadata"]["stream_chunk_count"], 2)
+                self.assertEqual(
+                    stream_payloads[0]["stream_options"],
+                    {"include_usage": True},
+                )
                 self.assertEqual((run_artifacts / "response.txt").read_text(encoding="utf-8"), "ABC")
                 tokens = [
                     json.loads(line)
                     for line in (run_artifacts / "tokens.jsonl").read_text(encoding="utf-8").splitlines()
                 ]
-                self.assertEqual([token["text"] for token in tokens], ["A", "B", "C"])
-                self.assertEqual([token["index"] for token in tokens], [0, 1, 2])
+                self.assertEqual([token["text"] for token in tokens], ["AB", "C"])
+                self.assertEqual([token["index"] for token in tokens], [0, 1])
+                self.assertEqual(
+                    {token["record_unit"] for token in tokens},
+                    {"sse_chunk"},
+                )
                 self.assertTrue(all(isinstance(token["timestamp_s"], float) for token in tokens))
                 events = [
                     json.loads(line)
@@ -530,6 +556,73 @@ class NodeWorkerTests(unittest.TestCase):
                 node_worker._wait_for_vllm_health = old_wait
                 node_worker._vllm_json_post = old_post
                 node_worker._vllm_stream_completion = old_stream
+
+    def test_vllm_include_usage_rejection_retries_and_labels_chunk_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            state_dir = tmpdir / "state"
+            state_dir.mkdir()
+            (state_dir / node_worker.VLLM_PIDFILE).write_text(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "port": 32129,
+                        "served_model_name": "jw-3050-smoke",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            payloads: list[dict[str, Any]] = []
+            old_post = node_worker._vllm_json_post
+            old_stream = node_worker._vllm_stream_completion
+
+            def fake_post(port: int, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+                del port, payload
+                if path == node_worker.VLLM_TOKENIZE_PATH:
+                    return {"tokens": [11, 22]}
+                return {}
+
+            def fake_stream(
+                port: int,
+                path: str,
+                payload: dict[str, Any],
+                *,
+                timeout_s: float,
+                usage_out: dict[str, Any] | None = None,
+            ):
+                del port, timeout_s, usage_out
+                payloads.append(dict(payload))
+                if "stream_options" in payload:
+                    raise node_worker.VllmHttpError(
+                        "unknown stream_options field",
+                        status_code=422,
+                        path=path,
+                        body='{"error":"unknown field stream_options.include_usage"}',
+                    )
+                return iter(["AB", "C"])
+
+            node_worker._vllm_json_post = fake_post  # type: ignore[assignment]
+            node_worker._vllm_stream_completion = fake_stream  # type: ignore[assignment]
+            try:
+                artifacts_dir = tmpdir / "artifacts"
+                task_path = self.write_task(
+                    tmpdir,
+                    valid_workload_task(task_id="task-run-include-usage-rejected"),
+                )
+                code = node_worker.main(
+                    ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+                )
+            finally:
+                node_worker._vllm_json_post = old_post
+                node_worker._vllm_stream_completion = old_stream
+
+            self.assertEqual(code, 0)
+            status = self.read_status(artifacts_dir)
+            self.assertEqual(status["metadata"]["token_count_source"], "stream_chunk_fallback")
+            self.assertEqual(status["metadata"]["emitted_tokens"], 2)
+            self.assertTrue(status["metadata"]["include_usage_retry_without_field"])
+            self.assertIn("stream_options", payloads[0])
+            self.assertNotIn("stream_options", payloads[1])
 
     def test_runtime_missing_vllm_launcher_is_runtime_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -677,7 +770,7 @@ class NodeWorkerTests(unittest.TestCase):
             )
             old_stream = node_worker._vllm_stream_completion
             node_worker._vllm_stream_completion = (  # type: ignore[assignment]
-                lambda port, path, payload, timeout_s: (_ for _ in ()).throw(
+                lambda port, path, payload, timeout_s, usage_out=None: (_ for _ in ()).throw(
                     node_worker.VllmHttpError("HTTP 500: CUDA out of memory in body")
                 )
             )
@@ -722,7 +815,7 @@ class NodeWorkerTests(unittest.TestCase):
                 )
             )
             node_worker._vllm_stream_completion = (  # type: ignore[assignment]
-                lambda port, path, payload, timeout_s: iter(["A"])
+                lambda port, path, payload, timeout_s, usage_out=None: iter(["A"])
             )
             try:
                 status, reason, message, artifacts, metadata = node_worker.handle_vllm_run_workload(
@@ -938,6 +1031,78 @@ class NodeWorkerTests(unittest.TestCase):
             self.assertNotIn("nvidia_smi_csv", artifacts)
             self.assertFalse(pidfile.exists())
             self.assertEqual(calls, [])
+
+    def test_vllm_cleanup_reports_surviving_worker_process(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            state_dir.mkdir()
+            pid = 424242
+            (state_dir / node_worker.VLLM_PIDFILE).write_text(
+                json.dumps({"pid": pid, "command": ["vllm", "serve"]}),
+                encoding="utf-8",
+            )
+            old_terminate = node_worker._terminate_vllm_pid
+            old_alive = node_worker._pid_is_alive
+            node_worker._DETACHED_VLLM_PROCESSES[pid] = object()
+            node_worker._terminate_vllm_pid = lambda value, metadata: None  # type: ignore[assignment]
+            node_worker._pid_is_alive = lambda value: True  # type: ignore[assignment]
+            try:
+                status, reason, message, _, metadata = node_worker.handle_vllm_cleanup(
+                    valid_runtime_task(
+                        operation="cleanup",
+                        paths={"state_dir": str(state_dir)},
+                    ),
+                    str(Path(tmp) / "artifacts"),
+                    lambda line: None,
+                )
+            finally:
+                node_worker._terminate_vllm_pid = old_terminate
+                node_worker._pid_is_alive = old_alive
+                node_worker._DETACHED_VLLM_PROCESSES.pop(pid, None)
+
+            self.assertEqual(status, "failed")
+            self.assertEqual(reason, "cleanup_failed")
+            self.assertIn("survived cleanup", message)
+            self.assertTrue(metadata["process_survived"])
+            self.assertTrue((state_dir / node_worker.VLLM_PIDFILE).exists())
+
+    def test_nvidia_stop_reports_surviving_sampler_process(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            state_dir.mkdir()
+            artifacts_dir = Path(tmp) / "artifacts"
+            artifacts_dir.mkdir()
+            pid = 434343
+            (state_dir / node_worker.NVIDIA_SMI_PIDFILE).write_text(
+                json.dumps({"pid": pid, "command": ["nvidia-smi"]}),
+                encoding="utf-8",
+            )
+            old_terminate = node_worker._terminate_pid
+            old_alive = node_worker._pid_is_alive
+            node_worker._DETACHED_NVIDIA_SMI_PROCESSES[pid] = object()
+            node_worker._terminate_pid = lambda value, metadata: None  # type: ignore[assignment]
+            node_worker._pid_is_alive = lambda value: True  # type: ignore[assignment]
+            try:
+                status, reason, message, _, metadata = (
+                    node_worker.handle_nvidia_smi_stop_sampling(
+                        valid_task(
+                            operation="stop_sampling",
+                            paths={"state_dir": str(state_dir)},
+                        ),
+                        str(artifacts_dir),
+                        lambda line: None,
+                    )
+                )
+            finally:
+                node_worker._terminate_pid = old_terminate
+                node_worker._pid_is_alive = old_alive
+                node_worker._DETACHED_NVIDIA_SMI_PROCESSES.pop(pid, None)
+
+            self.assertEqual(status, "failed")
+            self.assertEqual(reason, "cleanup_failed")
+            self.assertIn("sampler process survived", message)
+            self.assertTrue(metadata["process_survived"])
+            self.assertTrue((state_dir / node_worker.NVIDIA_SMI_PIDFILE).exists())
 
     def write_fake_nvidia_smi(self, bin_dir: Path) -> Path:
         bin_dir.mkdir()

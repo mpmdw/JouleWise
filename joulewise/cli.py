@@ -17,7 +17,12 @@ import json
 import shlex
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+
+from joulewise.adapters.nvidia_smi import (
+    RAW_SAMPLES_NAME as NVIDIA_SMI_RAW_SAMPLES_NAME,
+    samples_from_raw_nvidia_smi,
+)
 
 from joulewise.adapters.powermetrics import (
     RAW_SAMPLES_NAME,
@@ -746,11 +751,24 @@ def _strict_required_object_keys(
     ]
 
 
+RawToTraceVerifier = Callable[[BundleReader], list[str]]
+
+
 def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
-    raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
     telemetry_backend = _validated_config_telemetry_backend(reader)
-    if telemetry_backend != TelemetryBackend.POWERMETRICS and not raw_path.is_file():
-        return []
+    if telemetry_backend is None:
+        return ["strict: raw-to-trace: telemetry backend is unavailable from config.json"]
+    verifier = RAW_TO_TRACE_VERIFIERS.get(telemetry_backend)
+    if verifier is not None:
+        return verifier(reader)
+    return [
+        "strict: raw-to-trace: no verifier registered for production backend "
+        f"{telemetry_backend.value}"
+    ]
+
+
+def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
+    raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
     if not raw_path.is_file():
         return [f"strict: raw-to-trace: missing raw/{RAW_SAMPLES_NAME}"]
     metadata = reader.raw_metadata()
@@ -773,13 +791,95 @@ def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
         )
     except (OSError, ValueError) as exc:
         return [f"strict: raw-to-trace: cannot derive raw/{RAW_SAMPLES_NAME}: {exc}"]
+    return _compare_raw_derived_samples(reader, expected)
+
+
+def _verify_mock_raw_to_trace_exemption(reader: BundleReader) -> list[str]:
+    """Explicit fixture-only exemption: mock telemetry has no native raw file."""
+
+    del reader
+    return []
+
+
+def _verify_nvidia_smi_raw_to_trace(reader: BundleReader) -> list[str]:
+    raw_path = reader.path / "raw" / NVIDIA_SMI_RAW_SAMPLES_NAME
+    if not raw_path.is_file():
+        return [
+            "strict: raw-to-trace: nvidia_smi missing "
+            f"raw/{NVIDIA_SMI_RAW_SAMPLES_NAME}"
+        ]
+    metadata = reader.raw_metadata()
+    if not isinstance(metadata, dict):
+        return ["strict: raw-to-trace: nvidia_smi metadata.json is missing or invalid"]
+    adapters = metadata.get("adapters")
+    telemetry = adapters.get("telemetry") if isinstance(adapters, dict) else None
+    if not isinstance(telemetry, dict):
+        return [
+            "strict: raw-to-trace: nvidia_smi metadata.adapters.telemetry "
+            "is missing or not an object"
+        ]
+    worker_metadata = telemetry.get("worker_metadata")
+    if not isinstance(worker_metadata, dict):
+        return [
+            "strict: raw-to-trace: nvidia_smi telemetry worker_metadata "
+            "is missing or not an object"
+        ]
+    try:
+        node_utc_offset_s = finite_float(
+            worker_metadata.get("node_utc_offset_s"),
+            "metadata.adapters.telemetry.worker_metadata.node_utc_offset_s",
+        )
+    except ValueError as exc:
+        return [f"strict: raw-to-trace: nvidia_smi {exc}"]
+    alignments = telemetry.get("clock_alignments")
+    stop_alignment = None
+    if isinstance(alignments, list):
+        stop_alignment = next(
+            (
+                item
+                for item in reversed(alignments)
+                if isinstance(item, dict)
+                and item.get("stage") == "telemetry.stop_sampling"
+            ),
+            None,
+        )
+    if not isinstance(stop_alignment, dict):
+        return [
+            "strict: raw-to-trace: nvidia_smi telemetry.stop_sampling "
+            "clock alignment is missing"
+        ]
+    try:
+        offset_estimate_s = finite_float(
+            stop_alignment.get("offset_estimate_s"),
+            "metadata.adapters.telemetry.clock_alignments.stop_sampling.offset_estimate_s",
+        )
+        expected = samples_from_raw_nvidia_smi(
+            raw_path.read_bytes(),
+            node_utc_offset_s=node_utc_offset_s,
+            offset_estimate_s=offset_estimate_s,
+        )
+    except (OSError, ValueError) as exc:
+        return [
+            "strict: raw-to-trace: nvidia_smi cannot derive "
+            f"raw/{NVIDIA_SMI_RAW_SAMPLES_NAME}: {exc}"
+        ]
+    return _compare_raw_derived_samples(reader, expected, backend="nvidia_smi")
+
+
+def _compare_raw_derived_samples(
+    reader: BundleReader,
+    expected: list[Any],
+    *,
+    backend: str | None = None,
+) -> list[str]:
+    prefix = f"{backend} " if backend else ""
     try:
         rows = reader.trace_rows()
     except BundleReadError as exc:
-        return [f"strict: raw-to-trace: {exc}"]
+        return [f"strict: raw-to-trace: {prefix}{exc}"]
     if len(rows) != len(expected):
         return [
-            "strict: raw-to-trace: power_trace.csv row count "
+            f"strict: raw-to-trace: {prefix}power_trace.csv row count "
             f"{len(rows)} does not match raw-derived {len(expected)}"
         ]
     for index, (row, sample) in enumerate(zip(rows, expected), start=2):
@@ -799,29 +899,36 @@ def _strict_raw_to_trace_problems(reader: BundleReader) -> list[str]:
         expected_rail = sample.rail or ""
         if timestamp_s != sample.timestamp_s:
             return [
-                "strict: raw-to-trace: power_trace.csv row "
+                f"strict: raw-to-trace: {prefix}power_trace.csv row "
                 f"{index} rail {rail!r} timestamp_s {timestamp_s!r} "
                 f"does not match raw-derived {sample.timestamp_s!r}"
             ]
         if power_w != sample.power_w:
             return [
-                "strict: raw-to-trace: power_trace.csv row "
+                f"strict: raw-to-trace: {prefix}power_trace.csv row "
                 f"{index} rail {rail!r} power_w {power_w!r} "
                 f"does not match raw-derived {sample.power_w!r}"
             ]
         if source != sample.source:
             return [
-                "strict: raw-to-trace: power_trace.csv row "
+                f"strict: raw-to-trace: {prefix}power_trace.csv row "
                 f"{index} rail {rail!r} source {source!r} "
                 f"does not match raw-derived {sample.source!r}"
             ]
         if rail != expected_rail:
             return [
-                "strict: raw-to-trace: power_trace.csv row "
+                f"strict: raw-to-trace: {prefix}power_trace.csv row "
                 f"{index} rail {rail!r} does not match raw-derived "
                 f"{expected_rail!r}"
             ]
     return []
+
+
+RAW_TO_TRACE_VERIFIERS: dict[TelemetryBackend, RawToTraceVerifier] = {
+    TelemetryBackend.MOCK: _verify_mock_raw_to_trace_exemption,
+    TelemetryBackend.POWERMETRICS: _verify_powermetrics_raw_to_trace,
+    TelemetryBackend.NVIDIA_SMI: _verify_nvidia_smi_raw_to_trace,
+}
 
 
 def _validated_config_telemetry_backend(reader: BundleReader) -> TelemetryBackend | None:

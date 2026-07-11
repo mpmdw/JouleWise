@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import posixpath
+import shutil
 import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -63,6 +64,7 @@ class NodeTaskResult:
     failure_reason: FailureReason | None
     message: str
     artifacts_path: Path | None = None
+    artifacts: dict[str, bytes] = field(default_factory=dict)
     raw_status: dict[str, Any] | None = None
     pre_marker: ClockMarker | None = None
     post_marker: ClockMarker | None = None
@@ -107,6 +109,10 @@ class NodeWorkerClient:
         self.remote_python = remote_python
         self.remote_worker_path = posixpath.join(self.remote_work_root, WORKER_FILENAME)
         self._worker_shipped = False
+        self._cleanup_report: list[dict[str, Any]] = []
+
+    def cleanup_report(self) -> list[dict[str, Any]]:
+        return [dict(item) for item in self._cleanup_report]
 
     def take_clock_marker(self) -> ClockMarker | AdapterResult:
         ship_result = self._ensure_worker_shipped()
@@ -185,11 +191,25 @@ class NodeWorkerClient:
             except OSError:
                 pass
         if not put_result.ok:
-            return self._task_failure_from_adapter(put_result, "push task failed")
+            return self._with_remote_cleanup(
+                self._task_failure_from_adapter(put_result, "push task failed"),
+                task_id=task_id,
+                prepared_task=prepared_task,
+                paths=paths,
+                remote_task_path=remote_task_path,
+                remote_artifacts_path=remote_artifacts_path,
+            )
 
         pre = self.take_clock_marker()
         if isinstance(pre, AdapterResult):
-            return self._task_failure_from_adapter(pre, "pre-task clock marker failed")
+            return self._with_remote_cleanup(
+                self._task_failure_from_adapter(pre, "pre-task clock marker failed"),
+                task_id=task_id,
+                prepared_task=prepared_task,
+                paths=paths,
+                remote_task_path=remote_task_path,
+                remote_artifacts_path=remote_artifacts_path,
+            )
 
         run_result = self.transport.run(
             [
@@ -206,18 +226,32 @@ class NodeWorkerClient:
             not run_result.ok
             and run_result.failure_reason == FailureReason.TRANSPORT_UNAVAILABLE
         ):
-            return self._task_failure_from_adapter(
-                run_result,
-                "worker command transport failed",
-                pre_marker=pre,
+            return self._with_remote_cleanup(
+                self._task_failure_from_adapter(
+                    run_result,
+                    "worker command transport failed",
+                    pre_marker=pre,
+                ),
+                task_id=task_id,
+                prepared_task=prepared_task,
+                paths=paths,
+                remote_task_path=remote_task_path,
+                remote_artifacts_path=remote_artifacts_path,
             )
 
         post = self.take_clock_marker()
         if isinstance(post, AdapterResult):
-            return self._task_failure_from_adapter(
-                post,
-                "post-task clock marker failed",
-                pre_marker=pre,
+            return self._with_remote_cleanup(
+                self._task_failure_from_adapter(
+                    post,
+                    "post-task clock marker failed",
+                    pre_marker=pre,
+                ),
+                task_id=task_id,
+                prepared_task=prepared_task,
+                paths=paths,
+                remote_task_path=remote_task_path,
+                remote_artifacts_path=remote_artifacts_path,
             )
 
         alignment = self._alignment_record(pre, post)
@@ -228,51 +262,161 @@ class NodeWorkerClient:
 
         local_parent = Path(tempfile.mkdtemp(prefix="joulewise-node-artifacts-"))
         local_artifacts_path = local_parent / task_id
-        collect_result = self.transport.collect(
-            remote_artifacts_path,
-            str(local_artifacts_path),
+        try:
+            collect_result = self.transport.collect(
+                remote_artifacts_path,
+                str(local_artifacts_path),
+                timeout_s=FILE_TRANSFER_TIMEOUT_S,
+            )
+            if not collect_result.ok:
+                result = self._task_failure_from_adapter(
+                    collect_result,
+                    "collect artifacts failed",
+                    pre_marker=pre,
+                    post_marker=post,
+                    alignment=alignment,
+                )
+            else:
+                status_path = local_artifacts_path / STATUS_JSON
+                try:
+                    raw_status = json.loads(status_path.read_text(encoding="utf-8"))
+                    artifacts = self._read_flat_artifacts(local_artifacts_path)
+                except (OSError, json.JSONDecodeError) as exc:
+                    result = self._task_failure(
+                        FailureReason.UNKNOWN_ERROR,
+                        "missing or malformed status.json: %s" % exc,
+                        pre_marker=pre,
+                        post_marker=post,
+                        alignment=alignment,
+                    )
+                else:
+                    status = str(raw_status.get("status", "failed"))
+                    failure_reason = self._failure_reason(raw_status.get("failure_reason"))
+                    message = str(raw_status.get("message", ""))
+                    result = NodeTaskResult(
+                        ok=status == "succeeded",
+                        status=status,
+                        failure_reason=failure_reason,
+                        message=message,
+                        artifacts=artifacts,
+                        raw_status=raw_status,
+                        pre_marker=pre,
+                        post_marker=post,
+                        offset_estimate_s=alignment["offset_estimate_s"],
+                        offset_bound_s=alignment["offset_bound_s"],
+                        metadata={
+                            "clock_alignment": alignment,
+                            "worker_returncode": run_result.metadata.get("returncode"),
+                        },
+                    )
+        finally:
+            self._record_local_cleanup(task_id, local_parent)
+        return self._with_remote_cleanup(
+            result,
+            task_id=task_id,
+            prepared_task=prepared_task,
+            paths=paths,
+            remote_task_path=remote_task_path,
+            remote_artifacts_path=remote_artifacts_path,
+        )
+
+    def _read_flat_artifacts(self, artifacts_path: Path) -> dict[str, bytes]:
+        artifacts: dict[str, bytes] = {}
+        for path in artifacts_path.iterdir():
+            if path.is_file():
+                artifacts[path.name] = path.read_bytes()
+        return artifacts
+
+    def _record_local_cleanup(self, task_id: str, path: Path) -> None:
+        error: str | None = None
+        try:
+            shutil.rmtree(path)
+        except OSError as exc:
+            error = "%s: %s" % (exc.__class__.__name__, exc)
+        self._cleanup_report.append(
+            {
+                "task_id": task_id,
+                "scope": "local",
+                "path": str(path),
+                "removed": error is None,
+                "error": error,
+            }
+        )
+
+    def _with_remote_cleanup(
+        self,
+        result: NodeTaskResult,
+        *,
+        task_id: str,
+        prepared_task: dict[str, Any],
+        paths: dict[str, str],
+        remote_task_path: str,
+        remote_artifacts_path: str,
+    ) -> NodeTaskResult:
+        worker_metadata = (
+            result.raw_status.get("metadata")
+            if isinstance(result.raw_status, dict)
+            else None
+        )
+        process_survived = (
+            isinstance(worker_metadata, dict)
+            and worker_metadata.get("process_survived") is True
+        )
+        is_final_cleanup = (
+            prepared_task.get("task_type") == "runtime"
+            and prepared_task.get("operation") == "cleanup"
+            and not process_survived
+        )
+        targets = (
+            [paths["run_dir"]]
+            if is_final_cleanup
+            else [remote_task_path, remote_artifacts_path]
+        )
+        cleanup = self.transport.run(
+            ["rm", "-rf", "--", *targets],
             timeout_s=FILE_TRANSFER_TIMEOUT_S,
         )
-        if not collect_result.ok:
-            return self._task_failure_from_adapter(
-                collect_result,
-                "collect artifacts failed",
-                pre_marker=pre,
-                post_marker=post,
-                alignment=alignment,
-            )
-
-        status_path = local_artifacts_path / STATUS_JSON
-        try:
-            raw_status = json.loads(status_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as exc:
-            return self._task_failure(
-                FailureReason.UNKNOWN_ERROR,
-                "missing or malformed status.json: %s" % exc,
-                artifacts_path=local_artifacts_path,
-                pre_marker=pre,
-                post_marker=post,
-                alignment=alignment,
-            )
-
-        status = str(raw_status.get("status", "failed"))
-        failure_reason = self._failure_reason(raw_status.get("failure_reason"))
-        message = str(raw_status.get("message", ""))
+        error = None if cleanup.ok else (cleanup.message or "remote cleanup failed")
+        if is_final_cleanup and cleanup.ok:
+            run_prefix = paths["run_dir"].rstrip("/") + "/"
+            for previous in self._cleanup_report:
+                previous_path = previous.get("path")
+                if (
+                    previous.get("scope") == "remote"
+                    and previous.get("removed") is False
+                    and isinstance(previous_path, str)
+                    and (
+                        previous_path == paths["run_dir"]
+                        or previous_path.startswith(run_prefix)
+                    )
+                ):
+                    previous["eventually_removed"] = True
+        rows = [
+            {
+                "task_id": task_id,
+                "scope": "remote",
+                "path": target,
+                "removed": cleanup.ok,
+                "error": error,
+            }
+            for target in targets
+        ]
+        self._cleanup_report.extend(rows)
+        metadata = dict(result.metadata)
+        metadata["node_cleanup"] = rows
         return NodeTaskResult(
-            ok=status == "succeeded",
-            status=status,
-            failure_reason=failure_reason,
-            message=message,
-            artifacts_path=local_artifacts_path,
-            raw_status=raw_status,
-            pre_marker=pre,
-            post_marker=post,
-            offset_estimate_s=alignment["offset_estimate_s"],
-            offset_bound_s=alignment["offset_bound_s"],
-            metadata={
-                "clock_alignment": alignment,
-                "worker_returncode": run_result.metadata.get("returncode"),
-            },
+            ok=result.ok,
+            status=result.status,
+            failure_reason=result.failure_reason,
+            message=result.message,
+            artifacts_path=result.artifacts_path,
+            artifacts=dict(result.artifacts),
+            raw_status=result.raw_status,
+            pre_marker=result.pre_marker,
+            post_marker=result.post_marker,
+            offset_estimate_s=result.offset_estimate_s,
+            offset_bound_s=result.offset_bound_s,
+            metadata=metadata,
         )
 
     def _ensure_worker_shipped(self) -> AdapterResult:
