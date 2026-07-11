@@ -226,6 +226,57 @@ class AnalysisManifestTests(unittest.TestCase):
 
             self.assertTrue(any("does not equal contrast_ids length" in error for error in errors), errors)
 
+    def test_real_validator_rejects_reidentified_fixed_n_reduction(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            result = run_generator(*BASE_CONFIGS[0], out_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            mutated = copy.deepcopy(load_manifest(out_dir))
+            mutated["design"]["sampling_plan"]["planned_n_blocks"] = 1
+            for contrast in mutated["contrasts"]:
+                contrast["block_ids"] = contrast["block_ids"][:1]
+            reidentify(mutated)
+
+            errors = validate_analysis_manifest(mutated, manifest_dir=out_dir)
+
+            self.assertTrue(any("requires fixed_n=5" in error for error in errors), errors)
+
+    def test_real_validator_rejects_duplicate_contrast_block_id(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            result = run_generator(*BASE_CONFIGS[0], out_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            mutated = copy.deepcopy(load_manifest(out_dir))
+            mutated["contrasts"][0]["block_ids"][1] = mutated["contrasts"][0][
+                "block_ids"
+            ][0]
+            reidentify(mutated)
+
+            errors = validate_analysis_manifest(mutated, manifest_dir=out_dir)
+
+            self.assertTrue(
+                any("invalid semantic block linkage" in error for error in errors),
+                errors,
+            )
+
+    def test_real_validator_rejects_same_cell_contrast_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            result = run_generator(*BASE_CONFIGS[0], out_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            mutated = copy.deepcopy(load_manifest(out_dir))
+            mutated["contrasts"][0]["cell_b_id"] = mutated["contrasts"][0][
+                "cell_a_id"
+            ]
+            reidentify(mutated)
+
+            errors = validate_analysis_manifest(mutated, manifest_dir=out_dir)
+
+            self.assertTrue(
+                any("differs from frozen registry enumeration" in error for error in errors),
+                errors,
+            )
+
     def test_validation_rejects_non_frozen_status_and_ap_snapshot_mutations(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = Path(tmp) / "out"

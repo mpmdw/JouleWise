@@ -26,42 +26,63 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#scope-completed">Scope completed</a>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#root-cause">Root cause</a>
+<a href="#fix">Fix</a>
 <a href="#verification">Verification</a>
-<a href="#exact-next-step">Exact next step</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-10-p2040-fix-round-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-10-p2040-fix-round.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-10-p2040-fix-round.md · commit 71365d4"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-10-p2040-fix-round.md</span><span class="source-commit">commit 71365d4</span></span></div>
-    <h1>P2-040 / RETRO-001 Fix Round (2026-07-10)</h1>
-<p>Status: implementation and tests complete in the <code>c027-int-p2040</code> worktree;
-committed on c027-int-p2040 (lead pathspec commit 0136b80) for lead pathspec review and commit.</p>
-<h2 id="scope-completed">Scope completed</h2>
-<ul>
-<li>FIX-A1..A3: restored the deprecated <code>request</code> one-edge recipe and field
-shape, keyed legacy dispatch on <code>summary_provenance</code> property absence, and
-corrected the D-058 token-source documentation.</li>
-<li>FIX-B1..B7: hardened the six-identity corpus gate, legacy mutations,
-authenticity boundary and spoof outcome, atomic durability, cooldown
-evidence, reducer-version/nonpositive-window/joint-edge/aggregate controls.</li>
-<li>FIX-R1..R2: made pack lint fail closed outside the explicit <code>README.md</code>
-metadata allowlist and added site-log trim regression coverage.</li>
-</ul>
-<p>No corpus artifacts were rewritten. No signature machinery or dispatch
-semantics were added. No commit, push, merge, deployment, or hardware work was
-performed.</p>
+<a href="#handoff">Handoff</a></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-10-nvgate2-idle-capture-fix-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md · commit cd6e2cb"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-10-nvgate2-idle-capture-fix.md</span><span class="source-commit">commit cd6e2cb</span></span></div>
+    <h1>NV-GATE-2 Idle-Capture Regression Fix</h1>
+<p>Date: 2026-07-10
+Branch/worktree: <code>impl/nvgate2-codenow</code>
+Lane: <code>[AGENT]</code>; no live NVIDIA or quiet-machine measurement was performed.
+Authority: lead-directed targeted DEBUG+FIX; no commits requested.</p>
+<h2 id="root-cause">Root cause</h2>
+<p><code>handle_nvidia_smi_measure_idle</code> started the requested idle-duration deadline
+immediately after <code>subprocess.Popen</code>, before the worker had observed any
+sampler output. Under child-start or scheduling delay, the complete idle
+interval could expire before the fake (or real) sampler ran. The worker then
+terminated the sampler and only afterward checked the CSV, producing the
+observed zero-byte artifact and structured <code>telemetry_unavailable</code> result.</p>
+<p>The FIX-1 PID-fingerprint path was ruled out as the direct cause: idle capture
+uses its local <code>Popen</code> object and never calls <code>_pidfile_matches_live_process</code>.
+PATH was also correct: the worker metadata carried the expected command and a
+direct capture with the same environment resolved and ran the fake sampler.
+The defect was the ordering at the old deadline assignment (pre-fix
+<code>joulewise/adapters/node_worker.py:803</code>), not the fake executable.</p>
+<h2 id="fix">Fix</h2>
+<p>Idle capture now uses the existing first-parseable-row NVIDIA readiness gate,
+records its diagnostics in worker metadata, and starts <code>idle_seconds</code> only
+after readiness succeeds. A readiness failure is returned with the gate&#39;s
+specific diagnostic. The requested 80 ms NV-5 measurement duration is
+unchanged; sampler startup is no longer charged against it.</p>
+<p>A regression test delays the sampler&#39;s first output by 100 ms while requesting
+a 10 ms idle capture. It proves the worker waits for readiness and then runs
+the requested duration; the old ordering terminates before the first row.</p>
 <h2 id="verification">Verification</h2>
 <ul>
-<li>Focused: <code>python3 -m unittest tests.test_uncertainty_p2029 tests.test_cli_run tests.test_bundle tests.test_experiment tests.test_claims_lint tests.test_build_site_parsers</code> -&gt; <code>Ran 211 tests</code>, <code>OK</code>.</li>
-<li>Claims lint: <code>python3 scripts/claims_lint.py --mode all</code> -&gt; exit 0, no errors;
-advisory forbidden-language warnings remain.</li>
-<li>Diff hygiene: <code>git diff --check</code> clean.</li>
-<li>Canonical: <code>python3 -m unittest discover -s tests</code> -&gt; <code>Ran 908 tests in 32.723s</code>, <code>OK (skipped=11)</code>. The absent <code>runs/</code> corpus emitted the required
-loud acceptance-gate skip on stderr. The known fake-nvidia-smi load flake did
-not occur.</li>
+<li>The historic in-process fake-sampler test and the delayed-readiness
+regression passed together in three consecutive fresh Python processes.</li>
+<li>The exact localhost contract test was attempted in each of the three runs,
+but this managed sandbox denied its initial localhost bind with
+<code>PermissionError: [Errno 1] Operation not permitted</code>; all three invocations
+loudly skipped before worker execution. This is not recorded as a pass.</li>
+<li>Canonical unpiped suite:</li>
 </ul>
-<h2 id="exact-next-step">Exact next step</h2>
-<p>Lead reviews the committed on c027-int-p2040 (lead pathspec commit 0136b80) diff, supplies or mounts <code>runs/</code> to execute the
-six-bundle corpus acceptance gate, then commits the accepted paths.</p>
+<pre><code class="language-text">Ran 1023 tests in 35.164s
+
+OK (skipped=13)
+</code></pre>
+<ul>
+<li><code>python3 -m py_compile joulewise/adapters/node_worker.py tests/test_node_worker.py</code> passed.</li>
+<li><code>git diff --check</code> passed.</li>
+</ul>
+<h2 id="handoff">Handoff</h2>
+<p>The lead&#39;s next exact NV-GATE-2 step is to run both named tests three
+consecutive times in a socket-capable session, then review and land the three
+code/test/report/bookkeeping file groups by pathspec. Live NVIDIA promotion
+remains gated by P1-006.</p>
 
 
   </div>
@@ -70,7 +91,7 @@ six-bundle corpus acceptance gate, then commits the accepted paths.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-10-p2040-fix-round.md · commit 71365d4 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md · commit cd6e2cb · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
