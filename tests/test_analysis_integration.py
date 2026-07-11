@@ -95,7 +95,10 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 evaluation = contrast["claim_evaluation"]
                 self.assertEqual(evaluation["outcome"], "not_resolvable")
                 self.assertFalse(evaluation["claim_ready_for_l2_l3"])
-                self.assertIn(
+                # Reducer 0.4.2 supplies the governed precheck, so its
+                # absence reason must NOT appear; the remaining fail-closed
+                # reasons keep the outcome not_resolvable.
+                self.assertNotIn(
                     "window_evidence_precheck_missing", evaluation["reason_codes"]
                 )
                 self.assertIn(
