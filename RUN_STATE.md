@@ -80,7 +80,56 @@ RATIFIED by Ed, hardening proposal adjudicated (9 new queue rows
 P2-043..P2-048/CI-002/REPRO-002/RPT-002; record + conflicts table in
 docs/reviews/2026-07-10-hardening-adjudication.md).
 
-**IMMEDIATE next actions (in order):**
+**CHECKPOINT #4 (2026-07-11, Ed-directed pause; supersedes the item
+list below where they conflict). State at pause:**
+
+- MERGED today: PR #49 (NV-GATE-2 code-now, 1b0f1f6) and PR #54
+  (P2-041 vetted rebuild + full review stack + fix rounds, 69a3393).
+  Both historic flake classes dead; NV-5 localhost lead gate CLOSED.
+- OPEN PRs, all lead-gated, HELD for the integration-review window:
+  #50 P2-046A, #51 CI-002 (acceptance CI 4/4 green), #52 REPRO-002,
+  #53 RPT-002 (all seven sources primary-verified), #55 P2-044
+  (idle ESS per adjudicated design docs/reviews/2026-07-11-p2044-
+  design-consult.md; lead gates + corpus 6/6 done; metrology review
+  lens IN FLIGHT at pause).
+- impl/p2037 worktree: contrast/claim engine implemented by an ultra
+  session that exited transport-OK with NO REPORT (RED-round
+  signature) — work itself lead-verified green (focused 89 OK,
+  canonical OK); an independent xhigh AUDIT (implemented-vs-spec map,
+  scope audit of cli.py/claims_lint.py hunks, fail-open hunts) was IN
+  FLIGHT at pause; its report lands in the session scratchpad
+  (sol-p2037-audit.md). UNCOMMITTED — do not discard. Acceptance
+  gated on P2-044 (#55) landing + audit dispositions.
+- Scope-restraint + adapter infrastructure (global, outside repo):
+  claude-codex-report/v1 adopted (~/.claude/skills/codex-delegation/
+  ADAPTER.md); codex-run-v3 + codex-usage INSTALLED (~/.local/bin);
+  fail-on-diff scope backstop build IN FLIGHT at pause
+  (sol-scope-backstop.md); AGENTS.md now carries delegated-session
+  WRITE_SCOPE precedence + NEEDS_RULING early-return (9ca89cc,
+  31b3f5e). Consult records: docs/reviews/2026-07-11-scope-restraint-
+  consult.md, -p2044-design-consult.md, -p2041-red-tranche-triage.md,
+  -hardening-row-scheduling-scout.md.
+- Usage state: one ultra ≈ 11 xhigh sessions (35.3M vs ~3.1M tokens);
+  5h window was 26% remaining, resets ~11:03Z; usage-pressure mode
+  ACTIVE per Ed — after this pause, NO ultra launches (exception:
+  P2-037 resume if its audit demands completion, Ed-authorized);
+  prefer high/xhigh consultancy + spec design in break mode. Check
+  `codex-usage <manifests>` before any ultra.
+- RESUME ORDER: (1) consume the three in-flight reports
+  (sol-p2044-review.md, sol-p2037-audit.md, sol-scope-backstop.md;
+  scratchpad path in D-064 manifests; iCloud backup at
+  JouleWise-agent-logs/2026-07-11/); (2) P2-044 review dispositions →
+  merge #55; (3) P2-037 audit dispositions → fix/complete → PR; (4)
+  P2-043 + P2-045 launch decisions (scout: they needed p2041 landed —
+  satisfied — plus P2-037 CLI/vocabulary frozen); (5) DOC-008 kernel
+  (LAST), cross-stream integration review over final main, merge held
+  PRs #50-#53/#55 per its verdicts; (6) C-028 BOOKKEEPING ARC (item 5
+  below, unchanged; D-064 must also ratify manifest v3 + adapter;
+  P2-044 10s-bandwidth methodology freeze flagged for Ed veto) → THEN
+  clear this card.
+
+**Original item list (item 1 DONE; superseded where checkpoint #4
+says otherwise):**
 
 1. DONE 2026-07-11: PR #49 MERGED to main (1b0f1f6) after the full
    gate stack: lead conflict resolution (456772a), Sol merge review +
