@@ -80,7 +80,21 @@ docs/reviews/2026-07-10-hardening-adjudication.md).
 
 **IMMEDIATE next actions (in order):**
 
-1. PR #49 (impl/nvgate2-codenow) has REAL code conflicts vs post-#48
+1. DONE 2026-07-11: PR #49 MERGED to main (1b0f1f6) after the full
+   gate stack: lead conflict resolution (456772a), Sol merge review +
+   P2-005-row repair (13f6c9e), the py3.14 CI red root-caused as a
+   PRE-EXISTING main-side fixture SIGTERM race and fixed fixture-only
+   (10e0ad2; flake test 0/30 fails lead-run), NV-5 localhost lead gate
+   CLOSED (3/3 OK socket-capable), canonical 1041 OK (skipped=12)
+   unpiped, CI green both versions, Ed-approved SHA-guarded merge.
+   Both historic flake classes (fake-nvidia-smi idle deadline; P2-038
+   rail-only right-edge bracket) are now dead on main.
+   IN FLIGHT (Ed-directed fan-out): impl/p2041-vetted ULTRA
+   composition per the triage recipe, and a NEW impl/p2037 stream
+   (contrast/claim engine, ULTRA, from the banked adjudicated spec +
+   frozen rulings; interface assumptions vs p2041 flagged for
+   integration review). Original item (superseded): PR #49 had REAL
+   code conflicts vs post-#48
    main: joulewise/cli.py + reduce.py + schemas.py + tests/test_cli_run.py
    (both sides extended MeasurementQuality, ADDED_SINCE_0_3_0, and the
    0.3.x dispatch) + the usual state-file unions. A clean merge was
