@@ -1,6 +1,9 @@
 # JouleWise Run State
 
-Last updated: 2026-07-10 (P2-040 reducer-version review blocker fixed
+Last updated: 2026-07-10 (PR #49's main-side P2-038 rail-only CI flake
+root-caused to the fake powermetrics child's SIGTERM/right-edge-bracket race;
+fixture-only fix is uncommitted, exact test 100/100 green, focused 5 OK,
+canonical 1041 OK/13 skipped. Earlier: P2-040 reducer-version review blocker fixed
 without commit on `impl/p2040-remainder`: reducer 0.3.1 plus frozen-0.3.0
 absence projection; focused tests green, canonical rerun exposed one unrelated
 pre-existing node-worker timing failure. Earlier:
@@ -251,6 +254,15 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-10 NV-GATE-2 idle-capture regression debug/fix (uncommitted;
+  localhost re-verification remains lead-gated):
+  `docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md`
+- 2026-07-10 NV-GATE-2 CODE-NOW implementation (NV-1/NV-3/NV-4/NV-5;
+  live promotion evidence still gated):
+  `docs/run_reports/2026-07-10-nvgate2-codenow.md`
+- 2026-07-10 NV-GATE-2 accepted-findings fix round (uncommitted; merge
+  metadata recreation and lead gate pending):
+  `docs/run_reports/2026-07-10-nvgate2-fix-round.md`
 - 2026-07-10 P2-038 accepted-findings fix round (all FIX-1..FIX-6 green;
   content-merged `origin/main`, Git merge metadata sandbox-blocked):
   `docs/run_reports/2026-07-10-p2038-fix-round.md`
@@ -305,6 +317,35 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
+- PR #49 P2-038 rail-only flake: pre-fix exact-test loop failed 4/100;
+  retained failure emitted `cadence_ratio_unrecorded` plus
+  `interpolation_bound_unrecorded` because the final trace sample preceded the
+  stop marker. Archived `origin/main` reproduced on iteration 6. The
+  fixture-only terminal-sample handshake fix passed the exact test 100/100,
+  focused module `Ran 5 tests in 30.480s`, `OK`, and canonical suite
+  `Ran 1041 tests in 66.509s`, `OK (skipped=13)`. Report:
+  `docs/run_reports/2026-07-10-pr49-p2038-flake-root-cause.md`.
+- NV-GATE-2 idle-capture regression fix: historic fake-sampler plus new
+  delayed-readiness regression passed together in 3 consecutive fresh
+  processes; canonical suite `Ran 1023 tests in 35.164s`, `OK (skipped=13)`;
+  `py_compile` and `git diff --check` clean. The exact localhost contract was
+  attempted 3 times but loudly skipped before worker execution because this
+  sandbox denied socket bind; lead socket-capable 3x rerun remains required.
+  Report: `docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md`.
+- NV-GATE-2 accepted-findings fix round: focused node-worker/subprocess,
+  controller, reducer, strict-dispatch, and schema surface `Ran 229 tests in
+  4.995s`, `OK (skipped=2)`; the historic fake-sampler test passed three
+  consecutive fresh-process runs; canonical suite `Ran 1022 tests in 34.406s`,
+  `OK (skipped=13)`; targeted `py_compile` and `git diff --check` clean. The
+  0.3.1 dispatch came from `origin/impl/p2040-remainder` because post-main did
+  not contain it. Report: `docs/run_reports/2026-07-10-nvgate2-fix-round.md`.
+- NV-GATE-2 CODE-NOW worktree: baseline `Ran 910 tests in 32.549s`,
+  `OK (skipped=12)`; final canonical suite `Ran 922 tests in 33.551s`,
+  `OK (skipped=13)`; focused NV-1/NV-3/NV-4/NV-5 surface `Ran 232 tests
+  in 6.085s`, `OK (skipped=2)`; `git diff --check` and targeted
+  `py_compile` clean. The added skip is loud and specific: this managed
+  sandbox denied localhost socket bind for NV-5. No live NVIDIA evidence or
+  de-provisionalization was claimed.
 - P2-038 accepted-findings fix round: all FIX-1..FIX-6 complete; focused
   `Ran 70 tests in 41.211s`, `OK`; canonical `Ran 992 tests in 68.140s`,
   `OK (skipped=12)`; `git diff --check` clean. The real-child rail-only path
@@ -338,6 +379,19 @@ queue owns ordering (C-027):**
   at each manifest object layer, a fully rehashed coherent rename, and a CRLF
   AP fixture. Report:
   `docs/run_reports/2026-07-10-p2042-analysis-manifest.md`.
+- P2-040 reducer-version review fix: focused strict/reducer run
+  `Ran 84 tests in 1.908s`, `OK`; extended strict/reducer/schema run
+  `Ran 104 tests in 1.997s`, `OK (skipped=1)`. Canonical run reached
+  `Ran 926 tests in 33.732s`, `FAILED (failures=1, skipped=12)` solely at
+  pre-existing `test_telemetry_measure_idle_with_fake_nvidia_smi`; isolated
+  reruns reproduce its 0.2-second fake-process timing failure. All
+  reducer/version tests pass; no out-of-scope node-worker change was made.
+- P2-040 remainder worktree: pre-change baseline `Ran 910 tests in 34.584s`,
+  `OK (skipped=12)`; post-change focused affected modules `Ran 256 tests in
+  3.744s`, `OK (skipped=1)`; canonical `Ran 924 tests in 32.812s`, `OK
+  (skipped=12)`; compileall and `git diff --check` clean. The unchanged
+  six-corpus test produced its required loud skip because `runs/` is absent;
+  lead 6/6 strict read-only rerun remains the landing gate.
 - P2-040 / RETRO-001 fix-round worktree: canonical suite `Ran 908 tests in
   32.723s`, `OK (skipped=11)`; focused 211 tests OK; claims lint exit 0 with
   no errors; `git diff --check` clean. The absent `runs/` corpus produced the
@@ -391,6 +445,15 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
+- Worktree `/Users/edr/code/JouleWise-wt/nvgate2` on
+  `impl/nvgate2-codenow` has the idle-readiness fix, regression test, and
+  handoff bookkeeping COMMITTED (cd6e2cb) and the lead-resolved merge of
+  post-#48 `origin/main` (union of remote_cleanup_failed +
+  runtime_cleanup_ok in schema/ADDED_SINCE/dispatch tests). The pre-existing
+  main-side P2-038 rail-only flake has an uncommitted fixture-only SIGTERM
+  handshake fix plus handoff report/state updates. The localhost 3x lead gate
+  PASSED (lead-run 2026-07-11: 3/3 OK socket-capable; flake test 0/30
+  failures; canonical 1041 OK skipped=12 unpiped, socket test exercised).
 - `impl/p2038` is intentionally dirty with the uncommitted P2-038 software,
   accepted-findings fixes, tests, contracts, config, run reports, and the clean
   three-way content merge of `origin/main`. The lead owns pathspec review and

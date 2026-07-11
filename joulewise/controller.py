@@ -136,6 +136,7 @@ STATUS_BY_REASON: dict[FailureReason, RunStatus] = {
     FailureReason.TELEMETRY_UNAVAILABLE: RunStatus.UNSUPPORTED,
     FailureReason.PERMISSION_DENIED: RunStatus.FAILED,
     FailureReason.TRANSPORT_UNAVAILABLE: RunStatus.FAILED,
+    FailureReason.CLEANUP_FAILED: RunStatus.FAILED,
     FailureReason.UNKNOWN_ERROR: RunStatus.FAILED,
 }
 
@@ -617,6 +618,12 @@ class _Execution:
             if result.metadata:
                 self._runtime_cleanup_metadata = dict(result.metadata)
             if not result.ok:
+                if result.failure_reason == FailureReason.CLEANUP_FAILED:
+                    raise _StageFailure(
+                        "cleanup",
+                        FailureReason.CLEANUP_FAILED,
+                        result.message or "worker-started runtime process survived cleanup",
+                    )
                 metadata = {
                     "cleanup_ok": False,
                     "failure_reason": (
@@ -828,6 +835,16 @@ class _Execution:
                 "token_count": self._runtime_result.token_count,
                 "output_token_count": self._runtime_result.output_token_count,
             }
+            token_count_source = self._runtime_result.metadata.get(
+                "token_count_source"
+            )
+            if token_count_source in {
+                "server_usage",
+                "stream_chunk_fallback",
+            }:
+                extra["workload_observed"]["token_count_source"] = (
+                    token_count_source
+                )
             if self._runtime_result.workload_provenance is not None:
                 extra["workload_provenance"] = _jsonable(
                     self._runtime_result.workload_provenance
@@ -844,12 +861,19 @@ class _Execution:
                 "order_seed": self._suite_order_seed,
                 "order_row": self._suite_order_row,
             }
+        node_cleanup = [
+            *_adapter_cleanup_report(self._runtime),
+            *_adapter_cleanup_report(self._telemetry),
+        ]
         # Caller-supplied metadata (Slice 2F: the experiment runner records a
         # cooldown cap-hit against the following rep here). Lands under the
         # dedicated "extra" key so it never collides with controller fields and
         # the reducer reads it from one known place.
-        if self._extra_metadata:
-            extra["extra"] = _jsonable(self._extra_metadata)
+        controller_extra = dict(self._extra_metadata)
+        if node_cleanup:
+            controller_extra["node_cleanup"] = node_cleanup
+        if controller_extra:
+            extra["extra"] = _jsonable(controller_extra)
         self._writer.write_metadata(extra)
         self._metadata_written = True
 
@@ -915,6 +939,18 @@ class _Execution:
     # Summaries
 
     def _minimal_quality(self) -> MeasurementQuality:
+        cleanup_failed = sorted(
+            {
+                str(item["path"])
+                for item in (
+                    _adapter_cleanup_report(self._runtime)
+                    + _adapter_cleanup_report(self._telemetry)
+                )
+                if item.get("removed") is False
+                and item.get("eventually_removed") is not True
+                and isinstance(item.get("path"), str)
+            }
+        )
         return MeasurementQuality(
             requested_sampling_hz=self._config.sampling.power_hz,
             idle_power_w_stddev=(
@@ -924,6 +960,7 @@ class _Execution:
             idle_window_suspect=(
                 self._baseline.idle_window_suspect if self._baseline is not None else None
             ),
+            remote_cleanup_failed=cleanup_failed or None,
         )
 
     # ------------------------------------------------------------------
@@ -1173,6 +1210,21 @@ def _adapter_metadata(adapter: Any) -> dict[str, Any]:
     if not isinstance(metadata, dict):
         return {}
     return dict(metadata)
+
+
+def _adapter_cleanup_report(adapter: Any) -> list[dict[str, Any]]:
+    if adapter is None:
+        return []
+    getter = getattr(adapter, "cleanup_report", None)
+    if not callable(getter):
+        return []
+    try:
+        report = getter()
+    except Exception:  # noqa: BLE001 - cleanup evidence must not disturb lifecycle.
+        return []
+    if not isinstance(report, list):
+        return []
+    return [dict(item) for item in report if isinstance(item, dict)]
 
 
 def _merge_adapter_metadata(target: dict[str, Any], metadata: dict[str, Any]) -> None:

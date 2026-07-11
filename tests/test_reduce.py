@@ -615,6 +615,57 @@ class TokenFallbackTests(ReduceTestCase):
             summary.measurement_quality.token_count_source, "runtime_observed"
         )
 
+    def test_server_usage_is_eligible_and_wins_over_chunk_event_count(self) -> None:
+        summary = self.build(
+            workload_observed={
+                "token_count": 20,
+                "output_token_count": 3,
+                "token_count_source": "server_usage",
+            },
+        )
+
+        self.assertAlmostEqual(summary.energy_token_j, 25.0 / 20.0, places=9)
+        self.assertAlmostEqual(summary.energy_output_token_j, 25.0 / 3.0, places=9)
+        self.assertEqual(summary.measurement_quality.token_count_source, "server_usage")
+        self.assertEqual(summary.measurement_quality.token_counts_source, "server_usage")
+        self.assertEqual(
+            summary.claim_eligibility["per_token"],
+            {
+                "eligible": True,
+                "reasons": [],
+                "token_count_source": "server_usage",
+            },
+        )
+
+    def test_stream_chunk_fallback_nulls_per_token_metrics_and_is_ineligible(self) -> None:
+        summary = self.build(
+            workload_observed={
+                "token_count": 20,
+                "output_token_count": 4,
+                "token_count_source": "stream_chunk_fallback",
+            },
+        )
+
+        self.assertIsNone(summary.energy_token_j)
+        self.assertIsNone(summary.energy_output_token_j)
+        self.assertIsNone(summary.throughput_tokens_s)
+        self.assertEqual(
+            summary.measurement_quality.token_count_source,
+            "stream_chunk_fallback",
+        )
+        self.assertEqual(
+            summary.measurement_quality.token_counts_source,
+            "stream_chunk_fallback",
+        )
+        self.assertEqual(
+            summary.claim_eligibility["per_token"],
+            {
+                "eligible": False,
+                "reasons": ["stream_chunk_fallback"],
+                "token_count_source": "stream_chunk_fallback",
+            },
+        )
+
     def test_config_plus_output_events_does_not_fabricate_total_denominator(self) -> None:
         # P2-040 FIX-4 mutation test: configured prompt count plus output
         # events must not fabricate a governed total without a
