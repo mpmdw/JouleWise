@@ -12,6 +12,34 @@ from typing import Any
 COMMAND_TIMEOUT_S = 3.0
 
 
+def probe_thermal_pressure(
+    timeout_s: float = COMMAND_TIMEOUT_S,
+) -> tuple[str | None, str | None]:
+    """Return macOS thermal pressure from the read-only ``pmset`` probe.
+
+    ``pmset -g therm`` does not require sudo.  The stable nominal sentence is
+    mapped to ``nominal``; other platform output is retained as ``elevated``
+    only when it reports an active warning/limit.  Unknown formats fail soft.
+    """
+    stdout, error = _run(["pmset", "-g", "therm"], timeout_s)
+    if stdout is None:
+        return None, error
+    normalized = " ".join(stdout.lower().split())
+    if "no thermal warning level has been recorded" in normalized:
+        return "nominal", None
+    limits = [
+        int(value)
+        for value in re.findall(
+            r"(?:speed|scheduler)_limit\s*=\s*(\d+)", normalized
+        )
+    ]
+    if limits:
+        return ("elevated" if any(value < 100 for value in limits) else "nominal"), None
+    if "thermal warning" in normalized or "thermal level" in normalized:
+        return "elevated", None
+    return None, "unrecognized_output"
+
+
 def empty_environment_snapshot() -> dict[str, Any]:
     """Return the nullable environment shape without probing the host."""
     return {

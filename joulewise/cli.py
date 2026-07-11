@@ -37,6 +37,9 @@ from joulewise.bundle import BundleError
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.clock import Clock, FakeClock, SystemClock
 from joulewise.controller import run_benchmark, run_experiment
+from joulewise.doctor import doctor_report, exit_code as doctor_exit_code
+from joulewise.doctor import render_human as render_doctor_human
+from joulewise.doctor import render_json as render_doctor_json
 from joulewise.kv_size import (
     KVSizeError,
     KVSizeParams,
@@ -141,6 +144,22 @@ def _cmd_print_config_schema(args: argparse.Namespace) -> int:
 
 def _cmd_print_output_schema(args: argparse.Namespace) -> int:
     return _write_or_print_schema(SummaryMetrics.json_schema(), args.output, "output schema")
+
+
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    report = doctor_report(
+        [Path(path) for path in args.configs],
+        backup_destination=(
+            Path(args.backup_destination).expanduser()
+            if args.backup_destination is not None
+            else None
+        ),
+        mode="campaign" if args.campaign else "inspection",
+        acknowledge_config_warnings=args.ack_config_warnings,
+    )
+    rendered = render_doctor_json(report) if args.json_output else render_doctor_human(report)
+    print(rendered, end="")
+    return doctor_exit_code(report)
 
 
 # ---------------------------------------------------------------------------
@@ -1296,6 +1315,36 @@ def build_parser() -> argparse.ArgumentParser:
     output_schema = subparsers.add_parser("print-output-schema", help="print draft summary output JSON Schema")
     output_schema.add_argument("--output", help="optional path to write schema JSON")
     output_schema.set_defaults(func=_cmd_print_output_schema)
+
+    doctor = subparsers.add_parser(
+        "doctor", help="run a read-only configuration and machine preflight"
+    )
+    doctor.add_argument(
+        "configs",
+        nargs="*",
+        help="JSON benchmark config path(s), in any order",
+    )
+    doctor.add_argument(
+        "--campaign",
+        action="store_true",
+        help="apply campaign gates, including config-warning acknowledgement",
+    )
+    doctor.add_argument(
+        "--ack-config-warnings",
+        action="store_true",
+        help="record acknowledgement of ignored config keys for campaign mode",
+    )
+    doctor.add_argument(
+        "--backup-destination",
+        help="existing backup destination to inspect for presence and free space",
+    )
+    doctor.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="emit stable machine-readable JSON instead of the human table",
+    )
+    doctor.set_defaults(func=_cmd_doctor)
 
     kv_size = subparsers.add_parser("kv-size", help="compute KV-cache size from model config")
     kv_size.add_argument("config", nargs="?", help="path to a HF config.json")

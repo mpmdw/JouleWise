@@ -46,6 +46,7 @@ def run_campaign(
     backup: Path | None = None,
     waivers: Path | None = None,
     shakedown_gate: bool = False,
+    ack_config_warnings: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     command = [sys.executable, str(SCRIPT), str(config_dir), "--runs-dir", str(runs_dir)]
     if log_path is not None:
@@ -56,6 +57,8 @@ def run_campaign(
         command.extend(["--backup", str(backup)])
     if shakedown_gate:
         command.extend(["--shakedown-gate", "production_uncertainty_v1"])
+    if ack_config_warnings:
+        command.append("--ack-config-warnings")
     if waivers is not None:
         command.extend(["--waivers", str(waivers)])
     if cli_cmd is not None:
@@ -689,6 +692,65 @@ def analysis_manifest_id(config_dir: Path) -> str:
 
 
 class RunCampaignTests(unittest.TestCase):
+    def test_doctor_config_warning_gate_blocks_unacknowledged_campaign(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            config_path = write_config(config_dir, "warn.json", "warn")
+            payload = json.loads(config_path.read_text(encoding="utf-8"))
+            payload["workload_profile"]["output_tokenz"] = 64
+            config_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            sentinel = tmp_path / "sentinel"
+            fake_cli = make_fake_cli(tmp_path, sentinel)
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+            )
+
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertFalse(sentinel.exists())
+            self.assertIn("DOCTOR CONFIG PREFLIGHT: 1 warning(s), unacknowledged", result.stdout)
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(verdict["collection"]["verdict"], "invalid")
+            self.assertEqual(verdict["claim_readiness"]["verdict"], "not_assessed")
+            preflight = verdict["preflight"]
+            self.assertEqual(preflight["schema_version"], "joulewise.doctor.v1")
+            acknowledgement = preflight["config_warning_acknowledgement"]
+            self.assertTrue(acknowledgement["required"])
+            self.assertFalse(acknowledgement["acknowledged"])
+            self.assertEqual(acknowledgement["warnings"][0]["path"], "workload_profile.output_tokenz")
+
+    def test_doctor_config_warning_acknowledgement_is_logged_and_allows_campaign(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            config_path = write_config(config_dir, "warn.json", "warn")
+            payload = json.loads(config_path.read_text(encoding="utf-8"))
+            payload["sampling"]["power_hzz"] = 10.0
+            config_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            fake_cli = make_fake_cli(tmp_path)
+
+            result = run_campaign(
+                config_dir,
+                runs_dir,
+                cli_cmd=cli_cmd_for(fake_cli),
+                ack_config_warnings=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("DOCTOR CONFIG PREFLIGHT: 1 warning(s), acknowledged", result.stdout)
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(verdict["collection"]["verdict"], "usable")
+            acknowledgement = verdict["preflight"]["config_warning_acknowledgement"]
+            self.assertTrue(acknowledgement["acknowledged"])
+            self.assertEqual(acknowledgement["mechanism"], "--ack-config-warnings")
+
     def test_discover_configs_excludes_order_and_analysis_manifest_sidecars(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             config_dir = Path(tmp)
@@ -2099,7 +2161,9 @@ class RunCampaignTests(unittest.TestCase):
             payload["suite_sidecar_ref"] = str(Path("sidecars") / sidecar.name)
             config.write_text(json.dumps(payload) + "\n", encoding="utf-8")
 
-            result = run_campaign(config_dir, runs_dir)
+            result = run_campaign(
+                config_dir, runs_dir, ack_config_warnings=True
+            )
 
             self.assertEqual(result.returncode, 0, result.stderr)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
