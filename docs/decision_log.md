@@ -3159,3 +3159,147 @@ Alternatives considered: defer the kernel and generate
 current_policy.md first (the lead's draft position — REVERSED in
 council: it leaves the demonstrated drift mode active); full big-bang
 migration (rejected: risks the drift it cures).
+
+---
+
+## Index row
+
+| D-064 | Delegated-invocation compliance surface: tracked per-session JSONL event stream, canonical report envelope, enforced write scope | accepted |
+
+---
+
+## D-064: Delegated-invocation compliance surface — tracked JSONL event stream, report envelope, enforced write scope
+
+- Date: 2026-07-11 (core surface adjudicated 2026-07-10, C-028 H4;
+  v3/envelope/scope clauses ratified after landing in the C-028
+  infrastructure wave)
+- Status: accepted (C-028; process-layer)
+- Phase: cross-project process instrumentation
+
+Context: D-050 requires substantial delegated runs to leave a
+process trace and an invocation-manifest pointer map. The C-027
+audit showed a gitignored bridge manifest cannot serve as
+repository-auditable evidence, and that run-report summaries had
+collapsed roughly one hundred invocations into zero auditable
+per-invocation rows. The D-050 revisit condition fired at
+CP-5/C-022 and is adjudicated here through MET-001 option 2 and
+C-028 H4. During the C-028 arc the surface was then exercised in
+production: a wrapper crash mid-run (lead in-place edit of the
+installed runner) and two out-of-scope diffs (p2043-impl,
+p2044-fixround) tested the recovery and enforcement semantics now
+ratified below.
+
+Decision:
+
+1. **Compliance surface.** One tracked, append-only JSONL manifest
+   per substantial session under `docs/process_traces/`, with rows
+   for every actual invocation. Failed, capacity-ended, resumed,
+   and retried invocations get their own rows; resumes may share a
+   model session ID but never an invocation row. Run reports carry
+   only counts plus a link to the tracked manifest. The codex-run
+   observer index and raw logs remain recovery substrate, never
+   the compliance surface; the gitignored bridge manifest remains
+   local convenience only.
+
+2. **Manifest v3 is an append-only EVENT STREAM, not a mutable
+   ledger.** Three event kinds: `run_started` (wrapper-authored at
+   dispatch: prompt hash/bytes, contract, genre, write scope,
+   head/branch at start), `run_finished` (wrapper-authored at
+   exit: invocation state, report parse validity, semantic
+   status/completion, finding/verification counts, scope-violation
+   counts, head at end), and `run_consumed` (LEAD-authored at the
+   moment the lead dispositions the output: consumed / rejected /
+   deferred, with pointer). Consumption events are lead-owned
+   exclusively — a wrapper or delegated session never writes them.
+   Emitted rows are never mutated, rewritten, or deleted;
+   corrections are new rows. When the wrapper dies without writing
+   `run_finished`, the LEAD authors a recovery `run_finished` row
+   that says so explicitly (`error_stage`, a note naming the
+   failure, and any manually-performed classification) — silent
+   reconstruction that imitates a normal wrapper row is forbidden.
+   Two live defects were found on day one — a resume no-op after a
+   NEEDS_SCOPE early-return, and an in-place-edit crash hazard now
+   covered by the atomic-mv install rule — and both are recorded
+   in the adapter's operational lessons.
+
+3. **claude-codex-report/v1 is the canonical session report.**
+   Every delegated session returns the envelope: machine-parsed
+   header (run status, completion, finding counts by severity,
+   verification results, scope-deviation flags) over a prose body.
+   `run_finished` records the parse verdict and the extracted
+   counts. A session without a valid envelope is not consumable as
+   review or implementation evidence — it is raw substrate pending
+   a lead ruling or a re-run. NEEDS_RULING early-returns are
+   compliant envelopes, not failures.
+
+4. **WRITE_SCOPE is enforced, not advisory.** Each invocation
+   declares its write scope up front; the runner diffs the
+   worktree against that scope after the run. On violation the
+   runner exits 77, the out-of-scope work is PRESERVED in an
+   evidence bundle (status `failed_preserved`) and is never
+   landed; the lead inspects the bundle and decides. A session
+   that discovers it needs wider scope returns NEEDS_SCOPE as a
+   structured request; scope expansion is PROSPECTIVE ONLY — a new
+   invocation with the widened scope — never a retroactive
+   blessing of an already-out-of-scope diff. WRITE_SCOPE strictly
+   overrides any in-repo end-of-work instruction (AGENTS.md
+   precedence section, per the CI-002 root cause).
+
+This amends and supersedes only D-050's invocation-manifest
+compliance-surface clause. D-050's stop-card authority,
+process-trace obligation, and raw-log pointer policy are
+unchanged. v2 single-row-per-invocation snapshots remain valid
+evidence for pre-v3 invocations; new sessions emit v3.
+
+Alternatives considered:
+
+1. Run-report invocation summary as the surface. Rejected:
+   summarization destroyed per-invocation auditability — the exact
+   failure MET-001 exists to repair.
+2. Gitignored live bridge manifest as the authority. Rejected:
+   structurally local-only; unignoring a shared live file creates
+   multi-worktree contention and dirty-tree noise.
+3. Mutable per-invocation rows updated in place (start → finish →
+   disposition on one row). Rejected: in-place mutation destroys
+   the append-only audit property, makes wrapper crashes
+   indistinguishable from clean rows, and invites silent
+   retro-editing; the event stream keeps every state transition
+   and its author.
+4. Free-form final messages as session reports. Rejected:
+   unparseable; counts and scope flags cannot be mechanically
+   extracted into `run_finished`.
+5. Advisory-only write scope (prompt-level restriction without a
+   runner backstop). Rejected: the CI-002 deviation demonstrated
+   that in-repo end-of-work instructions override polite prompt
+   scoping; enforcement must be structural, with the work
+   preserved rather than discarded so enforcement never destroys
+   evidence.
+
+Consequences: session closeout must land the tracked manifest(s)
+before bookkeeping is declared complete; every `run_started` must
+be closed by a wrapper or lead-authored `run_finished` and a
+lead-authored disposition, with missing rows recorded as missing,
+never inferred from aggregates. D-063 Stage 2 may generate queries
+and projections over these files but may not replace the row-level
+source. Council-log layer-yield claims (D-061) should cite manifest
+rows.
+
+Revisit when: three substantial sessions have landed v3 manifests;
+or the one-file-per-session scheme shows material contention or
+ambiguity; or `run_consumed` coverage proves too burdensome to
+sustain (in which case narrow the event, do not revert to mutable
+rows).
+
+---
+
+## Adjudication note (was: drafting notes for the lead)
+
+Lead-adjudicated 2026-07-11: accepted as drafted. The date
+(2026-07-11 with the 07-10 H4 parenthetical), the "Status: accepted
+(C-028; process-layer)" voice, the clause-2 recovery-row
+generalization from the live p2037-fixround recovery row
+(`error_stage: wrapper_crash_lead_inplace_edit`), the clause-4
+exit-77/`failed_preserved` semantics (verified against the live
+p2043-impl / p2044-fixround status files), and the v2-valid-for-
+pre-v3 transition sentence all stand. One addition per lead
+dictation: the day-one-defects sentence appended to clause 2.

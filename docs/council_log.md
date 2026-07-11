@@ -1490,3 +1490,137 @@ Calibration (model-version scoping): one promising 5.6-sol batch —
 premise correction (5 instances), the counterreview out-argued the lead
 twice. NOT a promotion; the pre-registered sealed A/B remains the gate
 before delegation-boundary changes.
+
+---
+
+## Index row
+
+| C-028 | 2026-07-09/11 | C-027 adjudication → integration arc under the Fable-lead / gpt-5.6-sol division of labor (this segment: infrastructure wave + PRs #49/#54/#55 + integration window) | PRs #49, #54, #55 merged mid-arc; held wave #50–#53, #56–#58 integration-reviewed and merged (SHA-guarded) after the integration tree caught 38 cross-stream failures pre-merge; follow-up PR #59 opened from the cross-stream review; refuter tier narrowed 2 blockers via contradictory verdicts; delta re-audits caught 2 fresh blockers in newly-reachable paths; claude-codex-report/v1 + codex-run-v3 + WRITE_SCOPE backstop + NEEDS_RULING adopted (D-064); ~57 recorded Sol invocations |
+
+---
+
+## Full entry
+
+## C-028: C-027 adjudication and integration arc — infrastructure wave, PRs #49/#54/#55, and the integration window (2026-07-10/11)
+
+Full record: run report **TODO
+`docs/run_reports/2026-07-11-c028-<name>.md`**; binding rulings:
+`docs/specs/c027/ADJUDICATION.md`; invocation traces: **TODO
+`docs/process_traces/<session>_manifest.jsonl` (v2 snapshot) and
+`<session>_manifest_v3.jsonl` (event stream)** — the D-064 surfaces.
+The arc's earlier segment (adjudication rounds, PRs #41–#48) is
+recorded in the CP-5/checkpoint records and stop-card history; this
+entry records the 2026-07-10/11 continuation.
+
+Participants: Fable lead; gpt-5.6-sol as implementer, reviewer,
+refuter, auditor, and design consultant across ~57 recorded
+invocations. The lead retained worktree/merge authority, every final
+diff gate, all live verification, and bookkeeping.
+
+Scope of this segment: PR #49 (NV-GATE-2 code-now + flake
+root-causes) merged `1b0f1f6` + `10e0ad2`; PR #54 (P2-041 vetted
+rebuild from the RED-tranche triage recipe, review + fix round +
+delta review) merged `69a3393`; PR #55 (P2-044 idle dependence /
+HAC / ESS, design-consult-first, review + fix round) merged
+`56d103e`. At the Ed-directed pause (stop card checkpoint #4 +
+amendments) PRs #50–#53 and #56–#58 stood open and lead-gated with
+the resume order pinned; after resume, the integration tree
+(`c028-integration` @ `190a0fc`, main post-#55 + 7 branches) caught
+38 cross-stream failures, the fix round + cross-stream review
+cleared them, and the full wave merged SHA-guarded (#50, #51, #52,
+#53, #56, #57, #58 — P2-037 last), with final main verified green
+and content-identical to the reviewed tree; follow-up PR #59 (from
+the cross-stream review) is under review and DOC-008 rounds remain
+in flight. Delegation infrastructure landed on main: adapter,
+codex-run-v3, usage guard, scope backstop.
+
+Layer structure: Sol implementation sessions (xhigh; 2 ultra for the
+p2041-vetted composition and the P2-037 engine) → review lenses
+(contract + semantics per stream) → severity-tiered refuters (2 per
+blocker) → independent post-hoc audits (P2-037) → delta re-audits
+after fix rounds → lead gates (live runs, arithmetic checks, final
+heads, CI) → cross-stream integration tree before each merge.
+
+Unique catches per layer (D-061 evaluation record):
+
+- **Sol merge review:** caught the lead's own merge-resolution
+  error — the branch's updated P2-005 row silently lost by a
+  whole-file `--theirs` checkout during the #49 conflict
+  resolution; repaired as a proper 3-way merge (`13f6c9e`). Only
+  layer to catch it.
+- **Refuter tier:** narrowed 2 blockers via CONTRADICTORY paired
+  verdicts — P2-041 B1 (contract refuter confirmed, reachability
+  refuter refuted the broad form → landed as the narrowed shared
+  fail-closed cooldown verifier, `f2c4701`) and P2-037 F1 (design
+  vs repro refuters split the same way → F1 narrowed before the
+  fix round). The disagreement itself was the signal; neither
+  single refuter would have produced the narrowed form.
+- **Delta re-audits:** 2 fresh blockers in paths newly reachable
+  only after the fix round (P2-037 delta re-audit:
+  blocker=2/should-fix=3), plus the recurring symlink pattern —
+  cooldown provenance `Path.resolve` unwrapped against symlink
+  loop/OSError, wrapped fail-closed with a cross-version
+  regression test (`5f1f161`). Neither finding existed in the
+  pre-fix tree; the re-audit layer is what sees post-fix
+  reachability.
+- **Lead gates:** P2-044 F1 cadence arithmetic verified directly
+  (all-intervals population; binding Qwen-r3 values asserted
+  exactly: median 0.1199250625, ratio 1.0581313969 — `dc1ab95`);
+  live NV-5 localhost gate 3/3 OK closing the open lead gate on
+  #49 (`10e0ad2`); live doctor run. All three are
+  lead-live-only — no static layer could produce them.
+- **Integration tree:** 38 pre-merge cross-stream test failures
+  caught at the combined head, dominated by REPRO-002's
+  fail-closed environment/inventory checks meeting post-cut fields
+  from sibling streams. Zero of these were visible in any single
+  stream's green suite.
+- **Enforcement layer (scope backstop, live):** 2 bytecode
+  false-positive firings tuned same-day; NEEDS_SCOPE compliant
+  stops ×3 (p2037 fix round, doc008 ×2) — each returning the
+  correct paths where the lead had guessed wrong.
+
+Scope enforcement fired in production: two sessions (p2043-impl,
+p2044-fixround) exited SCOPE_VIOLATION with work preserved in
+evidence bundles, not landed; one wrapper crash (lead in-place edit
+of the installed runner mid-run) was recovered via a lead-authored
+recovery row rather than a mutated record — both behaviors are now
+ratified in D-064.
+
+Rough spend (from the two manifests + local usage accounting;
+estimates, not billing truth): 2 ultra sessions ≈ 100M tokens
+(p2041-vetted composition, P2-037 engine); 53 recorded xhigh
+invocations (14 v2-manifest + 37 v3-event-stream + 2 transition-era
+rows) — local 24h accounting shows 50 xhigh sessions ≈ 171M tokens;
+2 high (both FAILED rc=1 resume attempts, work recovered in later
+sessions) ≈ 40M. Fable lead: ~1.8M generation / ~14.8M billed-ish /
+~570M cache reads. Two v3 sessions (doc008-r3, pr59-review) still
+RUNNING at the manifest snapshot.
+
+Process artifacts adopted this arc (ratified as/alongside D-064):
+
+- **claude-codex-report/v1** — canonical machine-parsed session
+  report envelope; run_finished rows record parse validity, finding
+  counts, verification counts, scope flags.
+- **codex-run-v3** — append-only event-stream manifest
+  (run_started/run_finished/run_consumed), retry-with-resume,
+  lead-authored recovery rows on wrapper failure.
+- **WRITE_SCOPE backstop** — post-run diff vs declared scope; exit
+  77 + evidence bundle on violation; NEEDS_SCOPE prospective-only
+  expansion (AGENTS.md precedence section, `9ca89cc`).
+- **NEEDS_RULING** — any blocking non-delegable decision
+  early-returns a structured question instead of a guess
+  (`31b3f5e`); usage guard + usage-pressure mode active.
+- **Design-consult-by-default** — Ed-prompted global-rule
+  amendment; exercised for P2-044 (HAC/ESS design consult,
+  `827df12`) before implementation.
+
+Dissents overridden: none unresolved. The P2-041 RED tranche
+(ultra round deleting P2-038/P2-040 wholesale) was not landed or
+argued — it was triaged per-file and rebuilt from main under three
+Ed-approved C rulings (`96e10bd`, `750f7d0`).
+
+Calibration note (model-version scoping, per C-027): the refuter
+contradictory-verdict pattern produced correct narrowings twice;
+the two scope violations and one thin-output ultra warning are the
+arc's recorded 5.6-sol failure modes. Sealed A/B remains the gate
+before any delegation-boundary change.
