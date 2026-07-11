@@ -123,10 +123,9 @@ after a few more clean runs. Ed's division-of-labor directive (Sol =
 implementer + advisor, Fable = architect/director) is in effect and
 recorded in memory.
 
-**Ed-decision list** (unchanged, ADJUDICATION.md §Ed): P0-003 backup
-destination (E0, pre-Window-A hard gate); two-model floor economics;
-full-corpus CI; renderer (P1-008); REPRO pack publication; D-060
-ratification.
+**Ed-decision list** (updated 2026-07-10: P0-003 DONE — iCloud Drive +
+restore test; D-060 RATIFIED): remaining — two-model floor economics;
+full-corpus CI; renderer (P1-008); REPRO pack publication.
 
 ## Superseded stop card (CP-5)## Superseded stop card (CP-5)
 
