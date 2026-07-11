@@ -110,8 +110,4 @@ For §11 specifically: no new canonical registry rows belong **now**. Its IDs ar
 
 - Public release of verbatim bundles without a privacy audit is the proposal’s strongest genuinely new warning. Existing pack tooling is integrity-focused, not publication-safety-focused.
 
-<<<<<<< HEAD
 If only one thing can be done this week: **close P0-003 by choosing an off-machine destination and passing a fresh restore test**. That is the only action that unlocks irreplaceable quiet-machine evidence without weakening any scientific gate.
-=======
-If only one thing can be done this week: **close P0-003 by choosing an off-machine destination and passing a fresh restore test**. That is the only action that unlocks irreplaceable quiet-machine evidence without weakening any scientific gate.
->>>>>>> origin/main
