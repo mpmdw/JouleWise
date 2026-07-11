@@ -1635,6 +1635,23 @@ historical outputs are never silently recomputed under changed policy.
 The P2-044 hand fixtures are implemented in `tests/test_idle_dependence.py`;
 P2-037's propagation fixture remains owned by its separate tree.
 
+Amendment (2026-07-11, P2-045 / adjudicated hardening C5): reducer `0.4.2`
+adds governed `inter_token_throughput_tokens_s = (N - 1) /
+(t_last - t_first)`, where N is the runtime-observed output-token count and the
+timestamps are the first and last observed decode-token events. It is null
+when N is below two, fewer than two decode timestamps exist, or their span is
+zero. This is the steady-state decode/inter-token estimand. The frozen legacy
+`throughput_tokens_s` name and value remain unchanged: runtime-observed output
+token count divided by the first-to-last decode-token span, which counts N
+tokens over N−1 inter-token intervals and therefore exceeds the new metric by
+N/(N−1) when the counts agree. Because no existing field changes meaning,
+current-era reducer `0.4.1` gets absence-only tolerance for exactly the new
+field; a stored value remains an exact claim. Reducer `0.4.2` comparison is
+exact, while the `0.4.0`, `0.3.x`, unsupported-version, and six frozen legacy
+dispatch arms remain otherwise unchanged. Any change to either formula or
+nullability rule requires a new reducer version; frozen versions are never
+reused.
+
 Revisit when: bundle schema v0.2 lands (composite summaries need their
 own strict semantics), or a reducer version bump makes historical
 summaries legitimately differ from fresh reductions (then strict needs

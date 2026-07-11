@@ -312,13 +312,14 @@ derived from `stage_completed` events for phase `cleanup`. False surfaces local
 runtime cleanup failure without changing a successful current run's status,
 failure reason, energy, or window precheck. Missing/malformed completion
 evidence is null. Frozen legacy stored summaries may omit this field under the
-strict additive-absence rule; current reducer-0.4.1 summaries are exact.
+strict additive-absence rule; reducer-0.4.1-and-later summaries compare this
+field exactly.
 
 `measurement_quality.remote_cleanup_failed` is an additive nullable list of
 remote worker task paths whose file or directory cleanup failed. It is a
 quality-only hygiene signal; a surviving worker-started process remains the
 separate `cleanup_failed` run failure. Frozen legacy summaries may omit the
-field, while reducer-0.4.1 summaries compare it exactly alongside
+field, while reducer-0.4.1-and-later summaries compare it exactly alongside
 `runtime_cleanup_ok`.
 
 A status-only `{"status": "succeeded"}` summary is neither a complete bundle
@@ -339,7 +340,9 @@ and its derived summary are out of scope. Publication integrity is supplied by
 the bundle-pack hash chain (P2-027/REPRO-001), outside a single local
 `validate-bundle` invocation.
 
-Reducer `0.4.1` summaries use exact strict comparison. Current-era summaries
+Reducer `0.4.2` summaries use exact strict comparison. Current-era reducer
+`0.4.1` summaries may omit only `inter_token_throughput_tokens_s`; if the
+field is stored, its value remains an exact claim. Current-era summaries
 recording reducer `0.4.0` are unsupported and require explicit re-reduction;
 the governed idle-variance meaning changed, so there is no absence projection
 for `0.4.0`. Current-era `0.3.0` and `0.3.1` summaries remain unsupported.
@@ -352,10 +355,12 @@ honest `failed` summary without derived energy, phase, or suite metrics;
 strict validation rejects only a bundle that claims success for such a
 window.
 
-Additive summary fields landing with implementation (2026-07-09, P2-029):
+Additive governed summary fields (beginning with P2-029; later additions are
+listed in reducer-version order):
 
 | Field | Location | Contract |
 |---|---|---|
+| `inter_token_throughput_tokens_s` | `summary_metrics.json` top level and aggregate metric entries | Governed steady-state decode/inter-token throughput: `(N - 1) / (t_last - t_first)`, where N is the runtime-observed output-token count and the timestamps are the first and last observed decode-token events. It is null when N is below two, fewer than two decode timestamps exist, or their span is zero. The frozen legacy `throughput_tokens_s` remains `N / (t_last - t_first)`: it counts N tokens across N−1 inter-token intervals, is retained for compatibility, and must not be relabeled as steady-state throughput. |
 | `energy_uncertainty_status` | `summary_metrics.json` top level | One of `not_estimable`, `estimated`, or `bounded`. Single-bundle reducer output is `not_estimable` unless every relevant uncertainty term has an external calibrated bound; point estimates and quality fields are still emitted. |
 | `idle_mean_uncertainty` | `summary_metrics.json` top level | Governed powermetrics-v1 idle-mean derivation. `method` is `newey_west_bartlett_10s_iid_floor_v1`, `correlation_scope` is `independent_run`, `source_artifact` is `raw/powermetrics_idle.plist`, and `source_sha256` binds the derivation to immutable bytes. The object records raw count, median interval, type-7 p95/p05 cadence ratio, 10 s bandwidth, lag count, sample/IID/HAC/governed variances, clamped ESS, status, and frozen reason codes. Numeric results and ESS are null when `status=not_estimable`. Mock output is non-claim-bearing. Non-powermetrics physical backends report `backend_policy_not_frozen`. |
 | `energy_variance_terms_j2` | `summary_metrics.json` top level and aggregate metric entries | Object of named stochastic variance terms in J^2. The reducer emits `E_gross_repetition_j2: null` for single bundles and, only when `idle_mean_uncertainty.status == estimated`, `E_idle_mean_j2 = measured_duration_s^2 * governed_variance_of_mean_w2`. It is null rather than falling back to metadata or raw adjacent count when the governed estimate is unavailable. Aggregates continue consuming each member's corrected scalar and add repeated-gross and total idle-subtracted variance terms. |

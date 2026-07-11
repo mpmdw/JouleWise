@@ -548,9 +548,14 @@ class MockEndToEndTests(ReduceTestCase):
         self.assertAlmostEqual(summary.ttft_s, tokens[0] - start_s, places=9)
         self.assertAlmostEqual(summary.ttft_s, 32 * 0.001 + 0.010, places=6)
 
-        # throughput == 8 / (last token - first token).
+        # The legacy convention counts 8 tokens over the 7 inter-token
+        # intervals. The governed steady-state metric counts those 7
+        # intervals over the same first-to-last span.
         span = tokens[-1] - tokens[0]
         self.assertAlmostEqual(summary.throughput_tokens_s, 8 / span, places=9)
+        self.assertAlmostEqual(
+            summary.inter_token_throughput_tokens_s, 7 / span, places=9
+        )
         self.assertAlmostEqual(summary.decode_latency_s, span, places=9)
 
         self.assertAlmostEqual(
@@ -559,6 +564,31 @@ class MockEndToEndTests(ReduceTestCase):
         self.assertAlmostEqual(
             summary.phase_energy_j["decode"], 7.5 * durations["decode"], places=9
         )
+
+    def test_throughput_conventions_match_hand_computed_extremes(self) -> None:
+        # Integer timestamps make both hand-computed fixtures exact. At N=8,
+        # legacy exceeds inter-token throughput by 1/7 = 14.2857%; at N=512,
+        # the excess is 1/511 = 0.1957%.
+        for token_count in (8, 512):
+            with self.subTest(token_count=token_count):
+                timestamps = [float(index) for index in range(token_count)]
+                span = float(token_count - 1)
+                legacy = reduce_module._throughput_tokens_s(
+                    timestamps, token_count
+                )
+                inter_token = reduce_module._inter_token_throughput_tokens_s(
+                    timestamps, token_count
+                )
+
+                expected_legacy = {8: 8 / 7, 512: 512 / 511}[token_count]
+                expected_excess = {8: 1 / 7, 512: 1 / 511}[token_count]
+                self.assertEqual(legacy, expected_legacy)
+                self.assertEqual(inter_token, 1.0)
+                self.assertAlmostEqual(
+                    legacy / inter_token - 1.0,
+                    expected_excess,
+                    places=15,
+                )
 
     def test_mock_bundle_reducer_is_default_and_events_intact(self) -> None:
         # The controller's default reducer produced real energy numbers (not
@@ -650,6 +680,10 @@ class TokenFallbackTests(ReduceTestCase):
 
         self.assertAlmostEqual(summary.energy_token_j, 25.0 / 20.0, places=9)
         self.assertAlmostEqual(summary.energy_output_token_j, 25.0 / 3.0, places=9)
+        self.assertAlmostEqual(summary.throughput_tokens_s, 3.0 / 6.0, places=9)
+        self.assertAlmostEqual(
+            summary.inter_token_throughput_tokens_s, 2.0 / 6.0, places=9
+        )
         self.assertEqual(summary.measurement_quality.token_count_source, "server_usage")
         self.assertEqual(summary.measurement_quality.token_counts_source, "server_usage")
         self.assertEqual(
@@ -673,6 +707,7 @@ class TokenFallbackTests(ReduceTestCase):
         self.assertIsNone(summary.energy_token_j)
         self.assertIsNone(summary.energy_output_token_j)
         self.assertIsNone(summary.throughput_tokens_s)
+        self.assertIsNone(summary.inter_token_throughput_tokens_s)
         self.assertEqual(
             summary.measurement_quality.token_count_source,
             "stream_chunk_fallback",
@@ -744,6 +779,7 @@ class TokenFallbackTests(ReduceTestCase):
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         self.assertIsNone(summary.energy_output_token_j)
         self.assertIsNone(summary.throughput_tokens_s)
+        self.assertIsNone(summary.inter_token_throughput_tokens_s)
         self.assertEqual(summary.measurement_quality.token_counts_source, "config_fallback")
         self.assertEqual(summary.measurement_quality.token_count_source, "runtime_observed")
 

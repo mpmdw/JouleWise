@@ -108,6 +108,7 @@ _SUCCEEDED_NULLABLE_NUMBER_FIELDS = {
     "ttft_s",
     "decode_latency_s",
     "throughput_tokens_s",
+    "inter_token_throughput_tokens_s",
 }
 
 

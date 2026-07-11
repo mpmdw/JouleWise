@@ -89,6 +89,11 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
   unless realized prompt lengths match across compared cells (C-014).
 - Rank claims require rank gap > comparison MDE; otherwise the wording is
   `unresolved tie` (C-014).
+- Reader-facing steady-state decode-throughput claims use
+  `inter_token_throughput_tokens_s`, the N−1 inter-token-interval convention.
+  The frozen `throughput_tokens_s` N-over-span convention is retained only
+  for compatibility and explicitly labeled legacy wherever reported; it is
+  not eligible to stand in for the governed inter-token metric.
 
 ## Seeded plans
 
@@ -145,7 +150,7 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
 | claim_role | primary |
 | selection_scope | Frozen same-boundary candidate set for each workload shape, metric, model/quant set, and session block included in the ranking campaign. |
 | multiplicity_rule | Holm within each frozen same-boundary workload-shape x metric rank family; any expanded all-pairs or cross-shape ranking sweep uses Benjamini-Hochberg at q=0.10 and is labeled secondary/exploratory according to the frozen registry. |
-| Metric + exact window class | Same-boundary request-energy, runtime-observed energy/output-token, and throughput/latency metrics on request windows. |
+| Metric + exact window class | Same-boundary request-energy, runtime-observed energy/output-token, `inter_token_throughput_tokens_s`, and latency metrics on request windows. |
 | Unit of analysis + dependence structure | Bundle-level repetitions within same workload shape, boundary, model/quant, and session block. |
 | Estimator/formula | Pairwise rank gaps by matched shape; rank declared only when estimated gap > comparison MDE. |
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only; exclusions and waivers follow D-014/D-037 and must be row-linked in the claims index. |
