@@ -82,7 +82,7 @@ be re-derived by a future agent gets an entry here.
 | D-057 | Uncertainty terms: drift is a bound; stable claim-gate reason codes | accepted |
 | D-058 | Token-normalization and stack-identity contract adopted | accepted |
 | D-059 | Claims-lint mechanical enforcement in CI | accepted |
-| D-060 | Depth-before-breadth stop line | proposed |
+| D-060 | Depth-before-breadth stop line | accepted (ratified 2026-07-10) |
 | D-061 | Review-layer evaluation rule v2 | accepted |
 | D-062 | Confirmatory sampling policy (fixed n, demotion) | accepted |
 | D-063 | Process architecture v2 (state kernel first) | accepted |
@@ -2864,10 +2864,12 @@ Phase 4 claims-index mode extends this tool rather than a new one.
 Consequences: the D-053 freeze discipline and D-055 registry are now
 machine-checked.
 
-## D-060: Depth-before-breadth stop line (PROPOSED — awaiting Ed's ratification)
+## D-060: Depth-before-breadth stop line (RATIFIED)
 
-- Date: 2026-07-09
-- Status: **proposed** (C-027 council recommendation; allocates
+- Date: 2026-07-09; RATIFIED by Ed 2026-07-10 as written (C-028 session,
+  live decision; the independent hardening proposal's convergent freeze
+  recommendation was noted at ratification)
+- Status: **accepted** (C-027 council recommendation; allocates
   Ed-facing work, so Ed ratifies or amends)
 - Phase: cross-phase / project management
 

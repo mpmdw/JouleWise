@@ -60,11 +60,22 @@ At the end of substantial work:
 
 ## ACTIVE_STOP_CARD
 
-Status: **ACTIVE (2026-07-09 evening, C-027 implementation-blitz
-checkpoint).** Ed paused after the spec wave COMPLETED and the
-implementation fan-out ran. This card is the resume authority.
+Status: **ACTIVE (2026-07-10, C-028 checkpoint #2 — Ed away).** This
+card is the resume authority. The C-028 session adjudicated all ten
+C-027 specs (docs/specs/c027/ADJUDICATION.md — 40 rulings, 2-round Sol
+advisory), then landed the integration through per-tranche review
+stacks.
 
-**Completed this arc:**
+**MERGED to main this session:** PR #41 (spec wave incl. ADJUDICATION),
+PR #42 (docs tranche: governance addenda + per-invocation
+recoverability audit + AP/SPLIT amendments + env locks), PR #43
+(P2-040 tranche + version dispatch + NV-2 cooldown fix; lead gates:
+corpus 6/6 strict, mock e2e, suites green), PR #44 (RPT-001 report
+skeleton + gated vertical slice; lead re-ran the full build), PR #45
+(P2-039 floor calculator, validator hardened after a BLOCKED review).
+RETRO-001 ran (2 SHOULD-FIX, both fixed in #43); Current Verification
+may advance past 36d5641 after the NEXT session's fresh site
+regen+diff (RETRO-1's remaining condition).
 
 - P2-040 REVIEW BLOCKER FIXED (uncommitted): governed output-shape additions
   now bump the reducer patch version. Current output is 0.3.1 exact; frozen
@@ -131,38 +142,59 @@ implementation fan-out ran. This card is the resume authority.
     24 tests, orchestration inserts staged as a spec-dir doc. Live
     RUN_STATE/TASK_QUEUE conversion deliberately NOT done
     (adjudication-gated).
+**OPEN work, exact states:**
 
-**Resume procedure (in order):**
+- PR #46 DRAFT (impl/p2042 frozen analysis manifest): implementation
+  complete, main merged in (one manual-merge splice defect was
+  introduced and fixed — 8a1c9f-era note in the PR), suite green.
+  NEEDS: targeted Sol review (spec: engine trio §A + adjudication) →
+  fix round if any → un-draft → CI → merge.
+- impl/p2041 (pushed, NO PR): campaign verdict split + H3 fail-closed
+  campaign-cooldown gate, complete per its run report in the branch;
+  intentionally behind main. NEEDS: merge main in (run_campaign.py
+  will conflict with #46's sidecar exclusion — land #46 first),
+  targeted review, PR, gates, merge.
+- impl/p2040-remainder (pushed, NO PR): FIX-7a/7b/FIX-8 complete; lead
+  corpus gate + full suite ALREADY GREEN. NEEDS: targeted review
+  (cheap), PR, CI, merge.
+- impl/nvgate2-codenow: session died at capacity twice; a codex-run-v2
+  RESUME with --retries 3 was IN FLIGHT at checkpoint (out-file
+  scratchpad/nvgate2-impl2.md). If it completed: commit by pathspec in
+  ../JouleWise-wt/nvgate2, review, PR. If it died with the session:
+  the worktree holds partial state — resume again via
+  `codex-run-v2 <out> --resume ...` in that worktree.
+- impl/p2038 (production uncertainty evidence, stacked on the merged
+  P2-040): Sol session was IN FLIGHT at checkpoint (out-file
+  scratchpad/p2038-impl.md). Same recovery pattern as nvgate2.
+  P2-038 stays a HARD pre-Window-A gate.
+- DOC-008 kernel: adjudicated to land LAST — refresh the kernel at the
+  final integrated head + NOT-AUTHORITATIVE header, targeted review,
+  PR. Not started (deliberately).
+- Cross-stream integration review (Sol) over merged main AFTER the
+  remaining branches land; then C-028 BOOKKEEPING: consume
+  scratchpad/bookkeeping-drafts.md (16 KB: D-064 draft, C-028 council
+  entry draft, run-report skeleton, clearance template) — lead owns
+  final wording; per-invocation JSONL per D-064 (a start exists at
+  scratchpad/c028-invocations.jsonl via codex-run-v2 --manifest);
+  queue-row status updates; consistency sweep; site regen + deploy;
+  THEN clear this stop card.
 
-1. Deploy the site if Ed hasn't (command above).
-2. For EACH of the four in-flight worktrees: `git -C
-   ../JouleWise-wt/<name> log origin/impl/<name>..HEAD` — push any
-   commits the agents landed after the checkpoint push; read their
-   final reports if present (the agents' return notes did not all
-   arrive before pause; their commits are self-describing).
-3. LEAD ADJUDICATION of the ten DRAFT specs (known strikes: MET-001
-   spec's D-054 amendment item is already applied; each spec has a
-   DEVIATIONS/OPEN QUESTIONS section needing decisions — notably
-   P2-039's proposed guard factor and the engine trio's campaign-level
-   cooldown fail-closed unit). Open the c027-spec-wave PR; adjudication
-   edits ride it; merge per the D-031 gate.
-4. INTEGRATION of impl/* per multi-stream-worktrees: rebase/merge each
-   onto the merged spec base, full C-027-style review per stream
-   (lenses + lead gate + final-head), suite green (main baseline 877;
-   +new tests per stream), then PRs. Cross-stream check: p2040-core
-   vs p2040-io-nv2 both touch controller-adjacent seams; ARC-6 needs
-   an owner; the AP-EDIT amendments and the specs must agree post-
-   adjudication.
-5. Then continue the queue order: finish P2-040 remainder → P2-038 →
-   P2-039 integration hooks → RPT-001 skeleton → P2-042 → P2-041 →
-   P2-037 (specs are the pinned authorities).
-6. Bookkeeping debt for the next session: C-028 council entry (spec
-   wave + blitz), run report, MET-4/D-050 adjudication, RETRO-001
-   execution, queue row status updates for everything the impl
-   branches completed, consistency sweep, site regen.
+**Session scratchpad** (survives on disk):
+`/private/tmp/claude-501/-Users-edr-code-JouleWise/e48cf22e-209a-4355-bb28-9b6a37636b34/scratchpad/`
+— all review packets (rev-*.md, p2040-lens*.md, retro001.md), fix
+reports, the advisory thread record (resume-plan.md; MCP thread id in
+ADJUDICATION.md), bookkeeping drafts.
 
-Worktree cleanup: do NOT `git worktree remove` until each branch's
-work is merged or explicitly abandoned.
+**Tooling delta:** `~/.local/bin/codex-run-v2` installed (37/37 tests;
+per-call -m/--effort, capacity-aware retry-with-resume, D-064
+--manifest/--role/--parent rows). v1 untouched; promote v2 to default
+after a few more clean runs. Ed's division-of-labor directive (Sol =
+implementer + advisor, Fable = architect/director) is in effect and
+recorded in memory.
+
+**Ed-decision list** (updated 2026-07-10: P0-003 DONE — iCloud Drive +
+restore test; D-060 RATIFIED): remaining — two-model floor economics;
+full-corpus CI; renderer (P1-008); REPRO pack publication.
 
 ## Superseded stop card (CP-5)
 
@@ -177,6 +209,15 @@ rank 0 closed. Full record:
 `docs/run_reports/2026-07-09-cp5-resume.md`. No stop card is active.
 
 ## Current Project Status
+
+**RPT-001 targeted review fix round COMPLETE in worktree (2026-07-10;
+awaiting lead pathspec commit).** FIX-1..FIX-9 are implemented: Phase-4
+claims lint/projection, adjudicated 1P5B identity and regenerated artifacts,
+full/offline atomic build with hash verification, real pipeline regressions,
+D-058 T1 scope, expanded claim-language tripwires, boundary-honest prose,
+LF byte stability, and evidence-bootstrap gating. Real-corpus regeneration
+used `/Users/edr/code/JouleWise/runs`; focused 37 OK and canonical 890 OK
+(skipped=10). Report: `docs/run_reports/2026-07-10-rpt001-fix-round.md`.
 
 **Suite BUILD session COMPLETE and MERGED (2026-07-08; C-017;
 D-044..D-047).** The workload suite is now CODE, not contracts: P2-010a
