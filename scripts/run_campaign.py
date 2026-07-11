@@ -1570,6 +1570,48 @@ def write_campaign_provenance(path: Path, manifest: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
+def verify_cooldown_raw_provenance(
+    cooldown: dict[str, Any], manifest_dir: Path
+) -> bool:
+    """Re-verify a cooldown JSONL descriptor against its current raw bytes."""
+    raw_artifact = cooldown.get("raw_artifact")
+    if not isinstance(raw_artifact, dict):
+        return False
+    raw_path_text = raw_artifact.get("path")
+    raw_sha = raw_artifact.get("sha256")
+    raw_records = raw_artifact.get("records")
+    if (
+        not isinstance(raw_path_text, str)
+        or not raw_path_text
+        or Path(raw_path_text).is_absolute()
+        or Path(raw_path_text).name == raw_path_text
+        or ".." in Path(raw_path_text).parts
+        or not isinstance(raw_sha, str)
+        or len(raw_sha) != 64
+        or any(character not in "0123456789abcdef" for character in raw_sha)
+        or isinstance(raw_records, bool)
+        or not isinstance(raw_records, int)
+        or raw_records <= 0
+    ):
+        return False
+    manifest_dir = manifest_dir.resolve()
+    raw_path = (manifest_dir / raw_path_text).resolve()
+    if manifest_dir not in raw_path.parents:
+        return False
+    try:
+        payload = raw_path.read_bytes()
+    except OSError:
+        return False
+    if _sha256_bytes(payload) != raw_sha:
+        return False
+    try:
+        lines = payload.decode("utf-8").splitlines()
+        parsed_rows = [json.loads(line) for line in lines]
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return len(parsed_rows) == raw_records
+
+
 def prior_campaign_cooldown_evidence(
     runs_dir: Path, analysis_manifest_id: str | None
 ) -> dict[str, dict[str, Any]]:
@@ -1649,47 +1691,6 @@ def prior_campaign_cooldown_evidence(
                             ),
                         }
                     )
-            if cooldown.get("result") in {"recovered", "cap_hit"}:
-                raw_artifact = cooldown.get("raw_artifact")
-                raw_path_text = (
-                    raw_artifact.get("path")
-                    if isinstance(raw_artifact, dict)
-                    else None
-                )
-                raw_sha = (
-                    raw_artifact.get("sha256")
-                    if isinstance(raw_artifact, dict)
-                    else None
-                )
-                raw_records = (
-                    raw_artifact.get("records")
-                    if isinstance(raw_artifact, dict)
-                    else None
-                )
-                valid_raw = (
-                    isinstance(raw_path_text, str)
-                    and not Path(raw_path_text).is_absolute()
-                    and Path(raw_path_text).name != raw_path_text
-                    and ".." not in Path(raw_path_text).parts
-                    and isinstance(raw_sha, str)
-                    and isinstance(raw_records, int)
-                    and not isinstance(raw_records, bool)
-                    and raw_records > 0
-                )
-                raw_path = path.parent / raw_path_text if valid_raw else None
-                if (
-                    raw_path is None
-                    or not raw_path.is_file()
-                    or _sha256_bytes(raw_path.read_bytes()) != raw_sha
-                ):
-                    cooldown.update(
-                        {
-                            "result": "unknown",
-                            "reason": "raw cooldown provenance missing or hash-invalid",
-                        }
-                    )
-                else:
-                    raw_artifact["verified"] = True
             for bundle_id in bundle_ids:
                 if isinstance(bundle_id, str):
                     evidence[bundle_id] = cooldown
@@ -2010,20 +2011,17 @@ def _member_readiness_reasons(
 
     cooldown = evaluation.preceding_campaign_cooldown
     cooldown_result = cooldown.get("result") if isinstance(cooldown, dict) else None
-    raw = cooldown.get("raw_artifact") if isinstance(cooldown, dict) else None
-    raw_present = (
-        isinstance(raw, dict)
-        and isinstance(raw.get("path"), str)
-        and isinstance(raw.get("sha256"), str)
-        and isinstance(raw.get("records"), int)
-        and not isinstance(raw.get("records"), bool)
-        and raw["records"] > 0
+    raw_verified = (
+        isinstance(cooldown, dict)
+        and verify_cooldown_raw_provenance(
+            cooldown, evaluation.bundle_path.parent / "campaign_manifests"
+        )
     )
     if cooldown_result == "cap_hit":
         reasons.add("cooldown_cap_hit")
-        if not raw_present:
+        if not raw_verified:
             reasons.add("campaign_cooldown_evidence_missing")
-    elif cooldown_result == "recovered" and not raw_present:
+    elif cooldown_result == "recovered" and not raw_verified:
         reasons.add("campaign_cooldown_evidence_missing")
     elif cooldown_result not in ACCEPTED_CAMPAIGN_COOLDOWN_RESULTS:
         reasons.add("campaign_cooldown_evidence_missing")
@@ -2498,12 +2496,21 @@ def run_campaign(args: argparse.Namespace) -> int:
                 exit_code = None
                 duration_s = None
                 failures += 1
-                if state.inspect_members:
-                    missing_members.extend(
-                        member.name
-                        for member in expected_member_dirs(info, runs_dir)
-                        if not member.exists()
+                expected_members = expected_member_dirs(info, runs_dir)
+                existing_evaluations = [
+                    evaluate_member(
+                        member,
+                        info=info,
+                        waivers=waivers,
+                        cooldown_evidence=cooldown_by_bundle.get(member.name),
                     )
+                    for member in expected_members
+                    if member.exists()
+                ]
+                all_evaluations.extend(existing_evaluations)
+                missing_members.extend(
+                    member.name for member in expected_members if not member.exists()
+                )
                 inspect = ", ".join(state.inspect_members) if state.inspect_members else info.run_id
                 if state.malformed_summaries:
                     detail = "malformed summary_metrics.json: " + "; ".join(state.malformed_summaries)
@@ -2516,6 +2523,25 @@ def run_campaign(args: argparse.Namespace) -> int:
                     "bundle(s) before retrying",
                     file=sys.stderr,
                 )
+                extra = {
+                    **order_extra,
+                    "members": [
+                        evaluation.to_log() for evaluation in existing_evaluations
+                    ],
+                    "campaign_provenance_manifest": str(campaign_provenance_path),
+                }
+                assert campaign_provenance_path is not None
+                assert campaign_provenance is not None
+                record_campaign_member_provenance(
+                    campaign_provenance_path,
+                    campaign_provenance,
+                    info=info,
+                    bundle_ids=[
+                        evaluation.bundle_id for evaluation in existing_evaluations
+                    ],
+                    execution="existing",
+                    cooldown=None,
+                )
                 append_log(
                     log_path,
                     log_row(
@@ -2524,7 +2550,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                         status=status,
                         exit_code=exit_code,
                         duration_s=duration_s,
-                        extra=order_extra,
+                        extra=extra,
                     ),
                 )
                 counts[status] += 1

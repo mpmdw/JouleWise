@@ -406,8 +406,12 @@ mock-telemetry skip, adapter failure, absent baseline, or absent evidence is
 Every measured `recovered` or `cap_hit` gate references an immutable JSONL
 trace under `runs/campaign_manifests/raw/` with relative path, SHA-256, and
 record count. Recovered/cap-hit provenance with a missing or hash-invalid raw
-trace is treated as unknown on resume. The campaign JSONL repeats the
-following-member gate object and ends with a
+trace is treated as unknown on resume. At final verdict time, the runner
+re-resolves every recovered or cap-hit trace path relative to the campaign
+manifest and re-verifies file existence, current-byte SHA-256, JSONL
+parseability, and exact positive declared record count for both fresh and
+resumed evidence. The campaign JSONL repeats the following-member gate object
+and ends with a
 `joulewise.campaign_verdict.v2` row. That row separates `collection.verdict`
 (`usable`, `partial`, `blocked`, `invalid`) from
 `claim_readiness.verdict` (`ready_for_analysis`,

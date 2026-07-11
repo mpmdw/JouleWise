@@ -1468,6 +1468,145 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
             self.assertIn("campaign_cooldown_evidence_missing", readiness["reasons"])
 
+    def test_nonexistent_nonhex_cooldown_descriptor_has_readiness_objection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            evaluation = run_campaign_module.MemberEvaluation(
+                bundle_id="member",
+                bundle_path=runs_dir / "member",
+                config_name="member.json",
+                status="succeeded",
+                strict_valid=True,
+                summary={
+                    "gross_energy_j": 1.0,
+                    "window_evidence_precheck": {
+                        "gross_request": {"eligible": True, "reasons": []}
+                    },
+                    "measurement_quality": {"idle_window_suspect": False},
+                },
+                preceding_campaign_cooldown={
+                    "result": "recovered",
+                    "raw_artifact": {
+                        "path": "raw/nonexistent.jsonl",
+                        "sha256": "not-a-hex-digest",
+                        "records": 1,
+                    },
+                },
+            )
+
+            reasons = run_campaign_module._member_readiness_reasons(
+                evaluation,
+                {"metric": {"name": "gross_energy_j", "metric_tag": "gross_request"}},
+            )
+
+            self.assertNotEqual(reasons, [])
+            self.assertIn("campaign_cooldown_evidence_missing", reasons)
+
+    def test_fresh_cooldown_raw_provenance_is_reverified_at_verdict_time(self) -> None:
+        for mutation in (
+            "valid",
+            "hash_mismatch",
+            "count_mismatch",
+            "malformed_jsonl",
+        ):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                runs_dir = Path(tmp) / "runs"
+                provenance_path = runs_dir / "campaign_manifests" / "fresh.json"
+                raw_artifact = run_campaign_module._write_campaign_cooldown_trace(
+                    provenance_path,
+                    "member",
+                    [{"rolling_mean_power_w": 5.0}],
+                )
+                raw_path = provenance_path.parent / raw_artifact["path"]
+                if mutation == "hash_mismatch":
+                    raw_path.write_text('{"rolling_mean_power_w": 6.0}\n', encoding="utf-8")
+                elif mutation == "count_mismatch":
+                    raw_artifact["records"] = 2
+                elif mutation == "malformed_jsonl":
+                    payload = b'{"rolling_mean_power_w":\n'
+                    raw_path.write_bytes(payload)
+                    raw_artifact["sha256"] = hashlib.sha256(payload).hexdigest()
+                evaluation = run_campaign_module.MemberEvaluation(
+                    bundle_id="member",
+                    bundle_path=runs_dir / "member",
+                    config_name="member.json",
+                    status="succeeded",
+                    strict_valid=True,
+                    summary={
+                        "gross_energy_j": 1.0,
+                        "window_evidence_precheck": {
+                            "gross_request": {"eligible": True, "reasons": []}
+                        },
+                        "measurement_quality": {"idle_window_suspect": False},
+                    },
+                    preceding_campaign_cooldown={
+                        "result": "recovered",
+                        "raw_artifact": raw_artifact,
+                    },
+                )
+
+                reasons = run_campaign_module._member_readiness_reasons(
+                    evaluation,
+                    {
+                        "metric": {
+                            "name": "gross_energy_j",
+                            "metric_tag": "gross_request",
+                        }
+                    },
+                )
+
+                if mutation == "valid":
+                    self.assertNotIn("campaign_cooldown_evidence_missing", reasons)
+                else:
+                    self.assertIn("campaign_cooldown_evidence_missing", reasons)
+
+    def test_resumed_cooldown_hash_and_count_mismatches_block_readiness(self) -> None:
+        for mutation in ("hash_mismatch", "count_mismatch"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                config_dir = tmp_path / "configs"
+                runs_dir = tmp_path / "runs"
+                config_dir.mkdir()
+                manifest = write_strict_analysis_campaign(config_dir, runs_dir)
+                evidence = {
+                    entry["run_id"]: "recovered" for entry in manifest["entries"]
+                }
+                evidence[manifest["entries"][0]["run_id"]] = "first_run_exempt"
+                write_prior_campaign_provenance(
+                    runs_dir,
+                    evidence,
+                    analysis_manifest_id(config_dir),
+                )
+                provenance_path = runs_dir / "campaign_manifests" / "fixture.json"
+                if mutation == "hash_mismatch":
+                    (provenance_path.parent / "raw" / "fixture.jsonl").write_text(
+                        '{"rolling_mean_power_w": 6.0}\n', encoding="utf-8"
+                    )
+                else:
+                    provenance = json.loads(
+                        provenance_path.read_text(encoding="utf-8")
+                    )
+                    for member in provenance["members"]:
+                        raw_artifact = member["preceding_campaign_cooldown"].get(
+                            "raw_artifact"
+                        )
+                        if raw_artifact is not None:
+                            raw_artifact["records"] = 2
+                    provenance_path.write_text(
+                        json.dumps(provenance) + "\n", encoding="utf-8"
+                    )
+
+                result = run_campaign(config_dir, runs_dir)
+
+                self.assertEqual(result.returncode, 0, result.stderr)
+                readiness = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1][
+                    "claim_readiness"
+                ]
+                self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+                self.assertIn(
+                    "campaign_cooldown_evidence_missing", readiness["reasons"]
+                )
+
     def test_all_members_cannot_claim_one_session_first_run_exemption(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -2258,6 +2397,72 @@ class RunCampaignTests(unittest.TestCase):
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual([row["status"] for row in rows], ["incomplete_existing"])
             self.assertNotIn("members_succeeded", rows[0])
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(verdict["collection"]["verdict"], "blocked")
+            self.assertEqual(
+                verdict["collection"]["categories"]["usable"],
+                ["partial-exp__r1", "partial-exp__r2", "partial-exp__r3"],
+            )
+            self.assertEqual(
+                verdict["collection"]["categories"]["missing"],
+                ["partial-exp__r4", "partial-exp__r5"],
+            )
+
+    def test_existing_incomplete_member_prevents_usable_collection_verdict(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "01-usable.json", "usable")
+            write_config(config_dir, "02-incomplete.json", "incomplete")
+            write_single_bundle(runs_dir, "usable")
+            (runs_dir / "incomplete").mkdir()
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 1)
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertNotEqual(verdict["collection"]["verdict"], "usable")
+            self.assertEqual(verdict["collection"]["verdict"], "invalid")
+            self.assertEqual(
+                verdict["collection"]["categories"]["usable"], ["usable"]
+            )
+            self.assertEqual(
+                verdict["collection"]["categories"]["failed"], ["incomplete"]
+            )
+            self.assertEqual(verdict["collection"]["categories"]["missing"], [])
+
+    def test_mixed_complete_incomplete_and_absent_members_are_classified_exactly(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            config_path = write_config(
+                config_dir, "mixed.json", "mixed", repetitions=3
+            )
+            write_single_bundle(
+                runs_dir,
+                "mixed__r1",
+                config_path=config_path,
+            )
+            (runs_dir / "mixed__r2").mkdir()
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 1)
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(verdict["collection"]["verdict"], "blocked")
+            self.assertEqual(
+                verdict["collection"]["categories"],
+                {
+                    "usable": ["mixed__r1"],
+                    "waived": [],
+                    "failed": ["mixed__r2"],
+                    "missing": ["mixed__r3"],
+                },
+            )
 
     def test_reps_one_resume_uses_single_bundle_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2606,6 +2811,15 @@ class RunCampaignTests(unittest.TestCase):
             rows = read_jsonl(log_path)
             self.assertEqual([row["run_id"] for row in rows], ["alpha", "beta-crash2", "alpha", "beta-crash2"])
             self.assertEqual([row["status"] for row in rows], ["ok", "failed", "skipped", "incomplete_existing"])
+            verdicts = [
+                row
+                for row in read_all_jsonl(log_path)
+                if row.get("record_type") == "campaign_verdict"
+            ]
+            self.assertEqual(
+                [verdict["collection"]["verdict"] for verdict in verdicts],
+                ["blocked", "blocked"],
+            )
 
     def test_malformed_member_summary_is_incomplete_existing_without_invocation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2631,6 +2845,20 @@ class RunCampaignTests(unittest.TestCase):
             self.assertIn("matrix__r1", result.stderr)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual([row["status"] for row in rows], ["incomplete_existing"])
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(verdict["collection"]["verdict"], "blocked")
+            self.assertEqual(
+                verdict["collection"]["categories"]["failed"], ["matrix__r1"]
+            )
+            self.assertEqual(
+                verdict["collection"]["categories"]["missing"],
+                [
+                    "matrix__r2",
+                    "matrix__r3",
+                    "matrix__r4",
+                    "matrix__r5",
+                ],
+            )
 
     def test_config_error_aborts_before_invocation_or_log_writes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

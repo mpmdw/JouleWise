@@ -162,6 +162,14 @@ Queue candidates are recorded here, not added as live queue rows:
    handoff labels that inherited text superseded rather than importing later
    main state wholesale.
 
+## Review Fixes
+
+- B1 narrowed-confirmed → fixed: verdict-time cooldown raw provenance now fail-closes through one shared fresh/resume verifier for path, existence, current-byte SHA-256, JSONL parsing, and declared positive record count.
+- S1 confirmed → fixed: every physically present expected member in the incomplete-existing branch is evaluated, while only absent paths enter the missing category.
+- S2/R1 refuted empirically → queue candidate `frozen-legacy claim_eligibility mapper`.
+- Semantic cooldown-row verification → queue candidate; row-field consistency and finite-value checks remain explicitly out of scope for this fix.
+- N1 fixed: the current-reality critique cell now uses collection usable/partial/blocked/invalid plus `claim_readiness`.
+
 ## Verification
 
 Required recipe commands were run without piping suite exit status. Final
