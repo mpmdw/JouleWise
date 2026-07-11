@@ -18,7 +18,7 @@ from joulewise.validation import finite_float
 CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
-SUMMARY_REDUCER_VERSION = "0.4.1"
+SUMMARY_REDUCER_VERSION = "0.4.2"
 
 
 class SchemaError(ValueError):
@@ -745,6 +745,7 @@ class SummaryMetrics:
     ttft_s: float | None = None
     decode_latency_s: float | None = None
     throughput_tokens_s: float | None = None
+    inter_token_throughput_tokens_s: float | None = None
     idle_baseline: IdleBaseline | None = None
     uncertainty: UncertaintyInterval | None = None
     measurement_quality: MeasurementQuality | None = None
@@ -795,6 +796,7 @@ class SummaryMetrics:
                 "ttft_s": nullable_number,
                 "decode_latency_s": nullable_number,
                 "throughput_tokens_s": nullable_number,
+                "inter_token_throughput_tokens_s": nullable_number,
                 "idle_baseline": {
                     "anyOf": [{"$ref": "#/$defs/idle_baseline"}, {"type": "null"}]
                 },

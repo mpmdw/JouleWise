@@ -485,6 +485,7 @@ class StrictValidateTests(CliRunTestCase):
             "energy_variance_terms_j2",
             "energy_bound_terms_j",
             "window_evidence_precheck",
+            "inter_token_throughput_tokens_s",
         ):
             summary.pop(key)
         (bundle / "summary_metrics.json").write_text(
@@ -495,9 +496,51 @@ class StrictValidateTests(CliRunTestCase):
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
             self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_reducer_0_4_1_dispatch_requires_exact_summary(self) -> None:
-        bundle = self.make_bundle("strict-v041-exact")
+    def test_reducer_0_4_2_dispatch_requires_exact_summary(self) -> None:
+        bundle = self.make_bundle("strict-v042-exact")
         self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_reducer_0_4_2_missing_new_metric_fails_exact_summary(self) -> None:
+        bundle = self.make_bundle("strict-v042-new-metric-absent")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary.pop("inter_token_throughput_tokens_s")
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("inter_token_throughput_tokens_s" in problem for problem in problems),
+            problems,
+        )
+
+    def test_reducer_0_4_1_tolerates_only_new_metric_absence(self) -> None:
+        bundle = self.make_bundle("strict-v041-new-metric-absent")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.4.1"
+        summary.pop("inter_token_throughput_tokens_s")
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_reducer_0_4_1_stored_new_metric_remains_exact_claim(self) -> None:
+        bundle = self.make_bundle("strict-v041-new-metric-wrong")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.4.1"
+        summary["inter_token_throughput_tokens_s"] += 1.0
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("inter_token_throughput_tokens_s" in problem for problem in problems),
+            problems,
+        )
 
     def test_current_era_reducer_0_4_0_requires_re_reduction(self) -> None:
         bundle = self.make_bundle("strict-v040-rejected")
@@ -538,8 +581,8 @@ class StrictValidateTests(CliRunTestCase):
             validate_bundle(bundle, strict=True),
         )
 
-    def test_reducer_0_4_1_old_field_only_fails_exact_comparison(self) -> None:
-        bundle = self.make_bundle("strict-v041-old-field")
+    def test_reducer_0_4_2_old_field_only_fails_exact_comparison(self) -> None:
+        bundle = self.make_bundle("strict-v042-old-field")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         summary["claim_eligibility"] = summary.pop("window_evidence_precheck")
         (bundle / "summary_metrics.json").write_text(
@@ -610,8 +653,8 @@ class StrictValidateTests(CliRunTestCase):
             validate_bundle(bundle, strict=True),
         )
 
-    def test_claimed_0_4_1_missing_governed_field_fails_exact_dispatch(self) -> None:
-        bundle = self.make_bundle("strict-v041-governed-absence")
+    def test_claimed_0_4_2_missing_governed_field_fails_exact_dispatch(self) -> None:
+        bundle = self.make_bundle("strict-v042-governed-absence")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         del summary["window_evidence_precheck"]["gross_request"]
         (bundle / "summary_metrics.json").write_text(

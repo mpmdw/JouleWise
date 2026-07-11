@@ -914,6 +914,9 @@ def _reduce(
     ttft_s = _ttft_s(token_timestamps, window)
     decode_latency_s = _decode_latency_s(token_timestamps)
     throughput_tokens_s = _throughput_tokens_s(token_timestamps, output_token_count)
+    inter_token_throughput_tokens_s = _inter_token_throughput_tokens_s(
+        token_timestamps, output_token_count
+    )
 
     phase_windows = reader.phase_windows()
     phase_energy_j = _phase_energy(phase_windows, curve)
@@ -964,6 +967,7 @@ def _reduce(
         ttft_s=ttft_s,
         decode_latency_s=decode_latency_s,
         throughput_tokens_s=throughput_tokens_s,
+        inter_token_throughput_tokens_s=inter_token_throughput_tokens_s,
         idle_baseline=idle_baseline,
         measurement_quality=quality,
         phase_energy_j=phase_energy_j,
@@ -1041,6 +1045,18 @@ def _throughput_tokens_s(
     if span == 0:
         return None
     return output_token_count / span
+
+
+def _inter_token_throughput_tokens_s(
+    token_timestamps: list[float], output_token_count: int | None
+) -> float | None:
+    """Observed decode intervals per second over the first-to-last span."""
+    if not output_token_count or output_token_count < 2 or len(token_timestamps) < 2:
+        return None
+    span = token_timestamps[-1] - token_timestamps[0]
+    if span == 0:
+        return None
+    return (output_token_count - 1) / span
 
 
 def _phase_energy(

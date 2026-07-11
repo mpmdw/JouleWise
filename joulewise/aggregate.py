@@ -35,6 +35,7 @@ STANDARD_METRICS = (
     "ttft_s",
     "decode_latency_s",
     "throughput_tokens_s",
+    "inter_token_throughput_tokens_s",
 )
 
 _T_CRITICAL_95: dict[int, float] = {

@@ -156,7 +156,18 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertEqual(suite_summary["properties"]["floor_cmp_j"], {"type": ["number", "null"]})
         payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()
         self.assertIsNone(payload["suite_metrics"])
-        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.4.1")
+        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.4.2")
+
+    def test_inter_token_throughput_is_additive_nullable_metric(self) -> None:
+        schema = SummaryMetrics.json_schema()
+        self.assertEqual(
+            schema["properties"]["inter_token_throughput_tokens_s"],
+            {"type": ["number", "null"]},
+        )
+        self.assertNotIn("inter_token_throughput_tokens_s", schema["required"])
+        payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()
+        self.assertIn("inter_token_throughput_tokens_s", payload)
+        self.assertIsNone(payload["inter_token_throughput_tokens_s"])
 
     def test_idle_mean_uncertainty_schema_freezes_shape_and_reasons(self) -> None:
         schema = SummaryMetrics.json_schema()

@@ -23,7 +23,12 @@ from joulewise.cli import (
 )
 from joulewise.clock import FakeClock
 from joulewise.interfaces import PowerSample, RuntimeEvent
-from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus
+from joulewise.schemas import (
+    BenchmarkConfig,
+    FailureReason,
+    RunStatus,
+    SummaryMetrics,
+)
 from joulewise.suite import (
     BLOCK_END,
     BLOCK_START,
@@ -243,6 +248,27 @@ class CompletionStateTests(ReaderTestCase):
         reader = BundleReader(writer.path)
         self.assertFalse(reader.is_complete())
         self.assertIsNone(reader.raw_summary())
+
+    def test_inter_token_throughput_must_be_null_or_finite(self) -> None:
+        writer = self.make_bundle("nonfinite-inter-token-throughput")
+        summary = SummaryMetrics(
+            status=RunStatus.SUCCEEDED,
+            energy_request_j=1.0,
+            gross_energy_j=1.0,
+            inter_token_throughput_tokens_s=float("inf"),
+        ).to_dict()
+        (writer.path / "summary_metrics.json").write_text(json.dumps(summary))
+
+        problems = BundleReader(writer.path).problems()
+
+        self.assertTrue(
+            any(
+                "inter_token_throughput_tokens_s is not null or finite"
+                in problem
+                for problem in problems
+            ),
+            problems,
+        )
 
 
 class ProblemCollectionTests(ReaderTestCase):

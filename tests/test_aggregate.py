@@ -22,6 +22,7 @@ STANDARD_METRICS = (
     "ttft_s",
     "decode_latency_s",
     "throughput_tokens_s",
+    "inter_token_throughput_tokens_s",
 )
 
 
@@ -501,6 +502,7 @@ class MissingAndMemberProblemTests(AggregateTestCase):
                 "ttft_s": 0.5,
                 "decode_latency_s": 1.5,
                 "throughput_tokens_s": 20.0,
+                "inter_token_throughput_tokens_s": 17.5,
             },
         )
         _write_summary(
@@ -516,6 +518,7 @@ class MissingAndMemberProblemTests(AggregateTestCase):
                 "ttft_s": 0.7,
                 "decode_latency_s": 2.5,
                 "throughput_tokens_s": 30.0,
+                "inter_token_throughput_tokens_s": 27.5,
             },
         )
 
@@ -532,6 +535,7 @@ class MissingAndMemberProblemTests(AggregateTestCase):
             "ttft_s": 0.6,
             "decode_latency_s": 2.0,
             "throughput_tokens_s": 25.0,
+            "inter_token_throughput_tokens_s": 22.5,
         }
         for metric_name, expected_mean in expected_means.items():
             with self.subTest(metric=metric_name):
