@@ -37,9 +37,16 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit d47415b"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit d47415b</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 73489a9"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 73489a9</span></span></div>
     <h1>JouleWise Run State</h1>
-<p>Last updated: 2026-07-09 (C-027 whole-project council review with
+<p>Last updated: 2026-07-10 (PR #49&#39;s main-side P2-038 rail-only CI flake
+root-caused to the fake powermetrics child&#39;s SIGTERM/right-edge-bracket race;
+fixture-only fix is uncommitted, exact test 100/100 green, focused 5 OK,
+canonical 1041 OK/13 skipped. Earlier: P2-040 reducer-version review blocker fixed
+without commit on <code>impl/p2040-remainder</code>: reducer 0.3.1 plus frozen-0.3.0
+absence projection; focused tests green, canonical rerun exposed one unrelated
+pre-existing node-worker timing failure. Earlier:
+C-027 whole-project council review with
 gpt-5.6-sol: claim-surface corrections in README/PROJECT_STATUS/this
 file, 14 new queue rows plus NV-GATE-2 additions to P2-005, D-060 proposed +
 D-061..D-063 accepted; record in
@@ -91,73 +98,124 @@ REDEPLOY the site so the public snapshot tracks the repo (C-012):
 committed.</li>
 </ol>
 <h2 id="active-stop-card">ACTIVE_STOP_CARD</h2>
-<p>Status: <strong>ACTIVE (2026-07-10, C-028 checkpoint #2 — Ed away).</strong> This
-card is the resume authority. The C-028 session adjudicated all ten
-C-027 specs (docs/specs/c027/ADJUDICATION.md — 40 rulings, 2-round Sol
-advisory), then landed the integration through per-tranche review
-stacks.</p>
-<p><strong>MERGED to main this session:</strong> PR #41 (spec wave incl. ADJUDICATION),
-PR #42 (docs tranche: governance addenda + per-invocation
-recoverability audit + AP/SPLIT amendments + env locks), PR #43
-(P2-040 tranche + version dispatch + NV-2 cooldown fix; lead gates:
-corpus 6/6 strict, mock e2e, suites green), PR #44 (RPT-001 report
-skeleton + gated vertical slice; lead re-ran the full build), PR #45
-(P2-039 floor calculator, validator hardened after a BLOCKED review).
-RETRO-001 ran (2 SHOULD-FIX, both fixed in #43); Current Verification
-may advance past 36d5641 after the NEXT session&#39;s fresh site
-regen+diff (RETRO-1&#39;s remaining condition).</p>
-<p><strong>OPEN work, exact states:</strong></p>
-<ul>
-<li>PR #46 DRAFT (impl/p2042 frozen analysis manifest): implementation
-complete, main merged in (one manual-merge splice defect was
-introduced and fixed — 8a1c9f-era note in the PR), suite green.
-NEEDS: targeted Sol review (spec: engine trio §A + adjudication) →
-fix round if any → un-draft → CI → merge.</li>
-<li>impl/p2041 (pushed, NO PR): campaign verdict split + H3 fail-closed
-campaign-cooldown gate, complete per its run report in the branch;
-intentionally behind main. NEEDS: merge main in (run_campaign.py
-will conflict with #46&#39;s sidecar exclusion — land #46 first),
-targeted review, PR, gates, merge.</li>
-<li>impl/p2040-remainder (pushed, NO PR): FIX-7a/7b/FIX-8 complete; lead
-corpus gate + full suite ALREADY GREEN. NEEDS: targeted review
-(cheap), PR, CI, merge.</li>
-<li>impl/nvgate2-codenow: session died at capacity twice; a codex-run-v2
-RESUME with --retries 3 was IN FLIGHT at checkpoint (out-file
-scratchpad/nvgate2-impl2.md). If it completed: commit by pathspec in
-../JouleWise-wt/nvgate2, review, PR. If it died with the session:
-the worktree holds partial state — resume again via
-<code>codex-run-v2 &lt;out&gt; --resume ...</code> in that worktree.</li>
-<li>impl/p2038 (production uncertainty evidence, stacked on the merged
-P2-040): Sol session was IN FLIGHT at checkpoint (out-file
-scratchpad/p2038-impl.md). Same recovery pattern as nvgate2.
-P2-038 stays a HARD pre-Window-A gate.</li>
-<li>DOC-008 kernel: adjudicated to land LAST — refresh the kernel at the
-final integrated head + NOT-AUTHORITATIVE header, targeted review,
-PR. Not started (deliberately).</li>
-<li>Cross-stream integration review (Sol) over merged main AFTER the
-remaining branches land; then C-028 BOOKKEEPING: consume
-scratchpad/bookkeeping-drafts.md (16 KB: D-064 draft, C-028 council
-entry draft, run-report skeleton, clearance template) — lead owns
-final wording; per-invocation JSONL per D-064 (a start exists at
-scratchpad/c028-invocations.jsonl via codex-run-v2 --manifest);
-queue-row status updates; consistency sweep; site regen + deploy;
-THEN clear this stop card.</li>
+<p>Status: <strong>ACTIVE (2026-07-10 late, C-028 checkpoint #3 — fresh-thread
+handoff; the prior thread&#39;s context filled).</strong> This card is the ONLY
+resume authority. Read it plus <code>docs/reviews/2026-07-10-hardening-adjudication.md</code>
+before anything else.</p>
+<p><strong>MERGED to main (C-028 total): PRs #41-#48.</strong> #46 P2-042 analysis
+manifest (review + fix round), #47 P2-040 remainder (reducer 0.3.1 +
+ADDED_SINCE_0_3_0 discipline), #48 P2-038 production uncertainty
+(metrology review: unknown-contamination fail-open closed; cross-
+contract idle_drift_guard). Plus same-day: P0-003 CLOSED (iCloud
+Drive backup, restore test strict-valid + byte-identical), D-060
+RATIFIED by Ed, hardening proposal adjudicated (9 new queue rows
+P2-043..P2-048/CI-002/REPRO-002/RPT-002; record + conflicts table in
+docs/reviews/2026-07-10-hardening-adjudication.md).</p>
+<p><strong>IMMEDIATE next actions (in order):</strong></p>
+<ol>
+<li>DONE 2026-07-11: PR #49 MERGED to main (1b0f1f6) after the full
+gate stack: lead conflict resolution (456772a), Sol merge review +
+P2-005-row repair (13f6c9e), the py3.14 CI red root-caused as a
+PRE-EXISTING main-side fixture SIGTERM race and fixed fixture-only
+(10e0ad2; flake test 0/30 fails lead-run), NV-5 localhost lead gate
+CLOSED (3/3 OK socket-capable), canonical 1041 OK (skipped=12)
+unpiped, CI green both versions, Ed-approved SHA-guarded merge.
+Both historic flake classes (fake-nvidia-smi idle deadline; P2-038
+rail-only right-edge bracket) are now dead on main.
+IN FLIGHT (Ed-directed fan-out): impl/p2041-vetted ULTRA
+composition per the triage recipe, and a NEW impl/p2037 stream
+(contrast/claim engine, ULTRA, from the banked adjudicated spec +
+frozen rulings; interface assumptions vs p2041 flagged for
+integration review). Original item (superseded): PR #49 had REAL
+code conflicts vs post-#48
+main: joulewise/cli.py + reduce.py + schemas.py + tests/test_cli_run.py
+(both sides extended MeasurementQuality, ADDED_SINCE_0_3_0, and the
+0.3.x dispatch) + the usual state-file unions. A clean merge was
+deliberately NOT rushed at checkpoint. Resolve with care (union of
+BOTH quality fields runtime_cleanup_ok + remote_cleanup_failed in
+schema, ADDED_SINCE, and dispatch tests; suite must stay green
+UNPIPED), or delegate to a Sol session in ../JouleWise-wt/nvgate2
+with this exact contract. Then CI → merge #49. NOTE: #49 contains
+the ROOT-CAUSE fix for the historic fake-nvidia-smi flake (worker
+idle deadline now starts at sampler readiness) — after it merges,
+that flake class is dead everywhere.
+ADDENDUM (2026-07-11): conflicts RESOLVED lead-side (456772a +
+P2-005-row repair 13f6c9e after a Sol merge-review catch; suite
+1041 OK unpiped). CI then went RED ONCE on py3.14 at 13f6c9e:
+FAIL test_rail_only_sentinels_withhold_drift_but_leave_gross_eligible
+(tests/test_p2038_production_path.py, MAIN-side PR #48 content,
+AssertionError eligible=False) — NOT the localhost subprocess test
+(an earlier same-day report misattributed it). Same code was green
+on 3.11 and on both versions at 456772a ⇒ nondeterministic,
+timing-suspect, possibly pre-existing on main independent of #49.
+Root-cause + deterministic fix required BEFORE merging #49; do not
+merge on a rerun-green alone, and any fix must preserve fail-closed
+gate semantics (metrology adjudication).</li>
+<li>impl/p2041 — TRIAGE DONE, RULINGS ED-APPROVED (2026-07-11): the raw
+WIP diff must NOT be applied wholesale — it deletes P2-038/P2-040
+implementations (full audit + vetted rebuild recipe:
+docs/reviews/2026-07-11-p2041-red-tranche-triage.md). Sol&#39;s 7
+test-fixture fixes in the worktree are valid and retained. Ed
+approved the lead&#39;s rulings on the three C questions: (1)
+claim_readiness stays, analysis_readiness rename REJECTED; (2)
+first-run exemption stays per-physical-session; (3) scoped top-up
+detection + cooldown trace v2 hardening NOT in this landing —
+items (2)-hardening and (3) become queue candidates with dissent
+recorded. Rebuild AFTER #49 merges: branch impl/p2041-vetted off
+post-#49 main, Sol ULTRA composition per the triage recipe (0.4.0
+must union runtime_cleanup_ok AND #49&#39;s remote_cleanup_failed +
+verifier registry), then lead suite unpiped + full review stack.
+Original instructions (superseded but kept for context): the
+session exited OK but wrote an EMPTY report; its tree (branch fixes<ul>
+<li>main-post-#48 content PRE-UNIONED without merge ancestry + the C5
+window_evidence_precheck renames) is snapshot-committed as a
+clearly-labeled WIP [RED] head on impl/p2041 (pushed). Suite there:
+FAILED 6F/1E, all test_run_campaign — the composition with main&#39;s
+P2-042 sidecar/verdict changes is incomplete. Fresh thread:
+diagnose the 7 failures (likely a bounded Sol fix round with the
+failure list), REBUILD proper ancestry (safest: new branch off
+origin/main + apply the WIP diff), then the full review stack.
+Treat every claim of that session as uncorroborated (empty report).</li>
 </ul>
-<p><strong>Session scratchpad</strong> (survives on disk):
-<code>/private/tmp/claude-501/-Users-edr-code-JouleWise/e48cf22e-209a-4355-bb28-9b6a37636b34/scratchpad/</code>
-— all review packets (rev-<em>.md, p2040-lens</em>.md, retro001.md), fix
-reports, the advisory thread record (resume-plan.md; MCP thread id in
-ADJUDICATION.md), bookkeeping drafts.</p>
-<p><strong>Tooling delta:</strong> <code>~/.local/bin/codex-run-v2</code> installed (37/37 tests;
-per-call -m/--effort, capacity-aware retry-with-resume, D-064
---manifest/--role/--parent rows). v1 untouched; promote v2 to default
-after a few more clean runs. Ed&#39;s division-of-labor directive (Sol =
-implementer + advisor, Fable = architect/director) is in effect and
-recorded in memory.</p>
-<p><strong>Ed-decision list</strong> (unchanged, ADJUDICATION.md §Ed): P0-003 backup
-destination (E0, pre-Window-A hard gate); two-model floor economics;
-full-corpus CI; renderer (P1-008); REPRO pack publication; D-060
-ratification.</p>
+</li>
+<li>DOC-008 kernel (LAST, per adjudication): refresh at final
+integrated head + NOT-AUTHORITATIVE header, targeted review, PR.</li>
+<li>Cross-stream integration review (Sol) over final main: interaction
+defects only, esp. P2-038 evidence x P2-040 gates x P2-041
+readiness x P2-042 manifest x NV-GATE quality fields.</li>
+<li>C-028 BOOKKEEPING ARC: consume scratchpad/bookkeeping-drafts.md;
+D-064 decision entry (adjudicated H4: tracked per-session JSONL,
+one row per invocation; a partial exists at
+scratchpad/c028-invocations.jsonl); C-028 council entry (this arc
+had ~35 Sol sessions incl. 7-lens review, 40-ruling adjudication,
+per-stream review stacks, 2 capacity-killed+resumed sessions, the
+hardening adjudication, bridge v2); run report; queue-row updates
+(P2-040 FULLY done, P2-038/P2-042 done pending integration review,
+RETRO-001 done pending verification-head advance at next site
+regen+diff); RPT-001+P2-039 exit-checklist rows per DOC-009 rule;
+consistency sweep; site regen + deploy; THEN clear this card.</li>
+</ol>
+<p><strong>Environment/tooling facts for the fresh thread:</strong></p>
+<ul>
+<li>codex = gpt-5.6-sol (Ed&#39;s term); reviews at --effort xhigh (config
+default), BIG implementations at --effort ultra (spawn_agent-capable).
+Invoke via ~/.local/bin/codex-run-v2 (adds -m/--effort, capacity
+retry-with-resume, --manifest D-064 rows; 37/37 tests) — v1 exists
+but v2 is now proven across ~10 runs.</li>
+<li>Worktrees under ../JouleWise-wt/ — do NOT remove until merged.</li>
+<li>Git identity: repo-local user.name/email were set (hostname changed);
+worktree commits work.</li>
+<li>LESSON (bit three times): never pipe the suite when its exit code
+gates a push — run unpiped to a file, check, then push separately.</li>
+<li>Sol sandboxes cannot bind localhost sockets and cannot write shared
+worktree git metadata: socket tests are lead-run 3x; merges are
+lead-recreated (sessions may pre-union content).</li>
+<li>The fake-nvidia-smi flake fires near-deterministically under Sol
+load on THIS machine but never in CI — until #49 merges, judge that
+one failure accordingly.</li>
+</ul>
+<p><strong>Ed-decision list remaining:</strong> two-model floor economics; full-corpus
+CI commitment; renderer (P1-008); REPRO pack publication acts.</p>
 <h2>Superseded stop card (CP-5)## Superseded stop card (CP-5)</h2>
 <p>Status: <strong>CLEARED 2026-07-09</strong> by the CP-5 resume session. Every
 clearance criterion was met: all three worktree diffs lead-gated
@@ -199,6 +257,17 @@ fail-closed sampler pin, model weight hashing, hash-domain
 realized-vs-manifest closure), advisor status site + suite_next draft
 specs (D-051). Suite 822 OK. Ed&#39;s four-part answer + Window-A go/no-go:
 <code>docs/run_reports/2026-07-09-cp5-resume.md</code>.</p>
+<p><strong>P2-038 SOFTWARE SIDE COMPLETE on <code>impl/p2038</code> (2026-07-10; uncommitted
+for lead pathspec review); LIVE CLOSURE REMAINS OPEN.</strong> Current-era real
+powermetrics runs now derive and record paired-clock anchor/phase evidence,
+the interim pre/post idle envelope, and a separate idle-drift guard handoff;
+the post sentinel is outside the measured window. A production-shaped real
+adapter/child-process path passes the P2-029/P2-040 request gate with no
+synthetic metadata and exercises all three required fail-closed reasons.
+Campaign shakedown mode now enforces strict → reduce → strict → assertion →
+backup. True MLX + <code>/usr/bin/powermetrics</code> execution and approved backup remain
+lead-owned <code>[QUIET-MAC]</code> work. Report:
+<code>docs/run_reports/2026-07-10-p2038-production-uncertainty.md</code>.</p>
 <p><strong>RESTART HERE (next agent) — this is the ONLY next-action block; the
 queue owns ordering (C-027):</strong></p>
 <ol>
@@ -210,9 +279,8 @@ whole-project council review, adjudicated follow-ups) and
 before any new irreplaceable Window-A evidence is retained; plus
 P1-008 rubric/calendar (provisional-contract fallback per proposed
 D-060).</li>
-<li>[AGENT]: the C-027 correctness rows, in queue order — P2-040
-(reducer/gate fixes incl. zero-window strict), P2-038 (production
-uncertainty evidence path), P2-039 (frozen floor artifact +
+<li>[AGENT]: the C-027 correctness rows, in queue order — finish lead review
+and landing of P2-038&#39;s completed software diff, then P2-039 (frozen floor artifact +
 guard factor), then RPT-001 (report skeleton + vertical slice),
 P2-042 (frozen analysis manifest), P2-041 (campaign verdict
 split), and only then P2-037 (contrast/claim engine, which
@@ -231,6 +299,26 @@ are live for Window-A execution once the above gates clear.</li>
 </ol>
 <h2 id="session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</h2>
 <ul>
+<li>2026-07-10 NV-GATE-2 idle-capture regression debug/fix (uncommitted;
+localhost re-verification remains lead-gated):
+<code>docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md</code></li>
+<li>2026-07-10 NV-GATE-2 CODE-NOW implementation (NV-1/NV-3/NV-4/NV-5;
+live promotion evidence still gated):
+<code>docs/run_reports/2026-07-10-nvgate2-codenow.md</code></li>
+<li>2026-07-10 NV-GATE-2 accepted-findings fix round (uncommitted; merge
+metadata recreation and lead gate pending):
+<code>docs/run_reports/2026-07-10-nvgate2-fix-round.md</code></li>
+<li>2026-07-10 P2-038 accepted-findings fix round (all FIX-1..FIX-6 green;
+content-merged <code>origin/main</code>, Git merge metadata sandbox-blocked):
+<code>docs/run_reports/2026-07-10-p2038-fix-round.md</code></li>
+<li>2026-07-10 P2-038 production uncertainty software path (live quiet-machine
+closure still open):
+<code>docs/run_reports/2026-07-10-p2038-production-uncertainty.md</code></li>
+<li>2026-07-10 P2-040 reducer-version compatibility review fix (uncommitted):
+<code>docs/run_reports/2026-07-10-p2040-versioning-fix.md</code></li>
+<li>2026-07-10 P2-040 remainder implementation (uncommitted, pending lead
+pathspec commit/corpus gate):
+<code>docs/run_reports/2026-07-10-p2040-remainder.md</code></li>
 <li>2026-07-10 P2-040 / RETRO-001 fix round (committed on c027-int-p2040
 after lead review): <code>docs/run_reports/2026-07-10-p2040-fix-round.md</code></li>
 <li>2026-07-09 C-027 whole-project council review (7 gpt-5.6-sol lenses +
@@ -274,6 +362,73 @@ D-038..D-042): <code>docs/run_reports/2026-07-08-suite-science-expansion.md</cod
 </ul>
 <h2 id="current-verification">Current Verification</h2>
 <ul>
+<li>PR #49 P2-038 rail-only flake: pre-fix exact-test loop failed 4/100;
+retained failure emitted <code>cadence_ratio_unrecorded</code> plus
+<code>interpolation_bound_unrecorded</code> because the final trace sample preceded the
+stop marker. Archived <code>origin/main</code> reproduced on iteration 6. The
+fixture-only terminal-sample handshake fix passed the exact test 100/100,
+focused module <code>Ran 5 tests in 30.480s</code>, <code>OK</code>, and canonical suite
+<code>Ran 1041 tests in 66.509s</code>, <code>OK (skipped=13)</code>. Report:
+<code>docs/run_reports/2026-07-10-pr49-p2038-flake-root-cause.md</code>.</li>
+<li>NV-GATE-2 idle-capture regression fix: historic fake-sampler plus new
+delayed-readiness regression passed together in 3 consecutive fresh
+processes; canonical suite <code>Ran 1023 tests in 35.164s</code>, <code>OK (skipped=13)</code>;
+<code>py_compile</code> and <code>git diff --check</code> clean. The exact localhost contract was
+attempted 3 times but loudly skipped before worker execution because this
+sandbox denied socket bind; lead socket-capable 3x rerun remains required.
+Report: <code>docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md</code>.</li>
+<li>NV-GATE-2 accepted-findings fix round: focused node-worker/subprocess,
+controller, reducer, strict-dispatch, and schema surface <code>Ran 229 tests in 4.995s</code>, <code>OK (skipped=2)</code>; the historic fake-sampler test passed three
+consecutive fresh-process runs; canonical suite <code>Ran 1022 tests in 34.406s</code>,
+<code>OK (skipped=13)</code>; targeted <code>py_compile</code> and <code>git diff --check</code> clean. The
+0.3.1 dispatch came from <code>origin/impl/p2040-remainder</code> because post-main did
+not contain it. Report: <code>docs/run_reports/2026-07-10-nvgate2-fix-round.md</code>.</li>
+<li>NV-GATE-2 CODE-NOW worktree: baseline <code>Ran 910 tests in 32.549s</code>,
+<code>OK (skipped=12)</code>; final canonical suite <code>Ran 922 tests in 33.551s</code>,
+<code>OK (skipped=13)</code>; focused NV-1/NV-3/NV-4/NV-5 surface <code>Ran 232 tests in 6.085s</code>, <code>OK (skipped=2)</code>; <code>git diff --check</code> and targeted
+<code>py_compile</code> clean. The added skip is loud and specific: this managed
+sandbox denied localhost socket bind for NV-5. No live NVIDIA evidence or
+de-provisionalization was claimed.</li>
+<li>P2-038 accepted-findings fix round: all FIX-1..FIX-6 complete; focused
+<code>Ran 70 tests in 41.211s</code>, <code>OK</code>; canonical <code>Ran 992 tests in 68.140s</code>,
+<code>OK (skipped=12)</code>; <code>git diff --check</code> clean. The real-child rail-only path
+now withholds drift on unknown contamination while gross remains eligible;
+P2-039&#39;s pending guard validator accepts the emitted block; backup launch
+failure, extreme-sentinel exclusion, child invocation, and literal phase
+constants are regression-tested. The absent worktree <code>runs/</code> corpus produced
+the loud six-bundle acceptance-gate skip. Git merge metadata remains absent
+because the managed sandbox cannot write the external worktree admin dir;
+the exact clean three-way <code>origin/main</code> content snapshot is applied.</li>
+<li>P2-040 reducer-version review fix: focused strict/reducer run
+<code>Ran 84 tests in 1.908s</code>, <code>OK</code>; extended strict/reducer/schema run
+<code>Ran 104 tests in 1.997s</code>, <code>OK (skipped=1)</code>. Canonical run reached
+<code>Ran 926 tests in 33.732s</code>, <code>FAILED (failures=1, skipped=12)</code> solely at
+pre-existing <code>test_telemetry_measure_idle_with_fake_nvidia_smi</code>; isolated
+reruns reproduce its 0.2-second fake-process timing failure. All
+reducer/version tests pass; no out-of-scope node-worker change was made.</li>
+<li>P2-040 remainder worktree: pre-change baseline <code>Ran 910 tests in 34.584s</code>,
+<code>OK (skipped=12)</code>; post-change focused affected modules <code>Ran 256 tests in 3.744s</code>, <code>OK (skipped=1)</code>; canonical <code>Ran 924 tests in 32.812s</code>, <code>OK (skipped=12)</code>; compileall and <code>git diff --check</code> clean. The unchanged
+six-corpus test produced its required loud skip because <code>runs/</code> is absent;
+lead 6/6 strict read-only rerun remains the landing gate.</li>
+<li>P2-042 emitter branch <code>impl/p2042</code> (lead-committed base; draft PR #46;
+targeted-review fix round complete in the worktree, no fix-round commit):
+FIX-1 fail-closed typed identity/linkage validation, FIX-2 semantic
+<code>run_id</code> derivation, and FIX-3 raw-byte AP hashing/LF config emission are
+implemented. Focused manifest/generator/campaign checks: <code>Ran 82 tests in 12.317s, OK</code>; final canonical suite: <code>Ran 989 tests in 33.405s, OK (skipped=12)</code>. Review regressions cover <code>run_id=[]</code>, one malformed identity
+at each manifest object layer, a fully rehashed coherent rename, and a CRLF
+AP fixture. Report:
+<code>docs/run_reports/2026-07-10-p2042-analysis-manifest.md</code>.</li>
+<li>P2-040 reducer-version review fix: focused strict/reducer run
+<code>Ran 84 tests in 1.908s</code>, <code>OK</code>; extended strict/reducer/schema run
+<code>Ran 104 tests in 1.997s</code>, <code>OK (skipped=1)</code>. Canonical run reached
+<code>Ran 926 tests in 33.732s</code>, <code>FAILED (failures=1, skipped=12)</code> solely at
+pre-existing <code>test_telemetry_measure_idle_with_fake_nvidia_smi</code>; isolated
+reruns reproduce its 0.2-second fake-process timing failure. All
+reducer/version tests pass; no out-of-scope node-worker change was made.</li>
+<li>P2-040 remainder worktree: pre-change baseline <code>Ran 910 tests in 34.584s</code>,
+<code>OK (skipped=12)</code>; post-change focused affected modules <code>Ran 256 tests in 3.744s</code>, <code>OK (skipped=1)</code>; canonical <code>Ran 924 tests in 32.812s</code>, <code>OK (skipped=12)</code>; compileall and <code>git diff --check</code> clean. The unchanged
+six-corpus test produced its required loud skip because <code>runs/</code> is absent;
+lead 6/6 strict read-only rerun remains the landing gate.</li>
 <li>P2-040 / RETRO-001 fix-round worktree: canonical suite <code>Ran 908 tests in 32.723s</code>, <code>OK (skipped=11)</code>; focused 211 tests OK; claims lint exit 0 with
 no errors; <code>git diff --check</code> clean. The absent <code>runs/</code> corpus produced the
 required loud six-bundle acceptance-gate skip; the lead corpus gate then
@@ -323,6 +478,26 @@ the new era rule (PR #22 live gate: 6/6 valid, tamper fails named).</li>
 </ul>
 <h2 id="known-workspace-state">Known Workspace State</h2>
 <ul>
+<li>Worktree <code>/Users/edr/code/JouleWise-wt/nvgate2</code> on
+<code>impl/nvgate2-codenow</code> has the idle-readiness fix, regression test, and
+handoff bookkeeping COMMITTED (cd6e2cb) and the lead-resolved merge of
+post-#48 <code>origin/main</code> (union of remote_cleanup_failed +
+runtime_cleanup_ok in schema/ADDED_SINCE/dispatch tests). The pre-existing
+main-side P2-038 rail-only flake has an uncommitted fixture-only SIGTERM
+handshake fix plus handoff report/state updates. The localhost 3x lead gate
+PASSED (lead-run 2026-07-11: 3/3 OK socket-capable; flake test 0/30
+failures; canonical 1041 OK skipped=12 unpiped, socket test exercised).</li>
+<li><code>impl/p2038</code> is intentionally dirty with the uncommitted P2-038 software,
+accepted-findings fixes, tests, contracts, config, run reports, and the clean
+three-way content merge of <code>origin/main</code>. The lead owns pathspec review and
+the real Git merge/commit; the sandbox could not write <code>ORIG_HEAD</code>/merge
+metadata in the external worktree admin directory. No retained run bundle
+was modified.</li>
+<li>Worktree <code>/Users/edr/code/JouleWise-wt/p2040rem</code> on
+<code>impl/p2040-remainder</code> contains the committed remainder implementation and
+is intentionally dirty only with the uncommitted reducer-version review
+fix, tests, D-030 amendment, and handoff bookkeeping. Do not commit or
+discard these changes wholesale.</li>
 <li><code>main</code> and <code>origin/main</code> contain the user-directed Claude Code → Codex
 bridge hardening from commit <code>1d7c415</code> (pushed direct as a bounded
 tooling change, closeout <code>ef34cc9</code>). Branch <code>c027-council-review</code>
@@ -337,9 +512,9 @@ leave or remove; do not re-land.</li>
 lead-verification artifacts (live-runs bundles are not corpus).</li>
 </ul>
 <h2 id="what-is-next">What Is Next</h2>
-<p>See <strong>RESTART HERE</strong> above — that block and <code>TASK_QUEUE.md</code> are the only
-next-action authorities. (C-027 removed the duplicated ranking that
-previously lived here after it drifted stale against the queue.)</p>
+<p>Lead-review the uncommitted P2-040 reducer-version fix, run the retained
+six-bundle strict read-only gate, and commit by pathspec. Once landed, P2-038 is the next
+<code>[AGENT]</code> correctness row. <code>TASK_QUEUE.md</code> remains the ordering authority.</p>
 <p>Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
 C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),
 calendar mapping (P1-008).</p>
@@ -364,7 +539,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit d47415b · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit 73489a9 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
