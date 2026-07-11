@@ -89,6 +89,18 @@ docs/reviews/2026-07-10-hardening-adjudication.md).
    the ROOT-CAUSE fix for the historic fake-nvidia-smi flake (worker
    idle deadline now starts at sampler readiness) — after it merges,
    that flake class is dead everywhere.
+   ADDENDUM (2026-07-11): conflicts RESOLVED lead-side (456772a +
+   P2-005-row repair 13f6c9e after a Sol merge-review catch; suite
+   1041 OK unpiped). CI then went RED ONCE on py3.14 at 13f6c9e:
+   FAIL test_rail_only_sentinels_withhold_drift_but_leave_gross_eligible
+   (tests/test_p2038_production_path.py, MAIN-side PR #48 content,
+   AssertionError eligible=False) — NOT the localhost subprocess test
+   (an earlier same-day report misattributed it). Same code was green
+   on 3.11 and on both versions at 456772a ⇒ nondeterministic,
+   timing-suspect, possibly pre-existing on main independent of #49.
+   Root-cause + deterministic fix required BEFORE merging #49; do not
+   merge on a rerun-green alone, and any fix must preserve fail-closed
+   gate semantics (metrology adjudication).
 2. impl/p2041 — ULTRA ROUND FINISHED RED (post-checkpoint update): the
    session exited OK but wrote an EMPTY report; its tree (branch fixes
    + main-post-#48 content PRE-UNIONED without merge ancestry + the C5
