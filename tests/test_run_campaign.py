@@ -1560,6 +1560,31 @@ class RunCampaignTests(unittest.TestCase):
                 else:
                     self.assertIn("campaign_cooldown_evidence_missing", reasons)
 
+    def test_cooldown_provenance_symlink_loop_fails_closed(self) -> None:
+        # Path.resolve() may raise (RuntimeError, or OSError ELOOP depending
+        # on Python version) for a symlink loop; the verifier must return a
+        # fail-closed False, never abort verdict construction.
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest_dir = Path(tmp) / "campaign_manifests"
+            raw_dir = manifest_dir / "raw"
+            raw_dir.mkdir(parents=True)
+            loop = raw_dir / "loop.jsonl"
+            loop.symlink_to(loop)
+
+            self.assertFalse(
+                run_campaign_module.verify_cooldown_raw_provenance(
+                    {
+                        "result": "recovered",
+                        "raw_artifact": {
+                            "path": "raw/loop.jsonl",
+                            "sha256": "0" * 64,
+                            "records": 1,
+                        },
+                    },
+                    manifest_dir,
+                )
+            )
+
     def test_resumed_cooldown_hash_and_count_mismatches_block_readiness(self) -> None:
         for mutation in ("hash_mismatch", "count_mismatch"):
             with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as tmp:

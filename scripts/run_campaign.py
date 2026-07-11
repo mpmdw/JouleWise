@@ -1594,8 +1594,11 @@ def verify_cooldown_raw_provenance(
         or raw_records <= 0
     ):
         return False
-    manifest_dir = manifest_dir.resolve()
-    raw_path = (manifest_dir / raw_path_text).resolve()
+    try:
+        manifest_dir = manifest_dir.resolve()
+        raw_path = (manifest_dir / raw_path_text).resolve()
+    except (OSError, RuntimeError):
+        return False
     if manifest_dir not in raw_path.parents:
         return False
     try:
