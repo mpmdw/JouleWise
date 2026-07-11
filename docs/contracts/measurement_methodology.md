@@ -20,6 +20,21 @@ The source of truth for a run is the run bundle:
 
 ## Run Lifecycle
 
+Before a campaign creates a run bundle, the operator runs the read-only doctor
+preflight described in `docs/contracts/doctor_preflight.md`. Schema-0.1 parsing
+continues to warn-and-ignore unknown keys for compatibility, but campaign
+execution fails before the first bundle when those warnings have not been
+explicitly acknowledged. The terminal campaign-verdict JSONL row records the
+exact warning set and acknowledgement; acknowledgement does not alter config
+bytes, collection evidence, claim readiness, or claim outcomes.
+
+Doctor also exposes architecture/version, configured model and tokenizer
+identity, requested sampler fields, inspect-only powermetrics privilege policy,
+thermal pressure, backup capacity, and quiet-machine warnings. These are
+preflight observations, not substitutes for per-bundle provenance or live
+measurement gates. In particular, doctor never starts powermetrics and never
+certifies that a machine is quiet.
+
 1. Validate config.
 2. Create run directory.
 3. Collect device metadata.

@@ -44,6 +44,8 @@ from joulewise.bundle import sanitize_id_component  # noqa: E402
 from joulewise.cli import validate_bundle  # noqa: E402
 from joulewise.bundle_read import BundleReader, BundleReadError  # noqa: E402
 from joulewise.analysis_manifest import validate_analysis_manifest  # noqa: E402
+from joulewise.doctor import SCHEMA_VERSION as DOCTOR_SCHEMA_VERSION  # noqa: E402
+from joulewise.doctor import config_warning_gate  # noqa: E402
 from joulewise.schemas import RunStatus, RuntimeBackend, TelemetryBackend  # noqa: E402
 
 
@@ -330,6 +332,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--waivers",
         help="Optional JSON file listing campaign waivers; waivers are never written into bundles",
+    )
+    parser.add_argument(
+        "--ack-config-warnings",
+        action="store_true",
+        help="Acknowledge doctor-reported ignored config keys and record that fact in the campaign verdict",
     )
     parser.add_argument(
         "--check-prompt-hashes",
@@ -2228,6 +2235,7 @@ def append_verdict(
     members: list[MemberEvaluation],
     campaign_provenance_path: Path | None,
     warning: str | None,
+    preflight: dict[str, Any],
 ) -> None:
     row: dict[str, Any] = {
         "schema_version": CAMPAIGN_VERDICT_SCHEMA,
@@ -2250,6 +2258,7 @@ def append_verdict(
             if campaign_provenance_path is not None
             else None
         ),
+        "preflight": preflight,
     }
     if warning is not None:
         row["block_order_warning"] = warning
@@ -2272,6 +2281,52 @@ def run_campaign(args: argparse.Namespace) -> int:
     configs = apply_order_manifest(discover_configs(config_dir), order_entries)
     order_by_config = order_entry_by_config(order_entries)
     print_config_file_list(configs)
+    doctor_gate = config_warning_gate(
+        configs,
+        acknowledge=args.ack_config_warnings,
+        mode="campaign",
+    )
+    doctor_gate.pop("inspection")
+    preflight = {
+        "schema_version": DOCTOR_SCHEMA_VERSION,
+        "check": "config",
+        "status": doctor_gate["status"],
+        "summary": doctor_gate["summary"],
+        "config_warning_acknowledgement": doctor_gate["details"]["acknowledgement"],
+    }
+    for error in doctor_gate["details"]["errors"]:
+        print(
+            f"error: doctor config preflight failed for {error['config']}: {error['message']}",
+            file=sys.stderr,
+        )
+    if doctor_gate["details"]["errors"]:
+        return 2
+    acknowledgement = preflight["config_warning_acknowledgement"]
+    if acknowledgement["warning_count"]:
+        disposition = "acknowledged" if acknowledgement["acknowledged"] else "unacknowledged"
+        print(
+            f"DOCTOR CONFIG PREFLIGHT: {acknowledgement['warning_count']} warning(s), {disposition}"
+        )
+    if doctor_gate["status"] == "fail":
+        categories = {"usable": [], "waived": [], "failed": [], "missing": []}
+        collection_reasons = ["doctor config warnings were not acknowledged"]
+        readiness = claim_readiness_for(analysis_manifest, "invalid", [])
+        if not args.dry_run:
+            print_verdict("invalid", collection_reasons, categories, readiness)
+            append_verdict(
+                log_path,
+                collection_verdict="invalid",
+                collection_reasons=collection_reasons,
+                categories=categories,
+                claim_readiness=readiness,
+                analysis_manifest=analysis_manifest,
+                sampling_audit=sampling_audit_for(analysis_manifest),
+                members=[],
+                campaign_provenance_path=None,
+                warning=order_warning,
+                preflight=preflight,
+            )
+        return 1
     items = read_config_infos(configs)
     waivers = load_waivers(args.waivers)
     config_errors = [item for item in items if isinstance(item, ConfigError)]
@@ -2310,6 +2365,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             members=[],
             campaign_provenance_path=None,
             warning=order_warning,
+            preflight=preflight,
         )
         return 1
 
@@ -2725,6 +2781,7 @@ def run_campaign(args: argparse.Namespace) -> int:
             members=all_evaluations,
             campaign_provenance_path=campaign_provenance_path,
             warning=order_warning,
+            preflight=preflight,
         )
     return 1 if failures or collection_verdict in {"blocked", "invalid"} else 0
 
