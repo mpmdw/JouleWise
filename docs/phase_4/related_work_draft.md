@@ -1,16 +1,21 @@
 # Related Work Draft (Stage 4.6)
 
 - Status: **draft**
-- Date: 2026-07-06
+- Date: 2026-07-06; RPT-002 primary-source fold-in 2026-07-11
 - Provenance: generated as part of queue item **P3-001** (Stage 4.6 desk
   work; ungated per the Phase 4 plan).
 - Acceptance target (Stage 4.6): the report's background chapter must be
   assemblable from this draft plus `docs/contracts/measurement_methodology.md`
   **without new research**; the "why energy, why split, why now" story is
   sourced here, not asserted.
-- Every source below passed an independent verification pass; corrections
-  from that pass are already applied in the text. Citations are listed with
-  resolvable IDs in the Citations section.
+- The original eleven-source survey passed an independent verification pass
+  on 2026-07-06; that inherited evidence is preserved below. On 2026-07-11,
+  the lead verified all seven RPT-002 sources against primary records and
+  supplied binding metadata, scope, claim, and artifact corrections. All seven
+  records are `VERIFIED_AGAINST_PRIMARY` in the canonical source map.
+- Canonical citation metadata now lives in
+  `docs/report_src/references.csl.json`; per-source verification work and
+  proposal evidence locations live in `docs/report_src/source_map.json`.
 
 ## 1. Scope and positioning claims
 
@@ -36,10 +41,12 @@ honestly in Section 6 against the surveyed evidence, are:
 2. **Auditable raw run bundles**: each run preserves its raw power trace,
    event log, model output, and metadata as a self-contained,
    re-reducible artifact — not leaderboard summary numbers.
-3. **Split-inference energy on local interconnects**: measured energy of
-   prefill/decode-disaggregated inference across heterogeneous local
-   devices, decomposed into prefill / serialize / transfer / deserialize /
-   decode phases.
+3. **Intended split-inference evidence niche**: an extension targeting
+   prefill/decode-disaggregated inference across heterogeneous consumer/edge
+   devices, with both-end, boundary-labeled measurement and self-contained,
+   re-reducible bundles. This is a target contribution, not a claim that the
+   present report has completed split execution or that JouleWise originated
+   energy-aware disaggregation.
 
 ## 2. Naming lineage and framing
 
@@ -441,11 +448,96 @@ prefill/decode-disaggregated inference over local interconnects, which
 this work does not study — and JouleWise's auditable raw run bundles
 contrast with this paper's summary-level reporting.
 
-## 6. Positioning assessment (honest audit of the three claims)
+## 6. Primary-verified 2026 positioning intake
 
-For each distinguishing claim, this section states plainly whether any
-surveyed source undercuts it, using the per-source claim flags from the
-verified survey data, and gives the adjusted, defensible version.
+The lead checked all seven Appendix C/section 11 anchors against primary
+records on 2026-07-11. The canonical URLs, retrieval date, metadata, scope
+boundaries, artifact status, and completed checks are recorded in
+`docs/report_src/source_map.json`; every record is
+`VERIFIED_AGAINST_PRIMARY`.
+
+### Disaggregated-serving energy and placement
+
+*Revisiting Disaggregated Large Language Model Serving for Performance and
+Energy Implications* evaluates batches 2-64 on one two-A100 PCIe Gen3 node,
+using two full vLLM instances as its colocated baseline and moving KV state by
+PCIe P2P, CPU DRAM/Redis, or NVMe. Load, baseline choice, and transfer medium
+affect **performance** sensitivity. They do not reverse the energy result:
+under its combined pynvml, RAPL, and IPMI J/token accounting,
+disaggregation costs more energy essentially unconditionally
+[@revisiting-disaggregation-energy-2026]. That result is bounded to this
+single-node, two-GPU topology.
+
+*DualScale* combines phase placement with per-phase DVFS through ILP
+placement, MPC prefill control, and slack-aware decode control. Its reported
+39%/48% savings against DistServe under P99 SLOs come from sixteen homogeneous
+H100 GPUs across two InfiniBand-connected nodes. Energy is GPU-only: NVML
+instantaneous GPU power sampled at 10 ms, not node- or cluster-level energy
+[@dualscale-2026].
+
+Prima.cpp v3, published as an ICLR 2026 conference paper, does contain an
+energy evaluation; v2 does not. Appendix A.13 reports whole-run Wh per 1K
+output tokens from PowerMetrics, NVIDIA counters, RAPL, and Ludashi, with
+communication inside device-side accounting and no wall-power boundary. It
+reports 91-99% lower per-device energy and 57-90% lower total energy for its
+distributed configurations versus single-device llama.cpp, while cloud total
+energy is about 28% lower than the local cluster. It does not split energy by
+prefill and decode stage [@prima-cpp-2025]. JouleWise's niche is **per-stage
+both-end split, boundary-labeled discipline, re-reducible bundles**.
+
+### Transfer and KV-state handling
+
+*SplitZip* provides bitwise-lossless KV compression and reports the online
+path as 5.7% encoding, 92.9% transfer, and 1.4% decoding
+[@splitzip-2026]. Those are performance-cost shares. SplitZip contains no
+energy measurement and therefore supports no codec-energy or transfer-energy
+claim. Its implementation is released under CC BY 4.0.
+
+### Quantization, edge, and consumer-stack comparisons
+
+*Systematic Characterization of LLM Quantization* confirms task-, workload-,
+method-, and GPU-dependent interactions across three tasks, eleven PTQ
+methods, Llama-2 7B-70B and CodeLlama-34B, TensorRT-LLM v0.19.0, and A100/H100
+GPUs. Quantization is represented by weight, activation, and KV bit-width
+tuples. Its energy is GPU-only J/token; CPU and host energy are excluded, and
+the datacenter-GPU study does not establish edge or consumer-system effects
+[@systematic-quantization-2025]. qMeter is described, but no artifact is
+released or stated available.
+
+*Sustainable LLM Inference for Edge AI* evaluates 28 Ollama models with
+weight-only PTQ from FP16 through q3 and accuracy on five benchmarks on a
+**single Raspberry Pi 4 with 4 GB RAM, CPU-only**. A Joulescope JS110 samples
+the DC input at 2 MHz, giving a whole-device hardware boundary
+[@sustainable-edge-ai-2025]. The paper reports mean plus/minus standard
+deviation, but leaves run count unstated and gives no confidence intervals;
+it therefore does not establish rigorous uncertainty quantification. Datasets
+and scripts are stated available, but that availability was not verified
+because the referenced repository was unresolvable.
+
+*Silicon Showdown* compares RTX 5090/5080/4090/4050/3050 systems with M3
+Ultra/M4 Pro/M2 Max/M2 Air/M1 systems. It is an **ecosystem-as-deployed**
+comparison, not a controlled hardware comparison: TensorRT-LLM with NVFP4 or
+llama.cpp GGUF is unmatched to MLX native 4-bit. Its energy boundaries are
+also asymmetric—PyNVML GPU-board power for NVIDIA versus powermetrics
+whole-SoC power for Apple. Consequently, the reported **up-to-23x Apple
+efficiency headline crosses unmatched stacks and measurement boundaries**
+[@silicon-showdown-2026]. The paper reports no accuracy/quality evaluation
+and releases no artifact.
+
+### Novelty boundary after intake
+
+The verified intake is sufficient to withdraw any origination claim.
+JouleWise **does not claim to originate energy-aware disaggregated inference
+generally**. Prima.cpp v3 already establishes local heterogeneous multi-device
+energy evaluation, so that is not JouleWise's novelty. The remaining niche is
+**per-stage both-end split, boundary-labeled discipline, re-reducible
+bundles**. This is a bounded positioning statement, not a claim of priority
+or a claim that the present report has completed split execution.
+
+## 7. Positioning assessment (honest audit of the three claims)
+
+For each distinguishing claim, this section combines the inherited
+eleven-source survey with the seven primary-verified RPT-002 sources.
 
 ### Claim 1: Boundary-honest cross-device methodology (D-018)
 
@@ -478,7 +570,10 @@ recent local-LLM benchmarks (TokenPowerBench, ML.ENERGY, Intelligence per
 Watt, Bench360, "Where Do the Joules Go?") defines or reconciles
 cross-device boundaries; Intelligence per Watt in particular mixes
 powermetrics/NVML/ROCm SMI without stating comparability, which is the
-gap D-018 closes.
+gap D-018 closes. The new intake reinforces the need for that discipline:
+DualScale and the quantization study are GPU-only, Sustainable Edge AI is
+whole-device DC input, and Silicon Showdown's 23x headline crosses a
+GPU-board/whole-SoC boundary as well as unmatched software stacks.
 
 ### Claim 2: Auditable raw run bundles
 
@@ -511,63 +606,64 @@ checks the legacy additive summary comparison, and requires shape-valid
 provenance on new-era bundles (D-030 plus the 2026-07-07 P2-013/P2-014
 integrity pass). That is an audit of recorded evidence, not independent
 rerunning of the hardware session. JouleWise applies this to heterogeneous
-local device classes that MLPerf Power excludes, for a workload (split LLM
-inference) no surveyed source publishes raw measurement artifacts for. The
-chapter should explicitly acknowledge MLPerf Power's log publication and
-the Splitwise/Mooncake trace releases, and distinguish workload traces
+local device classes that MLPerf Power excludes. The inherited eleven-source
+survey did not identify a self-contained raw measurement bundle for split LLM
+inference. The verified new-source artifact record is narrower: SplitZip
+releases code under CC BY 4.0; Systematic Quantization and Silicon Showdown
+release no artifacts; Sustainable Edge AI states that datasets and scripts
+are available, but the referenced repository could not be resolved and the
+release was not verified. None displaces the re-reducible-bundle niche. The
+chapter should explicitly acknowledge MLPerf Power's log publication and the
+Splitwise/Mooncake trace releases, and distinguish workload traces and code
 from measurement-run artifacts.
 
-### Claim 3: Split-inference energy on local interconnects
+### Claim 3: Local, boundary-labeled split-inference evidence
 
-**Not undercut — no surveyed source carries this flag as TRUE.** The
-closest approaches: Splitwise measures per-phase GPU power (TDP-normalized)
-and per-request watt-hours and runs power-capping experiments, but on
-datacenter DGX clusters over InfiniBand, and its iso-power/iso-cost
-results are cluster provisioning optimizations, not measured end-to-end
-energy of the disaggregated pipeline including interconnect transfer.
-TokenPowerBench attributes energy to prefill and decode phases per
-request, but on monolithic (model-parallel) serving of one model, not
-phase-disaggregated serving across devices. DistServe and Mooncake measure
-disaggregated serving but report no energy or power at all. MLPerf Power's
-rules explicitly exclude disaggregated systems from the power-measurement
-flow. Intelligence per Watt explicitly isolates single-accelerator,
-batch-1 runs.
+**Origination claim withdrawn; overlap verified.** Splitwise, DistServe, and
+Mooncake establish phase-disaggregated architectures; Revisiting
+Disaggregation measures an unconditional energy penalty for disaggregation
+on a single two-A100 node; DualScale optimizes homogeneous H100 GPU-only
+energy; and Prima.cpp v3 measures whole-run energy for heterogeneous local
+multi-device inference. The categorical claim that no surveyed work measures
+energy-aware disaggregation or local multi-device energy is false and remains
+removed.
 
-**Defensible claim, as stated with one precision:** no surveyed work
-measures the end-to-end energy of prefill/decode-disaggregated LLM
-inference — on *any* interconnect, datacenter or local — decomposed into
-prefill / serialize / transfer / deserialize / decode stages with
-both-end power measurement. JouleWise's claim is safe and should be
-phrased at that strength, while crediting Splitwise and TokenPowerBench as
-the nearest energy-adjacent predecessors on the phase-energy side and
-DistServe/Mooncake on the architecture side.
+**Adjusted, defensible wording:** JouleWise does not claim to originate
+energy-aware disaggregated inference. Its niche is **per-stage both-end split,
+boundary-labeled discipline, re-reducible bundles**. That wording distinguishes
+the intended evidence shape from Prima.cpp's whole-run accounting,
+Revisiting Disaggregation's single-node aggregate J/token result, and
+DualScale's homogeneous GPU-only optimization without claiming priority.
 
-## 7. Unresolved sources
+## 8. RPT-002 verification ledger
 
-None. All eleven surveyed sources resolved (citation verified, full text
-or authoritative record fetched) in the verification pass. No source had
-to be dropped or carried as unresolved.
+The original eleven sources remain inherited as verified on 2026-07-06. The
+lead verified all seven RPT-002 sources against primary records on 2026-07-11:
 
-## 8. Citations
-
-All sources retrieved and verified 2026-07-06 (verification pass built on
-the 2026-07-05 landscape search).
-
-| Key | Citation | Resolvable ID |
+| Key | Proposal evidence | Session status |
 |---|---|---|
-| joulesort2007 | Rivoire, Shah, Ranganathan, Kozyrakis. "JouleSort: A Balanced Energy-Efficiency Benchmark." SIGMOD 2007, pp. 365-376. | https://doi.org/10.1145/1247480.1247522 |
-| splitwise-isca2024 | Patel, Choukse, Zhang, Shah, Goiri, Maleki, Bianchini. "Splitwise: Efficient Generative LLM Inference Using Phase Splitting." ISCA 2024. | arXiv:2311.18677; DOI:10.1109/ISCA59077.2024.00019 |
-| distserve | Zhong, Liu, Chen, Hu, Zhu, Liu, Jin, Zhang. "DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving." OSDI 2024. | arXiv:2401.09670 |
-| mooncake | Qin, Li, He, Zhang, Wu, Zheng, Xu. "Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving." USENIX FAST 2025 (Best Paper); extended in ACM ToS (DOI 10.1145/3773772). | arXiv:2407.00079 |
-| mlperf_power | Tschand, Rajan, Idgunji, et al. (26 authors, MLCommons Power WG). "MLPerf Power: Benchmarking the Energy Efficiency of Machine Learning Systems from Microwatts to Megawatts for Sustainable AI." arXiv 2024 (v2 Feb 2025); companion artifact labeled HPCA 2025 — verify final venue before camera-ready. | arXiv:2410.12032 |
-| zeus | You, Chung, Chowdhury. "Zeus: Understanding and Optimizing GPU Energy Consumption of DNN Training." NSDI 2023; ml.energy open-source project. | arXiv:2208.06102 |
-| tokenpowerbench | Niu, Zhang, Li, Zhao, Wang, Wang, Chen. "TokenPowerBench: Benchmarking the Power Consumption of LLM Inference." AAAI 2026 (Main Track). | arXiv:2512.03024 |
-| mlenergy_benchmark | Chung, Ma, Wu, Liu, Kweon, Xia, Wu, Chowdhury. "The ML.ENERGY Benchmark: Toward Automated Inference Energy Measurement and Optimization." NeurIPS D&B 2025 (Spotlight). | arXiv:2505.06371 |
-| intelligence_per_watt | Saad-Falcon, Narayan, et al. (Stanford Hazy Research). "Intelligence per Watt: Measuring Intelligence Efficiency of Local AI." arXiv preprint, Nov 2025. | arXiv:2511.07885 |
-| bench360 | Stuhlmann, Argerich, Fürst. "Bench360: Benchmarking Local LLM Inference from 360 Degrees." arXiv preprint, Nov 2025 (rev. Jan 2026). | arXiv:2511.16682 |
-| chung2026joules | Chung, Wu, Ma, Chowdhury. "Where Do the Joules Go? Diagnosing Inference Energy Consumption." arXiv preprint, Jan 2026 (ML.ENERGY Initiative, U. Michigan). | arXiv:2601.22076 |
+| revisiting-disaggregation-energy-2026 | Appendix C; section 11.1 | `VERIFIED_AGAINST_PRIMARY` |
+| dualscale-2026 | Appendix C; section 11.1 | `VERIFIED_AGAINST_PRIMARY` |
+| prima-cpp-2025 | Appendix C | `VERIFIED_AGAINST_PRIMARY` |
+| splitzip-2026 | section 11.1 | `VERIFIED_AGAINST_PRIMARY` |
+| systematic-quantization-2025 | section 11.1 | `VERIFIED_AGAINST_PRIMARY` |
+| sustainable-edge-ai-2025 | section 11.1 | `VERIFIED_AGAINST_PRIMARY` |
+| silicon-showdown-2026 | section 11.1 | `VERIFIED_AGAINST_PRIMARY` |
 
-## 9. Assembly notes for Stage 5.5
+The verified primary URLs, completed checks, retrieval date, boundaries,
+artifact status, and report evidence mapping for each key are canonical in
+`docs/report_src/source_map.json`.
+
+## 9. Citations
+
+Canonical structured metadata for the inherited eleven-source survey and the
+seven-source intake is `docs/report_src/references.csl.json`. This draft does
+not maintain a second citation table. The seven new entries contain the
+corrected primary-verified titles, authors, dates, versions,
+publication/preprint types, venue details, DOI where applicable, and scope
+notes supplied by the lead.
+
+## 10. Assembly notes for Stage 5.5
 
 Mapping from this draft to the future background chapter:
 
@@ -584,15 +680,15 @@ Mapping from this draft to the future background chapter:
   Co-Residency (D-013), and Statistical Protocol (D-014) sections. The
   MLPerf Power paragraph is the anchor for the boundary discussion; the
   Zeus paragraph anchors the software-counter instrumentation layer.
-- **Related-work positioning table**: build directly from the claim-flag
-  matrix implicit in Section 6 (three claims x eleven sources); the adjusted
-  claim wordings in Section 6 are the ones to use in the report —
-  do NOT use the stronger unadjusted forms for claims 1 and 2.
+- **Related-work positioning**: use the primary-verified wording and caveats in
+  Sections 6-7. Do not restore the withdrawn origination or categorical gap
+  claim, describe SplitZip as energy work, broaden DualScale beyond GPU-only,
+  or present Silicon Showdown as a controlled hardware comparison.
 - **Limitations cross-reference**: the report's limitations section
   (Stage 4.4) inherits the D-018 boundary table; Section 6 Claim 1's
   credit to JouleSort/MLPerf Power belongs there too.
-- **Citation hygiene before camera-ready**: confirm MLPerf Power's final
-  venue (HPCA 2025 expected); check whether "Where Do the Joules Go?"
+- **Citation hygiene before camera-ready**: confirm MLPerf Power's final venue
+  (HPCA 2025 expected); check whether "Where Do the Joules Go?"
   (fresh preprint) and Bench360 have since been published or released
   artifacts; attribute the "CoolSort" name to sortbenchmark.org, not the
   SIGMOD paper.
