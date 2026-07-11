@@ -18,10 +18,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 import joulewise.adapters
-from joulewise.adapters.powermetrics import PowermetricsTelemetryAdapter
+from joulewise.adapters.powermetrics import (
+    PowermetricsTelemetryAdapter,
+    parse_powermetrics_records,
+)
 from joulewise.cli import validate_bundle
 from joulewise.clock import SystemClock
 from joulewise.controller import run_benchmark
+from joulewise.reduce import reduce_bundle
 from joulewise.schemas import BenchmarkConfig
 from scripts.run_campaign import assert_production_uncertainty
 
@@ -90,13 +94,9 @@ class P2038ProductionPathTests(unittest.TestCase):
 
     def test_real_powermetrics_evidence_path_passes_p2029_p2040_gates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            bundle, summary = run_benchmark(
-                production_config(),
-                Path(tmp),
-                SystemClock(),
-                registry=ProductionShapedRegistry(),
-                environment_snapshot=None,
-            )
+            root = Path(tmp)
+            bundle, summary = self.run_mode(root, "normal")
+            self.assertGreaterEqual(int((root / "normal.state").read_text()), 1)
             self.assertEqual(summary.status.value, "succeeded")
             self.assertEqual(validate_bundle(bundle, strict=True), [])
             metadata = json.loads((bundle / "metadata.json").read_text())
@@ -127,6 +127,95 @@ class P2038ProductionPathTests(unittest.TestCase):
                 bundle, allow_mock_runtime=True
             )
             self.assertIs(assertion["request_eligible"], True)
+
+    def test_rail_only_sentinels_withhold_drift_but_leave_gross_eligible(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, summary = self.run_mode(Path(tmp), "rail_only")
+            self.assertEqual(summary.status.value, "succeeded")
+            self.assertEqual(validate_bundle(bundle, strict=True), [])
+            metadata = json.loads((bundle / "metadata.json").read_text())
+            self.assertNotIn("idle_drift_bound_w", metadata)
+            self.assertEqual(
+                metadata["uncertainty_evidence"]["idle_drift"],
+                {"status": "unknown", "reason": "contamination_evidence_unknown"},
+            )
+            gates = json.loads((bundle / "summary_metrics.json").read_text())[
+                "claim_eligibility"
+            ]
+            self.assertIs(gates["gross_request"]["eligible"], True)
+            self.assertIs(gates["idle_subtracted_request"]["eligible"], False)
+            self.assertIn(
+                "drift_term_unknown",
+                gates["idle_subtracted_request"]["reasons"],
+            )
+
+    def test_extreme_post_idle_sentinel_cannot_leak_into_measured_trace_or_energy(self) -> None:
+        class SnapshotAdapter(PowermetricsTelemetryAdapter):
+            trace_before_sentinel: bytes | None = None
+
+            def measure_post_run_idle(self, config, baseline, context):
+                assert context is not None
+                type(self).trace_before_sentinel = (
+                    context.bundle_path / "power_trace.csv"
+                ).read_bytes()
+                return super().measure_post_run_idle(config, baseline, context)
+
+        class SnapshotRegistry(ProductionShapedRegistry):
+            def resolve_telemetry(self, config, clock):
+                return (
+                    SnapshotAdapter(
+                        clock,
+                        executable=str(FIXTURE_PROCESS),
+                        privilege_prefix=(sys.executable,),
+                    ),
+                    None,
+                )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            state_path = root / "extreme.state"
+            with patch.dict(
+                os.environ,
+                {
+                    "P2038_FAKE_POWERMETRICS_MODE": "extreme_post",
+                    "P2038_FAKE_POWERMETRICS_STATE": str(state_path),
+                },
+            ):
+                bundle, summary = run_benchmark(
+                    production_config(),
+                    root,
+                    SystemClock(),
+                    registry=SnapshotRegistry(),
+                    environment_snapshot=None,
+                )
+            self.assertEqual(summary.status.value, "succeeded")
+            post_records = parse_powermetrics_records(
+                (bundle / "raw" / "powermetrics_idle_post.plist").read_bytes()
+            )
+            self.assertGreater(min(record.combined_power_w for record in post_records), 1e9)
+            self.assertIsNotNone(SnapshotAdapter.trace_before_sentinel)
+            self.assertEqual(
+                (bundle / "power_trace.csv").read_bytes(),
+                SnapshotAdapter.trace_before_sentinel,
+            )
+
+            stored = json.loads((bundle / "summary_metrics.json").read_text())
+            metadata_path = bundle / "metadata.json"
+            original_metadata = metadata_path.read_bytes()
+            metadata = json.loads(original_metadata)
+            metadata.pop("idle_drift_bound_w", None)
+            metadata["uncertainty_evidence"]["idle_drift"] = {
+                "status": "unknown",
+                "reason": "post_idle_unavailable",
+            }
+            metadata_path.write_text(json.dumps(metadata))
+            try:
+                no_sentinel_baseline = reduce_bundle(bundle)
+            finally:
+                metadata_path.write_bytes(original_metadata)
+            self.assertEqual(
+                stored["gross_energy_j"], no_sentinel_baseline.gross_energy_j
+            )
 
     def test_real_path_exercises_fail_closed_gate_reasons_without_scalar_edits(self) -> None:
         expected = {

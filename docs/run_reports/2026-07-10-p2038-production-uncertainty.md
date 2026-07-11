@@ -76,16 +76,18 @@ The separate interim guard block is:
 
 ```json
 {
+  "calibration_status": "pending_calibration",
   "method": "p2_015_prediction_guard_v1",
-  "guard_w": 0.0,
+  "guard_w": null,
   "n_bundles": 0,
   "bundle_sha256": [],
-  "cell_id": "",
-  "artifact_sha256": ""
+  "cell_id": null,
+  "artifact_sha256": null
 }
 ```
 
-`n_bundles=0` means not applied; the idle derivation records
+`calibration_status=pending_calibration` and `n_bundles=0` mean not applied;
+the idle derivation records
 `calibration_status=interim_run_sentinels_only` and a null applied guard.
 P2-039's adjudicated schema example now reserves the same separately named
 block for populated calibration provenance.

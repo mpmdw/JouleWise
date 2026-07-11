@@ -386,8 +386,8 @@ class PowermetricsTelemetryAdapter:
             pre_power_w=[record.combined_power_w for record in self._pre_idle_records],
             post_power_w=[record.combined_power_w for record in records],
             pre_power_w_mean=baseline.power_w_mean,
-            pre_idle_window_suspect=bool(pre_quality.get("idle_window_suspect", True)),
-            post_idle_window_suspect=bool(post_quality["idle_window_suspect"]),
+            pre_idle_window_suspect=pre_quality.get("idle_window_suspect"),
+            post_idle_window_suspect=post_quality["idle_window_suspect"],
         )
         result: dict[str, Any] = {
             "idle_drift": evidence,

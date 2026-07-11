@@ -600,7 +600,14 @@ def execute_production_uncertainty_gate(
         )
     assertion = assert_production_uncertainty(bundle)
     backup_script = backup_script_path(backup_arg)
-    backup_exit = backup_runs(runs_dir, backup_script)
+    try:
+        backup_exit = backup_runs(runs_dir, backup_script)
+    except OSError as exc:
+        raise _shakedown_fail(
+            "backup_failed",
+            bundle,
+            f"backup launch failed: {type(exc).__name__}: {exc}",
+        ) from exc
     if backup_exit != 0:
         raise _shakedown_fail("backup_failed", bundle, f"backup exit {backup_exit}")
     return {

@@ -78,6 +78,13 @@ def main() -> int:
                 gpu["idle_ratio"] = 0.0
                 gpu["freq_hz"] = 1200.0
                 document["gpu"] = gpu
+            if mode == "rail_only":
+                document.pop("gpu", None)
+            if mode == "extreme_post" and invocation >= 4:
+                processor = dict(document["processor"])
+                for rail in ("cpu_power", "gpu_power", "ane_power"):
+                    processor[rail] = 1_000_000_000_000.0
+                document["processor"] = processor
             if index:
                 handle.write(b"\0")
             handle.write(plistlib.dumps(document))

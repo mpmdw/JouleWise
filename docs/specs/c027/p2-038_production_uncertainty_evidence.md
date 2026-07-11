@@ -375,12 +375,13 @@ P2-039’s floor-artifact schema must reserve an optional, separately named cali
 
 ```json
 "idle_drift_guard": {
+  "calibration_status": "pending_calibration",
   "method": "p2_015_prediction_guard_v1",
-  "guard_w": 0.0,
+  "guard_w": null,
   "n_bundles": 0,
   "bundle_sha256": [],
-  "cell_id": "",
-  "artifact_sha256": ""
+  "cell_id": null,
+  "artifact_sha256": null
 }
 ```
 

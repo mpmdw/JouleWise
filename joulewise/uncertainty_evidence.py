@@ -42,12 +42,13 @@ def interim_idle_drift_guard() -> dict[str, Any]:
     """Return the separate, reserved P2-039 drift-guard handoff block."""
 
     return {
+        "calibration_status": "pending_calibration",
         "method": DRIFT_GUARD_METHOD,
-        "guard_w": 0.0,
+        "guard_w": None,
         "n_bundles": 0,
         "bundle_sha256": [],
-        "cell_id": "",
-        "artifact_sha256": "",
+        "cell_id": None,
+        "artifact_sha256": None,
     }
 
 
@@ -222,8 +223,8 @@ def derive_idle_drift_evidence(
     pre_power_w: Sequence[float],
     post_power_w: Sequence[float],
     pre_power_w_mean: float,
-    pre_idle_window_suspect: bool,
-    post_idle_window_suspect: bool,
+    pre_idle_window_suspect: bool | None,
+    post_idle_window_suspect: bool | None,
     calibration_guard: Mapping[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any], float | None]:
     """Derive the interim endpoint-envelope bound and optional guard max."""
@@ -234,6 +235,8 @@ def derive_idle_drift_evidence(
     values = [float(value) for value in (*pre_power_w, *post_power_w)]
     if not math.isfinite(pre_power_w_mean) or not all(math.isfinite(value) for value in values):
         return unknown_component("insufficient_idle_samples"), guard, None
+    if pre_idle_window_suspect is None or post_idle_window_suspect is None:
+        return unknown_component("contamination_evidence_unknown"), guard, None
     if pre_idle_window_suspect or post_idle_window_suspect:
         return unknown_component("sentinel_contaminated"), guard, None
     run_bound_w = max(abs(value - pre_power_w_mean) for value in values)

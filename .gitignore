@@ -17,3 +17,6 @@ report/
 !.claude/commands/codex.md
 .codex-bridge/
 .DS_Store
+
+# RPT-001 assembled report output (regenerable)
+/build/

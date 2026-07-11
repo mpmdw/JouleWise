@@ -36,7 +36,7 @@
 <a href="#structured-failure-reasons">Structured Failure Reasons</a></aside>
   <div class="doc-wrap doc-source-docs-contracts-adapter-contracts-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/contracts/adapter_contracts.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/adapter_contracts.md · commit 03bbc65"><span class="source-file">docs/<wbr>contracts/<wbr>adapter_contracts.md</span><span class="source-commit">commit 03bbc65</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/adapter_contracts.md · commit 0b79fbc"><span class="source-file">docs/<wbr>contracts/<wbr>adapter_contracts.md</span><span class="source-commit">commit 0b79fbc</span></span></div>
     <h1>Adapter Contracts</h1>
 <p>Living cross-phase contract, drafted in Phase 1; the executable form is
 <code>joulewise/interfaces.py</code>. The benchmark separates runtime work from
@@ -181,8 +181,8 @@ validity, and reduction success. Verdict codes are
 <li>Load or initialize model.</li>
 <li>Warm up workload.</li>
 <li>Run full request.</li>
-<li>Run prefill-only workload when supported.</li>
-<li>Run decode-only or replay workload when supported.</li>
+<li>Run prefill-only workload when supported (Phase-3-future: no shipped RuntimeAdapter implements or is required to implement this yet; binding form lands with Phase 3 Stage 3.1/3.2 schema v0.2).</li>
+<li>Run decode-only or replay workload when supported (Phase-3-future: same gating as prefill-only; the contract does not promise split modes the current adapters cannot express).</li>
 <li>Emit phase events.</li>
 <li>Emit output artifacts.</li>
 <li>Cleanup.</li>
@@ -347,7 +347,7 @@ for reducer integration under both fake and real clocks.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/contracts/adapter_contracts.md · commit 03bbc65 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/contracts/adapter_contracts.md · commit 0b79fbc · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

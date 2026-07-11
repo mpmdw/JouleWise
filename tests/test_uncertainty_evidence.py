@@ -4,9 +4,11 @@ import math
 import unittest
 
 from joulewise.clock import ClockStamp
+from joulewise.detection_floor import _validate_idle_drift_guard
 from joulewise.uncertainty_evidence import (
     derive_idle_drift_evidence,
     derive_powermetrics_clock_evidence,
+    interim_idle_drift_guard,
     prediction_guard_w,
 )
 
@@ -89,21 +91,38 @@ class ClockEvidenceTests(unittest.TestCase):
             inconsistent["clock_anchor"]["reason"], "plist_timestamp_inconsistent"
         )
 
-    def test_effective_bound_is_maximum_of_anchor_and_both_phases(self) -> None:
-        evidence, _ = self.evidence(stop_epoch=110.0)
+    def test_phase_bounds_and_reconstructed_endpoints_match_independent_fixture_math(self) -> None:
+        evidence, first_endpoint = self.evidence()
         clock = evidence["clock_anchor"]
         phase = evidence["sample_phase"]
+        self.assertAlmostEqual(phase["marker_to_first_sample_phase_bound_s"], 0.312)
+        self.assertAlmostEqual(phase["marker_to_last_sample_phase_bound_s"], 2.002)
+        self.assertAlmostEqual(clock["effective_clock_anchor_bound_s"], 2.002)
         self.assertEqual(
-            clock["effective_clock_anchor_bound_s"],
-            max(
-                clock["anchor_only_bound_s"],
-                phase["marker_to_first_sample_phase_bound_s"],
-                phase["marker_to_last_sample_phase_bound_s"],
-            ),
+            [round(first_endpoint + offset, 10) for offset in (0.0, 1.0, 2.0)],
+            [100.1, 101.1, 102.1],
         )
 
 
 class IdleDriftEvidenceTests(unittest.TestCase):
+    def test_pending_guard_matches_p2039_validator_wire_contract(self) -> None:
+        guard = interim_idle_drift_guard()
+        self.assertEqual(
+            guard,
+            {
+                "calibration_status": "pending_calibration",
+                "method": "p2_015_prediction_guard_v1",
+                "guard_w": None,
+                "n_bundles": 0,
+                "bundle_sha256": [],
+                "cell_id": None,
+                "artifact_sha256": None,
+            },
+        )
+        errors: list[str] = []
+        _validate_idle_drift_guard(guard, "idle_drift_guard", errors)
+        self.assertEqual(errors, [])
+
     def test_full_pre_post_envelope_retains_large_sample(self) -> None:
         evidence, guard, bound = derive_idle_drift_evidence(
             pre_power_w=[9.0, 10.0, 11.0],
@@ -138,6 +157,25 @@ class IdleDriftEvidenceTests(unittest.TestCase):
         )
         self.assertIsNone(bound)
         self.assertEqual(evidence["reason"], "insufficient_idle_samples")
+
+    def test_unknown_contamination_evidence_withholds_scalar_with_named_reason(self) -> None:
+        for pre_status, post_status in ((None, False), (False, None), (None, None)):
+            with self.subTest(pre=pre_status, post=post_status):
+                evidence, _guard, bound = derive_idle_drift_evidence(
+                    pre_power_w=[1.0, 1.0, 1.0],
+                    post_power_w=[1.0, 1.0, 1.0],
+                    pre_power_w_mean=1.0,
+                    pre_idle_window_suspect=pre_status,
+                    post_idle_window_suspect=post_status,
+                )
+                self.assertIsNone(bound)
+                self.assertEqual(
+                    evidence,
+                    {
+                        "status": "unknown",
+                        "reason": "contamination_evidence_unknown",
+                    },
+                )
 
     def test_calibration_combination_is_exact_max_and_guard_formula(self) -> None:
         guard = {

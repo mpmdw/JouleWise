@@ -9,6 +9,14 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from scripts.run_campaign import (
+    ShakedownGateError,
+    append_log,
+    execute_production_uncertainty_gate,
+    failed_shakedown_record,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -2163,6 +2171,44 @@ class RunCampaignTests(unittest.TestCase):
             gate = next(row for row in rows if row.get("record_type") == "shakedown_gate")
             self.assertEqual(gate["status"], "failed")
             self.assertEqual(gate["code"], "not_production_backend")
+
+    def test_p2038_shakedown_backup_launch_failure_has_named_failed_gate_row(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "bundle"
+            bundle.mkdir()
+            log_path = root / "campaign_log.jsonl"
+            completed = subprocess.CompletedProcess([], 0)
+            with (
+                patch("scripts.run_campaign.validate_bundle", return_value=[]),
+                patch("scripts.run_campaign.subprocess.run", return_value=completed),
+                patch(
+                    "scripts.run_campaign.assert_production_uncertainty",
+                    return_value={"bundle_id": bundle.name},
+                ),
+                patch(
+                    "scripts.run_campaign.backup_runs",
+                    side_effect=FileNotFoundError("backup executable missing"),
+                ),
+            ):
+                with self.assertRaises(ShakedownGateError) as raised:
+                    execute_production_uncertainty_gate(
+                        bundle, root, str(root / "missing-backup")
+                    )
+            error = raised.exception
+            self.assertEqual(error.code, "backup_failed")
+            rendered = (
+                f"SHAKEDOWN_GATE_FAILED[{error.code}] bundle={error.bundle_id} "
+                f"detail={error.detail}"
+            )
+            self.assertIn("SHAKEDOWN_GATE_FAILED[backup_failed]", rendered)
+            append_log(
+                log_path,
+                failed_shakedown_record("production_uncertainty_v1", error),
+            )
+            gate = read_all_jsonl(log_path)[0]
+            self.assertEqual(gate["status"], "failed")
+            self.assertEqual(gate["code"], "backup_failed")
 
 
 if __name__ == "__main__":

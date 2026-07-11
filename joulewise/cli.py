@@ -892,8 +892,8 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
                 pre_power_w=[record.combined_power_w for record in pre_records],
                 post_power_w=[record.combined_power_w for record in post_records],
                 pre_power_w_mean=pre_mean,
-                pre_idle_window_suspect=bool(pre_quality["idle_window_suspect"]),
-                post_idle_window_suspect=bool(post_quality["idle_window_suspect"]),
+                pre_idle_window_suspect=pre_quality["idle_window_suspect"],
+                post_idle_window_suspect=post_quality["idle_window_suspect"],
                 calibration_guard=guard,
             )
         except (OSError, TypeError, ValueError) as exc:
