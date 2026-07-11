@@ -1,0 +1,68 @@
+{
+  "schema_version": "joulewise.analysis_registry.v1",
+  "registry_id": "slice_2m_ap2_v1",
+  "plan_id": "AP-2",
+  "family_id": "FAM-2M-SHAPE-CONTRASTS",
+  "claim_role": "primary",
+  "multiplicity": {
+    "method": "holm",
+    "alpha": 0.05,
+    "q": null
+  },
+  "metrics": [
+    {
+      "metric_tag": "gross_request",
+      "name": "gross_energy_j",
+      "window_class": "request",
+      "unit": "J",
+      "ratio_estimand": null
+    },
+    {
+      "metric_tag": "idle_request",
+      "name": "energy_request_j",
+      "window_class": "request",
+      "unit": "J",
+      "ratio_estimand": null
+    },
+    {
+      "metric_tag": "gross_prefill",
+      "name": "phase_energy_j.prefill",
+      "window_class": "phase",
+      "unit": "J",
+      "ratio_estimand": null
+    },
+    {
+      "metric_tag": "gross_decode",
+      "name": "phase_energy_j.decode",
+      "window_class": "phase",
+      "unit": "J",
+      "ratio_estimand": null
+    }
+  ],
+  "condition_pairs": [
+    {
+      "condition_a": "short_short",
+      "condition_b": "long_short"
+    },
+    {
+      "condition_a": "short_short",
+      "condition_b": "short_long"
+    },
+    {
+      "condition_a": "short_short",
+      "condition_b": "mid_mid"
+    },
+    {
+      "condition_a": "long_short",
+      "condition_b": "short_long"
+    },
+    {
+      "condition_a": "long_short",
+      "condition_b": "mid_mid"
+    },
+    {
+      "condition_a": "short_long",
+      "condition_b": "mid_mid"
+    }
+  ]
+}
