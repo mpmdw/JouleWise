@@ -12,6 +12,7 @@ import csv
 import hashlib
 import io
 import json
+import math
 import re
 import shutil
 from dataclasses import dataclass
@@ -135,6 +136,7 @@ _SUMMARY_REDACTED_SUBTREES = frozenset(
         "energy_variance_terms_j2",
         "energy_bound_terms_j",
         "claim_eligibility",
+        "window_evidence_precheck",
         "summary_provenance",
     }
 )
@@ -156,18 +158,65 @@ _SUMMARY_KEYS = frozenset(
         "ttft_s",
         "decode_latency_s",
         "throughput_tokens_s",
+        "inter_token_throughput_tokens_s",
         "idle_baseline",
         "uncertainty",
         "measurement_quality",
         "phase_energy_j",
         "suite_metrics",
         "energy_uncertainty_status",
+        "idle_mean_uncertainty",
         "energy_variance_terms_j2",
         "energy_bound_terms_j",
         "claim_eligibility",
+        "window_evidence_precheck",
         "summary_provenance",
         "failure_reason",
         "failure_message",
+    }
+)
+
+_IDLE_MEAN_UNCERTAINTY_KEYS = frozenset(
+    {
+        "status",
+        "method",
+        "source_artifact",
+        "source_sha256",
+        "raw_sample_count",
+        "median_sample_interval_s",
+        "cadence_p95_p05_ratio",
+        "bandwidth_s",
+        "lag_count",
+        "sample_variance_w2",
+        "iid_variance_of_mean_w2",
+        "hac_variance_of_mean_w2",
+        "governed_variance_of_mean_w2",
+        "effective_sample_size",
+        "correlation_scope",
+        "reason_codes",
+    }
+)
+_IDLE_MEAN_UNCERTAINTY_NUMERIC_KEYS = frozenset(
+    {
+        "median_sample_interval_s",
+        "cadence_p95_p05_ratio",
+        "sample_variance_w2",
+        "iid_variance_of_mean_w2",
+        "hac_variance_of_mean_w2",
+        "governed_variance_of_mean_w2",
+        "effective_sample_size",
+    }
+)
+_IDLE_MEAN_UNCERTAINTY_REASON_CODES = frozenset(
+    {
+        "raw_idle_trace_unavailable",
+        "raw_idle_trace_invalid",
+        "nonfinite_idle_power",
+        "insufficient_idle_samples",
+        "idle_trace_span_below_three_bandwidths",
+        "idle_cadence_irregular",
+        "idle_metadata_mismatch",
+        "backend_policy_not_frozen",
     }
 )
 
@@ -345,6 +394,18 @@ def _audit_metadata(path: Path) -> None:
 def _audit_summary(path: Path) -> None:
     value = _load_json_object(path, "summary_metrics.json")
     _unknown_keys(set(value), _SUMMARY_KEYS, "summary_metrics.json")
+    inter_token_throughput = value.get("inter_token_throughput_tokens_s")
+    if inter_token_throughput is not None and (
+        isinstance(inter_token_throughput, bool)
+        or not isinstance(inter_token_throughput, (int, float))
+        or not math.isfinite(inter_token_throughput)
+    ):
+        raise PrivacyAuditError(
+            "summary_metrics.json.inter_token_throughput_tokens_s is not finite numeric or null"
+        )
+    idle_mean = value.get("idle_mean_uncertainty")
+    if idle_mean is not None:
+        _audit_idle_mean_uncertainty(idle_mean)
     quality = value.get("measurement_quality")
     if quality is not None:
         if not isinstance(quality, dict):
@@ -365,6 +426,56 @@ def _audit_summary(path: Path) -> None:
                 raise PrivacyAuditError(
                     f"summary_metrics.json.measurement_quality.{key} is unclassified"
                 )
+
+
+def _audit_idle_mean_uncertainty(value: Any) -> None:
+    label = "summary_metrics.json.idle_mean_uncertainty"
+    if not isinstance(value, dict):
+        raise PrivacyAuditError(f"{label} must be an object or null")
+    actual = set(value)
+    _unknown_keys(actual, _IDLE_MEAN_UNCERTAINTY_KEYS, label)
+    missing = sorted(_IDLE_MEAN_UNCERTAINTY_KEYS - actual)
+    if missing:
+        raise PrivacyAuditError(f"{label} is missing governed field(s): {', '.join(missing)}")
+    if not isinstance(value["status"], str) or value["status"] not in {
+        "estimated",
+        "not_estimable",
+    }:
+        raise PrivacyAuditError(f"{label}.status is unclassified")
+    if value["method"] != "newey_west_bartlett_10s_iid_floor_v1":
+        raise PrivacyAuditError(f"{label}.method is unclassified")
+    if value["source_artifact"] != "raw/powermetrics_idle.plist":
+        raise PrivacyAuditError(f"{label}.source_artifact is unclassified")
+    source_sha256 = value["source_sha256"]
+    if source_sha256 is not None and (
+        not isinstance(source_sha256, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", source_sha256)
+    ):
+        raise PrivacyAuditError(f"{label}.source_sha256 is not a lowercase SHA-256 or null")
+    for key in ("raw_sample_count", "lag_count"):
+        inner = value[key]
+        if inner is not None and (
+            isinstance(inner, bool) or not isinstance(inner, int) or inner < 0
+        ):
+            raise PrivacyAuditError(f"{label}.{key} is not a nonnegative integer or null")
+    for key in _IDLE_MEAN_UNCERTAINTY_NUMERIC_KEYS:
+        inner = value[key]
+        if inner is not None and (
+            isinstance(inner, bool)
+            or not isinstance(inner, (int, float))
+            or not math.isfinite(inner)
+        ):
+            raise PrivacyAuditError(f"{label}.{key} is not finite numeric or null")
+    if value["bandwidth_s"] != 10.0 or isinstance(value["bandwidth_s"], bool):
+        raise PrivacyAuditError(f"{label}.bandwidth_s is not the governed value 10.0")
+    if value["correlation_scope"] != "independent_run":
+        raise PrivacyAuditError(f"{label}.correlation_scope is unclassified")
+    reason_codes = value["reason_codes"]
+    if not isinstance(reason_codes, list) or any(
+        not isinstance(reason, str) or reason not in _IDLE_MEAN_UNCERTAINTY_REASON_CODES
+        for reason in reason_codes
+    ):
+        raise PrivacyAuditError(f"{label}.reason_codes contains an unclassified value")
 
 
 def _read_jsonl(path: Path, label: str) -> list[dict[str, Any]]:

@@ -20,6 +20,26 @@ SECRET_VALUES = (
 )
 
 
+IDLE_MEAN_UNCERTAINTY = {
+    "status": "estimated",
+    "method": "newey_west_bartlett_10s_iid_floor_v1",
+    "source_artifact": "raw/powermetrics_idle.plist",
+    "source_sha256": "2" * 64,
+    "raw_sample_count": 100,
+    "median_sample_interval_s": 0.1,
+    "cadence_p95_p05_ratio": 1.02,
+    "bandwidth_s": 10.0,
+    "lag_count": 100,
+    "sample_variance_w2": 0.4,
+    "iid_variance_of_mean_w2": 0.004,
+    "hac_variance_of_mean_w2": 0.006,
+    "governed_variance_of_mean_w2": 0.006,
+    "effective_sample_size": 66.66666666666667,
+    "correlation_scope": "independent_run",
+    "reason_codes": [],
+}
+
+
 def _write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -176,6 +196,12 @@ class PublicationPrivacyTests(unittest.TestCase):
             {
                 "status": "succeeded",
                 "energy_request_j": 10.0,
+                "inter_token_throughput_tokens_s": 20.0,
+                "idle_mean_uncertainty": IDLE_MEAN_UNCERTAINTY,
+                "window_evidence_precheck": {
+                    "private_path": "/srv/private/worker/state",
+                    "reason_codes": ["fixture-only-open-subtree"],
+                },
                 "measurement_quality": {
                     "requested_sampling_hz": 2.0,
                     "remote_cleanup_failed": ["/srv/private/worker/state"],
@@ -237,6 +263,9 @@ class PublicationPrivacyTests(unittest.TestCase):
             [publication_privacy.REDACTED_CLEANUP_PATH],
         )
         self.assertIs(quality["runtime_cleanup_ok"], False)
+        self.assertEqual(summary["inter_token_throughput_tokens_s"], 20.0)
+        self.assertEqual(summary["idle_mean_uncertainty"], IDLE_MEAN_UNCERTAINTY)
+        self.assertIsNone(summary["window_evidence_precheck"])
 
     def test_unknown_fields_and_paths_fail_closed(self) -> None:
         mutations = {
@@ -246,6 +275,11 @@ class PublicationPrivacyTests(unittest.TestCase):
             "metadata field": lambda bundle: self._add_json_field(
                 bundle / "metadata.json", "unreviewed_top_level"
             ),
+            "summary field": lambda bundle: self._add_json_field(
+                bundle / "summary_metrics.json", "unreviewed_top_level"
+            ),
+            "idle uncertainty field": self._add_idle_uncertainty_field,
+            "idle uncertainty reason": self._add_idle_uncertainty_reason,
             "measurement quality field": self._add_quality_field,
             "event field": self._add_event_field,
             "power source value": self._set_unreviewed_power_source,
@@ -300,6 +334,20 @@ class PublicationPrivacyTests(unittest.TestCase):
         path = bundle / "summary_metrics.json"
         value = json.loads(path.read_text())
         value["measurement_quality"]["unreviewed_quality"] = 1
+        _write_json(path, value)
+
+    @staticmethod
+    def _add_idle_uncertainty_field(bundle: Path) -> None:
+        path = bundle / "summary_metrics.json"
+        value = json.loads(path.read_text())
+        value["idle_mean_uncertainty"]["unreviewed_nested"] = "fixture-only"
+        _write_json(path, value)
+
+    @staticmethod
+    def _add_idle_uncertainty_reason(bundle: Path) -> None:
+        path = bundle / "summary_metrics.json"
+        value = json.loads(path.read_text())
+        value["idle_mean_uncertainty"]["reason_codes"] = ["unreviewed_reason"]
         _write_json(path, value)
 
     @staticmethod
