@@ -9,6 +9,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from joulewise.analysis_engine import estimate_manifest_observations
+from joulewise.analysis_engine.estimators import RatioObservation
+from joulewise.analysis_engine.sensitivity import randomization_check
 from joulewise.analysis_manifest import (
     calculate_manifest_id,
     extract_analysis_plan_row,
@@ -62,7 +65,43 @@ def reidentify(manifest: dict) -> None:
     manifest["manifest_id"] = calculate_manifest_id(manifest)
 
 
+def ratio_estimand(form: object) -> dict[str, object]:
+    return {
+        "form": form,
+        "numerator_metric": "energy_request_j",
+        "denominator": "runtime_observed_output_tokens",
+        "denominator_unit": "token",
+        "tokenizer_scope": "same_identity_required",
+        "output_policy_scope": "same_policy_required",
+    }
+
+
+def named_strata(block_ids: list[str]) -> dict[str, object]:
+    return {
+        "scheme": "stratified_paired_label_swap",
+        "exchangeability": "within_named_strata",
+        "named_strata": [
+            {"stratum_id": "early", "block_ids": block_ids[:3]},
+            {"stratum_id": "late", "block_ids": block_ids[3:]},
+        ],
+    }
+
+
 class AnalysisManifestTests(unittest.TestCase):
+    def _generated_manifest(self, out_dir: Path) -> dict:
+        result = run_generator(*BASE_CONFIGS[0], out_dir)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return load_manifest(out_dir)
+
+    @staticmethod
+    def _set_ratio(manifest: dict, form: object) -> dict:
+        metrics = [contrast["metric"] for contrast in manifest["contrasts"][6:12]]
+        for metric in metrics:
+            metric["unit"] = "J/token"
+            metric["ratio_estimand"] = ratio_estimand(form)
+        reidentify(manifest)
+        return metrics[0]
+
     def test_one_and_two_model_shape_and_entry_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             out_dir = Path(tmp) / "out"
@@ -247,6 +286,99 @@ class AnalysisManifestTests(unittest.TestCase):
                     reidentify(mutated)
                     errors = validate_analysis_manifest(mutated, manifest_dir=out_dir)
                     self.assertTrue(any(expected in error for error in errors), errors)
+
+    def test_validation_accepts_each_adjudicated_ratio_estimand(self) -> None:
+        for form in ("mean_of_request_ratios", "ratio_of_totals"):
+            with self.subTest(form=form), tempfile.TemporaryDirectory() as tmp:
+                out_dir = Path(tmp) / "out"
+                manifest = self._generated_manifest(out_dir)
+                self._set_ratio(manifest, form)
+
+                self.assertEqual(
+                    validate_analysis_manifest(manifest, manifest_dir=out_dir),
+                    [],
+                )
+
+    def test_validation_accepts_adjudicated_named_strata_randomization(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            manifest = self._generated_manifest(out_dir)
+            block_ids = manifest["contrasts"][0]["block_ids"]
+            manifest["design"]["randomization"] = named_strata(block_ids)
+            reidentify(manifest)
+
+            self.assertEqual(validate_analysis_manifest(manifest, manifest_dir=out_dir), [])
+
+    def test_validation_rejects_unknown_ratio_and_randomization_shapes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            original = self._generated_manifest(out_dir)
+            mutations = (
+                (
+                    "ratio",
+                    lambda value: self._set_ratio(value, "ratio_selected_after_observation"),
+                    "ratio_estimand.form",
+                ),
+                (
+                    "ratio_wrong_type",
+                    lambda value: self._set_ratio(value, ["ratio_of_totals"]),
+                    "ratio_estimand.form",
+                ),
+                (
+                    "randomization",
+                    lambda value: value["design"].__setitem__(
+                        "randomization",
+                        {"scheme": "global_label_shuffle", "exchangeability": "global"},
+                    ),
+                    "unsupported randomization design",
+                ),
+            )
+            for name, mutate, expected in mutations:
+                with self.subTest(name=name):
+                    manifest = copy.deepcopy(original)
+                    mutate(manifest)
+                    reidentify(manifest)
+
+                    errors = validate_analysis_manifest(manifest, manifest_dir=out_dir)
+
+                    self.assertTrue(any(expected in error for error in errors), errors)
+
+    def test_named_strata_ratio_manifest_flows_from_validator_to_engine(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            manifest = self._generated_manifest(out_dir)
+            block_ids = manifest["contrasts"][0]["block_ids"]
+            manifest["design"]["randomization"] = named_strata(block_ids)
+            metric = self._set_ratio(manifest, "ratio_of_totals")
+
+            self.assertEqual(validate_analysis_manifest(manifest, manifest_dir=out_dir), [])
+            sensitivity = randomization_check(
+                [1.0] * len(block_ids),
+                manifest["design"]["randomization"],
+                block_ids=block_ids,
+            )
+            observations = tuple(
+                RatioObservation(
+                    block_id=block_id,
+                    energy_a_j=10.0,
+                    energy_b_j=20.0,
+                    output_tokens_a=100,
+                    output_tokens_b=100,
+                    token_count_source_a="runtime_observed",
+                    token_count_source_b="runtime_observed",
+                    stop_reason_a="requested_tokens_emitted",
+                    stop_reason_b="requested_tokens_emitted",
+                    output_policy_a="fixed-100",
+                    output_policy_b="fixed-100",
+                    tokenizer_identity_a="tok-a",
+                    tokenizer_identity_b="tok-a",
+                )
+                for block_id in block_ids
+            )
+            estimate = estimate_manifest_observations(metric, observations)
+
+            self.assertEqual(sensitivity["status"], "not_run")
+            self.assertEqual(estimate.ratio_estimand, "ratio_of_totals")
 
     def test_validation_rejects_tampered_config_and_order_hash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

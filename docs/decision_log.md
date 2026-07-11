@@ -2832,6 +2832,60 @@ both. The `request` gate remains a deprecated alias of
 `idle_subtracted_request` through summary schema v0.1; removal waits for
 schema v0.2.
 
+Amendment (2026-07-11, P2-037 / C-028 analysis-trio adjudication): the
+analysis engine adds the following exact closed v1 reason vocabulary. Consumers
+may match these strings; additions or semantic changes require another
+versioned amendment:
+
+```text
+analysis_manifest_invalid
+analysis_manifest_not_frozen
+order_manifest_hash_mismatch
+config_hash_mismatch
+bundle_missing
+bundle_strict_invalid
+bundle_status_not_succeeded
+metric_missing_or_nonfinite
+paired_block_incomplete
+insufficient_complete_blocks
+fixed_n_plan_incomplete
+window_evidence_precheck_missing
+campaign_cooldown_evidence_missing
+idle_window_suspect
+idle_window_suspect_unknown
+floor_artifact_invalid
+floor_row_missing
+floor_row_ambiguous
+floor_row_stale
+floor_transport_inapplicable
+floor_abs_missing
+floor_cmp_missing
+effect_not_above_floor
+interpolation_bound_exceeds_floor
+interpolation_bound_exceeds_half_effect
+deterministic_bound_obscures_direction
+required_error_term_unknown
+required_covariance_unknown
+runtime_token_denominator_required
+stop_reason_required
+output_policy_required
+tokenizer_identity_mismatch
+multiplicity_family_incomplete
+multiplicity_not_rejected
+equivalence_margin_not_above_floor
+equivalence_not_supported
+randomization_check_insufficient_blocks
+randomization_sensitivity_disagrees
+loo_verdict_influential
+loo_magnitude_influential
+outcome_dependent_top_up
+legacy_l1_mechanics_only
+```
+
+Reducer-owned precheck reasons remain copied verbatim. Unknown reasons and
+unknown covariance/term provenance fail closed rather than acquiring a local
+alias or zero value.
+
 ## D-058: Token-normalization and stack-identity contract adopted
 
 - Date: 2026-07-09
@@ -2874,6 +2928,14 @@ Phase 4 claims-index mode extends this tool rather than a new one.
 
 Consequences: the D-053 freeze discipline and D-055 registry are now
 machine-checked.
+
+Amendment (2026-07-11, P2-037): `claims_lint` gains an explicit
+`claim-index` mode over the canonical Phase-4 JSONL. It verifies the linked
+`joulewise.claim_verdicts.v1` bytes, canonical ID, AP/contrast/role/outcome,
+manifest/floor/bundle provenance, D-062 demotion, sensitivity caveats, and
+claim-level ceiling. The single pre-P2-037 manual-review L1 row is
+grandfathered only under its exact canonical row identity/hash and emits a
+warning; it does not become engine-supported evidence.
 
 ## D-060: Depth-before-breadth stop line (RATIFIED)
 
