@@ -315,9 +315,12 @@ def _strict_problems(reader: BundleReader) -> list[str]:
                 "measured window; a succeeded summary needs a "
                 "reducer-consumable curve"
             )
-    version_problems, absent_tolerance, tolerate_fresh_nulls = (
-        _strict_reducer_version_dispatch(reader, summary)
-    )
+    (
+        version_problems,
+        absent_tolerance,
+        tolerate_fresh_nulls,
+        comparison_reducer_version,
+    ) = _strict_reducer_version_dispatch(reader, summary)
     problems.extend(version_problems)
     problems.extend(_strict_workload_provenance_problems(reader, summary))
     problems.extend(_strict_emitted_token_ids_problems(reader))
@@ -325,6 +328,10 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     problems.extend(_strict_raw_to_trace_problems(reader))
     if not version_problems:
         fresh = reduce_bundle(reader.path).to_dict()
+        if comparison_reducer_version is not None:
+            fresh["summary_provenance"]["reducer_version"] = (
+                comparison_reducer_version
+            )
         differing = _strict_summary_differences(
             fresh,
             summary,
@@ -358,10 +365,21 @@ _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
     "measurement_quality.idle_window_suspect",
 }
 
-_STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE = _STRICT_ADDITIVE_ABSENT_TOLERANCE | {
-    "measurement_quality.token_counts_source",
-    "measurement_quality.phase_identifiability",
-}
+ADDED_SINCE_0_3_0 = frozenset(
+    {
+        "measurement_quality.remote_cleanup_failed",
+        "measurement_quality.runtime_cleanup_ok",
+    }
+)
+
+_STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE = (
+    _STRICT_ADDITIVE_ABSENT_TOLERANCE
+    | ADDED_SINCE_0_3_0
+    | {
+        "measurement_quality.token_counts_source",
+        "measurement_quality.phase_identifiability",
+    }
+)
 
 
 def _strict_summary_differences(
@@ -541,25 +559,27 @@ def _strict_workload_provenance_problems(
 
 def _strict_reducer_version_dispatch(
     reader: BundleReader, summary: dict[str, Any]
-) -> tuple[list[str], set[str], bool]:
+) -> tuple[list[str], set[str], bool, str | None]:
     """Select strict comparison semantics solely from recorded provenance."""
     provenance = summary.get("summary_provenance")
     if (
         _strict_legacy_bundle_metadata(reader.raw_metadata())
         and "summary_provenance" not in summary
     ):
-        return [], _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE, True
+        return [], _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE, True, None
     if not isinstance(provenance, dict):
         return [
             "strict: summary_metrics.summary_provenance is missing or not an "
             "object for current-era bundle"
-        ], set(), False
+        ], set(), False, None
     reducer_version = provenance.get("reducer_version")
     if reducer_version == SUMMARY_REDUCER_VERSION:
-        return [], set(), False
+        return [], set(), False, None
+    if reducer_version == "0.3.0":
+        return [], set(ADDED_SINCE_0_3_0), False, "0.3.0"
     return [
         "strict: unsupported reducer version; re-reduction required"
-    ], set(), False
+    ], set(), False, None
 
 
 def _strict_legacy_bundle_metadata(metadata: Any) -> bool:

@@ -226,6 +226,69 @@ class NodeWorkerSubprocessTests(unittest.TestCase):
                 self.assertIn("nvidia_smi_idle_csv", idle.raw_status["artifacts"])
                 self.assertIn(b", 12.5, 41", idle.artifacts["nvidia_smi_idle.csv"])
 
+                sampling_task = {
+                    "run_id": run_id,
+                    "task_type": "telemetry",
+                    "node_role": None,
+                    "telemetry": {
+                        "backend": "nvidia_smi",
+                        "interval_ms": 20,
+                        "query_fields": [
+                            "timestamp",
+                            "power.draw",
+                            "temperature.gpu",
+                        ],
+                        "rail_manifest": ["gpu_board"],
+                    },
+                }
+                sampling_start = client.run_task(
+                    {
+                        **sampling_task,
+                        "task_id": "task-telemetry-start-sampling",
+                        "operation": "start_sampling",
+                    },
+                    timeout_s=15.0,
+                )
+                self.assertTrue(sampling_start.ok, sampling_start)
+                self.assertEqual(
+                    sampling_start.raw_status["artifacts"],
+                    {
+                        "nvidia_smi_pidfile": "nvidia_smi.pid",
+                        "status_json": "status.json",
+                        "worker_log": "worker.log",
+                    },
+                )
+                self.assertIn(b'"command"', sampling_start.artifacts["nvidia_smi.pid"])
+                sampler_pidfile = remote_root / run_id / "state" / "nvidia_smi.pid"
+                sampler_payload = json.loads(sampler_pidfile.read_text(encoding="utf-8"))
+                self._pin_pidfile_to_live_script_command(
+                    sampler_pidfile, int(sampler_payload["pid"])
+                )
+
+                sampling_stop = client.run_task(
+                    {
+                        **sampling_task,
+                        "task_id": "task-telemetry-stop-sampling",
+                        "operation": "stop_sampling",
+                    },
+                    timeout_s=15.0,
+                )
+                self.assertTrue(sampling_stop.ok, sampling_stop)
+                self.assertEqual(
+                    sampling_stop.raw_status["artifacts"],
+                    {
+                        "nvidia_smi_csv": "nvidia_smi.csv",
+                        "nvidia_smi_pidfile": "nvidia_smi.pid",
+                        "status_json": "status.json",
+                        "worker_log": "worker.log",
+                    },
+                )
+                self.assertIn(b", 12.5, 41", sampling_stop.artifacts["nvidia_smi.csv"])
+                self.assertEqual(
+                    sampling_stop.artifacts["nvidia_smi.pid"],
+                    sampling_start.artifacts["nvidia_smi.pid"],
+                )
+
                 self._pin_pidfile_to_live_script_command(pidfile, server_pid)
                 cleanup = client.run_task(
                     self._runtime_task(run_id, "cleanup", "task-runtime-cleanup"),
@@ -363,17 +426,17 @@ server.serve_forever()
 
     def _write_fake_nvidia_smi(self, path: Path) -> None:
         path.write_text(
-            f"""#!{sys.executable}
-import datetime
-import signal
-import sys
-import time
-
-signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(0))
-while True:
-    stamp = datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S.%f')[:-3]
-    print(f'{{stamp}}, 12.5, 41', flush=True)
-    time.sleep(0.02)
+            """#!/bin/sh
+trap 'exit 0' TERM INT
+i=0
+while [ "$i" -lt 5 ]; do
+    printf '2026/07/07 12:00:0%s.000, 12.5, 41\n' "$i"
+    i=$((i + 1))
+done
+while :; do
+    printf '2026/07/07 12:00:05.000, 12.5, 41\n'
+    sleep 0.02
+done
 """,
             encoding="utf-8",
         )

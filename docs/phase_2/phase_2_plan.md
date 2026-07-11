@@ -262,7 +262,10 @@ Design notes:
 - Idle baseline: `telemetry.measure_idle` for `sampling.idle_seconds`;
   result stored in summary and used by the reducer.
 - Warmup: `workload_profile.warmup_runs` invocations of the runtime warmup,
-  strictly before `start_sampling`.
+  followed by a `sampling.warmup_seconds` post-active-warmup settling wait,
+  strictly before the measured-run and `start_sampling` markers. The wait uses
+  the injected clock, is recorded on warmup completion and in the runtime log,
+  and is a no-op at zero.
 - Measured window: `start_sampling` -> `run_workload` -> `stop_sampling`.
   During the window the controller only blocks on the runtime (D-013):
   log records buffer in memory and flush after `stop_sampling`.
@@ -272,6 +275,10 @@ Design notes:
   the incomplete-bundle signal D-011 defines).
 - Single-run scope: repetitions handled in 2F; this slice runs exactly one
   measured run regardless of `repetitions`.
+- Cleanup quality: local cleanup failures remain post-window quality evidence,
+  not retroactive run failures. The reducer copies boolean cleanup-completion
+  evidence to nullable `measurement_quality.runtime_cleanup_ok`; later
+  campaign policy decides how a false value affects following repetitions.
 
 Actions: implement `controller.py` + tests using mocks/FakeClock: happy
 path; runtime-unsupported path (`mock-unsupported` => status unsupported,

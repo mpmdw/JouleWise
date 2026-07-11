@@ -955,6 +955,7 @@ def _reduce(
         token_counts_source=token_counts_source,
         phase_identifiability=phase_identifiability,
         remote_cleanup_failed=_remote_cleanup_failed(metadata),
+        runtime_cleanup_ok=reader.runtime_cleanup_ok(),
     )
 
     return SummaryMetrics(

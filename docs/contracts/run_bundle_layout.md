@@ -46,6 +46,10 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
   model, environment, clock, `config_sha256`, rail-manifest metadata, and
   optional workload provenance. Valid JSON with any non-object top-level
   shape is invalid in default validation.
+- `metadata.config_warnings` is a list of structured schema-0.1 diagnostics
+  (`code`, dotted `path`, and `message`). Unknown configuration keys emit
+  `unknown_config_key` to stderr, are listed here, and are ignored; their
+  values never enter normalized config bytes, bundle identity, or metadata.
 - `metadata.environment` includes nullable capture provenance fields such as
   `capture_scope`, `captured_for_rep`, `captured_at_s`,
   `env_capture_duration_s`, and `settle_s`. Normal member bundles capture this
@@ -271,6 +275,13 @@ reader policy:
 
 `phase_energy_j` values are GROSS-only; the rule's contract home is
 `docs/contracts/analysis_plans.md` standing rules (D-032/C-014).
+
+`measurement_quality.runtime_cleanup_ok` is an additive nullable boolean
+derived from `stage_completed` events for phase `cleanup`. False surfaces local
+runtime cleanup failure without changing a successful current run's status,
+failure reason, energy, or window eligibility. Missing/malformed completion
+evidence is null. Pre-0.3/legacy stored summaries may omit this field under the
+strict additive-absence rule; current reducer-0.3.0 summaries are exact.
 
 A status-only `{"status": "succeeded"}` summary is neither a complete bundle
 nor default-validation-valid.

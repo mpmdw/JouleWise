@@ -28,6 +28,7 @@
 <div class="doc-layout">
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#start-here-for-every-big-run">Start Here For Every Big Run</a>
 <a href="#active-stop-card">ACTIVE_STOP_CARD</a>
+<a href="#superseded-stop-card-cp-5-superseded-stop-card-cp-5">Superseded stop card (CP-5) Superseded stop card (CP-5)</a>
 <a href="#current-project-status">Current Project Status</a>
 <a href="#session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</a>
 <a href="#current-verification">Current Verification</a>
@@ -36,7 +37,7 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 0a5c5e6"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 0a5c5e6</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit d47415b"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit d47415b</span></span></div>
     <h1>JouleWise Run State</h1>
 <p>Last updated: 2026-07-09 (C-027 whole-project council review with
 gpt-5.6-sol: claim-surface corrections in README/PROJECT_STATUS/this
@@ -90,6 +91,74 @@ REDEPLOY the site so the public snapshot tracks the repo (C-012):
 committed.</li>
 </ol>
 <h2 id="active-stop-card">ACTIVE_STOP_CARD</h2>
+<p>Status: <strong>ACTIVE (2026-07-10, C-028 checkpoint #2 — Ed away).</strong> This
+card is the resume authority. The C-028 session adjudicated all ten
+C-027 specs (docs/specs/c027/ADJUDICATION.md — 40 rulings, 2-round Sol
+advisory), then landed the integration through per-tranche review
+stacks.</p>
+<p><strong>MERGED to main this session:</strong> PR #41 (spec wave incl. ADJUDICATION),
+PR #42 (docs tranche: governance addenda + per-invocation
+recoverability audit + AP/SPLIT amendments + env locks), PR #43
+(P2-040 tranche + version dispatch + NV-2 cooldown fix; lead gates:
+corpus 6/6 strict, mock e2e, suites green), PR #44 (RPT-001 report
+skeleton + gated vertical slice; lead re-ran the full build), PR #45
+(P2-039 floor calculator, validator hardened after a BLOCKED review).
+RETRO-001 ran (2 SHOULD-FIX, both fixed in #43); Current Verification
+may advance past 36d5641 after the NEXT session&#39;s fresh site
+regen+diff (RETRO-1&#39;s remaining condition).</p>
+<p><strong>OPEN work, exact states:</strong></p>
+<ul>
+<li>PR #46 DRAFT (impl/p2042 frozen analysis manifest): implementation
+complete, main merged in (one manual-merge splice defect was
+introduced and fixed — 8a1c9f-era note in the PR), suite green.
+NEEDS: targeted Sol review (spec: engine trio §A + adjudication) →
+fix round if any → un-draft → CI → merge.</li>
+<li>impl/p2041 (pushed, NO PR): campaign verdict split + H3 fail-closed
+campaign-cooldown gate, complete per its run report in the branch;
+intentionally behind main. NEEDS: merge main in (run_campaign.py
+will conflict with #46&#39;s sidecar exclusion — land #46 first),
+targeted review, PR, gates, merge.</li>
+<li>impl/p2040-remainder (pushed, NO PR): FIX-7a/7b/FIX-8 complete; lead
+corpus gate + full suite ALREADY GREEN. NEEDS: targeted review
+(cheap), PR, CI, merge.</li>
+<li>impl/nvgate2-codenow: session died at capacity twice; a codex-run-v2
+RESUME with --retries 3 was IN FLIGHT at checkpoint (out-file
+scratchpad/nvgate2-impl2.md). If it completed: commit by pathspec in
+../JouleWise-wt/nvgate2, review, PR. If it died with the session:
+the worktree holds partial state — resume again via
+<code>codex-run-v2 &lt;out&gt; --resume ...</code> in that worktree.</li>
+<li>impl/p2038 (production uncertainty evidence, stacked on the merged
+P2-040): Sol session was IN FLIGHT at checkpoint (out-file
+scratchpad/p2038-impl.md). Same recovery pattern as nvgate2.
+P2-038 stays a HARD pre-Window-A gate.</li>
+<li>DOC-008 kernel: adjudicated to land LAST — refresh the kernel at the
+final integrated head + NOT-AUTHORITATIVE header, targeted review,
+PR. Not started (deliberately).</li>
+<li>Cross-stream integration review (Sol) over merged main AFTER the
+remaining branches land; then C-028 BOOKKEEPING: consume
+scratchpad/bookkeeping-drafts.md (16 KB: D-064 draft, C-028 council
+entry draft, run-report skeleton, clearance template) — lead owns
+final wording; per-invocation JSONL per D-064 (a start exists at
+scratchpad/c028-invocations.jsonl via codex-run-v2 --manifest);
+queue-row status updates; consistency sweep; site regen + deploy;
+THEN clear this stop card.</li>
+</ul>
+<p><strong>Session scratchpad</strong> (survives on disk):
+<code>/private/tmp/claude-501/-Users-edr-code-JouleWise/e48cf22e-209a-4355-bb28-9b6a37636b34/scratchpad/</code>
+— all review packets (rev-<em>.md, p2040-lens</em>.md, retro001.md), fix
+reports, the advisory thread record (resume-plan.md; MCP thread id in
+ADJUDICATION.md), bookkeeping drafts.</p>
+<p><strong>Tooling delta:</strong> <code>~/.local/bin/codex-run-v2</code> installed (37/37 tests;
+per-call -m/--effort, capacity-aware retry-with-resume, D-064
+--manifest/--role/--parent rows). v1 untouched; promote v2 to default
+after a few more clean runs. Ed&#39;s division-of-labor directive (Sol =
+implementer + advisor, Fable = architect/director) is in effect and
+recorded in memory.</p>
+<p><strong>Ed-decision list</strong> (unchanged, ADJUDICATION.md §Ed): P0-003 backup
+destination (E0, pre-Window-A hard gate); two-model floor economics;
+full-corpus CI; renderer (P1-008); REPRO pack publication; D-060
+ratification.</p>
+<h2>Superseded stop card (CP-5)## Superseded stop card (CP-5)</h2>
 <p>Status: <strong>CLEARED 2026-07-09</strong> by the CP-5 resume session. Every
 clearance criterion was met: all three worktree diffs lead-gated
 (envgate live-gated against the real affine mock bundle) and merged as
@@ -100,6 +169,14 @@ the stream log); all accepted pre-campaign changes landed and merged
 rank 0 closed. Full record:
 <code>docs/run_reports/2026-07-09-cp5-resume.md</code>. No stop card is active.</p>
 <h2 id="current-project-status">Current Project Status</h2>
+<p><strong>RPT-001 targeted review fix round COMPLETE in worktree (2026-07-10;
+awaiting lead pathspec commit).</strong> FIX-1..FIX-9 are implemented: Phase-4
+claims lint/projection, adjudicated 1P5B identity and regenerated artifacts,
+full/offline atomic build with hash verification, real pipeline regressions,
+D-058 T1 scope, expanded claim-language tripwires, boundary-honest prose,
+LF byte stability, and evidence-bootstrap gating. Real-corpus regeneration
+used <code>/Users/edr/code/JouleWise/runs</code>; focused 37 OK and canonical 890 OK
+(skipped=10). Report: <code>docs/run_reports/2026-07-10-rpt001-fix-round.md</code>.</p>
 <p><strong>Suite BUILD session COMPLETE and MERGED (2026-07-08; C-017;
 D-044..D-047).</strong> The workload suite is now CODE, not contracts: P2-010a
 generic substrate (PR #17: suite.py, run_suite protocol, mock+MLX
@@ -154,6 +231,8 @@ are live for Window-A execution once the above gates clear.</li>
 </ol>
 <h2 id="session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</h2>
 <ul>
+<li>2026-07-10 P2-040 / RETRO-001 fix round (committed on c027-int-p2040
+after lead review): <code>docs/run_reports/2026-07-10-p2040-fix-round.md</code></li>
 <li>2026-07-09 C-027 whole-project council review (7 gpt-5.6-sol lenses +
 counterreview + independent final examiner):
 <code>docs/reviews/2026-07-09-c027-whole-project-review.md</code> (compact run
@@ -195,6 +274,11 @@ D-038..D-042): <code>docs/run_reports/2026-07-08-suite-science-expansion.md</cod
 </ul>
 <h2 id="current-verification">Current Verification</h2>
 <ul>
+<li>P2-040 / RETRO-001 fix-round worktree: canonical suite <code>Ran 908 tests in 32.723s</code>, <code>OK (skipped=11)</code>; focused 211 tests OK; claims lint exit 0 with
+no errors; <code>git diff --check</code> clean. The absent <code>runs/</code> corpus produced the
+required loud six-bundle acceptance-gate skip; the lead corpus gate then
+PASSED (6/6 strict via corpus symlink), plus mock e2e run+strict+reduce
+and the post-merge full suite (OK, skipped=12).</li>
 <li>Claude Code 2.1.205 approved the project <code>codex</code> MCP server; Codex CLI
 0.144.0 protocol handshake exposed <code>codex</code> + <code>codex-reply</code> with the
 expected full-session controls. A real Claude → Codex read-only call
@@ -280,7 +364,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit 0a5c5e6 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit d47415b · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

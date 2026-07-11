@@ -33,9 +33,9 @@ Conventions:
 | R-013 | Thermal throttling confounds measurements | 2-4 | medium | medium | mitigated by D-014 |
 | R-014 | Model weights become unavailable or gated | 2+ | low | medium | open |
 | R-015 | Schema changes after data collection starts | 2+ | low | high | mitigated |
-| R-016 | Measurement-corpus loss (`runs/` has no backup path) | 2-5 | low | high | mitigated-interim (protocol + restore test 2026-07-06; final destination pending user) |
+| R-016 | Measurement-corpus loss (`runs/` has no backup path) | 2-5 | low | high | mitigated (2026-07-10: iCloud Drive destination live, fresh restore test passed; re-verify before each window — eviction caveat) |
 | R-017 | Repo on iCloud-synced Desktop (EPERM lock recurrence) | all | low | medium | mitigated (repo moved 2026-07-05; residual: session launch paths) |
-| R-018 | Agent-loop self-expansion consumes calendar without grader-facing output | all | medium | high | open (C-027; D-060 stop line proposed as mitigation) |
+| R-018 | Agent-loop self-expansion consumes calendar without grader-facing output | all | medium | high | mitigated-in-policy (D-060 RATIFIED 2026-07-10; enforcement = queue discipline) |
 
 ## R-001: Supervisor approval delayed or scope shifts
 

@@ -8,6 +8,7 @@ semantics.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
@@ -17,11 +18,98 @@ from joulewise.validation import finite_float
 CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
-SUMMARY_REDUCER_VERSION = "0.3.0"
+SUMMARY_REDUCER_VERSION = "0.3.1"
 
 
 class SchemaError(ValueError):
     """Raised when a benchmark schema cannot be validated."""
+
+
+class ConfigKeyWarning(UserWarning):
+    """Schema-0.1 diagnostic for an ignored, unknown configuration key."""
+
+    code = "unknown_config_key"
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+        super().__init__(
+            f"unknown config key {path!r} ignored by schema {CONFIG_SCHEMA_VERSION}"
+        )
+
+    def to_dict(self) -> dict[str, str]:
+        return {"code": self.code, "path": self.path, "message": str(self)}
+
+
+_CONFIG_KEYS_BY_PATH: dict[str, frozenset[str]] = {
+    "": frozenset(
+        {
+            "schema_version",
+            "run_id",
+            "model",
+            "quantization",
+            "hardware_target",
+            "workload_profile",
+            "interconnect",
+            "sampling",
+            "run_metadata",
+        }
+    ),
+    "model": frozenset(
+        {
+            "name",
+            "family",
+            "source",
+            "revision",
+            "weight_format",
+            "context_window",
+        }
+    ),
+    "quantization": frozenset({"name", "bits", "group_size"}),
+    "hardware_target": frozenset(
+        {
+            "id",
+            "transport",
+            "runtime_backend",
+            "telemetry_backend",
+            "host",
+            "device_kind",
+            "notes",
+        }
+    ),
+    "workload_profile": frozenset(
+        {
+            "name",
+            "prompt_tokens",
+            "output_tokens",
+            "prompt_text",
+            "dataset_ref",
+            "suite_manifest_ref",
+            "suite_manifest_sha256",
+            "generator_sidecar_ref",
+            "repetitions",
+            "warmup_runs",
+        }
+    ),
+    "interconnect": frozenset({"name", "link_speed_mbps", "notes"}),
+    "sampling": frozenset({"power_hz", "idle_seconds", "warmup_seconds"}),
+    "run_metadata": frozenset(
+        {"project", "operator", "ambient_temp_c", "notes", "tags"}
+    ),
+}
+
+
+def _unknown_config_key_warnings(data: dict[str, Any]) -> tuple[ConfigKeyWarning, ...]:
+    paths = [str(key) for key in data if key not in _CONFIG_KEYS_BY_PATH[""]]
+    for section, allowed in _CONFIG_KEYS_BY_PATH.items():
+        if not section:
+            continue
+        value = data.get(section)
+        if not isinstance(value, dict):
+            # The owning from_mapping method raises SchemaError; do not inspect
+            # child keys of a value that is not a typed object.
+            continue
+        paths.extend(f"{section}.{key}" for key in value if key not in allowed)
+    return tuple(ConfigKeyWarning(path) for path in sorted(paths))
 
 
 class TransportKind(str, Enum):
@@ -355,10 +443,19 @@ class BenchmarkConfig:
     sampling: SamplingConfig = field(default_factory=SamplingConfig)
     run_metadata: RunMetadata = field(default_factory=lambda: RunMetadata(project="joulewise"))
     run_id: str | None = None
+    # Diagnostic-only construction state. It is deliberately excluded from
+    # comparison, repr, and normalized config serialization so unknown values
+    # cannot change D-001/D-022 identity or leak into config.json.
+    config_warnings: tuple[dict[str, str], ...] = field(
+        default_factory=tuple, compare=False, repr=False
+    )
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "BenchmarkConfig":
         data = _require_mapping(data, "benchmark config")
+        unknown_warnings = _unknown_config_key_warnings(data)
+        for warning in unknown_warnings:
+            warnings.warn(warning, stacklevel=2)
         schema_version = _require_string(data.get("schema_version"), "schema_version")
         if schema_version != CONFIG_SCHEMA_VERSION:
             raise SchemaError(
@@ -374,6 +471,7 @@ class BenchmarkConfig:
             interconnect=InterconnectConfig.from_mapping(data.get("interconnect")),
             sampling=SamplingConfig.from_mapping(data.get("sampling")),
             run_metadata=RunMetadata.from_mapping(data.get("run_metadata")),
+            config_warnings=tuple(warning.to_dict() for warning in unknown_warnings),
         )
         config.validate()
         return config
@@ -384,7 +482,9 @@ class BenchmarkConfig:
             raise SchemaError("hardware_target.host is required when transport is ssh")
 
     def to_dict(self) -> dict[str, Any]:
-        data = _enum_to_value(asdict(self))
+        data = asdict(self)
+        data.pop("config_warnings")
+        data = _enum_to_value(data)
         # D-044: suite_manifest_ref/suite_manifest_sha256 are the scoped
         # omission-serialized optionals. Existing non-suite configs keep their
         # byte-identical normalized JSON while every pre-existing optional keeps
@@ -411,6 +511,7 @@ class BenchmarkConfig:
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "title": "JouleWise BenchmarkConfig",
             "type": "object",
+            "x-joulewise-unknown-key-policy": "warn-and-ignore",
             "required": [
                 "schema_version",
                 "model",
@@ -578,6 +679,11 @@ class MeasurementQuality:
     #: quality-only hygiene signal; surviving worker-started processes use the
     #: cleanup_failed FailureReason and demote the run instead.
     remote_cleanup_failed: list[str] | None = None
+    #: Result of local runtime cleanup after the measured window. False is a
+    #: quality concern for the next repetition but never retroactively changes
+    #: the current run's success or energy result. None means no boolean cleanup
+    #: completion evidence was recorded (legacy/post-hoc/failure-before-cleanup).
+    runtime_cleanup_ok: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -755,6 +861,7 @@ class SummaryMetrics:
                             "type": ["array", "null"],
                             "items": {"type": "string"},
                         },
+                        "runtime_cleanup_ok": nullable_bool,
                     },
                 },
                 "summary_provenance": {

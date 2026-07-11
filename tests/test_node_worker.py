@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -624,6 +625,70 @@ class NodeWorkerTests(unittest.TestCase):
             self.assertIn("stream_options", payloads[0])
             self.assertNotIn("stream_options", payloads[1])
 
+    def test_vllm_accepted_without_usage_uses_chunk_fallback_without_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            state_dir = tmpdir / "state"
+            state_dir.mkdir()
+            (state_dir / node_worker.VLLM_PIDFILE).write_text(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "port": 32130,
+                        "served_model_name": "jw-3050-smoke",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            payloads: list[dict[str, Any]] = []
+            old_post = node_worker._vllm_json_post
+            old_stream = node_worker._vllm_stream_completion
+
+            def fake_post(port: int, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+                del port, payload
+                return {"tokens": [11, 22]} if path == node_worker.VLLM_TOKENIZE_PATH else {}
+
+            def fake_stream(
+                port: int,
+                path: str,
+                payload: dict[str, Any],
+                *,
+                timeout_s: float,
+                usage_out: dict[str, Any] | None = None,
+            ):
+                del port, path, timeout_s, usage_out
+                payloads.append(dict(payload))
+                return iter(["AB", "C"])
+
+            node_worker._vllm_json_post = fake_post  # type: ignore[assignment]
+            node_worker._vllm_stream_completion = fake_stream  # type: ignore[assignment]
+            try:
+                artifacts_dir = tmpdir / "artifacts"
+                task_path = self.write_task(
+                    tmpdir,
+                    valid_workload_task(task_id="task-run-usage-omitted"),
+                )
+                code = node_worker.main(
+                    ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+                )
+            finally:
+                node_worker._vllm_json_post = old_post
+                node_worker._vllm_stream_completion = old_stream
+
+            self.assertEqual(code, 0)
+            status = self.read_status(artifacts_dir)
+            self.assertEqual(len(payloads), 1)
+            self.assertEqual(payloads[0]["stream_options"], {"include_usage": True})
+            self.assertFalse(status["metadata"].get("include_usage_retry_without_field", False))
+            self.assertEqual(status["metadata"]["token_count_source"], "stream_chunk_fallback")
+            self.assertEqual(status["metadata"]["emitted_tokens"], 2)
+            self.assertEqual(status["metadata"]["stream_chunk_count"], 2)
+            tokens = [
+                json.loads(line)
+                for line in (artifacts_dir / "tokens.jsonl").read_text().splitlines()
+            ]
+            self.assertEqual({row["record_unit"] for row in tokens}, {"sse_chunk"})
+
     def test_runtime_missing_vllm_launcher_is_runtime_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmpdir = Path(tmp)
@@ -1032,6 +1097,227 @@ class NodeWorkerTests(unittest.TestCase):
             self.assertFalse(pidfile.exists())
             self.assertEqual(calls, [])
 
+    def test_vllm_pid_reuse_after_sigterm_does_not_sigkill_or_demote(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            state_dir = Path(tmp) / "state"
+            state_dir.mkdir()
+            artifacts_dir = Path(tmp) / "artifacts"
+            artifacts_dir.mkdir()
+            pid = 424240
+            pid_payload = {
+                "pid": pid,
+                "command": ["vllm", "serve"],
+                "ps_lstart": "Tue Jul  7 00:00:00 2026",
+            }
+            (state_dir / node_worker.VLLM_PIDFILE).write_text(
+                json.dumps(pid_payload), encoding="utf-8"
+            )
+            old_match = node_worker._pidfile_matches_live_process
+            old_kill = node_worker.os.kill
+            calls: list[tuple[int, int]] = []
+            identity_checks = 0
+
+            def changing_identity(payload: dict[str, Any], metadata: dict[str, Any]) -> bool:
+                nonlocal identity_checks
+                identity_checks += 1
+                if identity_checks == 1:
+                    metadata["pid_verification"] = "matched"
+                    return True
+                metadata["pid_verification"] = "start_time_mismatch"
+                return False
+
+            def record_kill(value: int, sig: int) -> None:
+                calls.append((value, sig))
+
+            node_worker._pidfile_matches_live_process = changing_identity  # type: ignore[assignment]
+            node_worker.os.kill = record_kill  # type: ignore[assignment]
+            try:
+                status, reason, _, _, metadata = node_worker.handle_vllm_cleanup(
+                    valid_runtime_task(
+                        operation="cleanup", paths={"state_dir": str(state_dir)}
+                    ),
+                    str(artifacts_dir),
+                    lambda line: None,
+                )
+            finally:
+                node_worker._pidfile_matches_live_process = old_match  # type: ignore[assignment]
+                node_worker.os.kill = old_kill  # type: ignore[assignment]
+
+            self.assertEqual(status, "succeeded")
+            self.assertIsNone(reason)
+            self.assertFalse(metadata["process_survived"])
+            self.assertEqual(metadata["pid_verification"], "start_time_mismatch")
+            self.assertEqual(calls, [(pid, signal.SIGTERM)])
+
+    def test_real_stubborn_vllm_survival_sigkills_same_fingerprint_and_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            script = root / "stubborn-vllm.py"
+            script.write_text(
+                "import signal, time\n"
+                "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+                "print('ready', flush=True)\n"
+                "while True: time.sleep(1)\n",
+                encoding="utf-8",
+            )
+            process = subprocess.Popen(
+                [sys.executable, str(script)],
+                stdout=subprocess.PIPE,
+                text=True,
+            )
+            assert process.stdout is not None
+            self.assertEqual(process.stdout.readline().strip(), "ready")
+            state_dir = root / "state"
+            state_dir.mkdir()
+            artifacts_dir = root / "artifacts"
+            artifacts_dir.mkdir()
+            command = [sys.executable, str(script)]
+            ps_lstart = "Tue Jul  7 00:00:00 2026"
+            (state_dir / node_worker.VLLM_PIDFILE).write_text(
+                json.dumps(
+                    {
+                        "pid": process.pid,
+                        "command": command,
+                        "ps_lstart": ps_lstart,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            old_kill = node_worker.os.kill
+            old_cmdline = node_worker._live_process_cmdline
+            old_lstart = node_worker._process_lstart
+            old_stop = node_worker.VLLM_STOP_TIMEOUT_S
+            old_kill_timeout = node_worker.VLLM_KILL_TIMEOUT_S
+            signals: list[tuple[int, int]] = []
+
+            def suppress_sigkill(pid: int, sig: int) -> None:
+                signals.append((pid, sig))
+                if sig != signal.SIGKILL:
+                    old_kill(pid, sig)
+
+            node_worker.os.kill = suppress_sigkill  # type: ignore[assignment]
+            node_worker._live_process_cmdline = lambda pid: list(command)  # type: ignore[assignment]
+            node_worker._process_lstart = lambda pid: ps_lstart  # type: ignore[assignment]
+            node_worker.VLLM_STOP_TIMEOUT_S = 0.05
+            node_worker.VLLM_KILL_TIMEOUT_S = 0.05
+            try:
+                status, reason, _, _, metadata = node_worker.handle_vllm_cleanup(
+                    valid_runtime_task(
+                        operation="cleanup", paths={"state_dir": str(state_dir)}
+                    ),
+                    str(artifacts_dir),
+                    lambda line: None,
+                )
+            finally:
+                node_worker.os.kill = old_kill  # type: ignore[assignment]
+                node_worker._live_process_cmdline = old_cmdline  # type: ignore[assignment]
+                node_worker._process_lstart = old_lstart  # type: ignore[assignment]
+                node_worker.VLLM_STOP_TIMEOUT_S = old_stop
+                node_worker.VLLM_KILL_TIMEOUT_S = old_kill_timeout
+                if process.poll() is None:
+                    old_kill(process.pid, signal.SIGKILL)
+                process.wait()
+                process.stdout.close()
+
+            self.assertEqual(status, "failed")
+            self.assertEqual(reason, "cleanup_failed")
+            self.assertTrue(metadata["process_survived"])
+            self.assertEqual(metadata["pid_verification"], "matched")
+            self.assertEqual(metadata["expected_ps_lstart"], ps_lstart)
+            self.assertIn((process.pid, signal.SIGKILL), signals)
+
+    def test_real_stubborn_sampler_survival_through_start_stop_handlers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bin_dir = root / "bin"
+            bin_dir.mkdir()
+            sampler = bin_dir / "nvidia-smi"
+            sampler.write_text(
+                "#!/usr/bin/env python3\n"
+                "import signal, time\n"
+                "signal.signal(signal.SIGTERM, signal.SIG_IGN)\n"
+                "for i in range(5):\n"
+                "    print(f'2026/07/07 12:00:0{i}.000, 12.5, 41', flush=True)\n"
+                "while True: time.sleep(1)\n",
+                encoding="utf-8",
+            )
+            sampler.chmod(0o755)
+            state_dir = root / "state"
+            state_dir.mkdir()
+            start_artifacts = root / "start-artifacts"
+            start_artifacts.mkdir()
+            stop_artifacts = root / "stop-artifacts"
+            stop_artifacts.mkdir()
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = str(bin_dir) + os.pathsep + old_path
+            pid: int | None = None
+            old_kill = node_worker.os.kill
+            old_cmdline = node_worker._live_process_cmdline
+            old_lstart = node_worker._process_lstart
+            old_stop = node_worker.NVIDIA_SMI_STOP_TIMEOUT_S
+            old_kill_timeout = node_worker.NVIDIA_SMI_KILL_TIMEOUT_S
+            signals: list[tuple[int, int]] = []
+            sampler_process: subprocess.Popen[Any] | None = None
+            try:
+                start_status, _, _, start_map, start_metadata = (
+                    node_worker.handle_nvidia_smi_start_sampling(
+                        valid_task(
+                            operation="start_sampling",
+                            paths={"state_dir": str(state_dir)},
+                        ),
+                        str(start_artifacts),
+                        lambda line: None,
+                    )
+                )
+                self.assertEqual(start_status, "succeeded")
+                self.assertEqual(start_map, {"nvidia_smi_pidfile": "nvidia_smi.pid"})
+                pid = int(start_metadata["pid"])
+                sampler_process = node_worker._DETACHED_NVIDIA_SMI_PROCESSES.pop(pid)
+                pidfile = state_dir / node_worker.NVIDIA_SMI_PIDFILE
+                payload = json.loads(pidfile.read_text(encoding="utf-8"))
+                live_command = [str(sampler), *payload["command"][1:]]
+                payload["command"] = live_command
+                pidfile.write_text(json.dumps(payload), encoding="utf-8")
+
+                def suppress_sigkill(value: int, sig: int) -> None:
+                    signals.append((value, sig))
+                    if sig != signal.SIGKILL:
+                        old_kill(value, sig)
+
+                node_worker.os.kill = suppress_sigkill  # type: ignore[assignment]
+                node_worker._live_process_cmdline = lambda value: list(live_command)  # type: ignore[assignment]
+                node_worker._process_lstart = lambda value: payload["ps_lstart"]  # type: ignore[assignment]
+                node_worker.NVIDIA_SMI_STOP_TIMEOUT_S = 0.05
+                node_worker.NVIDIA_SMI_KILL_TIMEOUT_S = 0.05
+                status, reason, _, _, metadata = node_worker.handle_nvidia_smi_stop_sampling(
+                    valid_task(
+                        operation="stop_sampling",
+                        paths={"state_dir": str(state_dir)},
+                    ),
+                    str(stop_artifacts),
+                    lambda line: None,
+                )
+            finally:
+                os.environ["PATH"] = old_path
+                node_worker.os.kill = old_kill  # type: ignore[assignment]
+                node_worker._live_process_cmdline = old_cmdline  # type: ignore[assignment]
+                node_worker._process_lstart = old_lstart  # type: ignore[assignment]
+                node_worker.NVIDIA_SMI_STOP_TIMEOUT_S = old_stop
+                node_worker.NVIDIA_SMI_KILL_TIMEOUT_S = old_kill_timeout
+                if pid is not None:
+                    try:
+                        old_kill(pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                if sampler_process is not None:
+                    sampler_process.wait()
+
+            self.assertEqual(status, "failed")
+            self.assertEqual(reason, "cleanup_failed")
+            self.assertTrue(metadata["process_survived"])
+            self.assertEqual(metadata["pid_verification"], "matched")
+            self.assertIn((pid, signal.SIGKILL), signals)
+
     def test_vllm_cleanup_reports_surviving_worker_process(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             state_dir = Path(tmp) / "state"
@@ -1042,10 +1328,9 @@ class NodeWorkerTests(unittest.TestCase):
                 encoding="utf-8",
             )
             old_terminate = node_worker._terminate_vllm_pid
-            old_alive = node_worker._pid_is_alive
-            node_worker._DETACHED_VLLM_PROCESSES[pid] = object()
-            node_worker._terminate_vllm_pid = lambda value, metadata: None  # type: ignore[assignment]
-            node_worker._pid_is_alive = lambda value: True  # type: ignore[assignment]
+            old_match = node_worker._pidfile_matches_live_process
+            node_worker._pidfile_matches_live_process = lambda value, metadata: True  # type: ignore[assignment]
+            node_worker._terminate_vllm_pid = lambda value, metadata: True  # type: ignore[assignment]
             try:
                 status, reason, message, _, metadata = node_worker.handle_vllm_cleanup(
                     valid_runtime_task(
@@ -1057,8 +1342,7 @@ class NodeWorkerTests(unittest.TestCase):
                 )
             finally:
                 node_worker._terminate_vllm_pid = old_terminate
-                node_worker._pid_is_alive = old_alive
-                node_worker._DETACHED_VLLM_PROCESSES.pop(pid, None)
+                node_worker._pidfile_matches_live_process = old_match  # type: ignore[assignment]
 
             self.assertEqual(status, "failed")
             self.assertEqual(reason, "cleanup_failed")
@@ -1078,10 +1362,9 @@ class NodeWorkerTests(unittest.TestCase):
                 encoding="utf-8",
             )
             old_terminate = node_worker._terminate_pid
-            old_alive = node_worker._pid_is_alive
-            node_worker._DETACHED_NVIDIA_SMI_PROCESSES[pid] = object()
-            node_worker._terminate_pid = lambda value, metadata: None  # type: ignore[assignment]
-            node_worker._pid_is_alive = lambda value: True  # type: ignore[assignment]
+            old_match = node_worker._pidfile_matches_live_process
+            node_worker._pidfile_matches_live_process = lambda value, metadata: True  # type: ignore[assignment]
+            node_worker._terminate_pid = lambda value, metadata: True  # type: ignore[assignment]
             try:
                 status, reason, message, _, metadata = (
                     node_worker.handle_nvidia_smi_stop_sampling(
@@ -1095,8 +1378,7 @@ class NodeWorkerTests(unittest.TestCase):
                 )
             finally:
                 node_worker._terminate_pid = old_terminate
-                node_worker._pid_is_alive = old_alive
-                node_worker._DETACHED_NVIDIA_SMI_PROCESSES.pop(pid, None)
+                node_worker._pidfile_matches_live_process = old_match  # type: ignore[assignment]
 
             self.assertEqual(status, "failed")
             self.assertEqual(reason, "cleanup_failed")
@@ -1110,19 +1392,17 @@ class NodeWorkerTests(unittest.TestCase):
         path.write_text(
             "\n".join(
                 [
-                    "#!/usr/bin/env python3",
-                    "import signal",
-                    "import time",
-                    "running = True",
-                    "def stop(signum, frame):",
-                    "    global running",
-                    "    running = False",
-                    "signal.signal(signal.SIGTERM, stop)",
-                    "i = 0",
-                    "while running:",
-                    "    print(f'2026/07/07 12:00:{i % 60:02d}.000, {10.0 + i:.2f}, {40 + i % 10}', flush=True)",
-                    "    i += 1",
-                    "    time.sleep(0.05)",
+                    "#!/bin/sh",
+                    "trap 'exit 0' TERM INT",
+                    "i=0",
+                    "while [ \"$i\" -lt 5 ]; do",
+                    "    printf '2026/07/07 12:00:0%s.000, 12.50, 41\\n' \"$i\"",
+                    "    i=$((i + 1))",
+                    "done",
+                    "while :; do",
+                    "    printf '2026/07/07 12:00:05.000, 12.50, 41\\n'",
+                    "    sleep 0.05",
+                    "done",
                     "",
                 ]
             ),

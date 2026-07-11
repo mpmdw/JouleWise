@@ -427,6 +427,23 @@ class DegenerateTests(ReduceTestCase):
         # Schema-valid failure summary (status/failure_reason consistent).
         summary.to_dict()
 
+    def test_runtime_cleanup_quality_is_copied_from_bundle_events(self) -> None:
+        builder = self.builder()
+        builder.measured_window(0.0, 2.0)
+        builder.add_event(
+            "stage_completed",
+            "cleanup",
+            3.0,
+            metadata={"cleanup_ok": False},
+        )
+        builder.write_trace(constant_samples(0.0, 2.0, hz=2.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"])
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIs(summary.measurement_quality.runtime_cleanup_ok, False)
+
     def test_zero_length_window_emits_no_derived_phase_metrics(self) -> None:
         # P2-040 FIX-1: an invalid measured window must not carry derived
         # phase/suite metrics into the structured failure summary.

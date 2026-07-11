@@ -217,6 +217,16 @@ class StubNode:
                     "tokens_jsonl": "tokens.jsonl",
                 }
             )
+            workload_metadata: dict[str, Any] = {
+                "prompt_token_ids": [701, 702, 703, 704, 705, 706, 707, 708, 709]
+            }
+            if self.mode == "usage_omitted":
+                workload_metadata.update(
+                    {
+                        "emitted_tokens": 3,
+                        "token_count_source": "stream_chunk_fallback",
+                    }
+                )
             self._write_status(
                 local_dir,
                 task,
@@ -224,7 +234,7 @@ class StubNode:
                 None,
                 "ok",
                 artifacts,
-                metadata={"prompt_token_ids": [701, 702, 703, 704, 705, 706, 707, 708, 709]},
+                metadata=workload_metadata,
             )
             return 0
         self._write_status(local_dir, task, "succeeded", None, "ok", artifacts)
@@ -649,6 +659,29 @@ class NvidiaNodeIntegrationTests(unittest.TestCase):
         self.assertEqual(summary.status, RunStatus.FAILED)
         self.assertEqual(summary.failure_reason, FailureReason.CLEANUP_FAILED)
         self.assertIn("sampler process survived", summary.failure_message)
+
+    def test_usage_omission_propagates_null_metrics_and_per_token_ineligibility(self) -> None:
+        _, summary = self.run_with_node(
+            load_config("nvidia-node-usage-omitted"),
+            StubNode(mode="usage_omitted"),
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNone(summary.energy_token_j)
+        self.assertIsNone(summary.energy_output_token_j)
+        self.assertIsNone(summary.throughput_tokens_s)
+        self.assertEqual(
+            summary.measurement_quality.token_count_source,
+            "stream_chunk_fallback",
+        )
+        self.assertEqual(
+            summary.claim_eligibility["per_token"],
+            {
+                "eligible": False,
+                "reasons": ["stream_chunk_fallback"],
+                "token_count_source": "stream_chunk_fallback",
+            },
+        )
 
     def test_directory_cleanup_failure_is_quality_only(self) -> None:
         bundle_path, summary = self.run_with_node(

@@ -448,8 +448,20 @@ class StrictValidateTests(CliRunTestCase):
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
             self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_reducer_0_3_0_dispatch_requires_exact_summary(self) -> None:
-        bundle = self.make_bundle("strict-v030-exact")
+    def test_reducer_0_3_1_dispatch_requires_exact_summary(self) -> None:
+        bundle = self.make_bundle("strict-v031-exact")
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_reducer_0_3_0_dispatch_tolerates_added_field_absence(self) -> None:
+        bundle = self.make_bundle("strict-v030-added-absence")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.3.0"
+        for field in ("remote_cleanup_failed", "runtime_cleanup_ok"):
+            del summary["measurement_quality"][field]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
         self.assertEqual(validate_bundle(bundle, strict=True), [])
 
     def test_reducer_0_2_x_dispatch_requires_re_reduction(self) -> None:
@@ -508,6 +520,7 @@ class StrictValidateTests(CliRunTestCase):
     def test_claimed_0_3_0_missing_governed_field_fails_exact_dispatch(self) -> None:
         bundle = self.make_bundle("strict-v030-governed-absence")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.3.0"
         del summary["claim_eligibility"]["gross_request"]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
@@ -639,6 +652,7 @@ class StrictValidateTests(CliRunTestCase):
         del summary["idle_baseline"]["gpu_idle_ratio_min"]
         del summary["idle_baseline"]["idle_window_suspect"]
         del summary["measurement_quality"]["idle_window_suspect"]
+        del summary["measurement_quality"]["runtime_cleanup_ok"]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
@@ -742,11 +756,25 @@ class StrictValidateTests(CliRunTestCase):
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
             self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_new_era_summary_missing_honesty_fields_fails_strict(self) -> None:
-        bundle = self.make_bundle("strict-new-era-missing-honesty")
+    def test_reducer_0_3_1_missing_either_added_field_fails_strict(self) -> None:
+        for field in ("remote_cleanup_failed", "runtime_cleanup_ok"):
+            with self.subTest(field=field):
+                bundle = self.make_bundle("strict-v031-missing-" + field)
+                summary = json.loads((bundle / "summary_metrics.json").read_text())
+                del summary["measurement_quality"][field]
+                (bundle / "summary_metrics.json").write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                )
+
+                problems = validate_bundle(bundle, strict=True)
+
+                self.assertEqual(len(problems), 1)
+                self.assertIn("measurement_quality." + field, problems[0])
+
+    def test_tampered_reducer_0_3_1_summary_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-v031-tampered")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
-        del summary["measurement_quality"]["token_counts_source"]
-        del summary["measurement_quality"]["phase_identifiability"]
+        summary["energy_request_j"] = 999999.0
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
@@ -754,8 +782,7 @@ class StrictValidateTests(CliRunTestCase):
         problems = validate_bundle(bundle, strict=True)
 
         self.assertEqual(len(problems), 1)
-        self.assertIn("measurement_quality.token_counts_source", problems[0])
-        self.assertIn("measurement_quality.phase_identifiability", problems[0])
+        self.assertIn("energy_request_j", problems[0])
 
     def test_legacy_summary_missing_honesty_fields_keeps_strict_tolerance(self) -> None:
         bundle = self.make_bundle("strict-legacy-missing-honesty")
@@ -763,6 +790,8 @@ class StrictValidateTests(CliRunTestCase):
         del summary["summary_provenance"]
         del summary["measurement_quality"]["token_counts_source"]
         del summary["measurement_quality"]["phase_identifiability"]
+        del summary["measurement_quality"]["remote_cleanup_failed"]
+        del summary["measurement_quality"]["runtime_cleanup_ok"]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )

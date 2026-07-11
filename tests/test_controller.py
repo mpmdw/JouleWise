@@ -367,6 +367,44 @@ class DeterministicClock:
         return {"kind": "deterministic-test", "start_s": self._start}
 
 
+class CleanupOutcomeRuntime:
+    """Wrap the production-shaped mock runtime with one cleanup mutation."""
+
+    def __init__(self, delegate: Any, *, raises: bool) -> None:
+        self._delegate = delegate
+        self._raises = raises
+        self.name = delegate.name
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._delegate, name)
+
+    def cleanup(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        if self._raises:
+            raise RuntimeError("injected local cleanup exception")
+        return AdapterResult(
+            ok=False,
+            failure_reason=FailureReason.UNKNOWN_ERROR,
+            message="injected local cleanup failure",
+        )
+
+
+class CleanupOutcomeRegistry:
+    def __init__(self, *, raises: bool) -> None:
+        self._raises = raises
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        runtime, failure = adapters.resolve_runtime(config, clock)
+        if runtime is not None:
+            runtime = CleanupOutcomeRuntime(runtime, raises=self._raises)
+        return runtime, failure
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_telemetry(config, clock)
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
 def fake_environment_run(command, **kwargs):
     if tuple(command) == ("git", "rev-parse", "HEAD"):
         return subprocess.CompletedProcess(command, 0, "0" * 40 + "\n", "")
@@ -539,6 +577,8 @@ class HappyPathTests(ControllerTestCase):
         self.assertEqual(quality["requested_sampling_hz"], 2.0)
         self.assertEqual(quality["idle_power_w_stddev"], 0.0)
         self.assertEqual(quality["telemetry_source"], "mock")
+        self.assertIs(quality["runtime_cleanup_ok"], True)
+        self.assertIs(summary.measurement_quality.runtime_cleanup_ok, True)
         self.assertEqual(data["idle_baseline"]["power_w_mean"], 5.0)
         self.assertEqual(summary.idle_baseline.power_w_mean, 5.0)
         # Real reducer output: energy and per-phase attribution are populated.
@@ -547,6 +587,112 @@ class HappyPathTests(ControllerTestCase):
         self.assertIsNotNone(summary.idle_subtracted_energy_j)
         self.assertEqual(set(summary.phase_energy_j), {"prefill", "decode"})
         self.assertIsNotNone(data["phase_energy_j"])
+
+    def test_warmup_seconds_advances_injected_clock_before_sampling(self) -> None:
+        data = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+        data["run_id"] = "controller-warmup-settle"
+        data["sampling"]["warmup_seconds"] = 7.25
+        bundle_path, summary = run_benchmark(
+            BenchmarkConfig.from_mapping(data), self.runs_root, self.clock
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        events = self.read_events(bundle_path)
+        warmup_started = next(
+            event
+            for event in events
+            if event["event_type"] == "stage_started" and event["phase"] == "warmup"
+        )
+        warmup_completed = next(
+            event
+            for event in events
+            if event["event_type"] == "stage_completed" and event["phase"] == "warmup"
+        )
+        measured_started = next(
+            event
+            for event in events
+            if event["event_type"] == "stage_started"
+            and event["phase"] == "measured_run"
+        )
+        sampling_started = next(
+            event for event in events if event["event_type"] == "sampling_started"
+        )
+        self.assertAlmostEqual(
+            warmup_completed["timestamp_s"] - warmup_started["timestamp_s"],
+            7.30,
+            places=6,
+        )
+        self.assertEqual(
+            warmup_completed["metadata"],
+            {"warmup_runs": 1, "warmup_seconds": 7.25},
+        )
+        self.assertEqual(
+            measured_started["timestamp_s"], warmup_completed["timestamp_s"]
+        )
+        self.assertEqual(
+            sampling_started["timestamp_s"], measured_started["timestamp_s"]
+        )
+        runtime_log = (bundle_path / "logs/runtime.log").read_text()
+        self.assertIn("post-warmup settling for 7.25 s", runtime_log)
+        runtime_lines = runtime_log.splitlines()
+        active_warmup_done_s = float(
+            next(line for line in runtime_lines if "completed 1 warmup run(s)" in line)
+            .split(maxsplit=1)[0]
+        )
+        settle_started_s = float(
+            next(line for line in runtime_lines if "post-warmup settling" in line)
+            .split(maxsplit=1)[0]
+        )
+        self.assertAlmostEqual(
+            active_warmup_done_s - warmup_started["timestamp_s"], 0.05, places=6
+        )
+        self.assertEqual(settle_started_s, active_warmup_done_s)
+        self.assertAlmostEqual(
+            measured_started["timestamp_s"] - settle_started_s, 7.25, places=6
+        )
+
+    def test_zero_warmup_seconds_is_a_timing_noop(self) -> None:
+        bundle_path, _ = self.run_happy()
+        events = self.read_events(bundle_path)
+        start_s = next(
+            event["timestamp_s"]
+            for event in events
+            if event["event_type"] == "stage_started" and event["phase"] == "warmup"
+        )
+        completed = next(
+            event
+            for event in events
+            if event["event_type"] == "stage_completed" and event["phase"] == "warmup"
+        )
+        self.assertAlmostEqual(completed["timestamp_s"] - start_s, 0.05, places=6)
+        self.assertEqual(
+            completed["metadata"],
+            {"warmup_runs": 1, "warmup_seconds": 0.0},
+        )
+
+    def test_config_warnings_are_recorded_in_bundle_metadata(self) -> None:
+        data = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+        data["run_id"] = "controller-config-warning"
+        data["sampling"]["power_hzz"] = 99
+        with self.assertWarnsRegex(UserWarning, "sampling.power_hzz"):
+            config = BenchmarkConfig.from_mapping(data)
+
+        bundle_path, _ = run_benchmark(config, self.runs_root, self.clock)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertEqual(
+            metadata["config_warnings"],
+            [
+                {
+                    "code": "unknown_config_key",
+                    "message": (
+                        "unknown config key 'sampling.power_hzz' ignored by schema 0.1"
+                    ),
+                    "path": "sampling.power_hzz",
+                }
+            ],
+        )
+        normalized = json.loads((bundle_path / "config.json").read_text())
+        self.assertNotIn("power_hzz", normalized["sampling"])
 
     def test_metadata_carries_model_block(self) -> None:
         # Contract: metadata.json enumerates model metadata (run_bundle_layout
@@ -758,6 +904,39 @@ class HappyPathTests(ControllerTestCase):
         self.assertEqual(data["energy_request_j"], 12.5)
 
 
+class CleanupQualityTests(ControllerTestCase):
+    def _run_cleanup_mutation(self, *, raises: bool) -> tuple[Path, SummaryMetrics]:
+        return run_benchmark(
+            make_config(f"cleanup-quality-{'raise' if raises else 'false'}"),
+            self.runs_root,
+            self.clock,
+            registry=CleanupOutcomeRegistry(raises=raises),
+        )
+
+    def _assert_cleanup_quality_false(
+        self, bundle_path: Path, summary: SummaryMetrics
+    ) -> None:
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNone(summary.failure_reason)
+        self.assertIs(summary.measurement_quality.runtime_cleanup_ok, False)
+        stored = json.loads((bundle_path / "summary_metrics.json").read_text())
+        self.assertEqual(stored["status"], "succeeded")
+        self.assertIsNone(stored["failure_reason"])
+        self.assertIs(stored["measurement_quality"]["runtime_cleanup_ok"], False)
+        cleanup = next(
+            event
+            for event in self.read_events(bundle_path)
+            if event["event_type"] == "stage_completed" and event["phase"] == "cleanup"
+        )
+        self.assertIs(cleanup["metadata"]["cleanup_ok"], False)
+
+    def test_cleanup_adapter_failure_surfaces_without_retroactive_run_failure(self) -> None:
+        self._assert_cleanup_quality_false(*self._run_cleanup_mutation(raises=False))
+
+    def test_cleanup_exception_surfaces_without_retroactive_run_failure(self) -> None:
+        self._assert_cleanup_quality_false(*self._run_cleanup_mutation(raises=True))
+
+
 class UnsupportedModelTests(ControllerTestCase):
     def run_unsupported(self) -> tuple[Path, SummaryMetrics]:
         config = make_config("controller-unsupported", model_name="mock-unsupported")
@@ -836,6 +1015,7 @@ class UnexpectedExceptionTests(ControllerTestCase):
         self.assertEqual(summary.status, RunStatus.FAILED)
         self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
         self.assertIn("injected workload explosion", summary.failure_message)
+        self.assertIsNone(summary.measurement_quality.runtime_cleanup_ok)
 
     def test_traceback_written_to_controller_log(self) -> None:
         bundle_path, _ = self.run_exploding()
@@ -849,6 +1029,7 @@ class UnexpectedExceptionTests(ControllerTestCase):
         data = self.assert_summary_round_trips(bundle_path)
         self.assertEqual(data["status"], "failed")
         self.assertEqual(data["failure_reason"], "unknown_error")
+        self.assertIsNone(data["measurement_quality"]["runtime_cleanup_ok"])
         metadata = json.loads((bundle_path / "metadata.json").read_text())
         self.assertEqual(
             metadata["adapters"]["runtime"]["cleanup_metadata"]["memory_snapshots"],

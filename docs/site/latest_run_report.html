@@ -26,52 +26,42 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#what-happened">What happened</a>
-<a href="#session-mechanics-evidence">Session mechanics / evidence</a>
-<a href="#next-best-task">Next best task</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-09-c027-council-review-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-09-c027-council-review.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-09-c027-council-review.md · commit c0f8f48"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-09-c027-council-review.md</span><span class="source-commit">commit c0f8f48</span></span></div>
-    <h1>Run Report: C-027 Whole-Project Council Review (2026-07-09)</h1>
-<p>Compact session record. The adjudicated substance — verdict, blockers,
-per-finding disposition table, deliberation traces, calibration record —
-lives in ONE place: <code>docs/reviews/2026-07-09-c027-whole-project-review.md</code>
-(raw lens/counterreview/examiner outputs under <code>docs/reviews/c027/</code>).
-This report intentionally does not restate it (C-027 itself adjudicated
-against duplicated session narrative).</p>
-<h2 id="what-happened">What happened</h2>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#scope-completed">Scope completed</a>
+<a href="#verification">Verification</a>
+<a href="#exact-next-step">Exact next step</a></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-10-p2040-fix-round-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-10-p2040-fix-round.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-10-p2040-fix-round.md · commit 71365d4"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-10-p2040-fix-round.md</span><span class="source-commit">commit 71365d4</span></span></div>
+    <h1>P2-040 / RETRO-001 Fix Round (2026-07-10)</h1>
+<p>Status: implementation and tests complete in the <code>c027-int-p2040</code> worktree;
+committed on c027-int-p2040 (lead pathspec commit 0136b80) for lead pathspec review and commit.</p>
+<h2 id="scope-completed">Scope completed</h2>
 <ul>
-<li>Ed directed a thorough whole-project council review with the new Codex
-model (gpt-5.6-sol, xhigh). The old CLI (0.143.0) rejected the model;
-upgraded to 0.144.0; smoke test confirmed model + effort in the
-session header.</li>
-<li>7 parallel read-only Sol lenses (topdocs, rigor-examiner, stats, meta,
-reverse-orchestration, arch, negspace) → lead verification of every
-blocker-class claim → Sol counterreview of the lead synthesis + 4
-design questions → independent Fable-tier final examiner
-(PASS-conditional; all conditions applied).</li>
-<li>Outcome: 8 confirmed blocker clusters; claim-surface corrections
-landed same session (README, PROJECT_STATUS, RUN_STATE, milestones,
-AGENT_PLAN, risk register, 2026-07-06 addendum); 14 follow-up queue rows (+ NV-GATE-2 additions to P2-005); D-060 PROPOSED (awaiting Ed) + D-061/D-062/D-063 accepted;
-R-018 registered.</li>
+<li>FIX-A1..A3: restored the deprecated <code>request</code> one-edge recipe and field
+shape, keyed legacy dispatch on <code>summary_provenance</code> property absence, and
+corrected the D-058 token-source documentation.</li>
+<li>FIX-B1..B7: hardened the six-identity corpus gate, legacy mutations,
+authenticity boundary and spoof outcome, atomic durability, cooldown
+evidence, reducer-version/nonpositive-window/joint-edge/aggregate controls.</li>
+<li>FIX-R1..R2: made pack lint fail closed outside the explicit <code>README.md</code>
+metadata allowlist and added site-log trim regression coverage.</li>
 </ul>
-<h2 id="session-mechanics-evidence">Session mechanics / evidence</h2>
+<p>No corpus artifacts were rewritten. No signature machinery or dispatch
+semantics were added. No commit, push, merge, deployment, or hardware work was
+performed.</p>
+<h2 id="verification">Verification</h2>
 <ul>
-<li>10 Codex invocations via codex-run (1 failed pre-upgrade smoke, 9 OK),
-appended to <code>.codex-bridge/invocation_manifest.jsonl</code> with archived
-output paths — the first D-050-compliant rows; 1 Fable-tier examiner
-subagent.</li>
-<li>Tests: docs-only session; suite not run (no code touched). Site
-regenerated + redeployed at close-out.</li>
-<li>Landed as branch <code>c027-council-review</code> + PR (multi-commit series per
-D-031 — a rule this very review found the lead breaching; the branch
-also carries the previously uncommitted user-directed CODEX-BRIDGE
-unit as its own labeled commit).</li>
+<li>Focused: <code>python3 -m unittest tests.test_uncertainty_p2029 tests.test_cli_run tests.test_bundle tests.test_experiment tests.test_claims_lint tests.test_build_site_parsers</code> -&gt; <code>Ran 211 tests</code>, <code>OK</code>.</li>
+<li>Claims lint: <code>python3 scripts/claims_lint.py --mode all</code> -&gt; exit 0, no errors;
+advisory forbidden-language warnings remain.</li>
+<li>Diff hygiene: <code>git diff --check</code> clean.</li>
+<li>Canonical: <code>python3 -m unittest discover -s tests</code> -&gt; <code>Ran 908 tests in 32.723s</code>, <code>OK (skipped=11)</code>. The absent <code>runs/</code> corpus emitted the required
+loud acceptance-gate skip on stderr. The known fake-nvidia-smi load flake did
+not occur.</li>
 </ul>
-<h2 id="next-best-task">Next best task</h2>
-<p>Per the corrected RUN_STATE restart block: [ED-EXTERNAL] P0-003 backup
-destination (hard pre-Window-A gate) + P1-008 rubric/calendar;
-[AGENT] P2-040 → P2-038 → P2-039 → RPT-001 → P2-037.</p>
+<h2 id="exact-next-step">Exact next step</h2>
+<p>Lead reviews the committed on c027-int-p2040 (lead pathspec commit 0136b80) diff, supplies or mounts <code>runs/</code> to execute the
+six-bundle corpus acceptance gate, then commits the accepted paths.</p>
 
 
   </div>
@@ -80,7 +70,7 @@ destination (hard pre-Window-A gate) + P1-008 rubric/calendar;
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-09-c027-council-review.md · commit c0f8f48 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-10-p2040-fix-round.md · commit 71365d4 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

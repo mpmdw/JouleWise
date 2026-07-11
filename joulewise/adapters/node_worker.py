@@ -564,8 +564,7 @@ def handle_vllm_cleanup(
             {},
             metadata,
         )
-    _terminate_vllm_pid(pid, metadata)
-    metadata["process_survived"] = _pid_is_alive(pid)
+    metadata["process_survived"] = _terminate_vllm_pid(pid_payload, metadata)
     if metadata["process_survived"]:
         log("vLLM cleanup failed; pid=%s survived" % pid)
         return (
@@ -728,8 +727,7 @@ def handle_nvidia_smi_stop_sampling(
             artifacts,
             metadata,
         )
-    _terminate_pid(pid, metadata)
-    metadata["process_survived"] = _pid_is_alive(pid)
+    metadata["process_survived"] = _terminate_pid(pid_payload, metadata)
     log("nvidia-smi sampler stop requested pid=%s" % pid)
 
     if metadata["process_survived"]:
@@ -1241,36 +1239,47 @@ def _terminate_process_object_with_timeouts(
         process.communicate()
 
 
-def _terminate_vllm_pid(pid: int, metadata: Dict[str, Any]) -> None:
+def _terminate_vllm_pid(
+    pid_payload: Dict[str, Any],
+    metadata: Dict[str, Any],
+) -> bool:
+    pid = int(pid_payload["pid"])
     cached_process = _DETACHED_VLLM_PROCESSES.pop(pid, None)
     if cached_process is not None:
         _terminate_process_object_with_timeouts(cached_process, VLLM_STOP_TIMEOUT_S)
         metadata["termination"] = "cached_popen"
-        return
+        return cached_process.poll() is None
 
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         metadata["termination"] = "already_exited"
-        return
+        return False
     except OSError as exc:
         metadata["termination_error"] = str(exc)
-        return
+        return _pidfile_matches_live_process(pid_payload, metadata)
 
-    if _wait_for_pid_exit(pid, VLLM_STOP_TIMEOUT_S):
+    if _wait_for_pidfile_identity_exit(pid_payload, VLLM_STOP_TIMEOUT_S, metadata):
         metadata["termination"] = "sigterm"
-        return
+        return False
+    if not _pidfile_matches_live_process(pid_payload, metadata):
+        metadata["termination"] = "sigterm_identity_changed"
+        return False
     try:
         os.kill(pid, signal.SIGKILL)
     except ProcessLookupError:
         metadata["termination"] = "sigterm"
-        return
+        return False
     except OSError as exc:
         metadata["termination_error"] = str(exc)
-        return
+        return _pidfile_matches_live_process(pid_payload, metadata)
     metadata["termination"] = "sigkill"
-    if not _wait_for_pid_exit(pid, VLLM_KILL_TIMEOUT_S):
+    survived = not _wait_for_pidfile_identity_exit(
+        pid_payload, VLLM_KILL_TIMEOUT_S, metadata
+    )
+    if survived:
         metadata["termination_warning"] = "pid still visible after SIGKILL"
+    return survived
 
 
 def _wait_for_nvidia_smi_csv(
@@ -1549,67 +1558,62 @@ def _float_or_none(value: Any) -> Optional[float]:
         return None
 
 
-def _terminate_pid(pid: int, metadata: Dict[str, Any]) -> None:
+def _terminate_pid(
+    pid_payload: Dict[str, Any],
+    metadata: Dict[str, Any],
+) -> bool:
+    pid = int(pid_payload["pid"])
     cached_process = _DETACHED_NVIDIA_SMI_PROCESSES.pop(pid, None)
     if cached_process is not None:
         _terminate_process_object(cached_process)
         metadata["termination"] = "cached_popen"
-        return
+        return cached_process.poll() is None
 
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         metadata["termination"] = "already_exited"
-        return
+        return False
     except OSError as exc:
         metadata["termination_error"] = str(exc)
-        return
+        return _pidfile_matches_live_process(pid_payload, metadata)
 
-    if _wait_for_pid_exit(pid, NVIDIA_SMI_STOP_TIMEOUT_S):
+    if _wait_for_pidfile_identity_exit(
+        pid_payload, NVIDIA_SMI_STOP_TIMEOUT_S, metadata
+    ):
         metadata["termination"] = "sigterm"
-        return
+        return False
+    if not _pidfile_matches_live_process(pid_payload, metadata):
+        metadata["termination"] = "sigterm_identity_changed"
+        return False
     try:
         os.kill(pid, signal.SIGKILL)
     except ProcessLookupError:
         metadata["termination"] = "sigterm"
-        return
+        return False
     except OSError as exc:
         metadata["termination_error"] = str(exc)
-        return
+        return _pidfile_matches_live_process(pid_payload, metadata)
     metadata["termination"] = "sigkill"
-    if not _wait_for_pid_exit(pid, NVIDIA_SMI_KILL_TIMEOUT_S):
+    survived = not _wait_for_pidfile_identity_exit(
+        pid_payload, NVIDIA_SMI_KILL_TIMEOUT_S, metadata
+    )
+    if survived:
         metadata["termination_warning"] = "pid still visible after SIGKILL"
+    return survived
 
 
-def _wait_for_pid_exit(pid: int, timeout_s: float) -> bool:
+def _wait_for_pidfile_identity_exit(
+    pid_payload: Dict[str, Any],
+    timeout_s: float,
+    metadata: Dict[str, Any],
+) -> bool:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
+        if not _pidfile_matches_live_process(pid_payload, metadata):
             return True
-        except OSError:
-            return False
         time.sleep(0.05)
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return True
-    except OSError:
-        return False
-    return False
-
-
-def _pid_is_alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except OSError:
-        return True
-    return True
-
-
+    return not _pidfile_matches_live_process(pid_payload, metadata)
 def _read_tail(path: str, limit: int = 2000) -> str:
     try:
         with open(path, "rb") as handle:

@@ -52,6 +52,8 @@ STATUSES = (
     "dry_run",
 )
 ORDER_MANIFEST_NAME = "order_manifest.json"
+ANALYSIS_MANIFEST_NAME = "analysis_manifest.json"
+CONFIG_SIDECAR_NAMES = frozenset({ORDER_MANIFEST_NAME, ANALYSIS_MANIFEST_NAME})
 KNOWN_NON_PROMPT_SIDECAR_SCHEMAS = frozenset(
     {
         "affine_smoke_annotations.v1",
@@ -417,7 +419,7 @@ def print_quiet_machine_warning() -> None:
 def discover_configs(config_dir: Path) -> list[Path]:
     if not config_dir.is_dir():
         raise ValueError(f"config_dir is not a directory: {config_dir}")
-    return sorted(path for path in config_dir.glob("*.json") if path.name != ORDER_MANIFEST_NAME)
+    return sorted(path for path in config_dir.glob("*.json") if path.name not in CONFIG_SIDECAR_NAMES)
 
 
 def print_config_file_list(configs: list[Path]) -> None:

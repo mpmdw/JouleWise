@@ -38,7 +38,7 @@
 <a href="#queue-maintenance">Queue Maintenance</a></aside>
   <div class="doc-wrap doc-source-task-queue-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 0a5c5e6"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 0a5c5e6</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 06f9be0"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 06f9be0</span></span></div>
     <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -65,6 +65,11 @@ instructions before considering any lower-ranked work.</li>
 <li>Place or update the task in the queue with priority, rationale, evidence,
 and blockers.</li>
 <li>If executing it now, say why it outranks the current top task.</li>
+<li>Closure rule (D-023): a row may move to Completed only after the
+corresponding phase exit-checklist matrix row already shows the same
+status with dated evidence, and the Completed row&#39;s evidence cell
+must cite that matrix row (file + item id). If no matrix row exists
+for the work, say so explicitly in the evidence cell.</li>
 </ol>
 <h2 id="priority-scale">Priority Scale</h2>
 <ul>
@@ -203,9 +208,9 @@ Normal ranking applies.</p>
 <td align="right">0h</td>
 <td>P2-040</td>
 <td>P2 Next Slice</td>
-<td>NEW (C-027; pre-Window-A) [AGENT]</td>
+<td>FIX ROUND COMMITTED on c027-int-p2040 2026-07-10; lead gates PASSED (corpus 6/6 strict, mock e2e run+strict+reduce, suite OK post-merge); final-head clean on code (C-027; pre-Window-A) [AGENT]</td>
 <td>Reducer/gate correctness batch: zero-length measured window must FAIL strict/claim paths (ARC-3); metric-specific evidence gates (gross request must not require idle-drift evidence, STA-5); joint-edge interpolation bound (STA-6); D-058 runtime-observed token denominator wins over config (STA-7, update the locking test); zero-MAD fallback review flag (STA-8); atomic experiment-manifest writes (ARC-5); unknown-config-key warning + delete-or-implement <code>warmup_seconds</code> (ARC-8); local cleanup-failure surfaced into run quality (ARC-6)</td>
-<td>Each item lands with a test that FAILS against current behavior (mutation-style per STA-11); C-027 disposition table is the authority: <code>docs/reviews/2026-07-09-c027-whole-project-review.md</code></td>
+<td>Fix round: 908 OK/11 skipped, lint errors=0; absent <code>runs/</code> makes the loud six-corpus acceptance gate pending. Lead-committed by pathspec; report <code>docs/run_reports/2026-07-10-p2040-fix-round.md</code>. Broader P2-040 remainder status remains governed by adjudication.</td>
 </tr>
 <tr>
 <td align="right">0i</td>
@@ -227,9 +232,9 @@ Normal ranking applies.</p>
 <td align="right">0k</td>
 <td>RPT-001</td>
 <td>P1 Phase Gate</td>
-<td>NEW (C-027/NEGSPACE; capstone-critical) [AGENT]</td>
+<td>FIX ROUND COMPLETE 2026-07-10 (awaiting lead pathspec commit) [AGENT]</td>
 <td>Report skeleton + end-to-end vertical slice: create the submission-format report source (intro/problem/contribution/harness/methodology stubs) and drive ONE reproducible bundle→analysis artifact→figure/table→claims-index row→report page path using the six legacy bundles (labeled legacy L1)</td>
-<td>Report source builds; one report-shaped figure + table + claims row exist and are regenerable by command; legacy-L1 labels present</td>
+<td>FIX-1..FIX-9 implemented; full offline regeneration against <code>/Users/edr/code/JouleWise/runs</code>; Phase-4 projection + manifest hash gates; focused 37 OK, canonical 890 OK (skipped=10); <code>docs/run_reports/2026-07-10-rpt001-fix-round.md</code></td>
 </tr>
 <tr>
 <td align="right">0l</td>
@@ -491,7 +496,7 @@ Normal ranking applies.</p>
 <td align="right">17</td>
 <td>P2-016</td>
 <td>P2 Next Slice</td>
-<td>NEW (C-011 deferred batch; post-2M / with-2K-live) [AGENT]</td>
+<td>NEW (C-011 deferred batch; post-2M / with-2K-live) [AGENT] (d) SUPERSEDED for powermetrics-era backends by NV-GATE-2/NV-3 ruling (ADJUDICATION.md)</td>
 <td>Critique-adjudicated queue batch: (a) post-2M controller split (experiment loop/cooldown/env capture out of controller.py); (b) node-worker protocol parity tests + table-driven validation (with 2K live); (c) NVIDIA [N/A]-row skip counts surfaced into measurement quality (with 2K live); (d) per-backend raw-to-trace strict generalization (with 2K live); (e) claims-to-evidence index seeded once 2M corpus exists; (f) schema v0.2 loader/export parity acceptance rule; (g) boundary labels propagated into report index/chart titles before any cross-boundary claims; (h) require <code>summary_provenance</code> in the strict succeeded-summary key list (C-014 scout); (i) align <code>token_count_source</code> value naming with the claims ladder&#39;s <code>config fallback</code> vocabulary (C-014 scout)</td>
 <td>Each item lands with its named gate; dispositions + rejected items (RemoteNodeSession per B-1, run-ID randomization per D-010/D-022, console script pre-2M) recorded in C-011</td>
 </tr>
@@ -839,7 +844,7 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit 0a5c5e6 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit 06f9be0 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
