@@ -195,6 +195,18 @@ rank 0 closed. Full record:
 
 ## Current Project Status
 
+**CI-002 IMPLEMENTED in worktree (2026-07-11; lead CI validation
+pending).** The Linux 3.11/3.14 workflow now compiles sources, runs the
+canonical suite, and executes the exact strict mock run -> strict validate ->
+reduce -> strict validate chain. Separate jobs build wheel+sdist, upload the
+distributions, install the wheel with `--no-deps` in a clean venv, and run
+`python -m joulewise --help` outside any checkout. The explicit setuptools
+backend leaves core `dependencies = []` unchanged. Local compileall, strict
+chain, workflow/TOML syntax, canonical 1041-test suite, and diff checks pass;
+the sandbox lacks `build` and a compatible setuptools backend, so distribution
+build/install remain for lead-side CI validation. Report:
+`docs/run_reports/2026-07-11-ci002-packaging-strictness.md`.
+
 **RPT-001 targeted review fix round COMPLETE in worktree (2026-07-10;
 awaiting lead pathspec commit).** FIX-1..FIX-9 are implemented: Phase-4
 claims lint/projection, adjudicated 1P5B identity and regenerated artifacts,
@@ -459,6 +471,11 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
+- Worktree `/Users/edr/code/JouleWise-wt/ci002` on `impl/ci002` is dirty only
+  with the uncommitted CI-002 workflow, explicit build backend, and required
+  bookkeeping/report changes. Package build and clean-venv wheel smoke are
+  intentionally deferred to lead CI because the sandbox has no `build` module
+  and its Python 3.13 environment has no setuptools.
 - Worktree `/Users/edr/code/JouleWise-wt/nvgate2` on
   `impl/nvgate2-codenow` has the idle-readiness fix, regression test, and
   handoff bookkeeping COMMITTED (cd6e2cb) and the lead-resolved merge of
@@ -493,6 +510,11 @@ queue owns ordering (C-027):**
   lead-verification artifacts (live-runs bundles are not corpus).
 
 ## What Is Next
+
+For CI-002, lead-review the bounded diff and run the GitHub workflow; require
+the build artifact to contain both a wheel and sdist and the no-checkout
+installed-wheel smoke to pass before marking the row complete. No phase-exit
+checklist row exists for CI-002.
 
 Lead-review the uncommitted P2-040 reducer-version fix, run the retained
 six-bundle strict read-only gate, and commit by pathspec. Once landed, P2-038 is the next
