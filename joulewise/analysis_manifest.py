@@ -198,6 +198,35 @@ def _exact_keys(value: Any, expected: set[str], where: str, errors: list[str]) -
     return not missing and not extra
 
 
+def _string_field(
+    value: Mapping[str, Any],
+    key: str,
+    where: str,
+    errors: list[str],
+    *,
+    identifier: bool = False,
+) -> str | None:
+    candidate = value.get(key)
+    if not isinstance(candidate, str):
+        errors.append(f"{where}.{key}: must be a string")
+        return None
+    if identifier and not ID_RE.fullmatch(candidate):
+        errors.append(f"{where}.{key}: must match [a-z0-9_-]+")
+        return None
+    return candidate
+
+
+def _string_array(value: Any, where: str, errors: list[str]) -> list[str] | None:
+    if not isinstance(value, list):
+        errors.append(f"{where}: must be an array")
+        return None
+    bad_indexes = [str(index) for index, item in enumerate(value) if not isinstance(item, str)]
+    if bad_indexes:
+        errors.append(f"{where}: item(s) {', '.join(bad_indexes)} must be strings")
+        return None
+    return value
+
+
 def _parse_json_object(raw: bytes, where: str) -> Mapping[str, Any]:
     try:
         value = json.loads(raw.decode("utf-8"))
@@ -210,9 +239,13 @@ def _parse_json_object(raw: bytes, where: str) -> Mapping[str, Any]:
 
 def extract_analysis_plan_row(path: Path, plan_id: str = "AP-2") -> AnalysisPlanRow:
     try:
-        text = path.read_text(encoding="utf-8")
+        raw = path.read_bytes()
     except OSError as exc:
         raise AnalysisManifestError(f"cannot read analysis plan {path}: {exc}") from exc
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise AnalysisManifestError(f"analysis plan {path}: invalid UTF-8: {exc}") from exc
     lines = text.splitlines(keepends=True)
     heading = f"### {plan_id}"
     start = next(
@@ -600,28 +633,64 @@ def _validate_entry_semantics(entry: Mapping[str, Any], index: int, errors: list
     where = f"entries[{index}]"
     if not _exact_keys(entry, ENTRY_KEYS, where, errors):
         return
-    for key in ("entry_id", "model_tag", "condition_id", "cell_id", "block_id", "sentinel_link_id"):
-        if not isinstance(entry[key], str) or not ID_RE.fullmatch(entry[key]):
-            errors.append(f"{where}.{key}: must match [a-z0-9_-]+")
-    if entry["role"] not in ENTRY_ROLES:
+    strings = {
+        key: _string_field(
+            entry,
+            key,
+            where,
+            errors,
+            identifier=key
+            in {"entry_id", "model_tag", "condition_id", "cell_id", "block_id", "sentinel_link_id"},
+        )
+        for key in (
+            "entry_id",
+            "config",
+            "config_sha256",
+            "run_id",
+            "model_tag",
+            "role",
+            "condition_id",
+            "cell_id",
+            "block_id",
+            "sentinel_link_id",
+        )
+    }
+    if any(candidate is None for candidate in strings.values()):
+        return
+    role = strings["role"]
+    assert role is not None
+    if role not in ENTRY_ROLES:
         errors.append(f"{where}.role: invalid role")
+        return
     rep = entry["planned_rep_index"]
     if isinstance(rep, bool) or not isinstance(rep, int) or rep < 1:
         errors.append(f"{where}.planned_rep_index: must be a positive integer")
         return
+    for key in ("order_index", "position_in_block"):
+        candidate = entry[key]
+        if isinstance(candidate, bool) or not isinstance(candidate, int) or candidate < 1:
+            errors.append(f"{where}.{key}: must be a positive integer")
     sentinel_position = None
-    if entry["role"].startswith("drift_sentinel_"):
-        sentinel_position = entry["role"].removeprefix("drift_sentinel_")
-    workload = entry["condition_id"].removeprefix("cond-2m-")
+    if role.startswith("drift_sentinel_"):
+        sentinel_position = role.removeprefix("drift_sentinel_")
+    condition_id = strings["condition_id"]
+    model_tag = strings["model_tag"]
+    assert condition_id is not None and model_tag is not None
+    workload = condition_id.removeprefix("cond-2m-")
     if sentinel_position is not None:
         workload = SENTINEL_WORKLOAD
-    expected = _semantic_ids(entry["model_tag"], rep, workload, sentinel_position)
+    expected = _semantic_ids(model_tag, rep, workload, sentinel_position)
     for key, expected_value in expected.items():
         if entry[key] != expected_value:
             errors.append(f"{where}.{key}: expected {expected_value!r}")
-    if not isinstance(entry["config"], str) or Path(entry["config"]).name != entry["config"]:
+    expected_run_id = f"{model_tag}-r{rep}-{workload}"
+    if sentinel_position is not None:
+        expected_run_id += f"-{sentinel_position}"
+    if entry["run_id"] != expected_run_id:
+        errors.append(f"{where}.run_id: expected semantic run_id {expected_run_id!r}")
+    if Path(entry["config"]).name != entry["config"]:
         errors.append(f"{where}.config: must be a basename")
-    if not isinstance(entry["config_sha256"], str) or not SHA256_RE.fullmatch(entry["config_sha256"]):
+    if not SHA256_RE.fullmatch(entry["config_sha256"]):
         errors.append(f"{where}.config_sha256: must be 64 lowercase hex chars")
 
 
@@ -654,13 +723,18 @@ def _validate_config_link(
     )
     if workload_name != expected_workload:
         errors.append(f"{where}: workload name disagrees with entry")
-    tags = config.get("run_metadata", {}).get("tags", [])
+    run_metadata = config.get("run_metadata")
+    tags = run_metadata.get("tags", []) if isinstance(run_metadata, Mapping) else []
     rep = entry.get("planned_rep_index")
     required_tags = {"2m", expected_workload, f"rep{rep}"}
     if str(entry.get("role", "")).startswith("drift_sentinel_"):
         position = str(entry["role"]).removeprefix("drift_sentinel_")
         required_tags.update({"drift_sentinel", f"sentinel_{position}"})
-    if not isinstance(tags, list) or not required_tags.issubset(set(tags)):
+    if (
+        not isinstance(tags, list)
+        or not all(isinstance(tag, str) for tag in tags)
+        or not required_tags.issubset(set(tags))
+    ):
         errors.append(f"{where}: config tags do not identify entry")
     if order_row is not None:
         comparisons = {
@@ -694,8 +768,14 @@ def validate_analysis_manifest(
         errors.append("manifest.freeze_status: must be 'frozen'")
     if not isinstance(value["manifest_id"], str) or not MANIFEST_ID_RE.fullmatch(value["manifest_id"]):
         errors.append("manifest.manifest_id: must be am- followed by 64 lowercase hex chars")
-    elif value["manifest_id"] != calculate_manifest_id(value):
-        errors.append("manifest.manifest_id: canonical identity mismatch")
+    else:
+        try:
+            expected_manifest_id = calculate_manifest_id(value)
+        except (TypeError, ValueError) as exc:
+            errors.append(f"manifest: fields must use JSON-compatible types: {exc}")
+        else:
+            if value["manifest_id"] != expected_manifest_id:
+                errors.append("manifest.manifest_id: canonical identity mismatch")
 
     design = value["design"]
     planned_n = None
@@ -804,10 +884,14 @@ def validate_analysis_manifest(
         _validate_entry_semantics(entry, index, errors)
         for key, seen in (("entry_id", entry_ids), ("config", configs), ("run_id", run_ids)):
             candidate = entry.get(key)
+            if not isinstance(candidate, str):
+                continue
             if candidate in seen:
                 errors.append(f"entries[{index}].{key}: duplicate value {candidate!r}")
             seen.add(candidate)
-        blocks.setdefault(entry.get("block_id"), []).append(entry)
+        block_id = entry.get("block_id")
+        if isinstance(block_id, str):
+            blocks.setdefault(block_id, []).append(entry)
         if manifest_dir is not None:
             order_row = order_rows[index] if index < len(order_rows) else None
             _validate_config_link(entry, order_row, manifest_dir, f"entries[{index}]", errors)
@@ -825,15 +909,21 @@ def validate_analysis_manifest(
     condition_cell_blocks: dict[Any, set[Any]] = {}
     expected_roles = {"condition"} | {f"drift_sentinel_{position}" for position in ("start", "end")}
     for block_id, block in blocks.items():
-        roles = [entry.get("role") for entry in block]
-        conditions = [entry.get("condition_id") for entry in block if entry.get("role") == "condition"]
+        roles = [entry.get("role") for entry in block if isinstance(entry.get("role"), str)]
+        conditions = [
+            entry.get("condition_id")
+            for entry in block
+            if entry.get("role") == "condition" and isinstance(entry.get("condition_id"), str)
+        ]
         if len(block) != 6 or set(roles) != expected_roles or roles.count("condition") != 4:
             errors.append(f"{block_id}: must have four conditions and exactly two sentinels")
         if set(conditions) != {f"cond-2m-{name}" for name in PROFILE_NAMES}:
             errors.append(f"{block_id}: baseline condition set is incomplete")
         for entry in block:
             if entry.get("role") == "condition":
-                condition_cell_blocks.setdefault(entry.get("cell_id"), set()).add(block_id)
+                cell_id = entry.get("cell_id")
+                if isinstance(cell_id, str):
+                    condition_cell_blocks.setdefault(cell_id, set()).add(block_id)
     if planned_n is not None:
         for cell_id, block_ids in condition_cell_blocks.items():
             if len(block_ids) != planned_n:
@@ -845,23 +935,62 @@ def validate_analysis_manifest(
         links = []
     seen_link_ids: set[Any] = set()
     linked_blocks: set[Any] = set()
-    entries_by_id = {entry.get("entry_id"): entry for entry in entries if isinstance(entry, Mapping)}
+    entries_by_id = {
+        entry_id: entry
+        for entry in entries
+        if isinstance(entry, Mapping)
+        and isinstance((entry_id := entry.get("entry_id")), str)
+    }
     for index, link in enumerate(links):
         where = f"sentinel_links[{index}]"
         if not _exact_keys(link, SENTINEL_LINK_KEYS, where, errors):
             continue
-        if link["sentinel_link_id"] in seen_link_ids:
+        link_strings = {
+            key: _string_field(
+                link,
+                key,
+                where,
+                errors,
+                identifier=key != "diagnostic",
+            )
+            for key in (
+                "sentinel_link_id",
+                "block_id",
+                "start_entry_id",
+                "end_entry_id",
+                "diagnostic",
+            )
+        }
+        linked_entry_ids = _string_array(
+            link["linked_condition_entry_ids"],
+            f"{where}.linked_condition_entry_ids",
+            errors,
+        )
+        if any(candidate is None for candidate in link_strings.values()) or linked_entry_ids is None:
+            continue
+        link_id = link_strings["sentinel_link_id"]
+        block_id = link_strings["block_id"]
+        assert link_id is not None and block_id is not None
+        if link_id in seen_link_ids:
             errors.append(f"{where}.sentinel_link_id: duplicate value")
-        seen_link_ids.add(link["sentinel_link_id"])
-        linked_blocks.add(link["block_id"])
-        block = blocks.get(link["block_id"], [])
-        by_role = {entry.get("role"): entry for entry in block}
+        seen_link_ids.add(link_id)
+        linked_blocks.add(block_id)
+        block = blocks.get(block_id, [])
+        by_role = {
+            role: entry
+            for entry in block
+            if isinstance((role := entry.get("role")), str)
+        }
         if link["start_entry_id"] != by_role.get("drift_sentinel_start", {}).get("entry_id"):
             errors.append(f"{where}.start_entry_id: does not link this block's start sentinel")
         if link["end_entry_id"] != by_role.get("drift_sentinel_end", {}).get("entry_id"):
             errors.append(f"{where}.end_entry_id: does not link this block's end sentinel")
         expected_linked = []
-        by_condition = {entry.get("condition_id"): entry for entry in block}
+        by_condition = {
+            condition_id: entry
+            for entry in block
+            if isinstance((condition_id := entry.get("condition_id")), str)
+        }
         for name in PROFILE_NAMES:
             entry = by_condition.get(f"cond-2m-{name}")
             if entry is not None:
@@ -870,7 +999,7 @@ def validate_analysis_manifest(
             errors.append(f"{where}.linked_condition_entry_ids: invalid workload-order linkage")
         if link["diagnostic"] != "end_minus_start":
             errors.append(f"{where}.diagnostic: invalid value")
-        for entry_id in [link["start_entry_id"], link["end_entry_id"], *link["linked_condition_entry_ids"]]:
+        for entry_id in [link["start_entry_id"], link["end_entry_id"], *linked_entry_ids]:
             if entry_id not in entries_by_id:
                 errors.append(f"{where}: references unknown entry {entry_id!r}")
     if linked_blocks != set(blocks):
@@ -890,20 +1019,66 @@ def validate_analysis_manifest(
         where = f"contrasts[{index}]"
         if not _exact_keys(contrast, CONTRAST_KEYS, where, errors):
             continue
-        contrast_id = contrast["contrast_id"]
+        contrast_strings = {
+            key: _string_field(
+                contrast,
+                key,
+                where,
+                errors,
+                identifier=key
+                in {
+                    "contrast_id",
+                    "family_instance_id",
+                    "condition_a_id",
+                    "condition_b_id",
+                    "cell_a_id",
+                    "cell_b_id",
+                },
+            )
+            for key in (
+                "contrast_id",
+                "plan_id",
+                "family_instance_id",
+                "claim_role",
+                "estimator",
+                "condition_a_id",
+                "condition_b_id",
+                "cell_a_id",
+                "cell_b_id",
+                "hypothesized_direction",
+            )
+        }
+        block_ids = _string_array(contrast["block_ids"], f"{where}.block_ids", errors)
+        if any(candidate is None for candidate in contrast_strings.values()) or block_ids is None:
+            continue
+        contrast_id = contrast_strings["contrast_id"]
+        assert contrast_id is not None
         contrast_ids.append(contrast_id)
         if contrast_id in contrast_by_id:
             errors.append(f"{where}.contrast_id: duplicate value {contrast_id!r}")
         contrast_by_id[contrast_id] = contrast
-        if not isinstance(contrast_id, str) or not ID_RE.fullmatch(contrast_id):
-            errors.append(f"{where}.contrast_id: invalid identifier")
         metric = contrast["metric"]
-        _exact_keys(metric, METRIC_KEYS, f"{where}.metric", errors)
+        metric_valid = _exact_keys(metric, METRIC_KEYS, f"{where}.metric", errors)
+        if metric_valid:
+            for key in ("name", "metric_tag", "window_class", "unit"):
+                if _string_field(metric, key, f"{where}.metric", errors) is None:
+                    metric_valid = False
         selector = contrast["floor_selector"]
         if _exact_keys(selector, FLOOR_SELECTOR_KEYS, f"{where}.floor_selector", errors):
+            selector_valid = all(
+                _string_field(selector, key, f"{where}.floor_selector", errors) is not None
+                for key in ("backend", "metric", "window_class", "floor_field", "transport_rule_id")
+            )
+            condition_family_ids = _string_array(
+                selector["condition_family_ids"],
+                f"{where}.floor_selector.condition_family_ids",
+                errors,
+            )
+            if not selector_valid or condition_family_ids is None:
+                continue
             if selector["backend"] != "from_bundle":
                 errors.append(f"{where}.floor_selector.backend: invalid value")
-            if isinstance(metric, Mapping):
+            if metric_valid:
                 if selector["metric"] != metric.get("name") or selector["window_class"] != metric.get("window_class"):
                     errors.append(f"{where}.floor_selector: metric/window mismatch")
             if selector["condition_family_ids"] != [contrast["condition_a_id"], contrast["condition_b_id"]]:
@@ -912,8 +1087,8 @@ def validate_analysis_manifest(
                 errors.append(f"{where}.floor_selector.floor_field: must use P2-039 floor_gate_j")
             if selector["transport_rule_id"] != "same_stack_componentwise_worst_case.v1":
                 errors.append(f"{where}.floor_selector.transport_rule_id: invalid P2-039 rule")
-        model_tag = str(contrast.get("cell_a_id", "")).removeprefix("cell-2m-").removesuffix(
-            "-" + str(contrast.get("condition_a_id", "")).removeprefix("cond-2m-")
+        model_tag = contrast["cell_a_id"].removeprefix("cell-2m-").removesuffix(
+            "-" + contrast["condition_a_id"].removeprefix("cond-2m-")
         )
         expected_blocks = [f"block-2m-{model_tag}-r{rep:02d}" for rep in range(1, 6)]
         if contrast["block_ids"] != expected_blocks:
@@ -930,16 +1105,26 @@ def validate_analysis_manifest(
         where = f"families[{index}]"
         if not _exact_keys(family, FAMILY_KEYS, where, errors):
             continue
-        instance_id = family["family_instance_id"]
+        family_strings = {
+            key: _string_field(
+                family,
+                key,
+                where,
+                errors,
+                identifier=key == "family_instance_id",
+            )
+            for key in ("family_id", "family_instance_id", "plan_id", "claim_role", "metric_tag")
+        }
+        ids = _string_array(family["contrast_ids"], f"{where}.contrast_ids", errors)
+        if any(candidate is None for candidate in family_strings.values()) or ids is None:
+            continue
+        instance_id = family_strings["family_instance_id"]
+        assert instance_id is not None
         if instance_id in family_ids:
             errors.append(f"{where}.family_instance_id: duplicate value")
         family_ids.add(instance_id)
         multiplicity = family["multiplicity"]
         if _exact_keys(multiplicity, MULTIPLICITY_KEYS, f"{where}.multiplicity", errors):
-            ids = family["contrast_ids"]
-            if not isinstance(ids, list):
-                errors.append(f"{where}.contrast_ids: must be an array")
-                ids = []
             if multiplicity["m"] != len(ids):
                 errors.append(f"{where}.multiplicity.m: does not equal contrast_ids length")
             if multiplicity != {"method": "holm", "alpha": 0.05, "q": None, "m": 6}:

@@ -153,7 +153,7 @@ def build_config(
 
 def write_config(path: Path, config: dict[str, Any]) -> None:
     rendered = json.dumps(config, indent=2) + "\n"
-    path.write_text(rendered, encoding="utf-8")
+    path.write_text(rendered, encoding="utf-8", newline="\n")
 
 
 def expected_output_paths(out_dir: Path, model_tag: str) -> set[Path]:

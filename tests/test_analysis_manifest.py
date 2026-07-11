@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import subprocess
 import sys
@@ -8,7 +9,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from joulewise.analysis_manifest import calculate_manifest_id, validate_analysis_manifest
+from joulewise.analysis_manifest import (
+    calculate_manifest_id,
+    extract_analysis_plan_row,
+    sha256_bytes,
+    validate_analysis_manifest,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -258,6 +264,99 @@ class AnalysisManifestTests(unittest.TestCase):
             order_path.write_bytes(order_path.read_bytes() + b" ")
             errors = validate_analysis_manifest(manifest, manifest_dir=out_dir)
             self.assertTrue(any("order_manifest.sha256: source hash mismatch" in error for error in errors), errors)
+
+    def test_validation_fails_closed_on_wrong_typed_identity_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            result = run_generator(*BASE_CONFIGS[0], out_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = load_manifest(out_dir)
+            mutations = (
+                ("entry", lambda value: value["entries"][0].__setitem__("run_id", []), "entries[0].run_id"),
+                (
+                    "sentinel_link",
+                    lambda value: value["sentinel_links"][0].__setitem__("sentinel_link_id", []),
+                    "sentinel_links[0].sentinel_link_id",
+                ),
+                (
+                    "family",
+                    lambda value: value["families"][0].__setitem__("family_instance_id", []),
+                    "families[0].family_instance_id",
+                ),
+                (
+                    "contrast",
+                    lambda value: value["contrasts"][0].__setitem__("contrast_id", []),
+                    "contrasts[0].contrast_id",
+                ),
+            )
+            for name, mutate, expected in mutations:
+                with self.subTest(layer=name):
+                    mutated = copy.deepcopy(manifest)
+                    mutate(mutated)
+                    reidentify(mutated)
+
+                    errors = validate_analysis_manifest(mutated, manifest_dir=out_dir)
+
+                    self.assertTrue(any(expected in error and "must be a string" in error for error in errors), errors)
+
+    def test_validation_rejects_coherent_semantic_run_id_rename(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            result = run_generator(*BASE_CONFIGS[0], out_dir)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = load_manifest(out_dir)
+            entry = manifest["entries"][1]
+            wrong_run_id = entry["run_id"] + "-renamed"
+            entry["run_id"] = wrong_run_id
+
+            config_path = out_dir / entry["config"]
+            config = json.loads(config_path.read_text(encoding="utf-8"))
+            config["run_id"] = wrong_run_id
+            config_path.write_text(
+                json.dumps(config, indent=2) + "\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+            entry["config_sha256"] = sha256_bytes(config_path.read_bytes())
+
+            order_path = out_dir / "order_manifest.json"
+            order = json.loads(order_path.read_text(encoding="utf-8"))
+            order["executed_order"][1]["run_id"] = wrong_run_id
+            order_path.write_text(
+                json.dumps(order, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+            manifest["source"]["order_manifest"]["sha256"] = sha256_bytes(order_path.read_bytes())
+            reidentify(manifest)
+
+            errors = validate_analysis_manifest(manifest, manifest_dir=out_dir)
+
+            self.assertTrue(any("entries[1].run_id: expected semantic run_id" in error for error in errors), errors)
+            self.assertFalse(any("source hash mismatch" in error for error in errors), errors)
+            self.assertFalse(any("disagrees with config" in error for error in errors), errors)
+            self.assertFalse(any("disagrees with order manifest" in error for error in errors), errors)
+
+    def test_ap_section_hash_preserves_crlf_bytes(self) -> None:
+        section = (
+            b"### AP-2: fixture\r\n"
+            b"\r\n"
+            b"| Field | Value |\r\n"
+            b"|---|---|\r\n"
+            b"| Plan ID / RQ consumer | AP-2 / fixture |\r\n"
+            b"| family_id | FAM-2M-SHAPE-CONTRASTS |\r\n"
+            b"| claim_role | primary |\r\n"
+            b"| selection_scope | fixture |\r\n"
+            b"| multiplicity_rule | Holm |\r\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "analysis_plans.md"
+            path.write_bytes(section + b"\r\n### AP-3: next\r\n")
+
+            row = extract_analysis_plan_row(path)
+
+            self.assertEqual(row.raw_section, section)
+            self.assertEqual(sha256_bytes(row.raw_section), hashlib.sha256(section).hexdigest())
 
 
 if __name__ == "__main__":

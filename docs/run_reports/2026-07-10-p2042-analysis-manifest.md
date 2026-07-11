@@ -110,6 +110,43 @@ Ran 891 tests in 33.592s
 OK (skipped=11)
 ```
 
+## Targeted-review fix round
+
+The lead accepted all three review findings. The bounded fix round remains
+uncommitted in the `impl/p2042` worktree for lead pathspec review.
+
+| Fix | Status | Evidence |
+|---|---|---|
+| FIX-1 fail closed on malformed field types | complete | Entry, sentinel-link, family, and contrast identity/string fields are validated before set insertion or dictionary lookup. Malformed values return path-named errors; the review's `run_id=[]` case no longer raises `TypeError`. Config tag membership is also guarded against non-string elements. |
+| FIX-2 semantic `run_id` derivation | complete | Each expected ID is derived as `<model_tag>-r<planned_rep_index>-<workload>` with exact `-start`/`-end` sentinel suffixes. A coordinated entry/config/order rename with all byte hashes and `manifest_id` refreshed now fails with `entries[...].run_id: expected semantic run_id ...`. |
+| FIX-3 byte-exact hashing | complete | AP extraction reads bytes and decodes UTF-8 without universal-newline translation, so `section_sha256` covers the original section bytes. Generated configs explicitly pin `newline="\n"`. |
+
+New tests:
+
+- `test_validation_fails_closed_on_wrong_typed_identity_fields`
+- `test_validation_rejects_coherent_semantic_run_id_rename`
+- `test_ap_section_hash_preserves_crlf_bytes`
+
+Focused verification:
+
+```text
+python3 -m unittest tests.test_analysis_manifest tests.test_generate_matrix tests.test_run_campaign
+..................................................................................
+----------------------------------------------------------------------
+Ran 82 tests in 12.317s
+
+OK
+```
+
+Canonical suite tail:
+
+```text
+----------------------------------------------------------------------
+Ran 989 tests in 33.405s
+
+OK (skipped=12)
+```
+
 `git diff --check` passed. No fake-NVIDIA load flake occurred.
 
 ## Deviations and contradictions
