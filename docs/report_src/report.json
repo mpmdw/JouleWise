@@ -3,6 +3,7 @@
   "source_format": "pandoc_markdown",
   "default_target": "assembled_markdown",
   "bibliography": "references.csl.json",
+  "source_map": "source_map.json",
   "chapters": [
     "chapters/00_abstract.md",
     "chapters/01_introduction.md",

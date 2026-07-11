@@ -1,4 +1,4 @@
-# Capstone report source (RPT-001 vertical slice)
+# Capstone report source (RPT-001 vertical slice + RPT-002 literature)
 
 Canonical report source per `docs/specs/c027/rpt-001_report_vertical_slice.md`:
 Pandoc-compatible Markdown, assembled by a stdlib-only script into one
@@ -9,6 +9,9 @@ build gate; the final renderer is a P1-008 decision behind the
 ## Layout
 
 - `report.json` — report profile: ordered chapter manifest + format-adapter seam.
+- `references.csl.json` — canonical offline CSL bibliography.
+- `source_map.json` — seven-source RPT-002 evidence/verification map; all
+  intake records were `VERIFIED_AGAINST_PRIMARY` by the lead on 2026-07-11.
 - `chapters/`, `appendices/` — authored prose (edit these).
 - `generated/` — build outputs inside the source tree (do NOT edit; first
   line carries a GENERATED marker).
@@ -47,10 +50,21 @@ exact stack. No cross-stack comparison, efficiency ranking, or scaling claim
 is made anywhere in this source tree, and the assembler fails the build on a
 small forbidden-phrase list.
 
+## Bibliography verification boundary
+
+The original eleven-source survey inherits its 2026-07-06 verification record
+from `docs/phase_4/related_work_draft.md`. The lead verified all seven RPT-002
+sources against primary records on 2026-07-11. `references.csl.json` contains
+the corrected metadata; each source-map entry records the verified primary
+URLs, retrieval date, scope boundary, claim wording, artifact status, and
+completed primary-paper checks.
+
+The assembler parses both JSON files, validates their structure, checks all
+Pandoc citation keys offline, and requires the seven intake records to retain
+an explicit recognized verification state.
+
 ## Known gaps vs the full RPT-001 spec (vertical slice, time-boxed)
 
-- `references.csl.json` + `source_map.json` bibliography pipeline: not yet
-  created; chapter 03 remains an assembly stub.
 - `{{jw:include-section}}` contract transclusion: not implemented; the
   assembler supports whole-file `{{jw:include path="..."}}` only. Chapters
   reference contracts instead of mirroring exact wording.

@@ -161,6 +161,10 @@ class TestRpt001Artifacts(unittest.TestCase):
         profile = json.loads((src / "report.json").read_text(encoding="utf-8"))
         self.assertEqual(profile["schema"], "joulewise.report_profile.v1")
         self.assertEqual(len(profile["chapters"]), 13)
+        self.assertEqual(profile["bibliography"], "references.csl.json")
+        self.assertEqual(profile["source_map"], "source_map.json")
+        self.assertTrue((src / profile["bibliography"]).is_file())
+        self.assertTrue((src / profile["source_map"]).is_file())
         for chapter in profile["chapters"]:
             self.assertTrue((src / chapter).is_file(), chapter)
         self.assertIsNone(profile["format_adapter"]["renderer"])
