@@ -4,6 +4,7 @@ import importlib.util
 import hashlib
 import json
 import os
+import shutil
 import shlex
 import subprocess
 import sys
@@ -151,6 +152,8 @@ def write_single_bundle(
     idle_window_suspect: bool | None = None,
     config_path: Path | None = None,
     start_s: float = 0.0,
+    runtime_cleanup_ok: bool | None = None,
+    remote_cleanup_failed: list[str] | None = None,
 ) -> None:
     _write_bundle(
         runs_dir,
@@ -159,6 +162,8 @@ def write_single_bundle(
         idle_window_suspect=idle_window_suspect,
         config_path=config_path,
         start_s=start_s,
+        runtime_cleanup_ok=runtime_cleanup_ok,
+        remote_cleanup_failed=remote_cleanup_failed,
     )
 
 
@@ -211,6 +216,8 @@ def _write_bundle(
     idle_window_suspect: bool | None = None,
     config_path: Path | None = None,
     start_s: float = 0.0,
+    runtime_cleanup_ok: bool | None = None,
+    remote_cleanup_failed: list[str] | None = None,
 ) -> None:
     from joulewise import reduce as reduce_module
     from joulewise.bundle import RunBundleWriter, sanitize_id_component
@@ -251,6 +258,16 @@ def _write_bundle(
         event(0.8, "phase_end", "decode")
         event(1.0, "sampling_stopped", "measured_run")
         event(1.0, "stage_completed", "measured_run")
+        if runtime_cleanup_ok is not None:
+            writer.append_event(
+                RuntimeEvent(
+                    timestamp_s=start_s + 1.05,
+                    event_type="stage_completed",
+                    phase="cleanup",
+                    message="stage_completed cleanup",
+                    metadata={"cleanup_ok": runtime_cleanup_ok},
+                )
+            )
         writer.write_power_trace(
             [
                 PowerSample(
@@ -272,8 +289,7 @@ def _write_bundle(
         }
         if idle_window_suspect is not None:
             idle["idle_window_suspect"] = idle_window_suspect
-        writer.write_metadata(
-            {
+        metadata = {
                 "device": {"telemetry": telemetry_backend, "rail_manifest": ["mock"]},
                 "adapters": {"telemetry": {"name": telemetry_backend}},
                 "clock_anchor_bound_s": 0.0,
@@ -299,7 +315,14 @@ def _write_bundle(
                     ),
                 },
             }
-        )
+        if remote_cleanup_failed:
+            metadata["extra"] = {
+                "node_cleanup": [
+                    {"path": path, "removed": False}
+                    for path in remote_cleanup_failed
+                ]
+            }
+        writer.write_metadata(metadata)
         summary = reduce_module.reduce_bundle(writer.path)
     else:
         writer.write_metadata(
@@ -1407,6 +1430,198 @@ class RunCampaignTests(unittest.TestCase):
             self.assertIs(sampling_audit["top_up_suspected"], False)
             self.assertNotIn("detection_scope", sampling_audit)
             self.assertNotIn("reasons", sampling_audit)
+
+    def test_cleanup_suspect_blocks_readiness_until_existing_waiver_is_recorded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            manifest = write_strict_analysis_campaign(config_dir, runs_dir)
+            target = next(entry for entry in manifest["entries"] if entry["role"] == "condition")
+            target_bundle = runs_dir / target["run_id"]
+            shutil.rmtree(target_bundle)
+            write_single_bundle(
+                runs_dir,
+                target["run_id"],
+                config_path=config_dir / target["config"],
+                runtime_cleanup_ok=False,
+                remote_cleanup_failed=["/remote/tmp/joulewise-task"],
+            )
+            suspect_summary = json.loads(
+                (target_bundle / "summary_metrics.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(suspect_summary["status"], "succeeded")
+            self.assertGreater(suspect_summary["energy_request_j"], 0.0)
+            evidence = {entry["run_id"]: "recovered" for entry in manifest["entries"]}
+            evidence[manifest["entries"][0]["run_id"]] = "first_run_exempt"
+            write_prior_campaign_provenance(
+                runs_dir, evidence, analysis_manifest_id(config_dir)
+            )
+
+            unwaived = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(unwaived.returncode, 0, unwaived.stderr)
+            first_verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(first_verdict["collection"]["verdict"], "usable")
+            self.assertEqual(
+                first_verdict["claim_readiness"]["verdict"],
+                "not_ready_for_analysis",
+            )
+            self.assertIn(
+                "required_error_term_unknown",
+                first_verdict["claim_readiness"]["reasons"],
+            )
+            first_member = next(
+                member
+                for member in first_verdict["members"]
+                if member["bundle_id"] == target["run_id"]
+            )
+            self.assertEqual(first_member["status"], "succeeded")
+            self.assertIs(first_member["runtime_cleanup_ok"], False)
+            self.assertEqual(
+                first_member["remote_cleanup_failed"],
+                ["/remote/tmp/joulewise-task"],
+            )
+            self.assertEqual(
+                first_member["claim_evidence_flags"],
+                ["remote_cleanup_failed", "runtime_cleanup_ok"],
+            )
+
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": target["run_id"],
+                            "reason": "cleanup residue reviewed and bounded",
+                            "approver": "campaign-owner",
+                            "timestamp": "2026-07-11T00:00:00Z",
+                            "scope": "runtime_cleanup_ok,remote_cleanup_failed",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            waived = run_campaign(config_dir, runs_dir, waivers=waivers)
+
+            self.assertEqual(waived.returncode, 0, waived.stderr)
+            second_verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(second_verdict["collection"]["verdict"], "usable")
+            self.assertEqual(
+                second_verdict["claim_readiness"]["verdict"], "ready_for_analysis"
+            )
+            second_member = next(
+                member
+                for member in second_verdict["members"]
+                if member["bundle_id"] == target["run_id"]
+            )
+            self.assertEqual(second_member["claim_evidence_classification"], "waived")
+            self.assertEqual(
+                second_member["waiver"]["scope"],
+                "runtime_cleanup_ok,remote_cleanup_failed",
+            )
+            provenance_rows = [
+                json.loads(path.read_text(encoding="utf-8"))
+                for path in (runs_dir / "campaign_manifests").glob("*.json")
+            ]
+            provenance_row = next(
+                row
+                for row in provenance_rows
+                if any(
+                    item.get("waiver") is not None
+                    for member in row["members"]
+                    for item in member.get("claim_evidence", [])
+                )
+            )
+            recorded = next(
+                item
+                for member in provenance_row["members"]
+                for item in member["claim_evidence"]
+                if item["bundle_id"] == target["run_id"]
+            )
+            self.assertEqual(recorded["waiver"], second_member["waiver"])
+
+    def test_ratio_readiness_reuses_engine_token_denominator_gate(self) -> None:
+        ratio = {
+            "form": "mean_of_request_ratios",
+            "numerator_metric": "energy_request_j",
+            "denominator": "runtime_observed_output_tokens",
+            "denominator_unit": "token",
+            "tokenizer_scope": "same_identity_required",
+            "output_policy_scope": "same_policy_required",
+        }
+        contrast = {
+            "contrast_id": "ratio-contrast",
+            "metric": {
+                "name": "energy_output_token_j",
+                "metric_tag": "energy_output_token",
+                "window_class": "idle_subtracted_request",
+                "unit": "J/token",
+                "ratio_estimand": ratio,
+            },
+            "cell_a_id": "cell-a",
+            "cell_b_id": "cell-b",
+            "block_ids": ["block-1"],
+        }
+        state = run_campaign_module.AnalysisManifestState(
+            path=Path("analysis_manifest.json"),
+            raw={
+                "design": {"sampling_plan": {"planned_n_blocks": 1}},
+                "entries": [
+                    {"run_id": "a", "block_id": "block-1", "cell_id": "cell-a"},
+                    {"run_id": "b", "block_id": "block-1", "cell_id": "cell-b"},
+                ],
+                "contrasts": [contrast],
+            },
+            manifest_id="ratio-fixture",
+            file_sha256="fixture",
+        )
+        summary = {
+            "energy_request_j": 2.0,
+            "window_evidence_precheck": {
+                "idle_subtracted_request": {"eligible": True, "reasons": []}
+            },
+            "measurement_quality": {"idle_window_suspect": False},
+        }
+        valid_provenance = {
+            "output_tokens": 2,
+            "token_count_source": "runtime_observed",
+            "stop_reason": "requested_tokens_emitted",
+            "output_policy": {
+                "name": "fixed_budget_exact",
+                "requested_tokens": 2,
+                "sampler": None,
+            },
+            "tokenizer_identity": {"backend": "mock", "identifier": "tok"},
+        }
+        evaluations = [
+            run_campaign_module.MemberEvaluation(
+                bundle_id=bundle_id,
+                bundle_path=Path(bundle_id),
+                config_name=f"{bundle_id}.json",
+                status="succeeded",
+                strict_valid=True,
+                summary=summary,
+                ratio_token_provenance={
+                    **valid_provenance,
+                    **({"token_count_source": "config_fallback"} if bundle_id == "b" else {}),
+                },
+                preceding_campaign_cooldown={"result": "first_run_exempt"},
+            )
+            for bundle_id in ("a", "b")
+        ]
+
+        readiness = run_campaign_module.claim_readiness_for(
+            state, "usable", evaluations
+        )
+
+        self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+        self.assertIn("runtime_token_denominator_required", readiness["reasons"])
+        self.assertNotIn("metric_missing_or_nonfinite", readiness["reasons"])
+        self.assertNotIn("window_evidence_precheck_missing", readiness["reasons"])
 
     def test_existing_resume_provenance_does_not_shadow_invoked_cooldown_evidence(
         self,

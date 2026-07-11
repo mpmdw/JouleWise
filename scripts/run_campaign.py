@@ -46,6 +46,15 @@ from joulewise.bundle_read import BundleReader, BundleReadError  # noqa: E402
 from joulewise.analysis_manifest import validate_analysis_manifest  # noqa: E402
 from joulewise.doctor import SCHEMA_VERSION as DOCTOR_SCHEMA_VERSION  # noqa: E402
 from joulewise.doctor import config_warning_gate  # noqa: E402
+from joulewise.analysis_engine.inputs import (  # noqa: E402
+    cleanup_claim_evidence_flags,
+    token_provenance_from_artifacts,
+)
+from joulewise.analysis_engine.ratio import (  # noqa: E402
+    estimation_metric,
+    ratio_collection_evidence_reasons,
+    ratio_evidence_reasons,
+)
 from joulewise.schemas import RunStatus, RuntimeBackend, TelemetryBackend  # noqa: E402
 
 
@@ -150,6 +159,11 @@ class MemberEvaluation:
     validation_problems: tuple[str, ...] = ()
     collection_integrity_flags: tuple[str, ...] = ()
     claim_evidence_flags: tuple[str, ...] = ()
+    runtime_cleanup_ok: bool | None = None
+    remote_cleanup_failed: tuple[str, ...] = ()
+    ratio_token_provenance: dict[str, Any] = field(
+        default_factory=dict, repr=False, compare=False
+    )
     prompt_hash_check: PromptHashCheck = field(
         default_factory=lambda: PromptHashCheck("not_applicable")
     )
@@ -175,13 +189,31 @@ class MemberEvaluation:
         collection_classes = self.failure_classes()
         return collection_classes if collection_classes else self.claim_evidence_flags
 
+    def waived_claim_evidence_flags(self) -> tuple[str, ...]:
+        if self.waiver is None or self.failure_classes():
+            return ()
+        if self.waiver.scope == "any":
+            return self.claim_evidence_flags
+        scopes = {part.strip() for part in self.waiver.scope.split(",") if part.strip()}
+        return tuple(flag for flag in self.claim_evidence_flags if flag in scopes)
+
+    def unwaived_claim_evidence_flags(self) -> tuple[str, ...]:
+        waived = set(self.waived_claim_evidence_flags())
+        return tuple(flag for flag in self.claim_evidence_flags if flag not in waived)
+
+    def has_cleanup_claim_waiver(self) -> bool:
+        return bool(
+            {"runtime_cleanup_ok", "remote_cleanup_failed"}
+            & set(self.waived_claim_evidence_flags())
+        )
+
     @property
     def usable(self) -> bool:
         return (
             self.status == "succeeded"
             and self.strict_valid
             and not self.collection_integrity_flags
-            and self.waiver is None
+            and (self.waiver is None or self.has_cleanup_claim_waiver())
         )
 
     @property
@@ -212,12 +244,18 @@ class MemberEvaluation:
             "validation_problems": list(self.validation_problems),
             "collection_integrity_flags": list(self.collection_integrity_flags),
             "claim_evidence_flags": list(self.claim_evidence_flags),
+            "runtime_cleanup_ok": self.runtime_cleanup_ok,
+            "remote_cleanup_failed": list(self.remote_cleanup_failed),
             "prompt_hash_check": self.prompt_hash_check.to_log(),
             "collection_classification": (
                 "usable" if self.usable else "waived" if self.waived else "failed"
             ),
             "claim_evidence_classification": (
-                "flagged" if self.claim_evidence_flags else "clean"
+                "flagged"
+                if self.unwaived_claim_evidence_flags()
+                else "waived"
+                if self.claim_evidence_flags
+                else "clean"
             ),
         }
         if self.waiver is not None:
@@ -304,6 +342,8 @@ VALID_WAIVER_SCOPES = {
     "idle_window_suspect",
     "prompt_hash_mismatch",
     "prompt_hash_check_error",
+    "runtime_cleanup_ok",
+    "remote_cleanup_failed",
 }
 
 
@@ -1206,6 +1246,7 @@ def claim_evidence_flags(summary: dict[str, Any] | None) -> tuple[str, ...]:
             flags.add("idle_window_suspect")
         if quality.get("cooldown_cap_hit") is True:
             flags.add("cooldown_cap_hit")
+    flags.update(cleanup_claim_evidence_flags(summary))
     return tuple(sorted(flags))
 
 
@@ -1263,6 +1304,16 @@ def evaluate_member(
                 summary = parsed
         except (OSError, json.JSONDecodeError):
             summary = None
+    metadata: dict[str, Any] | None = None
+    if (bundle_dir / "metadata.json").is_file():
+        try:
+            parsed_metadata = json.loads(
+                (bundle_dir / "metadata.json").read_text(encoding="utf-8")
+            )
+            if isinstance(parsed_metadata, dict):
+                metadata = parsed_metadata
+        except (OSError, json.JSONDecodeError):
+            metadata = None
     prompt_hash_check = check_prompt_hashes_for_config_bundle(bundle_dir, info)
     binding_problem = (
         _bundle_config_binding_problem(bundle_dir, info)
@@ -1281,6 +1332,21 @@ def evaluate_member(
         config_stem=info.path.stem,
         run_id=info.run_id,
     )
+    quality = summary.get("measurement_quality") if isinstance(summary, dict) else None
+    runtime_cleanup_ok = (
+        quality.get("runtime_cleanup_ok")
+        if isinstance(quality, dict)
+        and isinstance(quality.get("runtime_cleanup_ok"), bool)
+        else None
+    )
+    remote_cleanup = (
+        quality.get("remote_cleanup_failed") if isinstance(quality, dict) else None
+    )
+    remote_cleanup_failed = (
+        tuple(path for path in remote_cleanup if isinstance(path, str))
+        if isinstance(remote_cleanup, list)
+        else ()
+    )
     return MemberEvaluation(
         bundle_id=bundle_dir.name,
         bundle_path=bundle_dir,
@@ -1290,6 +1356,9 @@ def evaluate_member(
         validation_problems=tuple(problems),
         collection_integrity_flags=tuple(sorted(collection_flags)),
         claim_evidence_flags=claim_evidence_flags(summary),
+        runtime_cleanup_ok=runtime_cleanup_ok,
+        remote_cleanup_failed=remote_cleanup_failed,
+        ratio_token_provenance=token_provenance_from_artifacts(summary, metadata),
         prompt_hash_check=prompt_hash_check,
         suite_order_policy=suite_order_policy,
         suite_order_row=suite_order_row,
@@ -1832,10 +1901,32 @@ def record_campaign_member_provenance(
     *,
     info: ConfigInfo,
     bundle_ids: list[str],
+    evaluations: list[MemberEvaluation],
     execution: str,
     cooldown: dict[str, Any] | None,
 ) -> None:
     recorded_cooldown = cooldown if execution == "invoked" else None
+    claim_evidence: list[dict[str, Any]] = []
+    for evaluation in evaluations:
+        waiver = evaluation.waiver
+        claim_evidence.append(
+            {
+                "bundle_id": evaluation.bundle_id,
+                "claim_evidence_flags": list(evaluation.claim_evidence_flags),
+                "waiver": (
+                    {
+                        "target_kind": waiver.target_kind,
+                        "target": waiver.target,
+                        "reason": waiver.reason,
+                        "approver": waiver.approver,
+                        "timestamp": waiver.timestamp,
+                        "scope": waiver.scope,
+                    }
+                    if waiver is not None
+                    else None
+                ),
+            }
+        )
     manifest["members"].append(
         {
             "config": info.path.name,
@@ -1843,6 +1934,7 @@ def record_campaign_member_provenance(
             "bundle_ids": bundle_ids,
             "execution": execution,
             "preceding_campaign_cooldown": recorded_cooldown,
+            "claim_evidence": claim_evidence,
         }
     )
     if (
@@ -1945,6 +2037,7 @@ def _precheck_for_contrast(
     metric = contrast.get("metric")
     if not isinstance(metric, dict):
         return None
+    metric = estimation_metric(metric)
     metric_name = metric.get("name")
     metric_tag = metric.get("metric_tag")
     if metric_tag == "gross_request" or metric_name == "gross_energy_j":
@@ -1968,6 +2061,7 @@ def _metric_is_finite(summary: dict[str, Any] | None, contrast: dict[str, Any]) 
     if not isinstance(summary, dict):
         return False
     metric = contrast.get("metric")
+    metric = estimation_metric(metric) if isinstance(metric, dict) else metric
     metric_name = metric.get("name") if isinstance(metric, dict) else None
     if not isinstance(metric_name, str) or not metric_name:
         return False
@@ -1987,6 +2081,7 @@ def _contrast_uses_idle_subtraction(contrast: dict[str, Any]) -> bool:
     metric = contrast.get("metric")
     if not isinstance(metric, dict):
         return False
+    metric = estimation_metric(metric)
     return metric.get("metric_tag") == "idle_request" or metric.get("name") in {
         "energy_request_j",
         "idle_subtracted_energy_j",
@@ -2001,8 +2096,12 @@ def _member_readiness_reasons(
         reasons.add("bundle_strict_invalid")
     if evaluation.status != "succeeded":
         reasons.add("bundle_status_not_succeeded")
-    if evaluation.waiver is not None:
-        reasons.add("bundle_strict_invalid")
+    cleanup_flags = {
+        "runtime_cleanup_ok",
+        "remote_cleanup_failed",
+    }
+    if cleanup_flags & set(evaluation.unwaived_claim_evidence_flags()):
+        reasons.add("required_error_term_unknown")
     if "config_manifest_mismatch" in evaluation.collection_integrity_flags:
         reasons.add("config_hash_mismatch")
     if not _metric_is_finite(evaluation.summary, contrast):
@@ -2042,10 +2141,20 @@ def _member_readiness_reasons(
 
     if _contrast_uses_idle_subtraction(contrast):
         idle_state = quality.get("idle_window_suspect") if isinstance(quality, dict) else None
+        idle_waived = "idle_window_suspect" in evaluation.waived_claim_evidence_flags()
         if idle_state is True:
-            reasons.add("idle_window_suspect")
+            if not idle_waived:
+                reasons.add("idle_window_suspect")
         elif idle_state is not False:
             reasons.add("idle_window_suspect_unknown")
+    metric = contrast.get("metric")
+    if isinstance(metric, dict) and metric.get("ratio_estimand") is not None:
+        reasons.update(
+            ratio_evidence_reasons(
+                evaluation.ratio_token_provenance,
+                evaluation.ratio_token_provenance,
+            )
+        )
     return sorted(reasons)
 
 
@@ -2096,6 +2205,7 @@ def claim_readiness_for(
             continue
         reasons: set[str] = set()
         affected: list[str] = []
+        ratio_pairs: list[tuple[dict[str, Any], dict[str, Any]]] = []
         if collection_verdict != "usable":
             reasons.add("fixed_n_plan_incomplete")
         block_ids = contrast.get("block_ids")
@@ -2129,7 +2239,23 @@ def claim_readiness_for(
                 pair.append(evaluation)
                 reasons.update(_member_readiness_reasons(evaluation, contrast))
             if len(pair) == 2:
+                metric = contrast.get("metric")
+                if isinstance(metric, dict) and metric.get("ratio_estimand") is not None:
+                    ratio_pairs.append(
+                        (
+                            pair[0].ratio_token_provenance,
+                            pair[1].ratio_token_provenance,
+                        )
+                    )
+                    reasons.update(
+                        ratio_evidence_reasons(
+                            pair[0].ratio_token_provenance,
+                            pair[1].ratio_token_provenance,
+                        )
+                    )
                 complete_blocks += 1
+        if ratio_pairs:
+            reasons.update(ratio_collection_evidence_reasons(tuple(ratio_pairs)))
         design = analysis_manifest.raw.get("design")
         sampling_plan = design.get("sampling_plan") if isinstance(design, dict) else None
         planned_n = (
@@ -2527,6 +2653,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     campaign_provenance,
                     info=info,
                     bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
+                    evaluations=evaluations,
                     execution="existing",
                     cooldown=(
                         evaluations[0].preceding_campaign_cooldown
@@ -2598,6 +2725,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     bundle_ids=[
                         evaluation.bundle_id for evaluation in existing_evaluations
                     ],
+                    evaluations=existing_evaluations,
                     execution="existing",
                     cooldown=None,
                 )
@@ -2718,6 +2846,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                 campaign_provenance,
                 info=info,
                 bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
+                evaluations=evaluations,
                 execution="invoked",
                 cooldown=cooldown_note,
             )

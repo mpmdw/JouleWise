@@ -20,6 +20,7 @@ from joulewise.analysis_engine.artifact import (
 from joulewise.analysis_manifest import calculate_manifest_id
 from joulewise.analysis_engine.multiplicity import holm_adjust
 from joulewise.analysis_engine.estimators import StochasticVarianceTerm
+from joulewise.analysis_engine.inputs import load_analysis_inputs
 from joulewise.cli import main, validate_bundle
 from joulewise.detection_floor import (
     build_floor_artifact,
@@ -773,6 +774,152 @@ class AnalysisIntegrationTests(unittest.TestCase):
         gross = audit["window_prechecks"]["gross_request"]
         self.assertFalse(gross["eligible"])
         self.assertIn("window_evidence_precheck_missing", gross["reasons"])
+
+    def test_cleanup_suspect_is_excluded_unless_runner_waiver_is_recorded(self):
+        from joulewise import reduce as reduce_module
+
+        runs = self.root / "cleanup-suspect-runs"
+        shutil.copytree(self.runs_root, runs)
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        target = next(
+            entry
+            for entry in manifest["entries"]
+            if entry["role"] == "condition" and entry["planned_rep_index"] == 1
+        )
+        bundle = runs / target["run_id"]
+        events_path = bundle / "events.jsonl"
+        events = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines()]
+        cleanup = next(
+            event
+            for event in events
+            if event["event_type"] == "stage_completed" and event["phase"] == "cleanup"
+        )
+        cleanup["metadata"]["cleanup_ok"] = False
+        events_path.write_text(
+            "".join(json.dumps(event, sort_keys=True) + "\n" for event in events),
+            encoding="utf-8",
+        )
+        metadata_path = bundle / "metadata.json"
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        metadata.setdefault("extra", {})["node_cleanup"] = [
+            {"path": "/remote/tmp/joulewise-task", "removed": False}
+        ]
+        metadata_path.write_text(
+            json.dumps(metadata, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        summary = reduce_module.reduce_bundle(bundle)
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary.to_dict(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+        unwaived = analyze_claims(
+            self.manifest_path,
+            runs,
+            self.floor_path,
+            strict_validator=validate_bundle,
+        )
+        unwaived_audit = next(
+            row for row in unwaived["bundle_audit"] if row["entry_id"] == target["entry_id"]
+        )
+        unwaived_inputs = load_analysis_inputs(
+            self.manifest_path,
+            runs,
+            self.floor_path,
+            strict_validator=validate_bundle,
+        )
+        unwaived_evidence = unwaived_inputs.registered[target["entry_id"]]
+        self.assertEqual(
+            unwaived_evidence.claim_evidence_flags,
+            ("runtime_cleanup_ok", "remote_cleanup_failed"),
+        )
+        self.assertIsNone(unwaived_evidence.waiver)
+        self.assertEqual(unwaived_audit["inclusion_status"], "excluded")
+        self.assertIn("required_error_term_unknown", unwaived_audit["base_reason_codes"])
+        affected = [
+            contrast
+            for contrast in unwaived["contrasts"]
+            if target["cell_id"]
+            in {
+                contrast["conditions"]["cell_a_id"],
+                contrast["conditions"]["cell_b_id"],
+            }
+        ]
+        self.assertTrue(affected)
+        self.assertTrue(
+            all(
+                "required_error_term_unknown"
+                in contrast["claim_evaluation"]["reason_codes"]
+                for contrast in affected
+            )
+        )
+
+        campaign_dir = runs / "campaign_manifests"
+        campaign_dir.mkdir(parents=True, exist_ok=True)
+        waiver = {
+            "target_kind": "bundle_id",
+            "target": target["run_id"],
+            "reason": "cleanup residue reviewed and bounded",
+            "approver": "campaign-owner",
+            "timestamp": "2026-07-11T00:00:00Z",
+            "scope": "runtime_cleanup_ok,remote_cleanup_failed",
+        }
+        (campaign_dir / "cleanup-waiver.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": "joulewise.campaign_provenance.v1",
+                    "session_id": "cleanup-waiver-fixture",
+                    "created_at": "2026-07-11T00:00:00Z",
+                    "config_dir": str(self.config_dir),
+                    "analysis_manifest_id": manifest["manifest_id"],
+                    "first_physical_run_id": None,
+                    "members": [
+                        {
+                            "config": target["config"],
+                            "run_id": target["run_id"],
+                            "bundle_ids": [target["run_id"]],
+                            "execution": "existing",
+                            "preceding_campaign_cooldown": None,
+                            "claim_evidence": [
+                                {
+                                    "bundle_id": target["run_id"],
+                                    "claim_evidence_flags": [
+                                        "runtime_cleanup_ok",
+                                        "remote_cleanup_failed",
+                                    ],
+                                    "waiver": waiver,
+                                }
+                            ],
+                        }
+                    ],
+                    "cooldown_gates": [],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        waived = analyze_claims(
+            self.manifest_path,
+            runs,
+            self.floor_path,
+            strict_validator=validate_bundle,
+        )
+        waived_audit = next(
+            row for row in waived["bundle_audit"] if row["entry_id"] == target["entry_id"]
+        )
+        waived_inputs = load_analysis_inputs(
+            self.manifest_path,
+            runs,
+            self.floor_path,
+            strict_validator=validate_bundle,
+        )
+        waived_evidence = waived_inputs.registered[target["entry_id"]]
+        self.assertEqual(waived_audit["inclusion_status"], "included")
+        self.assertNotIn("required_error_term_unknown", waived_audit["base_reason_codes"])
+        self.assertEqual(waived_evidence.waiver, waiver)
 
     def test_realized_model_artifact_identity_disagreement_fails_cohort_closed(self):
         runs = self.root / "identity-mismatch-runs"
