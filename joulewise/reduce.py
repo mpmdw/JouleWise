@@ -900,6 +900,7 @@ def _reduce(
         idle_window_suspect=_idle_window_suspect(idle_baseline),
         token_counts_source=token_counts_source,
         phase_identifiability=phase_identifiability,
+        runtime_cleanup_ok=reader.runtime_cleanup_ok(),
     )
 
     return SummaryMetrics(

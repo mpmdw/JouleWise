@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import copy
+import io
 import json
 import unittest
+import warnings
+from contextlib import redirect_stderr
 from pathlib import Path
 
-from joulewise.schemas import BenchmarkConfig, SchemaError
+from joulewise.schemas import BenchmarkConfig, ConfigKeyWarning, SchemaError
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE_CONFIG = ROOT / "configs" / "examples" / "mock_local.json"
@@ -50,16 +53,84 @@ class SchemaCoverageGapTests(unittest.TestCase):
                 with self.assertRaisesRegex(SchemaError, "run_metadata.tags"):
                     BenchmarkConfig.from_mapping(data)
 
-    def test_unknown_workload_keys_are_ignored(self) -> None:
+    def test_unknown_workload_keys_warn_and_are_ignored(self) -> None:
         data = example_data()
         data["workload_profile"]["bogus_key"] = 99
 
-        config = BenchmarkConfig.from_mapping(data)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config = BenchmarkConfig.from_mapping(data)
 
+        self.assertEqual(len(caught), 1)
+        warning = caught[0].message
+        self.assertIsInstance(warning, ConfigKeyWarning)
+        self.assertEqual(warning.code, "unknown_config_key")
+        self.assertEqual(warning.path, "workload_profile.bogus_key")
+        self.assertEqual(
+            str(warning),
+            "unknown config key 'workload_profile.bogus_key' ignored by schema 0.1",
+        )
         self.assertEqual(config.workload_profile.name, "mock_smoke")
         self.assertEqual(config.workload_profile.prompt_tokens, 32)
         self.assertEqual(config.workload_profile.output_tokens, 8)
         self.assertFalse(hasattr(config.workload_profile, "bogus_key"))
+
+    def test_sampling_typo_warns_before_defaulting(self) -> None:
+        data = example_data()
+        data["sampling"].pop("power_hz")
+        data["sampling"]["power_hzz"] = 10
+
+        stderr = io.StringIO()
+        with warnings.catch_warnings():
+            warnings.simplefilter("always")
+            with redirect_stderr(stderr):
+                config = BenchmarkConfig.from_mapping(data)
+
+        self.assertEqual(config.sampling.power_hz, 1.0)
+        self.assertEqual(config.config_warnings[0]["code"], "unknown_config_key")
+        self.assertIn("sampling.power_hzz", stderr.getvalue())
+
+    def test_unknown_keys_warn_in_deterministic_order_at_every_schema_level(self) -> None:
+        data = example_data()
+        data["root_typo"] = 1
+        sections = (
+            "model",
+            "quantization",
+            "hardware_target",
+            "workload_profile",
+            "interconnect",
+            "sampling",
+            "run_metadata",
+        )
+        for section in sections:
+            data[section]["z_typo"] = section
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config = BenchmarkConfig.from_mapping(data)
+
+        expected = sorted(
+            ["root_typo"] + [f"{section}.z_typo" for section in sections]
+        )
+        self.assertEqual([warning.message.path for warning in caught], expected)
+        self.assertEqual(
+            [warning["path"] for warning in config.config_warnings], expected
+        )
+        emitted = config.to_dict()
+        self.assertNotIn("root_typo", emitted)
+        for section in sections:
+            self.assertNotIn("z_typo", emitted[section])
+
+    def test_non_object_section_fails_without_child_key_inspection(self) -> None:
+        data = example_data()
+        data["sampling"] = ["not", "an", "object"]
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with self.assertRaisesRegex(SchemaError, "sampling must be an object"):
+                BenchmarkConfig.from_mapping(data)
+
+        self.assertEqual(caught, [])
 
 
 class SchemaBugPins(unittest.TestCase):
@@ -101,6 +172,13 @@ class SchemaBugPins(unittest.TestCase):
             with self.subTest(section=section, field=field):
                 prop = copy.deepcopy(schema["$defs"][section]["properties"][field])
                 self.assertEqual(prop.get("minLength"), 1)
+
+    def test_config_schema_declares_warn_and_ignore_unknown_key_policy(self) -> None:
+        schema = BenchmarkConfig.json_schema()
+        self.assertEqual(
+            schema["x-joulewise-unknown-key-policy"], "warn-and-ignore"
+        )
+        self.assertNotIn("additionalProperties", schema)
 
 
 if __name__ == "__main__":

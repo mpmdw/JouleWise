@@ -431,7 +431,17 @@ class _Execution:
             self._check(result, "warmup", f"runtime warmup run {index} failed")
             self._capture_adapter_alignments()
         self._log(self._runtime_log, f"completed {warmup_runs} warmup run(s)")
-        self._complete_stage("warmup", {"warmup_runs": warmup_runs})
+        warmup_seconds = self._config.sampling.warmup_seconds
+        if warmup_seconds > 0.0:
+            self._log(
+                self._runtime_log,
+                f"post-warmup settling for {warmup_seconds} s before sampling",
+            )
+            self._clock.sleep(warmup_seconds)
+        self._complete_stage(
+            "warmup",
+            {"warmup_runs": warmup_runs, "warmup_seconds": warmup_seconds},
+        )
 
     def _stage_measured_run(self) -> None:
         self._begin_stage("measured_run")
@@ -656,6 +666,7 @@ class _Execution:
         if self._metadata_written:
             return
         extra: dict[str, Any] = {}
+        extra["config_warnings"] = [dict(item) for item in self._config.config_warnings]
         extra["model"] = _jsonable(asdict(self._config.model))
         extra["quantization"] = _jsonable(asdict(self._config.quantization))
         if self._device_metadata is not None:
