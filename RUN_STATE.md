@@ -106,6 +106,15 @@ list below where they conflict). State at pause:**
   FLIGHT at pause; its report lands in the session scratchpad
   (sol-p2037-audit.md). UNCOMMITTED — do not discard. Acceptance
   gated on P2-044 (#55) landing + audit dispositions.
+  AUDIT LANDED POST-CHECKPOINT: strong statistical core (frozen-m
+  multiplicity, artifact validation, top-up demotion, claims-index
+  machinery sound) and a CLEAN scope audit (all cli.py/claims_lint.py
+  hunks spec-required — no invention this time), but FOUR BLOCKERS on
+  the acceptance path (analysis_engine/__init__.py:229,
+  inputs.py:775 + :831, claims_lint.py:1773) + should-fixes. Full
+  findings: sol-p2037-audit.md. Resume path: blocker refuters (2 each
+  per adversarial-review) → fix round (NEEDS_RULING available) →
+  re-audit delta → commit by pathspec → PR; still behind #55.
 - Scope-restraint + adapter infrastructure (global, outside repo):
   claude-codex-report/v1 adopted (~/.claude/skills/codex-delegation/
   ADAPTER.md); codex-run-v3 + codex-usage INSTALLED (~/.local/bin);
