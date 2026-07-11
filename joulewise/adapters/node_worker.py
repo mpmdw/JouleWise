@@ -800,14 +800,17 @@ def handle_nvidia_smi_measure_idle(
                 stderr=stderr_handle,
                 stdin=subprocess.DEVNULL,
             )
-            deadline = time.monotonic() + max(0.0, idle_seconds)
-            while time.monotonic() < deadline:
-                if process.poll() is not None:
-                    break
-                remaining_s = deadline - time.monotonic()
-                if remaining_s <= 0:
-                    break
-                time.sleep(min(0.05, remaining_s))
+            ready = _wait_for_nvidia_smi_csv(process, raw_path)
+            metadata["readiness"] = ready
+            if ready.get("ok"):
+                deadline = time.monotonic() + max(0.0, idle_seconds)
+                while time.monotonic() < deadline:
+                    if process.poll() is not None:
+                        break
+                    remaining_s = deadline - time.monotonic()
+                    if remaining_s <= 0:
+                        break
+                    time.sleep(min(0.05, remaining_s))
             _terminate_process_object(process)
     except FileNotFoundError as exc:
         _remove_if_exists(raw_path)
@@ -827,12 +830,15 @@ def handle_nvidia_smi_measure_idle(
             metadata,
         )
 
-    if not _csv_file_has_parseable_row(raw_path):
+    if not metadata.get("readiness", {}).get("ok"):
         metadata["stderr_tail"] = _read_tail(stderr_path)
         return (
             STATUS_UNSUPPORTED,
             FAILURE_TELEMETRY_UNAVAILABLE,
-            "nvidia-smi idle capture did not produce a parseable CSV row",
+            metadata.get("readiness", {}).get(
+                "message",
+                "nvidia-smi idle capture did not produce a parseable CSV row",
+            ),
             {"nvidia_smi_idle_csv": NVIDIA_SMI_IDLE_CSV},
             metadata,
         )

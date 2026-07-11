@@ -367,6 +367,43 @@ class NodeWorkerTests(unittest.TestCase):
             finally:
                 os.environ["PATH"] = old_path
 
+    def test_telemetry_measure_idle_starts_duration_after_sampler_readiness(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            bin_dir = tmpdir / "bin"
+            fake = self.write_fake_nvidia_smi(bin_dir)
+            fake.write_text(
+                fake.read_text(encoding="utf-8").replace(
+                    "trap 'exit 0' TERM INT\n",
+                    "trap 'exit 0' TERM INT\nsleep 0.1\n",
+                    1,
+                ),
+                encoding="utf-8",
+            )
+            old_path = os.environ.get("PATH", "")
+            os.environ["PATH"] = str(bin_dir) + os.pathsep + old_path
+            try:
+                artifacts_dir = tmpdir / "artifacts"
+                task = valid_task(task_id="task-idle-delayed-ready")
+                task["telemetry"]["idle_seconds"] = 0.01
+                task["telemetry"]["interval_ms"] = 50
+                task_path = self.write_task(tmpdir, task)
+
+                code = node_worker.main(
+                    ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+                )
+
+                self.assertEqual(code, 0)
+                status = self.read_status(artifacts_dir)
+                self.assertEqual(status["status"], "succeeded")
+                self.assertTrue(status["metadata"]["readiness"]["ok"])
+                self.assertIn(
+                    "2026/07/07 12:00:00.000",
+                    (artifacts_dir / "nvidia_smi_idle.csv").read_text(encoding="utf-8"),
+                )
+            finally:
+                os.environ["PATH"] = old_path
+
     def test_telemetry_missing_nvidia_smi_is_telemetry_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmpdir = Path(tmp)

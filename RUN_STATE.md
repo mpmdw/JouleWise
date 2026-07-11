@@ -280,6 +280,9 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-10 NV-GATE-2 idle-capture regression debug/fix (uncommitted;
+  localhost re-verification remains lead-gated):
+  `docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md`
 - 2026-07-10 NV-GATE-2 CODE-NOW implementation (NV-1/NV-3/NV-4/NV-5;
   live promotion evidence still gated):
   `docs/run_reports/2026-07-10-nvgate2-codenow.md`
@@ -334,6 +337,13 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
+- NV-GATE-2 idle-capture regression fix: historic fake-sampler plus new
+  delayed-readiness regression passed together in 3 consecutive fresh
+  processes; canonical suite `Ran 1023 tests in 35.164s`, `OK (skipped=13)`;
+  `py_compile` and `git diff --check` clean. The exact localhost contract was
+  attempted 3 times but loudly skipped before worker execution because this
+  sandbox denied socket bind; lead socket-capable 3x rerun remains required.
+  Report: `docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md`.
 - NV-GATE-2 accepted-findings fix round: focused node-worker/subprocess,
   controller, reducer, strict-dispatch, and schema surface `Ran 229 tests in
   4.995s`, `OK (skipped=2)`; the historic fake-sampler test passed three
@@ -424,6 +434,10 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
+- Worktree `/Users/edr/code/JouleWise-wt/nvgate2` on
+  `impl/nvgate2-codenow` has the uncommitted idle-readiness fix, regression
+  test, and handoff bookkeeping. Do not discard; the localhost 3x lead gate
+  remains open.
 - Worktree `/Users/edr/code/JouleWise-wt/p2040rem` on
   `impl/p2040-remainder` contains the committed remainder implementation and
   is intentionally dirty only with the uncommitted reducer-version review

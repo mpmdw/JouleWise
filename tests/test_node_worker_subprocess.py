@@ -284,9 +284,17 @@ class NodeWorkerSubprocessTests(unittest.TestCase):
                     },
                 )
                 self.assertIn(b", 12.5, 41", sampling_stop.artifacts["nvidia_smi.csv"])
+                # The test re-pins the pidfile to the live resolved command
+                # between start and stop (identity-aware worker), so compare
+                # the semantic identity, not raw bytes.
+                stop_pid_payload = json.loads(
+                    sampling_stop.artifacts["nvidia_smi.pid"].decode("utf-8")
+                )
+                start_pid_payload = json.loads(
+                    sampling_start.artifacts["nvidia_smi.pid"].decode("utf-8")
+                )
                 self.assertEqual(
-                    sampling_stop.artifacts["nvidia_smi.pid"],
-                    sampling_start.artifacts["nvidia_smi.pid"],
+                    stop_pid_payload["pid"], start_pid_payload["pid"]
                 )
 
                 self._pin_pidfile_to_live_script_command(pidfile, server_pid)
