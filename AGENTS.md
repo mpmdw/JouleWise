@@ -3,6 +3,31 @@
 These instructions apply to every Codex session rooted in this repository,
 including sessions started by Claude Code through the project MCP server.
 
+## Delegated-session write authority
+
+A session is delegated when its prompt contains `SESSION_MODE: delegated` or a
+`WRITE_SCOPE:` field.
+
+For every delegated session, `WRITE_SCOPE` is the exhaustive repository write
+allowlist. It takes precedence over all repository-local workflow instructions,
+including this file's end-of-work checklist and instructions to update
+`RUN_STATE.md`, `TASK_QUEUE.md`, plans, reports, generated documentation, or tests.
+Those files are lead-owned unless their exact paths are explicitly included in
+`WRITE_SCOPE`.
+
+Repository instructions may require a delegated worker to read or inspect a file,
+but they never implicitly authorize writing it. Test failures, consistency repairs,
+generated artifacts, tidy-tree work, and work believed necessary for completion do
+not expand the allowlist.
+
+If an unlisted write appears necessary, the worker must preserve that path, complete
+independent authorized work, and stop with a blocking scope-expansion request. Only
+the lead can approve an expansion through a new or resumed prompt. Approval is
+prospective; an already-made out-of-scope edit remains a scope violation.
+
+For lead sessions without a `WRITE_SCOPE` field, the normal end-of-work
+expectations below continue to apply.
+
 ## Intake And Authority
 
 For any substantial task:
