@@ -1,6 +1,9 @@
 # JouleWise Run State
 
-Last updated: 2026-07-10 (P2-040 reducer-version review blocker fixed
+Last updated: 2026-07-10 (PR #49's main-side P2-038 rail-only CI flake
+root-caused to the fake powermetrics child's SIGTERM/right-edge-bracket race;
+fixture-only fix is uncommitted, exact test 100/100 green, focused 5 OK,
+canonical 1041 OK/13 skipped. Earlier: P2-040 reducer-version review blocker fixed
 without commit on `impl/p2040-remainder`: reducer 0.3.1 plus frozen-0.3.0
 absence projection; focused tests green, canonical rerun exposed one unrelated
 pre-existing node-worker timing failure. Earlier:
@@ -288,6 +291,14 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
+- PR #49 P2-038 rail-only flake: pre-fix exact-test loop failed 4/100;
+  retained failure emitted `cadence_ratio_unrecorded` plus
+  `interpolation_bound_unrecorded` because the final trace sample preceded the
+  stop marker. Archived `origin/main` reproduced on iteration 6. The
+  fixture-only terminal-sample handshake fix passed the exact test 100/100,
+  focused module `Ran 5 tests in 30.480s`, `OK`, and canonical suite
+  `Ran 1041 tests in 66.509s`, `OK (skipped=13)`. Report:
+  `docs/run_reports/2026-07-10-pr49-p2038-flake-root-cause.md`.
 - NV-GATE-2 idle-capture regression fix: historic fake-sampler plus new
   delayed-readiness regression passed together in 3 consecutive fresh
   processes; canonical suite `Ran 1023 tests in 35.164s`, `OK (skipped=13)`;
@@ -412,8 +423,11 @@ queue owns ordering (C-027):**
   `impl/nvgate2-codenow` has the idle-readiness fix, regression test, and
   handoff bookkeeping COMMITTED (cd6e2cb) and the lead-resolved merge of
   post-#48 `origin/main` (union of remote_cleanup_failed +
-  runtime_cleanup_ok in schema/ADDED_SINCE/dispatch tests). The localhost
-  3x lead gate remains open.
+  runtime_cleanup_ok in schema/ADDED_SINCE/dispatch tests). The pre-existing
+  main-side P2-038 rail-only flake has an uncommitted fixture-only SIGTERM
+  handshake fix plus handoff report/state updates. The localhost 3x lead gate
+  PASSED (lead-run 2026-07-11: 3/3 OK socket-capable; flake test 0/30
+  failures; canonical 1041 OK skipped=12 unpiped, socket test exercised).
 - `impl/p2038` is intentionally dirty with the uncommitted P2-038 software,
   accepted-findings fixes, tests, contracts, config, run reports, and the clean
   three-way content merge of `origin/main`. The lead owns pathspec review and

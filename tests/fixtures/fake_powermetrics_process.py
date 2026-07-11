@@ -17,12 +17,13 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
-RUNNING = True
+STOP_REQUESTED_AT_S: float | None = None
 
 
 def _stop(_signum: int, _frame: object) -> None:
-    global RUNNING
-    RUNNING = False
+    global STOP_REQUESTED_AT_S
+    if STOP_REQUESTED_AT_S is None:
+        STOP_REQUESTED_AT_S = time.monotonic()
 
 
 def main() -> int:
@@ -54,15 +55,11 @@ def main() -> int:
     index = 0
     previous_endpoint_s = time.monotonic() - interval_s
     with output.open("wb", buffering=0) as handle:
-        while RUNNING and (args.n is None or index < args.n):
+        while args.n is None or index < args.n:
             if index == 0 and args.n is None and mode == "wide":
                 time.sleep(1.2)
             if index:
                 time.sleep(interval_s)
-                # On SIGTERM, finish one complete interval after the controller's
-                # stop marker so strict reduction has a real right-edge bracket.
-                if not RUNNING:
-                    time.sleep(interval_s)
             document = dict(documents[index % len(documents)])
             endpoint_s = time.monotonic()
             document["elapsed_ns"] = max(
@@ -89,6 +86,15 @@ def main() -> int:
                 handle.write(b"\0")
             handle.write(plistlib.dumps(document))
             index += 1
+            # SIGTERM can arrive after a sample write but before the next loop
+            # condition.  Pin the fixture contract to an endpoint at least one
+            # requested interval after the signal so the controller's stop
+            # marker always has a real right-edge sample bracket.
+            if (
+                STOP_REQUESTED_AT_S is not None
+                and endpoint_s >= STOP_REQUESTED_AT_S + interval_s
+            ):
+                break
     return 0
 
 
