@@ -28,15 +28,17 @@
 <div class="doc-layout">
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#how-to-use-this-log">How To Use This Log</a>
 <a href="#index">Index</a>
-<a href="#d-058-token-normalization-and-stack-identity-contract-adopted">D-058: Token-normalization and stack-identity contract adopted</a>
 <a href="#d-059-claims-lint-mechanical-enforcement-in-ci">D-059: Claims-lint mechanical enforcement in CI</a>
 <a href="#d-060-depth-before-breadth-stop-line-ratified">D-060: Depth-before-breadth stop line (RATIFIED)</a>
 <a href="#d-061-review-layer-evaluation-rule-v2-replaces-the-two-zero-sessions-drop-rule">D-061: Review-layer evaluation rule v2 (replaces the two-zero-sessions drop rule)</a>
 <a href="#d-062-confirmatory-sampling-policy-fixed-n-explicit-demotion-no-silent-top-ups">D-062: Confirmatory sampling policy — fixed n, explicit demotion, no silent top-ups</a>
-<a href="#d-063-process-architecture-v2-machine-readable-state-kernel-first">D-063: Process architecture v2 — machine-readable state kernel first</a></aside>
+<a href="#d-063-process-architecture-v2-machine-readable-state-kernel-first">D-063: Process architecture v2 — machine-readable state kernel first</a>
+<a href="#index-row">Index row</a>
+<a href="#d-064-delegated-invocation-compliance-surface-tracked-jsonl-event-stream-report-envelope-enforced-write-scope">D-064: Delegated-invocation compliance surface — tracked JSONL event stream, report envelope, enforced write scope</a>
+<a href="#adjudication-note-was-drafting-notes-for-the-lead">Adjudication note (was: drafting notes for the lead)</a></aside>
   <div class="doc-wrap doc-source-docs-decision-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/decision_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit dd245eb"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit dd245eb</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 55e67c2"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 55e67c2</span></span></div>
     <h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
@@ -383,29 +385,8 @@ must be re-examined, not quietly worked around.</li>
 </tbody></table></div>
 <hr>
 <blockquote>
-<p><strong>Site view:</strong> the complete entry index appears above; the 57 older full entries are omitted from this page for capsule size. The complete log is the repository file <a href="https://github.com/mpmdw/JouleWise/blob/main/docs/decision_log.md"><code>docs/decision_log.md</code></a>.</p>
+<p><strong>Site view:</strong> the complete entry index appears above; the 58 older full entries are omitted from this page for capsule size. The complete log is the repository file <a href="https://github.com/mpmdw/JouleWise/blob/main/docs/decision_log.md"><code>docs/decision_log.md</code></a>.</p>
 </blockquote>
-<h2 id="d-058-token-normalization-and-stack-identity-contract-adopted">D-058: Token-normalization and stack-identity contract adopted</h2>
-<ul>
-<li>Date: 2026-07-09</li>
-<li>Status: accepted (promotes stream-ledger P31-1)</li>
-<li>Phase: cross-phase / claims</li>
-</ul>
-<p>Decision (PR #35): <code>docs/contracts/token_normalization.md</code> is binding for
-token-denominated metrics and stack identity on all claims-ladder-governed
-surfaces: request energy primary; J/token tokenizer-scoped with
-runtime-observed denominators; cross-tokenizer/model-family comparisons
-require companion denominators (J/char, J/byte, semantic-pair) or must
-avoid efficiency-ranking language (enforceable forbidden-phrase list); the
-11-field stack-identity table (hardware unit, OS, runtime, kernel/library,
-model artifact hash, quantization, tokenizer identity incl.
-prompt_source/bos_present, sampler/output policy, batching/concurrency —
-always applicable, boundary label, telemetry backend) with the table-wide
-rule: every field is a concrete value or an explicit unavailable/unknown;
-silent omission is non-compliant.</p>
-<p>Consequences: the L4-review stack-confound and J/token-comparability
-attacks now have a binding answer; figures/captions compose with
-capstone_scope single-unit language.</p>
 <h2 id="d-059-claims-lint-mechanical-enforcement-in-ci">D-059: Claims-lint mechanical enforcement in CI</h2>
 <ul>
 <li>Date: 2026-07-09</li>
@@ -424,6 +405,13 @@ satisfies the C-023 cut-line condition for structural claim checks; the
 Phase 4 claims-index mode extends this tool rather than a new one.</p>
 <p>Consequences: the D-053 freeze discipline and D-055 registry are now
 machine-checked.</p>
+<p>Amendment (2026-07-11, P2-037): <code>claims_lint</code> gains an explicit
+<code>claim-index</code> mode over the canonical Phase-4 JSONL. It verifies the linked
+<code>joulewise.claim_verdicts.v1</code> bytes, canonical ID, AP/contrast/role/outcome,
+manifest/floor/bundle provenance, D-062 demotion, sensitivity caveats, and
+claim-level ceiling. The single pre-P2-037 manual-review L1 row is
+grandfathered only under its exact canonical row identity/hash and emits a
+warning; it does not become engine-supported evidence.</p>
 <h2 id="d-060-depth-before-breadth-stop-line-ratified">D-060: Depth-before-breadth stop line (RATIFIED)</h2>
 <ul>
 <li>Date: 2026-07-09; RATIFIED by Ed 2026-07-10 as written (C-028 session,
@@ -451,6 +439,14 @@ contrast/claim path (P2-037) before any L2 interpretation.</li>
 <li>One end-to-end vertical slice: report source skeleton + reproducible
 bundle→analysis→figure→claims-row→report-page path (RPT-001).</li>
 </ol>
+<p>Application note (2026-07-11, C-028 closeout): gate 2 is satisfied by the
+verified iCloud backup and byte-identical strict-valid restore. The software
+prerequisites inside gate 3 are also satisfied: P2-039, P2-038, and the
+P2-042→P2-041→P2-037 analysis trio are merged, with reducer dispatch current
+through 0.4.2. Gate 3 itself is not complete because Window-A smoke, floors,
+and baselines have not executed. That execution is a quiet-machine + Ed
+action; no landed-software statement raises its claim level or promotes the
+PROVISIONAL NVIDIA pins.</p>
 <p>Work that CLOSES these gates, correctness defects, report writing, and
 already-obligated hardware preparation are always permitted.</p>
 <p>Alternatives considered: status quo (rejected — C-027/NEGSPACE evidence:
@@ -537,6 +533,140 @@ over the lead&#39;s original ordering).</p>
 current_policy.md first (the lead&#39;s draft position — REVERSED in
 council: it leaves the demonstrated drift mode active); full big-bang
 migration (rejected: risks the drift it cures).</p>
+<hr>
+<h2 id="index-row">Index row</h2>
+<p>| D-064 | Delegated-invocation compliance surface: tracked per-session JSONL event stream, canonical report envelope, enforced write scope | accepted |</p>
+<hr>
+<h2 id="d-064-delegated-invocation-compliance-surface-tracked-jsonl-event-stream-report-envelope-enforced-write-scope">D-064: Delegated-invocation compliance surface — tracked JSONL event stream, report envelope, enforced write scope</h2>
+<ul>
+<li>Date: 2026-07-11 (core surface adjudicated 2026-07-10, C-028 H4;
+v3/envelope/scope clauses ratified after landing in the C-028
+infrastructure wave)</li>
+<li>Status: accepted (C-028; process-layer)</li>
+<li>Phase: cross-project process instrumentation</li>
+</ul>
+<p>Context: D-050 requires substantial delegated runs to leave a
+process trace and an invocation-manifest pointer map. The C-027
+audit showed a gitignored bridge manifest cannot serve as
+repository-auditable evidence, and that run-report summaries had
+collapsed roughly one hundred invocations into zero auditable
+per-invocation rows. The D-050 revisit condition fired at
+CP-5/C-022 and is adjudicated here through MET-001 option 2 and
+C-028 H4. During the C-028 arc the surface was then exercised in
+production: a wrapper crash mid-run (lead in-place edit of the
+installed runner) and two out-of-scope diffs (p2043-impl,
+p2044-fixround) tested the recovery and enforcement semantics now
+ratified below.</p>
+<p>Decision:</p>
+<ol>
+<li><p><strong>Compliance surface.</strong> One tracked, append-only JSONL manifest
+per substantial session under <code>docs/process_traces/</code>, with rows
+for every actual invocation. Failed, capacity-ended, resumed,
+and retried invocations get their own rows; resumes may share a
+model session ID but never an invocation row. Run reports carry
+only counts plus a link to the tracked manifest. The codex-run
+observer index and raw logs remain recovery substrate, never
+the compliance surface; the gitignored bridge manifest remains
+local convenience only.</p>
+</li>
+<li><p><strong>Manifest v3 is an append-only EVENT STREAM, not a mutable
+ledger.</strong> Three event kinds: <code>run_started</code> (wrapper-authored at
+dispatch: prompt hash/bytes, contract, genre, write scope,
+head/branch at start), <code>run_finished</code> (wrapper-authored at
+exit: invocation state, report parse validity, semantic
+status/completion, finding/verification counts, scope-violation
+counts, head at end), and <code>run_consumed</code> (LEAD-authored at the
+moment the lead dispositions the output: consumed / rejected /
+deferred, with pointer). Consumption events are lead-owned
+exclusively — a wrapper or delegated session never writes them.
+Emitted rows are never mutated, rewritten, or deleted;
+corrections are new rows. When the wrapper dies without writing
+<code>run_finished</code>, the LEAD authors a recovery <code>run_finished</code> row
+that says so explicitly (<code>error_stage</code>, a note naming the
+failure, and any manually-performed classification) — silent
+reconstruction that imitates a normal wrapper row is forbidden.
+Two live defects were found on day one — a resume no-op after a
+NEEDS_SCOPE early-return, and an in-place-edit crash hazard now
+covered by the atomic-mv install rule — and both are recorded
+in the adapter&#39;s operational lessons.</p>
+</li>
+<li><p><strong>claude-codex-report/v1 is the canonical session report.</strong>
+Every delegated session returns the envelope: machine-parsed
+header (run status, completion, finding counts by severity,
+verification results, scope-deviation flags) over a prose body.
+<code>run_finished</code> records the parse verdict and the extracted
+counts. A session without a valid envelope is not consumable as
+review or implementation evidence — it is raw substrate pending
+a lead ruling or a re-run. NEEDS_RULING early-returns are
+compliant envelopes, not failures.</p>
+</li>
+<li><p><strong>WRITE_SCOPE is enforced, not advisory.</strong> Each invocation
+declares its write scope up front; the runner diffs the
+worktree against that scope after the run. On violation the
+runner exits 77, the out-of-scope work is PRESERVED in an
+evidence bundle (status <code>failed_preserved</code>) and is never
+landed; the lead inspects the bundle and decides. A session
+that discovers it needs wider scope returns NEEDS_SCOPE as a
+structured request; scope expansion is PROSPECTIVE ONLY — a new
+invocation with the widened scope — never a retroactive
+blessing of an already-out-of-scope diff. WRITE_SCOPE strictly
+overrides any in-repo end-of-work instruction (AGENTS.md
+precedence section, per the CI-002 root cause).</p>
+</li>
+</ol>
+<p>This amends and supersedes only D-050&#39;s invocation-manifest
+compliance-surface clause. D-050&#39;s stop-card authority,
+process-trace obligation, and raw-log pointer policy are
+unchanged. v2 single-row-per-invocation snapshots remain valid
+evidence for pre-v3 invocations; new sessions emit v3.</p>
+<p>Alternatives considered:</p>
+<ol>
+<li>Run-report invocation summary as the surface. Rejected:
+summarization destroyed per-invocation auditability — the exact
+failure MET-001 exists to repair.</li>
+<li>Gitignored live bridge manifest as the authority. Rejected:
+structurally local-only; unignoring a shared live file creates
+multi-worktree contention and dirty-tree noise.</li>
+<li>Mutable per-invocation rows updated in place (start → finish →
+disposition on one row). Rejected: in-place mutation destroys
+the append-only audit property, makes wrapper crashes
+indistinguishable from clean rows, and invites silent
+retro-editing; the event stream keeps every state transition
+and its author.</li>
+<li>Free-form final messages as session reports. Rejected:
+unparseable; counts and scope flags cannot be mechanically
+extracted into <code>run_finished</code>.</li>
+<li>Advisory-only write scope (prompt-level restriction without a
+runner backstop). Rejected: the CI-002 deviation demonstrated
+that in-repo end-of-work instructions override polite prompt
+scoping; enforcement must be structural, with the work
+preserved rather than discarded so enforcement never destroys
+evidence.</li>
+</ol>
+<p>Consequences: session closeout must land the tracked manifest(s)
+before bookkeeping is declared complete; every <code>run_started</code> must
+be closed by a wrapper or lead-authored <code>run_finished</code> and a
+lead-authored disposition, with missing rows recorded as missing,
+never inferred from aggregates. D-063 Stage 2 may generate queries
+and projections over these files but may not replace the row-level
+source. Council-log layer-yield claims (D-061) should cite manifest
+rows.</p>
+<p>Revisit when: three substantial sessions have landed v3 manifests;
+or the one-file-per-session scheme shows material contention or
+ambiguity; or <code>run_consumed</code> coverage proves too burdensome to
+sustain (in which case narrow the event, do not revert to mutable
+rows).</p>
+<hr>
+<h2 id="adjudication-note-was-drafting-notes-for-the-lead">Adjudication note (was: drafting notes for the lead)</h2>
+<p>Lead-adjudicated 2026-07-11: accepted as drafted. The date
+(2026-07-11 with the 07-10 H4 parenthetical), the &quot;Status: accepted
+(C-028; process-layer)&quot; voice, the clause-2 recovery-row
+generalization from the live p2037-fixround recovery row
+(<code>error_stage: wrapper_crash_lead_inplace_edit</code>), the clause-4
+exit-77/<code>failed_preserved</code> semantics (verified against the live
+p2043-impl / p2044-fixround status files), and the v2-valid-for-
+pre-v3 transition sentence all stand. One addition per lead
+dictation: the day-one-defects sentence appended to clause 2.</p>
 
 
   </div>
@@ -545,7 +675,7 @@ migration (rejected: risks the drift it cures).</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/decision_log.md · commit dd245eb · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/decision_log.md · commit 55e67c2 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

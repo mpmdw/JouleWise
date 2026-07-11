@@ -26,63 +26,473 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#root-cause">Root cause</a>
-<a href="#fix">Fix</a>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#outcome">Outcome</a>
+<a href="#intake-and-planning-reflection">Intake And Planning Reflection</a>
+<a href="#composition-by-category">Composition By Category</a>
+<a href="#lead-rulings-and-reverted-hardenings">Lead Rulings And Reverted Hardenings</a>
+<a href="#flagged-uncertainties-and-follow-ups">Flagged Uncertainties And Follow-Ups</a>
+<a href="#review-fixes">Review Fixes</a>
 <a href="#verification">Verification</a>
-<a href="#handoff">Handoff</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-10-nvgate2-idle-capture-fix-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md · commit cd6e2cb"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-10-nvgate2-idle-capture-fix.md</span><span class="source-commit">commit cd6e2cb</span></span></div>
-    <h1>NV-GATE-2 Idle-Capture Regression Fix</h1>
-<p>Date: 2026-07-10
-Branch/worktree: <code>impl/nvgate2-codenow</code>
-Lane: <code>[AGENT]</code>; no live NVIDIA or quiet-machine measurement was performed.
-Authority: lead-directed targeted DEBUG+FIX; no commits requested.</p>
-<h2 id="root-cause">Root cause</h2>
-<p><code>handle_nvidia_smi_measure_idle</code> started the requested idle-duration deadline
-immediately after <code>subprocess.Popen</code>, before the worker had observed any
-sampler output. Under child-start or scheduling delay, the complete idle
-interval could expire before the fake (or real) sampler ran. The worker then
-terminated the sampler and only afterward checked the CSV, producing the
-observed zero-byte artifact and structured <code>telemetry_unavailable</code> result.</p>
-<p>The FIX-1 PID-fingerprint path was ruled out as the direct cause: idle capture
-uses its local <code>Popen</code> object and never calls <code>_pidfile_matches_live_process</code>.
-PATH was also correct: the worker metadata carried the expected command and a
-direct capture with the same environment resolved and ran the fake sampler.
-The defect was the ordering at the old deadline assignment (pre-fix
-<code>joulewise/adapters/node_worker.py:803</code>), not the fake executable.</p>
-<h2 id="fix">Fix</h2>
-<p>Idle capture now uses the existing first-parseable-row NVIDIA readiness gate,
-records its diagnostics in worker metadata, and starts <code>idle_seconds</code> only
-after readiness succeeds. A readiness failure is returned with the gate&#39;s
-specific diagnostic. The requested 80 ms NV-5 measurement duration is
-unchanged; sampler startup is no longer charged against it.</p>
-<p>A regression test delays the sampler&#39;s first output by 100 ms while requesting
-a 10 ms idle capture. It proves the worker waits for readiness and then runs
-the requested duration; the old ordering terminates before the first row.</p>
-<h2 id="verification">Verification</h2>
+<a href="#recipe-steps-not-completed">Recipe Steps Not Completed</a>
+<a href="#process-trace">Process Trace</a>
+<a href="#next-exact-step">Next Exact Step</a></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-11-p2041-vetted-rebuild-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-11-p2041-vetted-rebuild.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-11-p2041-vetted-rebuild.md · commit f2c4701"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-11-p2041-vetted-rebuild.md</span><span class="source-commit">commit f2c4701</span></span></div>
+    <h1>P2-041 Vetted Rebuild (2026-07-11)</h1>
+<h2 id="outcome">Outcome</h2>
+<p>P2-041 was rebuilt manually on <code>impl/p2041-vetted</code> from post-PR-#49 commit
+<code>1b0f1f6578b60487cc6bb375cdc13008258740e5</code>, using
+<code>docs/reviews/2026-07-11-p2041-red-tranche-triage.md</code> as the authoritative
+per-file A/B/C recipe. The raw <code>impl/p2041</code> diff was not applied wholesale.
+No commit, push, merge, site regeneration, live hardware command, or
+<code>[QUIET-MAC]</code> measurement was performed.</p>
+<p>The resulting implementation keeps the wire name <code>claim_readiness</code>, applies
+the first-run exemption once per physical campaign session, retains the
+adjudicated <code>joulewise.campaign_verdict.v2</code> sampling-audit shape, and advances
+current reducer output to <code>0.4.0</code> with <code>window_evidence_precheck</code>. The reducer,
+<code>MeasurementQuality</code>, JSON Schema, and strict comparison retain both
+<code>runtime_cleanup_ok</code> and post-#49 <code>remote_cleanup_failed</code>. The strict raw-lineage
+registry, mock exemption, powermetrics current/legacy arms, and NVIDIA
+<code>nvidia_smi</code> verifier remain intact.</p>
+<p>The historical tranche report
+<code>docs/run_reports/2026-07-10-p2041-campaign-verdict-split.md</code> was copied exactly
+as required. Its stale deviations are historical; this report is the current
+rebuild authority.</p>
+<h2 id="intake-and-planning-reflection">Intake And Planning Reflection</h2>
 <ul>
-<li>The historic in-process fake-sampler test and the delayed-readiness
-regression passed together in three consecutive fresh Python processes.</li>
-<li>The exact localhost contract test was attempted in each of the three runs,
-but this managed sandbox denied its initial localhost bind with
-<code>PermissionError: [Errno 1] Operation not permitted</code>; all three invocations
-loudly skipped before worker execution. This is not recorded as a pass.</li>
-<li>Canonical unpiped suite:</li>
-</ul>
-<pre><code class="language-text">Ran 1023 tests in 35.164s
+<li><p>Read the authoritative triage recipe first, then the active stop card,
+Current Project Status, Known Workspace State, What Is Next, current queue,
+Do-Not-Do-Yet list, Mission M0, orchestration process, source-of-truth map,
+planning-reflection protocol, Component C, D-030, D-050, and D-057.</p>
+</li>
+<li><p>Confirmed the worktree was clean at the requested <code>1b0f1f6</code> branch point.</p>
+</li>
+<li><p>Baseline canonical suite:</p>
+<pre><code class="language-text">Ran 1041 tests in 67.995s
 
 OK (skipped=13)
 </code></pre>
-<ul>
-<li><code>python3 -m py_compile joulewise/adapters/node_worker.py tests/test_node_worker.py</code> passed.</li>
-<li><code>git diff --check</code> passed.</li>
+</li>
+<li><p>Goal: land only audited P2-041/C5 A behavior plus required post-#49 A+B
+unions, while preserving every unrelated P2-038/P2-040/P2-042/#49 behavior.</p>
+</li>
+<li><p>Fences: no pure-B deletion hunk, no <code>docs/site/*</code>, no quiet-Mac work, no
+speculative version compatibility, and no commit.</p>
+</li>
 </ul>
-<h2 id="handoff">Handoff</h2>
-<p>The lead&#39;s next exact NV-GATE-2 step is to run both named tests three
-consecutive times in a socket-capable session, then review and land the three
-code/test/report/bookkeeping file groups by pathspec. Live NVIDIA promotion
-remains gated by P1-006.</p>
+<h2 id="composition-by-category">Composition By Category</h2>
+<h3>Clean A files copied exactly from <code>impl/p2041</code></h3>
+<p>The working blobs match <code>impl/p2041:5135c1d</code> exactly:</p>
+<ul>
+<li><code>docs/run_reports/2026-07-10-p2041-campaign-verdict-split.md</code></li>
+<li><code>docs/specs/c027/p2-040_reducer_gate_correctness.md</code></li>
+<li><code>tests/test_analysis_manifest.py</code></li>
+<li><code>tests/test_uncertainty_p2029.py</code></li>
+</ul>
+<h3>Mixed files composed from main</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>File</th>
+<th>Composition decision</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>RUN_STATE.md</code></td>
+<td>Preserve post-#49 state; add only the rebuilt P2-041 handoff, verification, workspace, and report pointers.</td>
+</tr>
+<tr>
+<td><code>TASK_QUEUE.md</code></td>
+<td>Preserve main; update only P2-038&#39;s C5 request path and the P2-041 row.</td>
+</tr>
+<tr>
+<td><code>docs/contracts/run_bundle_layout.md</code></td>
+<td>Preserve config warnings, full P2-038 evidence, and cleanup fields; add 0.4.0/current-0.3.x dispatch, C5 precheck shape, and the original per-session campaign-provenance contract.</td>
+</tr>
+<tr>
+<td><code>docs/decision_log.md</code></td>
+<td>Preserve D-060 and the P2-038/P2-040 D-030 chain; union both cleanup fields, append 0.4.0, and append only the original closed-v1 P2-041 vocabulary.</td>
+</tr>
+<tr>
+<td><code>docs/phase_2/detection_floor.md</code></td>
+<td>Rename only the reducer field; preserve sentinel economics and landed-state tense.</td>
+</tr>
+<tr>
+<td><code>docs/specs/c027/analysis_engine_trio.md</code></td>
+<td>Resolve H3 to the landed campaign gate while retaining <code>claim_readiness</code>, per-physical-session exemption, and adjudicated v2/top-up shape.</td>
+</tr>
+<tr>
+<td><code>docs/specs/c027/p2-038_production_uncertainty_evidence.md</code></td>
+<td>Re-derive request paths to <code>window_evidence_precheck.idle_subtracted_request</code>; preserve the pending/null guard block.</td>
+</tr>
+<tr>
+<td><code>joulewise/cli.py</code></td>
+<td>Make 0.4.0 exact; reject current-era 0.3.0 and 0.3.1; retain frozen legacy arms, P2-038 uncertainty re-derivation, <code>RAW_TO_TRACE_VERIFIERS</code>, and NVIDIA verification.</td>
+</tr>
+<tr>
+<td><code>joulewise/reduce.py</code></td>
+<td>Rename helpers/output, remove the generic request alias, retain per-token evidence plus both cleanup fields.</td>
+</tr>
+<tr>
+<td><code>joulewise/schemas.py</code></td>
+<td>Set reducer 0.4.0 and rename the governed summary field while preserving ConfigKeyWarning and both cleanup fields/schema properties.</td>
+</tr>
+<tr>
+<td><code>scripts/run_campaign.py</code></td>
+<td>Apply the original audited verdict split; union P2-042&#39;s authoritative validator and both sidecar exclusions; preserve P2-038 shakedown and integer backup return; keep simple per-session cooldown provenance.</td>
+</tr>
+<tr>
+<td><code>tests/test_cli_run.py</code></td>
+<td>Re-derive exact 0.4.0 tests, explicit 0.3.0/0.3.1 rejection, old-field failure, and missing-either-cleanup-field exactness while retaining raw-lineage coverage.</td>
+</tr>
+<tr>
+<td><code>tests/test_p2038_production_path.py</code></td>
+<td>Preserve main&#39;s full production path and change only the three C5 request paths.</td>
+</tr>
+<tr>
+<td><code>tests/test_run_campaign.py</code></td>
+<td>Apply verdict/readiness mutations, all seven fixture repairs, real P2-042 validation, approved per-session provenance, sampling-audit shape, and P2-038 shakedown tests; omit rejected hardening tests.</td>
+</tr>
+<tr>
+<td><code>tests/test_schemas.py</code></td>
+<td>Expect 0.4.0 and assert both cleanup fields plus the renamed schema surface.</td>
+</tr>
+</tbody></table></div>
+<h3>Pure-B preservation</h3>
+<p>All recipe-listed pure-B configs, production code, tests, contracts, plans,
+reviews, reports, and generated <code>docs/site/*</code> files remain unchanged from the
+branch base, with one disclosed post-#49 union exception below. In particular,
+P2-038 clock/adapter/controller/uncertainty code, P2-040 warning/warmup/cleanup
+code, the production shakedown configs, and their tests were not replaced by
+tranche content. No site file was regenerated.</p>
+<p>The recipe predates #49. Keeping post-#49 tests byte-untouched makes the
+canonical suite fail after the required object/API rename, while adding a
+<code>claim_eligibility</code> compatibility property would violate C5. The bounded A+B
+union exception changes two assertions in <code>tests/test_reduce.py</code> and one in
+<code>tests/test_nvidia_node_integration.py</code> only to
+<code>summary.window_evidence_precheck</code>. No test behavior or production semantics
+changed, and no production compatibility alias was added.</p>
+<h2 id="lead-rulings-and-reverted-hardenings">Lead Rulings And Reverted Hardenings</h2>
+<ol>
+<li><strong>Wire name:</strong> all tranche <code>analysis_readiness</code> changes were rejected.
+Current JSON, console output, helpers, specs, and tests use
+<code>claim_readiness</code> / <code>CLAIM-INPUT READINESS</code>.</li>
+<li><strong>First-run identity:</strong> the landing exempts the first physical invocation
+once per physical campaign session. A final review found a fail-open where
+persisted provenance could fan one session&#39;s exemption out to every member.
+The bounded v1 fix accepts at most one exemption-bearing physical member per
+provenance session, tied to <code>session_id</code>, <code>first_physical_run_id</code>,
+<code>following_run_id</code>, and that member&#39;s bundle IDs. Malformed/fanned-out notes
+normalize to <code>unknown</code>; counting does not cross sessions or manifests.
+Only <code>execution: invoked</code> rows may originate evidence, and resumed
+<code>execution: existing</code> bookkeeping rows carry no copied cooldown note, so a
+later resume cannot shadow the valid physical origin.</li>
+<li><strong>Cooldown/top-up hardening:</strong> the landing keeps raw cooldown JSONL
+path/hash/record-count provenance and the adjudicated sampling-audit keys.
+It does not add trace-v2 adjacency/timestamp/re-derivation fields, scoped
+runs-directory scanning, <code>detection_scope</code>, new hardening reasons, or an
+<code>analysis_readiness</code> wire.</li>
+</ol>
+<p>Queue candidates are recorded here, not added as live queue rows:</p>
+<ul>
+<li><strong>Resume-spanning first-run identity.</strong> Candidate: separately adjudicate an
+across-resumes, once-per-analysis-manifest exemption. Dissent: that rejected
+form is more fail-closed because repeated resumes cannot each gain an
+exemption. The lead&#39;s per-physical-session ruling governs this landing.</li>
+<li><strong>Cooldown trace hardening.</strong> Candidate: version and review stronger
+adjacency/timestamp binding, row-shape checks, line-count validation, and
+independent rolling-decision re-derivation. Dissent: stronger binding would
+better detect stale or self-attested evidence. It is not silently folded
+into the adjudicated trace contract here.</li>
+<li><strong>Scoped top-up detection.</strong> Candidate: define a complete search scope before
+adding scanning and fail-closed vocabulary. Dissent:
+<code>top_up_suspected: false</code> cannot prove absence outside an inspected scope.
+The landing keeps the adjudicated v2 shape exactly.</li>
+</ul>
+<h2 id="flagged-uncertainties-and-follow-ups">Flagged Uncertainties And Follow-Ups</h2>
+<ol>
+<li><strong>Frozen stored-field mapper gap.</strong> Component C5 describes an internal
+mapping for a frozen legacy summary that actually contains
+<code>claim_eligibility</code>, including <code>source_field</code> and
+<code>legacy_precheck_not_claim_evaluator</code>. Neither main nor the tranche defines
+that mapper or stable reason. The six real frozen summaries apparently
+predate the field; current code preserves their provenance-less absence
+tolerance. No hypothetical mapper was invented. Lead/spec adjudication is
+required before claiming the broader mapping behavior.</li>
+<li><strong>Recipe-vintage pure-B conflict.</strong> The three post-#49 assertion-only edits
+described above are necessary for C5 plus a green canonical suite. They are
+intentionally flagged for lead authorization because the older recipe says
+every pure-B file remains byte-untouched.</li>
+<li><strong>Exact-clean P2-040 note.</strong> The copied P2-040 spec&#39;s supersession note names
+current-era 0.3.0 but predates #49&#39;s 0.3.1. It remains blob-exact by the
+clean-file instruction. Current D-030, the run-bundle contract, code, and
+explicit tests reject both 0.3.0 and 0.3.1.</li>
+<li><strong>Status-authority gap.</strong> The Phase-2 plan/checklist contain no P2-041 matrix
+row. D-023 would normally call for a closure row, but both files are pure-B
+under the recipe. They remain untouched; lead/DOC-009 should reconcile the
+missing status authority.</li>
+<li><strong>Top-up contract tension.</strong> Component C still describes eventual top-up
+detection, while the binding ruling excludes this tranche&#39;s scoped
+detector. The current log therefore reports the adjudicated empty arrays and
+<code>top_up_suspected: false</code>; it does not claim a complete absence proof.</li>
+<li><strong>Moving remote.</strong> <code>origin/main</code> advanced after this worktree was created.
+The rebuild intentionally remains anchored at the user-specified post-#49
+commit <code>1b0f1f6</code>; no later bookkeeping commits were merged into the
+reconstruction. Consequently the anchored active stop card retains item
+1&#39;s pre-merge #49 narrative even though HEAD is the #49 merge; the P2-041
+handoff labels that inherited text superseded rather than importing later
+main state wholesale.</li>
+</ol>
+<h2 id="review-fixes">Review Fixes</h2>
+<ul>
+<li>B1 narrowed-confirmed → fixed: verdict-time cooldown raw provenance now fail-closes through one shared fresh/resume verifier for path, existence, current-byte SHA-256, JSONL parsing, and declared positive record count.</li>
+<li>S1 confirmed → fixed: every physically present expected member in the incomplete-existing branch is evaluated, while only absent paths enter the missing category.</li>
+<li>S2/R1 refuted empirically → queue candidate <code>frozen-legacy claim_eligibility mapper</code>.</li>
+<li>Semantic cooldown-row verification → queue candidate; row-field consistency and finite-value checks remain explicitly out of scope for this fix.</li>
+<li>N1 fixed: the current-reality critique cell now uses collection usable/partial/blocked/invalid plus <code>claim_readiness</code>.</li>
+</ul>
+<h2 id="verification">Verification</h2>
+<p>Required recipe commands were run without piping suite exit status. Final
+tails:</p>
+<h3>Focused modules</h3>
+<pre><code class="language-text">----------------------------------------------------------------------
+Ran 398 tests in 54.964s
+
+OK (skipped=1)
+</code></pre>
+<h3>Canonical suite</h3>
+<p>The canonical command writes to
+<code>/private/tmp/p2041-vetted-canonical-final.log</code>.</p>
+<pre><code class="language-text">----------------------------------------------------------------------
+Ran 1062 tests in 76.436s
+
+OK (skipped=13)
+</code></pre>
+<p>The canonical run emitted the existing loud skips for the absent retained
+six-bundle corpus and sandbox-denied localhost socket gate. The
+<code>make_figures</code> hash-mismatch line is expected output from its negative fixture;
+the suite exit status was zero.</p>
+<h3>Other gates</h3>
+<pre><code class="language-text">git diff --check
+(no output; exit 0)
+
+rg -n &#39;_window_claim_eligibility|_windows_claim_eligibility&#39; joulewise scripts tests
+(no matches; exit 1 as required)
+</code></pre>
+<p>The focused pre-final iteration passed <code>Ran 392 tests in 51.128s</code>,
+<code>OK (skipped=1)</code>. The strengthened campaign module passed <code>Ran 72 tests in 18.229s</code>, <code>OK</code> after the exemption-fan-out and resume-shadow fixes and added
+ruling locks.</p>
+<h2 id="recipe-steps-not-completed">Recipe Steps Not Completed</h2>
+<p>Recipe step 6 (regenerate <code>docs/site/*</code>) was intentionally not run because the
+user&#39;s post-recipe instruction explicitly reserves source-settled site
+generation for the lead. No other recipe step was omitted. No commit was made,
+also by explicit instruction; lead review, pathspec commit, and integrated-head
+review remain handoff work rather than incomplete reconstruction work.</p>
+<h2 id="process-trace">Process Trace</h2>
+<ul>
+<li>Active stop card at start: <code>RUN_STATE.md#ACTIVE_STOP_CARD</code>.</li>
+<li>Skills/playbooks used: Mission M0, planning-reflection protocol,
+<code>docs/orchestration.md</code>, authoritative P2-041 triage recipe. No installed
+artifact skill was applicable.</li>
+<li>Worktree / branch: <code>/Users/edr/code/JouleWise-wt/p2041-vetted</code>,
+<code>impl/p2041-vetted</code>; no PR or commit created.</li>
+<li>Invocation manifest path: none. Native collaboration sessions expose stable
+task paths but not file-backed prompt/output hashes; D-064 promotion remains
+pending in the active stop card. Unavailable fields are not fabricated.</li>
+<li>Council/debate: none; three pinned-spec read-only review roles plus final
+re-audits.</li>
+</ul>
+<h3>Delegated invocation ledger</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Run</th>
+<th>Parent report</th>
+<th>Role/lens</th>
+<th>Model/wrapper</th>
+<th>Session ID</th>
+<th>Prompt hash/path</th>
+<th>Output path</th>
+<th>Status</th>
+<th>Consumed by</th>
+<th>Disposition</th>
+<th>Commit/PR</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>p2041-core-1</td>
+<td>this report</td>
+<td>core reducer/CLI union audit</td>
+<td>Codex subagent / native collaboration</td>
+<td><code>/root/core_union_audit</code></td>
+<td>unavailable (native)</td>
+<td>conversation result</td>
+<td>complete</td>
+<td>root</td>
+<td>accepted; drove dispatch union and flagged post-#49 test conflict</td>
+<td>none</td>
+</tr>
+<tr>
+<td>p2041-campaign-1</td>
+<td>this report</td>
+<td>campaign runner/test composition audit</td>
+<td>Codex subagent / native collaboration</td>
+<td><code>/root/campaign_audit</code></td>
+<td>unavailable (native)</td>
+<td>conversation result</td>
+<td>complete</td>
+<td>root</td>
+<td>accepted; defined approved/rejected campaign surface</td>
+<td>none</td>
+</tr>
+<tr>
+<td>p2041-docs-1</td>
+<td>this report</td>
+<td>docs/contracts composition audit</td>
+<td>Codex subagent / native collaboration</td>
+<td><code>/root/docs_audit</code></td>
+<td>unavailable (native)</td>
+<td>conversation result</td>
+<td>complete</td>
+<td>root</td>
+<td>accepted; drove D-030/D-057 and dissent wording</td>
+<td>none</td>
+</tr>
+<tr>
+<td>p2041-core-2</td>
+<td>this report</td>
+<td>final core diff audit</td>
+<td>Codex subagent / native collaboration</td>
+<td><code>/root/core_union_audit</code></td>
+<td>unavailable (native)</td>
+<td>conversation result</td>
+<td>complete</td>
+<td>root</td>
+<td>clean verification; two documentation flags consumed</td>
+<td>none</td>
+</tr>
+<tr>
+<td>p2041-docs-2</td>
+<td>this report</td>
+<td>final docs diff audit</td>
+<td>Codex subagent / native collaboration</td>
+<td><code>/root/docs_audit</code></td>
+<td>unavailable (native)</td>
+<td>conversation result</td>
+<td>complete</td>
+<td>root</td>
+<td>clean verification; wording/status gaps consumed</td>
+<td>none</td>
+</tr>
+<tr>
+<td>p2041-campaign-2</td>
+<td>this report</td>
+<td>final campaign diff audit</td>
+<td>Codex subagent / native collaboration</td>
+<td><code>/root/campaign_audit</code></td>
+<td>unavailable (native)</td>
+<td>conversation result</td>
+<td>complete</td>
+<td>root</td>
+<td>found exemption fan-out blocker plus coverage gaps; fixed</td>
+<td>none</td>
+</tr>
+<tr>
+<td>p2041-campaign-3</td>
+<td>this report</td>
+<td>exemption/resume-fix final audit</td>
+<td>Codex subagent / native collaboration</td>
+<td><code>/root/campaign_audit</code></td>
+<td>unavailable (native)</td>
+<td>conversation result</td>
+<td>complete</td>
+<td>root</td>
+<td>clean; adversarial inferential-member double resume and non-originating existing rows verified</td>
+<td>none</td>
+</tr>
+</tbody></table></div>
+<h3>Review yield and delegation calibration</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Altitude</th>
+<th>Lead-assigned outcome</th>
+<th>Unique useful findings</th>
+<th>Lead rework</th>
+<th>Prompt vs model defect</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Core audit</td>
+<td>pinned-spec / post-merge union</td>
+<td>accepted</td>
+<td>post-#49 pure-B conflict; frozen mapper gap; missing remote-cleanup contract prose</td>
+<td>not instrumented</td>
+<td>recipe-vintage gap, not model defect</td>
+</tr>
+<tr>
+<td>Campaign audit</td>
+<td>pinned-spec with composition judgment</td>
+<td>accepted after fixes</td>
+<td>first-exemption fan-out fail-open; copied-existing resume shadow; exact valid/rejected test split; session-local identity nuance</td>
+<td>not instrumented</td>
+<td>implementation defects caught by reviewer</td>
+</tr>
+<tr>
+<td>Docs audit</td>
+<td>pinned-spec</td>
+<td>accepted</td>
+<td>D-030 two-field union; D-057 wording; status-authority gap; dissent language</td>
+<td>not instrumented</td>
+<td>no prompt/model defect assigned</td>
+</tr>
+</tbody></table></div>
+<p>The campaign audit found the two accepted production defects in the final
+review rounds: exemption fan-out and copied-existing resume shadow. Other
+findings were contract/documentation drift or clean verification. No
+false-positive finding was applied.</p>
+<h3>Ephemeral artifacts</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Path</th>
+<th>SHA-256 / stable ID</th>
+<th>Promoted to</th>
+<th>Not promoted reason</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>/private/tmp/p2041-vetted-baseline.log</code></td>
+<td><code>91105c89f2b5fc20f99881a13c36628a891957559a99fd146932f4218350e867</code></td>
+<td>baseline tail in this report</td>
+<td>raw dot stream is disposable</td>
+</tr>
+<tr>
+<td><code>/private/tmp/p2041-vetted-focused-final.log</code></td>
+<td><code>f7a962361ddc09ad679c195afb29cc38afa5d90778e5b23fffc7239921809e49</code></td>
+<td>final tail in this report</td>
+<td>raw dot stream is disposable</td>
+</tr>
+<tr>
+<td><code>/private/tmp/p2041-vetted-canonical-final.log</code></td>
+<td><code>17eff0ec5fa4a029d64659bb9a7ff4b2b9adf70ba05a25884ac3283996a372c7</code></td>
+<td>final tail in this report</td>
+<td>raw dot stream is disposable</td>
+</tr>
+</tbody></table></div>
+<ul>
+<li>Stop state at end: implementation and local verification complete, dirty
+only with the intended uncommitted rebuild; lead owns final diff review,
+pathspec commit, review stack, and integration/merge decisions.</li>
+</ul>
+<h2 id="next-exact-step">Next Exact Step</h2>
+<p>Lead-review this diff against the triage recipe, explicitly adjudicate the
+three assertion-only post-#49 pure-B exceptions and the frozen-mapper gap, run
+the canonical suite unpiped in the lead environment, then commit only the
+reviewed P2-041 rebuild pathspecs. Do not regenerate <code>docs/site/*</code> until source
+composition is accepted.</p>
 
 
   </div>
@@ -91,7 +501,7 @@ remains gated by P1-006.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md · commit cd6e2cb · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-11-p2041-vetted-rebuild.md · commit f2c4701 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

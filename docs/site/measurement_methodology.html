@@ -41,7 +41,7 @@
 <a href="#statistical-protocol">Statistical Protocol</a></aside>
   <div class="doc-wrap doc-source-docs-contracts-measurement-methodology-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/contracts/measurement_methodology.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/measurement_methodology.md · commit 6578464"><span class="source-file">docs/<wbr>contracts/<wbr>measurement_methodology.md</span><span class="source-commit">commit 6578464</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/measurement_methodology.md · commit 359641e"><span class="source-file">docs/<wbr>contracts/<wbr>measurement_methodology.md</span><span class="source-commit">commit 359641e</span></span></div>
     <h1>Measurement Methodology</h1>
 <p>Living cross-phase contract, drafted in Phase 1. Changes require a
 decision-log entry when they bind later work.</p>
@@ -59,6 +59,19 @@ metrics are derived outputs, not the source of truth.</p>
 <li>Runtime and telemetry logs.</li>
 </ul>
 <h2 id="run-lifecycle">Run Lifecycle</h2>
+<p>Before a campaign creates a run bundle, the operator runs the read-only doctor
+preflight described in <code>docs/contracts/doctor_preflight.md</code>. Schema-0.1 parsing
+continues to warn-and-ignore unknown keys for compatibility, but campaign
+execution fails before the first bundle when those warnings have not been
+explicitly acknowledged. The terminal campaign-verdict JSONL row records the
+exact warning set and acknowledgement; acknowledgement does not alter config
+bytes, collection evidence, claim readiness, or claim outcomes.</p>
+<p>Doctor also exposes architecture/version, configured model and tokenizer
+identity, requested sampler fields, inspect-only powermetrics privilege policy,
+thermal pressure, backup capacity, and quiet-machine warnings. These are
+preflight observations, not substitutes for per-bundle provenance or live
+measurement gates. In particular, doctor never starts powermetrics and never
+certifies that a machine is quiet.</p>
 <ol>
 <li>Validate config.</li>
 <li>Create run directory.</li>
@@ -301,7 +314,7 @@ contrast CI lies entirely within that margin.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/contracts/measurement_methodology.md · commit 6578464 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/contracts/measurement_methodology.md · commit 359641e · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
