@@ -1,6 +1,10 @@
 # JouleWise Run State
 
-Last updated: 2026-07-09 (C-027 whole-project council review with
+Last updated: 2026-07-10 (P2-040 reducer-version review blocker fixed
+without commit on `impl/p2040-remainder`: reducer 0.3.1 plus frozen-0.3.0
+absence projection; focused tests green, canonical rerun exposed one unrelated
+pre-existing node-worker timing failure. Earlier:
+C-027 whole-project council review with
 gpt-5.6-sol: claim-surface corrections in README/PROJECT_STATUS/this
 file, 14 new queue rows plus NV-GATE-2 additions to P2-005, D-060 proposed +
 D-061..D-063 accepted; record in
@@ -61,6 +65,13 @@ checkpoint).** Ed paused after the spec wave COMPLETED and the
 implementation fan-out ran. This card is the resume authority.
 
 **Completed this arc:**
+
+- P2-040 REVIEW BLOCKER FIXED (uncommitted): governed output-shape additions
+  now bump the reducer patch version. Current output is 0.3.1 exact; frozen
+  0.3.0 gets absence-only tolerance for named `ADDED_SINCE_0_3_0`, currently
+  only `measurement_quality.runtime_cleanup_ok`; legacy and unsupported arms
+  are unchanged. Report:
+  `docs/run_reports/2026-07-10-p2040-versioning-fix.md`.
 
 - P2-040 REMAINDER IMPLEMENTED (uncommitted on
   `impl/p2040-remainder`, awaiting lead pathspec commit + retained-corpus
@@ -220,6 +231,8 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-10 P2-040 reducer-version compatibility review fix (uncommitted):
+  `docs/run_reports/2026-07-10-p2040-versioning-fix.md`
 - 2026-07-10 P2-040 remainder implementation (uncommitted, pending lead
   pathspec commit/corpus gate):
   `docs/run_reports/2026-07-10-p2040-remainder.md`
@@ -266,6 +279,13 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
+- P2-040 reducer-version review fix: focused strict/reducer run
+  `Ran 84 tests in 1.908s`, `OK`; extended strict/reducer/schema run
+  `Ran 104 tests in 1.997s`, `OK (skipped=1)`. Canonical run reached
+  `Ran 926 tests in 33.732s`, `FAILED (failures=1, skipped=12)` solely at
+  pre-existing `test_telemetry_measure_idle_with_fake_nvidia_smi`; isolated
+  reruns reproduce its 0.2-second fake-process timing failure. All
+  reducer/version tests pass; no out-of-scope node-worker change was made.
 - P2-040 remainder worktree: pre-change baseline `Ran 910 tests in 34.584s`,
   `OK (skipped=12)`; post-change focused affected modules `Ran 256 tests in
   3.744s`, `OK (skipped=1)`; canonical `Ran 924 tests in 32.812s`, `OK
@@ -326,10 +346,10 @@ queue owns ordering (C-027):**
 ## Known Workspace State
 
 - Worktree `/Users/edr/code/JouleWise-wt/p2040rem` on
-  `impl/p2040-remainder` is intentionally dirty with the uncommitted P2-040
-  remainder implementation, tests, contracts, checklist/queue handoff, and
-  dated run report. The lead commits by pathspec; do not discard or commit
-  unrelated paths wholesale.
+  `impl/p2040-remainder` contains the committed remainder implementation and
+  is intentionally dirty only with the uncommitted reducer-version review
+  fix, tests, D-030 amendment, and handoff bookkeeping. Do not commit or
+  discard these changes wholesale.
 - `main` and `origin/main` contain the user-directed Claude Code → Codex
   bridge hardening from commit `1d7c415` (pushed direct as a bounded
   tooling change, closeout `ef34cc9`). Branch `c027-council-review`
@@ -345,8 +365,8 @@ queue owns ordering (C-027):**
 
 ## What Is Next
 
-Lead-review the uncommitted P2-040 remainder diff, run the retained six-bundle
-strict read-only gate, and commit by pathspec. Once landed, P2-038 is the next
+Lead-review the uncommitted P2-040 reducer-version fix, run the retained
+six-bundle strict read-only gate, and commit by pathspec. Once landed, P2-038 is the next
 `[AGENT]` correctness row. `TASK_QUEUE.md` remains the ordering authority.
 
 Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from

@@ -156,7 +156,7 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertEqual(suite_summary["properties"]["floor_cmp_j"], {"type": ["number", "null"]})
         payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()
         self.assertIsNone(payload["suite_metrics"])
-        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.3.0")
+        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.3.1")
 
     def test_measurement_quality_runtime_cleanup_field_is_additive_nullable(self) -> None:
         schema = SummaryMetrics.json_schema()
