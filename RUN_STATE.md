@@ -260,6 +260,17 @@ P2-042 manifest validation, P2-038 shakedown behavior, and both
 `runtime_cleanup_ok` and `remote_cleanup_failed` under reducer 0.4.0. Focused
 398 OK/1 skipped; canonical 1062 OK/13 skipped. Report:
 `docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`.
+**CI-002 IMPLEMENTED in worktree (2026-07-11; lead CI validation
+pending).** The Linux 3.11/3.14 workflow now compiles sources, runs the
+canonical suite, and executes the exact strict mock run -> strict validate ->
+reduce -> strict validate chain. Separate jobs build wheel+sdist, upload the
+distributions, install the wheel with `--no-deps` in a clean venv, and run
+`python -m joulewise --help` outside any checkout. The explicit setuptools
+backend leaves core `dependencies = []` unchanged. Local compileall, strict
+chain, workflow/TOML syntax, canonical 1041-test suite, and diff checks pass;
+the sandbox lacks `build` and a compatible setuptools backend, so distribution
+build/install remain for lead-side CI validation. Report:
+`docs/run_reports/2026-07-11-ci002-packaging-strictness.md`.
 
 **RPT-001 targeted review fix round COMPLETE in worktree (2026-07-10;
 awaiting lead pathspec commit).** FIX-1..FIX-9 are implemented: Phase-4
@@ -543,6 +554,11 @@ queue owns ordering (C-027):**
   was not merged. No `docs/site/*` file was regenerated. Lead owns final diff
   review and pathspec commit; do not commit or discard the tree wholesale.
 
+- Worktree `/Users/edr/code/JouleWise-wt/ci002` on `impl/ci002` is dirty only
+  with the uncommitted CI-002 workflow, explicit build backend, and required
+  bookkeeping/report changes. Package build and clean-venv wheel smoke are
+  intentionally deferred to lead CI because the sandbox has no `build` module
+  and its Python 3.13 environment has no setuptools.
 - Worktree `/Users/edr/code/JouleWise-wt/nvgate2` on
   `impl/nvgate2-codenow` has the idle-readiness fix, regression test, and
   handoff bookkeeping COMMITTED (cd6e2cb) and the lead-resolved merge of
@@ -583,6 +599,14 @@ explicitly adjudicate the three post-#49 assertion-only pure-B exceptions and
 the frozen stored-field mapper gap, then commit only approved pathspecs. The
 cross-stream P2-038/P2-040/P2-041/P2-042/NV integration review remains the next
 stop-card action after landing. `TASK_QUEUE.md` remains the ordering authority.
+For CI-002, lead-review the bounded diff and run the GitHub workflow; require
+the build artifact to contain both a wheel and sdist and the no-checkout
+installed-wheel smoke to pass before marking the row complete. No phase-exit
+checklist row exists for CI-002.
+
+Lead-review the uncommitted P2-040 reducer-version fix, run the retained
+six-bundle strict read-only gate, and commit by pathspec. Once landed, P2-038 is the next
+`[AGENT]` correctness row. `TASK_QUEUE.md` remains the ordering authority.
 
 Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
 C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),
