@@ -290,9 +290,11 @@ and its derived summary are out of scope. Publication integrity is supplied by
 the bundle-pack hash chain (P2-027/REPRO-001), outside a single local
 `validate-bundle` invocation.
 
-Reducer `0.3.0` summaries use exact strict comparison. The legacy allowlist
-keeps its provenance-less additive-absence tolerance; recorded `0.2.x` and
-unknown reducer versions are unsupported and require explicit re-reduction.
+Reducer `0.4.0` summaries use exact strict comparison. Current-era `0.3.0`
+summaries require explicit re-reduction because C5 renamed the evidence-only
+gate surface. The legacy allowlist keeps its provenance-less additive-absence
+tolerance; recorded `0.2.x` and other unknown reducer versions are unsupported
+and also require explicit re-reduction.
 A succeeded summary requires a measured window with duration strictly greater
 than zero. A reducer encountering a nonpositive measured window emits an
 honest `failed` summary without derived energy, phase, or suite metrics;
@@ -306,14 +308,14 @@ Additive summary fields landing with implementation (2026-07-09, P2-029):
 | `energy_uncertainty_status` | `summary_metrics.json` top level | One of `not_estimable`, `estimated`, or `bounded`. Single-bundle reducer output is `not_estimable` unless every relevant uncertainty term has an external calibrated bound; point estimates and quality fields are still emitted. |
 | `energy_variance_terms_j2` | `summary_metrics.json` top level and aggregate metric entries | Object of named stochastic variance terms in J^2. The reducer emits `E_gross_repetition_j2: null` for single bundles and `E_idle_mean_j2 = duration_s^2 * idle_power_w_stddev^2 / idle_sample_count` when idle-baseline evidence exists. Aggregates add repeated-gross variance and total idle-subtracted variance terms. |
 | `energy_bound_terms_j` | `summary_metrics.json` top level and aggregate metric entries | Object of named deterministic bounds in J. Drift is recorded as `E_drift_bound_j` from documented `metadata.idle_drift_bound_w` evidence, or `metadata.extra.idle_drift_bound_w` for runner `extra_metadata` parity, and remains a bound, never a variance term, unless a future analysis explicitly names a distributional model. Missing drift evidence is represented as `null`. `E_interpolation_edge_bound_j` retains the diagnostic maximum change from shifting one edge at a time by +/- half its local observed gap. Reducer 0.3.0 adds the governed `E_interpolation_joint_edge_bound_j`, the maximum absolute change over all four Cartesian combinations of independently shifting both edges by +/- half their respective local gaps. Claim gates expose the same governed value as `interpolation_joint_edge_bound_j`. |
-| `claim_eligibility` | `summary_metrics.json` top level | Machine-readable claim gates by window class. `gross_request` governs `gross_energy_j` and does not require an idle baseline or drift bound. `idle_subtracted_request` governs `idle_subtracted_energy_j` and requires both. `request` is retained through schema v0.1 as a deprecated alias of `idle_subtracted_request`. Each request entry records `metric_name`, `window_class`, `eligible`, stable `reasons`, window duration, sample count, local-gap observations, cadence ratio, clock/anchor bound, and joint interpolation bound. `phase`/`item`/`block`/`level` remain gross-only gates; rollups contain `window_count` and nested `windows[]` entries. |
+| `window_evidence_precheck` | `summary_metrics.json` top level | Reducer-0.4 evidence prechecks by metric-specific window class. `gross_request` governs `gross_energy_j` and does not require an idle baseline or drift bound. `idle_subtracted_request` governs `idle_subtracted_energy_j`/`energy_request_j` and requires both. `phase`/`item`/`block`/`level` remain gross-only. Entries record `eligible`, stable `reasons`, timing/sample/cadence evidence, and governed bounds. New summaries do not emit the deprecated generic `request` alias. The frozen legacy allowlist may internally map an old `claim_eligibility` field for strict comparison only; that mapping never authorizes positive analysis readiness. |
 
-Stable P2-029 `claim_eligibility.reasons` values include
+Stable P2-029 `window_evidence_precheck.reasons` values include
 `insufficient_in_window_samples`, `cadence_ratio_unrecorded`,
 `cadence_ratio_below_threshold`, `clock_bound_unrecorded`,
 `clock_bound_exceeds_quarter_window`, `interpolation_bound_unrecorded`,
 `drift_term_unknown`, and `cooldown_cap_hit`.
-Reducer 0.3.0 adds `nonpositive_window_duration` and
+Reducer 0.3.0 introduced `nonpositive_window_duration` and
 `idle_baseline_unrecorded`; the latter applies only to idle-subtracted gates.
 `cadence_ratio_unrecorded` is also the documented fail-closed fallback when
 the cadence denominator would be computed from only a partial basis, such as
@@ -348,22 +350,38 @@ invocation at `runs/campaign_manifests/<session_id>.json` with schema
 campaign runner owns the D-014 gate between physical member invocations. The
 gate uses the preceding member's recorded idle baseline and the same rolling
 30-second/10-percent/300-second recovery rule as the experiment controller.
-Its tri-state result is attached to the following member. Only the first
-physical run in a recorded session may carry `first_run_exempt`; a fixed sleep,
-mock-telemetry skip, adapter failure, absent baseline, or absent evidence is
-`unknown`, not recovery.
+Its tri-state result is attached to the following member. `first_run_exempt`
+belongs only to the first member of the strict-valid frozen campaign order and
+may appear exactly once across every resume provenance for that analysis
+manifest. A resume-local "first newly invoked" member is never exempt. A fixed
+sleep, mock-telemetry skip, adapter failure, absent baseline, or absent evidence
+is `unknown`, not recovery.
 
-Every measured `recovered` or `cap_hit` gate references an immutable JSONL
-trace under `runs/campaign_manifests/raw/` with relative path, SHA-256, and
-record count. Recovered/cap-hit provenance with a missing or hash-invalid raw
-trace is treated as unknown on resume. The campaign JSONL repeats the
+Every measured `recovered` or `cap_hit` gate references an immutable v2 JSONL
+trace under `runs/campaign_manifests/raw/`. Each row binds the session, gate,
+preceding/following run and bundle identities, sample index, gate start,
+timestamps, full idle sub-window baseline, and recorded rolling mean. Resume
+validation and final readiness independently read and hash the bytes, verify the
+physical line count and row shape, recompute every 30-second rolling mean and
+the recovery-before-cap decision, compare it with the note, and bracket the
+trace between the preceding `run_finalized` and following first event. A
+claimed trace that cannot satisfy those checks yields
+`cooldown_evidence_unverifiable`. The final verdict binds the actual SHA-256 of
+every contributing provenance manifest and cooldown trace. The campaign JSONL repeats the
 following-member gate object and ends with a
 `joulewise.campaign_verdict.v2` row. That row separates `collection.verdict`
 (`usable`, `partial`, `blocked`, `invalid`) from
-`claim_readiness.verdict` (`ready_for_analysis`,
-`not_ready_for_analysis`, `not_assessed`). Claim readiness has no effect on
+`analysis_readiness.verdict` (`ready_for_analysis`,
+`not_ready_for_analysis`, `not_assessed`). Analysis readiness has no effect on
 the collection process exit status and is not a statistical claim; P2-037
 independently revalidates all evidence.
+
+The sampling audit scans immediate bundle directories under the campaign
+`runs_dir` and reports any strict-valid, scientifically matching config that is
+absent from the frozen manifest as `unregistered_matching_bundle`. Detection
+beyond that directory is not implemented and therefore emits the named
+fail-closed `top_up_detection_scope_incomplete` reason; it is never represented
+as a hardcoded clean/false result.
 
 MLX runtime adapters may record additive memory snapshots at prepare end and
 cleanup start. These snapshots include process RSS when available and guarded

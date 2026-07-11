@@ -1312,7 +1312,7 @@ zero. Claim-input readiness does not change the campaign process exit code.
 
 ### C4. Exact readiness rules
 
-`claim_readiness.verdict` is:
+`analysis_readiness.verdict` is:
 
 - `not_assessed` when no analysis manifest exists or it has no claim-bearing
   contrasts. This is the required result for an otherwise clean arbitrary
@@ -1400,22 +1400,20 @@ Required v1 behavior: for every confirmatory contrast whose paired blocks were
 collected through this path, P2-041 returns `not_ready_for_analysis` with
 `campaign_cooldown_evidence_missing`. P2-037 repeats the fail-closed check and
 cannot be overridden by the campaign’s collection-usability verdict. A
-manifest-declared first-run exemption may apply only to the first physical run
-in a session; it does not exempt all `repetitions = 1` configs.
+manifest-declared first-run exemption may apply only to the first member of the
+strict-valid frozen campaign order, exactly once across every resume for that
+campaign; it does not exempt all `repetitions = 1` configs.
 
-**OPEN QUESTION / LEAD:** assign one of these before real matrix claim
-readiness is possible:
-
-- implement a campaign-level D-014 recovery gate in `run_campaign.py`, with
-  raw cooldown evidence and a tri-state result attached to the following
-  manifest entry; or
-- redesign execution so interleaving and semantic block identity survive while
-  one controller-owned experiment runner performs the between-member gates.
+**Resolved by the P2-041 hardening landing:** `run_campaign.py` owns the
+campaign-level gate. Its persisted v2 rows bind both adjacent members and
+timestamps; resume validation and final readiness independently hash, parse,
+line-count, re-derive, and compare the rolling decision. A self-attested or
+under-specified trace yields `cooldown_evidence_unverifiable`.
 
 Merely writing `cooldown_cap_hit = false`, sleeping a fixed interval, or
 inferring recovery from start/end sentinels is not an acceptable resolution.
-Until an owner and implementation land, the collection may be `usable`, but
-confirmatory claim inputs remain not ready.
+Under-specified legacy traces remain unusable; only independently re-derived
+evidence (or the unique frozen-first-member exemption) can satisfy this gate.
 
 ### C7. Exact campaign-verdict v2 JSON shape
 
@@ -1442,7 +1440,7 @@ The final campaign log row becomes:
       "missing": []
     }
   },
-  "claim_readiness": {
+  "analysis_readiness": {
     "verdict": "not_ready_for_analysis",
     "reasons": ["campaign_cooldown_evidence_missing"],
     "required_contrast_ids": [],
@@ -1456,7 +1454,13 @@ The final campaign log row becomes:
     "registered_bundle_ids": [],
     "unregistered_matching_bundle_ids": [],
     "valid_replacements": [],
-    "top_up_suspected": false
+    "top_up_suspected": false,
+    "detection_scope": {
+      "campaign_runs_dir": "<path>",
+      "campaign_dir_scan": "complete",
+      "wider_scope_scan": "out_of_reach"
+    },
+    "reasons": ["top_up_detection_scope_incomplete"]
   },
   "members": []
 }
@@ -1476,7 +1480,7 @@ Console output becomes:
 ```text
 COLLECTION VERDICT:
   verdict: usable
-CLAIM-INPUT READINESS:
+ANALYSIS READINESS:
   verdict: not_ready_for_analysis
   reason: campaign_cooldown_evidence_missing
   note: P2-037 decides statistical claim outcomes.
@@ -1487,11 +1491,11 @@ CLAIM-INPUT READINESS:
 - Delete `publishable` from `verdict_for`, console text, taxonomy, tests, and
   current documentation examples.
 - Rename the helper to `collection_verdict_for`; add a separate
-  `claim_readiness_for`.
+  `analysis_readiness_for`.
 - Existing log rows are immutable historical evidence. A legacy log reader
   maps `verdict = "publishable"` only to
   `collection.verdict = "usable"` and
-  `claim_readiness.verdict = "not_assessed"`, with migration reason
+  `analysis_readiness.verdict = "not_assessed"`, with migration reason
   `legacy_publishable_meant_collection_usable_only`.
 - Never map old `publishable` to `ready_for_analysis`,
   `direction_supported`, `equivalent`, or a Phase-4 `supported` row.

@@ -316,7 +316,8 @@ For every reduced window, future reducer output should carry:
 - `energy_variance_terms_j2`: named term map where available.
 - `energy_bound_terms_j`: named non-variance bounds where only interval bounds
   are defensible.
-- `claim_eligibility`: per window class, with machine-readable reasons.
+- `window_evidence_precheck`: per metric-specific window class, with
+  machine-readable reasons.
 
 For a single bundle, uncertainty is `not_estimable` unless an external
 calibrated bound exists for every relevant term. The reducer may still emit the

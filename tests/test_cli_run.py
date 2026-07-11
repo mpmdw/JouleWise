@@ -437,7 +437,7 @@ class StrictValidateTests(CliRunTestCase):
             "energy_uncertainty_status",
             "energy_variance_terms_j2",
             "energy_bound_terms_j",
-            "claim_eligibility",
+            "window_evidence_precheck",
         ):
             summary.pop(key)
         (bundle / "summary_metrics.json").write_text(
@@ -448,9 +448,23 @@ class StrictValidateTests(CliRunTestCase):
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
             self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_reducer_0_3_0_dispatch_requires_exact_summary(self) -> None:
-        bundle = self.make_bundle("strict-v030-exact")
+    def test_reducer_0_4_0_dispatch_requires_exact_summary(self) -> None:
+        bundle = self.make_bundle("strict-v040-exact")
         self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_current_era_0_3_0_old_field_requires_re_reduction(self) -> None:
+        bundle = self.make_bundle("strict-v030-old-field")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.3.0"
+        summary["claim_eligibility"] = summary.pop("window_evidence_precheck")
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        self.assertIn(
+            "strict: unsupported reducer version; re-reduction required",
+            validate_bundle(bundle, strict=True),
+        )
 
     def test_reducer_0_2_x_dispatch_requires_re_reduction(self) -> None:
         bundle = self.make_bundle("strict-v02-rejected")
@@ -477,7 +491,7 @@ class StrictValidateTests(CliRunTestCase):
         )
 
     def test_missing_null_and_non_string_reducer_versions_are_rejected(self) -> None:
-        for value in ("missing", None, ["0.3.0"]):
+        for value in ("missing", None, ["0.4.0"]):
             with self.subTest(value=value):
                 bundle = self.make_bundle(f"strict-bad-version-{str(value)}")
                 summary = json.loads((bundle / "summary_metrics.json").read_text())
@@ -505,10 +519,10 @@ class StrictValidateTests(CliRunTestCase):
             validate_bundle(bundle, strict=True),
         )
 
-    def test_claimed_0_3_0_missing_governed_field_fails_exact_dispatch(self) -> None:
-        bundle = self.make_bundle("strict-v030-governed-absence")
+    def test_claimed_0_4_0_missing_governed_field_fails_exact_dispatch(self) -> None:
+        bundle = self.make_bundle("strict-v040-governed-absence")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
-        del summary["claim_eligibility"]["gross_request"]
+        del summary["window_evidence_precheck"]["gross_request"]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
@@ -516,7 +530,10 @@ class StrictValidateTests(CliRunTestCase):
         problems = validate_bundle(bundle, strict=True)
 
         self.assertTrue(
-            any("claim_eligibility.gross_request" in problem for problem in problems),
+            any(
+                "window_evidence_precheck.gross_request" in problem
+                for problem in problems
+            ),
             problems,
         )
 

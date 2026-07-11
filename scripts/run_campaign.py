@@ -24,13 +24,14 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import shlex
 import subprocess
 import sys
 import time
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,7 @@ if str(ROOT) not in sys.path:
 
 from joulewise.bundle import sanitize_id_component  # noqa: E402
 from joulewise.cli import validate_bundle  # noqa: E402
+from joulewise.analysis_manifest import validate_analysis_manifest  # noqa: E402
 
 
 STATUSES = (
@@ -57,10 +59,41 @@ ANALYSIS_MANIFEST_NAME = "analysis_manifest.json"
 NON_CONFIG_SIDECARS = frozenset({ORDER_MANIFEST_NAME, ANALYSIS_MANIFEST_NAME})
 CAMPAIGN_VERDICT_SCHEMA = "joulewise.campaign_verdict.v2"
 CAMPAIGN_PROVENANCE_SCHEMA = "joulewise.campaign_provenance.v1"
-CLAIM_READINESS_NOTE = (
+CAMPAIGN_COOLDOWN_TRACE_SCHEMA = "joulewise.campaign_cooldown_trace.v2"
+ANALYSIS_READINESS_NOTE = (
     "This verdict checks analysis inputs only; P2-037 decides claim outcomes."
 )
 ACCEPTED_CAMPAIGN_COOLDOWN_RESULTS = frozenset({"recovered", "first_run_exempt"})
+IDLE_BASELINE_TRACE_KEYS = frozenset(
+    {
+        "power_w_mean",
+        "power_w_stddev",
+        "duration_s",
+        "sample_count",
+        "telemetry_backend",
+        "gpu_idle_ratio_mean",
+        "gpu_idle_ratio_min",
+        "gpu_freq_hz_mean",
+        "idle_window_suspect",
+    }
+)
+CAMPAIGN_COOLDOWN_TRACE_KEYS = frozenset(
+    {
+        "schema_version",
+        "session_id",
+        "cooldown_run_id",
+        "sample_index",
+        "preceding_run_id",
+        "preceding_bundle_id",
+        "following_run_id",
+        "following_bundle_ids",
+        "gate_started_at_s",
+        "timestamp_s",
+        "waited_s",
+        "rolling_mean_power_w",
+        "baseline",
+    }
+)
 KNOWN_NON_PROMPT_SIDECAR_SCHEMAS = frozenset(
     {
         "affine_smoke_annotations.v1",
@@ -258,6 +291,41 @@ class AnalysisManifestState:
 
 
 @dataclass(frozen=True)
+class CooldownEvidenceValidation:
+    note: dict[str, Any]
+    provenance_path: Path
+    provenance_sha256: str
+    member_index: int
+    result: str | None
+    raw_artifact: dict[str, Any] | None = None
+    problems: tuple[str, ...] = ()
+
+    @property
+    def verifiable(self) -> bool:
+        return not self.problems
+
+    def effective_note(self) -> dict[str, Any]:
+        note = dict(self.note)
+        if self.problems:
+            note.update(
+                {
+                    "result": "unknown",
+                    "reason": "cooldown evidence unverifiable",
+                    "verification_problems": list(self.problems),
+                }
+            )
+        return note
+
+
+@dataclass(frozen=True)
+class PriorCampaignCooldownEvidence:
+    by_bundle: dict[str, CooldownEvidenceValidation]
+    manifest_hashes: tuple[dict[str, Any], ...] = ()
+    first_run_exemption_claims: int = 0
+    problems: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
 class OrderEntry:
     index: int
     config: str
@@ -384,7 +452,7 @@ def suite_manifest_ref_from_config(data: dict[str, Any]) -> str | None:
 def load_config_info(config_path: Path) -> ConfigInfo:
     try:
         data = json.loads(config_path.read_text(encoding="utf-8"))
-    except OSError as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         raise ValueError(f"failed to read config {config_path}: {exc}") from exc
     except json.JSONDecodeError as exc:
         raise ValueError(f"config is not valid JSON: {config_path}: {exc}") from exc
@@ -417,27 +485,53 @@ def load_config_info(config_path: Path) -> ConfigInfo:
     )
 
 
+def _normalized_benchmark_config(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    try:
+        from joulewise.schemas import BenchmarkConfig
+
+        return BenchmarkConfig.from_mapping(value).to_dict()
+    except Exception:  # noqa: BLE001 - malformed identities fail closed at callers.
+        return None
+
+
+def _bundle_config_binding_problem(
+    bundle_dir: Path,
+    info: ConfigInfo,
+) -> str | None:
+    try:
+        expected_raw = json.loads(info.path.read_text(encoding="utf-8"))
+        observed_raw = json.loads(
+            (bundle_dir / "config.json").read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        return f"bundle/config manifest identity cannot be read: {exc}"
+    expected = _normalized_benchmark_config(expected_raw)
+    observed = _normalized_benchmark_config(observed_raw)
+    if expected is None or observed is None:
+        return "bundle/config manifest identity is not a valid normalized config"
+    observed_run_id = observed.get("run_id")
+    if (
+        not isinstance(observed_run_id, str)
+        or sanitize_id_component(observed_run_id) != bundle_dir.name
+    ):
+        return "bundle config run_id does not match its bundle directory"
+    if info.repetitions == 1 and observed_run_id != expected.get("run_id"):
+        return "bundle config run_id does not match its frozen config identity"
+    expected.pop("run_id", None)
+    observed.pop("run_id", None)
+    if observed != expected:
+        return "bundle config does not match its registered campaign config"
+    return None
+
+
 def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _canonical_manifest_id(raw: dict[str, Any]) -> str:
-    payload = dict(raw)
-    payload.pop("manifest_id", None)
-    canonical = json.dumps(
-        payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
-    ).encode("utf-8")
-    return "am-" + _sha256_bytes(canonical)
-
-
 def load_analysis_manifest(config_dir: Path) -> AnalysisManifestState | None:
-    """Load the pinned P2-042 sidecar and validate P2-041's consumed links.
-
-    P2-042 is not present on this branch, so this is deliberately a consumer
-    seam rather than a second builder. It checks the frozen identity plus the
-    order/config byte hashes that govern collection and readiness. P2-037 will
-    independently perform the complete schema validation.
-    """
+    """Load P2-042's sidecar and run its authoritative strict validator."""
     path = config_dir / ANALYSIS_MANIFEST_NAME
     if not path.is_file():
         return None
@@ -451,7 +545,7 @@ def load_analysis_manifest(config_dir: Path) -> AnalysisManifestState | None:
     else:
         try:
             parsed = json.loads(file_bytes)
-        except json.JSONDecodeError as exc:
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raw = {}
             problems.append(f"analysis manifest is not valid JSON: {exc}")
         else:
@@ -462,86 +556,7 @@ def load_analysis_manifest(config_dir: Path) -> AnalysisManifestState | None:
                 raw = parsed
 
     manifest_id = raw.get("manifest_id") if isinstance(raw.get("manifest_id"), str) else None
-    if raw:
-        if raw.get("schema_version") != "joulewise.analysis_manifest.v1":
-            problems.append(
-                "analysis manifest schema_version is not "
-                "joulewise.analysis_manifest.v1"
-            )
-        if raw.get("freeze_status") != "frozen":
-            problems.append("analysis manifest is not frozen")
-        if manifest_id is None or manifest_id != _canonical_manifest_id(raw):
-            problems.append("analysis manifest_id does not match canonical content")
-
-        source = raw.get("source")
-        order_ref = source.get("order_manifest") if isinstance(source, dict) else None
-        expected_order_sha = order_ref.get("sha256") if isinstance(order_ref, dict) else None
-        order_path = config_dir / ORDER_MANIFEST_NAME
-        if not isinstance(expected_order_sha, str):
-            problems.append("analysis manifest order_manifest.sha256 is missing")
-        elif not order_path.is_file():
-            problems.append("analysis manifest references a missing order_manifest.json")
-        else:
-            actual_order_sha = _sha256_bytes(order_path.read_bytes())
-            if actual_order_sha != expected_order_sha:
-                problems.append("analysis manifest order_manifest.sha256 mismatch")
-
-        entries = raw.get("entries")
-        if not isinstance(entries, list):
-            problems.append("analysis manifest entries is not a list")
-        else:
-            seen_run_ids: set[str] = set()
-            seen_entry_ids: set[str] = set()
-            for index, entry in enumerate(entries):
-                if not isinstance(entry, dict):
-                    problems.append(f"analysis manifest entries[{index}] is not an object")
-                    continue
-                run_id = entry.get("run_id")
-                entry_id = entry.get("entry_id")
-                config_name = entry.get("config")
-                config_sha = entry.get("config_sha256")
-                if not isinstance(run_id, str) or not run_id:
-                    problems.append(f"analysis manifest entries[{index}].run_id is missing")
-                elif run_id in seen_run_ids:
-                    problems.append(f"analysis manifest duplicates run_id {run_id!r}")
-                else:
-                    seen_run_ids.add(run_id)
-                if not isinstance(entry_id, str) or not entry_id:
-                    problems.append(f"analysis manifest entries[{index}].entry_id is missing")
-                elif entry_id in seen_entry_ids:
-                    problems.append(f"analysis manifest duplicates entry_id {entry_id!r}")
-                else:
-                    seen_entry_ids.add(entry_id)
-                if (
-                    not isinstance(config_name, str)
-                    or Path(config_name).name != config_name
-                    or config_name in NON_CONFIG_SIDECARS
-                ):
-                    problems.append(f"analysis manifest entries[{index}].config is invalid")
-                    continue
-                config_path = config_dir / config_name
-                if not config_path.is_file():
-                    problems.append(f"analysis manifest config is missing: {config_name}")
-                    continue
-                if (
-                    not isinstance(config_sha, str)
-                    or _sha256_bytes(config_path.read_bytes()) != config_sha
-                ):
-                    problems.append(f"analysis manifest config_sha256 mismatch: {config_name}")
-
-        contrasts = raw.get("contrasts")
-        if not isinstance(contrasts, list):
-            problems.append("analysis manifest contrasts is not a list")
-        else:
-            seen_contrast_ids: set[str] = set()
-            for index, contrast in enumerate(contrasts):
-                contrast_id = contrast.get("contrast_id") if isinstance(contrast, dict) else None
-                if not isinstance(contrast_id, str) or not contrast_id:
-                    problems.append(f"analysis manifest contrasts[{index}].contrast_id is missing")
-                elif contrast_id in seen_contrast_ids:
-                    problems.append(f"analysis manifest duplicates contrast_id {contrast_id!r}")
-                else:
-                    seen_contrast_ids.add(contrast_id)
+    problems.extend(validate_analysis_manifest(raw, manifest_dir=config_dir))
 
     return AnalysisManifestState(
         path=path,
@@ -1111,6 +1126,15 @@ def evaluate_member(
         except (OSError, json.JSONDecodeError):
             summary = None
     prompt_hash_check = check_prompt_hashes_for_config_bundle(bundle_dir, info)
+    binding_problem = (
+        _bundle_config_binding_problem(bundle_dir, info)
+        if bundle_dir.exists()
+        else None
+    )
+    collection_flags = set(prompt_hash_check.collection_integrity_flags())
+    if binding_problem is not None:
+        problems.append(binding_problem)
+        collection_flags.add("config_manifest_mismatch")
     suite_order_policy, suite_order_row, suite_order_seed = suite_order_evidence(bundle_dir)
     waiver = matching_waiver(
         waivers,
@@ -1126,7 +1150,7 @@ def evaluate_member(
         status=status,
         strict_valid=strict_valid,
         validation_problems=tuple(problems),
-        collection_integrity_flags=prompt_hash_check.collection_integrity_flags(),
+        collection_integrity_flags=tuple(sorted(collection_flags)),
         claim_evidence_flags=claim_evidence_flags(summary),
         prompt_hash_check=prompt_hash_check,
         suite_order_policy=suite_order_policy,
@@ -1415,69 +1439,592 @@ def write_campaign_provenance(path: Path, manifest: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
+def _finite_number(value: Any) -> bool:
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int | float)
+        and math.isfinite(float(value))
+    )
+
+
+def _numbers_match(left: Any, right: Any) -> bool:
+    return _finite_number(left) and _finite_number(right) and math.isclose(
+        float(left), float(right), rel_tol=1e-12, abs_tol=1e-12
+    )
+
+
+def _bundle_event_bounds(bundle_path: Path) -> tuple[float | None, float | None, list[str]]:
+    path = bundle_path / "events.jsonl"
+    problems: list[str] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError) as exc:
+        return None, None, [f"{path}: cannot read events ({exc})"]
+    rows: list[dict[str, Any]] = []
+    for line_number, line in enumerate(lines, start=1):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError as exc:
+            problems.append(f"{path}: line {line_number} is invalid JSON ({exc.msg})")
+            continue
+        if not isinstance(row, dict) or not _finite_number(row.get("timestamp_s")):
+            problems.append(f"{path}: line {line_number} lacks a finite timestamp_s")
+            continue
+        rows.append(row)
+    if not rows:
+        problems.append(f"{path}: no timestamped events")
+        return None, None, problems
+    finalized = [
+        row for row in rows if row.get("event_type") == "run_finalized"
+    ]
+    if len(finalized) != 1:
+        problems.append(f"{path}: expected exactly one run_finalized event")
+        return float(rows[0]["timestamp_s"]), None, problems
+    return (
+        float(rows[0]["timestamp_s"]),
+        float(finalized[0]["timestamp_s"]),
+        problems,
+    )
+
+
+def _bundle_idle_reference(
+    bundle_path: Path,
+) -> tuple[float | None, str | None, list[str]]:
+    summary_path = bundle_path / "summary_metrics.json"
+    config_path = bundle_path / "config.json"
+    try:
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        return None, None, [f"{bundle_path}: cannot read prior idle identity ({exc})"]
+    idle = summary.get("idle_baseline") if isinstance(summary, dict) else None
+    reference = idle.get("power_w_mean") if isinstance(idle, dict) else None
+    if not _finite_number(reference):
+        return None, None, [
+            f"{summary_path}: prior idle baseline power_w_mean is not finite"
+        ]
+    recorded_backend = idle.get("telemetry_backend") if isinstance(idle, dict) else None
+    target = config.get("hardware_target") if isinstance(config, dict) else None
+    configured_backend = (
+        target.get("telemetry_backend") if isinstance(target, dict) else None
+    )
+    problems: list[str] = []
+    if not isinstance(recorded_backend, str) or not recorded_backend:
+        problems.append(f"{summary_path}: idle telemetry backend is invalid")
+    if configured_backend != recorded_backend:
+        problems.append("preceding bundle config and idle telemetry backend disagree")
+    if recorded_backend == "mock":
+        problems.append("mock telemetry cannot provide measured cooldown recovery evidence")
+    return float(reference), recorded_backend if isinstance(recorded_backend, str) else None, problems
+
+
+def rederive_campaign_cooldown_decision(
+    rows: list[dict[str, Any]], reference_power_w: float
+) -> tuple[dict[str, Any] | None, list[str]]:
+    """Validate trace rows and independently re-derive the D-014 decision."""
+    from joulewise.controller import (
+        COOLDOWN_CAP_S,
+        COOLDOWN_ROLLING_WINDOW_S,
+        COOLDOWN_TOLERANCE,
+    )
+    from joulewise.schemas import TelemetryBackend
+
+    problems: list[str] = []
+    if not _finite_number(reference_power_w):
+        return None, ["cooldown reference power is not finite"]
+    if not rows:
+        return None, ["cooldown trace contains no rows"]
+    readings: list[tuple[float, float]] = []
+    previous_timestamp: float | None = None
+    previous_waited: float | None = None
+    common_start: float | None = None
+    terminal: dict[str, Any] | None = None
+    for index, row in enumerate(rows):
+        where = f"cooldown trace row {index}"
+        if not isinstance(row, dict):
+            problems.append(f"{where}: must be an object")
+            continue
+        if set(row) != CAMPAIGN_COOLDOWN_TRACE_KEYS:
+            problems.append(f"{where}: keys do not match {CAMPAIGN_COOLDOWN_TRACE_SCHEMA}")
+            continue
+        if row.get("schema_version") != CAMPAIGN_COOLDOWN_TRACE_SCHEMA:
+            problems.append(f"{where}: schema_version is invalid")
+        if row.get("sample_index") != index:
+            problems.append(f"{where}: sample_index is not sequential")
+        timestamp = row.get("timestamp_s")
+        waited = row.get("waited_s")
+        rolling = row.get("rolling_mean_power_w")
+        gate_start = row.get("gate_started_at_s")
+        if not all(_finite_number(value) for value in (timestamp, waited, rolling, gate_start)):
+            problems.append(f"{where}: timing/rolling fields must be finite numbers")
+            continue
+        timestamp_f = float(timestamp)
+        waited_f = float(waited)
+        gate_start_f = float(gate_start)
+        prior_waited = previous_waited
+        if waited_f < 0.0:
+            problems.append(f"{where}: waited_s is negative")
+        if previous_timestamp is not None and timestamp_f <= previous_timestamp:
+            problems.append(f"{where}: timestamp_s is not strictly increasing")
+        if previous_waited is not None and waited_f <= previous_waited:
+            problems.append(f"{where}: waited_s is not strictly increasing")
+        previous_timestamp = timestamp_f
+        previous_waited = waited_f
+        if float(rolling) < 0.0:
+            problems.append(f"{where}: rolling_mean_power_w is negative")
+        if common_start is None:
+            common_start = gate_start_f
+        elif not _numbers_match(common_start, gate_start_f):
+            problems.append(f"{where}: gate_started_at_s changed within the trace")
+        if not _numbers_match(timestamp_f - waited_f, gate_start_f):
+            problems.append(f"{where}: timestamp_s - waited_s does not equal gate start")
+        baseline = row.get("baseline")
+        if not isinstance(baseline, dict) or set(baseline) != IDLE_BASELINE_TRACE_KEYS:
+            problems.append(f"{where}: baseline is not a full IdleBaseline record")
+            continue
+        for field_name in ("power_w_mean", "power_w_stddev", "duration_s"):
+            if not _finite_number(baseline.get(field_name)):
+                problems.append(f"{where}: baseline.{field_name} is not finite")
+        if _finite_number(baseline.get("power_w_mean")) and float(
+            baseline["power_w_mean"]
+        ) < 0.0:
+            problems.append(f"{where}: baseline.power_w_mean is negative")
+        if _finite_number(baseline.get("power_w_stddev")) and float(
+            baseline["power_w_stddev"]
+        ) < 0.0:
+            problems.append(f"{where}: baseline.power_w_stddev is negative")
+        duration = baseline.get("duration_s")
+        if _finite_number(duration) and float(duration) <= 0.0:
+            problems.append(f"{where}: baseline.duration_s is not positive")
+        if _finite_number(duration):
+            waited_increment = waited_f - (prior_waited if prior_waited is not None else 0.0)
+            if waited_increment + 1e-12 < float(duration):
+                problems.append(
+                    f"{where}: waited_s increment is shorter than the measured idle subwindow"
+                )
+        sample_count = baseline.get("sample_count")
+        if isinstance(sample_count, bool) or not isinstance(sample_count, int) or sample_count < 1:
+            problems.append(f"{where}: baseline.sample_count is not positive")
+        if baseline.get("telemetry_backend") not in {
+            backend.value for backend in TelemetryBackend
+        }:
+            problems.append(f"{where}: baseline.telemetry_backend is invalid")
+        for field_name in ("gpu_idle_ratio_mean", "gpu_idle_ratio_min"):
+            value = baseline.get(field_name)
+            if value is not None and not _finite_number(value):
+                problems.append(f"{where}: baseline.{field_name} is not finite or null")
+            elif value is not None and not 0.0 <= float(value) <= 1.0:
+                problems.append(f"{where}: baseline.{field_name} is outside [0, 1]")
+        frequency = baseline.get("gpu_freq_hz_mean")
+        if frequency is not None and not _finite_number(frequency):
+            problems.append(f"{where}: baseline.gpu_freq_hz_mean is not finite or null")
+        elif frequency is not None and float(frequency) < 0.0:
+            problems.append(f"{where}: baseline.gpu_freq_hz_mean is negative")
+        suspect = baseline.get("idle_window_suspect")
+        if suspect is not None and not isinstance(suspect, bool):
+            problems.append(f"{where}: baseline.idle_window_suspect is invalid")
+        power = baseline.get("power_w_mean")
+        if not _finite_number(power):
+            continue
+        readings.append((timestamp_f, float(power)))
+        cutoff = timestamp_f - COOLDOWN_ROLLING_WINDOW_S
+        readings = [reading for reading in readings if reading[0] >= cutoff]
+        recomputed = sum(value for _, value in readings) / len(readings)
+        if not _numbers_match(recomputed, rolling):
+            problems.append(f"{where}: rolling_mean_power_w does not re-derive")
+        recovered = abs(recomputed - reference_power_w) <= (
+            COOLDOWN_TOLERANCE * abs(reference_power_w)
+        )
+        result = "recovered" if recovered else ("cap_hit" if waited_f >= COOLDOWN_CAP_S else None)
+        if result is not None:
+            if terminal is None:
+                terminal = {
+                    "result": result,
+                    "waited_s": waited_f,
+                    "reference_power_w": float(reference_power_w),
+                    "tolerance_fraction": COOLDOWN_TOLERANCE,
+                    "decision_rolling_mean_power_w": recomputed,
+                    "gate_started_at_s": gate_start_f,
+                }
+            if index != len(rows) - 1:
+                problems.append(f"{where}: trace continues after a terminal decision")
+    if terminal is None:
+        problems.append("cooldown trace does not reach recovered or cap_hit")
+    return terminal, problems
+
+
+def _valid_sha256(value: Any) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and value == value.lower()
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _validate_campaign_cooldown_member(
+    *,
+    provenance_path: Path,
+    provenance_sha256: str,
+    provenance: dict[str, Any],
+    member_index: int,
+    frozen_run_ids: list[str],
+    runs_dir: Path,
+) -> CooldownEvidenceValidation | None:
+    members = provenance.get("members")
+    if not isinstance(members, list) or member_index >= len(members):
+        return None
+    member = members[member_index]
+    if not isinstance(member, dict):
+        return None
+    note = member.get("preceding_campaign_cooldown")
+    bundle_ids = member.get("bundle_ids")
+    run_id = member.get("run_id")
+    if not isinstance(note, dict) or not isinstance(bundle_ids, list):
+        return None
+    bundle_ids = [bundle_id for bundle_id in bundle_ids if isinstance(bundle_id, str)]
+    problems: list[str] = []
+    actual_raw: dict[str, Any] | None = None
+    result = note.get("result") if isinstance(note.get("result"), str) else None
+    if not isinstance(run_id, str) or run_id not in frozen_run_ids:
+        problems.append("provenance member run_id is not in frozen campaign order")
+        frozen_index = None
+    else:
+        frozen_index = frozen_run_ids.index(run_id)
+    provenance_session_id = provenance.get("session_id")
+    if not isinstance(provenance_session_id, str) or not provenance_session_id:
+        problems.append("campaign provenance session_id is not a non-empty string")
+    if note.get("session_id") != provenance.get("session_id"):
+        problems.append("cooldown note session_id does not match provenance")
+    if not isinstance(note.get("session_id"), str) or not note.get("session_id"):
+        problems.append("cooldown note session_id is not a non-empty string")
+    if not isinstance(note.get("recorded_at"), str) or not note.get("recorded_at"):
+        problems.append("cooldown note recorded_at is not a non-empty string")
+    if note.get("following_run_id") != run_id:
+        problems.append("cooldown note following_run_id does not match member")
+    if note.get("following_bundle_ids") != bundle_ids:
+        problems.append("cooldown note following_bundle_ids do not match member")
+    if bundle_ids != [run_id]:
+        problems.append("cooldown note does not bind the expected following bundle")
+    if result == "first_run_exempt":
+        if frozen_index != 0:
+            problems.append("first_run_exempt does not name the first frozen-order member")
+        if provenance.get("first_physical_run_id") != run_id:
+            problems.append("first_run_exempt disagrees with first_physical_run_id")
+        if member_index != 0:
+            problems.append("first_run_exempt is not the first provenance member")
+        if note.get("raw_artifact") is not None:
+            problems.append("first_run_exempt must not carry a raw cooldown artifact")
+    elif result in {"recovered", "cap_hit"}:
+        if not isinstance(note.get("cooldown_run_id"), str) or not note.get(
+            "cooldown_run_id"
+        ):
+            problems.append("cooldown_run_id is not a non-empty string")
+        if frozen_index is None or frozen_index == 0:
+            problems.append("measured cooldown has no preceding frozen-order member")
+            expected_preceding = None
+        else:
+            expected_preceding = frozen_run_ids[frozen_index - 1]
+        if note.get("preceding_run_id") != expected_preceding:
+            problems.append("cooldown preceding_run_id breaks frozen-order adjacency")
+        preceding_bundle_id = note.get("preceding_bundle_id")
+        if preceding_bundle_id != expected_preceding:
+            problems.append("cooldown preceding_bundle_id breaks frozen-order adjacency")
+        if member_index == 0 or not isinstance(members[member_index - 1], dict):
+            problems.append("cooldown provenance has no preceding member row")
+        else:
+            prior_member = members[member_index - 1]
+            if prior_member.get("run_id") != expected_preceding:
+                problems.append("cooldown provenance member rows are not frozen-order adjacent")
+            prior_bundles = prior_member.get("bundle_ids")
+            if not isinstance(prior_bundles, list) or preceding_bundle_id not in prior_bundles:
+                problems.append("cooldown preceding bundle is absent from prior member row")
+
+        raw_ref = note.get("raw_artifact")
+        raw_path_text = raw_ref.get("path") if isinstance(raw_ref, dict) else None
+        declared_sha = raw_ref.get("sha256") if isinstance(raw_ref, dict) else None
+        declared_records = raw_ref.get("records") if isinstance(raw_ref, dict) else None
+        raw_path: Path | None = None
+        raw_bytes = b""
+        if (
+            not isinstance(raw_path_text, str)
+            or Path(raw_path_text).is_absolute()
+            or ".." in Path(raw_path_text).parts
+            or Path(raw_path_text).name == raw_path_text
+        ):
+            problems.append("raw cooldown artifact path is not a contained relative path")
+        else:
+            candidate = provenance_path.parent / raw_path_text
+            try:
+                contained = candidate.resolve().is_relative_to(provenance_path.parent.resolve())
+            except OSError:
+                contained = False
+            if not contained or candidate.is_symlink():
+                problems.append("raw cooldown artifact escapes or symlinks outside provenance")
+            else:
+                raw_path = candidate
+        if not _valid_sha256(declared_sha):
+            problems.append("raw cooldown artifact sha256 is invalid")
+        if (
+            isinstance(declared_records, bool)
+            or not isinstance(declared_records, int)
+            or declared_records < 1
+        ):
+            problems.append("raw cooldown artifact records is not a positive integer")
+        if raw_path is not None:
+            try:
+                raw_bytes = raw_path.read_bytes()
+            except OSError as exc:
+                problems.append(f"raw cooldown artifact cannot be read ({exc})")
+        actual_sha = _sha256_bytes(raw_bytes)
+        if raw_bytes and actual_sha != declared_sha:
+            problems.append("raw cooldown artifact sha256 mismatch")
+        physical_lines = raw_bytes.splitlines()
+        if raw_bytes and not raw_bytes.endswith(b"\n"):
+            problems.append("raw cooldown artifact must end with a newline")
+        if any(not line.strip() for line in physical_lines):
+            problems.append("raw cooldown artifact contains blank physical lines")
+        if isinstance(declared_records, int) and not isinstance(declared_records, bool):
+            if len(physical_lines) != declared_records:
+                problems.append("raw cooldown artifact record count mismatch")
+        trace_rows: list[dict[str, Any]] = []
+        for line_number, line in enumerate(physical_lines, start=1):
+            try:
+                parsed = json.loads(line)
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                detail = exc.msg if isinstance(exc, json.JSONDecodeError) else str(exc)
+                problems.append(
+                    f"raw cooldown artifact line {line_number} is invalid JSON ({detail})"
+                )
+                continue
+            if not isinstance(parsed, dict):
+                problems.append(f"raw cooldown artifact line {line_number} is not an object")
+                continue
+            trace_rows.append(parsed)
+
+        preceding_path = runs_dir / str(preceding_bundle_id)
+        following_bundle_id = bundle_ids[0] if len(bundle_ids) == 1 else None
+        reference, reference_backend, reference_problems = _bundle_idle_reference(
+            preceding_path
+        )
+        problems.extend(reference_problems)
+        decision: dict[str, Any] | None = None
+        if reference is not None:
+            decision, decision_problems = rederive_campaign_cooldown_decision(
+                trace_rows, reference
+            )
+            problems.extend(decision_problems)
+        identity_fields = {
+            "session_id": provenance.get("session_id"),
+            "cooldown_run_id": note.get("cooldown_run_id"),
+            "preceding_run_id": expected_preceding,
+            "preceding_bundle_id": preceding_bundle_id,
+            "following_run_id": run_id,
+            "following_bundle_ids": bundle_ids,
+        }
+        for index, row in enumerate(trace_rows):
+            for key, expected in identity_fields.items():
+                if row.get(key) != expected:
+                    problems.append(f"cooldown trace row {index}: {key} binding mismatch")
+            baseline = row.get("baseline")
+            if (
+                isinstance(baseline, dict)
+                and baseline.get("telemetry_backend") != reference_backend
+            ):
+                problems.append(
+                    f"cooldown trace row {index}: telemetry backend does not match preceding bundle"
+                )
+        if decision is not None:
+            for key in (
+                "result",
+                "waited_s",
+                "reference_power_w",
+                "tolerance_fraction",
+                "decision_rolling_mean_power_w",
+                "gate_started_at_s",
+            ):
+                observed = note.get(key)
+                expected = decision[key]
+                if key == "result":
+                    if observed != expected:
+                        problems.append("recorded cooldown decision disagrees with re-derivation")
+                elif not _numbers_match(observed, expected):
+                    problems.append(f"recorded cooldown {key} disagrees with re-derivation")
+        if preceding_bundle_id is not None and following_bundle_id is not None and trace_rows:
+            _, previous_final, previous_problems = _bundle_event_bounds(preceding_path)
+            following_first, _, following_problems = _bundle_event_bounds(
+                runs_dir / following_bundle_id
+            )
+            problems.extend(previous_problems)
+            problems.extend(following_problems)
+            gate_start = trace_rows[0].get("gate_started_at_s")
+            trace_end = trace_rows[-1].get("timestamp_s")
+            if (
+                previous_final is not None
+                and _finite_number(gate_start)
+                and float(gate_start) < previous_final
+            ):
+                problems.append("cooldown gate starts before preceding run_finalized")
+            if (
+                following_first is not None
+                and _finite_number(trace_end)
+                and float(trace_end) > following_first
+            ):
+                problems.append("cooldown trace overlaps the following member")
+        actual_raw = (
+            {
+                "path": raw_path_text,
+                "sha256": actual_sha,
+                "records": len(physical_lines),
+                "preceding_bundle_id": preceding_bundle_id,
+                "following_bundle_ids": bundle_ids,
+            }
+            if raw_path_text is not None
+            else None
+        )
+    elif result == "unknown":
+        actual_raw = None
+    else:
+        problems.append("cooldown result is not in the closed result set")
+        actual_raw = None
+
+    return CooldownEvidenceValidation(
+        note=dict(note),
+        provenance_path=provenance_path,
+        provenance_sha256=provenance_sha256,
+        member_index=member_index,
+        result=result,
+        raw_artifact=actual_raw,
+        problems=tuple(sorted(set(problems))),
+    )
+
+
+def frozen_order_run_ids(analysis_manifest: AnalysisManifestState | None) -> list[str]:
+    if analysis_manifest is None or not analysis_manifest.valid:
+        return []
+    entries = analysis_manifest.raw.get("entries")
+    if not isinstance(entries, list):
+        return []
+    return [
+        entry["run_id"]
+        for entry in entries
+        if isinstance(entry, dict) and isinstance(entry.get("run_id"), str)
+    ]
+
+
 def prior_campaign_cooldown_evidence(
-    runs_dir: Path, analysis_manifest_id: str | None
-) -> dict[str, dict[str, Any]]:
-    """Recover persistent per-member gate evidence from earlier invocations."""
-    evidence: dict[str, dict[str, Any]] = {}
+    runs_dir: Path,
+    analysis_manifest_id: str | None,
+    frozen_run_ids: list[str],
+) -> PriorCampaignCooldownEvidence:
+    """Parse and re-derive every persisted cooldown note; trust no verified flag."""
     manifest_dir = runs_dir / "campaign_manifests"
     if not manifest_dir.is_dir():
-        return evidence
+        return PriorCampaignCooldownEvidence(by_bundle={})
+    validations: list[tuple[str, CooldownEvidenceValidation]] = []
+    manifest_hashes: list[dict[str, Any]] = []
+    global_problems: list[str] = []
+    exemption_claims = 0
     for path in sorted(manifest_dir.glob("*.json")):
-        raw, problem = _load_json_object(path, "campaign provenance")
-        if problem is not None or raw is None:
+        try:
+            manifest_bytes = path.read_bytes()
+            parsed = json.loads(manifest_bytes)
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            global_problems.append(f"{path}: campaign provenance cannot be verified ({exc})")
             continue
-        if raw.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA:
+        if not isinstance(parsed, dict) or parsed.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA:
             continue
-        if (
-            analysis_manifest_id is not None
-            and raw.get("analysis_manifest_id") != analysis_manifest_id
-        ):
+        if analysis_manifest_id is not None and parsed.get("analysis_manifest_id") != analysis_manifest_id:
             continue
-        members = raw.get("members")
+        manifest_sha = _sha256_bytes(manifest_bytes)
+        manifest_hashes.append({"path": str(path), "sha256": manifest_sha})
+        members = parsed.get("members")
         if not isinstance(members, list):
+            global_problems.append(f"{path}: members is not an array")
             continue
-        for member in members:
-            if not isinstance(member, dict):
+        first_notes_in_manifest = 0
+        for member_index, member in enumerate(members):
+            if isinstance(member, dict):
+                note = member.get("preceding_campaign_cooldown")
+                if isinstance(note, dict) and note.get("result") == "first_run_exempt":
+                    exemption_claims += 1
+                    first_notes_in_manifest += 1
+            validation = _validate_campaign_cooldown_member(
+                provenance_path=path,
+                provenance_sha256=manifest_sha,
+                provenance=parsed,
+                member_index=member_index,
+                frozen_run_ids=frozen_run_ids,
+                runs_dir=runs_dir,
+            )
+            if validation is None:
                 continue
-            cooldown = member.get("preceding_campaign_cooldown")
-            bundle_ids = member.get("bundle_ids")
-            if not isinstance(cooldown, dict) or not isinstance(bundle_ids, list):
-                continue
-            cooldown = dict(cooldown)
-            if cooldown.get("result") in {"recovered", "cap_hit"}:
-                raw = cooldown.get("raw_artifact")
-                raw_path_text = raw.get("path") if isinstance(raw, dict) else None
-                raw_sha = raw.get("sha256") if isinstance(raw, dict) else None
-                raw_records = raw.get("records") if isinstance(raw, dict) else None
-                valid_raw = (
-                    isinstance(raw_path_text, str)
-                    and not Path(raw_path_text).is_absolute()
-                    and Path(raw_path_text).name != raw_path_text
-                    and ".." not in Path(raw_path_text).parts
-                    and isinstance(raw_sha, str)
-                    and isinstance(raw_records, int)
-                    and not isinstance(raw_records, bool)
-                    and raw_records > 0
+            bundle_ids = member.get("bundle_ids") if isinstance(member, dict) else None
+            if isinstance(bundle_ids, list):
+                for bundle_id in bundle_ids:
+                    if isinstance(bundle_id, str):
+                        validations.append((bundle_id, validation))
+        reserved_first = parsed.get("first_physical_run_id")
+        if reserved_first is not None and first_notes_in_manifest == 0:
+            exemption_claims += 1
+            global_problems.append(
+                f"{path}: first-run exemption was reserved but no member evidence was finalized"
+            )
+        if reserved_first is not None and (
+            not isinstance(reserved_first, str)
+            or not frozen_run_ids
+            or reserved_first != frozen_run_ids[0]
+        ):
+            global_problems.append(
+                f"{path}: first_physical_run_id does not match the frozen first member"
+            )
+
+    if exemption_claims != 1 and exemption_claims:
+        validations = [
+            (
+                bundle_id,
+                replace(
+                    validation,
+                    problems=tuple(
+                        sorted(
+                            set(validation.problems)
+                            | {"first_run_exempt must appear exactly once per frozen campaign"}
+                        )
+                    ),
                 )
-                raw_path = path.parent / raw_path_text if valid_raw else None
-                if (
-                    raw_path is None
-                    or not raw_path.is_file()
-                    or _sha256_bytes(raw_path.read_bytes()) != raw_sha
-                ):
-                    cooldown.update(
-                        {
-                            "result": "unknown",
-                            "reason": "raw cooldown provenance missing or hash-invalid",
-                        }
+                if validation.result == "first_run_exempt"
+                else validation,
+            )
+            for bundle_id, validation in validations
+        ]
+    if any(
+        validation.result == "first_run_exempt" and validation.problems
+        for _, validation in validations
+    ):
+        global_problems.append("first_run_exempt evidence is unverifiable")
+    grouped: dict[str, list[CooldownEvidenceValidation]] = {}
+    for bundle_id, validation in validations:
+        grouped.setdefault(bundle_id, []).append(validation)
+    by_bundle: dict[str, CooldownEvidenceValidation] = {}
+    for bundle_id, candidates in grouped.items():
+        chosen = candidates[-1]
+        if len(candidates) != 1:
+            chosen = replace(
+                chosen,
+                problems=tuple(
+                    sorted(
+                        set(chosen.problems)
+                        | {"multiple cooldown evidence notes target the same bundle"}
                     )
-                else:
-                    raw["verified"] = True
-            for bundle_id in bundle_ids:
-                if isinstance(bundle_id, str):
-                    evidence[bundle_id] = cooldown
-    return evidence
+                ),
+            )
+        by_bundle[bundle_id] = chosen
+    return PriorCampaignCooldownEvidence(
+        by_bundle=by_bundle,
+        manifest_hashes=tuple(manifest_hashes),
+        first_run_exemption_claims=exemption_claims,
+        problems=tuple(sorted(set(global_problems))),
+    )
 
 
 def _idle_baseline_from_summary(summary: dict[str, Any] | None):
@@ -1506,23 +2053,41 @@ def _idle_baseline_from_summary(summary: dict[str, Any] | None):
 
 def _write_campaign_cooldown_trace(
     provenance_path: Path,
-    following_run_id: str,
+    note: dict[str, Any],
     trace: list[dict[str, Any]],
 ) -> dict[str, Any]:
     raw_dir = provenance_path.parent / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
     filename = (
         f"{provenance_path.stem}__cooldown_before_"
-        f"{sanitize_id_component(following_run_id)}.jsonl"
+        f"{sanitize_id_component(str(note['following_run_id']))}.jsonl"
     )
     path = raw_dir / filename
-    payload = "".join(json.dumps(row, sort_keys=True) + "\n" for row in trace)
+    enriched = [
+        {
+            "schema_version": CAMPAIGN_COOLDOWN_TRACE_SCHEMA,
+            "session_id": note["session_id"],
+            "cooldown_run_id": note["cooldown_run_id"],
+            "sample_index": index,
+            "preceding_run_id": note["preceding_run_id"],
+            "preceding_bundle_id": note["preceding_bundle_id"],
+            "following_run_id": note["following_run_id"],
+            "following_bundle_ids": note["following_bundle_ids"],
+            "gate_started_at_s": note["gate_started_at_s"],
+            "timestamp_s": row.get("timestamp_s"),
+            "waited_s": row.get("waited_s"),
+            "rolling_mean_power_w": row.get("rolling_mean_power_w"),
+            "baseline": row.get("baseline"),
+        }
+        for index, row in enumerate(trace)
+    ]
+    payload = "".join(json.dumps(row, sort_keys=True) + "\n" for row in enriched)
     with path.open("x", encoding="utf-8") as handle:
         handle.write(payload)
     return {
         "path": f"raw/{filename}",
         "sha256": _sha256_bytes(payload.encode("utf-8")),
-        "records": len(trace),
+        "records": len(enriched),
     }
 
 
@@ -1537,8 +2102,17 @@ def campaign_cooldown_before_member(
     """Measure D-014 recovery and attach its tri-state result to the next run."""
     note: dict[str, Any] = {
         "session_id": session_id,
-        "after_bundle_id": previous_evaluation.bundle_id,
+        "preceding_run_id": previous_info.run_id,
+        "preceding_bundle_id": previous_evaluation.bundle_id,
         "following_run_id": following_info.run_id,
+        "following_bundle_ids": (
+            [following_info.run_id]
+            if following_info.repetitions == 1
+            else [
+                f"{following_info.run_id}__r{rep}"
+                for rep in range(1, following_info.repetitions + 1)
+            ]
+        ),
         "recorded_at": utc_timestamp(),
     }
     baseline = _idle_baseline_from_summary(previous_evaluation.summary)
@@ -1589,8 +2163,11 @@ def campaign_cooldown_before_member(
         trace = gate.pop("_trace", [])
         note.update(gate)
         if trace:
+            note["gate_started_at_s"] = (
+                float(trace[0]["timestamp_s"]) - float(trace[0]["waited_s"])
+            )
             note["raw_artifact"] = _write_campaign_cooldown_trace(
-                provenance_path, following_info.run_id, trace
+                provenance_path, note, trace
             )
         else:
             note.update({"result": "unknown", "reason": "cooldown trace was empty"})
@@ -1690,11 +2267,15 @@ def collection_verdict_for(categories: dict[str, list[str]]) -> tuple[str, list[
 def _manifest_readiness_reasons(state: AnalysisManifestState) -> list[str]:
     reasons = {"analysis_manifest_invalid"}
     for problem in state.problems:
-        if "not frozen" in problem:
+        if "freeze_status" in problem or "not frozen" in problem:
             reasons.add("analysis_manifest_not_frozen")
-        if "order_manifest.sha256 mismatch" in problem:
+        if "order_manifest.sha256" in problem and (
+            "mismatch" in problem or "source hash mismatch" in problem
+        ):
             reasons.add("order_manifest_hash_mismatch")
-        if "config_sha256 mismatch" in problem:
+        if "config_sha256" in problem and (
+            "mismatch" in problem or "does not match config bytes" in problem
+        ):
             reasons.add("config_hash_mismatch")
     return sorted(reasons)
 
@@ -1706,30 +2287,62 @@ def _precheck_for_contrast(
         return None
     root = summary.get("window_evidence_precheck")
     if not isinstance(root, dict):
-        # P2-040 currently emits this stable-reason surface. P2-041 consumes it
-        # until the separately queued reducer-field migration lands.
-        root = summary.get("claim_eligibility")
-    if not isinstance(root, dict):
         return None
     metric = contrast.get("metric")
     if not isinstance(metric, dict):
         return None
-    window_class = metric.get("window_class")
     metric_name = metric.get("name")
-    if window_class in {"gross_request", "idle_subtracted_request", "request"}:
-        value = root.get(window_class)
+    metric_tag = metric.get("metric_tag")
+    if metric_tag == "gross_request" or metric_name == "gross_energy_j":
+        value = root.get("gross_request")
         return value if isinstance(value, dict) else None
-    if window_class in {"gross_phase", "phase"}:
+    if metric_tag == "idle_request" or metric_name in {
+        "energy_request_j",
+        "idle_subtracted_energy_j",
+    }:
+        value = root.get("idle_subtracted_request")
+        return value if isinstance(value, dict) else None
+    if isinstance(metric_name, str) and metric_name.startswith("phase_energy_j."):
         phase = root.get("phase")
-        phase_name = metric_name.rsplit(".", 1)[-1] if isinstance(metric_name, str) else None
+        phase_name = metric_name.rsplit(".", 1)[-1]
         value = phase.get(phase_name) if isinstance(phase, dict) and phase_name else None
         return value if isinstance(value, dict) else None
-    value = root.get(window_class) if isinstance(window_class, str) else None
-    return value if isinstance(value, dict) else None
+    return None
+
+
+def _metric_is_finite(summary: dict[str, Any] | None, contrast: dict[str, Any]) -> bool:
+    if not isinstance(summary, dict):
+        return False
+    metric = contrast.get("metric")
+    metric_name = metric.get("name") if isinstance(metric, dict) else None
+    if not isinstance(metric_name, str) or not metric_name:
+        return False
+    value: Any = summary
+    for part in metric_name.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return False
+        value = value[part]
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int | float)
+        and math.isfinite(float(value))
+    )
+
+
+def _contrast_uses_idle_subtraction(contrast: dict[str, Any]) -> bool:
+    metric = contrast.get("metric")
+    if not isinstance(metric, dict):
+        return False
+    return metric.get("metric_tag") == "idle_request" or metric.get("name") in {
+        "energy_request_j",
+        "idle_subtracted_energy_j",
+    }
 
 
 def _member_readiness_reasons(
-    evaluation: MemberEvaluation, contrast: dict[str, Any]
+    evaluation: MemberEvaluation,
+    contrast: dict[str, Any],
+    cooldown_evidence: CooldownEvidenceValidation | None,
 ) -> list[str]:
     reasons: set[str] = set()
     if not evaluation.strict_valid:
@@ -1738,6 +2351,10 @@ def _member_readiness_reasons(
         reasons.add("bundle_status_not_succeeded")
     if evaluation.waiver is not None:
         reasons.add("bundle_strict_invalid")
+    if "config_manifest_mismatch" in evaluation.collection_integrity_flags:
+        reasons.add("config_hash_mismatch")
+    if not _metric_is_finite(evaluation.summary, contrast):
+        reasons.add("metric_missing_or_nonfinite")
     precheck = _precheck_for_contrast(evaluation.summary, contrast)
     if precheck is None:
         reasons.add("window_evidence_precheck_missing")
@@ -1745,36 +2362,25 @@ def _member_readiness_reasons(
         embedded = precheck.get("reasons")
         if isinstance(embedded, list):
             reasons.update(reason for reason in embedded if isinstance(reason, str))
+        else:
+            reasons.add("window_evidence_precheck_missing")
         if precheck.get("eligible") is not True and not embedded:
             reasons.add("window_evidence_precheck_missing")
 
-    cooldown = evaluation.preceding_campaign_cooldown
-    cooldown_result = cooldown.get("result") if isinstance(cooldown, dict) else None
-    raw = cooldown.get("raw_artifact") if isinstance(cooldown, dict) else None
-    raw_present = (
-        isinstance(raw, dict)
-        and isinstance(raw.get("path"), str)
-        and isinstance(raw.get("sha256"), str)
-        and isinstance(raw.get("records"), int)
-        and not isinstance(raw.get("records"), bool)
-        and raw["records"] > 0
-    )
-    if cooldown_result == "cap_hit":
-        reasons.add("cooldown_cap_hit")
-        if not raw_present:
-            reasons.add("campaign_cooldown_evidence_missing")
-    elif cooldown_result == "recovered" and not raw_present:
+    if cooldown_evidence is None:
         reasons.add("campaign_cooldown_evidence_missing")
-    elif cooldown_result not in ACCEPTED_CAMPAIGN_COOLDOWN_RESULTS:
+    elif not cooldown_evidence.verifiable:
+        reasons.add("cooldown_evidence_unverifiable")
+    elif cooldown_evidence.result == "cap_hit":
+        reasons.add("cooldown_cap_hit")
+    elif cooldown_evidence.result not in ACCEPTED_CAMPAIGN_COOLDOWN_RESULTS:
         reasons.add("campaign_cooldown_evidence_missing")
 
     quality = evaluation.summary.get("measurement_quality") if evaluation.summary else None
     if isinstance(quality, dict) and quality.get("cooldown_cap_hit") is True:
         reasons.add("cooldown_cap_hit")
 
-    metric = contrast.get("metric")
-    window_class = metric.get("window_class") if isinstance(metric, dict) else None
-    if window_class in {"idle_subtracted_request", "idle_request"}:
+    if _contrast_uses_idle_subtraction(contrast):
         idle_state = quality.get("idle_window_suspect") if isinstance(quality, dict) else None
         if idle_state is True:
             reasons.add("idle_window_suspect")
@@ -1783,10 +2389,12 @@ def _member_readiness_reasons(
     return sorted(reasons)
 
 
-def claim_readiness_for(
+def analysis_readiness_for(
     analysis_manifest: AnalysisManifestState | None,
     collection_verdict: str,
     evaluations: list[MemberEvaluation],
+    cooldown_evidence: PriorCampaignCooldownEvidence | None = None,
+    sampling_audit: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     base = {
         "verdict": "not_assessed",
@@ -1794,9 +2402,17 @@ def claim_readiness_for(
         "required_contrast_ids": [],
         "ready_contrast_ids": [],
         "not_ready_contrasts": [],
-        "note": CLAIM_READINESS_NOTE,
+        "note": ANALYSIS_READINESS_NOTE,
     }
     if analysis_manifest is None:
+        return base
+    if not analysis_manifest.valid:
+        base.update(
+            {
+                "verdict": "not_ready_for_analysis",
+                "reasons": _manifest_readiness_reasons(analysis_manifest),
+            }
+        )
         return base
     contrasts = analysis_manifest.raw.get("contrasts")
     if not isinstance(contrasts, list) or not contrasts:
@@ -1807,15 +2423,6 @@ def claim_readiness_for(
         if isinstance(contrast, dict) and isinstance(contrast.get("contrast_id"), str)
     ]
     base["required_contrast_ids"] = required_ids
-    if not analysis_manifest.valid:
-        base.update(
-            {
-                "verdict": "not_ready_for_analysis",
-                "reasons": _manifest_readiness_reasons(analysis_manifest),
-            }
-        )
-        return base
-
     entries = analysis_manifest.raw.get("entries")
     assert isinstance(entries, list)
     evaluation_by_bundle = {evaluation.bundle_id: evaluation for evaluation in evaluations}
@@ -1831,6 +2438,17 @@ def claim_readiness_for(
             continue
         reasons: set[str] = set()
         affected: list[str] = []
+        if cooldown_evidence is not None and (
+            cooldown_evidence.problems
+            or cooldown_evidence.first_run_exemption_claims != 1
+        ):
+            reasons.add("cooldown_evidence_unverifiable")
+        if isinstance(sampling_audit, dict):
+            audit_reasons = sampling_audit.get("reasons")
+            if isinstance(audit_reasons, list):
+                reasons.update(
+                    reason for reason in audit_reasons if isinstance(reason, str)
+                )
         if collection_verdict != "usable":
             reasons.add("fixed_n_plan_incomplete")
         block_ids = contrast.get("block_ids")
@@ -1862,7 +2480,17 @@ def claim_readiness_for(
                     continue
                 affected.append(evaluation.bundle_id)
                 pair.append(evaluation)
-                reasons.update(_member_readiness_reasons(evaluation, contrast))
+                reasons.update(
+                    _member_readiness_reasons(
+                        evaluation,
+                        contrast,
+                        (
+                            cooldown_evidence.by_bundle.get(evaluation.bundle_id)
+                            if cooldown_evidence is not None
+                            else None
+                        ),
+                    )
+                )
             if len(pair) == 2:
                 complete_blocks += 1
         design = analysis_manifest.raw.get("design")
@@ -1906,10 +2534,39 @@ def claim_readiness_for(
     return base
 
 
-def sampling_audit_for(analysis_manifest: AnalysisManifestState | None) -> dict[str, Any]:
+def _scientific_config_identity(value: Any) -> str | None:
+    normalized = _normalized_benchmark_config(value)
+    if normalized is None:
+        return None
+    normalized.pop("run_id", None)
+    run_metadata = normalized.pop("run_metadata", None)
+    normalized["ambient_temp_c"] = (
+        run_metadata.get("ambient_temp_c")
+        if isinstance(run_metadata, dict)
+        else None
+    )
+    return _sha256_bytes(
+        json.dumps(
+            normalized,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+    )
+
+
+def sampling_audit_for(
+    analysis_manifest: AnalysisManifestState | None,
+    runs_dir: Path | None,
+) -> dict[str, Any]:
     planned_n: int | None = None
     design_name: str | None = None
     registered: list[str] = []
+    registered_identity_by_run_id: dict[str, str] = {}
+    registered_raw_run_id_by_dir: dict[str, str] = {}
+    reasons: set[str] = {"top_up_detection_scope_incomplete"}
+    scan_status = "not_run"
+    unregistered: list[str] = []
     if analysis_manifest is not None:
         design = analysis_manifest.raw.get("design")
         sampling = design.get("sampling_plan") if isinstance(design, dict) else None
@@ -1928,13 +2585,96 @@ def sampling_audit_for(analysis_manifest: AnalysisManifestState | None) -> dict[
                 for entry in entries
                 if isinstance(entry, dict) and isinstance(entry.get("run_id"), str)
             )
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                config_name = entry.get("config")
+                if not isinstance(config_name, str):
+                    continue
+                try:
+                    config_value = json.loads(
+                        (analysis_manifest.path.parent / config_name).read_text(
+                            encoding="utf-8"
+                        )
+                    )
+                except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+                    continue
+                identity = _scientific_config_identity(config_value)
+                run_id = entry.get("run_id")
+                if identity is not None and isinstance(run_id, str):
+                    registered_identity_by_run_id[run_id] = identity
+                    raw_run_id = (
+                        config_value.get("run_id")
+                        if isinstance(config_value, dict)
+                        else None
+                    )
+                    if isinstance(raw_run_id, str):
+                        registered_raw_run_id_by_dir[run_id] = raw_run_id
+    registered_identities = set(registered_identity_by_run_id.values())
+    if runs_dir is not None and analysis_manifest is not None and analysis_manifest.valid:
+        scan_status = "complete"
+        try:
+            children = sorted(runs_dir.iterdir(), key=lambda path: path.name)
+        except OSError:
+            children = []
+            scan_status = "incomplete"
+        for child in children:
+            if child.name in {"campaign_manifests", "experiments"}:
+                continue
+            if child.is_symlink():
+                scan_status = "incomplete"
+                continue
+            if not child.is_dir() or not (child / "config.json").is_file():
+                continue
+            try:
+                strict_problems = validate_bundle(child, strict=True)
+            except Exception:  # noqa: BLE001 - scanner failures are fail-closed.
+                scan_status = "incomplete"
+                continue
+            if strict_problems:
+                continue
+            try:
+                candidate_config = json.loads(
+                    (child / "config.json").read_text(encoding="utf-8")
+                )
+            except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+                scan_status = "incomplete"
+                continue
+            identity = _scientific_config_identity(candidate_config)
+            internal_run_id = (
+                candidate_config.get("run_id")
+                if isinstance(candidate_config, dict)
+                else None
+            )
+            is_bound_registered = (
+                child.name in registered_identity_by_run_id
+                and isinstance(internal_run_id, str)
+                and sanitize_id_component(internal_run_id) == child.name
+                and internal_run_id == registered_raw_run_id_by_dir.get(child.name)
+                and identity == registered_identity_by_run_id[child.name]
+            )
+            if is_bound_registered:
+                continue
+            if (
+                identity is not None
+                and identity in registered_identities
+            ):
+                unregistered.append(child.name)
+        if unregistered:
+            reasons.add("unregistered_matching_bundle")
     return {
         "design": design_name,
         "planned_n_blocks": planned_n,
         "registered_bundle_ids": registered,
-        "unregistered_matching_bundle_ids": [],
+        "unregistered_matching_bundle_ids": sorted(unregistered),
         "valid_replacements": [],
-        "top_up_suspected": False,
+        "top_up_suspected": bool(unregistered),
+        "detection_scope": {
+            "campaign_runs_dir": str(runs_dir) if runs_dir is not None else None,
+            "campaign_dir_scan": scan_status,
+            "wider_scope_scan": "out_of_reach",
+        },
+        "reasons": sorted(reasons),
     }
 
 
@@ -1942,7 +2682,7 @@ def print_verdict(
     collection_verdict: str,
     collection_reasons: list[str],
     categories: dict[str, list[str]],
-    claim_readiness: dict[str, Any],
+    analysis_readiness: dict[str, Any],
 ) -> None:
     print("COLLECTION VERDICT:")
     print(f"  verdict: {collection_verdict}")
@@ -1951,11 +2691,58 @@ def print_verdict(
     for key in ("usable", "waived", "failed", "missing"):
         members = ", ".join(categories[key]) if categories[key] else "<none>"
         print(f"  {key}: {members}")
-    print("CLAIM-INPUT READINESS:")
-    print(f"  verdict: {claim_readiness['verdict']}")
-    for reason in claim_readiness["reasons"]:
+    print("ANALYSIS READINESS:")
+    print(f"  verdict: {analysis_readiness['verdict']}")
+    for reason in analysis_readiness["reasons"]:
         print(f"  reason: {reason}")
-    print(f"  note: {claim_readiness['note']}")
+    print(f"  note: {analysis_readiness['note']}")
+
+
+def cooldown_provenance_for_verdict(
+    state: PriorCampaignCooldownEvidence | None,
+    current_path: Path | None,
+) -> dict[str, Any] | None:
+    manifests = list(state.manifest_hashes) if state is not None else []
+    known_paths = {row.get("path") for row in manifests}
+    if current_path is not None and str(current_path) not in known_paths:
+        try:
+            current_sha = _sha256_bytes(current_path.read_bytes())
+        except OSError:
+            current_sha = None
+        manifests.append({"path": str(current_path), "sha256": current_sha})
+    artifacts: list[dict[str, Any]] = []
+    seen_artifacts: set[tuple[Any, ...]] = set()
+    if state is not None:
+        for validation in state.by_bundle.values():
+            raw = validation.raw_artifact
+            if not isinstance(raw, dict):
+                continue
+            identity = (
+                str(validation.provenance_path),
+                raw.get("path"),
+                raw.get("sha256"),
+            )
+            if identity in seen_artifacts:
+                continue
+            seen_artifacts.add(identity)
+            artifacts.append(
+                {
+                    **raw,
+                    "provenance_path": str(validation.provenance_path),
+                    "provenance_sha256": validation.provenance_sha256,
+                    "validation": "valid" if validation.verifiable else "invalid",
+                    "problems": list(validation.problems),
+                }
+            )
+    if not manifests and not artifacts:
+        return None
+    return {
+        "manifests": sorted(manifests, key=lambda row: str(row.get("path"))),
+        "cooldown_artifacts": sorted(
+            artifacts,
+            key=lambda row: (str(row.get("provenance_path")), str(row.get("path"))),
+        ),
+    }
 
 
 def append_verdict(
@@ -1964,11 +2751,12 @@ def append_verdict(
     collection_verdict: str,
     collection_reasons: list[str],
     categories: dict[str, list[str]],
-    claim_readiness: dict[str, Any],
+    analysis_readiness: dict[str, Any],
     analysis_manifest: AnalysisManifestState | None,
     sampling_audit: dict[str, Any],
     members: list[MemberEvaluation],
     campaign_provenance_path: Path | None,
+    cooldown_evidence: PriorCampaignCooldownEvidence | None,
     warning: str | None,
 ) -> None:
     row: dict[str, Any] = {
@@ -1984,13 +2772,12 @@ def append_verdict(
             "reasons": collection_reasons,
             "categories": categories,
         },
-        "claim_readiness": claim_readiness,
+        "analysis_readiness": analysis_readiness,
         "sampling_audit": sampling_audit,
         "members": [member.to_log() for member in members],
-        "campaign_provenance": (
-            {"manifest_path": str(campaign_provenance_path)}
-            if campaign_provenance_path is not None
-            else None
+        "campaign_provenance": cooldown_provenance_for_verdict(
+            cooldown_evidence,
+            campaign_provenance_path,
         ),
     }
     if warning is not None:
@@ -2029,18 +2816,25 @@ def run_campaign(args: argparse.Namespace) -> int:
     if analysis_manifest is not None and not analysis_manifest.valid and not args.dry_run:
         categories = {"usable": [], "waived": [], "failed": [], "missing": []}
         collection_reasons = ["analysis manifest validation failed before execution"]
-        readiness = claim_readiness_for(analysis_manifest, "invalid", [])
+        sampling_audit = sampling_audit_for(analysis_manifest, runs_dir)
+        readiness = analysis_readiness_for(
+            analysis_manifest,
+            "invalid",
+            [],
+            sampling_audit=sampling_audit,
+        )
         print_verdict("invalid", collection_reasons, categories, readiness)
         append_verdict(
             log_path,
             collection_verdict="invalid",
             collection_reasons=collection_reasons,
             categories=categories,
-            claim_readiness=readiness,
+            analysis_readiness=readiness,
             analysis_manifest=analysis_manifest,
-            sampling_audit=sampling_audit_for(analysis_manifest),
+            sampling_audit=sampling_audit,
             members=[],
             campaign_provenance_path=None,
+            cooldown_evidence=None,
             warning=order_warning,
         )
         return 1
@@ -2053,10 +2847,17 @@ def run_campaign(args: argparse.Namespace) -> int:
     previous_model_tag: str | None = None
     previous_physical_info: ConfigInfo | None = None
     previous_physical_evaluation: MemberEvaluation | None = None
-    cooldown_by_bundle = prior_campaign_cooldown_evidence(
+    frozen_run_ids = frozen_order_run_ids(analysis_manifest)
+    prior_cooldown_state = prior_campaign_cooldown_evidence(
         runs_dir,
         analysis_manifest.manifest_id if analysis_manifest is not None else None,
+        frozen_run_ids,
     )
+    cooldown_by_bundle = {
+        bundle_id: validation.effective_note()
+        for bundle_id, validation in prior_cooldown_state.by_bundle.items()
+    }
+    first_run_exemption_claims = prior_cooldown_state.first_run_exemption_claims
     campaign_provenance_path: Path | None = None
     campaign_provenance: dict[str, Any] | None = None
 
@@ -2183,11 +2984,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                     info=info,
                     bundle_ids=[evaluation.bundle_id for evaluation in evaluations],
                     execution="existing",
-                    cooldown=(
-                        evaluations[0].preceding_campaign_cooldown
-                        if evaluations
-                        else None
-                    ),
+                    cooldown=None,
                 )
                 append_log(
                     log_path,
@@ -2201,6 +2998,9 @@ def run_campaign(args: argparse.Namespace) -> int:
                     ),
                 )
                 counts[status] += 1
+                if evaluations:
+                    previous_physical_info = info
+                    previous_physical_evaluation = evaluations[-1]
                 if failures >= args.max_failures:
                     break
                 continue
@@ -2246,16 +3046,25 @@ def run_campaign(args: argparse.Namespace) -> int:
 
             assert campaign_provenance_path is not None
             assert campaign_provenance is not None
-            if previous_physical_info is None or previous_physical_evaluation is None:
+            frozen_first_run_id = frozen_run_ids[0] if frozen_run_ids else None
+            following_bundle_ids = [
+                bundle_dir.name for bundle_dir in expected_member_dirs(info, runs_dir)
+            ]
+            if (
+                info.run_id == frozen_first_run_id
+                and first_run_exemption_claims == 0
+            ):
                 cooldown_note = {
                     "result": "first_run_exempt",
                     "session_id": campaign_provenance["session_id"],
                     "following_run_id": info.run_id,
+                    "following_bundle_ids": following_bundle_ids,
                     "recorded_at": utc_timestamp(),
                 }
                 campaign_provenance["first_physical_run_id"] = info.run_id
+                first_run_exemption_claims += 1
                 write_campaign_provenance(campaign_provenance_path, campaign_provenance)
-            else:
+            elif previous_physical_info is not None and previous_physical_evaluation is not None:
                 cooldown_note = campaign_cooldown_before_member(
                     previous_info=previous_physical_info,
                     previous_evaluation=previous_physical_evaluation,
@@ -2263,6 +3072,18 @@ def run_campaign(args: argparse.Namespace) -> int:
                     provenance_path=campaign_provenance_path,
                     session_id=campaign_provenance["session_id"],
                 )
+            else:
+                cooldown_note = {
+                    "result": "unknown",
+                    "session_id": campaign_provenance["session_id"],
+                    "following_run_id": info.run_id,
+                    "following_bundle_ids": following_bundle_ids,
+                    "recorded_at": utc_timestamp(),
+                    "reason": (
+                        "member is not the first frozen-order run and no preceding "
+                        "physical member is available for a recovery gate"
+                    ),
+                }
             for bundle_dir in expected_member_dirs(info, runs_dir):
                 cooldown_by_bundle[bundle_dir.name] = cooldown_note
 
@@ -2356,15 +3177,24 @@ def run_campaign(args: argparse.Namespace) -> int:
         return 0
     categories = classify_campaign_members(all_evaluations, missing_members)
     collection_verdict, collection_reasons = collection_verdict_for(categories)
-    claim_readiness = claim_readiness_for(
-        analysis_manifest, collection_verdict, all_evaluations
+    final_cooldown_state = prior_campaign_cooldown_evidence(
+        runs_dir,
+        analysis_manifest.manifest_id if analysis_manifest is not None else None,
+        frozen_run_ids,
     )
-    sampling_audit = sampling_audit_for(analysis_manifest)
+    sampling_audit = sampling_audit_for(analysis_manifest, runs_dir)
+    analysis_readiness = analysis_readiness_for(
+        analysis_manifest,
+        collection_verdict,
+        all_evaluations,
+        final_cooldown_state,
+        sampling_audit,
+    )
     print_verdict(
         collection_verdict,
         collection_reasons,
         categories,
-        claim_readiness,
+        analysis_readiness,
     )
     if not args.dry_run:
         append_verdict(
@@ -2372,11 +3202,12 @@ def run_campaign(args: argparse.Namespace) -> int:
             collection_verdict=collection_verdict,
             collection_reasons=collection_reasons,
             categories=categories,
-            claim_readiness=claim_readiness,
+            analysis_readiness=analysis_readiness,
             analysis_manifest=analysis_manifest,
             sampling_audit=sampling_audit,
             members=all_evaluations,
             campaign_provenance_path=campaign_provenance_path,
+            cooldown_evidence=final_cooldown_state,
             warning=order_warning,
         )
     return 1 if failures or collection_verdict in {"blocked", "invalid"} else 0

@@ -17,7 +17,7 @@ from joulewise.validation import finite_float
 CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
-SUMMARY_REDUCER_VERSION = "0.3.0"
+SUMMARY_REDUCER_VERSION = "0.4.0"
 
 
 class SchemaError(ValueError):
@@ -642,7 +642,7 @@ class SummaryMetrics:
     energy_uncertainty_status: str | None = None
     energy_variance_terms_j2: dict[str, float | None] | None = None
     energy_bound_terms_j: dict[str, float | None] | None = None
-    claim_eligibility: dict[str, Any] | None = None
+    window_evidence_precheck: dict[str, Any] | None = None
     summary_provenance: dict[str, str] | None = field(
         default_factory=lambda: {
             "summary_schema_version": SUMMARY_SCHEMA_VERSION,
@@ -700,7 +700,7 @@ class SummaryMetrics:
                 },
                 "energy_variance_terms_j2": {"type": ["object", "null"]},
                 "energy_bound_terms_j": {"type": ["object", "null"]},
-                "claim_eligibility": {"type": ["object", "null"]},
+                "window_evidence_precheck": {"type": ["object", "null"]},
                 "summary_provenance": {
                     "anyOf": [{"$ref": "#/$defs/summary_provenance"}, {"type": "null"}]
                 },

@@ -1561,6 +1561,19 @@ Succeeded bundles with a nonpositive measured window fail strict admission;
 honest failed summaries remain structurally and strictly valid because they
 make no successful-measurement claim.
 
+Amendment (2026-07-10, P2-041 major-fix / Component C5): reducer `0.4.0`
+renames the top-level evidence-only surface from `claim_eligibility` to
+`window_evidence_precheck`, removes the generic `request` alias from newly
+reduced summaries, and retains the metric-specific `gross_request` and
+`idle_subtracted_request` entries. This is a governed semantic/version change,
+not an additive 0.3.0 projection: a current-era summary recording reducer
+`0.3.0` or carrying only `claim_eligibility` fails strict dispatch with
+`unsupported reducer version; re-reduction required`. The frozen pre-D-033
+legacy allowlist may tolerate/map old absence for mechanical strict comparison,
+but that compatibility mapping never authorizes positive analysis readiness.
+Reducer `0.4.0` remains summary schema `0.1`; schema `0.2` is still reserved for
+the previously adjudicated composite changes.
+
 Revisit when: bundle schema v0.2 lands (composite summaries need their
 own strict semantics), or a reducer version bump makes historical
 summaries legitimately differ from fresh reductions (then strict needs
@@ -2836,6 +2849,18 @@ analysis/campaign consumer vocabulary is:
 versioned amendment. P2-041 copies reducer reasons verbatim, uses the
 campaign-specific subset above, and never treats absent/null cooldown state
 as recovery.
+
+Amendment (2026-07-10, P2-041 accepted hardening findings; campaign-consumer
+vocabulary v1.1): add `cooldown_evidence_unverifiable`,
+`unregistered_matching_bundle`, and `top_up_detection_scope_incomplete`.
+The first distinguishes a claimed cooldown trace whose bytes, shape,
+re-derived rolling decision, identity adjacency, or timestamps cannot be
+verified from evidence; absence remains `campaign_cooldown_evidence_missing`.
+The second names a strict-valid campaign-directory bundle whose normalized
+scientific config matches a frozen cell but whose run is unregistered. The
+third is mandatory whenever top-up detection cannot close a scope wider than
+the campaign runs directory. These are fail-closed analysis-input reasons,
+not collection-integrity failures and not P2-037 claim outcomes.
 
 ## D-058: Token-normalization and stack-identity contract adopted
 

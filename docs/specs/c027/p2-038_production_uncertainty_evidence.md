@@ -22,14 +22,17 @@ Acceptance is all of the following:
 4. A production-shaped test traverses the real powermetrics adapter, parser, controller, reducer, and strict validator. It must not replace the telemetry adapter with a fake implementation.
 5. The live C-019/P2-015-SMOKE gate produces one real bundle for which:
    - strict validation passes before and after `joulewise reduce`;
-   - `summary_metrics.json.claim_eligibility.request.eligible` is `true`;
+   - `summary_metrics.json.window_evidence_precheck.idle_subtracted_request.eligible` is `true`;
    - `reasons` is exactly `[]`;
    - backup succeeds;
    - no bound was supplied through `extra_metadata`.
 6. Production-derived negative cases exercise `clock_bound_unrecorded`, `clock_bound_exceeds_quarter_window`, and `drift_term_unknown`.
 7. The existing six legacy bundles remain strict-valid under their exact D-033 identity allowlist, but acquire no modern eligibility by exemption.
 
-Premise correction: there is no top-level `claim_eligibility.eligible` field. The current single request-window result is `claim_eligibility.request.eligible`. This spec uses the actual path.
+Premise correction: there is no top-level `window_evidence_precheck.eligible`
+field. The idle-subtracted request result is
+`window_evidence_precheck.idle_subtracted_request.eligible`; gross request has
+its separate metric-specific entry.
 
 ## 2. Binding design rulings
 
@@ -586,8 +589,8 @@ For a valid production bundle:
 
 ```json
 {
-  "claim_eligibility": {
-    "request": {
+  "window_evidence_precheck": {
+    "idle_subtracted_request": {
       "eligible": true,
       "reasons": []
     }
@@ -652,8 +655,8 @@ For the single expected bundle, the campaign runner performs:
    - all four top-level bounds are finite and non-negative;
    - `metadata.extra` contains neither `clock_anchor_bound_s` nor `idle_drift_bound_w`;
    - `energy_bound_terms_j.E_drift_bound_j` is finite;
-   - `claim_eligibility.request.eligible is True`;
-   - `claim_eligibility.request.reasons == []`;
+   - `window_evidence_precheck.idle_subtracted_request.eligible is True`;
+   - `window_evidence_precheck.idle_subtracted_request.reasons == []`;
    - `clock_bound_unrecorded`, `clock_bound_exceeds_quarter_window`, `drift_term_unknown`, and `interpolation_bound_unrecorded` are absent.
 6. Run the supplied backup command and require exit zero.
 7. Record the bundle ID, strict checks, re-reduction exit, evidence methods, request eligibility, backup command identity, and backup exit in the campaign log.
@@ -776,7 +779,9 @@ It may use the mock runtime to keep CI independent of MLX, but it must not monke
 - controller metadata;
 - reducer eligibility.
 
-It asserts strict validity and `claim_eligibility.request.eligible == true` without editing `metadata.json` after the run.
+It asserts strict validity and
+`window_evidence_precheck.idle_subtracted_request.eligible == true` without
+editing `metadata.json` after the run.
 
 This test is mandatory because adapter-replacement tests have repeatedly hidden live-only lifecycle defects.
 
@@ -879,7 +884,8 @@ Using the maximum of anchor, first-edge, and last-edge components may disqualify
 ### 15.1 Resolved premise deviations
 
 - The controller currently has no monotonic event clock; it has wall-clock events and one monotonic-minus-wall metadata point. This spec adds paired monotonic observations without overriding D-003.
-- `claim_eligibility` has no global `eligible` property. The shakedown asserts `claim_eligibility.request.eligible`.
+- `window_evidence_precheck` has no global `eligible` property. The shakedown
+  asserts `window_evidence_precheck.idle_subtracted_request.eligible`.
 - Current P2-015 floors do not populate an idle-drift watt bound. The handoff therefore adds a separate `idle_drift_guard` artifact member.
 - `detection_floor.md` §3 still says uncertainty propagation is future work, while D-057 and the code show P2-029 landed. Implementation must correct that stale tense without changing D-057 semantics.
 

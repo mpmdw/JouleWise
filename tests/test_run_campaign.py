@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import copy
+import importlib.util
 import json
 import hashlib
 import os
@@ -9,7 +11,10 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from dataclasses import replace as dataclass_replace
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +22,13 @@ SCRIPT = ROOT / "scripts" / "run_campaign.py"
 BASE_CONFIG = ROOT / "configs" / "examples" / "mock_local.json"
 SUITE_CONFIG = ROOT / "configs" / "examples" / "mock_suite_local.json"
 COMMAND_TIMEOUT_S = 60
+GENERATOR = ROOT / "scripts" / "generate_matrix.py"
+
+spec = importlib.util.spec_from_file_location("run_campaign_module", SCRIPT)
+run_campaign_module = importlib.util.module_from_spec(spec)
+assert spec.loader is not None
+sys.modules["run_campaign_module"] = run_campaign_module
+spec.loader.exec_module(run_campaign_module)
 
 
 def run_campaign(
@@ -127,8 +139,17 @@ def write_single_bundle(
     status: str = "succeeded",
     *,
     idle_window_suspect: bool | None = None,
+    config_path: Path | None = None,
+    start_s: float = 0.0,
 ) -> None:
-    _write_bundle(runs_dir, run_id, status, idle_window_suspect=idle_window_suspect)
+    _write_bundle(
+        runs_dir,
+        run_id,
+        status,
+        idle_window_suspect=idle_window_suspect,
+        config_path=config_path,
+        start_s=start_s,
+    )
 
 
 def write_experiment(
@@ -172,6 +193,8 @@ def _write_bundle(
     status: str,
     *,
     idle_window_suspect: bool | None = None,
+    config_path: Path | None = None,
+    start_s: float = 0.0,
 ) -> None:
     from joulewise import reduce as reduce_module
     from joulewise.bundle import RunBundleWriter
@@ -180,16 +203,18 @@ def _write_bundle(
     from joulewise.provenance import output_policy, prompt_provenance
     from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus, SummaryMetrics
 
-    config_data = json.loads(BASE_CONFIG.read_text(encoding="utf-8"))
+    source_config = config_path if config_path is not None else BASE_CONFIG
+    config_data = json.loads(source_config.read_text(encoding="utf-8"))
     config_data["run_id"] = run_id
     config_data["workload_profile"]["repetitions"] = 1
     config = BenchmarkConfig.from_mapping(config_data)
-    writer = RunBundleWriter.create(runs_dir, config, FakeClock(start=3.0))
+    telemetry_backend = config.hardware_target.telemetry_backend.value
+    writer = RunBundleWriter.create(runs_dir, config, FakeClock(start=start_s + 1.1))
 
     def event(timestamp_s: float, event_type: str, phase: str, message: str = "") -> None:
         writer.append_event(
             RuntimeEvent(
-                timestamp_s=timestamp_s,
+                timestamp_s=start_s + timestamp_s,
                 event_type=event_type,
                 phase=phase,
                 message=message or f"{event_type} {phase}",
@@ -210,11 +235,13 @@ def _write_bundle(
         event(1.0, "stage_completed", "measured_run")
         writer.write_power_trace(
             [
-                PowerSample(timestamp_s=0.0, power_w=7.5, source="mock", rail="mock"),
-                PowerSample(timestamp_s=0.25, power_w=7.5, source="mock", rail="mock"),
-                PowerSample(timestamp_s=0.5, power_w=7.5, source="mock", rail="mock"),
-                PowerSample(timestamp_s=0.75, power_w=7.5, source="mock", rail="mock"),
-                PowerSample(timestamp_s=1.0, power_w=7.5, source="mock", rail="mock"),
+                PowerSample(
+                    timestamp_s=start_s + step / 10.0,
+                    power_w=7.5,
+                    source=telemetry_backend,
+                    rail="mock",
+                )
+                for step in range(11)
             ]
         )
         idle = {
@@ -222,15 +249,17 @@ def _write_bundle(
             "power_w_stddev": 0.0,
             "duration_s": 1.0,
             "sample_count": 2,
-            "telemetry_backend": "mock",
+            "telemetry_backend": telemetry_backend,
+            "idle_window_suspect": False,
         }
         if idle_window_suspect is not None:
             idle["idle_window_suspect"] = idle_window_suspect
         writer.write_metadata(
             {
-                "device": {"telemetry": "mock", "rail_manifest": ["mock"]},
-                "adapters": {"telemetry": {"name": "mock"}},
+                "device": {"telemetry": telemetry_backend, "rail_manifest": ["mock"]},
+                "adapters": {"telemetry": {"name": telemetry_backend}},
                 "clock_anchor_bound_s": 0.0,
+                "idle_drift_bound_w": 0.0,
                 "idle_baseline": idle,
                 "workload_observed": {"token_count": 34, "output_token_count": 2},
                 "workload_provenance": {
@@ -309,10 +338,11 @@ def make_fake_cli(tmp: Path, sentinel: Path | None = None) -> Path:
                 print(f"bundle: {{bundle}} status={{status}}")
 
             def write_bundle(bundle_run_id, status):
-                config_data = json.loads(BASE_CONFIG.read_text(encoding="utf-8"))
+                config_data = json.loads(config_path.read_text(encoding="utf-8"))
                 config_data["run_id"] = bundle_run_id
                 config_data["workload_profile"]["repetitions"] = 1
                 config = BenchmarkConfig.from_mapping(config_data)
+                telemetry_backend = config.hardware_target.telemetry_backend.value
                 writer = RunBundleWriter.create(runs_dir, config, FakeClock(start=3.0))
 
                 def event(timestamp_s, event_type, phase):
@@ -339,25 +369,27 @@ def make_fake_cli(tmp: Path, sentinel: Path | None = None) -> Path:
                     event(1.0, "stage_completed", "measured_run")
                     writer.write_power_trace(
                         [
-                            PowerSample(timestamp_s=0.0, power_w=7.5, source="mock", rail="mock"),
-                            PowerSample(timestamp_s=0.25, power_w=7.5, source="mock", rail="mock"),
-                            PowerSample(timestamp_s=0.5, power_w=7.5, source="mock", rail="mock"),
-                            PowerSample(timestamp_s=0.75, power_w=7.5, source="mock", rail="mock"),
-                            PowerSample(timestamp_s=1.0, power_w=7.5, source="mock", rail="mock"),
+                            PowerSample(timestamp_s=0.0, power_w=7.5, source=telemetry_backend, rail="mock"),
+                            PowerSample(timestamp_s=0.25, power_w=7.5, source=telemetry_backend, rail="mock"),
+                            PowerSample(timestamp_s=0.5, power_w=7.5, source=telemetry_backend, rail="mock"),
+                            PowerSample(timestamp_s=0.75, power_w=7.5, source=telemetry_backend, rail="mock"),
+                            PowerSample(timestamp_s=1.0, power_w=7.5, source=telemetry_backend, rail="mock"),
                         ]
                     )
                     writer.write_metadata(
                         {{
-                            "device": {{"telemetry": "mock", "rail_manifest": ["mock"]}},
-                            "adapters": {{"telemetry": {{"name": "mock"}}}},
+                            "device": {{"telemetry": telemetry_backend, "rail_manifest": ["mock"]}},
+                            "adapters": {{"telemetry": {{"name": telemetry_backend}}}},
                             "clock_anchor_bound_s": 0.0,
                             "idle_baseline": {{
                                 "power_w_mean": 5.0,
                                 "power_w_stddev": 0.0,
                                 "duration_s": 1.0,
                                 "sample_count": 2,
-                                "telemetry_backend": "mock",
+                                "telemetry_backend": telemetry_backend,
+                                "idle_window_suspect": False,
                             }},
+                            "idle_drift_bound_w": 0.0,
                             "workload_observed": {{"token_count": 34, "output_token_count": 2}},
                             "workload_provenance": {{
                                 "prompt": prompt_provenance([1, 2, 3], text="test"),
@@ -601,7 +633,233 @@ def analysis_manifest_id(config_dir: Path) -> str:
     )["manifest_id"]
 
 
+def write_strict_analysis_campaign(
+    config_dir: Path,
+    runs_dir: Path | None = None,
+    *,
+    telemetry_backend: str = "wall_meter",
+) -> tuple[dict, dict[str, float]]:
+    base_payload = json.loads(BASE_CONFIG.read_text(encoding="utf-8"))
+    base_payload["hardware_target"]["telemetry_backend"] = telemetry_backend
+    base_path = config_dir.parent / "analysis-base.json"
+    base_path.write_text(json.dumps(base_payload) + "\n", encoding="utf-8")
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(GENERATOR),
+            "--base",
+            str(base_path),
+            "--model-tag",
+            "mock",
+            "--out-dir",
+            str(config_dir),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=COMMAND_TIMEOUT_S,
+    )
+    if result.returncode != 0:
+        raise AssertionError(result.stderr)
+    manifest = json.loads(
+        (config_dir / "analysis_manifest.json").read_text(encoding="utf-8")
+    )
+    starts: dict[str, float] = {}
+    if runs_dir is not None:
+        for index, entry in enumerate(manifest["entries"]):
+            run_id = entry["run_id"]
+            start_s = float(index * 400)
+            starts[run_id] = start_s
+            write_single_bundle(
+                runs_dir,
+                run_id,
+                config_path=config_dir / entry["config"],
+                start_s=start_s,
+            )
+    return manifest, starts
+
+
+def write_verifiable_campaign_provenance(
+    runs_dir: Path,
+    manifest: dict,
+    starts: dict[str, float],
+    *,
+    result_overrides: dict[str, str] | None = None,
+    fabricated_run_id: str | None = None,
+    omit_raw_for: set[str] | None = None,
+    all_first_run_exempt: bool = False,
+) -> Path:
+    result_overrides = result_overrides or {}
+    omit_raw_for = omit_raw_for or set()
+    manifest_dir = runs_dir / "campaign_manifests"
+    raw_dir = manifest_dir / "raw"
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    session_id = "campaign-verifiable-fixture"
+    members: list[dict] = []
+    cooldown_gates: list[dict] = []
+    entries = manifest["entries"]
+    for index, entry in enumerate(entries):
+        run_id = entry["run_id"]
+        bundle_ids = [run_id]
+        if index == 0 or all_first_run_exempt:
+            note = {
+                "result": "first_run_exempt",
+                "session_id": session_id,
+                "following_run_id": run_id,
+                "following_bundle_ids": bundle_ids,
+                "recorded_at": "2026-07-10T00:00:00Z",
+            }
+        else:
+            preceding_run_id = entries[index - 1]["run_id"]
+            preceding_bundle_config = json.loads(
+                (runs_dir / preceding_run_id / "config.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            trace_backend = preceding_bundle_config["hardware_target"][
+                "telemetry_backend"
+            ]
+            result = result_overrides.get(run_id, "recovered")
+            gate_started_at_s = starts[preceding_run_id] + 2.0
+            waited_s = 300.0 if result == "cap_hit" else 5.0
+            subwindow_power_w = 7.0 if result == "cap_hit" else 5.0
+            cooldown_run_id = f"{session_id}-cooldown-before-{run_id}"
+            note = {
+                "result": result,
+                "session_id": session_id,
+                "preceding_run_id": preceding_run_id,
+                "preceding_bundle_id": preceding_run_id,
+                "following_run_id": run_id,
+                "following_bundle_ids": bundle_ids,
+                "recorded_at": "2026-07-10T00:00:00Z",
+                "cooldown_run_id": cooldown_run_id,
+                "waited_s": waited_s,
+                "reference_power_w": 5.0,
+                "tolerance_fraction": 0.1,
+                "decision_rolling_mean_power_w": subwindow_power_w,
+                "gate_started_at_s": gate_started_at_s,
+            }
+            if run_id not in omit_raw_for:
+                if run_id == fabricated_run_id:
+                    payload = json.dumps({"rolling_mean_power_w": 5.0}) + "\n"
+                else:
+                    trace_row = {
+                        "schema_version": "joulewise.campaign_cooldown_trace.v2",
+                        "session_id": session_id,
+                        "cooldown_run_id": cooldown_run_id,
+                        "sample_index": 0,
+                        "preceding_run_id": preceding_run_id,
+                        "preceding_bundle_id": preceding_run_id,
+                        "following_run_id": run_id,
+                        "following_bundle_ids": bundle_ids,
+                        "gate_started_at_s": gate_started_at_s,
+                        "timestamp_s": gate_started_at_s + waited_s,
+                        "waited_s": waited_s,
+                        "rolling_mean_power_w": subwindow_power_w,
+                        "baseline": {
+                            "power_w_mean": subwindow_power_w,
+                            "power_w_stddev": 0.0,
+                            "duration_s": 5.0,
+                            "sample_count": 5,
+                            "telemetry_backend": trace_backend,
+                            "gpu_idle_ratio_mean": None,
+                            "gpu_idle_ratio_min": None,
+                            "gpu_freq_hz_mean": None,
+                            "idle_window_suspect": None,
+                        },
+                    }
+                    payload = json.dumps(trace_row, sort_keys=True) + "\n"
+                raw_name = f"fixture-before-{run_id}.jsonl"
+                (raw_dir / raw_name).write_text(payload, encoding="utf-8")
+                note["raw_artifact"] = {
+                    "path": f"raw/{raw_name}",
+                    "sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+                    "records": 1,
+                }
+            cooldown_gates.append(note)
+        members.append(
+            {
+                "config": entry["config"],
+                "run_id": run_id,
+                "bundle_ids": bundle_ids,
+                "execution": "fixture",
+                "preceding_campaign_cooldown": note,
+            }
+        )
+    path = manifest_dir / "verifiable-fixture.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": "joulewise.campaign_provenance.v1",
+                "session_id": session_id,
+                "created_at": "2026-07-10T00:00:00Z",
+                "config_dir": "fixture",
+                "analysis_manifest_id": manifest["manifest_id"],
+                "first_physical_run_id": entries[0]["run_id"],
+                "members": members,
+                "cooldown_gates": cooldown_gates,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def load_direct_readiness_fixture(
+    config_dir: Path,
+    runs_dir: Path,
+) -> tuple[object, list, object]:
+    state = run_campaign_module.load_analysis_manifest(config_dir)
+    assert state is not None and state.valid, state.problems if state else None
+    frozen = run_campaign_module.frozen_order_run_ids(state)
+    cooldown = run_campaign_module.prior_campaign_cooldown_evidence(
+        runs_dir, state.manifest_id, frozen
+    )
+    notes = {
+        bundle_id: validation.effective_note()
+        for bundle_id, validation in cooldown.by_bundle.items()
+    }
+    evaluations = []
+    for entry in state.raw["entries"]:
+        info = run_campaign_module.load_config_info(config_dir / entry["config"])
+        evaluations.extend(
+            run_campaign_module.evaluate_members(info, runs_dir, {}, notes)
+        )
+    return state, evaluations, cooldown
+
+
+def contrast_evaluation(
+    state: object,
+    evaluations: list,
+    metric_tag: str,
+) -> tuple[dict, object]:
+    contrast = next(
+        row for row in state.raw["contrasts"] if row["metric"]["metric_tag"] == metric_tag
+    )
+    entry = next(
+        row
+        for row in state.raw["entries"]
+        if row["block_id"] == contrast["block_ids"][0]
+        and row["cell_id"] == contrast["cell_a_id"]
+    )
+    evaluation = next(row for row in evaluations if row.bundle_id == entry["run_id"])
+    return contrast, evaluation
+
+
 class RunCampaignTests(unittest.TestCase):
+    def test_discover_configs_excludes_order_and_analysis_manifest_sidecars(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir = Path(tmp)
+            config = write_config(config_dir, "cell.json", "cell")
+            (config_dir / "order_manifest.json").write_text("{}\n", encoding="utf-8")
+            (config_dir / "analysis_manifest.json").write_text("{}\n", encoding="utf-8")
+
+            self.assertEqual(run_campaign_module.discover_configs(config_dir), [config])
+
     def test_dry_run_executes_nothing_and_reports_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -756,7 +1014,7 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(verdict["collection"]["verdict"], "partial")
             self.assertEqual(verdict["collection"]["categories"]["usable"], ["good"])
             self.assertEqual(verdict["collection"]["categories"]["waived"], ["idle"])
-            self.assertEqual(verdict["claim_readiness"]["verdict"], "not_assessed")
+            self.assertEqual(verdict["analysis_readiness"]["verdict"], "not_assessed")
 
     def test_waiver_target_namespace_is_exact_and_does_not_poison_collection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -952,7 +1210,7 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(verdict["collection"]["verdict"], "invalid")
             self.assertEqual(verdict["collection"]["categories"]["waived"], ["idle"])
 
-    def test_one_bundle_campaign_is_usable_and_claim_readiness_not_assessed(self) -> None:
+    def test_one_bundle_campaign_is_usable_and_analysis_readiness_not_assessed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -965,7 +1223,7 @@ class RunCampaignTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("COLLECTION VERDICT:", result.stdout)
-            self.assertIn("CLAIM-INPUT READINESS:", result.stdout)
+            self.assertIn("ANALYSIS READINESS:", result.stdout)
             self.assertNotIn("publish" + "able", result.stdout)
             all_rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
             self.assertEqual(all_rows[-1]["record_type"], "campaign_verdict")
@@ -974,7 +1232,7 @@ class RunCampaignTests(unittest.TestCase):
             )
             self.assertEqual(all_rows[-1]["collection"]["verdict"], "usable")
             self.assertEqual(
-                all_rows[-1]["claim_readiness"]["verdict"], "not_assessed"
+                all_rows[-1]["analysis_readiness"]["verdict"], "not_assessed"
             )
             self.assertEqual(
                 all_rows[-1]["collection"]["categories"]["usable"], ["one"]
@@ -989,18 +1247,14 @@ class RunCampaignTests(unittest.TestCase):
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            write_config(config_dir, "a.json", "a")
-            write_config(config_dir, "b.json", "b")
-            write_two_member_analysis_manifest(config_dir)
-            write_single_bundle(runs_dir, "a")
-            write_single_bundle(runs_dir, "b", idle_window_suspect=True)
+            write_strict_analysis_campaign(config_dir, runs_dir)
 
             result = run_campaign(config_dir, runs_dir)
 
             self.assertEqual(result.returncode, 0, result.stderr)
             verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
             self.assertEqual(verdict["collection"]["verdict"], "usable")
-            readiness = verdict["claim_readiness"]
+            readiness = verdict["analysis_readiness"]
             self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
             self.assertIn("campaign_cooldown_evidence_missing", readiness["reasons"])
             self.assertNotIn("idle_window_suspect", readiness["reasons"])
@@ -1012,15 +1266,14 @@ class RunCampaignTests(unittest.TestCase):
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            write_config(config_dir, "a.json", "a")
-            write_config(config_dir, "b.json", "b")
-            write_two_member_analysis_manifest(config_dir)
-            write_single_bundle(runs_dir, "a")
-            write_single_bundle(runs_dir, "b", idle_window_suspect=True)
-            write_prior_campaign_provenance(
-                runs_dir,
-                {"a": "first_run_exempt", "b": "cap_hit"},
-                analysis_manifest_id(config_dir),
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            target = next(
+                entry["run_id"]
+                for entry in manifest["entries"]
+                if entry["role"] == "condition"
+            )
+            write_verifiable_campaign_provenance(
+                runs_dir, manifest, starts, result_overrides={target: "cap_hit"}
             )
 
             result = run_campaign(config_dir, runs_dir)
@@ -1029,25 +1282,595 @@ class RunCampaignTests(unittest.TestCase):
             verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
             self.assertEqual(verdict["collection"]["verdict"], "usable")
             self.assertEqual(
-                verdict["claim_readiness"]["verdict"], "not_ready_for_analysis"
+                verdict["analysis_readiness"]["verdict"], "not_ready_for_analysis"
             )
-            self.assertIn("cooldown_cap_hit", verdict["claim_readiness"]["reasons"])
+            self.assertIn("cooldown_cap_hit", verdict["analysis_readiness"]["reasons"])
 
-    def test_explicit_campaign_cooldown_evidence_allows_ready_for_analysis(self) -> None:
+    def test_verifiable_cooldown_reaches_direct_ready_path_before_scope_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            write_config(config_dir, "a.json", "a")
-            write_config(config_dir, "b.json", "b")
-            write_two_member_analysis_manifest(config_dir)
-            write_single_bundle(runs_dir, "a")
-            write_single_bundle(runs_dir, "b", idle_window_suspect=True)
-            write_prior_campaign_provenance(
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            write_verifiable_campaign_provenance(runs_dir, manifest, starts)
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+
+            readiness = run_campaign_module.analysis_readiness_for(
+                state,
+                "usable",
+                evaluations,
+                cooldown,
+                {"reasons": []},
+            )
+
+            self.assertEqual(readiness["verdict"], "ready_for_analysis")
+            self.assertEqual(
+                readiness["ready_contrast_ids"],
+                [row["contrast_id"] for row in manifest["contrasts"]],
+            )
+
+    def test_synthesized_one_line_cooldown_note_is_unverifiable_and_not_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            target = next(
+                entry["run_id"]
+                for entry in manifest["entries"]
+                if entry["role"] == "condition"
+            )
+            write_verifiable_campaign_provenance(
                 runs_dir,
-                {"a": "first_run_exempt", "b": "recovered"},
-                analysis_manifest_id(config_dir),
+                manifest,
+                starts,
+                fabricated_run_id=target,
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            readiness = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1][
+                "analysis_readiness"
+            ]
+            self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+            self.assertIn("cooldown_evidence_unverifiable", readiness["reasons"])
+
+    def test_cooldown_trace_record_count_mismatch_is_unverifiable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            provenance_path = write_verifiable_campaign_provenance(
+                runs_dir, manifest, starts
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            provenance["members"][1]["preceding_campaign_cooldown"]["raw_artifact"][
+                "records"
+            ] = 2
+            provenance_path.write_text(
+                json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            readiness = run_campaign_module.analysis_readiness_for(
+                state, "usable", evaluations, cooldown, {"reasons": []}
+            )
+
+            self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+            self.assertIn("cooldown_evidence_unverifiable", readiness["reasons"])
+
+    def test_cooldown_trace_rejects_rehashed_spoofed_rolling_mean(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            provenance_path = write_verifiable_campaign_provenance(
+                runs_dir, manifest, starts
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            note = provenance["members"][1]["preceding_campaign_cooldown"]
+            raw_path = provenance_path.parent / note["raw_artifact"]["path"]
+            row = json.loads(raw_path.read_text(encoding="utf-8"))
+            row["rolling_mean_power_w"] = 123.0
+            payload = json.dumps(row, sort_keys=True) + "\n"
+            raw_path.write_text(payload, encoding="utf-8")
+            note["raw_artifact"]["sha256"] = hashlib.sha256(
+                payload.encode("utf-8")
+            ).hexdigest()
+            provenance_path.write_text(
+                json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            readiness = run_campaign_module.analysis_readiness_for(
+                state, "usable", evaluations, cooldown, {"reasons": []}
+            )
+
+            self.assertIn("cooldown_evidence_unverifiable", readiness["reasons"])
+
+    def test_cooldown_trace_rederives_multirow_rolling_recovery_and_rejects_nonmonotonic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            provenance_path = write_verifiable_campaign_provenance(
+                runs_dir, manifest, starts
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            note = provenance["members"][1]["preceding_campaign_cooldown"]
+            raw_path = provenance_path.parent / note["raw_artifact"]["path"]
+            template = json.loads(raw_path.read_text(encoding="utf-8"))
+            first = copy.deepcopy(template)
+            first["waited_s"] = 5.0
+            first["timestamp_s"] = first["gate_started_at_s"] + 5.0
+            first["rolling_mean_power_w"] = 7.0
+            first["baseline"]["power_w_mean"] = 7.0
+            second = copy.deepcopy(template)
+            second["sample_index"] = 1
+            second["waited_s"] = 10.0
+            second["timestamp_s"] = second["gate_started_at_s"] + 10.0
+            second["rolling_mean_power_w"] = 5.0
+            second["baseline"]["power_w_mean"] = 3.0
+            payload = "".join(
+                json.dumps(row, sort_keys=True) + "\n" for row in (first, second)
+            )
+            raw_path.write_text(payload, encoding="utf-8")
+            note["waited_s"] = 10.0
+            note["decision_rolling_mean_power_w"] = 5.0
+            note["raw_artifact"]["records"] = 2
+            note["raw_artifact"]["sha256"] = hashlib.sha256(
+                payload.encode("utf-8")
+            ).hexdigest()
+            provenance_path.write_text(
+                json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            ready = run_campaign_module.analysis_readiness_for(
+                state, "usable", evaluations, cooldown, {"reasons": []}
+            )
+            self.assertEqual(ready["verdict"], "ready_for_analysis")
+            self.assertEqual(second["baseline"]["power_w_mean"], 3.0)
+
+            second["timestamp_s"] = first["timestamp_s"]
+            bad_payload = "".join(
+                json.dumps(row, sort_keys=True) + "\n" for row in (first, second)
+            )
+            raw_path.write_text(bad_payload, encoding="utf-8")
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            provenance["members"][1]["preceding_campaign_cooldown"]["raw_artifact"][
+                "sha256"
+            ] = hashlib.sha256(bad_payload.encode("utf-8")).hexdigest()
+            provenance_path.write_text(
+                json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            _, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            not_ready = run_campaign_module.analysis_readiness_for(
+                state, "usable", evaluations, cooldown, {"reasons": []}
+            )
+            self.assertEqual(not_ready["verdict"], "not_ready_for_analysis")
+            self.assertIn("cooldown_evidence_unverifiable", not_ready["reasons"])
+
+    def test_cooldown_trace_rejects_rehashed_wrong_member_binding(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            provenance_path = write_verifiable_campaign_provenance(
+                runs_dir, manifest, starts
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            note = provenance["members"][1]["preceding_campaign_cooldown"]
+            raw_path = provenance_path.parent / note["raw_artifact"]["path"]
+            row = json.loads(raw_path.read_text(encoding="utf-8"))
+            row["preceding_bundle_id"] = "spoofed-member"
+            payload = json.dumps(row, sort_keys=True) + "\n"
+            raw_path.write_text(payload, encoding="utf-8")
+            note["raw_artifact"]["sha256"] = hashlib.sha256(
+                payload.encode("utf-8")
+            ).hexdigest()
+            provenance_path.write_text(
+                json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            readiness = run_campaign_module.analysis_readiness_for(
+                state, "usable", evaluations, cooldown, {"reasons": []}
+            )
+
+            self.assertIn("cooldown_evidence_unverifiable", readiness["reasons"])
+
+    def test_cooldown_trace_rejects_recorded_decision_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            provenance_path = write_verifiable_campaign_provenance(
+                runs_dir, manifest, starts
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            provenance["members"][1]["preceding_campaign_cooldown"][
+                "result"
+            ] = "cap_hit"
+            provenance_path.write_text(
+                json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            readiness = run_campaign_module.analysis_readiness_for(
+                state, "usable", evaluations, cooldown, {"reasons": []}
+            )
+
+            self.assertIn("cooldown_evidence_unverifiable", readiness["reasons"])
+
+    def test_cooldown_trace_rejects_invalid_baseline_semantics_and_zero_elapsed(self) -> None:
+        mutations = (
+            (
+                "negative_duration",
+                lambda row, note: row["baseline"].__setitem__("duration_s", -5.0),
+            ),
+            (
+                "negative_stddev",
+                lambda row, note: row["baseline"].__setitem__(
+                    "power_w_stddev", -1.0
+                ),
+            ),
+            (
+                "fabricated_backend",
+                lambda row, note: row["baseline"].__setitem__(
+                    "telemetry_backend", "fabricated"
+                ),
+            ),
+            (
+                "ratio_out_of_range",
+                lambda row, note: row["baseline"].__setitem__(
+                    "gpu_idle_ratio_mean", 2.0
+                ),
+            ),
+            (
+                "negative_frequency",
+                lambda row, note: row["baseline"].__setitem__(
+                    "gpu_freq_hz_mean", -1.0
+                ),
+            ),
+            (
+                "null_gate_id",
+                lambda row, note: (
+                    row.__setitem__("cooldown_run_id", None),
+                    note.__setitem__("cooldown_run_id", None),
+                ),
+            ),
+            (
+                "zero_elapsed_subwindow",
+                lambda row, note: (
+                    row.__setitem__("waited_s", 0.0),
+                    row.__setitem__("gate_started_at_s", row["timestamp_s"]),
+                    note.__setitem__("waited_s", 0.0),
+                    note.__setitem__("gate_started_at_s", row["timestamp_s"]),
+                ),
+            ),
+        )
+        for name, mutate in mutations:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                config_dir = tmp_path / "configs"
+                runs_dir = tmp_path / "runs"
+                config_dir.mkdir()
+                manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+                provenance_path = write_verifiable_campaign_provenance(
+                    runs_dir, manifest, starts
+                )
+                provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+                note = provenance["members"][1]["preceding_campaign_cooldown"]
+                raw_path = provenance_path.parent / note["raw_artifact"]["path"]
+                row = json.loads(raw_path.read_text(encoding="utf-8"))
+                mutate(row, note)
+                payload = json.dumps(row, sort_keys=True) + "\n"
+                raw_path.write_text(payload, encoding="utf-8")
+                note["raw_artifact"]["sha256"] = hashlib.sha256(
+                    payload.encode("utf-8")
+                ).hexdigest()
+                provenance_path.write_text(
+                    json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+
+                state, evaluations, cooldown = load_direct_readiness_fixture(
+                    config_dir, runs_dir
+                )
+                readiness = run_campaign_module.analysis_readiness_for(
+                    state, "usable", evaluations, cooldown, {"reasons": []}
+                )
+
+                self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+                self.assertIn(
+                    "cooldown_evidence_unverifiable", readiness["reasons"]
+                )
+
+    def test_fresh_readiness_rehashes_after_resume_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            provenance_path = write_verifiable_campaign_provenance(
+                runs_dir, manifest, starts
+            )
+            state = run_campaign_module.load_analysis_manifest(config_dir)
+            assert state is not None and state.valid
+            frozen = run_campaign_module.frozen_order_run_ids(state)
+            resume_check = run_campaign_module.prior_campaign_cooldown_evidence(
+                runs_dir, state.manifest_id, frozen
+            )
+            target = manifest["entries"][1]["run_id"]
+            self.assertTrue(resume_check.by_bundle[target].verifiable)
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            raw_ref = provenance["members"][1]["preceding_campaign_cooldown"][
+                "raw_artifact"
+            ]
+            raw_path = provenance_path.parent / raw_ref["path"]
+            raw_path.write_bytes(raw_path.read_bytes() + b" ")
+
+            _, evaluations, fresh_check = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            readiness = run_campaign_module.analysis_readiness_for(
+                state, "usable", evaluations, fresh_check, {"reasons": []}
+            )
+
+            self.assertFalse(fresh_check.by_bundle[target].verifiable)
+            self.assertIn("cooldown_evidence_unverifiable", readiness["reasons"])
+
+    def test_invalid_utf8_cooldown_trace_fails_closed_without_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            provenance_path = write_verifiable_campaign_provenance(
+                runs_dir, manifest, starts
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            note = provenance["members"][1]["preceding_campaign_cooldown"]
+            raw_path = provenance_path.parent / note["raw_artifact"]["path"]
+            payload = b"\xff\n"
+            raw_path.write_bytes(payload)
+            note["raw_artifact"]["sha256"] = hashlib.sha256(payload).hexdigest()
+            provenance_path.write_text(
+                json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            readiness = run_campaign_module.analysis_readiness_for(
+                state, "usable", evaluations, cooldown, {"reasons": []}
+            )
+
+            self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+            self.assertIn("cooldown_evidence_unverifiable", readiness["reasons"])
+
+    def test_all_repetition_one_members_cannot_claim_first_run_exempt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            write_verifiable_campaign_provenance(
+                runs_dir,
+                manifest,
+                starts,
+                all_first_run_exempt=True,
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            readiness = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1][
+                "analysis_readiness"
+            ]
+            self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+            self.assertIn("cooldown_evidence_unverifiable", readiness["reasons"])
+
+    def test_one_first_run_exemption_cannot_fan_out_to_all_members(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            provenance_path = write_verifiable_campaign_provenance(
+                runs_dir, manifest, starts
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            all_run_ids = [entry["run_id"] for entry in manifest["entries"]]
+            first = provenance["members"][0]
+            first["bundle_ids"] = all_run_ids
+            first["preceding_campaign_cooldown"]["following_bundle_ids"] = all_run_ids
+            for member in provenance["members"][1:]:
+                member["preceding_campaign_cooldown"] = None
+            provenance_path.write_text(
+                json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            readiness = run_campaign_module.analysis_readiness_for(
+                state, "usable", evaluations, cooldown, {"reasons": []}
+            )
+
+            self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+            self.assertIn("cooldown_evidence_unverifiable", readiness["reasons"])
+
+    def test_invalid_frozen_first_exemption_blocks_every_contrast_globally(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            provenance_path = write_verifiable_campaign_provenance(
+                runs_dir, manifest, starts
+            )
+            provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+            provenance["members"][0]["preceding_campaign_cooldown"][
+                "raw_artifact"
+            ] = provenance["members"][1]["preceding_campaign_cooldown"][
+                "raw_artifact"
+            ]
+            provenance_path.write_text(
+                json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            readiness = run_campaign_module.analysis_readiness_for(
+                state, "usable", evaluations, cooldown, {"reasons": []}
+            )
+
+            self.assertTrue(cooldown.problems)
+            self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+            self.assertIn("cooldown_evidence_unverifiable", readiness["reasons"])
+
+    def test_crash_window_first_exemption_reservation_is_consumed_and_unverifiable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, _ = write_strict_analysis_campaign(config_dir, runs_dir)
+            manifest_dir = runs_dir / "campaign_manifests"
+            manifest_dir.mkdir(parents=True)
+            reservation = manifest_dir / "crashed-before-member-record.json"
+            reservation.write_text(
+                json.dumps(
+                    {
+                        "schema_version": "joulewise.campaign_provenance.v1",
+                        "session_id": "crashed-session",
+                        "created_at": "2026-07-10T00:00:00Z",
+                        "config_dir": str(config_dir),
+                        "analysis_manifest_id": manifest["manifest_id"],
+                        "first_physical_run_id": manifest["entries"][0]["run_id"],
+                        "members": [],
+                        "cooldown_gates": [],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            state = run_campaign_module.load_analysis_manifest(config_dir)
+            assert state is not None and state.valid
+
+            cooldown = run_campaign_module.prior_campaign_cooldown_evidence(
+                runs_dir,
+                state.manifest_id,
+                run_campaign_module.frozen_order_run_ids(state),
+            )
+
+            self.assertEqual(cooldown.first_run_exemption_claims, 1)
+            self.assertTrue(cooldown.problems)
+
+    def test_mock_or_backend_mismatched_trace_cannot_authorize_recovery(self) -> None:
+        for backend, mutate_trace in (("mock", False), ("wall_meter", True)):
+            with self.subTest(backend=backend, mutate_trace=mutate_trace), tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                config_dir = tmp_path / "configs"
+                runs_dir = tmp_path / "runs"
+                config_dir.mkdir()
+                manifest, starts = write_strict_analysis_campaign(
+                    config_dir, runs_dir, telemetry_backend=backend
+                )
+                provenance_path = write_verifiable_campaign_provenance(
+                    runs_dir, manifest, starts
+                )
+                if mutate_trace:
+                    provenance = json.loads(
+                        provenance_path.read_text(encoding="utf-8")
+                    )
+                    note = provenance["members"][1]["preceding_campaign_cooldown"]
+                    raw_path = provenance_path.parent / note["raw_artifact"]["path"]
+                    row = json.loads(raw_path.read_text(encoding="utf-8"))
+                    row["baseline"]["telemetry_backend"] = "powermetrics"
+                    payload = json.dumps(row, sort_keys=True) + "\n"
+                    raw_path.write_text(payload, encoding="utf-8")
+                    note["raw_artifact"]["sha256"] = hashlib.sha256(
+                        payload.encode("utf-8")
+                    ).hexdigest()
+                    provenance_path.write_text(
+                        json.dumps(provenance, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                state, evaluations, cooldown = load_direct_readiness_fixture(
+                    config_dir, runs_dir
+                )
+                readiness = run_campaign_module.analysis_readiness_for(
+                    state, "usable", evaluations, cooldown, {"reasons": []}
+                )
+
+                self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+                self.assertIn(
+                    "cooldown_evidence_unverifiable", readiness["reasons"]
+                )
+
+    def test_unregistered_matching_strict_valid_bundle_blocks_analysis_readiness(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            extra_config = tmp_path / "top-up.json"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            write_verifiable_campaign_provenance(runs_dir, manifest, starts)
+            source = config_dir / manifest["entries"][1]["config"]
+            payload = json.loads(source.read_text(encoding="utf-8"))
+            payload["run_id"] = "unregistered-top-up"
+            extra_config.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            write_single_bundle(
+                runs_dir,
+                "unregistered-top-up",
+                config_path=extra_config,
+                start_s=99999.0,
             )
 
             result = run_campaign(config_dir, runs_dir)
@@ -1055,39 +1878,176 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
             self.assertEqual(
-                verdict["claim_readiness"]["verdict"], "ready_for_analysis"
+                verdict["sampling_audit"]["unregistered_matching_bundle_ids"],
+                ["unregistered-top-up"],
             )
-            self.assertEqual(
-                verdict["claim_readiness"]["ready_contrast_ids"],
-                ["ctr-b-minus-a"],
+            self.assertTrue(verdict["sampling_audit"]["top_up_suspected"])
+            self.assertIn(
+                "unregistered_matching_bundle",
+                verdict["analysis_readiness"]["reasons"],
             )
 
-    def test_recovered_cooldown_without_raw_provenance_fails_closed(self) -> None:
+    def test_wider_top_up_scope_is_named_and_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            write_config(config_dir, "a.json", "a")
-            write_config(config_dir, "b.json", "b")
-            write_two_member_analysis_manifest(config_dir)
-            write_single_bundle(runs_dir, "a")
-            write_single_bundle(runs_dir, "b")
-            write_prior_campaign_provenance(
-                runs_dir,
-                {"a": "first_run_exempt", "b": "recovered"},
-                analysis_manifest_id(config_dir),
-            )
-            (runs_dir / "campaign_manifests" / "raw" / "fixture.jsonl").unlink()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            write_verifiable_campaign_provenance(runs_dir, manifest, starts)
 
             result = run_campaign(config_dir, runs_dir)
 
             self.assertEqual(result.returncode, 0, result.stderr)
-            readiness = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1][
-                "claim_readiness"
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(
+                verdict["sampling_audit"]["detection_scope"]["wider_scope_scan"],
+                "out_of_reach",
+            )
+            self.assertIn(
+                "top_up_detection_scope_incomplete",
+                verdict["analysis_readiness"]["reasons"],
+            )
+
+    def test_gross_readiness_uses_gross_request_not_request_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            write_verifiable_campaign_provenance(runs_dir, manifest, starts)
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            contrast, evaluation = contrast_evaluation(
+                state, evaluations, "gross_request"
+            )
+            summary = copy.deepcopy(evaluation.summary)
+            summary["window_evidence_precheck"]["request"] = {
+                "eligible": False,
+                "reasons": ["deprecated_alias_must_not_be_consumed"],
+            }
+            summary["measurement_quality"]["idle_window_suspect"] = True
+            mutated = dataclass_replace(evaluation, summary=summary)
+
+            reasons = run_campaign_module._member_readiness_reasons(
+                mutated, contrast, cooldown.by_bundle[evaluation.bundle_id]
+            )
+
+            self.assertNotIn("deprecated_alias_must_not_be_consumed", reasons)
+            self.assertNotIn("idle_window_suspect", reasons)
+            self.assertEqual(reasons, [])
+
+    def test_idle_readiness_uses_idle_subtracted_request_precheck(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            write_verifiable_campaign_provenance(runs_dir, manifest, starts)
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            contrast, evaluation = contrast_evaluation(state, evaluations, "idle_request")
+            summary = copy.deepcopy(evaluation.summary)
+            summary["window_evidence_precheck"]["request"] = {
+                "eligible": True,
+                "reasons": [],
+            }
+            summary["window_evidence_precheck"]["idle_subtracted_request"] = {
+                "eligible": False,
+                "reasons": ["drift_term_unknown"],
+            }
+            mutated = dataclass_replace(evaluation, summary=summary)
+
+            reasons = run_campaign_module._member_readiness_reasons(
+                mutated, contrast, cooldown.by_bundle[evaluation.bundle_id]
+            )
+
+            self.assertIn("drift_term_unknown", reasons)
+
+    def test_current_era_claim_eligibility_only_never_becomes_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            write_verifiable_campaign_provenance(runs_dir, manifest, starts)
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            contrast, evaluation = contrast_evaluation(
+                state, evaluations, "gross_request"
+            )
+            summary = copy.deepcopy(evaluation.summary)
+            summary["claim_eligibility"] = summary.pop("window_evidence_precheck")
+            mutated = dataclass_replace(evaluation, summary=summary)
+
+            reasons = run_campaign_module._member_readiness_reasons(
+                mutated, contrast, cooldown.by_bundle[evaluation.bundle_id]
+            )
+
+            self.assertIn("window_evidence_precheck_missing", reasons)
+
+    def test_missing_null_nan_and_infinite_metric_emit_metric_missing_or_nonfinite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            write_verifiable_campaign_provenance(runs_dir, manifest, starts)
+            state, evaluations, cooldown = load_direct_readiness_fixture(
+                config_dir, runs_dir
+            )
+            contrast, evaluation = contrast_evaluation(
+                state, evaluations, "gross_request"
+            )
+            for value in ("missing", None, float("nan"), float("inf")):
+                with self.subTest(value=value):
+                    summary = copy.deepcopy(evaluation.summary)
+                    if value == "missing":
+                        del summary["gross_energy_j"]
+                    else:
+                        summary["gross_energy_j"] = value
+                    mutated = dataclass_replace(evaluation, summary=summary)
+                    reasons = run_campaign_module._member_readiness_reasons(
+                        mutated,
+                        contrast,
+                        cooldown.by_bundle[evaluation.bundle_id],
+                    )
+                    self.assertIn("metric_missing_or_nonfinite", reasons)
+
+    def test_verdict_binds_manifest_and_trace_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            manifest, starts = write_strict_analysis_campaign(config_dir, runs_dir)
+            write_verifiable_campaign_provenance(runs_dir, manifest, starts)
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            provenance = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1][
+                "campaign_provenance"
             ]
-            self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
-            self.assertIn("campaign_cooldown_evidence_missing", readiness["reasons"])
+            self.assertGreaterEqual(len(provenance["manifests"]), 2)
+            for row in provenance["manifests"]:
+                self.assertEqual(
+                    row["sha256"],
+                    hashlib.sha256(Path(row["path"]).read_bytes()).hexdigest(),
+                )
+            self.assertTrue(provenance["cooldown_artifacts"])
+            for row in provenance["cooldown_artifacts"]:
+                raw_path = Path(row["provenance_path"]).parent / row["path"]
+                self.assertEqual(
+                    row["sha256"], hashlib.sha256(raw_path.read_bytes()).hexdigest()
+                )
 
     def test_analysis_manifest_config_hash_mismatch_refuses_execution(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1096,12 +2056,11 @@ class RunCampaignTests(unittest.TestCase):
             runs_dir = tmp_path / "runs"
             sentinel = tmp_path / "invoked"
             config_dir.mkdir()
-            write_config(config_dir, "a.json", "a")
-            write_config(config_dir, "b.json", "b")
-            write_two_member_analysis_manifest(config_dir)
-            payload = json.loads((config_dir / "b.json").read_text(encoding="utf-8"))
+            manifest, _ = write_strict_analysis_campaign(config_dir)
+            config_path = config_dir / manifest["entries"][1]["config"]
+            payload = json.loads(config_path.read_text(encoding="utf-8"))
             payload["run_metadata"]["notes"] = "tampered after freeze"
-            (config_dir / "b.json").write_text(json.dumps(payload) + "\n", encoding="utf-8")
+            config_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
             fake_cli = make_fake_cli(tmp_path, sentinel=sentinel)
 
             result = run_campaign(
@@ -1112,7 +2071,66 @@ class RunCampaignTests(unittest.TestCase):
             self.assertFalse(sentinel.exists())
             verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
             self.assertEqual(verdict["collection"]["verdict"], "invalid")
-            self.assertIn("config_hash_mismatch", verdict["claim_readiness"]["reasons"])
+            self.assertIn("config_hash_mismatch", verdict["analysis_readiness"]["reasons"])
+
+    def test_readiness_preflight_uses_real_validator_for_fixed_n_block_and_cell_mutations(self) -> None:
+        from joulewise.analysis_manifest import calculate_manifest_id
+
+        mutations = (
+            (
+                "fixed_n",
+                lambda value: (
+                    value["design"]["sampling_plan"].__setitem__(
+                        "planned_n_blocks", 1
+                    ),
+                    [
+                        contrast.__setitem__("block_ids", contrast["block_ids"][:1])
+                        for contrast in value["contrasts"]
+                    ],
+                ),
+                "requires fixed_n=5",
+            ),
+            (
+                "duplicate_block",
+                lambda value: value["contrasts"][0]["block_ids"].__setitem__(
+                    1, value["contrasts"][0]["block_ids"][0]
+                ),
+                "invalid semantic block linkage",
+            ),
+            (
+                "same_cell",
+                lambda value: value["contrasts"][0].__setitem__(
+                    "cell_b_id", value["contrasts"][0]["cell_a_id"]
+                ),
+                "differs from frozen registry enumeration",
+            ),
+        )
+        for name, mutate, expected in mutations:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                config_dir = tmp_path / "configs"
+                runs_dir = tmp_path / "runs"
+                config_dir.mkdir()
+                manifest, _ = write_strict_analysis_campaign(config_dir)
+                mutate(manifest)
+                manifest["manifest_id"] = calculate_manifest_id(manifest)
+                (config_dir / "analysis_manifest.json").write_text(
+                    json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+
+                result = run_campaign(config_dir, runs_dir)
+
+                self.assertEqual(result.returncode, 1)
+                verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+                self.assertIn(
+                    expected,
+                    "\n".join(verdict["analysis_manifest"]["problems"]),
+                )
+                self.assertIn(
+                    "analysis_manifest_invalid",
+                    verdict["analysis_readiness"]["reasons"],
+                )
 
     def test_campaign_provenance_records_first_run_exemption_and_unknown_mock_gate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1120,8 +2138,7 @@ class RunCampaignTests(unittest.TestCase):
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            write_config(config_dir, "a.json", "a")
-            write_config(config_dir, "b.json", "b")
+            manifest, _ = write_strict_analysis_campaign(config_dir)
             fake_cli = make_fake_cli(tmp_path)
 
             result = run_campaign(config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli))
@@ -1130,7 +2147,8 @@ class RunCampaignTests(unittest.TestCase):
             manifests = list((runs_dir / "campaign_manifests").glob("*.json"))
             self.assertEqual(len(manifests), 1)
             provenance = json.loads(manifests[0].read_text(encoding="utf-8"))
-            self.assertEqual(provenance["first_physical_run_id"], "a")
+            first_run_id = manifest["entries"][0]["run_id"]
+            self.assertEqual(provenance["first_physical_run_id"], first_run_id)
             self.assertEqual(
                 provenance["members"][0]["preceding_campaign_cooldown"]["result"],
                 "first_run_exempt",
