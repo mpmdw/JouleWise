@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import importlib.util
 import hashlib
+import io
 import json
 import os
+import shutil
 import shlex
 import subprocess
 import sys
 import tempfile
 import textwrap
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -151,6 +154,8 @@ def write_single_bundle(
     idle_window_suspect: bool | None = None,
     config_path: Path | None = None,
     start_s: float = 0.0,
+    runtime_cleanup_ok: bool | None = None,
+    remote_cleanup_failed: list[str] | None = None,
 ) -> None:
     _write_bundle(
         runs_dir,
@@ -159,6 +164,8 @@ def write_single_bundle(
         idle_window_suspect=idle_window_suspect,
         config_path=config_path,
         start_s=start_s,
+        runtime_cleanup_ok=runtime_cleanup_ok,
+        remote_cleanup_failed=remote_cleanup_failed,
     )
 
 
@@ -211,6 +218,8 @@ def _write_bundle(
     idle_window_suspect: bool | None = None,
     config_path: Path | None = None,
     start_s: float = 0.0,
+    runtime_cleanup_ok: bool | None = None,
+    remote_cleanup_failed: list[str] | None = None,
 ) -> None:
     from joulewise import reduce as reduce_module
     from joulewise.bundle import RunBundleWriter, sanitize_id_component
@@ -251,6 +260,16 @@ def _write_bundle(
         event(0.8, "phase_end", "decode")
         event(1.0, "sampling_stopped", "measured_run")
         event(1.0, "stage_completed", "measured_run")
+        if runtime_cleanup_ok is not None:
+            writer.append_event(
+                RuntimeEvent(
+                    timestamp_s=start_s + 1.05,
+                    event_type="stage_completed",
+                    phase="cleanup",
+                    message="stage_completed cleanup",
+                    metadata={"cleanup_ok": runtime_cleanup_ok},
+                )
+            )
         writer.write_power_trace(
             [
                 PowerSample(
@@ -272,8 +291,7 @@ def _write_bundle(
         }
         if idle_window_suspect is not None:
             idle["idle_window_suspect"] = idle_window_suspect
-        writer.write_metadata(
-            {
+        metadata = {
                 "device": {"telemetry": telemetry_backend, "rail_manifest": ["mock"]},
                 "adapters": {"telemetry": {"name": telemetry_backend}},
                 "clock_anchor_bound_s": 0.0,
@@ -299,7 +317,14 @@ def _write_bundle(
                     ),
                 },
             }
-        )
+        if remote_cleanup_failed:
+            metadata["extra"] = {
+                "node_cleanup": [
+                    {"path": path, "removed": False}
+                    for path in remote_cleanup_failed
+                ]
+            }
+        writer.write_metadata(metadata)
         summary = reduce_module.reduce_bundle(writer.path)
     else:
         writer.write_metadata(
@@ -878,7 +903,7 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(rows[0]["members_succeeded"], 4)
             self.assertEqual(rows[0]["members_total"], 5)
 
-    def test_waiver_allows_invalid_existing_member_and_records_partial_verdict(self) -> None:
+    def test_claim_waiver_is_visible_without_changing_usable_collection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -915,15 +940,20 @@ class RunCampaignTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("COLLECTION VERDICT:", result.stdout)
-            self.assertIn("verdict: partial", result.stdout)
+            self.assertIn("verdict: usable", result.stdout)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
-            self.assertEqual([row["status"] for row in rows], ["skipped", "waived"])
+            self.assertEqual([row["status"] for row in rows], ["skipped", "skipped"])
+            self.assertEqual(rows[1]["members"][0]["collection_classification"], "usable")
+            self.assertEqual(rows[1]["members"][0]["claim_evidence_classification"], "flagged")
+            self.assertEqual(rows[1]["members"][0]["waiver"]["scope"], "idle_window_suspect")
             all_rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
             verdict = all_rows[-1]
             self.assertEqual(verdict["record_type"], "campaign_verdict")
-            self.assertEqual(verdict["collection"]["verdict"], "partial")
-            self.assertEqual(verdict["collection"]["categories"]["usable"], ["good"])
-            self.assertEqual(verdict["collection"]["categories"]["waived"], ["idle"])
+            self.assertEqual(verdict["collection"]["verdict"], "usable")
+            self.assertEqual(
+                verdict["collection"]["categories"]["usable"], ["good", "idle"]
+            )
+            self.assertEqual(verdict["collection"]["categories"]["waived"], [])
             self.assertEqual(verdict["claim_readiness"]["verdict"], "not_assessed")
 
     def test_waiver_target_namespace_is_exact_and_does_not_poison_collection(self) -> None:
@@ -996,7 +1026,7 @@ class RunCampaignTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("unknown scope class", result.stdout + result.stderr)
 
-    def test_waiver_scope_must_cover_failure_classes(self) -> None:
+    def test_unmatched_claim_waiver_scope_does_not_change_collection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -1029,9 +1059,15 @@ class RunCampaignTests(unittest.TestCase):
                 waivers=waivers,
             )
 
-            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.returncode, 0, result.stderr)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
-            self.assertEqual(rows[0]["status"], "failed")
+            self.assertEqual(rows[0]["status"], "skipped")
+            self.assertEqual(
+                rows[0]["members"][0]["collection_classification"], "usable"
+            )
+            self.assertEqual(
+                rows[0]["members"][0]["claim_evidence_classification"], "flagged"
+            )
             self.assertIn(
                 "idle_window_suspect",
                 rows[0]["members"][0]["claim_evidence_flags"],
@@ -1089,16 +1125,20 @@ class RunCampaignTests(unittest.TestCase):
             waivers = tmp_path / "waivers.json"
             config_dir.mkdir()
             write_config(config_dir, "idle.json", "idle")
-            write_single_bundle(runs_dir, "idle", idle_window_suspect=True)
+            write_single_bundle(runs_dir, "idle")
+            summary_path = runs_dir / "idle" / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["gross_energy_j"] += 1.0
+            summary_path.write_text(json.dumps(summary) + "\n", encoding="utf-8")
             waivers.write_text(
                 json.dumps(
                     [
                         {
                             "bundle_id": "idle",
-                            "reason": "all waived is not claim evidence",
+                            "reason": "strict-invalid member retained for collection audit",
                             "approver": "council",
                             "timestamp": "2026-07-08T00:00:00Z",
-                            "scope": "idle_window_suspect",
+                            "scope": "strict_invalid",
                         }
                     ]
                 )
@@ -1407,6 +1447,273 @@ class RunCampaignTests(unittest.TestCase):
             self.assertIs(sampling_audit["top_up_suspected"], False)
             self.assertNotIn("detection_scope", sampling_audit)
             self.assertNotIn("reasons", sampling_audit)
+
+    def test_cleanup_suspect_waiver_is_visible_but_never_clears_readiness(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            config_dir.mkdir()
+            manifest = write_strict_analysis_campaign(config_dir, runs_dir)
+            target = next(entry for entry in manifest["entries"] if entry["role"] == "condition")
+            target_bundle = runs_dir / target["run_id"]
+            shutil.rmtree(target_bundle)
+            write_single_bundle(
+                runs_dir,
+                target["run_id"],
+                config_path=config_dir / target["config"],
+                runtime_cleanup_ok=False,
+                remote_cleanup_failed=["/remote/tmp/joulewise-task"],
+            )
+            suspect_summary = json.loads(
+                (target_bundle / "summary_metrics.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(suspect_summary["status"], "succeeded")
+            self.assertGreater(suspect_summary["energy_request_j"], 0.0)
+            evidence = {entry["run_id"]: "recovered" for entry in manifest["entries"]}
+            evidence[manifest["entries"][0]["run_id"]] = "first_run_exempt"
+            write_prior_campaign_provenance(
+                runs_dir, evidence, analysis_manifest_id(config_dir)
+            )
+
+            unwaived = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(unwaived.returncode, 0, unwaived.stderr)
+            first_verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(first_verdict["collection"]["verdict"], "usable")
+            self.assertEqual(
+                first_verdict["claim_readiness"]["verdict"],
+                "not_ready_for_analysis",
+            )
+            self.assertIn(
+                "required_error_term_unknown",
+                first_verdict["claim_readiness"]["reasons"],
+            )
+            first_member = next(
+                member
+                for member in first_verdict["members"]
+                if member["bundle_id"] == target["run_id"]
+            )
+            self.assertEqual(first_member["status"], "succeeded")
+            self.assertIs(first_member["runtime_cleanup_ok"], False)
+            self.assertEqual(
+                first_member["remote_cleanup_failed"],
+                ["/remote/tmp/joulewise-task"],
+            )
+            self.assertEqual(
+                first_member["claim_evidence_flags"],
+                ["remote_cleanup_failed", "runtime_cleanup_ok"],
+            )
+
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": target["run_id"],
+                            "reason": "cleanup residue reviewed and bounded",
+                            "approver": "campaign-owner",
+                            "timestamp": "2026-07-11T00:00:00Z",
+                            "scope": "runtime_cleanup_ok,remote_cleanup_failed",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            waived = run_campaign(config_dir, runs_dir, waivers=waivers)
+
+            self.assertEqual(waived.returncode, 0, waived.stderr)
+            second_verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(second_verdict["collection"]["verdict"], "usable")
+            self.assertEqual(
+                second_verdict["claim_readiness"]["verdict"],
+                "not_ready_for_analysis",
+            )
+            self.assertIn(
+                "required_error_term_unknown",
+                second_verdict["claim_readiness"]["reasons"],
+            )
+            second_member = next(
+                member
+                for member in second_verdict["members"]
+                if member["bundle_id"] == target["run_id"]
+            )
+            self.assertEqual(second_member["claim_evidence_classification"], "flagged")
+            self.assertEqual(
+                second_member["waiver"]["scope"],
+                "runtime_cleanup_ok,remote_cleanup_failed",
+            )
+            provenance_rows = [
+                json.loads(path.read_text(encoding="utf-8"))
+                for path in (runs_dir / "campaign_manifests").glob("*.json")
+            ]
+            provenance_row = next(
+                row
+                for row in provenance_rows
+                if any(
+                    item.get("waiver") is not None
+                    for member in row["members"]
+                    for item in member.get("claim_evidence", [])
+                )
+            )
+            recorded = next(
+                item
+                for member in provenance_row["members"]
+                for item in member["claim_evidence"]
+                if item["bundle_id"] == target["run_id"]
+            )
+            self.assertEqual(recorded["waiver"], second_member["waiver"])
+
+    def test_cleanup_claim_waiver_does_not_skip_shakedown_or_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            backup = tmp_path / "backup.sh"
+            config_dir.mkdir()
+            config_path = write_config(config_dir, "cleanup.json", "cleanup")
+            write_single_bundle(
+                runs_dir,
+                "cleanup",
+                config_path=config_path,
+                runtime_cleanup_ok=False,
+                remote_cleanup_failed=["/remote/tmp/joulewise-task"],
+            )
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": "cleanup",
+                            "reason": "collection may continue after visible review",
+                            "approver": "campaign-owner",
+                            "timestamp": "2026-07-11T00:00:00Z",
+                            "scope": "runtime_cleanup_ok,remote_cleanup_failed",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            completed = subprocess.CompletedProcess([], 0)
+            argv = [
+                str(config_dir),
+                "--runs-dir",
+                str(runs_dir),
+                "--backup",
+                str(backup),
+                "--shakedown-gate",
+                "production_uncertainty_v1",
+                "--waivers",
+                str(waivers),
+            ]
+            with (
+                patch("run_campaign_module.validate_bundle", return_value=[]),
+                patch("run_campaign_module.subprocess.run", return_value=completed),
+                patch(
+                    "run_campaign_module.assert_production_uncertainty",
+                    return_value={"bundle_id": "cleanup", "request_eligible": True},
+                ),
+                patch("run_campaign_module.backup_runs", return_value=0) as backup_runs,
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(io.StringIO()),
+            ):
+                result = run_campaign_module.main(argv)
+
+            self.assertEqual(result, 0)
+            backup_runs.assert_called_once_with(runs_dir, backup)
+            rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
+            gate = next(row for row in rows if row.get("record_type") == "shakedown_gate")
+            campaign = next(row for row in rows if row.get("run_id") == "cleanup")
+            self.assertEqual(gate["status"], "passed")
+            self.assertEqual(campaign["status"], "skipped")
+            self.assertEqual(
+                campaign["members"][0]["collection_classification"], "usable"
+            )
+            self.assertEqual(
+                campaign["members"][0]["claim_evidence_classification"], "flagged"
+            )
+
+    def test_ratio_readiness_reuses_engine_token_denominator_gate(self) -> None:
+        ratio = {
+            "form": "mean_of_request_ratios",
+            "numerator_metric": "energy_request_j",
+            "denominator": "runtime_observed_output_tokens",
+            "denominator_unit": "token",
+            "tokenizer_scope": "same_identity_required",
+            "output_policy_scope": "same_policy_required",
+        }
+        contrast = {
+            "contrast_id": "ratio-contrast",
+            "metric": {
+                "name": "energy_output_token_j",
+                "metric_tag": "energy_output_token",
+                "window_class": "idle_subtracted_request",
+                "unit": "J/token",
+                "ratio_estimand": ratio,
+            },
+            "cell_a_id": "cell-a",
+            "cell_b_id": "cell-b",
+            "block_ids": ["block-1"],
+        }
+        state = run_campaign_module.AnalysisManifestState(
+            path=Path("analysis_manifest.json"),
+            raw={
+                "design": {"sampling_plan": {"planned_n_blocks": 1}},
+                "entries": [
+                    {"run_id": "a", "block_id": "block-1", "cell_id": "cell-a"},
+                    {"run_id": "b", "block_id": "block-1", "cell_id": "cell-b"},
+                ],
+                "contrasts": [contrast],
+            },
+            manifest_id="ratio-fixture",
+            file_sha256="fixture",
+        )
+        summary = {
+            "energy_request_j": 2.0,
+            "window_evidence_precheck": {
+                "idle_subtracted_request": {"eligible": True, "reasons": []}
+            },
+            "measurement_quality": {"idle_window_suspect": False},
+        }
+        valid_provenance = {
+            "output_tokens": 2,
+            "token_count_source": "runtime_observed",
+            "stop_reason": "requested_tokens_emitted",
+            "output_policy": {
+                "name": "fixed_budget_exact",
+                "requested_tokens": 2,
+                "sampler": None,
+            },
+            "tokenizer_identity": {"backend": "mock", "identifier": "tok"},
+        }
+        evaluations = [
+            run_campaign_module.MemberEvaluation(
+                bundle_id=bundle_id,
+                bundle_path=Path(bundle_id),
+                config_name=f"{bundle_id}.json",
+                status="succeeded",
+                strict_valid=True,
+                summary=summary,
+                ratio_token_provenance={
+                    **valid_provenance,
+                    **({"token_count_source": "config_fallback"} if bundle_id == "b" else {}),
+                },
+                preceding_campaign_cooldown={"result": "first_run_exempt"},
+            )
+            for bundle_id in ("a", "b")
+        ]
+
+        readiness = run_campaign_module.claim_readiness_for(
+            state, "usable", evaluations
+        )
+
+        self.assertEqual(readiness["verdict"], "not_ready_for_analysis")
+        self.assertIn("runtime_token_denominator_required", readiness["reasons"])
+        self.assertNotIn("metric_missing_or_nonfinite", readiness["reasons"])
+        self.assertNotIn("window_evidence_precheck_missing", readiness["reasons"])
 
     def test_existing_resume_provenance_does_not_shadow_invoked_cooldown_evidence(
         self,

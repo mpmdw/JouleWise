@@ -1,21 +1,11 @@
 # JouleWise Run State
 
-Last updated: 2026-07-11 (P2-041 vetted rebuild complete and uncommitted on
-`impl/p2041-vetted`; focused 398 OK/1 skipped, canonical 1062 OK/13 skipped.
-Earlier: PR #49's main-side P2-038 rail-only CI flake
-root-caused to the fake powermetrics child's SIGTERM/right-edge-bracket race;
-fixture-only fix is uncommitted, exact test 100/100 green, focused 5 OK,
-canonical 1041 OK/13 skipped. Earlier: P2-040 reducer-version review blocker fixed
-without commit on `impl/p2040-remainder`: reducer 0.3.1 plus frozen-0.3.0
-absence projection; focused tests green, canonical rerun exposed one unrelated
-pre-existing node-worker timing failure. Earlier:
-C-027 whole-project council review with
-gpt-5.6-sol: claim-surface corrections in README/PROJECT_STATUS/this
-file, 14 new queue rows plus NV-GATE-2 additions to P2-005, D-060 proposed +
-D-061..D-063 accepted; record in
-`docs/reviews/2026-07-09-c027-whole-project-review.md`. Earlier same
-day: Codex MCP bridge hardening; P2-034/C-026, C-025 wave 2, C-024
-wave 1, C-023 rigor review, C-022 CP-5 clearance; suite 877)
+Last updated: 2026-07-11 (C-028 COMPLETE AND CLEARED. PRs #41-#58 are
+merged; PR #59 is an open integration-review follow-up. The analysis trio is
+complete, reducer 0.4.2 is current, corpus gate 6/6 passed, and every Window-A
+software gate is satisfied. Window-A execution requires a quiet machine + Ed.
+Full record: `docs/run_reports/2026-07-11-c028-continuation.md`; C-028 council
+entry; D-064 ratified.)
 
 ## Start Here For Every Big Run
 
@@ -65,179 +55,33 @@ At the end of substantial work:
 
 ## ACTIVE_STOP_CARD
 
-Status: **ACTIVE (2026-07-10 late, C-028 checkpoint #3 — fresh-thread
-handoff; the prior thread's context filled).** This card is the ONLY
-resume authority. Read it plus `docs/reviews/2026-07-10-hardening-adjudication.md`
-before anything else.
+None. The C-028 card was **CLEARED 2026-07-11** — see the superseded
+record below. Normal queue/mission pointers apply.
 
-**MERGED to main (C-028 total): PRs #41-#48.** #46 P2-042 analysis
-manifest (review + fix round), #47 P2-040 remainder (reducer 0.3.1 +
-ADDED_SINCE_0_3_0 discipline), #48 P2-038 production uncertainty
-(metrology review: unknown-contamination fail-open closed; cross-
-contract idle_drift_guard). Plus same-day: P0-003 CLOSED (iCloud
-Drive backup, restore test strict-valid + byte-identical), D-060
-RATIFIED by Ed, hardening proposal adjudicated (9 new queue rows
-P2-043..P2-048/CI-002/REPRO-002/RPT-002; record + conflicts table in
-docs/reviews/2026-07-10-hardening-adjudication.md).
+<!-- BEGIN GENERATED: state-kernel run-state-intake -->
+<!-- Kernel intake marker (DOC-008): docs/process/state_kernel.json is a
+     generated NOT-AUTHORITATIVE derived view; this file, TASK_QUEUE.md,
+     and docs/decision_log.md remain authoritative. -->
+<!-- END GENERATED: state-kernel run-state-intake -->
 
-**CHECKPOINT #4 (2026-07-11, Ed-directed pause; supersedes the item
-list below where they conflict). State at pause:**
+## Superseded stop card (C-028)
 
-- MERGED today: PR #49 (NV-GATE-2 code-now, 1b0f1f6) and PR #54
-  (P2-041 vetted rebuild + full review stack + fix rounds, 69a3393).
-  Both historic flake classes dead; NV-5 localhost lead gate CLOSED.
-- OPEN PRs, all lead-gated, HELD for the integration-review window:
-  #50 P2-046A, #51 CI-002 (acceptance CI 4/4 green), #52 REPRO-002,
-  #53 RPT-002 (all seven sources primary-verified), #55 P2-044
-  (idle ESS per adjudicated design docs/reviews/2026-07-11-p2044-
-  design-consult.md; lead gates + corpus 6/6 done). #55 REVIEW LANDED
-  POST-CHECKPOINT with TWO METROLOGY BLOCKERS — do NOT merge #55
-  before a fix round: (1) cadence regularity check uses the wrong
-  interval population; (2) legacy strict dispatch can mask a freshly
-  derived metadata mismatch; also closed-form fixture assertions are
-  approximate, must be exact. Full findings:
-  session-scratchpad sol-p2044-review.md (+ iCloud backup). Fix round
-  + re-review + blocker refuters per adversarial-review, THEN merge.
-- impl/p2037 worktree: contrast/claim engine implemented by an ultra
-  session that exited transport-OK with NO REPORT (RED-round
-  signature) — work itself lead-verified green (focused 89 OK,
-  canonical OK); an independent xhigh AUDIT (implemented-vs-spec map,
-  scope audit of cli.py/claims_lint.py hunks, fail-open hunts) was IN
-  FLIGHT at pause; its report lands in the session scratchpad
-  (sol-p2037-audit.md). UNCOMMITTED — do not discard. Acceptance
-  gated on P2-044 (#55) landing + audit dispositions.
-  AUDIT LANDED POST-CHECKPOINT: strong statistical core (frozen-m
-  multiplicity, artifact validation, top-up demotion, claims-index
-  machinery sound) and a CLEAN scope audit (all cli.py/claims_lint.py
-  hunks spec-required — no invention this time), but FOUR BLOCKERS on
-  the acceptance path (analysis_engine/__init__.py:229,
-  inputs.py:775 + :831, claims_lint.py:1773) + should-fixes. Full
-  findings: sol-p2037-audit.md. Resume path: blocker refuters (2 each
-  per adversarial-review) → fix round (NEEDS_RULING available) →
-  re-audit delta → commit by pathspec → PR; still behind #55.
-- Scope-restraint + adapter infrastructure (global, outside repo):
-  claude-codex-report/v1 adopted (~/.claude/skills/codex-delegation/
-  ADAPTER.md); codex-run-v3 + codex-usage INSTALLED (~/.local/bin);
-  fail-on-diff scope backstop LANDED CLEAN and
-  INSTALLED post-checkpoint (149-assertion suite + full v2 compat
-  lead-replayed; SCOPE_VIOLATION/exit-77/evidence-bundle + NEEDS_SCOPE
-  approve/resume protocol live in ~/.local/bin/codex-run-v3 — every
-  future delegated write session runs enforced); AGENTS.md now carries delegated-session
-  WRITE_SCOPE precedence + NEEDS_RULING early-return (9ca89cc,
-  31b3f5e). Consult records: docs/reviews/2026-07-11-scope-restraint-
-  consult.md, -p2044-design-consult.md, -p2041-red-tranche-triage.md,
-  -hardening-row-scheduling-scout.md.
-- Usage state: one ultra ≈ 11 xhigh sessions (35.3M vs ~3.1M tokens);
-  5h window was 26% remaining, resets ~11:03Z; usage-pressure mode
-  ACTIVE per Ed — after this pause, NO ultra launches (exception:
-  P2-037 resume if its audit demands completion, Ed-authorized);
-  prefer high/xhigh consultancy + spec design in break mode. Check
-  `codex-usage <manifests>` before any ultra.
-- RESUME ORDER: (1) consume the three in-flight reports
-  (sol-p2044-review.md, sol-p2037-audit.md, sol-scope-backstop.md;
-  scratchpad path in D-064 manifests; iCloud backup at
-  JouleWise-agent-logs/2026-07-11/); (2) P2-044 review dispositions →
-  merge #55; (3) P2-037 audit dispositions → fix/complete → PR; (4)
-  P2-043 + P2-045 launch decisions (scout: they needed p2041 landed —
-  satisfied — plus P2-037 CLI/vocabulary frozen); (5) DOC-008 kernel
-  (LAST), cross-stream integration review over final main, merge held
-  PRs #50-#53/#55 per its verdicts; (6) C-028 BOOKKEEPING ARC (item 5
-  below, unchanged; D-064 must also ratify manifest v3 + adapter;
-  P2-044 10s-bandwidth methodology freeze flagged for Ed veto) → THEN
-  clear this card.
+Status: **CLEARED 2026-07-11.** Every clearance criterion met: all
+checkpoint-#4 resume items executed (P2-044 fix+merge #55; P2-037
+audit dispositions → two fix rounds + approved NEEDS_SCOPE expansion +
+delta re-audit → #58; P2-043 #57; P2-045 #56); the four held hardening
+PRs #50-#53 merged after the cross-stream integration review over the
+combined tree (38 pre-merge cross-stream failures caught and fixed; 1
+review blocker confirmed by refuters → PR #59; SF1 refuted; SF3 →
+queue row P2-049); DOC-008 kernel refreshed at final head (schema v2,
+authority field, branch impl/doc008-kernel awaiting PR); bookkeeping
+arc complete (run report, C-028 council entry with layer catch-rates
+and ~57-invocation spend record, D-064 ratified incl. manifest v3 +
+claude-codex-report/v1 + WRITE_SCOPE enforcement; queue reconciled;
+consistency sweep; site regen+deploy). Open at clearance, tracked in
+the queue: INT-59 merge, DOC-008 PR, P2-049/P2-050/TOOL-01.
 
-**Original item list (item 1 DONE; superseded where checkpoint #4
-says otherwise):**
-
-1. DONE 2026-07-11: PR #49 MERGED to main (1b0f1f6) after the full
-   gate stack: lead conflict resolution (456772a), Sol merge review +
-   P2-005-row repair (13f6c9e), the py3.14 CI red root-caused as a
-   PRE-EXISTING main-side fixture SIGTERM race and fixed fixture-only
-   (10e0ad2; flake test 0/30 fails lead-run), NV-5 localhost lead gate
-   CLOSED (3/3 OK socket-capable), canonical 1041 OK (skipped=12)
-   unpiped, CI green both versions, Ed-approved SHA-guarded merge.
-   Both historic flake classes (fake-nvidia-smi idle deadline; P2-038
-   rail-only right-edge bracket) are now dead on main.
-   IN FLIGHT (Ed-directed fan-out): impl/p2041-vetted ULTRA
-   composition per the triage recipe, and a NEW impl/p2037 stream
-   (contrast/claim engine, ULTRA, from the banked adjudicated spec +
-   frozen rulings; interface assumptions vs p2041 flagged for
-   integration review). Original item (superseded): PR #49 had REAL
-   code conflicts vs post-#48
-   main: joulewise/cli.py + reduce.py + schemas.py + tests/test_cli_run.py
-   (both sides extended MeasurementQuality, ADDED_SINCE_0_3_0, and the
-   0.3.x dispatch) + the usual state-file unions. A clean merge was
-   deliberately NOT rushed at checkpoint. Resolve with care (union of
-   BOTH quality fields runtime_cleanup_ok + remote_cleanup_failed in
-   schema, ADDED_SINCE, and dispatch tests; suite must stay green
-   UNPIPED), or delegate to a Sol session in ../JouleWise-wt/nvgate2
-   with this exact contract. Then CI → merge #49. NOTE: #49 contains
-   the ROOT-CAUSE fix for the historic fake-nvidia-smi flake (worker
-   idle deadline now starts at sampler readiness) — after it merges,
-   that flake class is dead everywhere.
-   ADDENDUM (2026-07-11): conflicts RESOLVED lead-side (456772a +
-   P2-005-row repair 13f6c9e after a Sol merge-review catch; suite
-   1041 OK unpiped). CI then went RED ONCE on py3.14 at 13f6c9e:
-   FAIL test_rail_only_sentinels_withhold_drift_but_leave_gross_eligible
-   (tests/test_p2038_production_path.py, MAIN-side PR #48 content,
-   AssertionError eligible=False) — NOT the localhost subprocess test
-   (an earlier same-day report misattributed it). Same code was green
-   on 3.11 and on both versions at 456772a ⇒ nondeterministic,
-   timing-suspect, possibly pre-existing on main independent of #49.
-   Root-cause + deterministic fix required BEFORE merging #49; do not
-   merge on a rerun-green alone, and any fix must preserve fail-closed
-   gate semantics (metrology adjudication).
-2. impl/p2041-vetted — VETTED REBUILD COMPLETE, UNCOMMITTED (2026-07-11):
-   manually composed from the requested post-#49 `1b0f1f6` base using the
-   triage recipe; no raw WIP diff or generated site files were applied.
-   HEAD itself is the #49 merge; item 1's pre-merge narrative is inherited
-   anchor text and is superseded, but later main bookkeeping was not imported.
-   `claim_readiness`, per-physical-session exemption, adjudicated v2/top-up
-   shape, P2-038/P2-040/P2-042 behavior, and both post-#49 cleanup fields are
-   retained. Final focused 398 OK/1 skipped; canonical 1062 OK/13 skipped;
-   mechanical gates clean. Report:
-   `docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`. Lead owns final diff
-   review and pathspec commit, including explicit adjudication of the three
-   assertion-only pure-B exceptions and the frozen stored-field mapper gap.
-3. DOC-008 kernel (LAST, per adjudication): refresh at final
-   integrated head + NOT-AUTHORITATIVE header, targeted review, PR.
-4. Cross-stream integration review (Sol) over final main: interaction
-   defects only, esp. P2-038 evidence x P2-040 gates x P2-041
-   readiness x P2-042 manifest x NV-GATE quality fields.
-5. C-028 BOOKKEEPING ARC: consume scratchpad/bookkeeping-drafts.md;
-   D-064 decision entry (adjudicated H4: tracked per-session JSONL,
-   one row per invocation; a partial exists at
-   scratchpad/c028-invocations.jsonl); C-028 council entry (this arc
-   had ~35 Sol sessions incl. 7-lens review, 40-ruling adjudication,
-   per-stream review stacks, 2 capacity-killed+resumed sessions, the
-   hardening adjudication, bridge v2); run report; queue-row updates
-   (P2-040 FULLY done, P2-038/P2-042 done pending integration review,
-   RETRO-001 done pending verification-head advance at next site
-   regen+diff); RPT-001+P2-039 exit-checklist rows per DOC-009 rule;
-   consistency sweep; site regen + deploy; THEN clear this card.
-
-**Environment/tooling facts for the fresh thread:**
-- codex = gpt-5.6-sol (Ed's term); reviews at --effort xhigh (config
-  default), BIG implementations at --effort ultra (spawn_agent-capable).
-  Invoke via ~/.local/bin/codex-run-v2 (adds -m/--effort, capacity
-  retry-with-resume, --manifest D-064 rows; 37/37 tests) — v1 exists
-  but v2 is now proven across ~10 runs.
-- Worktrees under ../JouleWise-wt/ — do NOT remove until merged.
-- Git identity: repo-local user.name/email were set (hostname changed);
-  worktree commits work.
-- LESSON (bit three times): never pipe the suite when its exit code
-  gates a push — run unpiped to a file, check, then push separately.
-- Sol sandboxes cannot bind localhost sockets and cannot write shared
-  worktree git metadata: socket tests are lead-run 3x; merges are
-  lead-recreated (sessions may pre-union content).
-- The fake-nvidia-smi flake fires near-deterministically under Sol
-  load on THIS machine but never in CI — until #49 merges, judge that
-  one failure accordingly.
-
-**Ed-decision list remaining:** two-model floor economics; full-corpus
-CI commitment; renderer (P1-008); REPRO pack publication acts.
-
-## Superseded stop card (CP-5)## Superseded stop card (CP-5)
+## Superseded stop card (CP-5)
 
 Status: **CLEARED 2026-07-09** by the CP-5 resume session. Every
 clearance criterion was met: all three worktree diffs lead-gated
@@ -251,99 +95,39 @@ rank 0 closed. Full record:
 
 ## Current Project Status
 
-**P2-041 VETTED REBUILD COMPLETE in `impl/p2041-vetted` (2026-07-11;
-uncommitted for lead pathspec review).** The 4 clean-A files were copied
-blob-exact and the 15 mixed files were manually re-derived from post-#49 main.
-The landing keeps `claim_readiness`, a per-physical-session first-run
-exemption, the adjudicated campaign-verdict-v2/top-up surface, authoritative
-P2-042 manifest validation, P2-038 shakedown behavior, and both
-`runtime_cleanup_ok` and `remote_cleanup_failed` under reducer 0.4.0. Focused
-398 OK/1 skipped; canonical 1062 OK/13 skipped. Report:
-`docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`.
-**CI-002 IMPLEMENTED in worktree (2026-07-11; lead CI validation
-pending).** The Linux 3.11/3.14 workflow now compiles sources, runs the
-canonical suite, and executes the exact strict mock run -> strict validate ->
-reduce -> strict validate chain. Separate jobs build wheel+sdist, upload the
-distributions, install the wheel with `--no-deps` in a clean venv, and run
-`python -m joulewise --help` outside any checkout. The explicit setuptools
-backend leaves core `dependencies = []` unchanged. Local compileall, strict
-chain, workflow/TOML syntax, canonical 1041-test suite, and diff checks pass;
-the sandbox lacks `build` and a compatible setuptools backend, so distribution
-build/install remain for lead-side CI validation. Report:
-`docs/run_reports/2026-07-11-ci002-packaging-strictness.md`.
+**C-028 CLOSED (2026-07-11): the full hardening + analysis-engine arc is
+on main.** Reducer lattice 0.4.2 (inter-token metric) / 0.4.1 (idle ESS,
+HAC variance — local r1's 47x underestimate closed) / 0.4.0 (verdict
+split + window_evidence_precheck) with frozen legacy arms; the analysis
+trio complete (P2-042 manifest → P2-041 verdict split → P2-037
+contrast/claim engine with unwaivable cleanup claim gating per the
+two-layer waiver reconciliation); doctor preflight; publication privacy
+pack (fail-closed inventory); packaging CI; primary-verified related
+work; load-transition prep (B remains [QUIET-MAC]). Window A's software
+gates are ALL satisfied; execution needs a quiet machine + Ed.
 
-**RPT-001 targeted review fix round COMPLETE in worktree (2026-07-10;
-awaiting lead pathspec commit).** FIX-1..FIX-9 are implemented: Phase-4
-claims lint/projection, adjudicated 1P5B identity and regenerated artifacts,
-full/offline atomic build with hash verification, real pipeline regressions,
-D-058 T1 scope, expanded claim-language tripwires, boundary-honest prose,
-LF byte stability, and evidence-bootstrap gating. Real-corpus regeneration
-used `/Users/edr/code/JouleWise/runs`; focused 37 OK and canonical 890 OK
-(skipped=10). Report: `docs/run_reports/2026-07-10-rpt001-fix-round.md`.
+PRs #41-#58 form the landed C-028 arc. PR #59 remains OPEN with the
+integration-review fixes (four added tests; 1,224-test worktree replay); it
+does not reopen the cleared card or imply live evidence. P0-003 is satisfied
+by the verified iCloud backup/restore. All NVIDIA/Orin protocol pins remain
+PROVISIONAL pending P1-006 live evidence.
 
-**Suite BUILD session COMPLETE and MERGED (2026-07-08; C-017;
-D-044..D-047).** The workload suite is now CODE, not contracts: P2-010a
-generic substrate (PR #17: suite.py, run_suite protocol, mock+MLX
-execution, BundleReader suite validation, reducer suite_metrics, strict
-rollup provenance), P2-010b affine core + smoke manifest (PR #18,
-promoted via #20 after a base-retarget slip), P2-012 phase-1 + P2-020
-generator engine (PR #19: gensuite, six categories + five ids-native
-sentinels). All 37 research-doc amendments adjudicated first (recorded
-dispositions). Live-verified on real MLX at three code states; three
-live-only defects caught and fixed at the lead gate. Post-merge
-integration review: zero cross-stream defects.
-
-**CP-5 RESUMED AND CLEARED (2026-07-09): pre-campaign review COMPLETE;
-Window A is GO in the CP-5 software sense — C-027 additionally
-conditions execution on P0-003 backup, P2-038, P2-039, and
-P2-015-SMOKE.** Seven PRs merged
-(#22..#28): D-033 strict legacy-bypass close, envelope-gate script,
-campaign-runner prompt-hash check, bundle-pack tooling, tokenizer
-identity widening + manifest regen, capture hardening (output token IDs,
-fail-closed sampler pin, model weight hashing, hash-domain
-realized-vs-manifest closure), advisor status site + suite_next draft
-specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
-`docs/run_reports/2026-07-09-cp5-resume.md`.
-
-**P2-038 SOFTWARE SIDE COMPLETE on `impl/p2038` (2026-07-10; uncommitted
-for lead pathspec review); LIVE CLOSURE REMAINS OPEN.** Current-era real
-powermetrics runs now derive and record paired-clock anchor/phase evidence,
-the interim pre/post idle envelope, and a separate idle-drift guard handoff;
-the post sentinel is outside the measured window. A production-shaped real
-adapter/child-process path passes the P2-029/P2-040 request gate with no
-synthetic metadata and exercises all three required fail-closed reasons.
-Campaign shakedown mode now enforces strict → reduce → strict → assertion →
-backup. True MLX + `/usr/bin/powermetrics` execution and approved backup remain
-lead-owned `[QUIET-MAC]` work. Report:
-`docs/run_reports/2026-07-10-p2038-production-uncertainty.md`.
-
-**RESTART HERE (next agent) — this is the ONLY next-action block; the
-queue owns ordering (C-027):**
-1. Read `docs/reviews/2026-07-09-c027-whole-project-review.md` (latest —
-   whole-project council review, adjudicated follow-ups) and
-   `docs/run_reports/2026-07-09-cp5-resume.md` (Window-A go/no-go).
-2. Lane state after C-027:
-   - [ED-EXTERNAL] P0-003 external backup destination is a HARD GATE
-     before any new irreplaceable Window-A evidence is retained; plus
-     P1-008 rubric/calendar (provisional-contract fallback per proposed
-     D-060).
-   - [AGENT]: the C-027 correctness rows, in queue order — finish lead review
-     and landing of P2-038's completed software diff, then P2-039 (frozen floor artifact +
-     guard factor), then RPT-001 (report skeleton + vertical slice),
-     P2-042 (frozen analysis manifest), P2-041 (campaign verdict
-     split), and only then P2-037 (contrast/claim engine, which
-     consumes the manifest — required before any P2-006
-     interpretation). P2-022/P2-023 remain BLOCKED post-2M per D-041 —
-     do not start them.
-   - [QUIET-MAC] Window A (C-019 shakedown → P2-015-SMOKE → P2-015
-     floors → P2-006) proceeds only after P2-040 + P2-038 + P2-039
-     land and the P0-003 backup gate is satisfied (P2-040 is
-     pre-Window-A: strict must reject zero-length windows before any
-     collection).
-3. Rotation (D-056), uncertainty gates (D-057), and the campaign packs
-   are live for Window-A execution once the above gates clear.
+**RESTART HERE (next session) — this is the ONLY next-action block; the
+queue owns ordering:**
+1. [AGENT] Land INT-59 only after CI and final-head review; open DOC-008's
+   already-pushed branch as a PR after its lead gate. Neither is a Window-A
+   software prerequisite.
+2. [QUIET-MAC + ED] Begin Window A: C-019 production-shaped shakedown and
+   P2-015-SMOKE, then P2-015 floors and P2-006 baselines. Do not run this
+   lane while an agent session is active.
+3. [AGENT] Outside a quiet window, take the next compatible queue row
+   (P2-049, P2-050 adjudication, P2-027 publication prep, or P2-028).
+   P2-022/P2-023 remain blocked until the 2M corpus exists.
 
 ## Session History (pointers only — run reports own the narrative)
+
+Parenthetical states below are historical at each report's head; they are not
+current restart instructions. Current state is the C-028 block above.
 
 - 2026-07-11 P2-041 vetted rebuild (uncommitted; lead pathspec review and
   commit pending): `docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`
@@ -410,6 +194,19 @@ queue owns ordering (C-027):**
 - Older: see `docs/run_reports/` (dated files).
 
 ## Current Verification
+
+- Current `main@cc3afc3`: canonical `Ran 1220 tests`, `OK (skipped=10)`;
+  retained corpus strict gate 6/6; main is content-identical to the reviewed
+  post-fix integration tree. PRs #41-#58 are merged.
+- Open PR #59 (`impl/int-findings`): lead replay `Ran 1224 tests`, `OK
+  (skipped=12)`. The four-test delta covers the integration-review cleanup
+  and ratio-readiness findings; merge still requires CI + final-head review.
+- Count convention for C-028 records: ordinary worktree replays report
+  `skipped=12`, final main reports `skipped=10`, and restricted managed
+  sandboxes may report `skipped=13` when their environment-gated probe is
+  unavailable. Preserve those environment labels when citing a tail.
+
+### Historical verification archive (exact at the recorded heads)
 
 - P2-041 vetted rebuild: baseline canonical `Ran 1041 tests in 67.995s`,
   `OK (skipped=13)`; final focused recipe modules `Ran 398 tests in 54.964s`,
@@ -547,66 +344,25 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
-- Worktree `/Users/edr/code/JouleWise-wt/p2041-vetted` on
-  `impl/p2041-vetted` is intentionally dirty only with the uncommitted P2-041
-  vetted rebuild and its bookkeeping/report. It remains anchored at the
-  user-specified post-#49 `1b0f1f6`; `origin/main` advanced during the run and
-  was not merged. No `docs/site/*` file was regenerated. Lead owns final diff
-  review and pathspec commit; do not commit or discard the tree wholesale.
-
-- Worktree `/Users/edr/code/JouleWise-wt/ci002` on `impl/ci002` is dirty only
-  with the uncommitted CI-002 workflow, explicit build backend, and required
-  bookkeeping/report changes. Package build and clean-venv wheel smoke are
-  intentionally deferred to lead CI because the sandbox has no `build` module
-  and its Python 3.13 environment has no setuptools.
-- Worktree `/Users/edr/code/JouleWise-wt/nvgate2` on
-  `impl/nvgate2-codenow` has the idle-readiness fix, regression test, and
-  handoff bookkeeping COMMITTED (cd6e2cb) and the lead-resolved merge of
-  post-#48 `origin/main` (union of remote_cleanup_failed +
-  runtime_cleanup_ok in schema/ADDED_SINCE/dispatch tests). The pre-existing
-  main-side P2-038 rail-only flake has an uncommitted fixture-only SIGTERM
-  handshake fix plus handoff report/state updates. The localhost 3x lead gate
-  PASSED (lead-run 2026-07-11: 3/3 OK socket-capable; flake test 0/30
-  failures; canonical 1041 OK skipped=12 unpiped, socket test exercised).
-- `impl/p2038` is intentionally dirty with the uncommitted P2-038 software,
-  accepted-findings fixes, tests, contracts, config, run reports, and the clean
-  three-way content merge of `origin/main`. The lead owns pathspec review and
-  the real Git merge/commit; the sandbox could not write `ORIG_HEAD`/merge
-  metadata in the external worktree admin directory. No retained run bundle
-  was modified.
-- Worktree `/Users/edr/code/JouleWise-wt/p2040rem` on
-  `impl/p2040-remainder` contains the committed remainder implementation and
-  is intentionally dirty only with the uncommitted reducer-version review
-  fix, tests, D-030 amendment, and handoff bookkeeping. Do not commit or
-  discard these changes wholesale.
-- `main` and `origin/main` contain the user-directed Claude Code → Codex
-  bridge hardening from commit `1d7c415` (pushed direct as a bounded
-  tooling change, closeout `ef34cc9`). Branch `c027-council-review`
-  (PR #40) carries the C-027 review record, claim-surface corrections,
-  and sweep fixes, and has merged main back in; the worktree is
-  otherwise clean.
-- Codex's own worktree `/Users/edr/.codex/worktrees/7fe2/JouleWise`
-  still holds the ORIGINAL advisor-site commits (bf9ffc5..e6cf431);
-  their content landed via PR #28 (D-051 renumber applied). Safe to
-  leave or remove; do not re-land.
-- `/tmp/jw-lead-verify/` and the session scratchpad hold disposable
-  lead-verification artifacts (live-runs bundles are not corpus).
+- Main checkout started this consistency sweep clean at `main@cc3afc3`, equal
+  to `origin/main`. This delegated session may modify only the seven paths in
+  its explicit WRITE_SCOPE; the lead owns review and commit.
+- `impl/int-findings` is the PR #59 branch. It contains the bounded
+  integration-review follow-up and has a 1,224-test green worktree replay;
+  it is not merged.
+- `impl/doc008-kernel` is pushed and awaiting its PR/lead gate. Its generated
+  state kernel is explicitly non-authoritative; `RUN_STATE.md`,
+  `TASK_QUEUE.md`, and `docs/decision_log.md` remain authoritative.
+- Retained corpus and session scratchpad evidence are immutable. No live run
+  bundle or site artifact is part of this sweep.
 
 ## What Is Next
 
-Lead-review the uncommitted P2-041 vetted rebuild against its triage recipe,
-explicitly adjudicate the three post-#49 assertion-only pure-B exceptions and
-the frozen stored-field mapper gap, then commit only approved pathspecs. The
-cross-stream P2-038/P2-040/P2-041/P2-042/NV integration review remains the next
-stop-card action after landing. `TASK_QUEUE.md` remains the ordering authority.
-For CI-002, lead-review the bounded diff and run the GitHub workflow; require
-the build artifact to contain both a wheel and sdist and the no-checkout
-installed-wheel smoke to pass before marking the row complete. No phase-exit
-checklist row exists for CI-002.
-
-Lead-review the uncommitted P2-040 reducer-version fix, run the retained
-six-bundle strict read-only gate, and commit by pathspec. Once landed, P2-038 is the next
-`[AGENT]` correctness row. `TASK_QUEUE.md` remains the ordering authority.
+Lead-review and land PR #59 after CI + final-head review, then open and gate
+the pushed DOC-008 branch. In the first clean quiet-machine window, Ed runs
+C-019/P2-015-SMOKE, followed by P2-015 floors and P2-006 baselines. Agent-safe
+work continues only outside that quiet window. `TASK_QUEUE.md` remains the
+ordering authority.
 
 Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
 C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),
@@ -616,7 +372,6 @@ calendar mapping (P1-008).
 
 - Supervisor approval and scope pending (P1-001, R-001 — mitigation
   holding); gates FULL D-016 closure.
-- Real backup destination pending (P0-003; interim same-disk active).
 - Calendar dates pending (P1-008, R-012).
 - Wall-meter decision pending (P1-003, R-007).
 - Physical network topology pending (P1-004, R-011).

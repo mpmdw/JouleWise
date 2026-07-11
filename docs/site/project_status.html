@@ -49,60 +49,53 @@
 <a href="#maintenance-of-this-document">Maintenance Of This Document</a></aside>
   <div class="doc-wrap doc-source-project-status-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>PROJECT_STATUS.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit c9acfc5"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit c9acfc5</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="PROJECT_STATUS.md · commit 55e67c2"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 55e67c2</span></span></div>
     <h1>JouleWise: Project Status, Plan, And Architecture</h1>
 <p>Audience: project advisor. This is the standalone monitoring document - it
 summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.</p>
 <ul>
-<li>Last updated: 2026-07-11 (advisor-facing C-028 refresh through
-<code>main@73489a9</code>). PRs #41-#49 are merged: notably P2-042&#39;s frozen
-analysis manifest (#46), the P2-040 remainder and reducer 0.3.1 (#47),
-P2-038&#39;s production-uncertainty software path (#48), and NV-GATE-2&#39;s
-code-now hardening (#49). P0-003 is closed with an iCloud Drive backup
-and a strict-valid, byte-identical restore proof; Ed ratified D-060;
-and the independent hardening proposal became nine concrete queue rows.
-P2-041 and P2-037 remain in progress on separate branches. Window A is
-not yet running: it still needs those two branches to land, a
-cross-stream integration review, and a quiet machine.</li>
+<li>Last updated: 2026-07-11 (C-028 closed at <code>main@cc3afc3</code>). PRs #41-#58
+are merged and PR #59 is an open integration-review follow-up. The arc
+completed the frozen analysis manifest, campaign verdict split, and
+contrast/claim engine; landed the reducer 0.4.0/0.4.1/0.4.2 lattice;
+and closed the doctor, packaging, privacy, related-work, and load-transition
+software gates. P0-003 is closed with an iCloud Drive backup and a
+strict-valid, byte-identical restore proof. Window A has not started, but
+all of its software gates are satisfied; execution now requires a quiet
+machine and Ed.</li>
 <li>Project phase: Phase 1 closing; Phase 2 in progress - instrument
 pre-campaign software review CLEARED (Window A begins with C-019
-shakedown and P2-015-SMOKE once P2-041/P2-037 land, the integration
-review passes, and the machine is quiet; the external-backup gate is
-satisfied); P2-013 evidence-integrity and P2-014 provenance fixes
+shakedown and P2-015-SMOKE in a lead-controlled quiet-machine session;
+every software prerequisite and the external-backup gate are satisfied);
+P2-013 evidence-integrity and P2-014 provenance fixes
 are complete; workload-suite build is merged; CP-5 pre-campaign review is
 COMPLETE and CLEARED (2026-07-09, PRs #22..#28; see
 <code>docs/run_reports/2026-07-09-cp5-resume.md</code>); the P2-015 design doc is
-merged; P2-038/P2-039/P2-040/P2-042 are landed; P2-041 and P2-037 are
-active software work before C-019 shakedown and P2-015 quiet calibration</li>
+merged; P2-038/P2-039/P2-040/P2-041/P2-042 and P2-037 are landed;
+PR #59 remains open as a bounded follow-up and does not reopen C-028</li>
 <li>Repository: <code>github.com/mpmdw/JouleWise</code> (branch <code>main</code>)</li>
 <li>Live status site: <a href="https://quiet-signal-6af8833395.lakebed.app">https://quiet-signal-6af8833395.lakebed.app</a> (Lakebed
 capsule; <code>/status.html</code> is the advisor cockpit and shows live overlays
 plus a drift banner when the repo has moved past the snapshot)</li>
 </ul>
 <h2 id="this-update-as-of-2026-07-11-c-028-hardening-and-integration-arc-30-second-read">This Update (as of 2026-07-11, C-028 hardening and integration arc) — 30-second read</h2>
-<p><strong>The pre-campaign evidence path is materially stronger, but Window A
-has not started.</strong> PRs #41-#49 are all merged. The closing tranche added
-the frozen P2-042 analysis manifest (#46), completed the P2-040 remainder
-with reducer 0.3.1 compatibility discipline (#47), landed P2-038&#39;s
-production uncertainty evidence path (#48), and landed NV-GATE-2 code-now
-(#49): a verifier registry for raw-lineage checks, usage-first vLLM
-streaming, and identity-aware process-survival handling. These are software
-and localhost gates, not live NVIDIA validation; remote protocol claims
-remain PROVISIONAL. The NV-5 localhost lead gate closed 3/3, and the lead-run
-canonical suite passed 1,041 tests with 12 skips. Both historic intermittent
-test classes were root-caused and eliminated on main: the fake-nvidia-smi
-idle deadline now starts at sampler readiness, and the P2-038 rail-only
-fixture now deterministically supplies its right-edge sample. Separately,
-P0-003 closed with an iCloud Drive backup whose fresh restore was strict-valid
-and byte-identical; Ed ratified the D-060 depth-before-breadth stop line; and
-the hardening proposal was adjudicated into nine queue rows rather than a
-parallel lifecycle. P2-041&#39;s vetted rebuild and P2-037&#39;s contrast/claim
-engine are still in progress on separate branches. Window A remains gated
-on both landing, an integration review, and a quiet machine; backup is no
-longer a blocker. No new hardware measurement or higher claim level is
-asserted by this update.</p>
+<p><strong>C-028 is closed; Window A is software-ready and has not started.</strong> PRs
+#41-#58 are merged. The analysis trio is complete: P2-042 freezes the
+analysis manifest, P2-041 separates collection usability from claim
+readiness, and P2-037 executes the predeclared contrast and claim rules.
+The reducer lattice preserves the six frozen legacy arms and 0.3.x
+compatibility, then advances through 0.4.0 (verdict/precheck shape), 0.4.1
+(idle dependence and HAC variance), and 0.4.2 (the governed inter-token
+metric). Doctor preflight, packaging CI, fail-closed publication privacy,
+primary-verified related work, and load-transition software preparation also
+landed. Current main passes 1,220 tests with 10 skips; PR #59 adds four
+integration-review regressions and remains open. P0-003 is satisfied by the
+verified iCloud backup/restore. All Window-A software gates are satisfied;
+the next act is C-019 plus P2-015-SMOKE on a quiet machine with Ed. These are
+landed software and localhost results, not new quiet-Mac data or live NVIDIA
+validation; every NVIDIA/Orin protocol pin remains PROVISIONAL.</p>
 <h2 id="previous-update-as-of-2026-07-09-c-027-whole-project-council-review-30-second-read">Previous Update (as of 2026-07-09, C-027 whole-project council review) — 30-second read</h2>
 <p><strong>The project put itself in front of a hostile examiner and corrected
 its own front page.</strong> A seven-lens cross-model review (new Codex model,
@@ -213,8 +206,8 @@ implementing the statistical-uncertainty protocol) queued.</p>
 <tbody><tr>
 <td>2026-07-10/11</td>
 <td>C-028 hardening and integration arc</td>
-<td>PRs #41-#49 merged; P2-042/P2-040/P2-038 and NV-GATE-2 code-now landed; P0-003 closed with a verified off-machine restore; D-060 ratified; both historic test-flake classes eliminated; P2-041/P2-037 remain in progress before Window A.</td>
-<td><code>docs/run_reports/2026-07-10-nvgate2-codenow.md</code>; <code>docs/run_reports/2026-07-10-pr49-p2038-flake-root-cause.md</code></td>
+<td>PRs #41-#58 merged; analysis trio complete; reducer lattice through 0.4.2; P0-003 restore proof and every Window-A software gate satisfied; PR #59 open as a bounded follow-up; no new live evidence claimed.</td>
+<td><code>docs/run_reports/2026-07-11-c028-continuation.md</code></td>
 </tr>
 <tr>
 <td>2026-07-06</td>
@@ -311,7 +304,7 @@ recorded in the Phase 2 plan.</p>
 <tr>
 <td>2. Harness, Mac vertical slice, homogeneous baselines</td>
 <td>runnable harness, first real measurements, per-target baselines</td>
-<td><strong>in progress</strong> - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); P2-013/P2-014 integrity and provenance fixes complete (31 audit pins fixed; strict now includes raw-to-trace and provenance gates); instrument upgrades landed 2026-07-07 (statistical uncertainty per D-014, contamination gate, deep DVFS telemetry, campaign automation); suite-science hardening + expansion MERGED 2026-07-08 (analysis-plans contract D-038, Q4 L3 grid design, drift sentinels, Window-A capture covariates, suite architecture v2 + benchmark-interop direction, capability map — see the research-questions pointer above); the WORKLOAD SUITE ITSELF is now BUILT and MERGED (2026-07-08, PRs #17-#20: generic suite substrate with one-manifest/marker/window mechanism, mock+MLX suite execution, affine_mod_ladder_v1 core + smoke manifest, six jw_mixed_v1 category generators + five content-sentinel conditions; adjudicated pins D-044..D-047; live-verified on real Apple-Silicon MLX); the C-028 software tranche is merged through PR #49, including the frozen floor/analysis artifacts, reducer and production-uncertainty hardening, and NV-GATE-2 code-now; P2-041 and P2-037 remain in progress before Window A; 2K live protocol pins remain PROVISIONAL and 2L remains gated on device access</td>
+<td><strong>in progress</strong> - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); evidence integrity, provenance, uncertainty, workload suite, campaign automation, and the C-028 analysis/hardening arc are merged; the analysis trio is complete and reducer 0.4.2 is current; every Window-A software gate is satisfied, so C-019/P2-015-SMOKE now await a quiet machine + Ed; 2K live protocol pins remain PROVISIONAL and 2L remains gated on device access</td>
 </tr>
 <tr>
 <td>3. Disaggregation, KV replay, interconnect sweep</td>
@@ -354,8 +347,8 @@ recorded in the Phase 2 plan.</p>
 <tr>
 <td>Harness / instrument</td>
 <td><code>joulewise/</code></td>
-<td>complete; pre-campaign software review cleared; C-028 hardening merged through PR #49</td>
-<td>Window A&#39;s C-019 shakedown and P2-015-SMOKE await P2-041/P2-037 landing, integration review, and a quiet machine; backup is satisfied</td>
+<td>complete; pre-campaign software review cleared; C-028 closed with PRs #41-#58 merged</td>
+<td>Window A&#39;s C-019 shakedown and P2-015-SMOKE await a quiet machine + Ed; backup and all software gates are satisfied</td>
 </tr>
 <tr>
 <td>Apple-Silicon characterization / homogeneous baselines</td>
@@ -372,8 +365,8 @@ recorded in the Phase 2 plan.</p>
 <tr>
 <td>Results / limitations + claims audit</td>
 <td>Phase 4 Stages 4.3-4.5</td>
-<td>analysis path in progress</td>
-<td>P2-042 manifest is merged; P2-037 contrast/claim engine is still in progress and real data remain gated</td>
+<td>analysis path implemented</td>
+<td>P2-042/P2-041/P2-037 analysis trio is merged; Window-A data do not yet exist</td>
 </tr>
 </tbody></table></div>
 <p>Complete so far (all verifiable in the repository):</p>
@@ -394,8 +387,8 @@ shared, tested read layer, which sharply reduces the risk of displayed
 numbers diverging from reported ones.</li>
 <li>Typed config and output schemas with validation, JSON-Schema export, and
 a CLI, plus a passing test suite (current count and skips live in
-RUN_STATE.md Current Verification; lead-run at <code>main@73489a9</code>: 1,041
-tests OK, 12 skipped; run in CI on every push, including a
+RUN_STATE.md Current Verification; current main: 1,220 tests OK,
+10 skipped; run in CI on every push, including a
 mock end-to-end run + bundle validation); emitted configs
 round-trip their own published schema, and config hashes (run identity)
 are pinned by test.</li>
@@ -404,7 +397,7 @@ bundle artifact contract, and the measurement methodology (idle
 subtraction, measurement boundaries, clock synchronization, statistical
 protocol - highlights below).</li>
 <li>Evidence-shaped plans for every phase, a design-decision log (D-001
-through D-063 at this update, with D-060 ratified by Ed; the log
+through D-064 at this update, with D-060 ratified by Ed; the log
 itself is the count authority, and most entries record the
 alternatives considered), a risk register with
 an explicit descope ladder, and example configs for the Mac and mock
@@ -418,11 +411,12 @@ request, ~44.4 J idle-subtracted, ~79-90 mJ per generated output token
 on the idle-subtracted basis, TTFT ~94 ms at 257 tokens/s; legacy L1
 preliminary observations, provisional model Qwen2.5-1.5B-Instruct-4bit
 mirrored locally).</li>
-<li>The P2-042 frozen analysis manifest, P2-040 reducer/gate remainder,
-P2-038 production-uncertainty software path, and NV-GATE-2 code-now
-hardening. The latter includes raw-lineage verifier registration,
-usage-first streaming, and identity-aware process-survival handling;
-it does not promote fixture-first NVIDIA evidence to live validation.</li>
+<li>The P2-042 frozen analysis manifest, P2-041 campaign verdict split,
+P2-037 contrast/claim engine, P2-040 reducer/gate remainder, P2-038
+production-uncertainty software path, and NV-GATE-2 code-now hardening.
+Reducer dispatch is frozen across the legacy and 0.3.x arms and current
+through 0.4.2. None of this promotes fixture-first NVIDIA evidence to live
+validation.</li>
 <li>The report&#39;s related-work survey draft (11 sources with verified
 citations and an honest positioning audit) and an off-machine iCloud
 Drive backup whose fresh restored bundles passed strict validation and
@@ -452,11 +446,11 @@ borrow window, to derive phase target dates.</li>
 finalizes model selection; deliberately deprioritized while all work
 remains harness-shaped and valuable under any scope.</li>
 </ol>
-<p>Closed since the last revision: P0-003&#39;s off-machine backup and restore
-proof; the NV-5 localhost software gate (3/3 lead-run); and both historic
-test-flake classes. The Mac privileged-telemetry gate had already closed
-on 2026-07-06. Window A itself remains unstarted pending P2-041/P2-037,
-integration review, and a quiet machine.</p>
+<p>Closed since the last revision: C-028; the full analysis trio; P0-003&#39;s
+off-machine backup and restore proof; the NV-5 localhost software gate (3/3
+lead-run); and both historic test-flake classes. The Mac privileged-telemetry
+gate had already closed on 2026-07-06. Window A itself remains unstarted and
+now awaits only lead-controlled execution on a quiet machine with Ed.</p>
 <h2 id="architecture">Architecture</h2>
 <pre><code class="language-text">typed config
   -&gt; controller
@@ -922,7 +916,7 @@ date above and the repository&#39;s run reports are the freshness check.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>PROJECT_STATUS.md · commit c9acfc5 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>PROJECT_STATUS.md · commit 55e67c2 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
