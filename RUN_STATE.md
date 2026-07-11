@@ -59,9 +59,26 @@ None. The C-028 card was **CLEARED 2026-07-11** — see the superseded
 record below. Normal queue/mission pointers apply.
 
 <!-- BEGIN GENERATED: state-kernel run-state-intake -->
-<!-- Kernel intake marker (DOC-008): docs/process/state_kernel.json is a
-     generated NOT-AUTHORITATIVE derived view; this file, TASK_QUEUE.md,
-     and docs/decision_log.md remain authoritative. -->
+## ACTIVE_STOP_CARD
+
+Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([decision log](docs/decision_log.md)).
+
+## Restart By Machine-State Lane
+
+Source of truth: [state kernel](docs/process/state_kernel.json) (updated 2026-07-11). Latest report: [REPRO-002 publication privacy (final C-028 merged handoff)](docs/run_reports/2026-07-11-repro002-publication-privacy.md).
+
+### [ED-EXTERNAL]
+
+- READY — E1 `P1-008`: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
+
+### [QUIET-MAC]
+
+- READY — Q7 `P2-038`: Close the production uncertainty live tail: execute the merged clock-anchor, marker-phase, idle-drift, and idle-guard path on true MLX plus /usr/bin/powermetrics and retain the backed-up shakedown evidence.
+
+### [AGENT]
+
+- CONTINUE — A11 `DOC-008`: Machine-readable state kernel generating the RUN_STATE restart block and live queue view; PROJECT_STATUS compaction with history archive; retire the planning reflection protocol as standalone intake; two-writer rule and credential-boundary push procedure into docs/orchestration.md.
+
 <!-- END GENERATED: state-kernel run-state-intake -->
 
 ## Superseded stop card (C-028)

@@ -139,11 +139,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertFalse(TERMINAL_IDS & set(self.tasks))
         with open(os.path.join(ROOT, "TASK_QUEUE.md"), encoding="utf-8") as fh:
             queue_text = fh.read()
-        for tid in TERMINAL_IDS:
-            # Pre-conversion: the six DONE rows still sit in Current Queue;
-            # post-conversion they must sit in Completed Queue Items. Either
-            # way they must be present in TASK_QUEUE.md and absent above.
-            self.assertIn(tid, queue_text)
+        completed = queue_text.split("## Completed Queue Items", 1)[1]
+        completed = completed.split("## Shelved Follow-Ups With Triggers", 1)[0]
+        for tid in sorted(TERMINAL_IDS):
+            self.assertIn(f"| {tid} |", completed)
 
     def test_stop_card_cleared(self):
         self.assertIsNone(self.kernel["active_stop_card"])
