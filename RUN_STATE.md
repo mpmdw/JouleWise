@@ -90,8 +90,14 @@ list below where they conflict). State at pause:**
   #50 P2-046A, #51 CI-002 (acceptance CI 4/4 green), #52 REPRO-002,
   #53 RPT-002 (all seven sources primary-verified), #55 P2-044
   (idle ESS per adjudicated design docs/reviews/2026-07-11-p2044-
-  design-consult.md; lead gates + corpus 6/6 done; metrology review
-  lens IN FLIGHT at pause).
+  design-consult.md; lead gates + corpus 6/6 done). #55 REVIEW LANDED
+  POST-CHECKPOINT with TWO METROLOGY BLOCKERS — do NOT merge #55
+  before a fix round: (1) cadence regularity check uses the wrong
+  interval population; (2) legacy strict dispatch can mask a freshly
+  derived metadata mismatch; also closed-form fixture assertions are
+  approximate, must be exact. Full findings:
+  session-scratchpad sol-p2044-review.md (+ iCloud backup). Fix round
+  + re-review + blocker refuters per adversarial-review, THEN merge.
 - impl/p2037 worktree: contrast/claim engine implemented by an ultra
   session that exited transport-OK with NO REPORT (RED-round
   signature) — work itself lead-verified green (focused 89 OK,
