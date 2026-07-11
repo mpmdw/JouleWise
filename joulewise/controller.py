@@ -69,11 +69,13 @@ from joulewise.bundle import (
     sanitize_id_component,
     write_experiment_manifest,
 )
-from joulewise.clock import Clock, FakeClock
+from joulewise.clock import Clock, ClockStamp, FakeClock
 from joulewise.environment import collect_environment_snapshot, empty_environment_snapshot
 from joulewise.interfaces import (
     AdapterFailure,
     AdapterResult,
+    BoundedTelemetryAdapter,
+    IdleDriftEvidenceProvider,
     PowerSample,
     RunContext,
     RuntimeAdapter,
@@ -226,6 +228,16 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
+def _clock_stamp(clock: Clock) -> ClockStamp:
+    """Use the paired API, with an exact synthetic bracket for old test clocks."""
+
+    stamp = getattr(clock, "stamp", None)
+    if callable(stamp):
+        return stamp()
+    epoch_s = clock.now()
+    return ClockStamp(epoch_s, epoch_s, epoch_s, 0.0, 0.0)
+
+
 class _Execution:
     """One run's lifecycle state: buffered events/logs and collected evidence."""
 
@@ -293,6 +305,8 @@ class _Execution:
         self._suite_order_seed: str | None = None
         self._suite_order_row: int | None = None
         self._samples: list[PowerSample] = []
+        self._uncertainty_evidence: dict[str, Any] | None = None
+        self._sampling_started_stamp: ClockStamp | None = None
         self._sampling_active = False
         # Idempotence flags so the failure path writes only what is missing.
         self._outputs_written = False
@@ -342,6 +356,7 @@ class _Execution:
         self._stage_idle_baseline()
         self._stage_warmup()
         self._stage_measured_run()
+        self._stage_idle_drift_sentinel()
         self._stage_cleanup()
         return self._stage_reduce()
 
@@ -459,8 +474,16 @@ class _Execution:
         # first sample) and stop-side parsing stay outside the window. The
         # start marker is stamped only after start_sampling confirms; the stop
         # marker is stamped before stop_sampling is asked to wind down.
-        self._buffer_event(
-            "sampling_started", "measured_run", "telemetry sampling confirmed active"
+        sampling_started_stamp = _clock_stamp(self._clock)
+        self._sampling_started_stamp = sampling_started_stamp
+        self._events.append(
+            RuntimeEvent(
+                timestamp_s=sampling_started_stamp.epoch_s,
+                event_type="sampling_started",
+                phase="measured_run",
+                message="telemetry sampling confirmed active",
+                metadata={},
+            )
         )
         # D-013 quiescent window: between the sampling_started stamp and the
         # sampling_stopped stamp the controller only blocks on the runtime -
@@ -483,9 +506,19 @@ class _Execution:
         # sampler's wind-down (process stop, plist parsing) stay outside the
         # window; the event itself is appended after the runtime events so
         # the stable flush-sort keeps it bracketing them.
-        sampling_stopped_s = self._clock.now()
+        sampling_stopped_stamp = _clock_stamp(self._clock)
         self._capture_adapter_alignments()
-        self._samples = self._telemetry.stop_sampling(self._config, self._context)
+        if isinstance(self._telemetry, BoundedTelemetryAdapter):
+            stop_result = self._telemetry.stop_sampling_with_evidence(
+                self._config,
+                self._context,
+                sampling_started=sampling_started_stamp,
+                sampling_stopped=sampling_stopped_stamp,
+            )
+            self._samples = stop_result.samples
+            self._uncertainty_evidence = dict(stop_result.uncertainty_evidence)
+        else:
+            self._samples = self._telemetry.stop_sampling(self._config, self._context)
         self._capture_adapter_alignments()
         self._capture_adapter_metadata()
         self._sampling_active = False
@@ -494,7 +527,7 @@ class _Execution:
         self._events.extend(runtime_result.events)
         self._events.append(
             RuntimeEvent(
-                timestamp_s=sampling_stopped_s,
+                timestamp_s=sampling_stopped_stamp.epoch_s,
                 event_type="sampling_stopped",
                 phase="measured_run",
                 message="telemetry sampling stopped",
@@ -512,6 +545,51 @@ class _Execution:
             {
                 "sample_count": len(self._samples),
                 "runtime_event_count": len(runtime_result.events),
+            },
+        )
+
+    def _stage_idle_drift_sentinel(self) -> None:
+        """Collect the short post-run idle sentinel outside the measured window."""
+
+        if not isinstance(self._telemetry, IdleDriftEvidenceProvider):
+            return
+        self._begin_stage("idle_drift_sentinel")
+        assert self._baseline is not None
+        try:
+            result = self._telemetry.measure_post_run_idle(
+                self._config, self._baseline, self._context
+            )
+        except Exception as exc:  # noqa: BLE001 - unknown drift preserves L0/L1
+            result = {
+                "idle_drift": {
+                    "status": "unknown",
+                    "reason": "post_idle_unavailable",
+                }
+            }
+            self._log(
+                self._telemetry_log,
+                f"post-run idle sentinel unavailable: {type(exc).__name__}: {exc}",
+            )
+        if self._uncertainty_evidence is None:
+            self._uncertainty_evidence = {
+                "schema_version": "p2-038.1",
+                "telemetry_backend": self._telemetry.name,
+            }
+        for key in ("idle_drift", "idle_drift_guard"):
+            if key in result:
+                self._uncertainty_evidence[key] = _jsonable(result[key])
+        if "idle_drift_bound_w" in result:
+            self._uncertainty_evidence["idle_drift_bound_w"] = result[
+                "idle_drift_bound_w"
+            ]
+        self._capture_adapter_metadata()
+        self._complete_stage(
+            "idle_drift_sentinel",
+            {
+                "status": self._uncertainty_evidence.get("idle_drift", {}).get(
+                    "status"
+                ),
+                "duration_requested_s": result.get("post_idle_duration_requested_s"),
             },
         )
 
@@ -610,11 +688,33 @@ class _Execution:
         # D-026: even on the failure path the sampling window gets its closing
         # marker, stamped before the stop call, so post-hoc re-reduction sees
         # the same window semantics as a successful run.
-        self._buffer_event(
-            "sampling_stopped", "measured_run", "telemetry sampling stopping (failure path)"
+        sampling_stopped_stamp = _clock_stamp(self._clock)
+        self._events.append(
+            RuntimeEvent(
+                timestamp_s=sampling_stopped_stamp.epoch_s,
+                event_type="sampling_stopped",
+                phase="measured_run",
+                message="telemetry sampling stopping (failure path)",
+                metadata={},
+            )
         )
         try:
-            self._samples = self._telemetry.stop_sampling(self._config, self._context)
+            if (
+                isinstance(self._telemetry, BoundedTelemetryAdapter)
+                and self._sampling_started_stamp is not None
+            ):
+                result = self._telemetry.stop_sampling_with_evidence(
+                    self._config,
+                    self._context,
+                    sampling_started=self._sampling_started_stamp,
+                    sampling_stopped=sampling_stopped_stamp,
+                )
+                self._samples = result.samples
+                self._uncertainty_evidence = dict(result.uncertainty_evidence)
+            else:
+                self._samples = self._telemetry.stop_sampling(
+                    self._config, self._context
+                )
             self._capture_adapter_alignments()
         except Exception:  # noqa: BLE001 - evidence salvage must not mask the failure
             self._log(
@@ -704,6 +804,25 @@ class _Execution:
             extra["thermal_pre"] = _jsonable(asdict(self._thermal_pre))
         if self._thermal_post is not None:
             extra["thermal_post"] = _jsonable(asdict(self._thermal_post))
+        if self._uncertainty_evidence is not None:
+            evidence = dict(self._uncertainty_evidence)
+            idle_bound_w = evidence.pop("idle_drift_bound_w", None)
+            extra["uncertainty_evidence"] = _jsonable(evidence)
+            clock_anchor = evidence.get("clock_anchor")
+            if isinstance(clock_anchor, dict) and clock_anchor.get("status") == "bounded":
+                extra["clock_anchor_bound_s"] = clock_anchor.get(
+                    "effective_clock_anchor_bound_s"
+                )
+            sample_phase = evidence.get("sample_phase")
+            if isinstance(sample_phase, dict) and sample_phase.get("status") == "bounded":
+                extra["marker_to_first_sample_phase_bound_s"] = sample_phase.get(
+                    "marker_to_first_sample_phase_bound_s"
+                )
+                extra["marker_to_last_sample_phase_bound_s"] = sample_phase.get(
+                    "marker_to_last_sample_phase_bound_s"
+                )
+            if idle_bound_w is not None:
+                extra["idle_drift_bound_w"] = idle_bound_w
         if self._runtime_result is not None:
             extra["workload_observed"] = {
                 "token_count": self._runtime_result.token_count,

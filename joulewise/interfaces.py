@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from joulewise.clock import Clock
+from joulewise.clock import Clock, ClockStamp
 from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline
 
 if TYPE_CHECKING:
@@ -101,6 +101,14 @@ class PowerSample:
 
 
 @dataclass(frozen=True)
+class TelemetryStopResult:
+    """Measured samples plus adapter-derived uncertainty provenance."""
+
+    samples: list[PowerSample]
+    uncertainty_evidence: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class ThermalState:
     timestamp_s: float
     temperature_c: float | None = None
@@ -184,6 +192,34 @@ class TelemetryAdapter(Protocol):
         self, config: BenchmarkConfig, context: RunContext | None = None
     ) -> ThermalState:
         """Return current thermal state when available."""
+
+
+@runtime_checkable
+class BoundedTelemetryAdapter(Protocol):
+    """Optional telemetry extension for per-run clock/phase evidence."""
+
+    def stop_sampling_with_evidence(
+        self,
+        config: BenchmarkConfig,
+        context: RunContext | None,
+        *,
+        sampling_started: ClockStamp,
+        sampling_stopped: ClockStamp,
+    ) -> TelemetryStopResult:
+        """Stop sampling and return evidence tied to controller markers."""
+
+
+@runtime_checkable
+class IdleDriftEvidenceProvider(Protocol):
+    """Optional post-window sentinel extension for empirical idle drift."""
+
+    def measure_post_run_idle(
+        self,
+        config: BenchmarkConfig,
+        baseline: IdleBaseline,
+        context: RunContext | None,
+    ) -> dict[str, Any]:
+        """Collect the post-run sentinel and return its derivation record."""
 
 
 @runtime_checkable

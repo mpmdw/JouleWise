@@ -243,6 +243,18 @@ realized-vs-manifest closure), advisor status site + suite_next draft
 specs (D-051). Suite 822 OK. Ed's four-part answer + Window-A go/no-go:
 `docs/run_reports/2026-07-09-cp5-resume.md`.
 
+**P2-038 SOFTWARE SIDE COMPLETE on `impl/p2038` (2026-07-10; uncommitted
+for lead pathspec review); LIVE CLOSURE REMAINS OPEN.** Current-era real
+powermetrics runs now derive and record paired-clock anchor/phase evidence,
+the interim pre/post idle envelope, and a separate idle-drift guard handoff;
+the post sentinel is outside the measured window. A production-shaped real
+adapter/child-process path passes the P2-029/P2-040 request gate with no
+synthetic metadata and exercises all three required fail-closed reasons.
+Campaign shakedown mode now enforces strict → reduce → strict → assertion →
+backup. True MLX + `/usr/bin/powermetrics` execution and approved backup remain
+lead-owned `[QUIET-MAC]` work. Report:
+`docs/run_reports/2026-07-10-p2038-production-uncertainty.md`.
+
 **RESTART HERE (next agent) — this is the ONLY next-action block; the
 queue owns ordering (C-027):**
 1. Read `docs/reviews/2026-07-09-c027-whole-project-review.md` (latest —
@@ -253,9 +265,8 @@ queue owns ordering (C-027):**
      before any new irreplaceable Window-A evidence is retained; plus
      P1-008 rubric/calendar (provisional-contract fallback per proposed
      D-060).
-   - [AGENT]: the C-027 correctness rows, in queue order — P2-040
-     (reducer/gate fixes incl. zero-window strict), P2-038 (production
-     uncertainty evidence path), P2-039 (frozen floor artifact +
+   - [AGENT]: the C-027 correctness rows, in queue order — finish lead review
+     and landing of P2-038's completed software diff, then P2-039 (frozen floor artifact +
      guard factor), then RPT-001 (report skeleton + vertical slice),
      P2-042 (frozen analysis manifest), P2-041 (campaign verdict
      split), and only then P2-037 (contrast/claim engine, which
@@ -272,6 +283,12 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-10 P2-038 accepted-findings fix round (all FIX-1..FIX-6 green;
+  content-merged `origin/main`, Git merge metadata sandbox-blocked):
+  `docs/run_reports/2026-07-10-p2038-fix-round.md`
+- 2026-07-10 P2-038 production uncertainty software path (live quiet-machine
+  closure still open):
+  `docs/run_reports/2026-07-10-p2038-production-uncertainty.md`
 - 2026-07-10 P2-040 reducer-version compatibility review fix (uncommitted):
   `docs/run_reports/2026-07-10-p2040-versioning-fix.md`
 - 2026-07-10 P2-040 remainder implementation (uncommitted, pending lead
@@ -320,6 +337,16 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
+- P2-038 accepted-findings fix round: all FIX-1..FIX-6 complete; focused
+  `Ran 70 tests in 41.211s`, `OK`; canonical `Ran 992 tests in 68.140s`,
+  `OK (skipped=12)`; `git diff --check` clean. The real-child rail-only path
+  now withholds drift on unknown contamination while gross remains eligible;
+  P2-039's pending guard validator accepts the emitted block; backup launch
+  failure, extreme-sentinel exclusion, child invocation, and literal phase
+  constants are regression-tested. The absent worktree `runs/` corpus produced
+  the loud six-bundle acceptance-gate skip. Git merge metadata remains absent
+  because the managed sandbox cannot write the external worktree admin dir;
+  the exact clean three-way `origin/main` content snapshot is applied.
 - P2-040 reducer-version review fix: focused strict/reducer run
   `Ran 84 tests in 1.908s`, `OK`; extended strict/reducer/schema run
   `Ran 104 tests in 1.997s`, `OK (skipped=1)`. Canonical run reached
@@ -396,6 +423,12 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
+- `impl/p2038` is intentionally dirty with the uncommitted P2-038 software,
+  accepted-findings fixes, tests, contracts, config, run reports, and the clean
+  three-way content merge of `origin/main`. The lead owns pathspec review and
+  the real Git merge/commit; the sandbox could not write `ORIG_HEAD`/merge
+  metadata in the external worktree admin directory. No retained run bundle
+  was modified.
 - Worktree `/Users/edr/code/JouleWise-wt/p2040rem` on
   `impl/p2040-remainder` contains the committed remainder implementation and
   is intentionally dirty only with the uncommitted reducer-version review

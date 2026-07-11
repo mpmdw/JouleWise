@@ -281,6 +281,14 @@ status rules below, and unrecognized keys are rejected at every level.
         "claim_usable": "<boolean>",
         "reason_codes": ["<stable reason code>"]
       },
+      "idle_drift_guard": {
+        "method": "p2_015_prediction_guard_v1",
+        "guard_w": "<finite nonnegative number>",
+        "n_bundles": "<integer >= 2>",
+        "bundle_sha256": ["<64 lowercase hex>"],
+        "cell_id": "<same stable cell id>",
+        "artifact_sha256": "<64 lowercase hex>"
+      },
       "floor_abs_j": "<finite nonnegative number|null>",
       "floor_cmp_j": "<finite nonnegative number|null>",
       "floor_gate_j": "<finite nonnegative number|null>",

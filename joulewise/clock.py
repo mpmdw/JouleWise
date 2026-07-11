@@ -10,9 +10,21 @@ and exercise the identical controller code path.
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 from joulewise.validation import is_finite_number
+
+
+@dataclass(frozen=True)
+class ClockStamp:
+    """A direct epoch read bracketed by controller-monotonic observations."""
+
+    epoch_s: float
+    monotonic_before_s: float
+    monotonic_after_s: float
+    wall_resolution_s: float
+    monotonic_resolution_s: float
 
 
 @runtime_checkable
@@ -21,6 +33,9 @@ class Clock(Protocol):
 
     def now(self) -> float:
         """Return the current time as epoch UTC seconds."""
+
+    def stamp(self) -> ClockStamp:
+        """Return an epoch timestamp with a monotonic read bracket."""
 
     def sleep(self, seconds: float) -> None:
         """Block (or simulate blocking) for the given duration."""
@@ -32,18 +47,44 @@ class Clock(Protocol):
 class SystemClock:
     """Real wall-clock time. The package's sole caller of ``time``."""
 
+    def __init__(self) -> None:
+        self._wall_resolution_s = time.get_clock_info("time").resolution
+        self._monotonic_resolution_s = time.get_clock_info("monotonic").resolution
+        self._info_start = self.stamp()
+
     def now(self) -> float:
         return time.time()
+
+    def stamp(self) -> ClockStamp:
+        monotonic_before_s = time.monotonic()
+        epoch_s = time.time()
+        monotonic_after_s = time.monotonic()
+        return ClockStamp(
+            epoch_s=epoch_s,
+            monotonic_before_s=monotonic_before_s,
+            monotonic_after_s=monotonic_after_s,
+            wall_resolution_s=getattr(self, "_wall_resolution_s", time.get_clock_info("time").resolution),
+            monotonic_resolution_s=getattr(
+                self,
+                "_monotonic_resolution_s",
+                time.get_clock_info("monotonic").resolution,
+            ),
+        )
 
     def sleep(self, seconds: float) -> None:
         time.sleep(seconds)
 
     def info(self) -> dict[str, Any]:
-        # Per-process monotonic-vs-wall offset detects wall-clock steps
-        # mid-run when compared across artifacts (D-003).
+        end = self.stamp()
         return {
             "kind": "system",
-            "monotonic_minus_wall_s": time.monotonic() - time.time(),
+            "monotonic_minus_wall_s": end.monotonic_after_s - end.epoch_s,
+            "wall_resolution_s": self._wall_resolution_s,
+            "monotonic_resolution_s": self._monotonic_resolution_s,
+            "wall_minus_monotonic_start_s": (
+                self._info_start.epoch_s - self._info_start.monotonic_after_s
+            ),
+            "wall_minus_monotonic_end_s": end.epoch_s - end.monotonic_after_s,
         }
 
 
@@ -56,6 +97,15 @@ class FakeClock:
 
     def now(self) -> float:
         return self._now
+
+    def stamp(self) -> ClockStamp:
+        return ClockStamp(
+            epoch_s=self._now,
+            monotonic_before_s=self._now,
+            monotonic_after_s=self._now,
+            wall_resolution_s=0.0,
+            monotonic_resolution_s=0.0,
+        )
 
     def sleep(self, seconds: float) -> None:
         if not is_finite_number(seconds):
