@@ -135,6 +135,12 @@ four bundles in A/B/B/A order. Runtime estimates use accepted Tier-1 throughput
 after ordinary cooldown and harness overhead; they are sizing estimates, not a
 promise that cooldown gates will stay open.
 
+P2-038 adds a post-run idle sentinel of approximately five seconds per bundle,
+outside the measured window. Queue estimates must include that increment: it
+adds about 15 minutes at the 180-bundle minimum and about 28.3 minutes at the
+340-bundle maximum before any cooldown overrun. The throughput columns below
+remain useful rounded planning rates only when they already absorb this cost.
+
 | Group | Cells covered | Primary? | Incremental bundles | Shared bundles and notes | Runtime @30/h | Runtime @75/h |
 |---|---|---:|---:|---|---:|---:|
 | Mid request repeat | DF-RQ-GROSS-MID, DF-RQ-IDLE-MID | yes | 10 | idle-sub floor reuses gross request bundles and recorded idle baseline | 0.33 h | 0.13 h |
@@ -301,16 +307,17 @@ do not block L0/L1 operation or raw bundle reduction.
 
 ## 3. UNCERTAINTY-PROPAGATION SPEC
 
-Implementation lands in a later stream. The current code was verified before
-this spec: `joulewise/reduce.py` integrates gross energy trapezoidally,
+P2-029/P2-040 now implement the reducer-level fields and metric-specific gates
+below. `joulewise/reduce.py` integrates gross energy trapezoidally,
 computes `idle_subtracted = gross - idle_mean * duration`, records idle
 stddev and quality flags, and emits raw phase energies; `joulewise/aggregate.py`
 computes repetition mean/sample-stddev/Student-t intervals and outlier flags.
-Neither module currently propagates the error-budget terms below.
+P2-038 supplies production powermetrics clock/phase/drift evidence to those
+gates; calibrated floor selection remains owned by P2-039/P2-037.
 
-### Reducer-Level Future Fields
+### Reducer-Level Fields
 
-For every reduced window, future reducer output should carry:
+For every reduced window, reducer output carries:
 
 - `energy_uncertainty_status`: `not_estimable`, `estimated`, or `bounded`.
 - `energy_variance_terms_j2`: named term map where available.

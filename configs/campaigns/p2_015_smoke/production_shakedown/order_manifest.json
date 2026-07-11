@@ -1,0 +1,14 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "p2038_production_shakedown.json",
+      "run_id": "p2038-production-shakedown",
+      "model_tag": "qwen25-15b-mlx",
+      "rep": 1,
+      "workload": "jw_mixed_v1_sentinel",
+      "role": "production_uncertainty_shakedown"
+    }
+  ]
+}
