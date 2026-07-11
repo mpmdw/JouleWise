@@ -1,7 +1,7 @@
 # JouleWise Run State
 
-Last updated: 2026-07-11 (C-028 COMPLETE AND CLEARED. PRs #41-#58 are
-merged; PR #59 is an open integration-review follow-up. The analysis trio is
+Last updated: 2026-07-11 (C-028 COMPLETE AND CLEARED. PRs #41-#60 are
+ALL merged (incl. #59 integration findings and #60 DOC-008 kernel). The analysis trio is
 complete, reducer 0.4.2 is current, corpus gate 6/6 passed, and every Window-A
 software gate is satisfied. Window-A execution requires a quiet machine + Ed.
 Full record: `docs/run_reports/2026-07-11-c028-continuation.md`; C-028 council
@@ -123,17 +123,15 @@ pack (fail-closed inventory); packaging CI; primary-verified related
 work; load-transition prep (B remains [QUIET-MAC]). Window A's software
 gates are ALL satisfied; execution needs a quiet machine + Ed.
 
-PRs #41-#58 form the landed C-028 arc. PR #59 remains OPEN with the
-integration-review fixes (four added tests; 1,224-test worktree replay); it
-does not reopen the cleared card or imply live evidence. P0-003 is satisfied
+PRs #41-#60 form the landed C-028 arc, all merged 2026-07-11 (incl. the
+#59 integration-review fixes and the #60 DOC-008 kernel refresh); none
+implies live evidence. P0-003 is satisfied
 by the verified iCloud backup/restore. All NVIDIA/Orin protocol pins remain
 PROVISIONAL pending P1-006 live evidence.
 
 **RESTART HERE (next session) — this is the ONLY next-action block; the
 queue owns ordering:**
-1. [AGENT] Land INT-59 only after CI and final-head review; open DOC-008's
-   already-pushed branch as a PR after its lead gate. Neither is a Window-A
-   software prerequisite.
+1. DONE 2026-07-11: INT-59 merged (#59); DOC-008 merged (#60).
 2. [QUIET-MAC + ED] Begin Window A: C-019 production-shaped shakedown and
    P2-015-SMOKE, then P2-015 floors and P2-006 baselines. Do not run this
    lane while an agent session is active.
