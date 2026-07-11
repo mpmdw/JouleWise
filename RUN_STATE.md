@@ -127,7 +127,7 @@ recorded in memory.
 restore test; D-060 RATIFIED): remaining — two-model floor economics;
 full-corpus CI; renderer (P1-008); REPRO pack publication.
 
-## Superseded stop card (CP-5)## Superseded stop card (CP-5)
+## Superseded stop card (CP-5)
 
 Status: **CLEARED 2026-07-09** by the CP-5 resume session. Every
 clearance criterion was met: all three worktree diffs lead-gated
