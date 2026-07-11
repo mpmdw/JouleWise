@@ -38,7 +38,7 @@
 <a href="#queue-maintenance">Queue Maintenance</a></aside>
   <div class="doc-wrap doc-source-task-queue-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 55e67c2"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 55e67c2</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit f16b83e"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit f16b83e</span></span></div>
     <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -432,6 +432,48 @@ lanes below.</p>
 <td>Same dated C-028 report closeout addendum; <code>claims_lint --mode all</code>; diff/scope checks</td>
 </tr>
 <tr>
+<td>P2-015-PREP</td>
+<td>P2 Next Slice</td>
+<td>2026-07-09</td>
+<td>P2-015 detection-floor design doc — combined floors, error budget, telemetry trust, and calibration runbooks</td>
+<td>No matrix row exists in <code>docs/phase_2/phase_2_exit_checklist.md</code> for this design-doc task; <code>docs/phase_2/detection_floor.md</code>; D-054; PR #31; run report <code>docs/run_reports/2026-07-09-spec-fleshing-wave1.md</code></td>
+</tr>
+<tr>
+<td>P2-029</td>
+<td>P2 Next Slice</td>
+<td>2026-07-09</td>
+<td>Reducer/aggregator uncertainty propagation and claim gates</td>
+<td>No matrix row exists in <code>docs/phase_2/phase_2_exit_checklist.md</code> for this post-checklist implementation task; D-057; PR #33; run report <code>docs/run_reports/2026-07-09-spec-fleshing-wave2.md</code></td>
+</tr>
+<tr>
+<td>P2-030</td>
+<td>P2 Next Slice</td>
+<td>2026-07-09</td>
+<td>Ordering executability: rotation policies and order provenance</td>
+<td>No matrix row exists in <code>docs/phase_2/phase_2_exit_checklist.md</code> for this post-checklist implementation task; D-056; PR #34; run report <code>docs/run_reports/2026-07-09-spec-fleshing-wave2.md</code></td>
+</tr>
+<tr>
+<td>P2-031</td>
+<td>P2 Next Slice</td>
+<td>2026-07-09</td>
+<td>Token-normalization contract and stack-identity table</td>
+<td>No matrix row exists in <code>docs/phase_2/phase_2_exit_checklist.md</code> for this post-checklist contract task; D-058; PR #35; <code>docs/contracts/token_normalization.md</code>; run report <code>docs/run_reports/2026-07-09-spec-fleshing-wave2.md</code></td>
+</tr>
+<tr>
+<td>P2-032</td>
+<td>P2 Next Slice</td>
+<td>2026-07-09</td>
+<td>Campaign packs: Q1-Q3 split suite, Q6 rail-vs-wall, and C5-2.3 KV economics</td>
+<td>No matrix row exists in <code>docs/phase_2/phase_2_exit_checklist.md</code> for this campaign-pack task; PR #36; <code>docs/campaign_packs/</code>; run report <code>docs/run_reports/2026-07-09-spec-fleshing-wave2.md</code></td>
+</tr>
+<tr>
+<td>P2-034</td>
+<td>P2 Next Slice</td>
+<td>2026-07-09</td>
+<td>Broad campaign packs: C5-2.7/2.8, replication runbook, and C5-I.1..I.5</td>
+<td>No matrix row exists in <code>docs/phase_2/phase_2_exit_checklist.md</code> for this campaign-pack task; PR #39; six packs in <code>docs/campaign_packs/</code>; pack lint errors=0; run report <code>docs/run_reports/2026-07-09-p2034-broad-packs.md</code></td>
+</tr>
+<tr>
 <td>CODEX-BRIDGE</td>
 <td>P0 Safety</td>
 <td>2026-07-09</td>
@@ -763,6 +805,316 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <li>Move completed tasks below or mark them <code>done</code>.</li>
 <li>Update <code>RUN_STATE.md</code> with the next highest-ranked task.</li>
 </ul>
+<!-- BEGIN GENERATED: state-kernel current-queue -->
+<!-- GENERATED from docs/process/state_kernel.json by scripts/gen_state.py. Do NOT hand-edit between the markers; edit the kernel and regenerate. --><h3>[ED-EXTERNAL] lane</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Rank</th>
+<th>ID</th>
+<th>Priority</th>
+<th>Queue state</th>
+<th>Task</th>
+<th>Evidence / Acceptance</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>E1</td>
+<td>P1-008</td>
+<td>P1 Phase Gate</td>
+<td>READY</td>
+<td>Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).</td>
+<td>Colloquium/report dates plus borrow window in docs/milestones.md; phase targets derived; acceptance-bar notes beside the P1-001 scope notes. Evidence: Dates + borrow window in docs/milestones.md; Derived phase targets; Acceptance-bar notes beside P1-001 scope notes. Authority: <a href="docs/milestones.md">Milestones + R-012</a>. Acceptance: <a href="docs/process/state_kernel.json">P1-008 acceptance</a>. Note: R-012 is the biggest active management risk for an undergrad timeline.</td>
+</tr>
+<tr>
+<td>E2</td>
+<td>P2-027</td>
+<td>P2 Next Slice</td>
+<td>READY</td>
+<td>Publish a privacy-transformed, integrity-verified three-bundle pack from a clean tagged commit and obtain one documented external re-reduction by an uninvolved party.</td>
+<td>Published pack plus a documented external re-reduction; until then the auditability claim stays L0-scoped. Evidence: Published pack; Documented external re-reduction. Authority: <a href="docs/reviews/2026-07-09-c027-whole-project-review.md">C-020 + C-027 NEG-9</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-027 acceptance</a>. Note: Environment locks, pack preparation, integrity tooling, and fail-closed privacy transformation are merged; publication and external re-reduction remain ED-EXTERNAL.</td>
+</tr>
+<tr>
+<td>E3</td>
+<td>P1-001</td>
+<td>P1 Phase Gate</td>
+<td>READY</td>
+<td>Capture supervisor approval and scope notes.</td>
+<td>Dated notes in the Phase 1 exit checklist; unblocks full D-016 closure (P2-004). Evidence: Dated notes in docs/phase_1/phase_1_exit_checklist.md. Authority: <a href="docs/risk_register.md">R-001</a>. Acceptance: <a href="docs/phase_1/phase_1_exit_checklist.md">Phase 1 exit checklist</a>. Note: User-deferred 2026-07-06; R-001 mitigation holds: all work stays harness-shaped.</td>
+</tr>
+<tr>
+<td>E4</td>
+<td>P1-003</td>
+<td>P1 Phase Gate</td>
+<td>READY</td>
+<td>Record the wall-meter decision: meter make/model or unavailable verdict plus measurement/export method.</td>
+<td>Exit-checklist wall-meter section filled; informs D-018 boundary calibration. Evidence: Wall-meter section of the Phase 1 exit checklist filled. Authority: <a href="docs/decision_log.md">D-018/C-003</a>. Acceptance: <a href="docs/phase_1/phase_1_exit_checklist.md">Phase 1 exit checklist</a>. Note: Elevated value: gates Q6 boundary sensitivity (C-003).</td>
+</tr>
+<tr>
+<td>E5</td>
+<td>P1-004</td>
+<td>P1 Phase Gate</td>
+<td>READY</td>
+<td>Fill the network/interconnect topology plan: physical topology, link-speed paths, throughput method.</td>
+<td>Network section of the Phase 1 exit checklist recorded. Evidence: Network section of the Phase 1 exit checklist recorded. Authority: <a href="docs/risk_register.md">R-011</a>. Acceptance: <a href="docs/phase_1/phase_1_exit_checklist.md">Phase 1 exit checklist</a>. Note: Partial.</td>
+</tr>
+<tr>
+<td>E6</td>
+<td>P1-006</td>
+<td>P1 Phase Gate</td>
+<td>READY</td>
+<td>Confirm NVIDIA/Orin telemetry access paths: SSH/runtime/telemetry command evidence, or marked pending with blocker (gates slices 2K/2L).</td>
+<td>Instrumentation section of the Phase 1 exit checklist filled or blocker recorded. Evidence: SSH/runtime/telemetry command evidence in the exit checklist; Or an explicit pending-with-blocker record. Authority: <a href="docs/phase_2/hardware_slice_implementation_guide.md">Remote gate / NV-GATE-2</a>. Acceptance: <a href="docs/phase_1/phase_1_exit_checklist.md">Phase 1 exit checklist</a>.</td>
+</tr>
+</tbody></table></div>
+<h3>[QUIET-MAC] lane</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Rank</th>
+<th>ID</th>
+<th>Priority</th>
+<th>Queue state</th>
+<th>Task</th>
+<th>Evidence / Acceptance</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Q0</td>
+<td>P2-015-SMOKE</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-038 (production uncertainty evidence path lands)</td>
+<td>Pre-Window-A tasks-sampler overhead smoke plus production-shaped campaign shakedown through doctor, strict validation, reducer 0.4.2, strict revalidation, campaign verdict split, and approved backup.</td>
+<td>Both preconditions recorded per detection_floor Ordering Preconditions; results noted in the Window-A run report before P2-015 floor cells. Evidence: Ordering Preconditions rows satisfied; Noted in Window-A run report before floor cells. Authority: <a href="docs/phase_2/detection_floor.md">Detection floor Ordering Preconditions</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-015-SMOKE acceptance</a>.</td>
+</tr>
+<tr>
+<td>Q1</td>
+<td>P2-015</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-015-SMOKE (sampler-overhead smoke + C-019 shakedown recorded), P2-038 (production uncertainty evidence path lands)</td>
+<td>Detection-floor calibration campaign: expanded Window A floors for gross request, idle-sub request, phase window, and item/level window, plus comparative MDE from same-condition repeats/ABBA; daily fixed reference cell at window start/end (NEG-8); Window-B-start revalidation cell (CP-6).</td>
+<td>Reducer-0.4.2 strict-valid calibration bundles; per-metric floor_abs_j and floor_cmp_j; governed idle uncertainty retained; calibration manifest hash cited by later reports. Evidence: Versioned strict-valid calibration bundles; Per-metric/window-class floor_abs_j + floor_cmp_j; Calibration manifest hash cited by later reports. Authority: <a href="docs/phase_2/detection_floor.md">D-054 + detection floor spec</a>. Acceptance: <a href="docs/phase_2/phase_2_exit_checklist.md">Phase 2 exit checklist</a>.</td>
+</tr>
+<tr>
+<td>Q2</td>
+<td>P2-006</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-015 (Window-A floors measured first)</td>
+<td>Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.</td>
+<td>Strict-valid reducer-0.4.2 campaign bundles with counterbalanced order and drift sentinels; interpretation uses campaign claim_readiness plus the merged fail-closed analysis engine. Evidence: Strict-valid campaign bundles under the fixed validator; Counterbalanced order manifest + drift sentinel positions recorded; baseline_results.md with variance + prefill/decode comparison. Authority: <a href="docs/phase_2/phase_2_plan.md">Phase 2 plan + analysis plans</a>. Acceptance: <a href="docs/phase_2/phase_2_exit_checklist.md">Phase 2 exit checklist</a>. Note: Software interpretation gates are satisfied; execution remains blocked until P2-015 Window-A floors complete.</td>
+</tr>
+<tr>
+<td>Q3</td>
+<td>P2-010</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-015 (quiet-window tail available after floors)</td>
+<td>P2-010b remainder: affine smoke campaign execution (B=5) plus envelope-gate verdict on its bundles, on a quiet-window tail.</td>
+<td>joulewise envelope-gate emits the D-036 verdict from strict-valid smoke bundles; campaign acceptance in AP-5. Evidence: D-036 verdict from strict-valid smoke bundles; AP-5 campaign acceptance met. Authority: <a href="docs/contracts/analysis_plans.md">AP-5 + affine stream log</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-010 acceptance</a>. Note: Envelope-gate script merged 2026-07-09 (PR #23); only the campaign remains.</td>
+</tr>
+<tr>
+<td>Q4</td>
+<td>P2-019</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-006 (Window-A baselines size n)</td>
+<td>q4_l3_shape_grid_v1 campaign (Window B, AP-1, two models, n sized from Window A): 4x3 prompt/decode grid with holdouts (512,256) and (4096,512); categorical-additive fit first; 8192-prompt anchor on small+mid models feeding D-048 (CP-6).</td>
+<td>Grid campaign lands per AP-1; top-up near-floor cells before L3 wording. Evidence: AP-1 grid campaign bundles; Holdout cells honored; 8192 anchor cells on small+mid models. Authority: <a href="docs/contracts/analysis_plans.md">AP-1</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-019 acceptance</a>.</td>
+</tr>
+<tr>
+<td>Q5</td>
+<td>P2-020</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-006 (Window-A baselines size n)</td>
+<td>Content-sensitivity sentinel campaign (Window B, AP-6): five equal-shape ids-native conditions, n sized from Window A; request-energy deltas and MDE verdicts.</td>
+<td>Campaign lands per AP-6; the AP-6 non-generalization caveat applies (D-046). Evidence: Five equal-shape ids-native conditions; Request-energy deltas + MDE verdicts. Authority: <a href="docs/contracts/analysis_plans.md">AP-6 + D-046</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-020 acceptance</a>. Note: Generator merged (PR #19), manifests ready (PR #26); a tiny AP-6 pilot may ride a Window-A tail (CP-6).</td>
+</tr>
+<tr>
+<td>Q6</td>
+<td>P2-012</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-006 (identification-core runs after Window A)</td>
+<td>Identification-core campaign (jw_mixed) after Window A; natural-EOS pilot plus full panels in later phases.</td>
+<td>Campaign bundles strict-valid per AP-4; no category claims outside matched strata. Evidence: Strict-valid bundles per AP-4; No category claims outside matched strata. Authority: <a href="docs/contracts/analysis_plans.md">AP-4 + D-039/D-040</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-012 acceptance</a>. Note: Manifests generated + regenerated (PR #26); runner/runtime/validator hash guards merged (PRs #24/#27).</td>
+</tr>
+<tr>
+<td>Q7</td>
+<td>P2-038</td>
+<td>P2 Next Slice</td>
+<td>PARTIAL; READY</td>
+<td>Close the production uncertainty live tail: execute the merged clock-anchor, marker-phase, idle-drift, and idle-guard path on true MLX plus /usr/bin/powermetrics and retain the backed-up shakedown evidence.</td>
+<td>On a lead-controlled quiet Mac, a true MLX plus /usr/bin/powermetrics shakedown passes strict, reducer-0.4.2 re-reduction, production uncertainty gates, campaign claim-readiness plumbing, and approved backup. Evidence: True MLX plus /usr/bin/powermetrics campaign shakedown; Strict then reduce then strict request gate passes without synthetic metadata; Approved off-machine backup succeeds. Authority: <a href="docs/specs/c027/p2-038_production_uncertainty_evidence.md">Adjudicated P2-038 production-uncertainty spec</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-038 acceptance</a>. Note: PR #48 merged the software path and accepted-finding fixes; only the lead-controlled quiet-machine live closure remains.</td>
+</tr>
+<tr>
+<td>Q8</td>
+<td>P2-046B</td>
+<td>P1 Phase Gate</td>
+<td>BLOCKED — P2-038 (P2-038 live production path closes first)</td>
+<td>Execute the frozen load-transition alignment harness on the real Mac and adjudicate the production interval-support bound from offset and residual artifacts.</td>
+<td>Real-Mac counterbalanced transitions validate or widen the P2-038 conservative interval-support bound; physical evidence replaces the PROVISIONAL Part-A verdict. Evidence: Counterbalanced real-Mac transition artifacts; Offset, residual, and conservative-bound verdict; P2-038 bound cited or amended. Authority: <a href="docs/reviews/2026-07-10-hardening-adjudication.md">Hardening adjudication C6</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-046B acceptance</a>. Fence: Do not promote Part-A fixture evidence or retain PROVISIONAL interval support after a conflicting physical verdict (Hardening adjudication C6). Note: Part A merged in PR #50; Part B is quiet-machine physical execution.</td>
+</tr>
+<tr>
+<td>Q9</td>
+<td>P2-047B</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-015 (Window-A floors exist), P2-047A (frozen controller-overhead harness exists)</td>
+<td>Run the frozen controller capture-overhead ABBA on the quiet Mac and record the floor-governed overhead verdict.</td>
+<td>Real floor-governed ABBA execution yields a named overhead verdict with instrumented-stack scope unless a separate subtraction model is justified. Evidence: Floor-governed quiet-Mac ABBA bundles; Named overhead verdict; Instrumented-stack scope or separately justified model. Authority: <a href="docs/reviews/2026-07-10-hardening-adjudication.md">Hardening adjudication C7</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-047B acceptance</a>.</td>
+</tr>
+</tbody></table></div>
+<h3>[AGENT] lane</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Rank</th>
+<th>ID</th>
+<th>Priority</th>
+<th>Queue state</th>
+<th>Task</th>
+<th>Evidence / Acceptance</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A0</td>
+<td>P2-035</td>
+<td>P3 Research Expansion</td>
+<td>BLOCKED — P2-015 (P2-015 detection floors measured)</td>
+<td>RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).</td>
+<td>Promotion decided per registry rules; harness gaps closed before promotion. Evidence: Registry promotion record per docs/research_question_bank.md rules; G-RQVAR-* harness gaps implemented with tests. Authority: <a href="docs/specs/rq_energy_variance_design.md">RQ-ENERGY-VARIANCE candidate design</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-035 acceptance</a>. Fence: C-004 quarantine binds; no promotion before floors exist (C-004 quarantine).</td>
+</tr>
+<tr>
+<td>A11</td>
+<td>DOC-008</td>
+<td>P2 Next Slice</td>
+<td>ACTIVE</td>
+<td>Machine-readable state kernel generating the RUN_STATE restart block and live queue view; PROJECT_STATUS compaction with history archive; retire the planning reflection protocol as standalone intake; two-writer rule and credential-boundary push procedure into docs/orchestration.md.</td>
+<td>Schema-version-2 kernel carries the fixed derived-view authority notice; generated blocks are byte-reproducible; one next-action surface remains. Evidence: Top-level authority notice is required and fixed; python3 scripts/gen_state.py --check exits 0; python3 -m unittest tests.test_gen_state passes; One next-action surface remains. Authority: <a href="docs/specs/c027/doc-008_state_kernel.md">DOC-008 spec (D-063 Stage 1)</a>. Acceptance: <a href="docs/process/state_kernel.json">DOC-008 acceptance</a>. Note: Final C-028 live-state refresh is in progress; live RUN_STATE/TASK_QUEUE marker conversion remains lead-owned.</td>
+</tr>
+<tr>
+<td>A16</td>
+<td>P3-000</td>
+<td>P3 Research Expansion</td>
+<td>BLOCKED — R-003 (user approves the 3.0.2 installs (R-003))</td>
+<td>KV persistence feasibility spikes (Phase 3 Stage 3.0): 3.0.2+ open; 3.0.2 needs installs and inherits the 3.0.1 harness shape plus its two deferred hardening fixes (ledger C-8).</td>
+<td>Verdicts recorded in docs/phase_3/kv_feasibility.md; checklist rows are the status authority; must complete before any borrow-window scheduling. Evidence: Verdicts in docs/phase_3/kv_feasibility.md; Checklist rows updated. Authority: <a href="docs/decision_log.md">D-035/D-036</a>. Acceptance: <a href="docs/phase_3/phase_3_exit_checklist.md">Phase 3 exit checklist</a>. Note: 3.0.1 complete and merged (PR #9, replay_supported).</td>
+</tr>
+<tr>
+<td>A17</td>
+<td>P2-022</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-006 (the 2M corpus exists (post-2M per D-041))</td>
+<td>Marker-shim energy-layer feasibility spike: verdict-shaped export path only (external_markers_supported / partial / external_markers_unsupported).</td>
+<td>3+ marked items, external result artifact hashed, strict bundle valid; verdict recorded. Evidence: 3+ marked items; External result artifact hashed; Strict bundle valid. Authority: <a href="docs/decision_log.md">D-041 (post-2M gate)</a>. Acceptance: <a href="docs/contracts/adapter_contracts.md">Adapter contract</a>. Fence: Energy-layer-only pin: no accuracy interpretation, no leaderboard join, no pass@k-energy ratio, no general adapter framework; AP row required before any L2 claim (D-041). Note: C-027: the C-026 revisit-after-Window-A note is a revisit of sequencing, not permission.</td>
+</tr>
+<tr>
+<td>A18</td>
+<td>P2-023</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-006 (the 2M corpus exists (post-2M per D-041)), P2-022 (P2-022 verdict recorded)</td>
+<td>HumanEval import smoke: benchmark_import manifest plus suite profile plumbing goal; freeze subset with C-005 discipline, MIT license/provenance fields, 256/512-token completion policy.</td>
+<td>Frozen subset with license/provenance fields lands; no pass@k/accuracy/capability claim. Evidence: Frozen subset manifest with C-005 discipline; License/provenance fields present. Authority: <a href="docs/decision_log.md">D-041 (post-2M gate)</a>. Acceptance: <a href="docs/research_question_bank.md">RQ bank import-smoke design</a>. Fence: No pass@k, accuracy, or capability claim (D-041).</td>
+</tr>
+<tr>
+<td>A19</td>
+<td>P2-024</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-006 (2M reductions identify floor/MDE headroom), P2-015 (Window-A floors measured)</td>
+<td>Cheap-campaign shortlist: select among C5-1.6 sampler ABBA, C5-1.12 quant decomposition, C5-1.8 runtime attribution per measured floors; the selected campaign is then queued [QUIET-MAC].</td>
+<td>Explicit selection recorded after floors; selection cites floor/MDE headroom. Evidence: Selection recorded with floor/MDE headroom rationale; Selected campaign queued as a quiet_mac task. Authority: <a href="docs/research_question_bank.md">C-015 + RQ bank</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-024 acceptance</a>.</td>
+</tr>
+<tr>
+<td>A20</td>
+<td>P2-028</td>
+<td>P2 Next Slice</td>
+<td>READY</td>
+<td>Response-hash determinism gate script: formal check that repeated same-config bundles have byte-identical per-item response hashes within rep groups.</td>
+<td>Script emits a named verdict from 2+ strict-valid bundles. Evidence: Named verdict from 2+ strict-valid bundles; Existing real bundles pass formally. Authority: <a href="docs/reviews/2026-07-09-c027-whole-project-review.md">CP-6 adjudication record</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-028 acceptance</a>.</td>
+</tr>
+<tr>
+<td>A21</td>
+<td>P3-001b</td>
+<td>P3 Research Expansion</td>
+<td>BLOCKED — P2-006 (2M affine coefficients exist)</td>
+<td>Seed the split analysis-plan row: pre-registered compositional predictions per pairing/link (including named same-boundary headline and at least one predicted-crossover cell if feasible), per-cell transfer-boundary labels (D-049).</td>
+<td>AP row committed before any split hardware run; phase_3_plan amendment line landed. Evidence: AP row committed pre-split-hardware; phase_3_plan amendment line landed. Authority: <a href="docs/decision_log.md">D-048/D-049</a>. Acceptance: <a href="docs/contracts/analysis_plans.md">Analysis plans (split row)</a>.</td>
+</tr>
+<tr>
+<td>A22</td>
+<td>P2-004</td>
+<td>P2 Next Slice</td>
+<td>PARTIAL; READY; GATES close: P1-001</td>
+<td>Close model selection (D-016): decision-log entry with models, revisions, artifact paths, local mirror, fallback candidate; mid-model pick, CUDA load, GGUF paths outstanding.</td>
+<td>Decision-log entry complete; full closure gated on P1-001. Evidence: Decision-log entry: models, revisions, artifact paths, mirror, fallback. Authority: <a href="docs/decision_log.md">D-016</a>. Acceptance: <a href="docs/phase_1/phase_1_exit_checklist.md">Phase 1 exit checklist</a>. Note: Provisional small-model pick 2026-07-06 opens 2G.</td>
+</tr>
+<tr>
+<td>A23</td>
+<td>P2-005</td>
+<td>P2 Next Slice</td>
+<td>PARTIAL; READY; GATES live_promotion: P1-006</td>
+<td>Remote targets (2K NVIDIA/vLLM/ssh and 2L Orin): fixture-first and NV-GATE-2 code-now hardening are merged; protocol pins remain provisional until the external live-promotion rows execute.</td>
+<td>Live 2K/2L evidence or a documented access blocker; applicability table updated; NV-GATE-2 live rows close without promoting fixture evidence. Evidence: Remote bundle or documented access blocker; Applicability table updated; NV-GATE-2 items closed at live promotion. Authority: <a href="docs/specs/c027/nv-gate-2_live_promotion.md">NV-GATE-2 live-promotion spec</a>. Acceptance: <a href="docs/phase_1/2k_live_verification_checklist.md">2K live verification checklist</a>. Note: PR #49 merged the code-now verifier, streaming, cleanup, and localhost gates; P1-006 and device execution remain open.</td>
+</tr>
+<tr>
+<td>A24</td>
+<td>P2-016</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-006 (the 2M corpus exists)</td>
+<td>Critique-adjudicated queue batch (umbrella a..i): post-2M controller split; node-worker protocol parity tests; NVIDIA skip counts into measurement quality; per-backend raw-to-trace strict generalization; claims-to-evidence index post-2M; schema v0.2 loader/export parity; boundary labels in report index; summary_provenance strict key; token_count_source naming alignment.</td>
+<td>Each item lands with its named gate; dispositions plus rejected items recorded in C-011. Evidence: Each subitem lands with its named gate; Dispositions recorded in C-011. Authority: <a href="docs/reviews/2026-07-09-c027-whole-project-review.md">C-011 ledger + C-027 (post-2M umbrella)</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-016 acceptance</a>. Note: Stage 1 conservatively blocks the parent; a later owning session may split P2-016a..i through normal intake.</td>
+</tr>
+<tr>
+<td>A25</td>
+<td>P2-047A</td>
+<td>P2 Next Slice</td>
+<td>BLOCKED — P2-015 (Window-A floors exist before overhead design is frozen)</td>
+<td>Freeze the controller capture-overhead ABBA harness comparing the standard event path with a buffered or minimal-marker path under identical outputs and hashes.</td>
+<td>A frozen controller-overhead ABBA harness preserves output identity and defaults to instrumented-stack scope rather than unvalidated subtraction. Evidence: Frozen ABBA manifest; Standard and buffered/minimal-marker paths have identical output policy and hashes; Analysis refuses unsupported subtraction. Authority: <a href="docs/reviews/2026-07-10-hardening-adjudication.md">Hardening adjudication C7</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-047A acceptance</a>. Fence: Do not subtract controller overhead without a separately justified correction model (Hardening adjudication C7).</td>
+</tr>
+</tbody></table></div>
+<h3>Shelved task records</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Rank</th>
+<th>ID</th>
+<th>Priority</th>
+<th>Queue state</th>
+<th>Task</th>
+<th>Evidence / Acceptance</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>A1</td>
+<td>P2-036</td>
+<td>P3 Research Expansion</td>
+<td>SHELVED — trigger: P2-023 (HumanEval import smoke (P2-023) lands)</td>
+<td>Second-benchmark-family source session: pick and freeze the second import family with licensing/contamination/shape discipline; MMLU/tinyBenchmarks remain rejected as first.</td>
+<td>Named family plus frozen subset manifest passing claims_lint --mode pack. Evidence: Named family with license/provenance fields; Frozen subset manifest passing claims_lint --mode pack. Authority: <a href="docs/campaign_packs/c5_i_1_i_2_i_5_import_family.md">Import-family campaign pack</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-036 acceptance</a>. Note: SHELF per C-026 meeting; FLORES language-set decision (D-046/B6) may share the session.</td>
+</tr>
+<tr>
+<td>A26</td>
+<td>P2-048</td>
+<td>P2 Next Slice</td>
+<td>SHELVED — trigger: P1-003 (external wall-meter decision supplies a usable device path)</td>
+<td>Implement the conditional external-meter importer and boundary-calibrate CLI for the already-designed Q6 and D-018 bridge.</td>
+<td>The existing Q6 and D-018 bridge design is implemented with bound metadata, synchronization, paired windows, calibration fit, held-out gate, floor identity, and refusal reasons. Evidence: External-meter importer; boundary-calibrate CLI; Designed refusal reasons and held-out gate. Authority: <a href="docs/reviews/2026-07-10-hardening-adjudication.md">Hardening adjudication C9</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-048 acceptance</a>. Fence: Implement the existing bridge design; do not create a duplicate design contract (Hardening adjudication C9). Note: Conditional on P1-003 selecting an available meter path.</td>
+</tr>
+<tr>
+<td>A27</td>
+<td>CI-003</td>
+<td>P3 Research Expansion</td>
+<td>SHELVED — trigger: G6 (G6 reference milestone is complete)</td>
+<td>Evaluate post-reference developer polish: console entry point, macOS install/import CI, Ruff, and measured coverage reporting.</td>
+<td>Post-reference developer polish is adopted only from observed need; thresholds follow measurement rather than precedent. Evidence: Observed baseline justifies each adopted tool; Console entry point and macOS job only if useful; Measured coverage policy. Authority: <a href="docs/reviews/2026-07-10-hardening-adjudication.md">Hardening adjudication C10</a>. Acceptance: <a href="docs/process/state_kernel.json">CI-003 acceptance</a>.</td>
+</tr>
+<tr>
+<td>A28</td>
+<td>DOC-010</td>
+<td>P4 Polish</td>
+<td>SHELVED — trigger: DOC-008 (DOC-008 state kernel is complete and proven in use)</td>
+<td>Audit non-authoritative historical material for bounded relocation after DOC-008 proves the state kernel.</td>
+<td>A post-DOC-008 audit relocates only non-authoritative history while preserving paths or redirects, citations, decision authority, and link integrity. Evidence: Only non-authoritative historical material moves; Paths or redirects preserve citations; Decision and evidence links remain intact. Authority: <a href="docs/reviews/2026-07-10-hardening-adjudication.md">Hardening adjudication C11</a>. Acceptance: <a href="docs/process/state_kernel.json">DOC-010 acceptance</a>. Fence: Do not move cited evidence, decisions, council records, or authoritative histories (Hardening adjudication C11).</td>
+</tr>
+</tbody></table></div>
+<!-- END GENERATED: state-kernel current-queue -->
 
 
   </div>
@@ -771,7 +1123,7 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit 55e67c2 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit f16b83e · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
