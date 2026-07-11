@@ -400,9 +400,11 @@ class StrictValidateTests(CliRunTestCase):
         self.assertEqual(exit_code, 0)
         return self.bundle_path_from_line(out.splitlines()[0])
 
-    def mark_allowlisted_legacy_identity(self, bundle: Path) -> None:
+    def mark_allowlisted_legacy_identity(
+        self, bundle: Path, identity: tuple[str, str] = LEGACY_ALLOWLIST_PAIR
+    ) -> None:
         metadata = json.loads((bundle / "metadata.json").read_text())
-        metadata["run_id"], metadata["config_sha256"] = LEGACY_ALLOWLIST_PAIR
+        metadata["run_id"], metadata["config_sha256"] = identity
         (bundle / "metadata.json").write_text(
             json.dumps(metadata, indent=2, sort_keys=True) + "\n"
         )
@@ -435,6 +437,7 @@ class StrictValidateTests(CliRunTestCase):
         summary.pop("summary_provenance")
         for key in (
             "energy_uncertainty_status",
+            "idle_mean_uncertainty",
             "energy_variance_terms_j2",
             "energy_bound_terms_j",
             "window_evidence_precheck",
@@ -448,9 +451,22 @@ class StrictValidateTests(CliRunTestCase):
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
             self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_reducer_0_4_0_dispatch_requires_exact_summary(self) -> None:
-        bundle = self.make_bundle("strict-v040-exact")
+    def test_reducer_0_4_1_dispatch_requires_exact_summary(self) -> None:
+        bundle = self.make_bundle("strict-v041-exact")
         self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_current_era_reducer_0_4_0_requires_re_reduction(self) -> None:
+        bundle = self.make_bundle("strict-v040-rejected")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.4.0"
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        self.assertIn(
+            "strict: unsupported reducer version; re-reduction required",
+            validate_bundle(bundle, strict=True),
+        )
 
     def test_current_era_reducer_0_3_0_requires_re_reduction(self) -> None:
         bundle = self.make_bundle("strict-v030-rejected")
@@ -478,8 +494,8 @@ class StrictValidateTests(CliRunTestCase):
             validate_bundle(bundle, strict=True),
         )
 
-    def test_reducer_0_4_0_old_field_only_fails_exact_comparison(self) -> None:
-        bundle = self.make_bundle("strict-v040-old-field")
+    def test_reducer_0_4_1_old_field_only_fails_exact_comparison(self) -> None:
+        bundle = self.make_bundle("strict-v041-old-field")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         summary["claim_eligibility"] = summary.pop("window_evidence_precheck")
         (bundle / "summary_metrics.json").write_text(
@@ -550,8 +566,8 @@ class StrictValidateTests(CliRunTestCase):
             validate_bundle(bundle, strict=True),
         )
 
-    def test_claimed_0_4_0_missing_governed_field_fails_exact_dispatch(self) -> None:
-        bundle = self.make_bundle("strict-v040-governed-absence")
+    def test_claimed_0_4_1_missing_governed_field_fails_exact_dispatch(self) -> None:
+        bundle = self.make_bundle("strict-v041-governed-absence")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         del summary["window_evidence_precheck"]["gross_request"]
         (bundle / "summary_metrics.json").write_text(
@@ -711,23 +727,44 @@ class StrictValidateTests(CliRunTestCase):
             problems,
         )
 
-    def test_allowlisted_legacy_bundle_missing_provenance_passes_strict(self) -> None:
-        self.assertIn(LEGACY_ALLOWLIST_PAIR, _STRICT_LEGACY_BUNDLE_IDENTITIES)
-        bundle = self.make_bundle("strict-allowlisted-legacy-provenance")
+    def test_all_six_allowlisted_legacy_bundles_keep_dispatch_semantics(self) -> None:
+        self.assertEqual(len(_STRICT_LEGACY_BUNDLE_IDENTITIES), 6)
+        for index, identity in enumerate(sorted(_STRICT_LEGACY_BUNDLE_IDENTITIES)):
+            with self.subTest(identity=identity):
+                bundle = self.make_bundle(f"strict-allowlisted-legacy-{index}")
+                summary = json.loads((bundle / "summary_metrics.json").read_text())
+                summary.pop("summary_provenance")
+                summary.pop("idle_mean_uncertainty")
+                (bundle / "summary_metrics.json").write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                )
+                metadata = json.loads((bundle / "metadata.json").read_text())
+                metadata.pop("workload_provenance")
+                (bundle / "metadata.json").write_text(
+                    json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+                )
+                self.mark_allowlisted_legacy_identity(bundle, identity)
+
+                with patch(
+                    "joulewise.bundle_read._check_config_sha256", return_value=[]
+                ):
+                    self.assertEqual(validate_bundle(bundle, strict=True), [])
+
+    def test_idle_metadata_mismatch_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-idle-metadata-mismatch")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
-        summary.pop("summary_provenance")
+        summary["idle_mean_uncertainty"]["reason_codes"] = [
+            "idle_metadata_mismatch"
+        ]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
-        metadata = json.loads((bundle / "metadata.json").read_text())
-        metadata.pop("workload_provenance")
-        (bundle / "metadata.json").write_text(
-            json.dumps(metadata, indent=2, sort_keys=True) + "\n"
-        )
-        self.mark_allowlisted_legacy_identity(bundle)
 
-        with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
-            self.assertEqual(validate_bundle(bundle, strict=True), [])
+        problems = validate_bundle(bundle, strict=True)
+        self.assertTrue(
+            any("idle_metadata_mismatch" in problem for problem in problems),
+            problems,
+        )
 
     def test_allowlisted_legacy_present_null_provenance_fails_strict(self) -> None:
         bundle = self.make_bundle("strict-legacy-present-null-provenance")
@@ -792,10 +829,10 @@ class StrictValidateTests(CliRunTestCase):
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
             self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_reducer_0_4_0_missing_either_added_field_fails_strict(self) -> None:
+    def test_reducer_0_4_1_missing_either_added_field_fails_strict(self) -> None:
         for field in ("remote_cleanup_failed", "runtime_cleanup_ok"):
             with self.subTest(field=field):
-                bundle = self.make_bundle("strict-v040-missing-" + field)
+                bundle = self.make_bundle("strict-v041-missing-" + field)
                 summary = json.loads((bundle / "summary_metrics.json").read_text())
                 del summary["measurement_quality"][field]
                 (bundle / "summary_metrics.json").write_text(
@@ -807,8 +844,8 @@ class StrictValidateTests(CliRunTestCase):
                 self.assertEqual(len(problems), 1)
                 self.assertIn("measurement_quality." + field, problems[0])
 
-    def test_tampered_reducer_0_4_0_summary_fails_strict(self) -> None:
-        bundle = self.make_bundle("strict-v040-tampered")
+    def test_tampered_reducer_0_4_1_summary_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-v041-tampered")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         summary["energy_request_j"] = 999999.0
         (bundle / "summary_metrics.json").write_text(

@@ -18,7 +18,7 @@ from joulewise.validation import finite_float
 CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
-SUMMARY_REDUCER_VERSION = "0.4.0"
+SUMMARY_REDUCER_VERSION = "0.4.1"
 
 
 class SchemaError(ValueError):
@@ -751,6 +751,7 @@ class SummaryMetrics:
     phase_energy_j: dict[str, float] | None = None
     suite_metrics: SuiteSummary | None = None
     energy_uncertainty_status: str | None = None
+    idle_mean_uncertainty: dict[str, Any] | None = None
     energy_variance_terms_j2: dict[str, float | None] | None = None
     energy_bound_terms_j: dict[str, float | None] | None = None
     window_evidence_precheck: dict[str, Any] | None = None
@@ -809,6 +810,12 @@ class SummaryMetrics:
                     "type": ["string", "null"],
                     "enum": ["not_estimable", "estimated", "bounded", None],
                 },
+                "idle_mean_uncertainty": {
+                    "anyOf": [
+                        {"$ref": "#/$defs/idle_mean_uncertainty"},
+                        {"type": "null"},
+                    ]
+                },
                 "energy_variance_terms_j2": {"type": ["object", "null"]},
                 "energy_bound_terms_j": {"type": ["object", "null"]},
                 "window_evidence_precheck": {"type": ["object", "null"]},
@@ -840,6 +847,81 @@ class SummaryMetrics:
                         "gpu_idle_ratio_min": nullable_number,
                         "gpu_freq_hz_mean": nullable_number,
                         "idle_window_suspect": nullable_bool,
+                    },
+                },
+                "idle_mean_uncertainty": {
+                    "type": "object",
+                    "required": [
+                        "status",
+                        "method",
+                        "source_artifact",
+                        "source_sha256",
+                        "raw_sample_count",
+                        "median_sample_interval_s",
+                        "cadence_p95_p05_ratio",
+                        "bandwidth_s",
+                        "lag_count",
+                        "sample_variance_w2",
+                        "iid_variance_of_mean_w2",
+                        "hac_variance_of_mean_w2",
+                        "governed_variance_of_mean_w2",
+                        "effective_sample_size",
+                        "correlation_scope",
+                        "reason_codes",
+                    ],
+                    "properties": {
+                        "status": {
+                            "type": "string",
+                            "enum": ["estimated", "not_estimable"],
+                        },
+                        "method": {
+                            "type": "string",
+                            "const": "newey_west_bartlett_10s_iid_floor_v1",
+                        },
+                        "source_artifact": {
+                            "type": "string",
+                            "const": "raw/powermetrics_idle.plist",
+                        },
+                        "source_sha256": {
+                            "type": ["string", "null"],
+                            "pattern": "^[0-9a-f]{64}$",
+                        },
+                        "raw_sample_count": {
+                            "type": ["integer", "null"],
+                            "minimum": 0,
+                        },
+                        "median_sample_interval_s": nullable_number,
+                        "cadence_p95_p05_ratio": nullable_number,
+                        "bandwidth_s": {"type": "number", "const": 10.0},
+                        "lag_count": {
+                            "type": ["integer", "null"],
+                            "minimum": 0,
+                        },
+                        "sample_variance_w2": nullable_number,
+                        "iid_variance_of_mean_w2": nullable_number,
+                        "hac_variance_of_mean_w2": nullable_number,
+                        "governed_variance_of_mean_w2": nullable_number,
+                        "effective_sample_size": nullable_number,
+                        "correlation_scope": {
+                            "type": "string",
+                            "const": "independent_run",
+                        },
+                        "reason_codes": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "raw_idle_trace_unavailable",
+                                    "raw_idle_trace_invalid",
+                                    "nonfinite_idle_power",
+                                    "insufficient_idle_samples",
+                                    "idle_trace_span_below_three_bandwidths",
+                                    "idle_cadence_irregular",
+                                    "idle_metadata_mismatch",
+                                    "backend_policy_not_frozen",
+                                ],
+                            },
+                        },
                     },
                 },
                 "measurement_quality": {

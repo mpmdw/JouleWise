@@ -330,6 +330,7 @@ def _strict_problems(reader: BundleReader) -> list[str]:
         _strict_reducer_version_dispatch(reader, summary)
     )
     problems.extend(version_problems)
+    problems.extend(_strict_idle_mean_uncertainty_problems(summary))
     problems.extend(_strict_workload_provenance_problems(reader, summary))
     problems.extend(_strict_emitted_token_ids_problems(reader))
     problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
@@ -377,10 +378,26 @@ _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE = (
     _STRICT_ADDITIVE_ABSENT_TOLERANCE
     | ADDED_SINCE_0_3_0
     | {
+        "idle_mean_uncertainty",
         "measurement_quality.token_counts_source",
         "measurement_quality.phase_identifiability",
     }
 )
+
+
+def _strict_idle_mean_uncertainty_problems(
+    summary: dict[str, Any],
+) -> list[str]:
+    uncertainty = summary.get("idle_mean_uncertainty")
+    if not isinstance(uncertainty, dict):
+        return []
+    reasons = uncertainty.get("reason_codes")
+    if isinstance(reasons, list) and "idle_metadata_mismatch" in reasons:
+        return [
+            "strict: raw idle trace does not match metadata.idle_baseline "
+            "(idle_metadata_mismatch)"
+        ]
+    return []
 
 
 def _strict_summary_differences(

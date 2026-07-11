@@ -277,7 +277,7 @@ do not block L0/L1 operation or raw bundle reduction.
 | Sampling cadence | all window classes | window-local p95 sample gap, bracketing max sample gap, dropped-sample count, requested Hz | under-cadence windows are `not resolvable` for L2/L3 |
 | Timestamp-anchor uncertainty | request, phase, item, level windows | sampler readiness anchor, plist anchor offset where present, event-marker uncertainty | short-window claims capped or `not resolvable` when anchor bound is too large |
 | Interpolation/aliasing bound | all integrated windows | perturb window edges by half observed sample gap and recompute; for burst loads use calibration burst residual | if bound exceeds effect, claim is `not resolvable` |
-| Idle-baseline SE | idle-subtracted metrics | `idle_power_w_stddev / sqrt(idle_sample_count)` propagated by duration | idle-sub claims capped until propagated |
+| Idle-baseline SE | idle-subtracted metrics | powermetrics-v1 `newey_west_bartlett_10s_iid_floor_v1` governed variance-of-mean, propagated by measured duration | idle-sub claims capped until the governed raw-trace estimate is available |
 | Idle drift | idle-subtracted metrics | start/end idle sentinels, cooldown cap hit, drift sentinel trend, or conservative bound from calibration repeats | cap-hit or drift above floor downgrades per C-023 M5 |
 | Clock-offset bound | multi-node and externally metered windows | D-003 marker half-round-trip bound; meter synchronization residual | attributed windows shorter than bound cannot carry energy attribution claims |
 
@@ -345,9 +345,12 @@ where:
 - `Var(E_gross)` comes from repeated gross-energy bundles for the same
   condition, or from a bounded sampling/interpolation model if repetitions are
   unavailable.
-- `Var(P_idle_mean)` is estimated from each bundle's idle baseline as
-  `idle_power_w_stddev^2 / idle_sample_count`, then carried through the
-  duration of the measured window.
+- `Var(P_idle_mean)` is the bundle's
+  `idle_mean_uncertainty.governed_variance_of_mean_w2`, derived from immutable
+  `raw/powermetrics_idle.plist` with the frozen 10 s Newey-West/Bartlett
+  method, IID floor, and ESS clamp. It is carried through the measured-window
+  duration as `E_idle_mean_j2 = measured_duration_s^2 * Var(P_idle_mean)`.
+  Metadata is cross-check evidence, never an independent variance source.
 - `E_drift_bound_j` comes from start/end idle sentinels, drift cells, cooldown
   cap-hit evidence, or a conservative calibration bound and is stored in
   `energy_bound_terms_j`. If no drift evidence exists, the term is `unknown`
@@ -361,6 +364,39 @@ For condition contrasts, the preferred estimator is a paired/block contrast
 when the manifest supplies ABBA or interleaved order. Marginal interval
 separation alone is not sufficient for L2/L3 wording once contrast-level
 tooling exists.
+
+### P2-044 idle-dependence predeclaration
+
+The powermetrics-only estimator is frozen before Window-A calibration effects
+are inspected:
+
+- Exact method ID and formulas, including autocovariance denominator.
+- Powermetrics 10 s bandwidth.
+- Median-interval lag conversion.
+- IID variance floor and ESS clamps.
+- Minimum three-bandwidth trace rule.
+- Cadence regularity threshold of 1.25.
+- Rail definition: the same CPU+GPU+ANE arithmetic total used by the idle baseline.
+- Arithmetic, not time-weighted, mean so the uncertainty matches the current point estimand.
+- No trimming, detrending, stationarity “repair,” or adaptive bandwidth.
+- Raw/metadata cross-check tolerance and failure behavior.
+- Physical-backend applicability.
+- `independent_run` covariance scope and the separation from deterministic drift.
+- Reducer 0.4.1 and exact P2-037 required-method gate.
+- The adjudicated hand fixtures in `tests/test_idle_dependence.py`.
+
+Operationally, `L = floor(10 / median(interval_s))`, eligibility requires
+`n >= 3*(L+1)`, and the type-7 linear cadence ratio must be at most 1.25.
+Raw/metadata counts match exactly; mean, sample standard deviation, and
+duration use `rel_tol=1e-9`, `abs_tol=1e-12`. Missing, corrupt, nonfinite,
+short, irregular, or mismatched raw evidence is `not_estimable` with no IID
+fallback and no resampling. Other physical backends emit
+`backend_policy_not_frozen`; mock remains synthetic and non-claim-bearing.
+The residual stochastic term has `independent_run` scope; deterministic slow
+drift remains separate under D-057. P2-037 must require reducer 0.4.1, the
+exact method ID, estimated status, independent-run scope, and the corrected
+per-bundle `E_idle_mean_j2`; it never parses raw idle evidence or treats ESS as
+paired-block `n`/degrees of freedom.
 
 ### Claim-Gate Thresholds
 

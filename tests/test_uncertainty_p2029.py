@@ -170,7 +170,7 @@ class ReducerPropagationTests(ReducerUncertaintyTestCase):
             summary.energy_variance_terms_j2["E_gross_repetition_j2"]
         )
 
-    def test_idle_mean_variance_term_uses_duration_squared(self) -> None:
+    def test_mock_idle_mean_variance_is_not_claim_bearing(self) -> None:
         builder = self.builder()
         builder.measured_window(0.0, 10.0)
         builder.write_trace(constant_samples(0.0, 10.0, hz=1.0, power_w=7.5))
@@ -181,8 +181,10 @@ class ReducerPropagationTests(ReducerUncertaintyTestCase):
 
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         self.assertIsNotNone(summary.energy_variance_terms_j2)
-        self.assertAlmostEqual(
-            summary.energy_variance_terms_j2["E_idle_mean_j2"], 100.0, places=12
+        self.assertIsNone(summary.energy_variance_terms_j2["E_idle_mean_j2"])
+        self.assertEqual(
+            summary.idle_mean_uncertainty["reason_codes"],
+            ["raw_idle_trace_unavailable"],
         )
 
     def test_drift_bound_is_duration_times_recorded_power_bound(self) -> None:

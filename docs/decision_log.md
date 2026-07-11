@@ -1598,6 +1598,43 @@ versions remain unsupported. Legacy compatibility never authorizes positive
 claim readiness. Summary schema remains `0.1`; schema `0.2` remains reserved
 for the previously adjudicated composite changes.
 
+Amendment (2026-07-11, P2-044 idle dependence / lead-adjudicated design):
+reducer `0.4.1` adds the governed `idle_mean_uncertainty` derivation and changes
+`E_idle_mean_j2` to `measured_duration_s^2 *
+governed_variance_of_mean_w2`. Current-era reducer `0.4.0` summaries are
+rejected as re-reduction-required with no absence projection; the six frozen
+legacy identity arms are unchanged. Strict validation fails on a raw/metadata
+idle-baseline mismatch. The predeclaration freeze, before Window-A/P2-015
+calibration effects are inspected, is:
+
+- Exact method ID and formulas, including autocovariance denominator.
+- Powermetrics 10 s bandwidth.
+- Median-interval lag conversion.
+- IID variance floor and ESS clamps.
+- Minimum three-bandwidth trace rule.
+- Cadence regularity threshold of 1.25.
+- Rail definition: the same CPU+GPU+ANE arithmetic total used by the idle baseline.
+- Arithmetic, not time-weighted, mean so the uncertainty matches the current point estimand.
+- No trimming, detrending, stationarity “repair,” or adaptive bandwidth.
+- Raw/metadata cross-check tolerance and failure behavior.
+- Physical-backend applicability.
+- `independent_run` covariance scope and the separation from deterministic drift.
+- Reducer 0.4.1 and exact P2-037 required-method gate.
+- The hand fixtures below.
+
+The frozen method ID is `newey_west_bartlett_10s_iid_floor_v1`. The estimator
+uses `L=floor(10/median(interval_s))`, the IID variance floor, ESS clamped to
+`[1,n]`, `n >= 3*(L+1)`, and a type-7 linear p95/p05 cadence ratio no greater
+than 1.25. Raw/metadata count is exact; mean, sample standard deviation, and
+duration use `rel_tol=1e-9` and `abs_tol=1e-12`. Irregular cadence fails closed
+without resampling. The policy is powermetrics-v1 only; other physical
+backends emit `backend_policy_not_frozen`, and mock remains non-claim-bearing.
+ESS is audit-only, never P2-037's paired-block sample size or degrees of
+freedom. Any later method change requires a new method ID and reducer version;
+historical outputs are never silently recomputed under changed policy.
+The P2-044 hand fixtures are implemented in `tests/test_idle_dependence.py`;
+P2-037's propagation fixture remains owned by its separate tree.
+
 Revisit when: bundle schema v0.2 lands (composite summaries need their
 own strict semantics), or a reducer version bump makes historical
 summaries legitimately differ from fresh reductions (then strict needs

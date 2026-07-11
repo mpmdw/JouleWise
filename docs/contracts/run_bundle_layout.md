@@ -16,7 +16,8 @@ runs/<run_id>/
   rich_telemetry_idle.jsonl
   summary_metrics.json
   raw/
-    (backend-native artifacts, e.g. powermetrics.plist, nvidia_smi.csv)
+    (backend-native artifacts, e.g. powermetrics.plist,
+     powermetrics_idle.plist, nvidia_smi.csv)
   logs/
     controller.log
     runtime.log
@@ -311,13 +312,13 @@ derived from `stage_completed` events for phase `cleanup`. False surfaces local
 runtime cleanup failure without changing a successful current run's status,
 failure reason, energy, or window precheck. Missing/malformed completion
 evidence is null. Frozen legacy stored summaries may omit this field under the
-strict additive-absence rule; current reducer-0.4.0 summaries are exact.
+strict additive-absence rule; current reducer-0.4.1 summaries are exact.
 
 `measurement_quality.remote_cleanup_failed` is an additive nullable list of
 remote worker task paths whose file or directory cleanup failed. It is a
 quality-only hygiene signal; a surviving worker-started process remains the
 separate `cleanup_failed` run failure. Frozen legacy summaries may omit the
-field, while reducer-0.4.0 summaries compare it exactly alongside
+field, while reducer-0.4.1 summaries compare it exactly alongside
 `runtime_cleanup_ok`.
 
 A status-only `{"status": "succeeded"}` summary is neither a complete bundle
@@ -338,11 +339,13 @@ and its derived summary are out of scope. Publication integrity is supplied by
 the bundle-pack hash chain (P2-027/REPRO-001), outside a single local
 `validate-bundle` invocation.
 
-Reducer `0.4.0` summaries use exact strict comparison. Current-era summaries
-recording reducer `0.3.0` or `0.3.1` are unsupported and require explicit
-re-reduction. The frozen legacy allowlist keeps its provenance-less
-additive-absence tolerance; recorded `0.2.x` and unknown reducer versions are
-also unsupported and require explicit re-reduction.
+Reducer `0.4.1` summaries use exact strict comparison. Current-era summaries
+recording reducer `0.4.0` are unsupported and require explicit re-reduction;
+the governed idle-variance meaning changed, so there is no absence projection
+for `0.4.0`. Current-era `0.3.0` and `0.3.1` summaries remain unsupported.
+The six frozen legacy identities keep their provenance-less additive-absence
+tolerance unchanged; recorded `0.2.x` and unknown reducer versions are also
+unsupported and require explicit re-reduction.
 A succeeded summary requires a measured window with duration strictly greater
 than zero. A reducer encountering a nonpositive measured window emits an
 honest `failed` summary without derived energy, phase, or suite metrics;
@@ -354,7 +357,8 @@ Additive summary fields landing with implementation (2026-07-09, P2-029):
 | Field | Location | Contract |
 |---|---|---|
 | `energy_uncertainty_status` | `summary_metrics.json` top level | One of `not_estimable`, `estimated`, or `bounded`. Single-bundle reducer output is `not_estimable` unless every relevant uncertainty term has an external calibrated bound; point estimates and quality fields are still emitted. |
-| `energy_variance_terms_j2` | `summary_metrics.json` top level and aggregate metric entries | Object of named stochastic variance terms in J^2. The reducer emits `E_gross_repetition_j2: null` for single bundles and `E_idle_mean_j2 = duration_s^2 * idle_power_w_stddev^2 / idle_sample_count` when idle-baseline evidence exists. Aggregates add repeated-gross variance and total idle-subtracted variance terms. |
+| `idle_mean_uncertainty` | `summary_metrics.json` top level | Governed powermetrics-v1 idle-mean derivation. `method` is `newey_west_bartlett_10s_iid_floor_v1`, `correlation_scope` is `independent_run`, `source_artifact` is `raw/powermetrics_idle.plist`, and `source_sha256` binds the derivation to immutable bytes. The object records raw count, median interval, type-7 p95/p05 cadence ratio, 10 s bandwidth, lag count, sample/IID/HAC/governed variances, clamped ESS, status, and frozen reason codes. Numeric results and ESS are null when `status=not_estimable`. Mock output is non-claim-bearing. Non-powermetrics physical backends report `backend_policy_not_frozen`. |
+| `energy_variance_terms_j2` | `summary_metrics.json` top level and aggregate metric entries | Object of named stochastic variance terms in J^2. The reducer emits `E_gross_repetition_j2: null` for single bundles and, only when `idle_mean_uncertainty.status == estimated`, `E_idle_mean_j2 = measured_duration_s^2 * governed_variance_of_mean_w2`. It is null rather than falling back to metadata or raw adjacent count when the governed estimate is unavailable. Aggregates continue consuming each member's corrected scalar and add repeated-gross and total idle-subtracted variance terms. |
 | `energy_bound_terms_j` | `summary_metrics.json` top level and aggregate metric entries | Object of named deterministic bounds in J. Drift is recorded as `E_drift_bound_j` from documented `metadata.idle_drift_bound_w` evidence, or `metadata.extra.idle_drift_bound_w` for runner `extra_metadata` parity, and remains a bound, never a variance term, unless a future analysis explicitly names a distributional model. Missing drift evidence is represented as `null`. `E_interpolation_edge_bound_j` retains the diagnostic maximum change from shifting one edge at a time by +/- half its local observed gap. Reducer 0.3.0 introduced the governed `E_interpolation_joint_edge_bound_j`, the maximum absolute change over all four Cartesian combinations of independently shifting both edges by +/- half their respective local gaps. Window prechecks expose the same governed value as `interpolation_joint_edge_bound_j`. |
 | `window_evidence_precheck` | `summary_metrics.json` top level | Machine-readable evidence prechecks by metric-specific window class. `gross_request` governs `gross_energy_j` and does not require an idle baseline or drift bound. `idle_subtracted_request` governs `idle_subtracted_energy_j` and requires both. Reducer 0.4.0 writes no generic `request` alias. Each request entry records `metric_name`, `window_class`, `eligible`, stable `reasons`, window duration, sample count, local-gap observations, cadence ratio, clock/anchor bound, and joint interpolation bound. `phase`/`item`/`block`/`level` remain gross-only prechecks; rollups contain `window_count` and nested `windows[]` entries. The frozen legacy allowlist may internally map an old `claim_eligibility` field for strict comparison only; that mapping never authorizes positive claim readiness. |
 
@@ -368,6 +372,39 @@ Reducer 0.3.0 adds `nonpositive_window_duration` and
 `cadence_ratio_unrecorded` is also the documented fail-closed fallback when
 the cadence denominator would be computed from only a partial basis, such as
 an in-window p95 with a missing bracketing edge gap.
+
+### Idle-mean dependence contract (P2-044)
+
+For powermetrics-v1 idle totals `x_0..x_(n-1)`, use the same CPU+GPU+ANE
+arithmetic rail sum and arithmetic mean as `metadata.idle_baseline`. With
+`H = 10 s`, `L = floor(H / median(delta_t))`, sample variance `s^2`, and
+autocovariance `gamma_k = fsum((x_t-xbar)(x_(t-k)-xbar), t=k..n-1) / n`:
+
+`v_iid = s^2 / n`
+
+`v_HAC = (gamma_0 + 2 * fsum((1-k/(L+1))*gamma_k, k=1..L)) / n`
+
+`v_governed = max(v_iid, v_HAC)`
+
+`ESS = clamp(s^2 / v_governed, 1, n)`
+
+A constant trace has all variance terms zero and ESS `n`. ESS is audit-only;
+it is not a Student-t sample size or degrees of freedom. Estimation requires
+at least two arithmetic samples and `n >= 3*(L+1)`. Cadence requires a type-7
+linear `p95(interval)/p05(interval) <= 1.25`. Irregular cadence fails closed;
+v1 never resamples, trims, detrends, repairs stationarity, selects bandwidth
+adaptively, or shops estimators. `math.fsum` is used for governed sums.
+
+Raw sample count, arithmetic mean, sample standard deviation, and duration
+(`fsum(elapsed_ns / 1e9)`) are cross-checked against
+`metadata.idle_baseline`. Count must match exactly; floats use
+`rel_tol=1e-9`, `abs_tol=1e-12`. Any mismatch emits
+`idle_metadata_mismatch`, withholds governed variance, and fails strict
+validation. The complete frozen reason vocabulary is:
+`raw_idle_trace_unavailable`, `raw_idle_trace_invalid`,
+`nonfinite_idle_power`, `insufficient_idle_samples`,
+`idle_trace_span_below_three_bandwidths`, `idle_cadence_irregular`,
+`idle_metadata_mismatch`, and `backend_policy_not_frozen`.
 
 ## Experiment Manifests
 
