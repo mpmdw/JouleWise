@@ -25,11 +25,20 @@ The source of truth for a run is the run bundle:
 3. Collect device metadata.
 4. Measure idle baseline.
 5. Warm up runtime.
-6. Start measured telemetry.
-7. Run workload.
-8. Stop measured telemetry.
-9. Cleanup runtime.
-10. Reduce raw artifacts into summary metrics.
+6. Wait the configured post-warmup settling interval
+   (`sampling.warmup_seconds`; zero means no wait).
+7. Start measured telemetry.
+8. Run workload.
+9. Stop measured telemetry.
+10. Cleanup runtime.
+11. Reduce raw artifacts into summary metrics.
+
+The post-warmup settling interval begins only after all active
+`workload_profile.warmup_runs` calls and their clock-alignment captures have
+completed. It ends before the measured-run stage and sampling-active markers,
+so it is never integrated into the measured window. Controller events record
+the configured value on the warmup completion event and the runtime log records
+positive waits.
 
 ## Idle Subtraction
 
@@ -76,6 +85,10 @@ Each run summary should include:
 - Idle variance.
 - Thermal drift.
 - Telemetry source.
+- Local runtime cleanup result (`runtime_cleanup_ok`: true/false/null). Cleanup
+  occurs after the measured window, so failure is a quality concern for the
+  following repetition and does not retroactively change current-run status or
+  energy.
 - Wall-meter comparison delta, when available.
 
 ## Phase Labels

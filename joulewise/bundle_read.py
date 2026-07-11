@@ -329,6 +329,31 @@ class BundleReader:
             return None
         return Window(start_s=stage_start, end_s=stage_end)
 
+    def runtime_cleanup_ok(self) -> bool | None:
+        """Local runtime-cleanup result from cleanup completion events.
+
+        A recorded ``False`` dominates because one failed cleanup is enough to
+        contaminate the following repetition. Otherwise every matching value
+        must be the boolean ``True``; absent or malformed evidence is unknown.
+        """
+        values: list[Any] = []
+        for event in self.events():
+            if (
+                event.get("event_type") != "stage_completed"
+                or event.get("phase") != "cleanup"
+            ):
+                continue
+            metadata = event.get("metadata")
+            if not isinstance(metadata, dict):
+                values.append(None)
+                continue
+            values.append(metadata.get("cleanup_ok"))
+        if any(value is False for value in values):
+            return False
+        if not values or any(not isinstance(value, bool) for value in values):
+            return None
+        return True
+
     def phase_windows(self) -> dict[str, list[Window]]:
         """Pair ``phase_start``/``phase_end`` events by phase name in order.
 

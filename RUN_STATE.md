@@ -1,6 +1,10 @@
 # JouleWise Run State
 
-Last updated: 2026-07-09 (C-027 whole-project council review with
+Last updated: 2026-07-10 (P2-040 reducer-version review blocker fixed
+without commit on `impl/p2040-remainder`: reducer 0.3.1 plus frozen-0.3.0
+absence projection; focused tests green, canonical rerun exposed one unrelated
+pre-existing node-worker timing failure. Earlier:
+C-027 whole-project council review with
 gpt-5.6-sol: claim-surface corrections in README/PROJECT_STATUS/this
 file, 14 new queue rows plus NV-GATE-2 additions to P2-005, D-060 proposed +
 D-061..D-063 accepted; record in
@@ -73,6 +77,71 @@ RETRO-001 ran (2 SHOULD-FIX, both fixed in #43); Current Verification
 may advance past 36d5641 after the NEXT session's fresh site
 regen+diff (RETRO-1's remaining condition).
 
+- P2-040 REVIEW BLOCKER FIXED (uncommitted): governed output-shape additions
+  now bump the reducer patch version. Current output is 0.3.1 exact; frozen
+  0.3.0 gets absence-only tolerance for named `ADDED_SINCE_0_3_0`, currently
+  only `measurement_quality.runtime_cleanup_ok`; legacy and unsupported arms
+  are unchanged. Report:
+  `docs/run_reports/2026-07-10-p2040-versioning-fix.md`.
+
+- P2-040 REMAINDER IMPLEMENTED (uncommitted on
+  `impl/p2040-remainder`, awaiting lead pathspec commit + retained-corpus
+  gate): FIX-7a deterministic unknown-key stderr/metadata warnings, FIX-7b
+  adjudicated post-active-warmup settling, and FIX-8/ARC-6 local cleanup
+  quality propagation. Canonical suite 924 OK/12 skipped; local corpus test
+  produced the required loud skip. Report:
+  `docs/run_reports/2026-07-10-p2040-remainder.md`.
+
+- PR #40 (C-027 council review) MERGED to main; site regenerated and
+  committed; SITE DEPLOY still pending (permission-gated):
+  `cd site_capsule && npx lakebed deploy`.
+- SPEC WAVE COMPLETE: branch `c027-spec-wave` (pushed, NO PR yet) holds
+  all TEN C-027 spec sheets under `docs/specs/c027/` (~345 KB): P2-040,
+  P2-038, P2-039, analysis_engine_trio (P2-042/041/037), RPT-001,
+  DOC-008 kernel, NV-GATE-2, MET-001/RETRO-001, SPLIT-AP/AP-EDIT,
+  DOC-009/REPRO-001. ALL headers say DRAFT pending lead adjudication.
+- IMPLEMENTATION BLITZ (Ed-directed override of the earlier
+  specs-merge-first line; override recorded in the D-050 addendum on
+  impl/met001): nine worktrees under `../JouleWise-wt/<name>`, branches
+  `impl/*` all PUSHED, all branched from c027-spec-wave@f7f866d:
+  - impl/doc009 — DONE (4 commits): checklist reconciliation + queue
+    closure rule. 2 flagged follow-ups: queue evidence-cell cross-refs,
+    decision-log line for the convention.
+  - impl/repro001 — DONE: env/ lockfiles (analysis + mac-measurement),
+    README, lock test, 3-bundle ~52 MiB pack selection doc.
+  - impl/ap-edit — DONE (7 commits): all SPLIT-1..3 + AP-1..6 text
+    amendments, lint clean; 1 adaptation beyond spec text (residual
+    better-monolithic phrases) flagged.
+  - impl/met001 — DONE (5 commits): MET-1/2/3/6 addenda + the
+    recoverability AUDIT (headline: 103/106 observer-index rows have
+    surviving artifacts covering ~all claimed DIRECT invocations; only
+    the 46 C-025 Workflow agents unattributable from that index).
+    MET-4 (D-050 adjudication) deliberately left for the lead.
+  - impl/p2040-io-nv2 — DONE: atomic manifest writes + NVIDIA
+    cooldown-context fix (failing-first proven; suite 880 OK there).
+    ARC-6 cleanup-into-quality SKIPPED (fence conflict) — route to
+    integration or the p2040-core owner.
+  - impl/p2040-core — DONE (5 commits, all pushed): FIX-1 zero-window
+    fail-closed (+ strict gate + reducer version 0.3.0 — the version
+    bump WITHOUT a 0.2.0 projection is the main design call to
+    ratify), FIX-2 metric-specific gates, FIX-3 joint-edge bound,
+    FIX-4 D-058 token precedence, FIX-5 zero-MAD review flags. All
+    red/green mutation-proven; suite 884 OK there; all six corpus
+    bundles still pass strict read-only. FIX-6/7/8 remain (see io-nv2
+    + fence skips).
+  - impl/rpt001 — DONE (2 commits): report skeleton (10 chapters,
+    Pandoc-markdown, format-swap seam) + gated byte-stable
+    bundle→figure/table/claims-row→report-page pipeline; claims-row
+    means match spec golden values exactly.
+  - impl/p2039 — DONE: floor calculator (guard g(n)=max(1,sqrt(9/(n-1))),
+    ADJUDICATION-PENDING), artifact emit/validate w/ 16 tamper
+    rejections, transport refusal; 29 tests, 906 OK there. CLI +
+    integration hooks deferred.
+  - impl/doc008-kernel — DONE (2 commits): 39-task kernel (parity
+    verified vs queue), stdlib generator --check/--stdout byte-stable,
+    24 tests, orchestration inserts staged as a spec-dir doc. Live
+    RUN_STATE/TASK_QUEUE conversion deliberately NOT done
+    (adjudication-gated).
 **OPEN work, exact states:**
 
 - PR #46 DRAFT (impl/p2042 frozen analysis manifest): implementation
@@ -220,6 +289,11 @@ queue owns ordering (C-027):**
 - 2026-07-10 P2-038 production uncertainty software path (live quiet-machine
   closure still open):
   `docs/run_reports/2026-07-10-p2038-production-uncertainty.md`
+- 2026-07-10 P2-040 reducer-version compatibility review fix (uncommitted):
+  `docs/run_reports/2026-07-10-p2040-versioning-fix.md`
+- 2026-07-10 P2-040 remainder implementation (uncommitted, pending lead
+  pathspec commit/corpus gate):
+  `docs/run_reports/2026-07-10-p2040-remainder.md`
 - 2026-07-10 P2-040 / RETRO-001 fix round (committed on c027-int-p2040
   after lead review): `docs/run_reports/2026-07-10-p2040-fix-round.md`
 - 2026-07-09 C-027 whole-project council review (7 gpt-5.6-sol lenses +
@@ -273,6 +347,19 @@ queue owns ordering (C-027):**
   the loud six-bundle acceptance-gate skip. Git merge metadata remains absent
   because the managed sandbox cannot write the external worktree admin dir;
   the exact clean three-way `origin/main` content snapshot is applied.
+- P2-040 reducer-version review fix: focused strict/reducer run
+  `Ran 84 tests in 1.908s`, `OK`; extended strict/reducer/schema run
+  `Ran 104 tests in 1.997s`, `OK (skipped=1)`. Canonical run reached
+  `Ran 926 tests in 33.732s`, `FAILED (failures=1, skipped=12)` solely at
+  pre-existing `test_telemetry_measure_idle_with_fake_nvidia_smi`; isolated
+  reruns reproduce its 0.2-second fake-process timing failure. All
+  reducer/version tests pass; no out-of-scope node-worker change was made.
+- P2-040 remainder worktree: pre-change baseline `Ran 910 tests in 34.584s`,
+  `OK (skipped=12)`; post-change focused affected modules `Ran 256 tests in
+  3.744s`, `OK (skipped=1)`; canonical `Ran 924 tests in 32.812s`, `OK
+  (skipped=12)`; compileall and `git diff --check` clean. The unchanged
+  six-corpus test produced its required loud skip because `runs/` is absent;
+  lead 6/6 strict read-only rerun remains the landing gate.
 - P2-042 emitter branch `impl/p2042` (lead-committed base; draft PR #46;
   targeted-review fix round complete in the worktree, no fix-round commit):
   FIX-1 fail-closed typed identity/linkage validation, FIX-2 semantic
@@ -342,6 +429,11 @@ queue owns ordering (C-027):**
   the real Git merge/commit; the sandbox could not write `ORIG_HEAD`/merge
   metadata in the external worktree admin directory. No retained run bundle
   was modified.
+- Worktree `/Users/edr/code/JouleWise-wt/p2040rem` on
+  `impl/p2040-remainder` contains the committed remainder implementation and
+  is intentionally dirty only with the uncommitted reducer-version review
+  fix, tests, D-030 amendment, and handoff bookkeeping. Do not commit or
+  discard these changes wholesale.
 - `main` and `origin/main` contain the user-directed Claude Code → Codex
   bridge hardening from commit `1d7c415` (pushed direct as a bounded
   tooling change, closeout `ef34cc9`). Branch `c027-council-review`
@@ -357,9 +449,9 @@ queue owns ordering (C-027):**
 
 ## What Is Next
 
-See **RESTART HERE** above — that block and `TASK_QUEUE.md` are the only
-next-action authorities. (C-027 removed the duplicated ranking that
-previously lived here after it drifted stale against the queue.)
+Lead-review the uncommitted P2-040 reducer-version fix, run the retained
+six-bundle strict read-only gate, and commit by pathspec. Once landed, P2-038 is the next
+`[AGENT]` correctness row. `TASK_QUEUE.md` remains the ordering authority.
 
 Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
 C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),

@@ -1572,6 +1572,16 @@ monotonic envelope. Record zero is timestamped at that interval endpoint;
 records `i>0` advance by elapsed values `1..i`. Strict mode re-derives the
 midpoint and bounds from paired-clock observations and raw plists; plist
 whole-second dates are consistency checks only and never tighten the bound.
+Amendment (2026-07-10, P2-040 review fix): reducer `0.3.1` adds governed
+output field `measurement_quality.runtime_cleanup_ok`; `0.3.1` strict
+comparison is exact. A stored `0.3.0` summary is compared against a fresh
+reduction projected to recorded reducer version `0.3.0`, with absence-only
+tolerance for exactly `ADDED_SINCE_0_3_0` (currently only
+`measurement_quality.runtime_cleanup_ok`); any stored value remains an exact
+claim. Legacy and unsupported-version arms are unchanged. From this point,
+every governed output-shape addition MUST bump the reducer patch version and
+extend the immediately prior frozen version's named absence-tolerance set.
+A frozen reducer version is never reused for a changed governed output shape.
 
 Revisit when: bundle schema v0.2 lands (composite summaries need their
 own strict semantics), or a reducer version bump makes historical
