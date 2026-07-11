@@ -353,28 +353,22 @@ def _campaign_cooldown_evidence(
     return resolved
 
 
-def _campaign_claim_waivers(
+def _campaign_claim_records(
     runs_root: Path, manifest_id: str
-) -> dict[str, Mapping[str, Any]]:
-    """Read the latest runner-recorded cleanup waiver for each bundle.
+) -> dict[str, tuple[str, ...]]:
+    """Read runner-recorded cleanup flags for fail-closed comparison.
 
-    Waivers remain outside immutable bundles.  The campaign provenance member
-    record binds the existing waiver object to the manifest and bundle ID; a
-    malformed or non-cleanup scope is ignored so cleanup evidence fails closed.
+    Waivers remain campaign-level audit context and are intentionally ignored
+    here. The analysis engine re-derives cleanup flags from immutable bundle
+    evidence; malformed provenance is a process-input error, and disagreement
+    with the recorded cleanup subset fails closed downstream.
     """
 
     manifest_dir = runs_root / "campaign_manifests"
     if not manifest_dir.is_dir():
         return {}
-    result: dict[str, Mapping[str, Any]] = {}
+    result: dict[str, tuple[str, ...]] = {}
     cleanup_scopes = {"runtime_cleanup_ok", "remote_cleanup_failed"}
-    known_scopes = cleanup_scopes | {
-        "status_failed",
-        "strict_invalid",
-        "idle_window_suspect",
-        "prompt_hash_mismatch",
-        "prompt_hash_check_error",
-    }
     for path in sorted(manifest_dir.glob("*.json"), key=lambda item: item.name):
         try:
             raw = json.loads(path.read_text(encoding="utf-8"))
@@ -416,61 +410,24 @@ def _campaign_claim_waivers(
                 if not isinstance(row, Mapping):
                     continue
                 bundle_id = row.get("bundle_id")
-                waiver = row.get("waiver")
                 flags = row.get("claim_evidence_flags")
-                if (
-                    bundle_id not in valid_bundle_ids
-                    or not isinstance(flags, list)
-                ):
+                try:
+                    if not isinstance(bundle_id, str) or not bundle_id:
+                        raise TypeError("bundle_id must be a non-empty string")
+                    if not isinstance(flags, list) or any(
+                        not isinstance(flag, str) or not flag for flag in flags
+                    ):
+                        raise TypeError(
+                            "claim_evidence_flags must contain only non-empty strings"
+                        )
+                    recorded_cleanup = cleanup_scopes.intersection(flags)
+                except TypeError as exc:
+                    raise AnalysisInputError(
+                        f"malformed campaign claim evidence in {path.name}: {exc}"
+                    ) from exc
+                if bundle_id not in valid_bundle_ids:
                     continue
-                if not cleanup_scopes.intersection(flags):
-                    continue
-                if waiver is None:
-                    result.pop(bundle_id, None)
-                    continue
-                if not isinstance(waiver, Mapping):
-                    result.pop(bundle_id, None)
-                    continue
-                required = {
-                    "target_kind",
-                    "target",
-                    "reason",
-                    "approver",
-                    "timestamp",
-                    "scope",
-                }
-                if set(waiver) != required or any(
-                    not isinstance(waiver.get(key), str) or not waiver[key]
-                    for key in required
-                ):
-                    continue
-                target_kind = waiver["target_kind"]
-                target = waiver["target"]
-                member_config = member.get("config")
-                target_matches = (
-                    (target_kind == "bundle_id" and target == bundle_id)
-                    or (target_kind == "run_id" and target == run_id)
-                    or (
-                        target_kind == "config"
-                        and isinstance(member_config, str)
-                        and target in {member_config, Path(member_config).stem}
-                    )
-                )
-                if not target_matches:
-                    continue
-                scope = waiver["scope"]
-                scopes = (
-                    cleanup_scopes
-                    if scope == "any"
-                    else {part.strip() for part in scope.split(",") if part.strip()}
-                )
-                if (
-                    not scopes
-                    or not scopes <= known_scopes
-                    or not scopes & cleanup_scopes
-                ):
-                    continue
-                result[bundle_id] = dict(waiver)
+                result[bundle_id] = tuple(sorted(recorded_cleanup))
     return result
 
 
@@ -649,29 +606,14 @@ def cleanup_claim_evidence_flags(summary: Mapping[str, Any] | None) -> tuple[str
     return tuple(flags)
 
 
-def _waived_cleanup_flags(
-    flags: Sequence[str], waiver: Mapping[str, Any] | None
-) -> frozenset[str]:
-    if not flags or not isinstance(waiver, Mapping):
-        return frozenset()
-    scope = waiver.get("scope")
-    if scope == "any":
-        return frozenset(flags)
-    if not isinstance(scope, str):
-        return frozenset()
-    scopes = {part.strip() for part in scope.split(",") if part.strip()}
-    return frozenset(flag for flag in flags if flag in scopes)
-
-
 def _apply_cleanup_claim_policy(
-    evidence: BundleEvidence, waiver: Mapping[str, Any] | None
+    evidence: BundleEvidence, recorded_flags: Sequence[str] | None
 ) -> None:
     flags = cleanup_claim_evidence_flags(evidence.summary)
     evidence.claim_evidence_flags = flags
-    waived = _waived_cleanup_flags(flags, waiver)
-    if waived:
-        evidence.waiver = dict(waiver) if isinstance(waiver, Mapping) else None
-    if set(flags) - waived:
+    if flags or (
+        recorded_flags is not None and set(recorded_flags) != set(flags)
+    ):
         # Cleanup contamination is an unquantified required error term.  Reuse
         # the frozen engine vocabulary rather than inventing a cleanup reason.
         _exclude_evidence(evidence, "required_error_term_unknown")
@@ -859,7 +801,7 @@ def _scan_replacements_and_topups(
     strict_validator: StrictValidator,
     registered: Mapping[str, BundleEvidence],
     cohort_identities: Mapping[str, Mapping[str, Any]],
-    cleanup_waivers: Mapping[str, Mapping[str, Any]],
+    cleanup_records: Mapping[str, Sequence[str]],
 ) -> tuple[
     dict[str, BundleEvidence],
     list[BundleEvidence],
@@ -922,7 +864,7 @@ def _scan_replacements_and_topups(
             replacement_classification="replacement_candidate",
             allow_replacement_tags=True,
         )
-        _apply_cleanup_claim_policy(evidence, cleanup_waivers.get(evidence.bundle_id))
+        _apply_cleanup_claim_policy(evidence, cleanup_records.get(evidence.bundle_id))
         cohort_identity = cohort_identities.get(entry["model_tag"])
         if (
             cohort_identity is not None
@@ -995,7 +937,7 @@ def load_analysis_inputs(
     manifest, manifest_sha = load_manifest(Path(analysis_manifest_path))
     floor_artifact, floor_sha = load_floor_artifact(Path(floor_artifact_path))
     runs_root = Path(runs_root)
-    cleanup_waivers = _campaign_claim_waivers(
+    cleanup_records = _campaign_claim_records(
         runs_root, str(manifest["manifest_id"])
     )
     registered: dict[str, BundleEvidence] = {}
@@ -1018,7 +960,7 @@ def load_analysis_inputs(
             strict_validator,
         )
         _apply_cleanup_claim_policy(
-            registered[entry["entry_id"]], cleanup_waivers.get(run_id)
+            registered[entry["entry_id"]], cleanup_records.get(run_id)
         )
     cohort_identities = _enforce_registered_realized_identity(manifest, registered)
     effective, extras, replacements, unregistered, top_up_ids = _scan_replacements_and_topups(
@@ -1028,7 +970,7 @@ def load_analysis_inputs(
         strict_validator,
         registered,
         cohort_identities,
-        cleanup_waivers,
+        cleanup_records,
     )
     cooldown_by_bundle = _campaign_cooldown_evidence(
         runs_root, str(manifest["manifest_id"])

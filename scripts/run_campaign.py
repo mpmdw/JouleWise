@@ -186,26 +186,12 @@ class MemberEvaluation:
         return tuple(dict.fromkeys(classes))
 
     def waiver_classes(self) -> tuple[str, ...]:
-        collection_classes = self.failure_classes()
-        return collection_classes if collection_classes else self.claim_evidence_flags
-
-    def waived_claim_evidence_flags(self) -> tuple[str, ...]:
-        if self.waiver is None or self.failure_classes():
-            return ()
-        if self.waiver.scope == "any":
-            return self.claim_evidence_flags
-        scopes = {part.strip() for part in self.waiver.scope.split(",") if part.strip()}
-        return tuple(flag for flag in self.claim_evidence_flags if flag in scopes)
+        return self.failure_classes()
 
     def unwaived_claim_evidence_flags(self) -> tuple[str, ...]:
-        waived = set(self.waived_claim_evidence_flags())
-        return tuple(flag for flag in self.claim_evidence_flags if flag not in waived)
-
-    def has_cleanup_claim_waiver(self) -> bool:
-        return bool(
-            {"runtime_cleanup_ok", "remote_cleanup_failed"}
-            & set(self.waived_claim_evidence_flags())
-        )
+        # Claim-scope waivers are collection audit context only. They never
+        # clear a claim-evidence flag or support readiness.
+        return self.claim_evidence_flags
 
     @property
     def usable(self) -> bool:
@@ -213,7 +199,6 @@ class MemberEvaluation:
             self.status == "succeeded"
             and self.strict_valid
             and not self.collection_integrity_flags
-            and (self.waiver is None or self.has_cleanup_claim_waiver())
         )
 
     @property
@@ -226,10 +211,7 @@ class MemberEvaluation:
         if self.waiver.scope == "any":
             return True
         scopes = {part.strip() for part in self.waiver.scope.split(",") if part.strip()}
-        collection_classes = self.failure_classes()
-        if collection_classes:
-            return all(failure_class in scopes for failure_class in collection_classes)
-        return any(claim_class in scopes for claim_class in self.claim_evidence_flags)
+        return all(failure_class in scopes for failure_class in classes)
 
     @property
     def failed(self) -> bool:
@@ -251,11 +233,7 @@ class MemberEvaluation:
                 "usable" if self.usable else "waived" if self.waived else "failed"
             ),
             "claim_evidence_classification": (
-                "flagged"
-                if self.unwaived_claim_evidence_flags()
-                else "waived"
-                if self.claim_evidence_flags
-                else "clean"
+                "flagged" if self.claim_evidence_flags else "clean"
             ),
         }
         if self.waiver is not None:
@@ -2141,10 +2119,8 @@ def _member_readiness_reasons(
 
     if _contrast_uses_idle_subtraction(contrast):
         idle_state = quality.get("idle_window_suspect") if isinstance(quality, dict) else None
-        idle_waived = "idle_window_suspect" in evaluation.waived_claim_evidence_flags()
         if idle_state is True:
-            if not idle_waived:
-                reasons.add("idle_window_suspect")
+            reasons.add("idle_window_suspect")
         elif idle_state is not False:
             reasons.add("idle_window_suspect_unknown")
     metric = contrast.get("metric")

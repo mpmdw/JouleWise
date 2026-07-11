@@ -325,11 +325,17 @@ field, while reducer-0.4.1-and-later summaries compare it exactly alongside
 At campaign and analysis boundaries, `runtime_cleanup_ok=false` and a non-empty
 `remote_cleanup_failed` are suspect claim-evidence flags. They never change the
 completed current run's status, failure reason, energy, or reducer window
-precheck. An unwaived flag blocks claim-input readiness and P2-037 inclusion as
-the existing `required_error_term_unknown` condition. A campaign waiver may
-name `runtime_cleanup_ok`, `remote_cleanup_failed`, both comma-separated, or
-`any`; the ordinary waiver object and approval fields apply, and no bundle is
-rewritten. Partial coverage remains fail-closed.
+precheck. Either flag unconditionally blocks claim-input readiness and P2-037
+inclusion as the existing `required_error_term_unknown` condition. A campaign
+waiver may name `runtime_cleanup_ok`, `remote_cleanup_failed`, both
+comma-separated, or `any`; the ordinary waiver object and approval fields
+apply, and no bundle is rewritten. That waiver is collection-level audit and
+continuation context only: it remains visible in campaign records, does not set
+the member's operational `waived` classification or change its campaign row
+status, and never clears a claim-evidence flag or supports analysis readiness.
+The claims-ladder allowance for a suspect flag "waived in text" is therefore a
+collection-level disclosure rule, not authority to include that evidence in an
+analysis-engine claim.
 
 A status-only `{"status": "succeeded"}` summary is neither a complete bundle
 nor default-validation-valid.
@@ -472,10 +478,13 @@ independently revalidates all evidence.
 
 Each campaign-provenance member also carries additive `claim_evidence[]` rows
 with `bundle_id`, the extracted `claim_evidence_flags`, and the matching
-ordinary waiver object or `null`. This is the non-bundle handoff by which
-P2-037 verifies a named cleanup waiver. The engine independently re-derives
-cleanup flags from `summary_metrics.json`; malformed, mismatched, stale, or
-partially covering waiver records do not clear them.
+ordinary waiver object or `null`. This is a visible non-bundle audit handoff;
+it does not authorize P2-037 to waive cleanup evidence. The engine independently
+re-derives cleanup flags from `summary_metrics.json`, ignores the waiver when
+deciding inclusion, and applies `required_error_term_unknown` whenever a fresh
+cleanup flag is present. A recorded-versus-re-derived cleanup-flag mismatch is
+also fail-closed, while malformed `bundle_id` or `claim_evidence_flags` input is
+an analysis-input error rather than a skipped record.
 
 For a contrast with a non-null `metric.ratio_estimand`, campaign readiness uses
 the same numerator routing and per-token evidence gate as P2-037. The numerator

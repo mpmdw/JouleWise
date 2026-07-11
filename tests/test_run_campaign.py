@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import hashlib
+import io
 import json
 import os
 import shutil
@@ -11,6 +12,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
@@ -901,7 +903,7 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(rows[0]["members_succeeded"], 4)
             self.assertEqual(rows[0]["members_total"], 5)
 
-    def test_waiver_allows_invalid_existing_member_and_records_partial_verdict(self) -> None:
+    def test_claim_waiver_is_visible_without_changing_usable_collection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -938,15 +940,20 @@ class RunCampaignTests(unittest.TestCase):
 
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("COLLECTION VERDICT:", result.stdout)
-            self.assertIn("verdict: partial", result.stdout)
+            self.assertIn("verdict: usable", result.stdout)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
-            self.assertEqual([row["status"] for row in rows], ["skipped", "waived"])
+            self.assertEqual([row["status"] for row in rows], ["skipped", "skipped"])
+            self.assertEqual(rows[1]["members"][0]["collection_classification"], "usable")
+            self.assertEqual(rows[1]["members"][0]["claim_evidence_classification"], "flagged")
+            self.assertEqual(rows[1]["members"][0]["waiver"]["scope"], "idle_window_suspect")
             all_rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
             verdict = all_rows[-1]
             self.assertEqual(verdict["record_type"], "campaign_verdict")
-            self.assertEqual(verdict["collection"]["verdict"], "partial")
-            self.assertEqual(verdict["collection"]["categories"]["usable"], ["good"])
-            self.assertEqual(verdict["collection"]["categories"]["waived"], ["idle"])
+            self.assertEqual(verdict["collection"]["verdict"], "usable")
+            self.assertEqual(
+                verdict["collection"]["categories"]["usable"], ["good", "idle"]
+            )
+            self.assertEqual(verdict["collection"]["categories"]["waived"], [])
             self.assertEqual(verdict["claim_readiness"]["verdict"], "not_assessed")
 
     def test_waiver_target_namespace_is_exact_and_does_not_poison_collection(self) -> None:
@@ -1019,7 +1026,7 @@ class RunCampaignTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("unknown scope class", result.stdout + result.stderr)
 
-    def test_waiver_scope_must_cover_failure_classes(self) -> None:
+    def test_unmatched_claim_waiver_scope_does_not_change_collection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -1052,9 +1059,15 @@ class RunCampaignTests(unittest.TestCase):
                 waivers=waivers,
             )
 
-            self.assertEqual(result.returncode, 1)
+            self.assertEqual(result.returncode, 0, result.stderr)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
-            self.assertEqual(rows[0]["status"], "failed")
+            self.assertEqual(rows[0]["status"], "skipped")
+            self.assertEqual(
+                rows[0]["members"][0]["collection_classification"], "usable"
+            )
+            self.assertEqual(
+                rows[0]["members"][0]["claim_evidence_classification"], "flagged"
+            )
             self.assertIn(
                 "idle_window_suspect",
                 rows[0]["members"][0]["claim_evidence_flags"],
@@ -1112,16 +1125,20 @@ class RunCampaignTests(unittest.TestCase):
             waivers = tmp_path / "waivers.json"
             config_dir.mkdir()
             write_config(config_dir, "idle.json", "idle")
-            write_single_bundle(runs_dir, "idle", idle_window_suspect=True)
+            write_single_bundle(runs_dir, "idle")
+            summary_path = runs_dir / "idle" / "summary_metrics.json"
+            summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            summary["gross_energy_j"] += 1.0
+            summary_path.write_text(json.dumps(summary) + "\n", encoding="utf-8")
             waivers.write_text(
                 json.dumps(
                     [
                         {
                             "bundle_id": "idle",
-                            "reason": "all waived is not claim evidence",
+                            "reason": "strict-invalid member retained for collection audit",
                             "approver": "council",
                             "timestamp": "2026-07-08T00:00:00Z",
-                            "scope": "idle_window_suspect",
+                            "scope": "strict_invalid",
                         }
                     ]
                 )
@@ -1431,7 +1448,7 @@ class RunCampaignTests(unittest.TestCase):
             self.assertNotIn("detection_scope", sampling_audit)
             self.assertNotIn("reasons", sampling_audit)
 
-    def test_cleanup_suspect_blocks_readiness_until_existing_waiver_is_recorded(self) -> None:
+    def test_cleanup_suspect_waiver_is_visible_but_never_clears_readiness(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -1511,14 +1528,19 @@ class RunCampaignTests(unittest.TestCase):
             second_verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
             self.assertEqual(second_verdict["collection"]["verdict"], "usable")
             self.assertEqual(
-                second_verdict["claim_readiness"]["verdict"], "ready_for_analysis"
+                second_verdict["claim_readiness"]["verdict"],
+                "not_ready_for_analysis",
+            )
+            self.assertIn(
+                "required_error_term_unknown",
+                second_verdict["claim_readiness"]["reasons"],
             )
             second_member = next(
                 member
                 for member in second_verdict["members"]
                 if member["bundle_id"] == target["run_id"]
             )
-            self.assertEqual(second_member["claim_evidence_classification"], "waived")
+            self.assertEqual(second_member["claim_evidence_classification"], "flagged")
             self.assertEqual(
                 second_member["waiver"]["scope"],
                 "runtime_cleanup_ok,remote_cleanup_failed",
@@ -1543,6 +1565,76 @@ class RunCampaignTests(unittest.TestCase):
                 if item["bundle_id"] == target["run_id"]
             )
             self.assertEqual(recorded["waiver"], second_member["waiver"])
+
+    def test_cleanup_claim_waiver_does_not_skip_shakedown_or_backup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            waivers = tmp_path / "waivers.json"
+            backup = tmp_path / "backup.sh"
+            config_dir.mkdir()
+            config_path = write_config(config_dir, "cleanup.json", "cleanup")
+            write_single_bundle(
+                runs_dir,
+                "cleanup",
+                config_path=config_path,
+                runtime_cleanup_ok=False,
+                remote_cleanup_failed=["/remote/tmp/joulewise-task"],
+            )
+            waivers.write_text(
+                json.dumps(
+                    [
+                        {
+                            "bundle_id": "cleanup",
+                            "reason": "collection may continue after visible review",
+                            "approver": "campaign-owner",
+                            "timestamp": "2026-07-11T00:00:00Z",
+                            "scope": "runtime_cleanup_ok,remote_cleanup_failed",
+                        }
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            completed = subprocess.CompletedProcess([], 0)
+            argv = [
+                str(config_dir),
+                "--runs-dir",
+                str(runs_dir),
+                "--backup",
+                str(backup),
+                "--shakedown-gate",
+                "production_uncertainty_v1",
+                "--waivers",
+                str(waivers),
+            ]
+            with (
+                patch("run_campaign_module.validate_bundle", return_value=[]),
+                patch("run_campaign_module.subprocess.run", return_value=completed),
+                patch(
+                    "run_campaign_module.assert_production_uncertainty",
+                    return_value={"bundle_id": "cleanup", "request_eligible": True},
+                ),
+                patch("run_campaign_module.backup_runs", return_value=0) as backup_runs,
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(io.StringIO()),
+            ):
+                result = run_campaign_module.main(argv)
+
+            self.assertEqual(result, 0)
+            backup_runs.assert_called_once_with(runs_dir, backup)
+            rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
+            gate = next(row for row in rows if row.get("record_type") == "shakedown_gate")
+            campaign = next(row for row in rows if row.get("run_id") == "cleanup")
+            self.assertEqual(gate["status"], "passed")
+            self.assertEqual(campaign["status"], "skipped")
+            self.assertEqual(
+                campaign["members"][0]["collection_classification"], "usable"
+            )
+            self.assertEqual(
+                campaign["members"][0]["claim_evidence_classification"], "flagged"
+            )
 
     def test_ratio_readiness_reuses_engine_token_denominator_gate(self) -> None:
         ratio = {

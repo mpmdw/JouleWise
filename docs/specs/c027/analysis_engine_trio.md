@@ -1291,19 +1291,32 @@ or make a strict-valid succeeded bundle collection-invalid. They make the
 affected claim inputs not ready. A prompt-hash mismatch remains a collection
 integrity failure because scientific workload identity is wrong.
 
-Waivers remain visible and never support claim readiness. An all-waived
-campaign is `invalid` for collection and `not_ready_for_analysis`.
+Waivers remain visible and never support claim readiness. The two layers are
+deliberately distinct: a collection-integrity waiver can permit collection
+continuation under the verdict rules below, but a claim-scope waiver is audit
+context only. It does not set `MemberEvaluation.waived`, change an operational
+campaign row status, suppress shakedown or backup, clear a claim-evidence flag,
+or support readiness. In particular, re-derived `runtime_cleanup_ok=false` and
+non-empty `remote_cleanup_failed` flags are unwaivable at the analysis-engine
+layer and produce `required_error_term_unknown` even when a campaign record
+contains a broad or stale waiver. The claims-ladder phrase "waived in text"
+governs visible collection-level disclosure only; it is not analysis-engine
+inclusion authority. An all-collection-waived campaign is `invalid` for
+collection and `not_ready_for_analysis`.
 
 ### C3. Exact collection verdict rules
 
-Given expected manifest members and existing waiver behavior:
+Given expected manifest members and collection-integrity waiver behavior:
 
 1. `blocked`: at least one expected member is missing or incomplete;
 2. `invalid`: any unwaived member has a collection-integrity failure, or no
    unwaived usable member exists;
 3. `partial`: at least one member is collection usable and at least one other
-   member is explicitly waived, with no missing or unwaived-invalid member;
-4. `usable`: every expected member is collection usable and none is waived.
+   member has an explicitly waived collection-integrity failure, with no
+   missing or unwaived-invalid member;
+4. `usable`: every expected member is collection usable and none has a waived
+   collection-integrity failure. A claim-scope waiver record does not change
+   this result.
 
 This preserves the safety character of the old verdict while removing its
 publication claim. Exit status remains operational: `blocked`/`invalid` or an
@@ -1517,7 +1530,9 @@ Required tests:
    request readiness;
 6. prompt hash mismatch remains collection invalid;
 7. missing planned member is collection blocked and readiness not ready;
-8. any waiver prevents full readiness; all-waived remains invalid;
+8. a collection-integrity waiver prevents full readiness and an
+   all-collection-waived campaign remains invalid; a claim-scope waiver leaves
+   operational status unchanged and cannot clear the reason it names;
 9. analysis/order/config hash mismatch fails closed;
 10. unregistered matching bundle is surfaced as suspected top-up;
 11. legacy v1 log mapping never upgrades claim readiness;

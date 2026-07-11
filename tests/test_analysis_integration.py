@@ -775,7 +775,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         self.assertFalse(gross["eligible"])
         self.assertIn("window_evidence_precheck_missing", gross["reasons"])
 
-    def test_cleanup_suspect_is_excluded_unless_runner_waiver_is_recorded(self):
+    def test_cleanup_suspect_is_excluded_even_with_stale_broad_runner_waiver(self):
         from joulewise import reduce as reduce_module
 
         runs = self.root / "cleanup-suspect-runs"
@@ -863,7 +863,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
             "reason": "cleanup residue reviewed and bounded",
             "approver": "campaign-owner",
             "timestamp": "2026-07-11T00:00:00Z",
-            "scope": "runtime_cleanup_ok,remote_cleanup_failed",
+            "scope": "any",
         }
         (campaign_dir / "cleanup-waiver.json").write_text(
             json.dumps(
@@ -886,7 +886,6 @@ class AnalysisIntegrationTests(unittest.TestCase):
                                     "bundle_id": target["run_id"],
                                     "claim_evidence_flags": [
                                         "runtime_cleanup_ok",
-                                        "remote_cleanup_failed",
                                     ],
                                     "waiver": waiver,
                                 }
@@ -917,9 +916,57 @@ class AnalysisIntegrationTests(unittest.TestCase):
             strict_validator=validate_bundle,
         )
         waived_evidence = waived_inputs.registered[target["entry_id"]]
-        self.assertEqual(waived_audit["inclusion_status"], "included")
-        self.assertNotIn("required_error_term_unknown", waived_audit["base_reason_codes"])
-        self.assertEqual(waived_evidence.waiver, waiver)
+        self.assertEqual(waived_audit["inclusion_status"], "excluded")
+        self.assertIn("required_error_term_unknown", waived_audit["base_reason_codes"])
+        self.assertIsNone(waived_evidence.waiver)
+
+    def test_malformed_campaign_claim_evidence_refuses_with_analysis_input_error(self):
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        target = manifest["entries"][0]
+        malformed_values = (
+            ("claim_evidence_flags", [["runtime_cleanup_ok"]]),
+            ("bundle_id", [target["run_id"]]),
+        )
+        for field, value in malformed_values:
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                runs = Path(tmp) / "runs"
+                shutil.copytree(self.runs_root, runs)
+                campaign_dir = runs / "campaign_manifests"
+                campaign_dir.mkdir(parents=True, exist_ok=True)
+                evidence = {
+                    "bundle_id": target["run_id"],
+                    "claim_evidence_flags": ["runtime_cleanup_ok"],
+                    "waiver": None,
+                }
+                evidence[field] = value
+                (campaign_dir / "malformed.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": "joulewise.campaign_provenance.v1",
+                            "analysis_manifest_id": manifest["manifest_id"],
+                            "members": [
+                                {
+                                    "config": target["config"],
+                                    "run_id": target["run_id"],
+                                    "bundle_ids": [target["run_id"]],
+                                    "claim_evidence": [evidence],
+                                }
+                            ],
+                        }
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(
+                    AnalysisInputError, "malformed campaign claim evidence"
+                ):
+                    load_analysis_inputs(
+                        self.manifest_path,
+                        runs,
+                        self.floor_path,
+                        strict_validator=validate_bundle,
+                    )
 
     def test_realized_model_artifact_identity_disagreement_fails_cohort_closed(self):
         runs = self.root / "identity-mismatch-runs"
