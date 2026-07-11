@@ -170,7 +170,7 @@ class ReducerPropagationTests(ReducerUncertaintyTestCase):
             summary.energy_variance_terms_j2["E_gross_repetition_j2"]
         )
 
-    def test_idle_mean_variance_term_uses_duration_squared(self) -> None:
+    def test_mock_idle_mean_variance_is_not_claim_bearing(self) -> None:
         builder = self.builder()
         builder.measured_window(0.0, 10.0)
         builder.write_trace(constant_samples(0.0, 10.0, hz=1.0, power_w=7.5))
@@ -181,8 +181,10 @@ class ReducerPropagationTests(ReducerUncertaintyTestCase):
 
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         self.assertIsNotNone(summary.energy_variance_terms_j2)
-        self.assertAlmostEqual(
-            summary.energy_variance_terms_j2["E_idle_mean_j2"], 100.0, places=12
+        self.assertIsNone(summary.energy_variance_terms_j2["E_idle_mean_j2"])
+        self.assertEqual(
+            summary.idle_mean_uncertainty["reason_codes"],
+            ["raw_idle_trace_unavailable"],
         )
 
     def test_drift_bound_is_duration_times_recorded_power_bound(self) -> None:
@@ -235,12 +237,10 @@ class ReducerPropagationTests(ReducerUncertaintyTestCase):
 
                 summary = reduce_module.reduce_bundle(builder.path)
 
-                gates = summary.claim_eligibility or {}
+                gates = summary.window_evidence_precheck or {}
                 self.assertIsNone(
                     (summary.energy_bound_terms_j or {})["E_drift_bound_j"]
                 )
-                self.assertFalse(gates["request"]["eligible"])
-                self.assertEqual(gates["request"]["reasons"], ["drift_term_unknown"])
                 self.assertFalse(gates["idle_subtracted_request"]["eligible"])
                 self.assertEqual(
                     gates["idle_subtracted_request"]["reasons"],
@@ -270,7 +270,7 @@ class ReducerJointEdgeBoundTests(ReducerUncertaintyTestCase):
         )
 
 
-class ClaimGateTests(ReducerUncertaintyTestCase):
+class WindowEvidencePrecheckTests(ReducerUncertaintyTestCase):
     def test_zero_duration_phase_has_nonpositive_window_reason(self) -> None:
         # P2-040 FIX-1: a zero-duration subwindow inside a valid positive
         # measured window carries the D-057 additive reason and is never
@@ -284,7 +284,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
         summary = reduce_module.reduce_bundle(builder.path)
 
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-        phase = (summary.claim_eligibility or {})["phase"]["instant"]
+        phase = (summary.window_evidence_precheck or {})["phase"]["instant"]
         self.assertFalse(phase["eligible"])
         self.assertIn("nonpositive_window_duration", phase["reasons"])
         window_entry = phase["windows"][0]
@@ -301,7 +301,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
-        gates = summary.claim_eligibility or {}
+        gates = summary.window_evidence_precheck or {}
         self.assertTrue(gates["gross_request"]["eligible"])
         self.assertEqual(gates["gross_request"]["reasons"], [])
         self.assertEqual(gates["gross_request"]["metric_name"], "gross_energy_j")
@@ -324,12 +324,13 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
-        # Deprecated alias plus both P2-040 metric-specific entries.
+        # C5 writes only the two metric-specific request entries.
         for key in ("gross_request", "idle_subtracted_request"):
-            entry = (summary.claim_eligibility or {})[key]
+            entry = (summary.window_evidence_precheck or {})[key]
             self.assertTrue(entry["eligible"], key)
             self.assertEqual(entry["reasons"], [], key)
-        request = (summary.claim_eligibility or {})["request"]
+        self.assertNotIn("request", summary.window_evidence_precheck or {})
+        request = (summary.window_evidence_precheck or {})["idle_subtracted_request"]
         self.assertTrue(request["eligible"])
         self.assertEqual(request["reasons"], [])
         self.assertEqual(request["cadence_ratio"], 4.0)
@@ -347,7 +348,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
-        phase = (summary.claim_eligibility or {})["phase"]["short"]
+        phase = (summary.window_evidence_precheck or {})["phase"]["short"]
         self.assertFalse(phase["eligible"])
         self.assertIn("insufficient_in_window_samples", phase["reasons"])
 
@@ -366,9 +367,12 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
-        gates = summary.claim_eligibility or {}
-        self.assertFalse(gates["request"]["eligible"])
-        self.assertIn("cadence_ratio_below_threshold", gates["request"]["reasons"])
+        gates = summary.window_evidence_precheck or {}
+        self.assertFalse(gates["idle_subtracted_request"]["eligible"])
+        self.assertIn(
+            "cadence_ratio_below_threshold",
+            gates["idle_subtracted_request"]["reasons"],
+        )
         self.assertTrue(gates["phase"]["coarse"]["eligible"])
 
     def test_phase_cadence_ratio_below_two_fails(self) -> None:
@@ -387,7 +391,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
-        phase = (summary.claim_eligibility or {})["phase"]["coarser"]
+        phase = (summary.window_evidence_precheck or {})["phase"]["coarser"]
         self.assertFalse(phase["eligible"])
         self.assertIn("cadence_ratio_below_threshold", phase["reasons"])
 
@@ -400,7 +404,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
-        phase = (summary.claim_eligibility or {})["phase"]["clocked"]
+        phase = (summary.window_evidence_precheck or {})["phase"]["clocked"]
         self.assertFalse(phase["eligible"])
         self.assertIn("clock_bound_exceeds_quarter_window", phase["reasons"])
 
@@ -413,7 +417,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
-        phase = (summary.claim_eligibility or {})["phase"]["unknown_clock"]
+        phase = (summary.window_evidence_precheck or {})["phase"]["unknown_clock"]
         self.assertFalse(phase["eligible"])
         self.assertIn("clock_bound_unrecorded", phase["reasons"])
 
@@ -432,7 +436,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
-        phase = (summary.claim_eligibility or {})["phase"]["interpolated"][
+        phase = (summary.window_evidence_precheck or {})["phase"]["interpolated"][
             "windows"
         ][0]
         self.assertAlmostEqual(phase["interpolation_edge_bound_j"], 13.0, places=12)
@@ -468,16 +472,14 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
         )
         # The new metric-specific prechecks expose and consume the joint field.
         for key in ("gross_request", "idle_subtracted_request"):
-            entry = (summary.claim_eligibility or {})[key]
+            entry = (summary.window_evidence_precheck or {})[key]
             self.assertAlmostEqual(
                 entry["interpolation_joint_edge_bound_j"], 8.0, places=12, msg=key
             )
             self.assertNotIn("interpolation_bound_unrecorded", entry["reasons"])
-        request = (summary.claim_eligibility or {})["request"]
-        self.assertNotIn("interpolation_joint_edge_bound_j", request)
-        self.assertAlmostEqual(request["interpolation_edge_bound_j"], 4.0, places=12)
+        self.assertNotIn("request", summary.window_evidence_precheck or {})
 
-    def test_deprecated_request_uses_one_edge_when_joint_bound_is_unrecorded(self) -> None:
+    def test_legacy_interpolation_mode_uses_one_edge_when_joint_bound_is_unrecorded(self) -> None:
         curve = [
             reduce_module.TracePoint(0.0, 10.0),
             reduce_module.TracePoint(1.0, 10.0),
@@ -490,7 +492,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
             "E_interpolation_joint_edge_bound_j": None,
             "E_drift_bound_j": 1.0,
         }
-        legacy = reduce_module._window_claim_eligibility(
+        legacy = reduce_module._window_evidence_precheck_for_window(
             curve,
             {"clock_anchor_bound_s": 0.0},
             window,
@@ -500,7 +502,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
             bound_terms_j=terms,
             legacy_interpolation_edge=True,
         )
-        current = reduce_module._window_claim_eligibility(
+        current = reduce_module._window_evidence_precheck_for_window(
             curve,
             {"clock_anchor_bound_s": 0.0},
             window,
@@ -546,9 +548,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
-        gates = summary.claim_eligibility or {}
-        self.assertFalse(gates["request"]["eligible"])
-        self.assertEqual(gates["request"]["reasons"], ["drift_term_unknown"])
+        gates = summary.window_evidence_precheck or {}
         self.assertFalse(gates["idle_subtracted_request"]["eligible"])
         self.assertEqual(
             gates["idle_subtracted_request"]["reasons"], ["drift_term_unknown"]
@@ -566,7 +566,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
-        request = (summary.claim_eligibility or {})["request"]
+        request = (summary.window_evidence_precheck or {})["idle_subtracted_request"]
         self.assertIsNone(request["observed_bracketing_max_sample_gap_s"])
         self.assertIsNone(request["cadence_ratio"])
         self.assertIn("cadence_ratio_unrecorded", request["reasons"])
@@ -581,7 +581,7 @@ class ClaimGateTests(ReducerUncertaintyTestCase):
 
         summary = reduce_module.reduce_bundle(builder.path)
 
-        item_gates = (summary.claim_eligibility or {})["item"]
+        item_gates = (summary.window_evidence_precheck or {})["item"]
         eligible = item_gates["0:item_ok"]
         self.assertTrue(eligible["eligible"])
         self.assertEqual(eligible["reasons"], [])

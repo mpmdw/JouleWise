@@ -1,6 +1,8 @@
 # JouleWise Run State
 
-Last updated: 2026-07-10 (PR #49's main-side P2-038 rail-only CI flake
+Last updated: 2026-07-11 (P2-041 vetted rebuild complete and uncommitted on
+`impl/p2041-vetted`; focused 398 OK/1 skipped, canonical 1062 OK/13 skipped.
+Earlier: PR #49's main-side P2-038 rail-only CI flake
 root-caused to the fake powermetrics child's SIGTERM/right-edge-bracket race;
 fixture-only fix is uncommitted, exact test 100/100 green, focused 5 OK,
 canonical 1041 OK/13 skipped. Earlier: P2-040 reducer-version review blocker fixed
@@ -78,9 +80,90 @@ RATIFIED by Ed, hardening proposal adjudicated (9 new queue rows
 P2-043..P2-048/CI-002/REPRO-002/RPT-002; record + conflicts table in
 docs/reviews/2026-07-10-hardening-adjudication.md).
 
-**IMMEDIATE next actions (in order):**
+**CHECKPOINT #4 (2026-07-11, Ed-directed pause; supersedes the item
+list below where they conflict). State at pause:**
 
-1. PR #49 (impl/nvgate2-codenow) has REAL code conflicts vs post-#48
+- MERGED today: PR #49 (NV-GATE-2 code-now, 1b0f1f6) and PR #54
+  (P2-041 vetted rebuild + full review stack + fix rounds, 69a3393).
+  Both historic flake classes dead; NV-5 localhost lead gate CLOSED.
+- OPEN PRs, all lead-gated, HELD for the integration-review window:
+  #50 P2-046A, #51 CI-002 (acceptance CI 4/4 green), #52 REPRO-002,
+  #53 RPT-002 (all seven sources primary-verified), #55 P2-044
+  (idle ESS per adjudicated design docs/reviews/2026-07-11-p2044-
+  design-consult.md; lead gates + corpus 6/6 done). #55 REVIEW LANDED
+  POST-CHECKPOINT with TWO METROLOGY BLOCKERS — do NOT merge #55
+  before a fix round: (1) cadence regularity check uses the wrong
+  interval population; (2) legacy strict dispatch can mask a freshly
+  derived metadata mismatch; also closed-form fixture assertions are
+  approximate, must be exact. Full findings:
+  session-scratchpad sol-p2044-review.md (+ iCloud backup). Fix round
+  + re-review + blocker refuters per adversarial-review, THEN merge.
+- impl/p2037 worktree: contrast/claim engine implemented by an ultra
+  session that exited transport-OK with NO REPORT (RED-round
+  signature) — work itself lead-verified green (focused 89 OK,
+  canonical OK); an independent xhigh AUDIT (implemented-vs-spec map,
+  scope audit of cli.py/claims_lint.py hunks, fail-open hunts) was IN
+  FLIGHT at pause; its report lands in the session scratchpad
+  (sol-p2037-audit.md). UNCOMMITTED — do not discard. Acceptance
+  gated on P2-044 (#55) landing + audit dispositions.
+  AUDIT LANDED POST-CHECKPOINT: strong statistical core (frozen-m
+  multiplicity, artifact validation, top-up demotion, claims-index
+  machinery sound) and a CLEAN scope audit (all cli.py/claims_lint.py
+  hunks spec-required — no invention this time), but FOUR BLOCKERS on
+  the acceptance path (analysis_engine/__init__.py:229,
+  inputs.py:775 + :831, claims_lint.py:1773) + should-fixes. Full
+  findings: sol-p2037-audit.md. Resume path: blocker refuters (2 each
+  per adversarial-review) → fix round (NEEDS_RULING available) →
+  re-audit delta → commit by pathspec → PR; still behind #55.
+- Scope-restraint + adapter infrastructure (global, outside repo):
+  claude-codex-report/v1 adopted (~/.claude/skills/codex-delegation/
+  ADAPTER.md); codex-run-v3 + codex-usage INSTALLED (~/.local/bin);
+  fail-on-diff scope backstop LANDED CLEAN and
+  INSTALLED post-checkpoint (149-assertion suite + full v2 compat
+  lead-replayed; SCOPE_VIOLATION/exit-77/evidence-bundle + NEEDS_SCOPE
+  approve/resume protocol live in ~/.local/bin/codex-run-v3 — every
+  future delegated write session runs enforced); AGENTS.md now carries delegated-session
+  WRITE_SCOPE precedence + NEEDS_RULING early-return (9ca89cc,
+  31b3f5e). Consult records: docs/reviews/2026-07-11-scope-restraint-
+  consult.md, -p2044-design-consult.md, -p2041-red-tranche-triage.md,
+  -hardening-row-scheduling-scout.md.
+- Usage state: one ultra ≈ 11 xhigh sessions (35.3M vs ~3.1M tokens);
+  5h window was 26% remaining, resets ~11:03Z; usage-pressure mode
+  ACTIVE per Ed — after this pause, NO ultra launches (exception:
+  P2-037 resume if its audit demands completion, Ed-authorized);
+  prefer high/xhigh consultancy + spec design in break mode. Check
+  `codex-usage <manifests>` before any ultra.
+- RESUME ORDER: (1) consume the three in-flight reports
+  (sol-p2044-review.md, sol-p2037-audit.md, sol-scope-backstop.md;
+  scratchpad path in D-064 manifests; iCloud backup at
+  JouleWise-agent-logs/2026-07-11/); (2) P2-044 review dispositions →
+  merge #55; (3) P2-037 audit dispositions → fix/complete → PR; (4)
+  P2-043 + P2-045 launch decisions (scout: they needed p2041 landed —
+  satisfied — plus P2-037 CLI/vocabulary frozen); (5) DOC-008 kernel
+  (LAST), cross-stream integration review over final main, merge held
+  PRs #50-#53/#55 per its verdicts; (6) C-028 BOOKKEEPING ARC (item 5
+  below, unchanged; D-064 must also ratify manifest v3 + adapter;
+  P2-044 10s-bandwidth methodology freeze flagged for Ed veto) → THEN
+  clear this card.
+
+**Original item list (item 1 DONE; superseded where checkpoint #4
+says otherwise):**
+
+1. DONE 2026-07-11: PR #49 MERGED to main (1b0f1f6) after the full
+   gate stack: lead conflict resolution (456772a), Sol merge review +
+   P2-005-row repair (13f6c9e), the py3.14 CI red root-caused as a
+   PRE-EXISTING main-side fixture SIGTERM race and fixed fixture-only
+   (10e0ad2; flake test 0/30 fails lead-run), NV-5 localhost lead gate
+   CLOSED (3/3 OK socket-capable), canonical 1041 OK (skipped=12)
+   unpiped, CI green both versions, Ed-approved SHA-guarded merge.
+   Both historic flake classes (fake-nvidia-smi idle deadline; P2-038
+   rail-only right-edge bracket) are now dead on main.
+   IN FLIGHT (Ed-directed fan-out): impl/p2041-vetted ULTRA
+   composition per the triage recipe, and a NEW impl/p2037 stream
+   (contrast/claim engine, ULTRA, from the banked adjudicated spec +
+   frozen rulings; interface assumptions vs p2041 flagged for
+   integration review). Original item (superseded): PR #49 had REAL
+   code conflicts vs post-#48
    main: joulewise/cli.py + reduce.py + schemas.py + tests/test_cli_run.py
    (both sides extended MeasurementQuality, ADDED_SINCE_0_3_0, and the
    0.3.x dispatch) + the usual state-file unions. A clean merge was
@@ -104,31 +187,18 @@ docs/reviews/2026-07-10-hardening-adjudication.md).
    Root-cause + deterministic fix required BEFORE merging #49; do not
    merge on a rerun-green alone, and any fix must preserve fail-closed
    gate semantics (metrology adjudication).
-2. impl/p2041 — TRIAGE DONE, RULINGS ED-APPROVED (2026-07-11): the raw
-   WIP diff must NOT be applied wholesale — it deletes P2-038/P2-040
-   implementations (full audit + vetted rebuild recipe:
-   docs/reviews/2026-07-11-p2041-red-tranche-triage.md). Sol's 7
-   test-fixture fixes in the worktree are valid and retained. Ed
-   approved the lead's rulings on the three C questions: (1)
-   claim_readiness stays, analysis_readiness rename REJECTED; (2)
-   first-run exemption stays per-physical-session; (3) scoped top-up
-   detection + cooldown trace v2 hardening NOT in this landing —
-   items (2)-hardening and (3) become queue candidates with dissent
-   recorded. Rebuild AFTER #49 merges: branch impl/p2041-vetted off
-   post-#49 main, Sol ULTRA composition per the triage recipe (0.4.0
-   must union runtime_cleanup_ok AND #49's remote_cleanup_failed +
-   verifier registry), then lead suite unpiped + full review stack.
-   Original instructions (superseded but kept for context): the
-   session exited OK but wrote an EMPTY report; its tree (branch fixes
-   + main-post-#48 content PRE-UNIONED without merge ancestry + the C5
-   window_evidence_precheck renames) is snapshot-committed as a
-   clearly-labeled WIP [RED] head on impl/p2041 (pushed). Suite there:
-   FAILED 6F/1E, all test_run_campaign — the composition with main's
-   P2-042 sidecar/verdict changes is incomplete. Fresh thread:
-   diagnose the 7 failures (likely a bounded Sol fix round with the
-   failure list), REBUILD proper ancestry (safest: new branch off
-   origin/main + apply the WIP diff), then the full review stack.
-   Treat every claim of that session as uncorroborated (empty report).
+2. impl/p2041-vetted — VETTED REBUILD COMPLETE, UNCOMMITTED (2026-07-11):
+   manually composed from the requested post-#49 `1b0f1f6` base using the
+   triage recipe; no raw WIP diff or generated site files were applied.
+   HEAD itself is the #49 merge; item 1's pre-merge narrative is inherited
+   anchor text and is superseded, but later main bookkeeping was not imported.
+   `claim_readiness`, per-physical-session exemption, adjudicated v2/top-up
+   shape, P2-038/P2-040/P2-042 behavior, and both post-#49 cleanup fields are
+   retained. Final focused 398 OK/1 skipped; canonical 1062 OK/13 skipped;
+   mechanical gates clean. Report:
+   `docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`. Lead owns final diff
+   review and pathspec commit, including explicit adjudication of the three
+   assertion-only pure-B exceptions and the frozen stored-field mapper gap.
 3. DOC-008 kernel (LAST, per adjudication): refresh at final
    integrated head + NOT-AUTHORITATIVE header, targeted review, PR.
 4. Cross-stream integration review (Sol) over final main: interaction
@@ -180,6 +250,16 @@ rank 0 closed. Full record:
 `docs/run_reports/2026-07-09-cp5-resume.md`. No stop card is active.
 
 ## Current Project Status
+
+**P2-041 VETTED REBUILD COMPLETE in `impl/p2041-vetted` (2026-07-11;
+uncommitted for lead pathspec review).** The 4 clean-A files were copied
+blob-exact and the 15 mixed files were manually re-derived from post-#49 main.
+The landing keeps `claim_readiness`, a per-physical-session first-run
+exemption, the adjudicated campaign-verdict-v2/top-up surface, authoritative
+P2-042 manifest validation, P2-038 shakedown behavior, and both
+`runtime_cleanup_ok` and `remote_cleanup_failed` under reducer 0.4.0. Focused
+398 OK/1 skipped; canonical 1062 OK/13 skipped. Report:
+`docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`.
 
 **RPT-001 targeted review fix round COMPLETE in worktree (2026-07-10;
 awaiting lead pathspec commit).** FIX-1..FIX-9 are implemented: Phase-4
@@ -254,6 +334,9 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-11 P2-041 vetted rebuild (uncommitted; lead pathspec review and
+  commit pending): `docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`
+
 - 2026-07-10 NV-GATE-2 idle-capture regression debug/fix (uncommitted;
   localhost re-verification remains lead-gated):
   `docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md`
@@ -316,6 +399,14 @@ queue owns ordering (C-027):**
 - Older: see `docs/run_reports/` (dated files).
 
 ## Current Verification
+
+- P2-041 vetted rebuild: baseline canonical `Ran 1041 tests in 67.995s`,
+  `OK (skipped=13)`; final focused recipe modules `Ran 398 tests in 54.964s`,
+  `OK (skipped=1)`; final canonical `Ran 1062 tests in 76.436s`, `OK
+  (skipped=13)`; `git diff --check` and the dead-private-helper search clean.
+  The retained corpus and localhost socket gates skipped loudly; no live or
+  quiet-Mac validation was claimed. Report:
+  `docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`.
 
 - PR #49 P2-038 rail-only flake: pre-fix exact-test loop failed 4/100;
   retained failure emitted `cadence_ratio_unrecorded` plus
@@ -445,6 +536,13 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
+- Worktree `/Users/edr/code/JouleWise-wt/p2041-vetted` on
+  `impl/p2041-vetted` is intentionally dirty only with the uncommitted P2-041
+  vetted rebuild and its bookkeeping/report. It remains anchored at the
+  user-specified post-#49 `1b0f1f6`; `origin/main` advanced during the run and
+  was not merged. No `docs/site/*` file was regenerated. Lead owns final diff
+  review and pathspec commit; do not commit or discard the tree wholesale.
+
 - Worktree `/Users/edr/code/JouleWise-wt/nvgate2` on
   `impl/nvgate2-codenow` has the idle-readiness fix, regression test, and
   handoff bookkeeping COMMITTED (cd6e2cb) and the lead-resolved merge of
@@ -480,9 +578,11 @@ queue owns ordering (C-027):**
 
 ## What Is Next
 
-Lead-review the uncommitted P2-040 reducer-version fix, run the retained
-six-bundle strict read-only gate, and commit by pathspec. Once landed, P2-038 is the next
-`[AGENT]` correctness row. `TASK_QUEUE.md` remains the ordering authority.
+Lead-review the uncommitted P2-041 vetted rebuild against its triage recipe,
+explicitly adjudicate the three post-#49 assertion-only pure-B exceptions and
+the frozen stored-field mapper gap, then commit only approved pathspecs. The
+cross-stream P2-038/P2-040/P2-041/P2-042/NV integration review remains the next
+stop-card action after landing. `TASK_QUEUE.md` remains the ordering authority.
 
 Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
 C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),

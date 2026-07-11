@@ -47,6 +47,10 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window
+from joulewise.idle_dependence import (
+    derive_idle_mean_uncertainty,
+    idle_mean_energy_variance_j2,
+)
 from joulewise.schemas import (
     BenchmarkConfig,
     FailureReason,
@@ -358,21 +362,21 @@ def _dropped_samples(curve: list[TracePoint], requested_hz: float) -> int:
 
 
 def _energy_variance_terms_j2(
-    idle_baseline: IdleBaseline | None,
+    idle_mean_uncertainty: dict[str, Any],
     window: Window,
 ) -> dict[str, float | None]:
     """Reducer-level stochastic terms derivable from a single bundle.
 
     Gross-energy repetition variance is unavailable for one bundle, but the
-    idle-baseline mean variance is recorded when the idle baseline supplies its
-    sample standard deviation and sample count.
+    idle-baseline mean variance is recorded only when the governed P2-044 raw
+    trace estimator succeeds.  Metadata never independently selects it.
     """
     idle_term: float | None = None
-    if idle_baseline is not None and idle_baseline.sample_count > 0:
-        idle_power_mean_variance = (
-            idle_baseline.power_w_stddev * idle_baseline.power_w_stddev
-        ) / idle_baseline.sample_count
-        idle_term = window.duration_s * window.duration_s * idle_power_mean_variance
+    governed = idle_mean_uncertainty.get("governed_variance_of_mean_w2")
+    if idle_mean_uncertainty.get("status") == "estimated" and isinstance(
+        governed, int | float
+    ):
+        idle_term = idle_mean_energy_variance_j2(window.duration_s, float(governed))
     return {
         "E_gross_repetition_j2": None,
         "E_idle_mean_j2": idle_term,
@@ -483,7 +487,7 @@ def _interpolation_joint_edge_bound_j(
     return max(abs(value - base) for value in perturbed)
 
 
-def _claim_eligibility(
+def _window_evidence_precheck(
     reader: BundleReader,
     metadata: dict[str, Any],
     curve: list[TracePoint],
@@ -493,9 +497,9 @@ def _claim_eligibility(
 ) -> dict[str, Any]:
     # P2-040 FIX-2 (STA-5): metric-specific request gates. ``gross_request``
     # never requires idle/drift evidence; ``idle_subtracted_request`` requires
-    # idle baseline plus a recorded drift bound. ``request`` remains the
-    # deprecated schema-0.1 alias with its original idle-subtracted meaning.
-    gross_request = _window_claim_eligibility(
+    # idle baseline plus a recorded drift bound. C5 removes the generic
+    # ``request`` alias from current reducer output.
+    gross_request = _window_evidence_precheck_for_window(
         curve,
         metadata,
         measured_window,
@@ -508,7 +512,7 @@ def _claim_eligibility(
     gross_request["metric_name"] = "gross_energy_j"
     gross_request["window_class"] = "gross_request"
 
-    idle_subtracted_request = _window_claim_eligibility(
+    idle_subtracted_request = _window_evidence_precheck_for_window(
         curve,
         metadata,
         measured_window,
@@ -524,17 +528,6 @@ def _claim_eligibility(
     idle_subtracted_request["window_class"] = "idle_subtracted_request"
 
     result: dict[str, Any] = {
-        "request": _window_claim_eligibility(
-            curve,
-            metadata,
-            measured_window,
-            cadence_ratio_min=REQUEST_WINDOW_CADENCE_RATIO_MIN,
-            require_sample_count=False,
-            require_drift=True,
-            require_cooldown=True,
-            bound_terms_j=request_bound_terms_j,
-            legacy_interpolation_edge=True,
-        ),
         "gross_request": gross_request,
         "idle_subtracted_request": idle_subtracted_request,
     }
@@ -542,7 +535,7 @@ def _claim_eligibility(
     phase_windows = reader.phase_windows()
     if phase_windows:
         result["phase"] = {
-            phase: _windows_claim_eligibility(
+            phase: _windows_evidence_precheck(
                 curve,
                 metadata,
                 intervals,
@@ -556,7 +549,7 @@ def _claim_eligibility(
     item_windows = reader.item_windows()
     if item_windows:
         result["item"] = {
-            f"{item.item_index}:{item.item_id}": _window_claim_eligibility(
+            f"{item.item_index}:{item.item_id}": _window_evidence_precheck_for_window(
                 curve,
                 metadata,
                 item.window,
@@ -570,7 +563,7 @@ def _claim_eligibility(
     block_windows = reader.block_windows()
     if block_windows:
         result["block"] = {
-            block_id: _windows_claim_eligibility(
+            block_id: _windows_evidence_precheck(
                 curve,
                 metadata,
                 intervals,
@@ -584,7 +577,7 @@ def _claim_eligibility(
     level_windows = reader.level_windows()
     if level_windows:
         result["level"] = {
-            f"{block_id}/{level_id}": _windows_claim_eligibility(
+            f"{block_id}/{level_id}": _windows_evidence_precheck(
                 curve,
                 metadata,
                 intervals,
@@ -597,7 +590,7 @@ def _claim_eligibility(
     return result
 
 
-def _windows_claim_eligibility(
+def _windows_evidence_precheck(
     curve: list[TracePoint],
     metadata: dict[str, Any],
     windows: list[Window],
@@ -607,7 +600,7 @@ def _windows_claim_eligibility(
     require_drift: bool,
 ) -> dict[str, Any]:
     entries = [
-        _window_claim_eligibility(
+        _window_evidence_precheck_for_window(
             curve,
             metadata,
             window,
@@ -626,7 +619,7 @@ def _windows_claim_eligibility(
     }
 
 
-def _window_claim_eligibility(
+def _window_evidence_precheck_for_window(
     curve: list[TracePoint],
     metadata: dict[str, Any],
     window: Window,
@@ -926,15 +919,18 @@ def _reduce(
     phase_energy_j = _phase_energy(phase_windows, curve)
     phase_identifiability = _phase_identifiability(phase_windows, curve)
     suite_metrics = _suite_metrics(reader, curve)
-    energy_variance_terms_j2 = _energy_variance_terms_j2(idle_baseline, window)
+    idle_mean_uncertainty = derive_idle_mean_uncertainty(reader, idle_baseline)
+    energy_variance_terms_j2 = _energy_variance_terms_j2(
+        idle_mean_uncertainty, window
+    )
     energy_bound_terms_j = _energy_bound_terms_j(metadata, curve, window)
-    claim_eligibility = _claim_eligibility(
+    window_evidence_precheck = _window_evidence_precheck(
         reader, metadata, curve, window, energy_bound_terms_j, idle_baseline
     )
     runtime_token_source = _runtime_token_count_source(metadata)
     if runtime_token_source is not None:
         fallback = runtime_token_source == "stream_chunk_fallback"
-        claim_eligibility["per_token"] = {
+        window_evidence_precheck["per_token"] = {
             "eligible": not fallback,
             "reasons": ["stream_chunk_fallback"] if fallback else [],
             "token_count_source": runtime_token_source,
@@ -973,9 +969,10 @@ def _reduce(
         phase_energy_j=phase_energy_j,
         suite_metrics=suite_metrics,
         energy_uncertainty_status="not_estimable",
+        idle_mean_uncertainty=idle_mean_uncertainty,
         energy_variance_terms_j2=energy_variance_terms_j2,
         energy_bound_terms_j=energy_bound_terms_j,
-        claim_eligibility=claim_eligibility,
+        window_evidence_precheck=window_evidence_precheck,
     )
 
 

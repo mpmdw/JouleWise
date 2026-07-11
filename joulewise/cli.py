@@ -326,13 +326,12 @@ def _strict_problems(reader: BundleReader) -> list[str]:
                 "measured window; a succeeded summary needs a "
                 "reducer-consumable curve"
             )
-    (
-        version_problems,
-        absent_tolerance,
-        tolerate_fresh_nulls,
-        comparison_reducer_version,
-    ) = _strict_reducer_version_dispatch(reader, summary)
+    version_problems, absent_tolerance, tolerate_fresh_nulls = (
+        _strict_reducer_version_dispatch(reader, summary)
+    )
     problems.extend(version_problems)
+    stored_idle_problems = _strict_idle_mean_uncertainty_problems(summary)
+    problems.extend(stored_idle_problems)
     problems.extend(_strict_workload_provenance_problems(reader, summary))
     problems.extend(_strict_emitted_token_ids_problems(reader))
     problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
@@ -340,10 +339,14 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     problems.extend(_strict_raw_to_trace_problems(reader))
     if not version_problems:
         fresh = reduce_bundle(reader.path).to_dict()
-        if comparison_reducer_version is not None:
-            fresh["summary_provenance"]["reducer_version"] = (
-                comparison_reducer_version
-            )
+        # The fresh 0.4.1 derivation is the raw/metadata authority.  Inspect it
+        # before legacy additive-absence projection can hide the governed
+        # object, while retaining the stored-summary check for unsupported
+        # versions and tampered current-era summaries.  Exact diagnostics are
+        # de-duplicated when both views independently report the mismatch.
+        for problem in _strict_idle_mean_uncertainty_problems(fresh):
+            if problem not in problems:
+                problems.append(problem)
         differing = _strict_summary_differences(
             fresh,
             summary,
@@ -359,11 +362,7 @@ def _strict_problems(reader: BundleReader) -> list[str]:
 
 
 _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
-    "claim_eligibility",
-    # P2-040 FIX-2: metric-specific request gates are additive over pre-0.3.0
-    # summaries whose claim_eligibility carried only the deprecated alias.
-    "claim_eligibility.gross_request",
-    "claim_eligibility.idle_subtracted_request",
+    "window_evidence_precheck",
     # P2-040 FIX-3: joint interpolation bound is additive over pre-0.3.0
     # summaries.
     "energy_bound_terms_j.E_interpolation_joint_edge_bound_j",
@@ -388,10 +387,26 @@ _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE = (
     _STRICT_ADDITIVE_ABSENT_TOLERANCE
     | ADDED_SINCE_0_3_0
     | {
+        "idle_mean_uncertainty",
         "measurement_quality.token_counts_source",
         "measurement_quality.phase_identifiability",
     }
 )
+
+
+def _strict_idle_mean_uncertainty_problems(
+    summary: dict[str, Any],
+) -> list[str]:
+    uncertainty = summary.get("idle_mean_uncertainty")
+    if not isinstance(uncertainty, dict):
+        return []
+    reasons = uncertainty.get("reason_codes")
+    if isinstance(reasons, list) and "idle_metadata_mismatch" in reasons:
+        return [
+            "strict: raw idle trace does not match metadata.idle_baseline "
+            "(idle_metadata_mismatch)"
+        ]
+    return []
 
 
 def _strict_summary_differences(
@@ -571,27 +586,25 @@ def _strict_workload_provenance_problems(
 
 def _strict_reducer_version_dispatch(
     reader: BundleReader, summary: dict[str, Any]
-) -> tuple[list[str], set[str], bool, str | None]:
+) -> tuple[list[str], set[str], bool]:
     """Select strict comparison semantics solely from recorded provenance."""
     provenance = summary.get("summary_provenance")
     if (
         _strict_legacy_bundle_metadata(reader.raw_metadata())
         and "summary_provenance" not in summary
     ):
-        return [], _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE, True, None
+        return [], _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE, True
     if not isinstance(provenance, dict):
         return [
             "strict: summary_metrics.summary_provenance is missing or not an "
             "object for current-era bundle"
-        ], set(), False, None
+        ], set(), False
     reducer_version = provenance.get("reducer_version")
     if reducer_version == SUMMARY_REDUCER_VERSION:
-        return [], set(), False, None
-    if reducer_version == "0.3.0":
-        return [], set(ADDED_SINCE_0_3_0), False, "0.3.0"
+        return [], set(), False
     return [
         "strict: unsupported reducer version; re-reduction required"
-    ], set(), False, None
+    ], set(), False
 
 
 def _strict_legacy_bundle_metadata(metadata: Any) -> bool:
