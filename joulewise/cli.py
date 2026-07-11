@@ -1297,6 +1297,44 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# P2-037 deterministic contrast/claim derivation.
+
+
+def _cmd_analyze_claims(args: argparse.Namespace) -> int:
+    # Lazy import avoids a cycle: the engine receives this module's shared
+    # strict validator by injection rather than importing/duplicating it.
+    from joulewise.analysis_engine import AnalysisInputError, analyze_claims
+    from joulewise.analysis_engine.artifact import ClaimArtifactError
+
+    try:
+        artifact = analyze_claims(
+            Path(args.analysis_manifest),
+            Path(args.runs_root),
+            Path(args.floor_artifact),
+            strict_validator=validate_bundle,
+            output_path=Path(args.output),
+            legacy_l1_mechanics=args.legacy_l1_mechanics,
+            legacy_allowlist=_STRICT_LEGACY_BUNDLE_IDENTITIES,
+        )
+    except (AnalysisInputError, ClaimArtifactError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    except OSError as exc:
+        print(f"error: cannot write claim-verdict artifact: {exc}", file=sys.stderr)
+        return 3
+    outcomes: dict[str, int] = {}
+    for contrast in artifact["contrasts"]:
+        outcome = contrast["claim_evaluation"]["outcome"]
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+    counts = ",".join(f"{key}={outcomes[key]}" for key in sorted(outcomes))
+    print(
+        f"claim-verdicts: {args.output} id={artifact['claim_verdicts_id']} "
+        f"contrasts={len(artifact['contrasts'])} outcomes={counts}"
+    )
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # report verb (Slice 2J) - static HTML run browser (D-006), [analysis] extra
 
 
@@ -1434,6 +1472,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     reduce_parser.add_argument("path", help="path to a run bundle directory")
     reduce_parser.set_defaults(func=_cmd_reduce)
+
+    analyze = subparsers.add_parser(
+        "analyze-claims",
+        help="derive paired contrast and claim verdicts from frozen evidence",
+    )
+    analyze.add_argument(
+        "--analysis-manifest", required=True, help="frozen analysis_manifest.json path"
+    )
+    analyze.add_argument(
+        "--runs-root", required=True, help="directory containing registered run bundles"
+    )
+    analyze.add_argument(
+        "--floor-artifact", required=True, help="validated P2-039 floor artifact JSON"
+    )
+    analyze.add_argument(
+        "--output", required=True, help="claim_verdicts.json output path"
+    )
+    analyze.add_argument(
+        "--legacy-l1-mechanics",
+        action="store_true",
+        help="mechanics-only legacy mode; frozen six-bundle allowlist and L1 ceiling",
+    )
+    analyze.set_defaults(func=_cmd_analyze_claims)
 
     report = subparsers.add_parser(
         "report", help="render a static HTML run browser (needs the [analysis] extra)"

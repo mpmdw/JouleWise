@@ -58,7 +58,9 @@ SAMPLING_KEYS = {
     "freeze_basis",
     "allowed_replacement_reasons",
 }
-RANDOMIZATION_KEYS = {"scheme", "exchangeability", "seed"}
+DETERMINISTIC_RANDOMIZATION_KEYS = {"scheme", "exchangeability", "seed"}
+STRATIFIED_RANDOMIZATION_KEYS = {"scheme", "exchangeability", "named_strata"}
+NAMED_STRATUM_KEYS = {"stratum_id", "block_ids"}
 SOURCE_KEYS = {"generator", "registry_template", "order_manifest", "ap_rows"}
 SOURCE_FILE_KEYS = {"path", "sha256"}
 AP_ROW_KEYS = {
@@ -121,6 +123,15 @@ CONTRAST_KEYS = {
     "floor_selector",
 }
 METRIC_KEYS = {"name", "metric_tag", "window_class", "unit", "ratio_estimand"}
+RATIO_ESTIMAND_KEYS = {
+    "form",
+    "numerator_metric",
+    "denominator",
+    "denominator_unit",
+    "tokenizer_scope",
+    "output_policy_scope",
+}
+RATIO_ESTIMAND_FORMS = {"mean_of_request_ratios", "ratio_of_totals"}
 FLOOR_SELECTOR_KEYS = {
     "backend",
     "metric",
@@ -225,6 +236,150 @@ def _string_array(value: Any, where: str, errors: list[str]) -> list[str] | None
         errors.append(f"{where}: item(s) {', '.join(bad_indexes)} must be strings")
         return None
     return value
+
+
+def _validate_ratio_estimand(value: Any, where: str, errors: list[str]) -> bool:
+    if not _exact_keys(value, RATIO_ESTIMAND_KEYS, where, errors):
+        return False
+    valid = True
+    if not isinstance(value["form"], str) or value["form"] not in RATIO_ESTIMAND_FORMS:
+        errors.append(
+            f"{where}.form: must be 'mean_of_request_ratios' or 'ratio_of_totals'"
+        )
+        valid = False
+    expected = {
+        "numerator_metric": "energy_request_j",
+        "denominator": "runtime_observed_output_tokens",
+        "denominator_unit": "token",
+        "tokenizer_scope": "same_identity_required",
+        "output_policy_scope": "same_policy_required",
+    }
+    for key, required in expected.items():
+        if value[key] != required:
+            errors.append(f"{where}.{key}: expected {required!r}")
+            valid = False
+    return valid
+
+
+def _validate_randomization(
+    value: Any,
+    where: str,
+    errors: list[str],
+) -> set[str] | None:
+    if not isinstance(value, Mapping):
+        errors.append(f"{where}: must be an object")
+        return None
+    scheme = value.get("scheme")
+    if scheme == "deterministic_rotation":
+        if not _exact_keys(value, DETERMINISTIC_RANDOMIZATION_KEYS, where, errors):
+            return None
+        if value != {
+            "scheme": "deterministic_rotation",
+            "exchangeability": "none",
+            "seed": 2000005,
+        }:
+            errors.append(f"{where}: invalid Slice-2M rotation")
+        return None
+    if scheme != "stratified_paired_label_swap":
+        errors.append(f"{where}.scheme: unsupported randomization design")
+        return None
+    if not _exact_keys(value, STRATIFIED_RANDOMIZATION_KEYS, where, errors):
+        return None
+    if value["exchangeability"] != "within_named_strata":
+        errors.append(
+            f"{where}.exchangeability: stratified paired swaps require "
+            "'within_named_strata'"
+        )
+    strata = value["named_strata"]
+    if not isinstance(strata, list) or not strata:
+        errors.append(f"{where}.named_strata: must be a nonempty array")
+        return set()
+    assigned: list[str] = []
+    stratum_ids: set[str] = set()
+    for index, stratum in enumerate(strata):
+        stratum_where = f"{where}.named_strata[{index}]"
+        if not _exact_keys(stratum, NAMED_STRATUM_KEYS, stratum_where, errors):
+            continue
+        stratum_id = _string_field(
+            stratum,
+            "stratum_id",
+            stratum_where,
+            errors,
+            identifier=True,
+        )
+        block_ids = _string_array(
+            stratum["block_ids"],
+            f"{stratum_where}.block_ids",
+            errors,
+        )
+        if stratum_id is not None:
+            if stratum_id in stratum_ids:
+                errors.append(f"{stratum_where}.stratum_id: duplicate value")
+            stratum_ids.add(stratum_id)
+        if block_ids is None:
+            continue
+        if not block_ids:
+            errors.append(f"{stratum_where}.block_ids: must be nonempty")
+            continue
+        for block_index, block_id in enumerate(block_ids):
+            if not ID_RE.fullmatch(block_id):
+                errors.append(
+                    f"{stratum_where}.block_ids[{block_index}]: "
+                    "must match [a-z0-9_-]+"
+                )
+        if len(block_ids) != len(set(block_ids)):
+            errors.append(f"{stratum_where}.block_ids: contains duplicate values")
+        assigned.extend(block_ids)
+    if len(assigned) != len(set(assigned)):
+        errors.append(f"{where}.named_strata: a block appears in more than one stratum")
+    return set(assigned)
+
+
+def _is_adjudicated_ratio_variant(
+    observed: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> bool:
+    if set(observed) != METRIC_KEYS or set(expected) != METRIC_KEYS:
+        return False
+    ratio = observed.get("ratio_estimand")
+    if not isinstance(ratio, Mapping) or set(ratio) != RATIO_ESTIMAND_KEYS:
+        return False
+    if not isinstance(ratio.get("form"), str) or ratio.get("form") not in RATIO_ESTIMAND_FORMS:
+        return False
+    if ratio != {
+        "form": ratio["form"],
+        "numerator_metric": "energy_request_j",
+        "denominator": "runtime_observed_output_tokens",
+        "denominator_unit": "token",
+        "tokenizer_scope": "same_identity_required",
+        "output_policy_scope": "same_policy_required",
+    }:
+        return False
+    return (
+        expected.get("name") == "energy_request_j"
+        and observed.get("name") == expected.get("name")
+        and observed.get("metric_tag") == expected.get("metric_tag")
+        and observed.get("window_class") == expected.get("window_class")
+        and observed.get("unit") == "J/token"
+    )
+
+
+def _contrast_matches_registry(
+    observed: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> bool:
+    if observed == expected:
+        return True
+    observed_without_metric = dict(observed)
+    expected_without_metric = dict(expected)
+    observed_metric = observed_without_metric.pop("metric", None)
+    expected_metric = expected_without_metric.pop("metric", None)
+    return (
+        observed_without_metric == expected_without_metric
+        and isinstance(observed_metric, Mapping)
+        and isinstance(expected_metric, Mapping)
+        and _is_adjudicated_ratio_variant(observed_metric, expected_metric)
+    )
 
 
 def _parse_json_object(raw: bytes, where: str) -> Mapping[str, Any]:
@@ -779,6 +934,7 @@ def validate_analysis_manifest(
 
     design = value["design"]
     planned_n = None
+    named_strata_block_ids: set[str] | None = None
     if _exact_keys(design, DESIGN_KEYS, "manifest.design", errors):
         expected_design = {
             "design_id": "slice_2m_ap2_v1",
@@ -803,14 +959,11 @@ def validate_analysis_manifest(
                 "unsupported_before_measurement",
             ]:
                 errors.append("manifest.design.sampling_plan.allowed_replacement_reasons: invalid value/order")
-        randomization = design["randomization"]
-        if _exact_keys(randomization, RANDOMIZATION_KEYS, "manifest.design.randomization", errors):
-            if randomization != {
-                "scheme": "deterministic_rotation",
-                "exchangeability": "none",
-                "seed": 2000005,
-            }:
-                errors.append("manifest.design.randomization: invalid Slice-2M rotation")
+        named_strata_block_ids = _validate_randomization(
+            design["randomization"],
+            "manifest.design.randomization",
+            errors,
+        )
 
     registry_path = registry_path or repository_root / REGISTRY_RELATIVE_PATH
     ap_path = ap_path or repository_root / AP_RELATIVE_PATH
@@ -1063,6 +1216,17 @@ def validate_analysis_manifest(
             for key in ("name", "metric_tag", "window_class", "unit"):
                 if _string_field(metric, key, f"{where}.metric", errors) is None:
                     metric_valid = False
+            ratio_estimand = metric["ratio_estimand"]
+            if ratio_estimand is not None:
+                if not _validate_ratio_estimand(
+                    ratio_estimand,
+                    f"{where}.metric.ratio_estimand",
+                    errors,
+                ):
+                    metric_valid = False
+                if metric["unit"] != "J/token":
+                    errors.append(f"{where}.metric.unit: ratio estimands require 'J/token'")
+                    metric_valid = False
         selector = contrast["floor_selector"]
         if _exact_keys(selector, FLOOR_SELECTOR_KEYS, f"{where}.floor_selector", errors):
             selector_valid = all(
@@ -1093,6 +1257,10 @@ def validate_analysis_manifest(
         expected_blocks = [f"block-2m-{model_tag}-r{rep:02d}" for rep in range(1, 6)]
         if contrast["block_ids"] != expected_blocks:
             errors.append(f"{where}.block_ids: invalid semantic block linkage")
+        if named_strata_block_ids is not None and set(block_ids) != named_strata_block_ids:
+            errors.append(
+                f"{where}.block_ids: named strata must cover every frozen block exactly once"
+            )
         if contrast["estimator"] != "paired_block_mean_difference_t_v1":
             errors.append(f"{where}.estimator: invalid value")
         if contrast["hypothesized_direction"] != "two_sided":
@@ -1136,6 +1304,13 @@ def validate_analysis_manifest(
                     errors.append(f"{where}: references unknown contrast {contrast_id!r}")
                 elif contrast.get("family_instance_id") != instance_id:
                     errors.append(f"{where}: contrast {contrast_id!r} links another family")
+            family_metrics = [
+                contrast_by_id[contrast_id].get("metric")
+                for contrast_id in ids
+                if contrast_id in contrast_by_id
+            ]
+            if family_metrics and any(metric != family_metrics[0] for metric in family_metrics[1:]):
+                errors.append(f"{where}: contrasts must use one estimand-local metric")
     if len(referenced_contrast_ids) != len(set(referenced_contrast_ids)):
         errors.append("manifest.families: a contrast_id appears in more than one family")
     if set(referenced_contrast_ids) != set(contrast_ids):
@@ -1149,7 +1324,11 @@ def validate_analysis_manifest(
         )
         if families != expected_families:
             errors.append("manifest.families: differs from frozen registry enumeration")
-        if contrasts != expected_contrasts:
+        if len(contrasts) != len(expected_contrasts) or any(
+            not isinstance(observed, Mapping)
+            or not _contrast_matches_registry(observed, expected)
+            for observed, expected in zip(contrasts, expected_contrasts)
+        ):
             errors.append("manifest.contrasts: differs from frozen registry enumeration")
     return errors
 
