@@ -1,0 +1,1556 @@
+{
+  "active_stop_card": null,
+  "authority": "NOT_AUTHORITATIVE_DERIVED_VIEW",
+  "latest_report": {
+    "label": "REPRO-002 publication privacy (final C-028 merged handoff)",
+    "path": "docs/run_reports/2026-07-11-repro002-publication-privacy.md"
+  },
+  "schema": "docs/process/state_kernel.schema.json",
+  "schema_version": 2,
+  "tasks": {
+    "CI-003": {
+      "acceptance": {
+        "evidence": [
+          "Observed baseline justifies each adopted tool",
+          "Console entry point and macOS job only if useful",
+          "Measured coverage policy"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/CI-003/acceptance",
+          "label": "CI-003 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Post-reference developer polish is adopted only from observed need; thresholds follow measurement rather than precedent."
+      },
+      "authority": {
+        "label": "Hardening adjudication C10",
+        "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "G6 reference milestone is complete",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "G6"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Evaluate post-reference developer polish: console entry point, macOS install/import CI, Ruff, and measured coverage reporting.",
+      "id": "CI-003",
+      "lane": "agent",
+      "priority": "p3_research_expansion",
+      "rank": 27,
+      "status": "shelved",
+      "stop_card": null
+    },
+    "DOC-008": {
+      "acceptance": {
+        "evidence": [
+          "Top-level authority notice is required and fixed",
+          "python3 scripts/gen_state.py --check exits 0",
+          "python3 -m unittest tests.test_gen_state passes",
+          "One next-action surface remains"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/DOC-008/acceptance",
+          "label": "DOC-008 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Schema-version-2 kernel carries the fixed derived-view authority notice; generated blocks are byte-reproducible; one next-action surface remains."
+      },
+      "authority": {
+        "label": "DOC-008 spec (D-063 Stage 1)",
+        "path": "docs/specs/c027/doc-008_state_kernel.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Machine-readable state kernel generating the RUN_STATE restart block and live queue view; PROJECT_STATUS compaction with history archive; retire the planning reflection protocol as standalone intake; two-writer rule and credential-boundary push procedure into docs/orchestration.md.",
+      "id": "DOC-008",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 11,
+      "status": "active",
+      "status_note": "Final C-028 live-state refresh is in progress; live RUN_STATE/TASK_QUEUE marker conversion remains lead-owned.",
+      "stop_card": null
+    },
+    "DOC-010": {
+      "acceptance": {
+        "evidence": [
+          "Only non-authoritative historical material moves",
+          "Paths or redirects preserve citations",
+          "Decision and evidence links remain intact"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/DOC-010/acceptance",
+          "label": "DOC-010 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A post-DOC-008 audit relocates only non-authoritative history while preserving paths or redirects, citations, decision authority, and link integrity."
+      },
+      "authority": {
+        "label": "Hardening adjudication C11",
+        "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "DOC-008 state kernel is complete and proven in use",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "DOC-008"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Hardening adjudication C11",
+            "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
+          },
+          "rule": "Do not move cited evidence, decisions, council records, or authoritative histories"
+        }
+      ],
+      "flags": [],
+      "goal": "Audit non-authoritative historical material for bounded relocation after DOC-008 proves the state kernel.",
+      "id": "DOC-010",
+      "lane": "agent",
+      "priority": "p4_polish",
+      "rank": 28,
+      "status": "shelved",
+      "stop_card": null
+    },
+    "P1-001": {
+      "acceptance": {
+        "evidence": [
+          "Dated notes in docs/phase_1/phase_1_exit_checklist.md"
+        ],
+        "pointer": {
+          "label": "Phase 1 exit checklist",
+          "path": "docs/phase_1/phase_1_exit_checklist.md"
+        },
+        "summary": "Dated notes in the Phase 1 exit checklist; unblocks full D-016 closure (P2-004)."
+      },
+      "authority": {
+        "label": "R-001",
+        "path": "docs/risk_register.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Capture supervisor approval and scope notes.",
+      "id": "P1-001",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 3,
+      "status": "queued",
+      "status_note": "User-deferred 2026-07-06; R-001 mitigation holds: all work stays harness-shaped.",
+      "stop_card": null
+    },
+    "P1-003": {
+      "acceptance": {
+        "evidence": [
+          "Wall-meter section of the Phase 1 exit checklist filled"
+        ],
+        "pointer": {
+          "label": "Phase 1 exit checklist",
+          "path": "docs/phase_1/phase_1_exit_checklist.md"
+        },
+        "summary": "Exit-checklist wall-meter section filled; informs D-018 boundary calibration."
+      },
+      "authority": {
+        "label": "D-018/C-003",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Record the wall-meter decision: meter make/model or unavailable verdict plus measurement/export method.",
+      "id": "P1-003",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 4,
+      "status": "queued",
+      "status_note": "Elevated value: gates Q6 boundary sensitivity (C-003).",
+      "stop_card": null
+    },
+    "P1-004": {
+      "acceptance": {
+        "evidence": [
+          "Network section of the Phase 1 exit checklist recorded"
+        ],
+        "pointer": {
+          "label": "Phase 1 exit checklist",
+          "path": "docs/phase_1/phase_1_exit_checklist.md"
+        },
+        "summary": "Network section of the Phase 1 exit checklist recorded."
+      },
+      "authority": {
+        "label": "R-011",
+        "path": "docs/risk_register.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Fill the network/interconnect topology plan: physical topology, link-speed paths, throughput method.",
+      "id": "P1-004",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 5,
+      "status": "queued",
+      "status_note": "Partial.",
+      "stop_card": null
+    },
+    "P1-006": {
+      "acceptance": {
+        "evidence": [
+          "SSH/runtime/telemetry command evidence in the exit checklist",
+          "Or an explicit pending-with-blocker record"
+        ],
+        "pointer": {
+          "label": "Phase 1 exit checklist",
+          "path": "docs/phase_1/phase_1_exit_checklist.md"
+        },
+        "summary": "Instrumentation section of the Phase 1 exit checklist filled or blocker recorded."
+      },
+      "authority": {
+        "label": "Remote gate / NV-GATE-2",
+        "path": "docs/phase_2/hardware_slice_implementation_guide.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Confirm NVIDIA/Orin telemetry access paths: SSH/runtime/telemetry command evidence, or marked pending with blocker (gates slices 2K/2L).",
+      "id": "P1-006",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 6,
+      "status": "queued",
+      "stop_card": null
+    },
+    "P1-008": {
+      "acceptance": {
+        "evidence": [
+          "Dates + borrow window in docs/milestones.md",
+          "Derived phase targets",
+          "Acceptance-bar notes beside P1-001 scope notes"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P1-008/acceptance",
+          "label": "P1-008 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Colloquium/report dates plus borrow window in docs/milestones.md; phase targets derived; acceptance-bar notes beside the P1-001 scope notes."
+      },
+      "authority": {
+        "label": "Milestones + R-012",
+        "path": "docs/milestones.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).",
+      "id": "P1-008",
+      "lane": "ed_external",
+      "priority": "p1_phase_gate",
+      "rank": 1,
+      "status": "queued",
+      "status_note": "R-012 is the biggest active management risk for an undergrad timeline.",
+      "stop_card": null
+    },
+    "P2-004": {
+      "acceptance": {
+        "evidence": [
+          "Decision-log entry: models, revisions, artifact paths, mirror, fallback"
+        ],
+        "pointer": {
+          "label": "Phase 1 exit checklist",
+          "path": "docs/phase_1/phase_1_exit_checklist.md"
+        },
+        "summary": "Decision-log entry complete; full closure gated on P1-001."
+      },
+      "authority": {
+        "label": "D-016",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "supervisor approval and scope notes captured",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P1-001"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "migration_inferred_lane"
+      ],
+      "goal": "Close model selection (D-016): decision-log entry with models, revisions, artifact paths, local mirror, fallback candidate; mid-model pick, CUDA load, GGUF paths outstanding.",
+      "id": "P2-004",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 22,
+      "status": "partial",
+      "status_note": "Provisional small-model pick 2026-07-06 opens 2G.",
+      "stop_card": null
+    },
+    "P2-005": {
+      "acceptance": {
+        "evidence": [
+          "Remote bundle or documented access blocker",
+          "Applicability table updated",
+          "NV-GATE-2 items closed at live promotion"
+        ],
+        "pointer": {
+          "label": "2K live verification checklist",
+          "path": "docs/phase_1/2k_live_verification_checklist.md"
+        },
+        "summary": "Live 2K/2L evidence or a documented access blocker; applicability table updated; NV-GATE-2 live rows close without promoting fixture evidence."
+      },
+      "authority": {
+        "label": "NV-GATE-2 live-promotion spec",
+        "path": "docs/specs/c027/nv-gate-2_live_promotion.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "NVIDIA/Orin telemetry access confirmed",
+          "scope": "live_promotion",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P1-006"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "migration_inferred_lane",
+        "provisional_until_live"
+      ],
+      "goal": "Remote targets (2K NVIDIA/vLLM/ssh and 2L Orin): fixture-first and NV-GATE-2 code-now hardening are merged; protocol pins remain provisional until the external live-promotion rows execute.",
+      "id": "P2-005",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 23,
+      "status": "partial",
+      "status_note": "PR #49 merged the code-now verifier, streaming, cleanup, and localhost gates; P1-006 and device execution remain open.",
+      "stop_card": null
+    },
+    "P2-006": {
+      "acceptance": {
+        "evidence": [
+          "Strict-valid campaign bundles under the fixed validator",
+          "Counterbalanced order manifest + drift sentinel positions recorded",
+          "baseline_results.md with variance + prefill/decode comparison"
+        ],
+        "pointer": {
+          "label": "Phase 2 exit checklist",
+          "path": "docs/phase_2/phase_2_exit_checklist.md"
+        },
+        "summary": "Strict-valid reducer-0.4.2 campaign bundles with counterbalanced order and drift sentinels; interpretation uses campaign claim_readiness plus the merged fail-closed analysis engine."
+      },
+      "authority": {
+        "label": "Phase 2 plan + analysis plans",
+        "path": "docs/phase_2/phase_2_plan.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "P2-037 merged analysis-engine integration evidence",
+            "path": "tests/test_analysis_integration.py"
+          },
+          "kind": "task",
+          "required": "contrast/claim analysis engine exists",
+          "scope": "interpret",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P2-037"
+        },
+        {
+          "evidence": {
+            "label": "P2-041 merged campaign-verdict split evidence",
+            "path": "docs/run_reports/2026-07-11-p2041-vetted-rebuild.md"
+          },
+          "kind": "task",
+          "required": "campaign verdict split exists",
+          "scope": "interpret",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P2-041"
+        },
+        {
+          "evidence": {
+            "label": "P2-044 governed idle-ESS evidence",
+            "path": "docs/run_reports/2026-07-11-p2044-idle-ess.md"
+          },
+          "kind": "task",
+          "required": "governed idle dependence and effective-sample-size term exists",
+          "scope": "interpret",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P2-044"
+        },
+        {
+          "evidence": {
+            "label": "Reducer 0.4.2 governed throughput contract",
+            "path": "docs/contracts/run_bundle_layout.md"
+          },
+          "kind": "task",
+          "required": "reducer 0.4.2 governed inter-token throughput semantics exist",
+          "scope": "interpret",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P2-045"
+        },
+        {
+          "evidence": {
+            "label": "R-016 mitigated: off-machine backup and restore proof",
+            "path": "docs/risk_register.md"
+          },
+          "kind": "task",
+          "required": "external backup destination live before irreplaceable Window-A evidence accumulates",
+          "scope": "retain_evidence",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P0-003"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Window-A floors measured first",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-015"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Homogeneous baselines (slice 2M) on the Mac target: Window A two-model campaign with drift-sentinel profiles, then docs/phase_2/baseline_results.md with variance plus prefill/decode comparison.",
+      "id": "P2-006",
+      "lane": "quiet_mac",
+      "priority": "p2_next_slice",
+      "rank": 2,
+      "status": "blocked",
+      "status_note": "Software interpretation gates are satisfied; execution remains blocked until P2-015 Window-A floors complete.",
+      "stop_card": null
+    },
+    "P2-010": {
+      "acceptance": {
+        "evidence": [
+          "D-036 verdict from strict-valid smoke bundles",
+          "AP-5 campaign acceptance met"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-010/acceptance",
+          "label": "P2-010 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "joulewise envelope-gate emits the D-036 verdict from strict-valid smoke bundles; campaign acceptance in AP-5."
+      },
+      "authority": {
+        "label": "AP-5 + affine stream log",
+        "path": "docs/contracts/analysis_plans.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "R-016 mitigated: off-machine backup and restore proof",
+            "path": "docs/risk_register.md"
+          },
+          "kind": "task",
+          "required": "external backup destination live before irreplaceable Window-A evidence accumulates",
+          "scope": "retain_evidence",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P0-003"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "quiet-window tail available after floors",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-015"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "P2-010b remainder: affine smoke campaign execution (B=5) plus envelope-gate verdict on its bundles, on a quiet-window tail.",
+      "id": "P2-010",
+      "lane": "quiet_mac",
+      "priority": "p2_next_slice",
+      "rank": 3,
+      "status": "blocked",
+      "status_note": "Envelope-gate script merged 2026-07-09 (PR #23); only the campaign remains.",
+      "stop_card": null
+    },
+    "P2-012": {
+      "acceptance": {
+        "evidence": [
+          "Strict-valid bundles per AP-4",
+          "No category claims outside matched strata"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-012/acceptance",
+          "label": "P2-012 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Campaign bundles strict-valid per AP-4; no category claims outside matched strata."
+      },
+      "authority": {
+        "label": "AP-4 + D-039/D-040",
+        "path": "docs/contracts/analysis_plans.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "R-016 mitigated: off-machine backup and restore proof",
+            "path": "docs/risk_register.md"
+          },
+          "kind": "task",
+          "required": "external backup destination live before irreplaceable Window-A evidence accumulates",
+          "scope": "retain_evidence",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P0-003"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "identification-core runs after Window A",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-006"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Identification-core campaign (jw_mixed) after Window A; natural-EOS pilot plus full panels in later phases.",
+      "id": "P2-012",
+      "lane": "quiet_mac",
+      "priority": "p2_next_slice",
+      "rank": 6,
+      "status": "blocked",
+      "status_note": "Manifests generated + regenerated (PR #26); runner/runtime/validator hash guards merged (PRs #24/#27).",
+      "stop_card": null
+    },
+    "P2-015": {
+      "acceptance": {
+        "evidence": [
+          "Versioned strict-valid calibration bundles",
+          "Per-metric/window-class floor_abs_j + floor_cmp_j",
+          "Calibration manifest hash cited by later reports"
+        ],
+        "pointer": {
+          "label": "Phase 2 exit checklist",
+          "path": "docs/phase_2/phase_2_exit_checklist.md"
+        },
+        "summary": "Reducer-0.4.2 strict-valid calibration bundles; per-metric floor_abs_j and floor_cmp_j; governed idle uncertainty retained; calibration manifest hash cited by later reports."
+      },
+      "authority": {
+        "label": "D-054 + detection floor spec",
+        "path": "docs/phase_2/detection_floor.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "R-016 mitigated: off-machine backup and restore proof",
+            "path": "docs/risk_register.md"
+          },
+          "kind": "task",
+          "required": "external backup destination live before irreplaceable Window-A evidence accumulates",
+          "scope": "retain_evidence",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P0-003"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "sampler-overhead smoke + C-019 shakedown recorded",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-015-SMOKE"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "production uncertainty evidence path lands",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-038"
+        },
+        {
+          "evidence": {
+            "label": "P2-039 merged floor-artifact fixtures and validator",
+            "path": "tests/test_detection_floor.py"
+          },
+          "kind": "task",
+          "required": "floor calculator artifact lands",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P2-039"
+        },
+        {
+          "evidence": {
+            "label": "P2-043 merged doctor preflight contract",
+            "path": "docs/contracts/doctor_preflight.md"
+          },
+          "kind": "task",
+          "required": "read-only campaign doctor and acknowledgement gate exist",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P2-043"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only",
+        "pre_window_a_gate"
+      ],
+      "goal": "Detection-floor calibration campaign: expanded Window A floors for gross request, idle-sub request, phase window, and item/level window, plus comparative MDE from same-condition repeats/ABBA; daily fixed reference cell at window start/end (NEG-8); Window-B-start revalidation cell (CP-6).",
+      "id": "P2-015",
+      "lane": "quiet_mac",
+      "priority": "p2_next_slice",
+      "rank": 1,
+      "status": "blocked",
+      "stop_card": null
+    },
+    "P2-015-SMOKE": {
+      "acceptance": {
+        "evidence": [
+          "Ordering Preconditions rows satisfied",
+          "Noted in Window-A run report before floor cells"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-015-SMOKE/acceptance",
+          "label": "P2-015-SMOKE acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Both preconditions recorded per detection_floor Ordering Preconditions; results noted in the Window-A run report before P2-015 floor cells."
+      },
+      "authority": {
+        "label": "Detection floor Ordering Preconditions",
+        "path": "docs/phase_2/detection_floor.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "R-016 mitigated: off-machine backup and restore proof",
+            "path": "docs/risk_register.md"
+          },
+          "kind": "task",
+          "required": "external backup destination live before irreplaceable Window-A evidence accumulates",
+          "scope": "retain_evidence",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P0-003"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "production uncertainty evidence path lands",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-038"
+        },
+        {
+          "evidence": {
+            "label": "P2-043 merged doctor preflight contract",
+            "path": "docs/contracts/doctor_preflight.md"
+          },
+          "kind": "task",
+          "required": "read-only doctor passes campaign mode with warnings acknowledged",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P2-043"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only",
+        "pre_window_a_gate"
+      ],
+      "goal": "Pre-Window-A tasks-sampler overhead smoke plus production-shaped campaign shakedown through doctor, strict validation, reducer 0.4.2, strict revalidation, campaign verdict split, and approved backup.",
+      "id": "P2-015-SMOKE",
+      "lane": "quiet_mac",
+      "priority": "p2_next_slice",
+      "rank": 0,
+      "status": "blocked",
+      "stop_card": null
+    },
+    "P2-016": {
+      "acceptance": {
+        "evidence": [
+          "Each subitem lands with its named gate",
+          "Dispositions recorded in C-011"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-016/acceptance",
+          "label": "P2-016 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Each item lands with its named gate; dispositions plus rejected items recorded in C-011."
+      },
+      "authority": {
+        "label": "C-011 ledger + C-027 (post-2M umbrella)",
+        "path": "docs/reviews/2026-07-09-c027-whole-project-review.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "2K live promotion for live-gated subitems",
+          "scope": "live_promotion",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-005"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the 2M corpus exists",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-006"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "blocked_post_2m"
+      ],
+      "goal": "Critique-adjudicated queue batch (umbrella a..i): post-2M controller split; node-worker protocol parity tests; NVIDIA skip counts into measurement quality; per-backend raw-to-trace strict generalization; claims-to-evidence index post-2M; schema v0.2 loader/export parity; boundary labels in report index; summary_provenance strict key; token_count_source naming alignment.",
+      "id": "P2-016",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 24,
+      "status": "blocked",
+      "status_note": "Stage 1 conservatively blocks the parent; a later owning session may split P2-016a..i through normal intake.",
+      "stop_card": null
+    },
+    "P2-019": {
+      "acceptance": {
+        "evidence": [
+          "AP-1 grid campaign bundles",
+          "Holdout cells honored",
+          "8192 anchor cells on small+mid models"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-019/acceptance",
+          "label": "P2-019 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Grid campaign lands per AP-1; top-up near-floor cells before L3 wording."
+      },
+      "authority": {
+        "label": "AP-1",
+        "path": "docs/contracts/analysis_plans.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "R-016 mitigated: off-machine backup and restore proof",
+            "path": "docs/risk_register.md"
+          },
+          "kind": "task",
+          "required": "external backup destination live before irreplaceable Window-A evidence accumulates",
+          "scope": "retain_evidence",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P0-003"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Window-A baselines size n",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-006"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "q4_l3_shape_grid_v1 campaign (Window B, AP-1, two models, n sized from Window A): 4x3 prompt/decode grid with holdouts (512,256) and (4096,512); categorical-additive fit first; 8192-prompt anchor on small+mid models feeding D-048 (CP-6).",
+      "id": "P2-019",
+      "lane": "quiet_mac",
+      "priority": "p2_next_slice",
+      "rank": 4,
+      "status": "blocked",
+      "stop_card": null
+    },
+    "P2-020": {
+      "acceptance": {
+        "evidence": [
+          "Five equal-shape ids-native conditions",
+          "Request-energy deltas + MDE verdicts"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-020/acceptance",
+          "label": "P2-020 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Campaign lands per AP-6; the AP-6 non-generalization caveat applies (D-046)."
+      },
+      "authority": {
+        "label": "AP-6 + D-046",
+        "path": "docs/contracts/analysis_plans.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "R-016 mitigated: off-machine backup and restore proof",
+            "path": "docs/risk_register.md"
+          },
+          "kind": "task",
+          "required": "external backup destination live before irreplaceable Window-A evidence accumulates",
+          "scope": "retain_evidence",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P0-003"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Window-A baselines size n",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-006"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Content-sensitivity sentinel campaign (Window B, AP-6): five equal-shape ids-native conditions, n sized from Window A; request-energy deltas and MDE verdicts.",
+      "id": "P2-020",
+      "lane": "quiet_mac",
+      "priority": "p2_next_slice",
+      "rank": 5,
+      "status": "blocked",
+      "status_note": "Generator merged (PR #19), manifests ready (PR #26); a tiny AP-6 pilot may ride a Window-A tail (CP-6).",
+      "stop_card": null
+    },
+    "P2-022": {
+      "acceptance": {
+        "evidence": [
+          "3+ marked items",
+          "External result artifact hashed",
+          "Strict bundle valid"
+        ],
+        "pointer": {
+          "label": "Adapter contract",
+          "path": "docs/contracts/adapter_contracts.md"
+        },
+        "summary": "3+ marked items, external result artifact hashed, strict bundle valid; verdict recorded."
+      },
+      "authority": {
+        "label": "D-041 (post-2M gate)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the 2M corpus exists (post-2M per D-041)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-006"
+        },
+        {
+          "evidence": {
+            "label": "Affine ladder stream log",
+            "path": "docs/stream_logs/2026-07-08-affine-ladder.md"
+          },
+          "kind": "task",
+          "required": "affine smoke coefficients recorded",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P2-010a"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-041",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Energy-layer-only pin: no accuracy interpretation, no leaderboard join, no pass@k-energy ratio, no general adapter framework; AP row required before any L2 claim"
+        }
+      ],
+      "flags": [
+        "blocked_post_2m"
+      ],
+      "goal": "Marker-shim energy-layer feasibility spike: verdict-shaped export path only (external_markers_supported / partial / external_markers_unsupported).",
+      "id": "P2-022",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 17,
+      "status": "blocked",
+      "status_note": "C-027: the C-026 revisit-after-Window-A note is a revisit of sequencing, not permission.",
+      "stop_card": null
+    },
+    "P2-023": {
+      "acceptance": {
+        "evidence": [
+          "Frozen subset manifest with C-005 discipline",
+          "License/provenance fields present"
+        ],
+        "pointer": {
+          "label": "RQ bank import-smoke design",
+          "path": "docs/research_question_bank.md"
+        },
+        "summary": "Frozen subset with license/provenance fields lands; no pass@k/accuracy/capability claim."
+      },
+      "authority": {
+        "label": "D-041 (post-2M gate)",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the 2M corpus exists (post-2M per D-041)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-006"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "P2-022 verdict recorded",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-022"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "D-041",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "No pass@k, accuracy, or capability claim"
+        }
+      ],
+      "flags": [
+        "blocked_post_2m"
+      ],
+      "goal": "HumanEval import smoke: benchmark_import manifest plus suite profile plumbing goal; freeze subset with C-005 discipline, MIT license/provenance fields, 256/512-token completion policy.",
+      "id": "P2-023",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 18,
+      "status": "blocked",
+      "stop_card": null
+    },
+    "P2-024": {
+      "acceptance": {
+        "evidence": [
+          "Selection recorded with floor/MDE headroom rationale",
+          "Selected campaign queued as a quiet_mac task"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-024/acceptance",
+          "label": "P2-024 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Explicit selection recorded after floors; selection cites floor/MDE headroom."
+      },
+      "authority": {
+        "label": "C-015 + RQ bank",
+        "path": "docs/research_question_bank.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "2M reductions identify floor/MDE headroom",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-006"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Window-A floors measured",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-015"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Cheap-campaign shortlist: select among C5-1.6 sampler ABBA, C5-1.12 quant decomposition, C5-1.8 runtime attribution per measured floors; the selected campaign is then queued [QUIET-MAC].",
+      "id": "P2-024",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 19,
+      "status": "blocked",
+      "stop_card": null
+    },
+    "P2-027": {
+      "acceptance": {
+        "evidence": [
+          "Published pack",
+          "Documented external re-reduction"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-027/acceptance",
+          "label": "P2-027 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Published pack plus a documented external re-reduction; until then the auditability claim stays L0-scoped."
+      },
+      "authority": {
+        "label": "C-020 + C-027 NEG-9",
+        "path": "docs/reviews/2026-07-09-c027-whole-project-review.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "REPRO-001 merged environment locks and publication-pack preparation",
+            "path": "env/README.md"
+          },
+          "kind": "task",
+          "required": "publication-ready environment lock and bundle pack exist",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "REPRO-001"
+        },
+        {
+          "evidence": {
+            "label": "REPRO-002 merged publication-privacy evidence",
+            "path": "docs/run_reports/2026-07-11-repro002-publication-privacy.md"
+          },
+          "kind": "task",
+          "required": "fail-closed privacy audit and transformed public-pack path exist",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "REPRO-002"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Publish a privacy-transformed, integrity-verified three-bundle pack from a clean tagged commit and obtain one documented external re-reduction by an uninvolved party.",
+      "id": "P2-027",
+      "lane": "ed_external",
+      "priority": "p2_next_slice",
+      "rank": 2,
+      "status": "queued",
+      "status_note": "Environment locks, pack preparation, integrity tooling, and fail-closed privacy transformation are merged; publication and external re-reduction remain ED-EXTERNAL.",
+      "stop_card": null
+    },
+    "P2-028": {
+      "acceptance": {
+        "evidence": [
+          "Named verdict from 2+ strict-valid bundles",
+          "Existing real bundles pass formally"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-028/acceptance",
+          "label": "P2-028 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Script emits a named verdict from 2+ strict-valid bundles."
+      },
+      "authority": {
+        "label": "CP-6 adjudication record",
+        "path": "docs/reviews/2026-07-09-c027-whole-project-review.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Response-hash determinism gate script: formal check that repeated same-config bundles have byte-identical per-item response hashes within rep groups.",
+      "id": "P2-028",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 20,
+      "status": "queued",
+      "stop_card": null
+    },
+    "P2-035": {
+      "acceptance": {
+        "evidence": [
+          "Registry promotion record per docs/research_question_bank.md rules",
+          "G-RQVAR-* harness gaps implemented with tests"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-035/acceptance",
+          "label": "P2-035 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Promotion decided per registry rules; harness gaps closed before promotion."
+      },
+      "authority": {
+        "label": "RQ-ENERGY-VARIANCE candidate design",
+        "path": "docs/specs/rq_energy_variance_design.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "P2-015 detection floors measured",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-015"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "C-004 quarantine",
+            "path": "docs/research_question_bank.md"
+          },
+          "rule": "C-004 quarantine binds; no promotion before floors exist"
+        }
+      ],
+      "flags": [],
+      "goal": "RQ-ENERGY-VARIANCE promotion prerequisites: council round plus harness gaps G-RQVAR-* (per-bundle sampler seed recording, forced-token replay mode, replay manifests).",
+      "id": "P2-035",
+      "lane": "agent",
+      "priority": "p3_research_expansion",
+      "rank": 0,
+      "status": "blocked",
+      "stop_card": null
+    },
+    "P2-036": {
+      "acceptance": {
+        "evidence": [
+          "Named family with license/provenance fields",
+          "Frozen subset manifest passing claims_lint --mode pack"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-036/acceptance",
+          "label": "P2-036 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Named family plus frozen subset manifest passing claims_lint --mode pack."
+      },
+      "authority": {
+        "label": "Import-family campaign pack",
+        "path": "docs/campaign_packs/c5_i_1_i_2_i_5_import_family.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "HumanEval import smoke (P2-023) lands",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-023"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Second-benchmark-family source session: pick and freeze the second import family with licensing/contamination/shape discipline; MMLU/tinyBenchmarks remain rejected as first.",
+      "id": "P2-036",
+      "lane": "agent",
+      "priority": "p3_research_expansion",
+      "rank": 1,
+      "status": "shelved",
+      "status_note": "SHELF per C-026 meeting; FLORES language-set decision (D-046/B6) may share the session.",
+      "stop_card": null
+    },
+    "P2-038": {
+      "acceptance": {
+        "evidence": [
+          "True MLX plus /usr/bin/powermetrics campaign shakedown",
+          "Strict then reduce then strict request gate passes without synthetic metadata",
+          "Approved off-machine backup succeeds"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-038/acceptance",
+          "label": "P2-038 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "On a lead-controlled quiet Mac, a true MLX plus /usr/bin/powermetrics shakedown passes strict, reducer-0.4.2 re-reduction, production uncertainty gates, campaign claim-readiness plumbing, and approved backup."
+      },
+      "authority": {
+        "label": "Adjudicated P2-038 production-uncertainty spec",
+        "path": "docs/specs/c027/p2-038_production_uncertainty_evidence.md"
+      },
+      "dependencies": [
+        {
+          "evidence": {
+            "label": "R-016 mitigated: off-machine backup and restore proof",
+            "path": "docs/risk_register.md"
+          },
+          "kind": "task",
+          "required": "approved off-machine backup destination and restore proof exist",
+          "scope": "retain_evidence",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P0-003"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only",
+        "pre_window_a_gate",
+        "provisional_until_live"
+      ],
+      "goal": "Close the production uncertainty live tail: execute the merged clock-anchor, marker-phase, idle-drift, and idle-guard path on true MLX plus /usr/bin/powermetrics and retain the backed-up shakedown evidence.",
+      "id": "P2-038",
+      "lane": "quiet_mac",
+      "priority": "p2_next_slice",
+      "rank": 7,
+      "status": "partial",
+      "status_note": "PR #48 merged the software path and accepted-finding fixes; only the lead-controlled quiet-machine live closure remains.",
+      "stop_card": null
+    },
+    "P2-046B": {
+      "acceptance": {
+        "evidence": [
+          "Counterbalanced real-Mac transition artifacts",
+          "Offset, residual, and conservative-bound verdict",
+          "P2-038 bound cited or amended"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-046B/acceptance",
+          "label": "P2-046B acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Real-Mac counterbalanced transitions validate or widen the P2-038 conservative interval-support bound; physical evidence replaces the PROVISIONAL Part-A verdict."
+      },
+      "authority": {
+        "label": "Hardening adjudication C6",
+        "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "P2-038 live production path closes first",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-038"
+        },
+        {
+          "evidence": {
+            "label": "P2-046A merged provisional harness and fixtures",
+            "path": "docs/run_reports/2026-07-11-p2046-load-transition-prep.md"
+          },
+          "kind": "task",
+          "required": "frozen Part-A harness and analysis exist",
+          "scope": "start",
+          "state": "satisfied",
+          "strength": "hard",
+          "target": "P2-046A"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Hardening adjudication C6",
+            "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
+          },
+          "rule": "Do not promote Part-A fixture evidence or retain PROVISIONAL interval support after a conflicting physical verdict"
+        }
+      ],
+      "flags": [
+        "lead_only",
+        "provisional_until_live"
+      ],
+      "goal": "Execute the frozen load-transition alignment harness on the real Mac and adjudicate the production interval-support bound from offset and residual artifacts.",
+      "id": "P2-046B",
+      "lane": "quiet_mac",
+      "priority": "p1_phase_gate",
+      "rank": 8,
+      "status": "blocked",
+      "status_note": "Part A merged in PR #50; Part B is quiet-machine physical execution.",
+      "stop_card": null
+    },
+    "P2-047A": {
+      "acceptance": {
+        "evidence": [
+          "Frozen ABBA manifest",
+          "Standard and buffered/minimal-marker paths have identical output policy and hashes",
+          "Analysis refuses unsupported subtraction"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-047A/acceptance",
+          "label": "P2-047A acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A frozen controller-overhead ABBA harness preserves output identity and defaults to instrumented-stack scope rather than unvalidated subtraction."
+      },
+      "authority": {
+        "label": "Hardening adjudication C7",
+        "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Window-A floors exist before overhead design is frozen",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-015"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Hardening adjudication C7",
+            "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
+          },
+          "rule": "Do not subtract controller overhead without a separately justified correction model"
+        }
+      ],
+      "flags": [],
+      "goal": "Freeze the controller capture-overhead ABBA harness comparing the standard event path with a buffered or minimal-marker path under identical outputs and hashes.",
+      "id": "P2-047A",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 25,
+      "status": "blocked",
+      "stop_card": null
+    },
+    "P2-047B": {
+      "acceptance": {
+        "evidence": [
+          "Floor-governed quiet-Mac ABBA bundles",
+          "Named overhead verdict",
+          "Instrumented-stack scope or separately justified model"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-047B/acceptance",
+          "label": "P2-047B acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Real floor-governed ABBA execution yields a named overhead verdict with instrumented-stack scope unless a separate subtraction model is justified."
+      },
+      "authority": {
+        "label": "Hardening adjudication C7",
+        "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "Window-A floors exist",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-015"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "frozen controller-overhead harness exists",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-047A"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Run the frozen controller capture-overhead ABBA on the quiet Mac and record the floor-governed overhead verdict.",
+      "id": "P2-047B",
+      "lane": "quiet_mac",
+      "priority": "p2_next_slice",
+      "rank": 9,
+      "status": "blocked",
+      "stop_card": null
+    },
+    "P2-048": {
+      "acceptance": {
+        "evidence": [
+          "External-meter importer",
+          "boundary-calibrate CLI",
+          "Designed refusal reasons and held-out gate"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-048/acceptance",
+          "label": "P2-048 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The existing Q6 and D-018 bridge design is implemented with bound metadata, synchronization, paired windows, calibration fit, held-out gate, floor identity, and refusal reasons."
+      },
+      "authority": {
+        "label": "Hardening adjudication C9",
+        "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "external wall-meter decision supplies a usable device path",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P1-003"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Hardening adjudication C9",
+            "path": "docs/reviews/2026-07-10-hardening-adjudication.md"
+          },
+          "rule": "Implement the existing bridge design; do not create a duplicate design contract"
+        }
+      ],
+      "flags": [],
+      "goal": "Implement the conditional external-meter importer and boundary-calibrate CLI for the already-designed Q6 and D-018 bridge.",
+      "id": "P2-048",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 26,
+      "status": "shelved",
+      "status_note": "Conditional on P1-003 selecting an available meter path.",
+      "stop_card": null
+    },
+    "P3-000": {
+      "acceptance": {
+        "evidence": [
+          "Verdicts in docs/phase_3/kv_feasibility.md",
+          "Checklist rows updated"
+        ],
+        "pointer": {
+          "label": "Phase 3 exit checklist",
+          "path": "docs/phase_3/phase_3_exit_checklist.md"
+        },
+        "summary": "Verdicts recorded in docs/phase_3/kv_feasibility.md; checklist rows are the status authority; must complete before any borrow-window scheduling."
+      },
+      "authority": {
+        "label": "D-035/D-036",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "external",
+          "required": "user approves the 3.0.2 installs (R-003)",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "R-003"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "KV persistence feasibility spikes (Phase 3 Stage 3.0): 3.0.2+ open; 3.0.2 needs installs and inherits the 3.0.1 harness shape plus its two deferred hardening fixes (ledger C-8).",
+      "id": "P3-000",
+      "lane": "agent",
+      "priority": "p3_research_expansion",
+      "rank": 16,
+      "status": "blocked",
+      "status_note": "3.0.1 complete and merged (PR #9, replay_supported).",
+      "stop_card": null
+    },
+    "P3-001b": {
+      "acceptance": {
+        "evidence": [
+          "AP row committed pre-split-hardware",
+          "phase_3_plan amendment line landed"
+        ],
+        "pointer": {
+          "label": "Analysis plans (split row)",
+          "path": "docs/contracts/analysis_plans.md"
+        },
+        "summary": "AP row committed before any split hardware run; phase_3_plan amendment line landed."
+      },
+      "authority": {
+        "label": "D-048/D-049",
+        "path": "docs/decision_log.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "2M affine coefficients exist",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-006"
+        }
+      ],
+      "fallback": null,
+      "fences": [],
+      "flags": [],
+      "goal": "Seed the split analysis-plan row: pre-registered compositional predictions per pairing/link (including named same-boundary headline and at least one predicted-crossover cell if feasible), per-cell transfer-boundary labels (D-049).",
+      "id": "P3-001b",
+      "lane": "agent",
+      "priority": "p3_research_expansion",
+      "rank": 21,
+      "status": "blocked",
+      "stop_card": null
+    }
+  },
+  "updated": "2026-07-11"
+}

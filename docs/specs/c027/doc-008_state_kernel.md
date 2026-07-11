@@ -76,11 +76,20 @@ The kernel is hand-edited; views are generated. Generating the kernel from Markd
 | Field | Type | Required | Contract |
 |---|---|---:|---|
 | `schema` | string | yes | Exact value `docs/process/state_kernel.schema.json`. |
-| `schema_version` | integer | yes | Exact value `1`. Changed meaning requires a new version and migration. |
+| `schema_version` | integer | yes | Exact value `2`. Changed meaning requires a new version and migration. |
+| `authority` | string | yes | Exact value `NOT_AUTHORITATIVE_DERIVED_VIEW`. This mandatory notice states that the kernel is a derived work-selection view; owning plans, contracts, decisions, and exit checklists remain authoritative. |
 | `updated` | string | yes | Explicit `YYYY-MM-DD`; never generated from wall-clock time. |
 | `latest_report` | Pointer | yes | Latest substantial handoff report. |
 | `active_stop_card` | Pointer or null | yes | Null when no card is active; otherwise points to `docs/stop_cards/<id>.md`. |
 | `tasks` | object keyed by task ID | yes | Live nonterminal tasks only. Object order has no meaning. |
+
+Schema version 2 is the 2026-07-11 migration that adds the required
+top-level `authority` notice. Version 1 kernels are not accepted after this
+migration; the field is not optional compatibility metadata, and no other
+field changes meaning in this version bump. The notice does not weaken the
+kernel's role as the sole editable source for live work-selection state. It
+prevents that derived state from superseding the authorities referenced by
+each task or D-023's checklist ownership of phase completion.
 
 ### 3.2 Pointer
 
@@ -177,7 +186,7 @@ Priority is not a dependency. C-027’s P2-040 → P2-038 → P2-039 → RPT-001
 
 The generator rejects the kernel unless:
 
-1. IDs match object keys; lane ranks are unique; no unknown fields exist.
+1. `schema_version` is `2`, `authority` is exactly `NOT_AUTHORITATIVE_DERIVED_VIEW`, IDs match object keys, lane ranks are unique, and no unknown fields exist.
 2. No task has terminal status.
 3. For non-shelved tasks, `blocked` exactly matches hard pending start dependencies.
 4. Pending task dependencies resolve; no self-dependency exists; pending hard task edges are acyclic across all scopes.
@@ -667,7 +676,7 @@ Named decisions win: missions do not override dependencies, ranks do not overrid
 
 `tests/test_gen_state.py` covers:
 
-1. valid minimal and migrated kernels;
+1. valid minimal and migrated schema-version-2 kernels, including rejection of a missing or altered top-level `authority` notice;
 2. missing/unknown fields and enums;
 3. ID mismatch, duplicate lane rank, invalid pointers/paths, self-dependency, dangling task, and cycles;
 4. blocked/status consistency and later-scope gates;

@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/process/state_kernel.schema.json",
+  "title": "JouleWise state kernel (DOC-008 Stage 1, schema_version 2)",
+  "description": "Editor/tooling schema only; scripts/gen_state.py is the runtime validator (stdlib, no jsonschema dependency). Cross-record invariants (lane-rank uniqueness, blocked/status consistency, pointer resolution, acyclicity, stop-card agreement) live in the generator.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "authority", "updated", "latest_report", "active_stop_card", "tasks"],
+  "properties": {
+    "schema": { "const": "docs/process/state_kernel.schema.json" },
+    "schema_version": { "const": 2 },
+    "authority": { "const": "NOT_AUTHORITATIVE_DERIVED_VIEW" },
+    "updated": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "latest_report": { "$ref": "#/$defs/pointer" },
+    "active_stop_card": {
+      "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/pointer" }]
+    },
+    "tasks": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/task" }
+    }
+  },
+  "$defs": {
+    "cellText": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^|\\n]+$"
+    },
+    "pointer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "label"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "pattern": "^(?!/)(?!.*\\.\\.)[^:]*$" },
+        "label": { "$ref": "#/$defs/cellText" },
+        "anchor": { "type": "string", "minLength": 1, "pattern": "^[^#].*$" },
+        "json_pointer": { "type": "string", "pattern": "^/" }
+      },
+      "not": { "required": ["anchor", "json_pointer"] }
+    },
+    "dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "target", "required", "state", "strength", "scope", "evidence"],
+      "properties": {
+        "kind": { "enum": ["task", "artifact", "decision", "external", "event"] },
+        "target": { "type": "string", "minLength": 1 },
+        "required": { "$ref": "#/$defs/cellText" },
+        "state": { "enum": ["pending", "satisfied"] },
+        "strength": { "enum": ["hard", "advisory"] },
+        "scope": { "enum": ["start", "retain_evidence", "interpret", "close", "live_promotion"] },
+        "evidence": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/pointer" }]
+        },
+        "note": { "$ref": "#/$defs/cellText" }
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "pointer", "evidence"],
+      "properties": {
+        "summary": { "$ref": "#/$defs/cellText" },
+        "pointer": { "$ref": "#/$defs/pointer" },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/cellText" }
+        }
+      }
+    },
+    "fence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "authority"],
+      "properties": {
+        "rule": { "$ref": "#/$defs/cellText" },
+        "authority": { "$ref": "#/$defs/pointer" }
+      }
+    },
+    "fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["condition", "action", "pointer"],
+      "properties": {
+        "condition": { "$ref": "#/$defs/cellText" },
+        "action": { "$ref": "#/$defs/cellText" },
+        "pointer": { "$ref": "#/$defs/pointer" }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "lane", "rank", "priority", "status", "goal", "dependencies",
+        "authority", "acceptance", "fences", "fallback", "flags", "stop_card"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9.-]*$" },
+        "lane": { "enum": ["agent", "quiet_mac", "ed_external"] },
+        "rank": { "type": "integer", "minimum": 0 },
+        "priority": {
+          "enum": ["p0_safety", "p1_phase_gate", "p2_next_slice", "p3_research_expansion", "p4_polish"]
+        },
+        "status": { "enum": ["queued", "active", "partial", "blocked", "shelved"] },
+        "status_note": { "$ref": "#/$defs/cellText" },
+        "goal": { "$ref": "#/$defs/cellText" },
+        "dependencies": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dependency" }
+        },
+        "authority": { "$ref": "#/$defs/pointer" },
+        "acceptance": { "$ref": "#/$defs/acceptance" },
+        "fences": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/fence" }
+        },
+        "fallback": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/fallback" }]
+        },
+        "flags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "blocked_post_2m", "lead_only", "migration_inferred_lane",
+              "mixed_lane_migrated", "pre_window_a_gate", "provisional_until_live"
+            ]
+          }
+        },
+        "stop_card": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/pointer" }]
+        }
+      }
+    }
+  }
+}
