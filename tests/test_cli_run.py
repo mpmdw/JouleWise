@@ -437,7 +437,7 @@ class StrictValidateTests(CliRunTestCase):
             "energy_uncertainty_status",
             "energy_variance_terms_j2",
             "energy_bound_terms_j",
-            "claim_eligibility",
+            "window_evidence_precheck",
         ):
             summary.pop(key)
         (bundle / "summary_metrics.json").write_text(
@@ -448,21 +448,54 @@ class StrictValidateTests(CliRunTestCase):
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
             self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_reducer_0_3_1_dispatch_requires_exact_summary(self) -> None:
-        bundle = self.make_bundle("strict-v031-exact")
+    def test_reducer_0_4_0_dispatch_requires_exact_summary(self) -> None:
+        bundle = self.make_bundle("strict-v040-exact")
         self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_reducer_0_3_0_dispatch_tolerates_added_field_absence(self) -> None:
-        bundle = self.make_bundle("strict-v030-added-absence")
+    def test_current_era_reducer_0_3_0_requires_re_reduction(self) -> None:
+        bundle = self.make_bundle("strict-v030-rejected")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         summary["summary_provenance"]["reducer_version"] = "0.3.0"
-        for field in ("remote_cleanup_failed", "runtime_cleanup_ok"):
-            del summary["measurement_quality"][field]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
 
-        self.assertEqual(validate_bundle(bundle, strict=True), [])
+        self.assertIn(
+            "strict: unsupported reducer version; re-reduction required",
+            validate_bundle(bundle, strict=True),
+        )
+
+    def test_current_era_reducer_0_3_1_requires_re_reduction(self) -> None:
+        bundle = self.make_bundle("strict-v031-rejected")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["summary_provenance"]["reducer_version"] = "0.3.1"
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        self.assertIn(
+            "strict: unsupported reducer version; re-reduction required",
+            validate_bundle(bundle, strict=True),
+        )
+
+    def test_reducer_0_4_0_old_field_only_fails_exact_comparison(self) -> None:
+        bundle = self.make_bundle("strict-v040-old-field")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["claim_eligibility"] = summary.pop("window_evidence_precheck")
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("claim_eligibility" in problem for problem in problems),
+            problems,
+        )
+        self.assertTrue(
+            any("window_evidence_precheck" in problem for problem in problems),
+            problems,
+        )
 
     def test_reducer_0_2_x_dispatch_requires_re_reduction(self) -> None:
         bundle = self.make_bundle("strict-v02-rejected")
@@ -489,7 +522,7 @@ class StrictValidateTests(CliRunTestCase):
         )
 
     def test_missing_null_and_non_string_reducer_versions_are_rejected(self) -> None:
-        for value in ("missing", None, ["0.3.0"]):
+        for value in ("missing", None, ["0.4.0"]):
             with self.subTest(value=value):
                 bundle = self.make_bundle(f"strict-bad-version-{str(value)}")
                 summary = json.loads((bundle / "summary_metrics.json").read_text())
@@ -517,11 +550,10 @@ class StrictValidateTests(CliRunTestCase):
             validate_bundle(bundle, strict=True),
         )
 
-    def test_claimed_0_3_0_missing_governed_field_fails_exact_dispatch(self) -> None:
-        bundle = self.make_bundle("strict-v030-governed-absence")
+    def test_claimed_0_4_0_missing_governed_field_fails_exact_dispatch(self) -> None:
+        bundle = self.make_bundle("strict-v040-governed-absence")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
-        summary["summary_provenance"]["reducer_version"] = "0.3.0"
-        del summary["claim_eligibility"]["gross_request"]
+        del summary["window_evidence_precheck"]["gross_request"]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
@@ -529,7 +561,10 @@ class StrictValidateTests(CliRunTestCase):
         problems = validate_bundle(bundle, strict=True)
 
         self.assertTrue(
-            any("claim_eligibility.gross_request" in problem for problem in problems),
+            any(
+                "window_evidence_precheck.gross_request" in problem
+                for problem in problems
+            ),
             problems,
         )
 
@@ -652,6 +687,7 @@ class StrictValidateTests(CliRunTestCase):
         del summary["idle_baseline"]["gpu_idle_ratio_min"]
         del summary["idle_baseline"]["idle_window_suspect"]
         del summary["measurement_quality"]["idle_window_suspect"]
+        del summary["measurement_quality"]["remote_cleanup_failed"]
         del summary["measurement_quality"]["runtime_cleanup_ok"]
         (bundle / "summary_metrics.json").write_text(
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
@@ -756,10 +792,10 @@ class StrictValidateTests(CliRunTestCase):
         with patch("joulewise.bundle_read._check_config_sha256", return_value=[]):
             self.assertEqual(validate_bundle(bundle, strict=True), [])
 
-    def test_reducer_0_3_1_missing_either_added_field_fails_strict(self) -> None:
+    def test_reducer_0_4_0_missing_either_added_field_fails_strict(self) -> None:
         for field in ("remote_cleanup_failed", "runtime_cleanup_ok"):
             with self.subTest(field=field):
-                bundle = self.make_bundle("strict-v031-missing-" + field)
+                bundle = self.make_bundle("strict-v040-missing-" + field)
                 summary = json.loads((bundle / "summary_metrics.json").read_text())
                 del summary["measurement_quality"][field]
                 (bundle / "summary_metrics.json").write_text(
@@ -771,8 +807,8 @@ class StrictValidateTests(CliRunTestCase):
                 self.assertEqual(len(problems), 1)
                 self.assertIn("measurement_quality." + field, problems[0])
 
-    def test_tampered_reducer_0_3_1_summary_fails_strict(self) -> None:
-        bundle = self.make_bundle("strict-v031-tampered")
+    def test_tampered_reducer_0_4_0_summary_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-v040-tampered")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         summary["energy_request_j"] = 999999.0
         (bundle / "summary_metrics.json").write_text(

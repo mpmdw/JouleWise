@@ -1403,19 +1403,18 @@ cannot be overridden by the campaign’s collection-usability verdict. A
 manifest-declared first-run exemption may apply only to the first physical run
 in a session; it does not exempt all `repetitions = 1` configs.
 
-**OPEN QUESTION / LEAD:** assign one of these before real matrix claim
-readiness is possible:
-
-- implement a campaign-level D-014 recovery gate in `run_campaign.py`, with
-  raw cooldown evidence and a tri-state result attached to the following
-  manifest entry; or
-- redesign execution so interleaving and semantic block identity survive while
-  one controller-owned experiment runner performs the between-member gates.
+**Resolved by the P2-041 landing:** `run_campaign.py` owns the campaign-level
+D-014 recovery gate between independent physical config invocations. It uses
+the controller's rolling 30-second/10-percent/300-second rule, persists raw
+JSONL evidence with a relative path, SHA-256, and record count, and attaches a
+tri-state result to the following member. Missing or hash-invalid raw evidence
+is unknown on resume. The first-run exemption remains limited to the first
+physical run in each physical campaign session.
 
 Merely writing `cooldown_cap_hit = false`, sleeping a fixed interval, or
 inferring recovery from start/end sentinels is not an acceptable resolution.
-Until an owner and implementation land, the collection may be `usable`, but
-confirmatory claim inputs remain not ready.
+Only a measured recovered gate or the one per-session first-run exemption can
+satisfy this readiness input; unknown and cap-hit results remain fail-closed.
 
 ### C7. Exact campaign-verdict v2 JSON shape
 

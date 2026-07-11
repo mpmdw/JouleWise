@@ -156,16 +156,23 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertEqual(suite_summary["properties"]["floor_cmp_j"], {"type": ["number", "null"]})
         payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()
         self.assertIsNone(payload["suite_metrics"])
-        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.3.1")
+        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.4.0")
 
-    def test_measurement_quality_runtime_cleanup_field_is_additive_nullable(self) -> None:
+    def test_measurement_quality_cleanup_fields_are_additive_nullable(self) -> None:
         schema = SummaryMetrics.json_schema()
         quality = schema["$defs"]["measurement_quality"]
         self.assertEqual(
             quality["properties"]["runtime_cleanup_ok"],
             {"type": ["boolean", "null"]},
         )
+        self.assertEqual(
+            quality["properties"]["remote_cleanup_failed"],
+            {"type": ["array", "null"], "items": {"type": "string"}},
+        )
         self.assertNotIn("runtime_cleanup_ok", quality["required"])
+        self.assertNotIn("remote_cleanup_failed", quality["required"])
+        self.assertIn("window_evidence_precheck", schema["properties"])
+        self.assertNotIn("claim_eligibility", schema["properties"])
 
     def test_summary_metrics_schema_has_idle_gpu_quality_fields(self) -> None:
         schema = SummaryMetrics.json_schema()
