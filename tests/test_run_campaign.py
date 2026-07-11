@@ -159,6 +159,7 @@ def write_experiment(
     *,
     statuses: list[str] | None = None,
     completed: int | None = None,
+    config_path: Path | None = None,
 ) -> None:
     if statuses is None:
         statuses = ["succeeded"] * repetitions
@@ -168,7 +169,12 @@ def write_experiment(
     for rep in range(1, completed + 1):
         member_name = f"{run_id}__r{rep}"
         members.append(member_name)
-        _write_bundle(runs_dir, member_name, statuses[rep - 1])
+        _write_bundle(
+            runs_dir,
+            member_name,
+            statuses[rep - 1],
+            config_path=config_path,
+        )
     experiments = runs_dir / "experiments"
     experiments.mkdir(parents=True, exist_ok=True)
     (experiments / f"{run_id}.json").write_text(
@@ -197,7 +203,7 @@ def _write_bundle(
     start_s: float = 0.0,
 ) -> None:
     from joulewise import reduce as reduce_module
-    from joulewise.bundle import RunBundleWriter
+    from joulewise.bundle import RunBundleWriter, sanitize_id_component
     from joulewise.clock import FakeClock
     from joulewise.interfaces import PowerSample, RuntimeEvent
     from joulewise.provenance import output_policy, prompt_provenance
@@ -205,8 +211,10 @@ def _write_bundle(
 
     source_config = config_path if config_path is not None else BASE_CONFIG
     config_data = json.loads(source_config.read_text(encoding="utf-8"))
-    config_data["run_id"] = run_id
-    config_data["workload_profile"]["repetitions"] = 1
+    if sanitize_id_component(config_data["run_id"]) != run_id:
+        config_data["run_id"] = run_id
+    if config_path is None:
+        config_data["workload_profile"]["repetitions"] = 1
     config = BenchmarkConfig.from_mapping(config_data)
     telemetry_backend = config.hardware_target.telemetry_backend.value
     writer = RunBundleWriter.create(runs_dir, config, FakeClock(start=start_s + 1.1))
@@ -340,7 +348,6 @@ def make_fake_cli(tmp: Path, sentinel: Path | None = None) -> Path:
             def write_bundle(bundle_run_id, status):
                 config_data = json.loads(config_path.read_text(encoding="utf-8"))
                 config_data["run_id"] = bundle_run_id
-                config_data["workload_profile"]["repetitions"] = 1
                 config = BenchmarkConfig.from_mapping(config_data)
                 telemetry_backend = config.hardware_target.telemetry_backend.value
                 writer = RunBundleWriter.create(runs_dir, config, FakeClock(start=3.0))
@@ -894,8 +901,12 @@ class RunCampaignTests(unittest.TestCase):
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            write_config(config_dir, "complete.json", "complete-exp", repetitions=5)
-            write_experiment(runs_dir, "complete-exp", 5)
+            config_path = write_config(
+                config_dir, "complete.json", "complete-exp", repetitions=5
+            )
+            write_experiment(
+                runs_dir, "complete-exp", 5, config_path=config_path
+            )
             sentinel = tmp_path / "sentinel"
             fake_cli = make_fake_cli(tmp_path, sentinel)
 
@@ -943,12 +954,18 @@ class RunCampaignTests(unittest.TestCase):
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            write_config(config_dir, "failed-member.json", "failed-member-exp", repetitions=5)
+            config_path = write_config(
+                config_dir,
+                "failed-member.json",
+                "failed-member-exp",
+                repetitions=5,
+            )
             write_experiment(
                 runs_dir,
                 "failed-member-exp",
                 5,
                 statuses=["succeeded", "succeeded", "failed", "succeeded", "succeeded"],
+                config_path=config_path,
             )
             sentinel = tmp_path / "sentinel"
             fake_cli = make_fake_cli(tmp_path, sentinel)
@@ -2138,7 +2155,9 @@ class RunCampaignTests(unittest.TestCase):
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            manifest, _ = write_strict_analysis_campaign(config_dir)
+            manifest, _ = write_strict_analysis_campaign(
+                config_dir, telemetry_backend="mock"
+            )
             fake_cli = make_fake_cli(tmp_path)
 
             result = run_campaign(config_dir, runs_dir, cli_cmd=cli_cmd_for(fake_cli))
@@ -2763,8 +2782,16 @@ class RunCampaignTests(unittest.TestCase):
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            write_config(config_dir, "partial.json", "partial-exp", repetitions=5)
-            write_experiment(runs_dir, "partial-exp", 5, completed=3)
+            config_path = write_config(
+                config_dir, "partial.json", "partial-exp", repetitions=5
+            )
+            write_experiment(
+                runs_dir,
+                "partial-exp",
+                5,
+                completed=3,
+                config_path=config_path,
+            )
             sentinel = tmp_path / "sentinel"
             fake_cli = make_fake_cli(tmp_path, sentinel)
 
@@ -3214,8 +3241,8 @@ class RunCampaignTests(unittest.TestCase):
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            write_config(config_dir, "space.json", "Foo Bar")
-            write_single_bundle(runs_dir, "foo-bar")
+            config_path = write_config(config_dir, "space.json", "Foo Bar")
+            write_single_bundle(runs_dir, "foo-bar", config_path=config_path)
             fake_cli = make_fake_cli(tmp_path)
 
             result = run_campaign(
@@ -3389,11 +3416,23 @@ class RunCampaignTests(unittest.TestCase):
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
             config_dir.mkdir()
-            write_config(config_dir, "01-complete.json", "complete", repetitions=5)
-            write_config(config_dir, "02-partial.json", "partial", repetitions=5)
+            complete_config = write_config(
+                config_dir, "01-complete.json", "complete", repetitions=5
+            )
+            partial_config = write_config(
+                config_dir, "02-partial.json", "partial", repetitions=5
+            )
             write_config(config_dir, "03-fresh.json", "fresh", repetitions=5)
-            write_experiment(runs_dir, "complete", 5)
-            write_experiment(runs_dir, "partial", 5, completed=2)
+            write_experiment(
+                runs_dir, "complete", 5, config_path=complete_config
+            )
+            write_experiment(
+                runs_dir,
+                "partial",
+                5,
+                completed=2,
+                config_path=partial_config,
+            )
             fake_cli = make_fake_cli(tmp_path)
 
             dry = run_campaign(

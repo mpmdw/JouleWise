@@ -212,8 +212,12 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
-- 2026-07-10 P2-041 campaign verdict split (implemented in `impl/p2041`,
-  uncommitted pending lead pathspec review):
+- 2026-07-10 P2-041 bounded composition diagnosis/fix round at WIP `[RED]`
+  snapshot `d0bc777` (seven stale-fixture failures fixed; ancestry rebuild and
+  lead review still pending):
+  `docs/run_reports/2026-07-10-p2041-bounded-fix-round.md`
+- 2026-07-10 earlier P2-041 campaign-verdict report (its verification claims
+  are superseded by the fresh bounded reproduction above):
   `docs/run_reports/2026-07-10-p2041-campaign-verdict-split.md`
 - 2026-07-10 P2-040 / RETRO-001 fix round (committed on c027-int-p2040
   after lead review): `docs/run_reports/2026-07-10-p2040-fix-round.md`
@@ -258,12 +262,15 @@ queue owns ordering (C-027):**
 
 ## Current Verification
 
-- P2-041 worktree `impl/p2041`: pre-change baseline `Ran 910 tests in
-  33.321s`, `OK (skipped=12)`; focused campaign/cooldown/reducer set `Ran 99
-  tests in 11.210s`, `OK`; final canonical suite `Ran 916 tests in 33.924s`,
-  `OK (skipped=12)`; claims lint AP+registry clean; `git diff --check` clean.
-  No quiet-machine collection was run. Report:
-  `docs/run_reports/2026-07-10-p2041-campaign-verdict-split.md`.
+- P2-041 worktree `impl/p2041` at WIP `[RED]` snapshot `d0bc777`: the fresh
+  focused reproduction found the recorded 6 failures / 1 error in
+  `tests.test_run_campaign`; all seven were stale composed fixtures, not a
+  production-code relaxation. After the bounded fixture fix:
+  `python3 -m unittest tests.test_run_campaign` -> `Ran 80 tests in 35.072s`,
+  `OK`; canonical suite -> `Ran 1020 tests in 62.462s`, `OK (skipped=12)`;
+  `git diff --check` clean. No quiet-machine collection was run. The content
+  remains pre-unioned without merge ancestry and pending lead rebuild/review.
+  Report: `docs/run_reports/2026-07-10-p2041-bounded-fix-round.md`.
 - P2-040 / RETRO-001 fix-round worktree: canonical suite `Ran 908 tests in
   32.723s`, `OK (skipped=11)`; focused 211 tests OK; claims lint exit 0 with
   no errors; `git diff --check` clean. The absent `runs/` corpus produced the
@@ -317,11 +324,12 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
-- `impl/p2041` holds the uncommitted P2-041 tranche for lead pathspec review.
-  `origin/main` advanced by nine RPT-001/P2-039 commits during its final
-  verification, so the branch is intentionally behind and was not merged or
-  rebased. The P2-042 producer remains absent at this branch head; see the
-  P2-041 report for the bounded consumer seam and C5/P2-037 ownership conflict.
+- `impl/p2041` is at WIP `[RED]` snapshot `d0bc777`, which contains P2-041
+  branch work plus main-post-PR-#48 content copied into the tree without merge
+  ancestry and the C5 `window_evidence_precheck` rename. The seven composed
+  `test_run_campaign` failures are fixed locally and both focused/canonical
+  suites are green, but the lead must still rebuild ancestry from
+  `origin/main`, review the full tranche, and rerun verification before a PR.
 - `main` and `origin/main` contain the user-directed Claude Code → Codex
   bridge hardening from commit `1d7c415` (pushed direct as a bounded
   tooling change, closeout `ef34cc9`). Branch `c027-council-review`
