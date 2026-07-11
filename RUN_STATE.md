@@ -118,8 +118,11 @@ list below where they conflict). State at pause:**
 - Scope-restraint + adapter infrastructure (global, outside repo):
   claude-codex-report/v1 adopted (~/.claude/skills/codex-delegation/
   ADAPTER.md); codex-run-v3 + codex-usage INSTALLED (~/.local/bin);
-  fail-on-diff scope backstop build IN FLIGHT at pause
-  (sol-scope-backstop.md); AGENTS.md now carries delegated-session
+  fail-on-diff scope backstop LANDED CLEAN and
+  INSTALLED post-checkpoint (149-assertion suite + full v2 compat
+  lead-replayed; SCOPE_VIOLATION/exit-77/evidence-bundle + NEEDS_SCOPE
+  approve/resume protocol live in ~/.local/bin/codex-run-v3 — every
+  future delegated write session runs enforced); AGENTS.md now carries delegated-session
   WRITE_SCOPE precedence + NEEDS_RULING early-return (9ca89cc,
   31b3f5e). Consult records: docs/reviews/2026-07-11-scope-restraint-
   consult.md, -p2044-design-consult.md, -p2041-red-tranche-triage.md,
