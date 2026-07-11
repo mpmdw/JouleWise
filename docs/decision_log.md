@@ -1572,16 +1572,31 @@ monotonic envelope. Record zero is timestamped at that interval endpoint;
 records `i>0` advance by elapsed values `1..i`. Strict mode re-derives the
 midpoint and bounds from paired-clock observations and raw plists; plist
 whole-second dates are consistency checks only and never tighten the bound.
-Amendment (2026-07-10, P2-040 review fix): reducer `0.3.1` adds governed
-output field `measurement_quality.runtime_cleanup_ok`; `0.3.1` strict
+Amendment (2026-07-10, P2-040 review fix, post-#49 union): reducer `0.3.1`
+adds governed output fields `measurement_quality.runtime_cleanup_ok` and
+`measurement_quality.remote_cleanup_failed`; `0.3.1` strict
 comparison is exact. A stored `0.3.0` summary is compared against a fresh
 reduction projected to recorded reducer version `0.3.0`, with absence-only
-tolerance for exactly `ADDED_SINCE_0_3_0` (currently only
-`measurement_quality.runtime_cleanup_ok`); any stored value remains an exact
-claim. Legacy and unsupported-version arms are unchanged. From this point,
+tolerance for exactly `ADDED_SINCE_0_3_0` (currently
+`measurement_quality.runtime_cleanup_ok` and
+`measurement_quality.remote_cleanup_failed`); any stored value remains an
+exact claim. Legacy and unsupported-version arms are unchanged. From this point,
 every governed output-shape addition MUST bump the reducer patch version and
 extend the immediately prior frozen version's named absence-tolerance set.
 A frozen reducer version is never reused for a changed governed output shape.
+
+Amendment (2026-07-11, P2-041 / Component C5): reducer `0.4.0` renames the
+top-level evidence-only surface from `claim_eligibility` to
+`window_evidence_precheck`, removes the generic `request` alias from newly
+reduced summaries, and retains the metric-specific `gross_request` and
+`idle_subtracted_request` entries. Reducer `0.4.0` strict comparison is exact.
+Current-era summaries recording reducer `0.3.0` or `0.3.1` require explicit
+re-reduction; they are not projected across this semantic rename. The frozen
+pre-D-033 legacy identity arm retains its provenance-less additive-absence
+tolerance and original raw reconstruction, while recorded `0.2.x` and unknown
+versions remain unsupported. Legacy compatibility never authorizes positive
+claim readiness. Summary schema remains `0.1`; schema `0.2` remains reserved
+for the previously adjudicated composite changes.
 
 Revisit when: bundle schema v0.2 lands (composite summaries need their
 own strict semantics), or a reducer version bump makes historical
@@ -2831,6 +2846,36 @@ Request gating is metric-specific: `gross_request` governs
 both. The `request` gate remains a deprecated alias of
 `idle_subtracted_request` through summary schema v0.1; removal waits for
 schema v0.2.
+
+Amendment (2026-07-10, P2-041 / C-027 adjudication): the closed v1
+analysis/campaign consumer vocabulary is:
+`analysis_manifest_invalid`, `analysis_manifest_not_frozen`,
+`order_manifest_hash_mismatch`, `config_hash_mismatch`, `bundle_missing`,
+`bundle_strict_invalid`, `bundle_status_not_succeeded`,
+`metric_missing_or_nonfinite`, `paired_block_incomplete`,
+`insufficient_complete_blocks`, `fixed_n_plan_incomplete`,
+`window_evidence_precheck_missing`, `campaign_cooldown_evidence_missing`,
+`idle_window_suspect`, `idle_window_suspect_unknown`,
+`floor_artifact_invalid`, `floor_row_missing`, `floor_row_ambiguous`,
+`floor_row_stale`, `floor_transport_inapplicable`, `floor_abs_missing`,
+`floor_cmp_missing`, `effect_not_above_floor`,
+`interpolation_bound_exceeds_floor`,
+`interpolation_bound_exceeds_half_effect`,
+`deterministic_bound_obscures_direction`, `required_error_term_unknown`,
+`required_covariance_unknown`, `runtime_token_denominator_required`,
+`stop_reason_required`, `output_policy_required`,
+`tokenizer_identity_mismatch`, `multiplicity_family_incomplete`,
+`multiplicity_not_rejected`, `equivalence_margin_not_above_floor`,
+`equivalence_not_supported`, `randomization_check_insufficient_blocks`,
+`randomization_sensitivity_disagrees`, `loo_verdict_influential`,
+`loo_magnitude_influential`, `outcome_dependent_top_up`, and
+`legacy_l1_mechanics_only`. Additions or spelling changes require a
+versioned amendment. P2-041 copies reducer reasons verbatim, uses the
+campaign-specific subset above, and never treats absent/null cooldown state
+as recovery. The Component C5 `window_evidence_precheck` migration and
+generic-alias removal supersede only D-057's historical field name and the
+preceding amendment's alias-retention wording; its metric-specific reason
+semantics remain binding.
 
 ## D-058: Token-normalization and stack-identity contract adopted
 

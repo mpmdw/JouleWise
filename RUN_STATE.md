@@ -1,6 +1,8 @@
 # JouleWise Run State
 
-Last updated: 2026-07-10 (PR #49's main-side P2-038 rail-only CI flake
+Last updated: 2026-07-11 (P2-041 vetted rebuild complete and uncommitted on
+`impl/p2041-vetted`; focused 398 OK/1 skipped, canonical 1062 OK/13 skipped.
+Earlier: PR #49's main-side P2-038 rail-only CI flake
 root-caused to the fake powermetrics child's SIGTERM/right-edge-bracket race;
 fixture-only fix is uncommitted, exact test 100/100 green, focused 5 OK,
 canonical 1041 OK/13 skipped. Earlier: P2-040 reducer-version review blocker fixed
@@ -104,31 +106,18 @@ docs/reviews/2026-07-10-hardening-adjudication.md).
    Root-cause + deterministic fix required BEFORE merging #49; do not
    merge on a rerun-green alone, and any fix must preserve fail-closed
    gate semantics (metrology adjudication).
-2. impl/p2041 — TRIAGE DONE, RULINGS ED-APPROVED (2026-07-11): the raw
-   WIP diff must NOT be applied wholesale — it deletes P2-038/P2-040
-   implementations (full audit + vetted rebuild recipe:
-   docs/reviews/2026-07-11-p2041-red-tranche-triage.md). Sol's 7
-   test-fixture fixes in the worktree are valid and retained. Ed
-   approved the lead's rulings on the three C questions: (1)
-   claim_readiness stays, analysis_readiness rename REJECTED; (2)
-   first-run exemption stays per-physical-session; (3) scoped top-up
-   detection + cooldown trace v2 hardening NOT in this landing —
-   items (2)-hardening and (3) become queue candidates with dissent
-   recorded. Rebuild AFTER #49 merges: branch impl/p2041-vetted off
-   post-#49 main, Sol ULTRA composition per the triage recipe (0.4.0
-   must union runtime_cleanup_ok AND #49's remote_cleanup_failed +
-   verifier registry), then lead suite unpiped + full review stack.
-   Original instructions (superseded but kept for context): the
-   session exited OK but wrote an EMPTY report; its tree (branch fixes
-   + main-post-#48 content PRE-UNIONED without merge ancestry + the C5
-   window_evidence_precheck renames) is snapshot-committed as a
-   clearly-labeled WIP [RED] head on impl/p2041 (pushed). Suite there:
-   FAILED 6F/1E, all test_run_campaign — the composition with main's
-   P2-042 sidecar/verdict changes is incomplete. Fresh thread:
-   diagnose the 7 failures (likely a bounded Sol fix round with the
-   failure list), REBUILD proper ancestry (safest: new branch off
-   origin/main + apply the WIP diff), then the full review stack.
-   Treat every claim of that session as uncorroborated (empty report).
+2. impl/p2041-vetted — VETTED REBUILD COMPLETE, UNCOMMITTED (2026-07-11):
+   manually composed from the requested post-#49 `1b0f1f6` base using the
+   triage recipe; no raw WIP diff or generated site files were applied.
+   HEAD itself is the #49 merge; item 1's pre-merge narrative is inherited
+   anchor text and is superseded, but later main bookkeeping was not imported.
+   `claim_readiness`, per-physical-session exemption, adjudicated v2/top-up
+   shape, P2-038/P2-040/P2-042 behavior, and both post-#49 cleanup fields are
+   retained. Final focused 398 OK/1 skipped; canonical 1062 OK/13 skipped;
+   mechanical gates clean. Report:
+   `docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`. Lead owns final diff
+   review and pathspec commit, including explicit adjudication of the three
+   assertion-only pure-B exceptions and the frozen stored-field mapper gap.
 3. DOC-008 kernel (LAST, per adjudication): refresh at final
    integrated head + NOT-AUTHORITATIVE header, targeted review, PR.
 4. Cross-stream integration review (Sol) over final main: interaction
@@ -180,6 +169,16 @@ rank 0 closed. Full record:
 `docs/run_reports/2026-07-09-cp5-resume.md`. No stop card is active.
 
 ## Current Project Status
+
+**P2-041 VETTED REBUILD COMPLETE in `impl/p2041-vetted` (2026-07-11;
+uncommitted for lead pathspec review).** The 4 clean-A files were copied
+blob-exact and the 15 mixed files were manually re-derived from post-#49 main.
+The landing keeps `claim_readiness`, a per-physical-session first-run
+exemption, the adjudicated campaign-verdict-v2/top-up surface, authoritative
+P2-042 manifest validation, P2-038 shakedown behavior, and both
+`runtime_cleanup_ok` and `remote_cleanup_failed` under reducer 0.4.0. Focused
+398 OK/1 skipped; canonical 1062 OK/13 skipped. Report:
+`docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`.
 
 **RPT-001 targeted review fix round COMPLETE in worktree (2026-07-10;
 awaiting lead pathspec commit).** FIX-1..FIX-9 are implemented: Phase-4
@@ -254,6 +253,9 @@ queue owns ordering (C-027):**
 
 ## Session History (pointers only — run reports own the narrative)
 
+- 2026-07-11 P2-041 vetted rebuild (uncommitted; lead pathspec review and
+  commit pending): `docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`
+
 - 2026-07-10 NV-GATE-2 idle-capture regression debug/fix (uncommitted;
   localhost re-verification remains lead-gated):
   `docs/run_reports/2026-07-10-nvgate2-idle-capture-fix.md`
@@ -316,6 +318,14 @@ queue owns ordering (C-027):**
 - Older: see `docs/run_reports/` (dated files).
 
 ## Current Verification
+
+- P2-041 vetted rebuild: baseline canonical `Ran 1041 tests in 67.995s`,
+  `OK (skipped=13)`; final focused recipe modules `Ran 398 tests in 54.964s`,
+  `OK (skipped=1)`; final canonical `Ran 1062 tests in 76.436s`, `OK
+  (skipped=13)`; `git diff --check` and the dead-private-helper search clean.
+  The retained corpus and localhost socket gates skipped loudly; no live or
+  quiet-Mac validation was claimed. Report:
+  `docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`.
 
 - PR #49 P2-038 rail-only flake: pre-fix exact-test loop failed 4/100;
   retained failure emitted `cadence_ratio_unrecorded` plus
@@ -445,6 +455,13 @@ queue owns ordering (C-027):**
 
 ## Known Workspace State
 
+- Worktree `/Users/edr/code/JouleWise-wt/p2041-vetted` on
+  `impl/p2041-vetted` is intentionally dirty only with the uncommitted P2-041
+  vetted rebuild and its bookkeeping/report. It remains anchored at the
+  user-specified post-#49 `1b0f1f6`; `origin/main` advanced during the run and
+  was not merged. No `docs/site/*` file was regenerated. Lead owns final diff
+  review and pathspec commit; do not commit or discard the tree wholesale.
+
 - Worktree `/Users/edr/code/JouleWise-wt/nvgate2` on
   `impl/nvgate2-codenow` has the idle-readiness fix, regression test, and
   handoff bookkeeping COMMITTED (cd6e2cb) and the lead-resolved merge of
@@ -480,9 +497,11 @@ queue owns ordering (C-027):**
 
 ## What Is Next
 
-Lead-review the uncommitted P2-040 reducer-version fix, run the retained
-six-bundle strict read-only gate, and commit by pathspec. Once landed, P2-038 is the next
-`[AGENT]` correctness row. `TASK_QUEUE.md` remains the ordering authority.
+Lead-review the uncommitted P2-041 vetted rebuild against its triage recipe,
+explicitly adjudicate the three post-#49 assertion-only pure-B exceptions and
+the frozen stored-field mapper gap, then commit only approved pathspecs. The
+cross-stream P2-038/P2-040/P2-041/P2-042/NV integration review remains the next
+stop-card action after landing. `TASK_QUEUE.md` remains the ordering authority.
 
 Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
 C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),

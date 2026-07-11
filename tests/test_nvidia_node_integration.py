@@ -675,7 +675,7 @@ class NvidiaNodeIntegrationTests(unittest.TestCase):
             "stream_chunk_fallback",
         )
         self.assertEqual(
-            summary.claim_eligibility["per_token"],
+            summary.window_evidence_precheck["per_token"],
             {
                 "eligible": False,
                 "reasons": ["stream_chunk_fallback"],

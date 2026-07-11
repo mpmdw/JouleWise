@@ -629,7 +629,7 @@ class TokenFallbackTests(ReduceTestCase):
         self.assertEqual(summary.measurement_quality.token_count_source, "server_usage")
         self.assertEqual(summary.measurement_quality.token_counts_source, "server_usage")
         self.assertEqual(
-            summary.claim_eligibility["per_token"],
+            summary.window_evidence_precheck["per_token"],
             {
                 "eligible": True,
                 "reasons": [],
@@ -658,7 +658,7 @@ class TokenFallbackTests(ReduceTestCase):
             "stream_chunk_fallback",
         )
         self.assertEqual(
-            summary.claim_eligibility["per_token"],
+            summary.window_evidence_precheck["per_token"],
             {
                 "eligible": False,
                 "reasons": ["stream_chunk_fallback"],
