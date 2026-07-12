@@ -1080,8 +1080,8 @@
         "summary": "Script emits a named verdict from 2+ strict-valid bundles."
       },
       "authority": {
-        "label": "CP-6 adjudication record",
-        "path": "docs/reviews/2026-07-09-c027-whole-project-review.md"
+        "label": "CP-6 adjudication (CP-5 resume session record)",
+        "path": "docs/run_reports/2026-07-09-cp5-resume.md"
       },
       "dependencies": [],
       "fallback": null,
