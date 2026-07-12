@@ -1,11 +1,10 @@
 import { capsule, endpoint, json, string, table, text } from "lakebed/server";
 import { BUILD } from "./content/buildinfo";
-import { PAGES } from "./content/pages";
+import { PACKED_SITE } from "./content/pages";
 
 // The platform bundler inlines an imported binding's module source at
 // EVERY reference site; alias once so the payload is bundled once.
-const PAGE_MAP = PAGES;
-import { STYLE_CSS_GZ } from "./content/styles";
+const SITE = PACKED_SITE;
 
 type CacheRow = {
   id?: string;
@@ -32,11 +31,15 @@ type SourceStatus = {
   stale: boolean;
 };
 
+type SharedContent = {
+  freshness: string;
+  style: string;
+};
+
 const REPO_API = "https://api.github.com/repos/mpmdw/JouleWise/commits";
 const RAW_REPO = "https://raw.githubusercontent.com/mpmdw/JouleWise/main/";
 const CACHE_TTL_MS = 300_000;
 const LIVE_DOC_TTL_MS = 60_000;
-const decodedContent = new Map<string, string | Promise<string>>();
 
 const endpoints = {} as Record<string, ReturnType<typeof endpoint>>;
 
@@ -50,59 +53,93 @@ function base64ToBytes(value: string): Uint8Array {
 }
 
 async function decodeGzipBase64(value: string): Promise<string> {
-  const cached = decodedContent.get(value);
-  if (typeof cached === "string") {
-    return cached;
+  const bytes = base64ToBytes(value);
+  // Avoid the production runtime's broken reply-object polyfill
+  // (Buffer.alloc on undefined). Stream the bytes through
+  // DecompressionStream manually and decode with TextDecoder.
+  const source = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
+  const reader = source.pipeThrough(new DecompressionStream("gzip")).getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let complete = false;
+  // Bounded loop (the deploy validator rejects unbounded for-loops);
+  // 1e6 reads is far beyond any realistic chunk count for our payloads.
+  for (let reads = 0; reads < 1_000_000; reads += 1) {
+    const { done, value: chunk } = await reader.read();
+    if (done) {
+      complete = true;
+      break;
+    }
+    chunks.push(chunk);
+    total += chunk.length;
   }
+  if (!complete) {
+    throw new Error("gzip decode read bound reached");
+  }
+  const joined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.length;
+  }
+  const decoded = new TextDecoder().decode(joined);
+  return decoded;
+}
+
+let decodedShared: Promise<SharedContent> | null = null;
+const decodedShards = new Map<number, Promise<Record<string, string>>>();
+
+async function loadShared(): Promise<SharedContent> {
+  if (!decodedShared) {
+    decodedShared = (async () => {
+      const parsed = JSON.parse(await decodeGzipBase64(SITE.shared)) as Partial<SharedContent>;
+      if (!parsed || typeof parsed.freshness !== "string" || typeof parsed.style !== "string") {
+        throw new Error("invalid packed shared archive");
+      }
+      return parsed as SharedContent;
+    })().catch((error) => {
+      decodedShared = null;
+      throw error;
+    });
+  }
+  return decodedShared;
+}
+
+async function loadShard(index: number): Promise<Record<string, string>> {
+  const cached = decodedShards.get(index);
   if (cached) {
     return cached;
   }
-
-  const decode = (async () => {
-    const bytes = base64ToBytes(value);
-    // Avoid the production runtime's broken reply-object polyfill
-    // (Buffer.alloc on undefined). Stream the bytes through
-    // DecompressionStream manually and decode with TextDecoder.
-    const source = new ReadableStream<Uint8Array>({
-      start(controller) {
-        controller.enqueue(bytes);
-        controller.close();
-      },
-    });
-    const reader = source.pipeThrough(new DecompressionStream("gzip")).getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    let complete = false;
-    // Bounded loop (the deploy validator rejects unbounded for-loops);
-    // 1e6 reads is far beyond any realistic chunk count for our payloads.
-    for (let reads = 0; reads < 1_000_000; reads += 1) {
-      const { done, value: chunk } = await reader.read();
-      if (done) {
-        complete = true;
-        break;
-      }
-      chunks.push(chunk);
-      total += chunk.length;
+  const encoded = SITE.shards[index];
+  if (typeof encoded !== "string") {
+    throw new Error("packed shard is missing");
+  }
+  const pending = (async () => {
+    const parsed = JSON.parse(await decodeGzipBase64(encoded)) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== "object" || Object.values(parsed).some((value) => typeof value !== "string")) {
+      throw new Error("invalid packed page shard");
     }
-    if (!complete) {
-      throw new Error("gzip decode read bound reached");
-    }
-    const joined = new Uint8Array(total);
-    let offset = 0;
-    for (const chunk of chunks) {
-      joined.set(chunk, offset);
-      offset += chunk.length;
-    }
-    const decoded = new TextDecoder().decode(joined);
-    decodedContent.set(value, decoded);
-    return decoded;
+    return parsed as Record<string, string>;
   })().catch((error) => {
-    decodedContent.delete(value);
+    decodedShards.delete(index);
     throw error;
   });
+  decodedShards.set(index, pending);
+  return pending;
+}
 
-  decodedContent.set(value, decode);
-  return decode;
+function pageWithFreshness(html: string, freshness: string): string {
+  const marker = "</body>";
+  const offset = html.indexOf(marker);
+  if (offset < 0) {
+    throw new Error("packed page has no closing body");
+  }
+  return html.slice(0, offset) + freshness + "\n" + html.slice(offset);
 }
 
 function endpointName(path: string): string {
@@ -129,32 +166,38 @@ function registerEndpoint(
 // validator rejects them); the Preact client redirects "/" to /index.
 const RESERVED_PATHS = new Set(["/", "/index.html"]);
 
-for (const [path, page] of Object.entries(PAGE_MAP)) {
-  const handler = async () =>
-    text(await decodeGzipBase64(page.gz), {
+for (const [path, route] of Object.entries(SITE.routes)) {
+  const handler = async () => {
+    const shared = await loadShared();
+    const pages = await loadShard(route.shard);
+    const html = pages[path];
+    if (typeof html !== "string") {
+      throw new Error("packed page is missing");
+    }
+    return text(pageWithFreshness(html, shared.freshness), {
       headers: { "Content-Type": "text/html; charset=utf-8" },
     });
-  for (const route of [path, ...page.aliases]) {
-    if (RESERVED_PATHS.has(route)) continue;
-    registerEndpoint(endpointName(route), "GET", route, handler);
+  };
+  for (const alias of [path, ...route.aliases]) {
+    if (RESERVED_PATHS.has(alias)) continue;
+    registerEndpoint(endpointName(alias), "GET", alias, handler);
   }
 }
 
-registerEndpoint("style_css", "GET", "/style.css", async () =>
-  text(await decodeGzipBase64(STYLE_CSS_GZ), {
+registerEndpoint("style_css", "GET", "/style.css", async () => {
+  const shared = await loadShared();
+  return text(shared.style, {
     headers: {
       "Content-Type": "text/css; charset=utf-8",
       "Cache-Control": "public, max-age=3600",
     },
-  }),
-);
+  });
+});
 
 const bakedBySource = new Map<string, string>();
-for (const page of Object.values(PAGE_MAP)) {
-  for (const stamp of page.sources) {
-    if (!bakedBySource.has(stamp.source)) {
-      bakedBySource.set(stamp.source, stamp.commit);
-    }
+for (const stamp of SITE.sources) {
+  if (!bakedBySource.has(stamp.source)) {
+    bakedBySource.set(stamp.source, stamp.commit);
   }
 }
 

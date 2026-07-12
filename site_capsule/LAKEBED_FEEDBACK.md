@@ -37,9 +37,13 @@ real deploy blocker or near-blocker:
    on comments make the rule hard to discover; error should say which
    byte offset/line matched). Suggestion: parse, don't grep; or at
    minimum exempt comments and report match locations.
-2. **Unbounded `for(;;)` loops rejected by the same textual scan.**
-   Workaround: bounded decode loop. Severity: minor once known;
-   paper-cut discoverability. Suggestion: document the full deny-list.
+2. **Any `for` loop with an omitted initializer is rejected by the same
+   textual scan.** Lakebed 0.0.25 uses the textual shape
+   `\bfor\s*\(\s*;`: temporary builds rejected `for (; i < 10; i += 1)`,
+   `for (; ; i += 1)`, and `for (;;)`, while the omitted-condition-only
+   `for (let i = 0; ; i += 1)` passed. Workaround: bounded decode loops with
+   explicit initializers. Severity: minor once known; paper-cut
+   discoverability. Suggestion: document the exact rule and full deny-list.
 3. **>2 MiB request bodies rejected; ~1 MiB artifact cap.** Embedded
    woff2 fonts exceeded it; `pack_capsule.py` defaults fonts OFF for
    Lakebed. Severity: minor (fair limit, but the limit should be in the
@@ -217,3 +221,20 @@ Capsule deploy ID: `dep_2I04CG6tQ4t0mzY7`. Live app:
   remains at the clearance-state snapshot; freshness banner shows drift
   honestly. Feedback: a size breakdown in the error (per-chunk) would make
   trimming targeted; a 2-4 MiB tier would fit doc-heavy capsules.
+
+## 2026-07-11 — Local size-validation build retried the registry despite a cached CLI
+- Command / action: `npx lakebed build` from `site_capsule/` while validating
+  the SITE-01 packing fix; no deploy was attempted.
+- Expected: reuse the already cached Lakebed CLI and produce a local artifact.
+- Observed (verbatim core error): `npm error code ENOTFOUND` and `npm error
+  network request to https://registry.npmjs.org/lakebed failed, reason:
+  getaddrinfo ENOTFOUND registry.npmjs.org`.
+- Workaround: invoked the previously cached `lakebed` 0.0.25 executable
+  directly for this local diagnostic build. It produced an 861,197-byte stable
+  validator artifact from 244,793 bytes of packed content; deployment remains
+  lead-owned.
+- Severity for a production user: major for offline/restricted CI; minor when
+  registry access is reliable.
+- Suggestion for the maintainer: make `npx lakebed` cache-reusable without a
+  registry lookup, document a pinned local CLI path, and print stable artifact
+  bytes versus the cap at the end of `build`.

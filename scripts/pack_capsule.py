@@ -10,16 +10,20 @@ import gzip
 import hashlib
 import html as html_lib
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
 SITE = ROOT / "docs" / "site"
-CAPSULE_CONTENT = ROOT / "site_capsule" / "server" / "content"
+CAPSULE = ROOT / "site_capsule"
+CAPSULE_CONTENT = CAPSULE / "server" / "content"
 KNOWN_HAND_PAGES = {"index.html", "results.html", "process.html", "research.html"}
 GITHUB_REPO = "https://github.com/mpmdw/JouleWise"
 INTERNAL_HREF_REWRITES = {
@@ -27,6 +31,21 @@ INTERNAL_HREF_REWRITES = {
     "../project_critique_review.html": "/project_critique_review.html",
 }
 RESERVED_PATHS = {"/", "/index.html"}
+LAKEBED_ARTIFACT_CAP_BYTES = 1_048_576
+LAKEBED_TARGET_ARTIFACT_BYTES = 943_718
+# Lakebed 0.0.25 embeds generated modules in compiled code and again in an
+# inline base64 source map. The measured residual after subtracting both
+# copies was 70,355 bytes; add 52,281 bytes of reserve. Artifact metadata is
+# rounded from 5,809 bytes (5,937 before the change) to 8 KiB.
+LAKEBED_MEASURED_WRAPPER_BYTES = 396_747
+LAKEBED_MEASURED_BASE_WRAPPER_BYTES = 70_355
+LAKEBED_BASE_WRAPPER_BUDGET_BYTES = 122_636
+LAKEBED_MEASURED_METADATA_BYTES = 5_809
+LAKEBED_METADATA_BUDGET_BYTES = 8_192
+MAX_SHARD_BASE64_BYTES = 30_000
+MAX_FIRST_REQUEST_DECODE_BYTES = 32_000
+VALIDATOR_TOKENS = ("process", "fetch", "globalThis", "self")
+UNBOUNDED_FOR_RE = re.compile(r"\bfor\s*\(\s*;")
 
 
 @dataclass(frozen=True)
@@ -381,7 +400,8 @@ def pack_page(spec: PageSpec) -> dict[str, object]:
     packed = rewrite_internal_hrefs(raw)
     if spec.require_stylesheet:
         packed = rewrite_stylesheet_link(packed, spec.page_name)
-    packed = inject_freshness(packed, spec.page_name)
+    if "</body>" not in packed:
+        raise CapsulePackError(f"{spec.page_name}: expected </body>")
     return {"html": packed, "sources": stamps}
 
 
@@ -400,6 +420,13 @@ def pack_pages() -> dict[str, dict[str, object]]:
     return pages
 
 
+def escape_validator_text(encoded: str) -> str:
+    for token in VALIDATOR_TOKENS:
+        escaped = f"\\u{ord(token[0]):04x}{token[1:]}"
+        encoded = encoded.replace(token, escaped)
+    return encoded.replace("for(;;)", "\\u0066or(;;)")
+
+
 def ts_json_parse(value: object) -> str:
     # A JSON document is a valid TS expression (strings, arrays, objects),
     # so emit it directly — wrapping in JSON.parse("...") double-escaped
@@ -407,17 +434,17 @@ def ts_json_parse(value: object) -> str:
     encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     encoded = encoded.replace("`", "\\u0060").replace("${", "\\u0024{")
     # Lakebed's anonymous-build validator text-scans module source for the
-    # tokens `process` and `fetch`, flagging them even inside string
-    # literals (e.g. links to process.html, the freshness script). Escape
-    # one letter as a \u sequence so the emitted source never contains the
-    # literal token; the string decodes identically at parse time.
-    encoded = encoded.replace("process", "proc\\u0065ss").replace("fetch", "f\\u0065tch")
-    return encoded
+    # deny-list even inside string literals. Escape one letter so the emitted
+    # source never contains a rejected token; JS restores the original text.
+    return escape_validator_text(encoded)
 
 
-def gzip_base64(text: str) -> str:
-    compressed = gzip.compress(text.encode("utf-8"), mtime=0)
-    return base64.b64encode(compressed).decode("ascii")
+def gzip_bytes(text: str) -> bytes:
+    return gzip.compress(text.encode("utf-8"), compresslevel=9, mtime=0)
+
+
+def ts_string(value: str) -> str:
+    return escape_validator_text(json.dumps(value, ensure_ascii=False, separators=(",", ":")))
 
 
 def chunk_ts_string(value: str, width: int = 4000) -> str:
@@ -425,60 +452,335 @@ def chunk_ts_string(value: str, width: int = 4000) -> str:
     runtime 500s (Buffer.alloc in its loader) on megabyte-scale single-line
     literals; ~4KB segments keep lines short."""
     if len(value) <= width:
-        return json.dumps(value, separators=(",", ":"))
-    parts = [json.dumps(value[i:i + width]) for i in range(0, len(value), width)]
+        return ts_string(value)
+    parts = [ts_string(value[i:i + width]) for i in range(0, len(value), width)]
     return "(" + " +\n    ".join(parts) + ")"
 
 
-def emit_pages(pages: dict[str, dict[str, object]], out_path: Path) -> None:
+def shared_sources(pages: dict[str, dict[str, object]]) -> list[dict[str, str]]:
+    commits: dict[str, str] = {}
+    for entry in pages.values():
+        for stamp in entry["sources"]:
+            source = str(stamp["source"])
+            commit = str(stamp["commit"])
+            prior = commits.setdefault(source, commit)
+            if prior != commit:
+                raise CapsulePackError(f"conflicting baked commits for {source}: {prior} vs {commit}")
+    return [{"source": source, "commit": commits[source]} for source in sorted(commits)]
+
+
+def encode_json_archive(value: object) -> tuple[str, dict[str, int]]:
+    raw = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    compressed = gzip_bytes(raw)
+    encoded = base64.b64encode(compressed).decode("ascii")
+    return encoded, {
+        "raw": len(raw.encode("utf-8")),
+        "gzip": len(compressed),
+        "base64": len(encoded.encode("ascii")),
+    }
+
+
+def encode_page_shard(
+    pages: dict[str, dict[str, object]], paths: list[str]
+) -> tuple[str, dict[str, int]]:
+    return encode_json_archive({path: str(pages[path]["html"]) for path in sorted(paths)})
+
+
+def page_shards(pages: dict[str, dict[str, object]]) -> list[list[str]]:
+    individual_sizes = {
+        path: encode_page_shard(pages, [path])[1]["base64"] for path in pages
+    }
+    oversized = [path for path, size in individual_sizes.items() if size > MAX_SHARD_BASE64_BYTES]
+    if oversized:
+        details = ", ".join(f"{path} ({individual_sizes[path]} bytes)" for path in sorted(oversized))
+        raise CapsulePackError(
+            f"page exceeds {MAX_SHARD_BASE64_BYTES}-byte runtime shard budget: {details}; split the page"
+        )
+
+    shards: list[list[str]] = []
+    for path in sorted(pages, key=lambda item: (individual_sizes[item], item), reverse=True):
+        candidates: list[tuple[int, int]] = []
+        for index, shard in enumerate(shards):
+            size = encode_page_shard(pages, [*shard, path])[1]["base64"]
+            if size <= MAX_SHARD_BASE64_BYTES:
+                candidates.append((size, index))
+        if candidates:
+            _, index = min(candidates)
+            shards[index].append(path)
+        else:
+            shards.append([path])
+    return [sorted(shard) for shard in shards]
+
+
+def encode_site(
+    pages: dict[str, dict[str, object]], css: str
+) -> tuple[dict[str, object], dict[str, int]]:
+    shard_paths = page_shards(pages)
+    encoded_shards: list[str] = []
+    shard_stats: list[dict[str, int]] = []
+    routes: dict[str, dict[str, object]] = {}
+    for index, paths in enumerate(shard_paths):
+        encoded, stats = encode_page_shard(pages, paths)
+        encoded_shards.append(encoded)
+        shard_stats.append(stats)
+        for path in paths:
+            routes[path] = {
+                "shard": index,
+                "aliases": list(pages[path].get("aliases", [])),
+            }
+    shared, shared_stats = encode_json_archive(
+        {
+            "freshness": FRESHNESS_STYLE + "\n" + FRESHNESS_SCRIPT,
+            "style": css,
+        }
+    )
+    return {
+        "shared": shared,
+        "shards": encoded_shards,
+        "routes": {path: routes[path] for path in sorted(routes)},
+        "sources": shared_sources(pages),
+    }, {
+        "raw": shared_stats["raw"] + sum(item["raw"] for item in shard_stats),
+        "gzip": shared_stats["gzip"] + sum(item["gzip"] for item in shard_stats),
+        "base64": shared_stats["base64"] + sum(item["base64"] for item in shard_stats),
+        "shards": len(shard_stats),
+        "max_shard": max(item["base64"] for item in shard_stats),
+        "first_request_decode": shared_stats["gzip"] + max(item["gzip"] for item in shard_stats),
+    }
+
+
+def emit_site(pages: dict[str, dict[str, object]], css: str, out_path: Path) -> dict[str, int]:
+    site, stats = encode_site(pages, css)
     lines = [
         "export type PageSource = { source: string; commit: string };",
-        "export type PackedPage = { gz: string; sources: PageSource[]; aliases: string[] };",
-        "export const PAGES: Record<string, PackedPage> = {",
+        "export type PackedRoute = { shard: number; aliases: string[] };",
+        "export type PackedSite = { shared: string; shards: string[]; routes: Record<string, PackedRoute>; sources: PageSource[] };",
+        "export const PACKED_SITE: PackedSite = {",
+        f"  shared: {chunk_ts_string(str(site['shared']))},",
+        "  shards: [",
+        *[f"    {chunk_ts_string(str(archive))}," for archive in site["shards"]],
+        "  ],",
+        f"  routes: {ts_json_parse(site['routes'])},",
+        f"  sources: {ts_json_parse(site['sources'])},",
+        "};",
     ]
-    for path in sorted(pages):
-        entry = pages[path]
-        # Keys get the same validator-token escaping as ts_json_parse bodies;
-        # \u escapes in a plain JS string literal decode at parse time.
-        key = json.dumps(path).replace("process", "proc\\u0065ss").replace("fetch", "f\\u0065tch")
-        gz = chunk_ts_string(gzip_base64(str(entry["html"])))
-        lines.append(
-            f"  {key}: {{ gz: {gz}, sources: {ts_json_parse(entry['sources'])}, aliases: {ts_json_parse(entry.get('aliases', []))} }},"
-        )
-    lines.append("};")
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    manifest = len(ts_json_parse(site["routes"]).encode("utf-8")) + len(ts_json_parse(site["sources"]).encode("utf-8"))
+    return {**stats, "manifest": manifest}
 
 
 def emit_buildinfo(build: dict[str, str], out_path: Path) -> None:
     out_path.write_text(f"export const BUILD = {ts_json_parse(build)};\n", encoding="utf-8")
 
 
-def emit_styles(css: str, out_path: Path) -> None:
-    gz = chunk_ts_string(gzip_base64(css))
-    out_path.write_text(f"export const STYLE_CSS_GZ: string = {gz};\n", encoding="utf-8")
-
-
 def packed_size(paths: list[Path]) -> int:
     return sum(path.stat().st_size for path in paths)
 
 
-def build(no_fonts: bool = False) -> int:
+def base64_size(size: int) -> int:
+    return 4 * ((size + 2) // 3)
+
+
+def estimate_lakebed_artifact_size(content_size: int) -> int:
+    raw_server = content_size + base64_size(content_size) + LAKEBED_BASE_WRAPPER_BUDGET_BYTES
+    return base64_size(raw_server) + LAKEBED_METADATA_BUDGET_BYTES
+
+
+def enforce_lakebed_budget(content_size: int) -> int:
+    estimate = estimate_lakebed_artifact_size(content_size)
+    if estimate > LAKEBED_TARGET_ARTIFACT_BYTES:
+        raise CapsulePackError(
+            "estimated Lakebed artifact "
+            f"{estimate} bytes exceeds conservative {LAKEBED_TARGET_ARTIFACT_BYTES}-byte budget "
+            f"(1 MiB cap with at least 10% margin; packed content {content_size} bytes)"
+        )
+    return estimate
+
+
+def discover_lakebed_executable() -> Path | None:
+    """Find an installed or npx-cached CLI without contacting the registry."""
+    candidates: list[Path] = []
+    on_path = shutil.which("lakebed")
+    if on_path:
+        candidates.append(Path(on_path))
+    cache_root = Path.home() / ".npm" / "_npx"
+    if cache_root.is_dir():
+        candidates.extend(sorted(cache_root.glob("*/node_modules/.bin/lakebed")))
+    for candidate in candidates:
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return candidate.resolve()
+    return None
+
+
+def lakebed_stable_json_size(value: object) -> int:
+    """Match Lakebed's stableStringify byte count for validator artifacts."""
+    encoded = json.dumps(
+        value,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return len(encoded.encode("utf-8"))
+
+
+def measure_lakebed_artifact(executable: Path, capsule_dir: Path) -> tuple[int, str]:
+    """Build and measure the exact artifact object checked by Lakebed."""
+    with tempfile.TemporaryDirectory(prefix="joulewise-lakebed-build-") as temp_dir:
+        artifact_path = Path(temp_dir) / "artifact.json"
+        command = [
+            str(executable),
+            "build",
+            str(capsule_dir.resolve()),
+            "--target",
+            "anonymous",
+            "--out",
+            str(artifact_path),
+            "--json",
+        ]
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=temp_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=120,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise CapsulePackError(
+                f"measured Lakebed artifact build could not run via {executable}: {exc}"
+            ) from exc
+        if completed.returncode != 0:
+            detail = "\n".join(
+                part.strip() for part in (completed.stdout, completed.stderr) if part.strip()
+            )
+            raise CapsulePackError(
+                "measured Lakebed artifact build failed "
+                f"via {executable} (exit {completed.returncode}): {detail or 'no diagnostic output'}"
+            )
+        try:
+            envelope = json.loads(artifact_path.read_text(encoding="utf-8"))
+            artifact = envelope["artifact"]
+            created_with = artifact.get("createdWith", {})
+            version = str(created_with.get("lakebed", "unknown"))
+            measured = lakebed_stable_json_size(artifact)
+        except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise CapsulePackError(
+                f"measured Lakebed build produced an unreadable validator artifact: {exc}"
+            ) from exc
+    return measured, version
+
+
+def enforce_lakebed_artifact_postcondition(
+    content_size: int,
+    capsule_dir: Path | None = None,
+) -> int:
+    capsule_dir = CAPSULE if capsule_dir is None else capsule_dir
+    executable = discover_lakebed_executable()
+    if executable is None:
+        print(
+            "Lakebed artifact postcondition mode: estimator-only advisory "
+            "(Lakebed executable unavailable)"
+        )
+        estimate = estimate_lakebed_artifact_size(content_size)
+        print(
+            f"advisory estimated Lakebed artifact: {estimate} bytes "
+            f"(budget {LAKEBED_TARGET_ARTIFACT_BYTES}; cap {LAKEBED_ARTIFACT_CAP_BYTES})"
+        )
+        return enforce_lakebed_budget(content_size)
+
+    print(f"Lakebed artifact postcondition mode: measured ({executable})")
+    measured, version = measure_lakebed_artifact(executable, capsule_dir)
+    print(
+        f"measured Lakebed validator artifact: {measured} bytes "
+        f"(budget {LAKEBED_TARGET_ARTIFACT_BYTES}; cap {LAKEBED_ARTIFACT_CAP_BYTES}; "
+        f"Lakebed {version})"
+    )
+    if measured > LAKEBED_TARGET_ARTIFACT_BYTES:
+        cap_detail = (
+            f"{measured - LAKEBED_ARTIFACT_CAP_BYTES} bytes over the 1 MiB cap"
+            if measured > LAKEBED_ARTIFACT_CAP_BYTES
+            else f"{LAKEBED_ARTIFACT_CAP_BYTES - measured} bytes below the 1 MiB cap"
+        )
+        raise CapsulePackError(
+            "measured Lakebed validator artifact "
+            f"{measured} bytes exceeds conservative {LAKEBED_TARGET_ARTIFACT_BYTES}-byte budget "
+            f"({cap_detail}; packed content {content_size} bytes)"
+        )
+    return measured
+
+
+def enforce_runtime_decode_budget(stats: dict[str, int]) -> None:
+    if stats["first_request_decode"] > MAX_FIRST_REQUEST_DECODE_BYTES:
+        raise CapsulePackError(
+            "first-request base64 decode requires "
+            f"{stats['first_request_decode']} byte-loop iterations, above the "
+            f"{MAX_FIRST_REQUEST_DECODE_BYTES}-iteration runtime budget"
+        )
+
+
+def lakebed_source_paths(capsule_dir: Path | None = None) -> list[Path]:
+    """Return every regular server/shared source Lakebed's validator scans."""
+    capsule_dir = CAPSULE if capsule_dir is None else capsule_dir
+    paths: list[Path] = []
+    for source_root in (capsule_dir / "server", capsule_dir / "shared"):
+        if not source_root.is_dir():
+            continue
+        for path in source_root.rglob("*"):
+            relative_parts = path.relative_to(capsule_dir).parts
+            if any(part in {"node_modules", ".lakebed"} for part in relative_parts):
+                continue
+            if path.name == ".DS_Store" or path.is_symlink() or not path.is_file():
+                continue
+            paths.append(path)
+    return sorted(paths)
+
+
+def validate_lakebed_sources(paths: list[Path], capsule_dir: Path | None = None) -> None:
+    capsule_dir = CAPSULE if capsule_dir is None else capsule_dir
+    for path in paths:
+        source = read_text(path)
+        try:
+            label = str(path.relative_to(capsule_dir))
+        except ValueError:
+            label = str(path)
+        for token in VALIDATOR_TOKENS:
+            if token in source:
+                raise CapsulePackError(f"{label}: Lakebed validator token remains: {token}")
+        if UNBOUNDED_FOR_RE.search(source):
+            raise CapsulePackError(f"{label}: unbounded for-loop remains")
+
+
+def build(no_fonts: bool = False, enforce_budget: bool = True) -> int:
     CAPSULE_CONTENT.mkdir(parents=True, exist_ok=True)
     pages = pack_pages()
     css = stylesheet(no_fonts=no_fonts)
     pages_path = CAPSULE_CONTENT / "pages.ts"
-    styles_path = CAPSULE_CONTENT / "styles.ts"
     buildinfo_path = CAPSULE_CONTENT / "buildinfo.ts"
-    emit_pages(pages, pages_path)
-    emit_styles(css, styles_path)
+    stats = emit_site(pages, css, pages_path)
     emit_buildinfo(build_info(), buildinfo_path)
-    total = packed_size([pages_path, styles_path, buildinfo_path])
-    for label, path in [("pages", pages_path), ("styles", styles_path), ("buildinfo", buildinfo_path)]:
+    legacy_styles_path = CAPSULE_CONTENT / "styles.ts"
+    if legacy_styles_path.exists():
+        legacy_styles_path.unlink()
+    total = packed_size([pages_path, buildinfo_path])
+    print(
+        "sharded archives: "
+        f"{stats['raw']} raw -> {stats['gzip']} gzip -> {stats['base64']} base64 bytes; "
+        f"{stats['shards']} page shards (largest {stats['max_shard']} bytes); "
+        f"first-request decode {stats['first_request_decode']} bytes; "
+        f"route/source manifest: {stats['manifest']} bytes"
+    )
+    for label, path in [("pages", pages_path), ("buildinfo", buildinfo_path)]:
         size = path.stat().st_size
         print(f"{label}: {size} bytes ({size / 1024 / 1024:.2f} MiB)")
     print(f"packed capsule content: {total} bytes ({total / 1024 / 1024:.2f} MiB)")
-    if total > 4 * 1024 * 1024:
-        print("warning: packed capsule content exceeds 4 MiB", file=sys.stderr)
+    validate_lakebed_sources(lakebed_source_paths(), CAPSULE)
+    if enforce_budget:
+        enforce_runtime_decode_budget(stats)
+        enforce_lakebed_artifact_postcondition(total)
+    else:
+        print("Lakebed artifact postcondition mode: disabled (non-Lakebed --fonts flow)")
     return total
 
 
@@ -491,7 +793,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fonts", action="store_true", help="inline woff2 files as data URIs (exceeds the Lakebed artifact limit; for other hosts)")
     args = parser.parse_args(argv)
     try:
-        build(no_fonts=not args.fonts)
+        build(no_fonts=not args.fonts, enforce_budget=not args.fonts)
     except (CapsulePackError, subprocess.CalledProcessError) as exc:
         print(f"pack_capsule.py: {exc}", file=sys.stderr)
         return 1
