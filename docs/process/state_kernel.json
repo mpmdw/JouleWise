@@ -48,38 +48,6 @@
       "status": "shelved",
       "stop_card": null
     },
-    "DOC-008": {
-      "acceptance": {
-        "evidence": [
-          "Top-level authority notice is required and fixed",
-          "python3 scripts/gen_state.py --check exits 0",
-          "python3 -m unittest tests.test_gen_state passes",
-          "One next-action surface remains"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/DOC-008/acceptance",
-          "label": "DOC-008 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Schema-version-2 kernel carries the fixed derived-view authority notice; generated blocks are byte-reproducible; one next-action surface remains."
-      },
-      "authority": {
-        "label": "DOC-008 spec (D-063 Stage 1)",
-        "path": "docs/specs/c027/doc-008_state_kernel.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Machine-readable state kernel generating the RUN_STATE restart block and live queue view; PROJECT_STATUS compaction with history archive; retire the planning reflection protocol as standalone intake; two-writer rule and credential-boundary push procedure into docs/orchestration.md.",
-      "id": "DOC-008",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 11,
-      "status": "active",
-      "status_note": "Final C-028 live-state refresh is in progress; live RUN_STATE/TASK_QUEUE marker conversion remains lead-owned.",
-      "stop_card": null
-    },
     "DOC-010": {
       "acceptance": {
         "evidence": [
@@ -101,12 +69,12 @@
       "dependencies": [
         {
           "evidence": null,
-          "kind": "task",
-          "required": "DOC-008 state kernel is complete and proven in use",
+          "kind": "event",
+          "required": "DOC-008 state kernel (merged PR #60, 2026-07-11) is proven in use",
           "scope": "start",
           "state": "pending",
           "strength": "hard",
-          "target": "DOC-008"
+          "target": "DOC-008-proven-in-use"
         }
       ],
       "fallback": null,

@@ -77,7 +77,7 @@ Source of truth: [state kernel](docs/process/state_kernel.json) (updated 2026-07
 
 ### [AGENT]
 
-- CONTINUE — A11 `DOC-008`: Machine-readable state kernel generating the RUN_STATE restart block and live queue view; PROJECT_STATUS compaction with history archive; retire the planning reflection protocol as standalone intake; two-writer rule and credential-boundary push procedure into docs/orchestration.md.
+- READY — A20 `P2-028`: Response-hash determinism gate script: formal check that repeated same-config bundles have byte-identical per-item response hashes within rep groups.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
@@ -210,12 +210,12 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Current Verification
 
-- Current `main@cc3afc3`: canonical `Ran 1220 tests`, `OK (skipped=10)`;
-  retained corpus strict gate 6/6; main is content-identical to the reviewed
-  post-fix integration tree. PRs #41-#58 are merged.
-- Open PR #59 (`impl/int-findings`): lead replay `Ran 1224 tests`, `OK
-  (skipped=12)`. The four-test delta covers the integration-review cleanup
-  and ratio-readiness findings; merge still requires CI + final-head review.
+- Current `main@194ea39` (post #59 + #60 merges): canonical `Ran 1258
+  tests`, `OK (skipped=10)`, lead-run 2026-07-11 fresh-thread intake.
+  PRs #41-#60 are all merged.
+- Prior head `main@cc3afc3`: canonical `Ran 1220 tests`, `OK (skipped=10)`;
+  retained corpus strict gate 6/6; PR #59 pre-merge lead replay was
+  `Ran 1224 tests`, `OK (skipped=12)`.
 - Count convention for C-028 records: ordinary worktree replays report
   `skipped=12`, final main reports `skipped=10`, and restricted managed
   sandboxes may report `skipped=13` when their environment-gated probe is
@@ -359,25 +359,23 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Known Workspace State
 
-- Main checkout started this consistency sweep clean at `main@cc3afc3`, equal
-  to `origin/main`. This delegated session may modify only the seven paths in
-  its explicit WRITE_SCOPE; the lead owns review and commit.
-- `impl/int-findings` is the PR #59 branch. It contains the bounded
-  integration-review follow-up and has a 1,224-test green worktree replay;
-  it is not merged.
-- `impl/doc008-kernel` is pushed and awaiting its PR/lead gate. Its generated
-  state kernel is explicitly non-authoritative; `RUN_STATE.md`,
-  `TASK_QUEUE.md`, and `docs/decision_log.md` remain authoritative.
-- Retained corpus and session scratchpad evidence are immutable. No live run
-  bundle or site artifact is part of this sweep.
+- Main checkout is at `main@194ea39`, equal to `origin/main`, with PRs
+  #41-#60 all merged. `impl/int-findings` (#59) and `impl/doc008-kernel`
+  (#60) are merged branches; their worktrees under `~/code/JouleWise-wt/`
+  are removable at the next cleanup pass.
+- The generated state-kernel blocks are explicitly non-authoritative;
+  `RUN_STATE.md`, `TASK_QUEUE.md`, and `docs/decision_log.md` remain
+  authoritative.
+- Retained corpus and session scratchpad evidence are immutable.
 
 ## What Is Next
 
-Lead-review and land PR #59 after CI + final-head review, then open and gate
-the pushed DOC-008 branch. In the first clean quiet-machine window, Ed runs
-C-019/P2-015-SMOKE, followed by P2-015 floors and P2-006 baselines. Agent-safe
-work continues only outside that quiet window. `TASK_QUEUE.md` remains the
-ordering authority.
+In the first clean quiet-machine window, Ed runs C-019/P2-015-SMOKE,
+followed by P2-015 floors and P2-006 baselines. Agent-safe work continues
+only outside that quiet window: SITE-01 (capsule under the 1 MiB Lakebed
+cap + redeploy), P2-049 (fail-closed analysis-manifest ROOT), and P2-028
+(determinism gate script) are the active [AGENT] heads. `TASK_QUEUE.md`
+remains the ordering authority.
 
 Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
 C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),

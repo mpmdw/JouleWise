@@ -26,7 +26,7 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 
 EXPECTED_IDS = {
     # [AGENT]
-    "P2-035", "P2-036", "DOC-008", "P3-000", "P2-022", "P2-023",
+    "P2-035", "P2-036", "P3-000", "P2-022", "P2-023",
     "P2-024", "P2-028", "P3-001b", "P2-004", "P2-005", "P2-016",
     "P2-047A", "P2-048", "CI-003", "DOC-010",
     # [QUIET-MAC]
@@ -36,7 +36,8 @@ EXPECTED_IDS = {
     "P1-008", "P2-027", "P1-001", "P1-003", "P1-004", "P1-006",
 }
 
-TERMINAL_IDS = {"P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034"}
+TERMINAL_IDS = {"P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
+                "DOC-008"}
 
 
 def load_kernel():
@@ -76,10 +77,10 @@ class TestKernelValidity(unittest.TestCase):
             ("bad schema_version", lambda k: k.update(schema_version=1)),
             ("missing authority", lambda k: k.pop("authority")),
             ("altered authority", lambda k: k.update(authority="AUTHORITATIVE")),
-            ("id/key mismatch", lambda k: k["tasks"]["DOC-008"].update(id="P2-999")),
-            ("terminal status", lambda k: k["tasks"]["DOC-008"].update(status="done")),
-            ("duplicate lane rank", lambda k: k["tasks"]["DOC-008"].update(rank=0)),
-            ("blocked without hard start dep", lambda k: k["tasks"]["DOC-008"].update(status="blocked")),
+            ("id/key mismatch", lambda k: k["tasks"]["P2-028"].update(id="P2-999")),
+            ("terminal status", lambda k: k["tasks"]["P2-028"].update(status="done")),
+            ("duplicate lane rank", lambda k: k["tasks"]["P2-028"].update(rank=0)),
+            ("blocked without hard start dep", lambda k: k["tasks"]["P2-028"].update(status="blocked")),
             ("queued with hard start dep", lambda k: k["tasks"]["P2-035"].update(status="queued")),
             ("dangling pending task dep",
              lambda k: k["tasks"]["P2-035"]["dependencies"][0].update(target="NOPE-1")),
@@ -89,11 +90,11 @@ class TestKernelValidity(unittest.TestCase):
              lambda k: k["tasks"]["P2-035"]["dependencies"][0].update(
                  evidence={"path": "docs/decision_log.md", "label": "x"})),
             ("missing pointer target",
-             lambda k: k["tasks"]["DOC-008"]["authority"].update(path="docs/does_not_exist.md")),
+             lambda k: k["tasks"]["P2-028"]["authority"].update(path="docs/does_not_exist.md")),
             ("absolute pointer path",
-             lambda k: k["tasks"]["DOC-008"]["authority"].update(path="/etc/passwd")),
-            ("pipe in goal", lambda k: k["tasks"]["DOC-008"].update(goal="a | b")),
-            ("unknown flag", lambda k: k["tasks"]["DOC-008"].update(flags=["nope"])),
+             lambda k: k["tasks"]["P2-028"]["authority"].update(path="/etc/passwd")),
+            ("pipe in goal", lambda k: k["tasks"]["P2-028"].update(goal="a | b")),
+            ("unknown flag", lambda k: k["tasks"]["P2-028"].update(flags=["nope"])),
             ("quiet_mac without lead_only",
              lambda k: k["tasks"]["P2-019"].update(flags=[])),
             ("blocked_post_2m without P2-006 dep",
@@ -125,9 +126,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_32(self):
+    def test_exact_live_id_set_31(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 32)
+        self.assertEqual(len(self.tasks), 31)
 
     def test_schema_v2_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 2)
@@ -232,8 +233,13 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             self.assertIn("migration_inferred_lane", self.tasks[tid]["flags"])
         self.assertIn("provisional_until_live", self.tasks["P2-005"]["flags"])
 
-    def test_doc_008_active(self):
-        self.assertEqual(self.tasks["DOC-008"]["status"], "active")
+    def test_doc_008_retired(self):
+        # DOC-008 completed (PR #60 merged 2026-07-11); the kernel holds only
+        # live tasks, and DOC-010's trigger became an event dependency.
+        self.assertNotIn("DOC-008", self.tasks)
+        (dep,) = self.tasks["DOC-010"]["dependencies"]
+        self.assertEqual(dep["kind"], "event")
+        self.assertEqual(dep["state"], "pending")
 
 
 class TestGeneratorSelfConsistency(unittest.TestCase):
