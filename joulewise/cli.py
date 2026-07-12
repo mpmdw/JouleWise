@@ -1378,6 +1378,67 @@ def _cmd_envelope_gate(args: argparse.Namespace) -> int:
     return 3
 
 
+def _cmd_determinism_gate(args: argparse.Namespace) -> int:
+    """Run the P2-028 response-hash determinism gate and emit JSON."""
+    from joulewise.determinism_gate import (
+        REASON_OUTPUT_INSIDE_INPUT_BUNDLE,
+        VERDICT_REFUSED,
+        VERDICT_SUPPORTED,
+        analyze_determinism_gate,
+    )
+
+    bundle_dirs = [Path(path) for path in args.bundle_dirs]
+    output_path = Path(args.output) if args.output else None
+    output_inside_bundle = output_path is not None and _path_resolves_inside_any(
+        output_path, bundle_dirs
+    )
+    payload = analyze_determinism_gate(
+        bundle_dirs,
+        lambda path: validate_bundle(path, strict=True),
+        preflight_reason_codes=(
+            [REASON_OUTPUT_INSIDE_INPUT_BUNDLE] if output_inside_bundle else None
+        ),
+    )
+    text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    if output_inside_bundle:
+        print(text, end="")
+    elif output_path is not None:
+        try:
+            output_path.write_text(text, encoding="utf-8")
+        except OSError as exc:
+            print(text, end="")
+            print(
+                f"determinism-gate: failed to write --output {output_path}: {exc}",
+                file=sys.stderr,
+            )
+        else:
+            print(f"determinism-gate: {args.output} verdict={payload['verdict']}")
+    else:
+        print(text, end="")
+    if payload["verdict"] == VERDICT_SUPPORTED:
+        return 0
+    if payload["verdict"] == VERDICT_REFUSED:
+        return 2
+    return 3
+
+
+def _path_resolves_inside_any(path: Path, directories: list[Path]) -> bool:
+    try:
+        resolved_path = path.resolve()
+    except (OSError, RuntimeError):
+        return False
+    for directory in directories:
+        try:
+            resolved_directory = directory.resolve()
+            resolved_path.relative_to(resolved_directory)
+        except ValueError:
+            continue
+        except (OSError, RuntimeError):
+            continue
+        return True
+    return False
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="joulewise")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1521,6 +1582,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="optional path to write the machine-readable verdict JSON",
     )
     envelope_gate.set_defaults(func=_cmd_envelope_gate)
+
+    determinism_gate = subparsers.add_parser(
+        "determinism-gate",
+        help="compare per-item response hashes across repeated strict-valid bundles",
+    )
+    determinism_gate.add_argument(
+        "bundle_dirs",
+        nargs="*",
+        help="bundle directories from one same-config repetition group (two or more required)",
+    )
+    determinism_gate.add_argument(
+        "--output",
+        help="optional path to write the machine-readable verdict JSON",
+    )
+    determinism_gate.set_defaults(func=_cmd_determinism_gate)
 
     return parser
 
