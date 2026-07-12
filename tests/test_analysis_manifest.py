@@ -8,11 +8,15 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import joulewise.analysis_manifest as analysis_manifest_module
 from joulewise.analysis_engine import estimate_manifest_observations
 from joulewise.analysis_engine.estimators import RatioObservation
 from joulewise.analysis_engine.sensitivity import randomization_check
 from joulewise.analysis_manifest import (
+    AnalysisManifestError,
+    build_slice_2m_analysis_manifest,
     calculate_manifest_id,
     extract_analysis_plan_row,
     sha256_bytes,
@@ -101,6 +105,65 @@ class AnalysisManifestTests(unittest.TestCase):
             metric["ratio_estimand"] = ratio_estimand(form)
         reidentify(manifest)
         return metrics[0]
+
+    def test_installed_layout_default_root_refuses_with_actionable_markers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            out_dir = tmp_path / "out"
+            manifest = self._generated_manifest(out_dir)
+            installed_root = tmp_path / "site-packages"
+            installed_root.mkdir()
+
+            with mock.patch.object(analysis_manifest_module, "ROOT", installed_root):
+                errors = validate_analysis_manifest(manifest, manifest_dir=out_dir)
+                with self.assertRaises(AnalysisManifestError) as raised:
+                    build_slice_2m_analysis_manifest(out_dir)
+
+            message = str(raised.exception)
+            self.assertEqual(errors, [message])
+            self.assertIn("configs/analysis_registry/slice_2m_ap2.v1.json", message)
+            self.assertIn("docs/contracts/analysis_plans.md", message)
+            self.assertIn("repository_root=Path(...)", message)
+
+    def test_explicit_root_works_when_package_default_is_not_a_checkout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            out_dir = tmp_path / "out"
+            manifest = self._generated_manifest(out_dir)
+            installed_root = tmp_path / "site-packages"
+            installed_root.mkdir()
+
+            with mock.patch.object(analysis_manifest_module, "ROOT", installed_root):
+                rebuilt = build_slice_2m_analysis_manifest(
+                    out_dir,
+                    repository_root=ROOT,
+                )
+                errors = validate_analysis_manifest(
+                    manifest,
+                    manifest_dir=out_dir,
+                    repository_root=ROOT,
+                )
+
+            self.assertEqual(rebuilt, manifest)
+            self.assertEqual(errors, [])
+
+    def test_checkout_default_root_works_end_to_end(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            generated = self._generated_manifest(out_dir)
+
+            default_build = build_slice_2m_analysis_manifest(out_dir)
+            explicit_build = build_slice_2m_analysis_manifest(
+                out_dir,
+                repository_root=ROOT,
+            )
+
+            self.assertEqual(default_build, generated)
+            self.assertEqual(default_build, explicit_build)
+            self.assertEqual(
+                validate_analysis_manifest(default_build, manifest_dir=out_dir),
+                [],
+            )
 
     def test_one_and_two_model_shape_and_entry_identity(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

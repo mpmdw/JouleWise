@@ -172,6 +172,35 @@ class AnalysisPlanRow:
     values: Mapping[str, str]
 
 
+def _resolve_repository_paths(
+    *,
+    repository_root: Path | None,
+    registry_path: Path | None,
+    ap_path: Path | None,
+) -> tuple[Path, Path]:
+    if registry_path is not None and ap_path is not None:
+        return registry_path, ap_path
+
+    root = repository_root
+    if root is None:
+        expected_markers = (REGISTRY_RELATIVE_PATH, AP_RELATIVE_PATH)
+        missing_markers = [path for path in expected_markers if not (ROOT / path).is_file()]
+        if missing_markers:
+            expected = ", ".join(repr(path.as_posix()) for path in expected_markers)
+            missing = ", ".join(repr(path.as_posix()) for path in missing_markers)
+            raise AnalysisManifestError(
+                "cannot infer the JouleWise repository root from package location "
+                f"{ROOT}: expected repository marker files {expected}; missing {missing}. "
+                "Pass an explicit repository root with repository_root=Path(...)."
+            )
+        root = ROOT
+
+    return (
+        registry_path if registry_path is not None else root / REGISTRY_RELATIVE_PATH,
+        ap_path if ap_path is not None else root / AP_RELATIVE_PATH,
+    )
+
+
 def sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
@@ -697,12 +726,15 @@ def _build_families_and_contrasts(
 def build_slice_2m_analysis_manifest(
     config_dir: Path,
     *,
-    repository_root: Path = ROOT,
+    repository_root: Path | None = None,
     registry_path: Path | None = None,
     ap_path: Path | None = None,
 ) -> dict[str, Any]:
-    registry_path = registry_path or repository_root / REGISTRY_RELATIVE_PATH
-    ap_path = ap_path or repository_root / AP_RELATIVE_PATH
+    registry_path, ap_path = _resolve_repository_paths(
+        repository_root=repository_root,
+        registry_path=registry_path,
+        ap_path=ap_path,
+    )
     registry, ap_row = load_analysis_registry(registry_path, ap_path)
     order_path = config_dir / ORDER_MANIFEST_NAME
     try:
@@ -909,7 +941,7 @@ def validate_analysis_manifest(
     value: Mapping[str, Any],
     *,
     manifest_dir: Path | None = None,
-    repository_root: Path = ROOT,
+    repository_root: Path | None = None,
     registry_path: Path | None = None,
     ap_path: Path | None = None,
 ) -> list[str]:
@@ -965,11 +997,14 @@ def validate_analysis_manifest(
             errors,
         )
 
-    registry_path = registry_path or repository_root / REGISTRY_RELATIVE_PATH
-    ap_path = ap_path or repository_root / AP_RELATIVE_PATH
     registry: AnalysisRegistry | None = None
     ap_row: AnalysisPlanRow | None = None
     try:
+        registry_path, ap_path = _resolve_repository_paths(
+            repository_root=repository_root,
+            registry_path=registry_path,
+            ap_path=ap_path,
+        )
         registry, ap_row = load_analysis_registry(registry_path, ap_path)
     except AnalysisManifestError as exc:
         errors.append(str(exc))
