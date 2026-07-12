@@ -2,8 +2,8 @@
   "active_stop_card": null,
   "authority": "NOT_AUTHORITATIVE_DERIVED_VIEW",
   "latest_report": {
-    "label": "REPRO-002 publication privacy (final C-028 merged handoff)",
-    "path": "docs/run_reports/2026-07-11-repro002-publication-privacy.md"
+    "label": "Agent-lane triple: SITE-01 + P2-049 + P2-028 (PRs #61-#63)",
+    "path": "docs/run_reports/2026-07-12-agent-lane-triple.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 2,
@@ -1092,7 +1092,8 @@
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 20,
-      "status": "queued",
+      "status": "active",
+      "status_note": "PR #62 open (2026-07-12); implementation + two lenses + fix rounds + lead gate done; fresh delta re-audit owed pre-merge.",
       "stop_card": null
     },
     "P2-035": {
@@ -1520,5 +1521,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-07-11"
+  "updated": "2026-07-12"
 }

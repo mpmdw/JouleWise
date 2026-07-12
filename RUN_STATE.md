@@ -1,11 +1,12 @@
 # JouleWise Run State
 
-Last updated: 2026-07-11 (C-028 COMPLETE AND CLEARED. PRs #41-#60 are
-ALL merged (incl. #59 integration findings and #60 DOC-008 kernel). The analysis trio is
-complete, reducer 0.4.2 is current, corpus gate 6/6 passed, and every Window-A
-software gate is satisfied. Window-A execution requires a quiet machine + Ed.
-Full record: `docs/run_reports/2026-07-11-c028-continuation.md`; C-028 council
-entry; D-064 ratified.)
+Last updated: 2026-07-12 (Agent-lane triple session: PRs #61 P2-049 /
+#62 P2-028 / #63 SITE-01 all OPEN at fully-lead-gated heads — #61 needs
+only a merge click (harness denied lead self-merge); #62/#63 owe a fresh
+delta re-audit pre-merge (upstream Codex outage blocked three attempts);
+#63 owes the lead-run live Lakebed deploy post-merge. C-028 remains
+CLOSED; Window-A execution still requires a quiet machine + Ed. Full
+record: `docs/run_reports/2026-07-12-agent-lane-triple.md`.)
 
 ## Start Here For Every Big Run
 
@@ -65,7 +66,7 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Restart By Machine-State Lane
 
-Source of truth: [state kernel](docs/process/state_kernel.json) (updated 2026-07-11). Latest report: [REPRO-002 publication privacy (final C-028 merged handoff)](docs/run_reports/2026-07-11-repro002-publication-privacy.md).
+Source of truth: [state kernel](docs/process/state_kernel.json) (updated 2026-07-12). Latest report: [Agent-lane triple: SITE-01 + P2-049 + P2-028 (PRs #61-#63)](docs/run_reports/2026-07-12-agent-lane-triple.md).
 
 ### [ED-EXTERNAL]
 
@@ -77,7 +78,7 @@ Source of truth: [state kernel](docs/process/state_kernel.json) (updated 2026-07
 
 ### [AGENT]
 
-- READY — A20 `P2-028`: Response-hash determinism gate script: formal check that repeated same-config bundles have byte-identical per-item response hashes within rep groups.
+- CONTINUE — A20 `P2-028`: Response-hash determinism gate script: formal check that repeated same-config bundles have byte-identical per-item response hashes within rep groups.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
@@ -131,19 +132,30 @@ PROVISIONAL pending P1-006 live evidence.
 
 **RESTART HERE (next session) — this is the ONLY next-action block; the
 queue owns ordering:**
-1. DONE 2026-07-11: INT-59 merged (#59); DOC-008 merged (#60).
-2. [QUIET-MAC + ED] Begin Window A: C-019 production-shaped shakedown and
+1. [ED or AGENT] Land the open PR triple: merge #61 (fully gated; harness
+   denied lead self-merge — needs Ed's click or re-authorization); run the
+   owed fresh delta re-audits over #62 and #63 final heads (read-only Sol,
+   `--effort xhigh` EXPLICITLY — see the effort-default defect in the
+   2026-07-12 run report), triage, then CI-green merge both.
+2. [AGENT, after #63 merges] Live Lakebed deploy from main: site regen →
+   pack (measured postcondition must pass) → `npx lakebed deploy` → verify
+   the five endpoints + instruction meter on a cold worst-shard request →
+   freshness banner clears → Lakebed feedback entry.
+3. [QUIET-MAC + ED] Begin Window A: C-019 production-shaped shakedown and
    P2-015-SMOKE, then P2-015 floors and P2-006 baselines. Do not run this
    lane while an agent session is active.
-3. [AGENT] Outside a quiet window, take the next compatible queue row
-   (P2-049, P2-050 adjudication, P2-027 publication prep, or P2-028).
-   P2-022/P2-023 remain blocked until the 2M corpus exists.
+4. [AGENT] Outside a quiet window, next compatible rows: P2-050
+   adjudication, P2-027 publication prep. P2-022/P2-023 remain blocked
+   until the 2M corpus exists.
 
 ## Session History (pointers only — run reports own the narrative)
 
 Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the C-028 block above.
 
+- 2026-07-12 Agent-lane triple: SITE-01/P2-049/P2-028 → PRs #61-#63 at
+  lead-gated heads; delta re-audits owed pre-merge on #62/#63:
+  `docs/run_reports/2026-07-12-agent-lane-triple.md`
 - 2026-07-11 P2-041 vetted rebuild (uncommitted; lead pathspec review and
   commit pending): `docs/run_reports/2026-07-11-p2041-vetted-rebuild.md`
 
