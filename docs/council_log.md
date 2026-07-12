@@ -1606,6 +1606,20 @@ sessions) ≈ 40M. Fable lead: ~1.8M generation / ~14.8M billed-ish /
 ~570M cache reads. Two v3 sessions (doc008-r3, pr59-review) still
 RUNNING at the manifest snapshot.
 
+Spend snapshot addendum (2026-07-11 ~20:00Z, `codex-usage` 24h
+window, arc-close truth for the table above; estimates, not billing):
+59 Sol sessions / 330.6M tokens / ~17.5h session time — xhigh 55 ≈
+190.4M, ultra 2 ≈ 100.3M, high 2 ≈ 40.0M (both FAILED). Composition
+(measured from raw session records): ~97.4% of Sol input is cached,
+output ≈ 0.37% of volume. API-list-price equivalent (GPT-5.6-sol
+$5/$30, cached $0.50; Fable 5 $10/$50, cache reads $1): Sol ≈ $240,
+Fable ≈ $810 — combined ≈ $1,050 for the recorded arc; upper bound
+≈ $2,300 counting all local Codex sessions (includes non-manifest
+sessions; resume rows may double-count). Note the inversion: Sol is
+~180x the token volume but Fable is ~3.4x the cost — cache reads
+dominate the lead's footprint. Snapshot convention now standing in
+the council skill §Recording + instrumentation.
+
 Process artifacts adopted this arc (ratified as/alongside D-064):
 
 - **claude-codex-report/v1** — canonical machine-parsed session
