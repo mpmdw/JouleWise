@@ -37,9 +37,16 @@ class ClaudeBridgeMcpTests(unittest.TestCase):
         )
         return [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
 
-    def assert_failed_envelope(self, result: dict, flag: str = "protocol_failure") -> dict:
+    def assert_failed_envelope(
+        self,
+        result: dict,
+        flag: str = "protocol_failure",
+        effort: str | None = None,
+    ) -> dict:
         self.assertTrue(result["isError"])
         lines = result["content"][0]["text"].splitlines()
+        if effort is not None:
+            self.assertEqual(lines.pop(0), f"[consult effort: {effort}]")
         self.assertEqual(lines[0], "BRIDGE_REPORT_V1")
         self.assertEqual(len(lines), 2)
         report = json.loads(lines[1])
@@ -67,6 +74,7 @@ class ClaudeBridgeMcpTests(unittest.TestCase):
         tools = next(reply["result"]["tools"] for reply in replies if reply.get("id") == 2)
         self.assertEqual([tool["name"] for tool in tools], ["consult_fable"])
         self.assertEqual(tools[0]["inputSchema"]["required"], ["prompt"])
+        self.assertEqual(tools[0]["inputSchema"]["properties"]["effort"]["enum"], ["high", "xhigh"])
 
     def test_rejects_missing_one_hop_guard_without_starting_claude(self) -> None:
         replies = self.exchange(
@@ -176,7 +184,7 @@ class ClaudeBridgeMcpTests(unittest.TestCase):
                 },
             )
             output = replies[0]["result"]["content"][0]["text"]
-            self.assertTrue(output.startswith("JOULEWISE_FAKE_FABLE_OK\n"))
+            self.assertTrue(output.startswith("[consult effort: high]\nJOULEWISE_FAKE_FABLE_OK\n"))
             self.assertTrue(output.endswith('"verification":[],"flags":[]}'))
             args = json.loads(args_log.read_text(encoding="utf-8"))
             self.assertIn("fable", args)
@@ -195,6 +203,200 @@ class ClaudeBridgeMcpTests(unittest.TestCase):
             self.assertEqual(spawned_prompt.count("BRIDGE_ORIGIN: codex"), 1)
             self.assertEqual(spawned_prompt.count("BRIDGE_HOPS_REMAINING: 0"), 1)
             self.assertIn("Return the bridge token.", spawned_prompt)
+
+    def test_explicit_xhigh_effort_is_honored_and_echoed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            fake_claude = tmp_path / "fake-claude"
+            args_log = tmp_path / "args.json"
+            fake_claude.write_text(
+                f"#!{sys.executable}\n"
+                "import json, os, pathlib, sys\n"
+                "pathlib.Path(os.environ['CLAUDE_ARGS_LOG']).write_text(json.dumps(sys.argv[1:]))\n"
+                "print('BRIDGE_REPORT_V1')\n"
+                "print(json.dumps({'status':'DISCUSSION','summary':'reviewed','pathspec':[],"
+                "'verification':[],'flags':[]}))\n",
+                encoding="utf-8",
+            )
+            fake_claude.chmod(0o755)
+            prompt = "BRIDGE_ORIGIN: codex\nBRIDGE_HOPS_REMAINING: 0\nReview this."
+            replies = self.exchange(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 13,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "consult_fable",
+                            "arguments": {"prompt": prompt, "effort": "xhigh"},
+                        },
+                    }
+                ],
+                {"CLAUDE_BIN": str(fake_claude), "CLAUDE_ARGS_LOG": str(args_log)},
+            )
+            result = replies[0]["result"]
+            self.assertNotIn("isError", result)
+            self.assertTrue(result["content"][0]["text"].startswith("[consult effort: xhigh]\n"))
+            args = json.loads(args_log.read_text(encoding="utf-8"))
+            self.assertEqual(args[args.index("--effort") + 1], "xhigh")
+
+    def test_validated_environment_effort_default_is_respected(self) -> None:
+        for configured, expected in (("xhigh", "xhigh"), ("invalid", "high")):
+            with self.subTest(configured=configured), tempfile.TemporaryDirectory() as tmp:
+                tmp_path = Path(tmp)
+                fake_claude = tmp_path / "fake-claude"
+                args_log = tmp_path / "args.json"
+                fake_claude.write_text(
+                    f"#!{sys.executable}\n"
+                    "import json, os, pathlib, sys\n"
+                    "pathlib.Path(os.environ['CLAUDE_ARGS_LOG']).write_text(json.dumps(sys.argv[1:]))\n"
+                    "print('BRIDGE_REPORT_V1')\n"
+                    "print(json.dumps({'status':'DISCUSSION','summary':'reviewed','pathspec':[],"
+                    "'verification':[],'flags':[]}))\n",
+                    encoding="utf-8",
+                )
+                fake_claude.chmod(0o755)
+                prompt = "BRIDGE_ORIGIN: codex\nBRIDGE_HOPS_REMAINING: 0\nReview this."
+                replies = self.exchange(
+                    [
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 14,
+                            "method": "tools/call",
+                            "params": {
+                                "name": "consult_fable",
+                                "arguments": {"prompt": prompt},
+                            },
+                        }
+                    ],
+                    {
+                        "CLAUDE_BIN": str(fake_claude),
+                        "CLAUDE_ARGS_LOG": str(args_log),
+                        "CLAUDE_BRIDGE_EFFORT": configured,
+                    },
+                )
+                output = replies[0]["result"]["content"][0]["text"]
+                self.assertTrue(output.startswith(f"[consult effort: {expected}]\n"))
+                args = json.loads(args_log.read_text(encoding="utf-8"))
+                self.assertEqual(args[args.index("--effort") + 1], expected)
+
+    def test_invalid_effort_is_protocol_failure_without_starting_claude(self) -> None:
+        prompt = "BRIDGE_ORIGIN: codex\nBRIDGE_HOPS_REMAINING: 0\nReview this."
+        replies = self.exchange(
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 15,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "consult_fable",
+                        "arguments": {"prompt": prompt, "effort": "ultra"},
+                    },
+                }
+            ],
+            {"CLAUDE_BIN": "/definitely/not/claude"},
+        )
+        report = self.assert_failed_envelope(replies[0]["result"])
+        self.assertIn("high, xhigh", report["summary"])
+
+    def test_accepts_spaced_single_line_envelope_with_additional_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            fake_claude = Path(tmp) / "fake-claude"
+            fake_claude.write_text(
+                f"#!{sys.executable}\n"
+                "print('advice')\n"
+                "print('BRIDGE_REPORT_V1')\n"
+                "print('{\"status\": \"DISCUSSION\", \"summary\": \"reviewed\", "
+                "\"pathspec\": [], \"verification\": [], \"flags\": [], \"future\": 1}')\n",
+                encoding="utf-8",
+            )
+            fake_claude.chmod(0o755)
+            prompt = "BRIDGE_ORIGIN: codex\nBRIDGE_HOPS_REMAINING: 0\nReview this."
+            replies = self.exchange(
+                [
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 16,
+                        "method": "tools/call",
+                        "params": {"name": "consult_fable", "arguments": {"prompt": prompt}},
+                    }
+                ],
+                {"CLAUDE_BIN": str(fake_claude)},
+            )
+            result = replies[0]["result"]
+            self.assertNotIn("isError", result)
+            self.assertIn('"future": 1', result["content"][0]["text"])
+
+    def test_rejects_malformed_or_nonfinal_child_envelopes(self) -> None:
+        valid = json.dumps(
+            {
+                "status": "DISCUSSION",
+                "summary": "reviewed",
+                "pathspec": [],
+                "verification": [],
+                "flags": [],
+            }
+        )
+        cases = {
+            "missing_required": "BRIDGE_REPORT_V1\n"
+            + json.dumps(
+                {
+                    "status": "DISCUSSION",
+                    "summary": "reviewed",
+                    "pathspec": [],
+                    "verification": [],
+                }
+            )
+            + "\n",
+            "bad_status": "BRIDGE_REPORT_V1\n"
+            + json.dumps(
+                {
+                    "status": "BOGUS",
+                    "summary": "reviewed",
+                    "pathspec": [],
+                    "verification": [],
+                    "flags": [],
+                }
+            )
+            + "\n",
+            "nonempty_pathspec": "BRIDGE_REPORT_V1\n"
+            + json.dumps(
+                {
+                    "status": "DISCUSSION",
+                    "summary": "reviewed",
+                    "pathspec": ["file.txt"],
+                    "verification": [],
+                    "flags": [],
+                }
+            )
+            + "\n",
+            "sentinel_not_final": f"BRIDGE_REPORT_V1\n{valid}\ntrailing\n",
+            "duplicated_sentinel": f"BRIDGE_REPORT_V1\n{valid}\nBRIDGE_REPORT_V1\n{valid}\n",
+        }
+        for name, child_output in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                fake_claude = Path(tmp) / "fake-claude"
+                fake_claude.write_text(
+                    f"#!{sys.executable}\nimport sys\nsys.stdout.write({child_output!r})\n",
+                    encoding="utf-8",
+                )
+                fake_claude.chmod(0o755)
+                prompt = "BRIDGE_ORIGIN: codex\nBRIDGE_HOPS_REMAINING: 0\nReview this."
+                replies = self.exchange(
+                    [
+                        {
+                            "jsonrpc": "2.0",
+                            "id": 17,
+                            "method": "tools/call",
+                            "params": {
+                                "name": "consult_fable",
+                                "arguments": {"prompt": prompt},
+                            },
+                        }
+                    ],
+                    {"CLAUDE_BIN": str(fake_claude)},
+                )
+                self.assert_failed_envelope(replies[0]["result"], effort="high")
 
     def test_nonzero_claude_exit_synthesizes_failed_bridge_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -220,12 +422,8 @@ class ClaudeBridgeMcpTests(unittest.TestCase):
                 {"CLAUDE_BIN": str(fake_claude)},
             )
             result = replies[0]["result"]
-            self.assertTrue(result["isError"])
-            lines = result["content"][0]["text"].splitlines()
-            self.assertEqual(lines[0], "BRIDGE_REPORT_V1")
-            report = json.loads(lines[1])
+            report = self.assert_failed_envelope(result, "transport_failure", "high")
             self.assertEqual(report["status"], "FAILED")
-            self.assertEqual(report["flags"], ["transport_failure"])
             self.assertIn("raw child failure must not escape", report["summary"])
 
     def test_missing_worker_envelope_synthesizes_protocol_failure(self) -> None:
@@ -248,11 +446,7 @@ class ClaudeBridgeMcpTests(unittest.TestCase):
                 ],
                 {"CLAUDE_BIN": str(fake_claude)},
             )
-            result = replies[0]["result"]
-            self.assertTrue(result["isError"])
-            report = json.loads(result["content"][0]["text"].splitlines()[1])
-            self.assertEqual(report["status"], "FAILED")
-            self.assertEqual(report["flags"], ["protocol_failure"])
+            self.assert_failed_envelope(replies[0]["result"], effort="high")
 
     def test_empty_worker_output_synthesizes_protocol_failure(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -271,7 +465,7 @@ class ClaudeBridgeMcpTests(unittest.TestCase):
                 ],
                 {"CLAUDE_BIN": str(fake_claude)},
             )
-            self.assert_failed_envelope(replies[0]["result"])
+            self.assert_failed_envelope(replies[0]["result"], effort="high")
 
     def test_needs_ruling_worker_status_is_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -300,9 +494,10 @@ class ClaudeBridgeMcpTests(unittest.TestCase):
             )
             result = replies[0]["result"]
             self.assertNotIn("isError", result)
+            self.assertTrue(result["content"][0]["text"].startswith("[consult effort: high]\n"))
             self.assertIn('"status":"NEEDS_RULING"', result["content"][0]["text"])
 
-    def test_other_successful_worker_statuses_append_protocol_deviation(self) -> None:
+    def test_other_successful_worker_statuses_synthesize_one_deviation_envelope(self) -> None:
         for status in ("DONE", "PARTIAL", "NEEDS_SCOPE", "BLOCKED", "FAILED"):
             with self.subTest(status=status), tempfile.TemporaryDirectory() as tmp:
                 fake_claude = Path(tmp) / "fake-claude"
@@ -334,8 +529,11 @@ class ClaudeBridgeMcpTests(unittest.TestCase):
                 result = replies[0]["result"]
                 self.assertTrue(result["isError"])
                 output = result["content"][0]["text"]
-                self.assertTrue(output.startswith("bounded advisory text\nBRIDGE_REPORT_V1\n"))
-                self.assertEqual(output.count("BRIDGE_REPORT_V1"), 2)
+                self.assertTrue(
+                    output.startswith("[consult effort: high]\nbounded advisory text\n")
+                )
+                self.assertEqual(output.count("BRIDGE_REPORT_V1"), 1)
+                self.assertIn(f"child claimed status {status}", output)
                 failed = json.loads(output.splitlines()[-1])
                 self.assertEqual(failed["status"], "FAILED")
                 self.assertEqual(failed["flags"], ["protocol_deviation"])

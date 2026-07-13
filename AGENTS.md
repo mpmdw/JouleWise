@@ -77,10 +77,10 @@ This repository supports one bounded cross-model hop in either direction:
   the reverse Claude server inside that Sol session.
 - A top-level Codex session may request a read-only Fable judgment consult via
   the project Claude MCP `consult_fable` tool and
-  `.agents/skills/claude-consult`. The tracked MCP adapter pins Fable/high,
-  plan mode, no session persistence, no slash commands, an empty MCP registry,
-  and only read/search tools. The project allowlists and preapproves only this
-  consult tool.
+  `.agents/skills/claude-consult`. The tracked MCP adapter pins Fable with a
+  high default and optional per-call xhigh effort, plan mode, no session
+  persistence, no slash commands, an empty MCP registry, and only read/search
+  tools. The project allowlists and preapproves only this consult tool.
 
 Never bounce one bridge call back through the other, never use the reverse path
 from a Claude-originated Sol session, and never delegate final verification or
@@ -88,17 +88,24 @@ authority decisions. The top-level caller remains lead and adjudicates the
 peer's advice.
 
 The full wire contract is `docs/contracts/bridge_protocol.md`
-(`bridge-protocol/v1`) — prompt header, return envelope, early returns,
+(`bridge-protocol/v1.1`) — prompt header, return envelope, early returns,
 routing, thread semantics, leases, and scope checking. A Sol session working
 under this bridge MUST: honor the `BRIDGE_TASK_V1` header (especially
 `WRITE_SCOPE` — never infer extra scope); end every MCP turn with the
-`BRIDGE_REPORT_V1` sentinel plus one minified JSON line (an audited CLI run
+`BRIDGE_REPORT_V1` sentinel plus one JSON object on the final line (an audited CLI run
 with a valid `claude-codex-report/v1` body is trailer-exempt); return
 `NEEDS_SCOPE`/`NEEDS_RULING` instead of guessing; return `PARTIAL` with a
 `route_cli` flag when MCP work outgrows a short bounded turn; and run the
 end-of-turn self scope audit against the provided baseline manifest. Claude
 verifies mechanically with `scripts/bridge scope-check`; the self-audit is
 defense-in-depth, not the backstop.
+
+Read-only `GENRE: discussion` turns may use the contract's reduced header. A
+same-objective peer channel is continuity, never independent review. A
+discussion proposal diff is advice only: keep `pathspec: []`, never self-apply
+it, and keep the aggregate objective within about three files and 200 changed
+lines. The lead applies and verifies any proposal at the bench; sensitive or
+larger work routes to a leased write session.
 
 ## Work And Verification
 

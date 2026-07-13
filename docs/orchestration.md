@@ -260,6 +260,10 @@ Pointer map only; mechanics stay in their owning files.
   response snapshots, logs, status files, and
   `.codex-bridge/invocation_manifest.jsonl` rows with prompt/output/log
   hashes.
+- Workspace-write bridge ceremony: `scripts/bridge session-open` and
+  `session-close`; the reduced discussion header, tolerant return envelope,
+  receipt anchoring, and recovery primitives are defined only in
+  `docs/contracts/bridge_protocol.md` (`bridge-protocol/v1.1`).
 - Skill-only mechanics on the operator's machine live under
   `~/.claude/skills`: `operation-loop` is the conductor,
   `codex-delegation` is the invocation/consumption contract,
