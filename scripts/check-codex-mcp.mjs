@@ -16,13 +16,43 @@ if (rootResult.status !== 0) {
 
 const repoRoot = rootResult.stdout.trim();
 const mcpConfig = JSON.parse(readFileSync(resolve(repoRoot, ".mcp.json"), "utf8"));
-const server = mcpConfig?.mcpServers?.codex;
+const codexServer = mcpConfig?.mcpServers?.codex;
+const expectedModel = "gpt-5.6-sol";
+const expectedEffort = "high";
+const expectedCodexArgs = [
+  "mcp-server",
+  "-c",
+  `model="${expectedModel}"`,
+  "-c",
+  `model_reasoning_effort="${expectedEffort}"`,
+  "-c",
+  "mcp_servers.claude.enabled=false",
+];
 
-if (server?.command !== "codex" || JSON.stringify(server?.args) !== '["mcp-server"]') {
+if (
+  codexServer?.command !== "codex" ||
+  JSON.stringify(codexServer?.args) !== JSON.stringify(expectedCodexArgs)
+) {
   process.stderr.write(
-    'FAIL: .mcp.json must declare codex as {"command":"codex","args":["mcp-server"]}\n',
+    `FAIL: .mcp.json must pin Codex MCP to ${expectedModel} with ${expectedEffort} fallback effort\n`,
   );
   process.exit(1);
+}
+
+const codexProjectConfig = readFileSync(resolve(repoRoot, ".codex/config.toml"), "utf8");
+for (const fragment of [
+  "[mcp_servers.claude]",
+  'command = "node"',
+  'args = ["scripts/claude-bridge-mcp.mjs"]',
+  'enabled_tools = ["consult_fable"]',
+  'default_tools_approval_mode = "prompt"',
+  "[mcp_servers.claude.tools.consult_fable]",
+  'approval_mode = "approve"',
+]) {
+  if (!codexProjectConfig.includes(fragment)) {
+    process.stderr.write(`FAIL: .codex/config.toml is missing ${fragment}\n`);
+    process.exit(1);
+  }
 }
 
 function commandVersion(command, args) {
@@ -40,10 +70,9 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-async function listCodexTools() {
+async function listMcpTools(command, args, label) {
   return await new Promise((resolvePromise, reject) => {
-    const codexBin = process.env.CODEX_BIN || server.command;
-    const child = spawn(codexBin, server.args, {
+    const child = spawn(command, args, {
       cwd: repoRoot,
       env: { ...process.env, NO_COLOR: "1" },
       stdio: ["pipe", "pipe", "pipe"],
@@ -83,7 +112,7 @@ async function listCodexTools() {
         try {
           message = JSON.parse(line);
         } catch (error) {
-          finish(new Error(`Codex MCP emitted invalid JSON: ${error.message}`));
+          finish(new Error(`${label} MCP emitted invalid JSON: ${error.message}`));
           return;
         }
 
@@ -93,7 +122,7 @@ async function listCodexTools() {
           send({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
         } else if (message.id === 2) {
           if (message.error) {
-            finish(new Error(`Codex MCP tools/list failed: ${JSON.stringify(message.error)}`));
+            finish(new Error(`${label} MCP tools/list failed: ${JSON.stringify(message.error)}`));
           } else {
             finish(null, message.result?.tools || []);
           }
@@ -102,12 +131,12 @@ async function listCodexTools() {
     });
     child.on("exit", (code) => {
       if (!settled) {
-        finish(new Error(`Codex MCP exited ${code} before tools/list. ${stderr.trim()}`));
+        finish(new Error(`${label} MCP exited ${code} before tools/list. ${stderr.trim()}`));
       }
     });
 
     timer = setTimeout(() => {
-      finish(new Error(`timed out waiting for Codex MCP tools/list. ${stderr.trim()}`));
+      finish(new Error(`timed out waiting for ${label} MCP tools/list. ${stderr.trim()}`));
     }, 10_000);
 
     send({
@@ -117,13 +146,13 @@ async function listCodexTools() {
       params: {
         protocolVersion: "2025-06-18",
         capabilities: {},
-        clientInfo: { name: "joulewise-codex-check", version: "1.0.0" },
+        clientInfo: { name: "joulewise-agent-bridge-check", version: "1.0.0" },
       },
     });
   });
 }
 
-function validateTools(tools) {
+function validateCodexTools(tools) {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
   const start = byName.get("codex");
   const reply = byName.get("codex-reply");
@@ -150,6 +179,22 @@ function validateTools(tools) {
   assert(reply.inputSchema?.required?.includes("prompt"), "codex-reply does not require prompt");
 }
 
+function validateFableConsultTools(tools) {
+  assert(tools.length === 1, "reverse bridge must expose exactly one MCP tool");
+  const consult = tools[0];
+  assert(consult.name === "consult_fable", "reverse bridge did not expose consult_fable");
+  const properties = consult.inputSchema?.properties || {};
+  assert(properties.prompt, "consult_fable is missing its prompt property");
+  assert(
+    consult.inputSchema?.required?.includes("prompt"),
+    "consult_fable does not require prompt",
+  );
+  assert(
+    properties.prompt.description?.includes("BRIDGE_HOPS_REMAINING: 0"),
+    "consult_fable schema does not advertise the one-hop guard",
+  );
+}
+
 function checkClaudeApproval() {
   const claudeBin = process.env.CLAUDE_BIN || "claude";
   const result = spawnSync(claudeBin, ["mcp", "get", "codex"], {
@@ -173,15 +218,32 @@ function checkClaudeApproval() {
 }
 
 try {
-  const codexVersion = commandVersion(process.env.CODEX_BIN || "codex", ["--version"]);
-  const claudeVersion = commandVersion(process.env.CLAUDE_BIN || "claude", ["--version"]);
-  const tools = await listCodexTools();
-  validateTools(tools);
+  const codexBin = process.env.CODEX_BIN || "codex";
+  const claudeBin = process.env.CLAUDE_BIN || "claude";
+  const nodeBin = process.env.NODE_BIN || "node";
+  const codexVersion = commandVersion(codexBin, ["--version"]);
+  const claudeVersion = commandVersion(claudeBin, ["--version"]);
+  const nodeVersion = commandVersion(nodeBin, ["--version"]);
+  const [codexTools, claudeTools] = await Promise.all([
+    listMcpTools(codexBin, codexServer.args, "Codex"),
+    listMcpTools(nodeBin, [resolve(repoRoot, "scripts/claude-bridge-mcp.mjs")], "Claude bridge"),
+  ]);
+  validateCodexTools(codexTools);
+  validateFableConsultTools(claudeTools);
   checkClaudeApproval();
   process.stdout.write(`PASS: ${codexVersion}\n`);
   process.stdout.write(`PASS: Claude Code ${claudeVersion}\n`);
+  process.stdout.write(`PASS: Node.js ${nodeVersion}\n`);
   process.stdout.write(
-    "PASS: project MCP exposes full-session codex controls and codex-reply continuation\n",
+    "PASS: Claude -> Sol MCP exposes full-session start and continuation controls\n",
+  );
+  process.stdout.write(
+    `PASS: Claude -> Sol defaults to ${expectedModel} with ${expectedEffort} fallback effort\n`,
+  );
+  process.stdout.write("PASS: Claude-originated Sol sessions disable the reverse Claude server\n");
+  process.stdout.write("PASS: Sol -> Fable MCP exposes only the guarded consult_fable tool\n");
+  process.stdout.write(
+    "PASS: reverse bridge preapproves only consult_fable and enforces read-only one-hop policy\n",
   );
   process.stdout.write(`PASS: Claude Code approved the codex server for ${repoRoot}\n`);
 } catch (error) {

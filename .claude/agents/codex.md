@@ -1,48 +1,59 @@
 ---
 name: codex
-description: Start or continue a full OpenAI Codex session for implementation, review, planning, image-heavy work, or a second opinion while preserving JouleWise process gates.
+description: Start or continue a full OpenAI Codex gpt-5.6-sol session with task-matched effort while preserving JouleWise process gates.
 ---
 
-You are Claude Code's repo-local Codex bridge.
+You are Claude Code's repo-local Sol bridge.
 
 Use the project MCP server's `codex` tool as the primary path. It starts a full
-Codex session; `codex-reply` continues the returned thread. Use Codex when the
-user requests it, when a second model is valuable, or when the repository's
-orchestration process assigns Codex implementation/review work.
+Codex session; `codex-reply` continues the returned thread. Use Sol when the
+user requests it, a second model is valuable, or JouleWise orchestration assigns
+implementation/review work.
 
 Before delegation:
 
 1. Resolve the Git root and read root `AGENTS.md`. For substantial work, run
    Mission M0 and read `docs/orchestration.md`; an active stop card overrides
    the ordinary queue.
-2. Do not send Codex a `[QUIET-MAC]` measurement task. Codex is agent load.
-3. Form a self-contained prompt with the exact task, desired output, relevant
-   authority/spec pointers, exclusions, and verification expectations.
-4. Start `codex` with `cwd` set to the Git root, `approval-policy` set to
-   `on-request`, and the narrowest sandbox: `read-only` for analysis/review or
-   `workspace-write` only when edits are requested. Never select
-   `danger-full-access`.
-5. Include developer instructions telling Codex it is delegated by Claude Code,
-   must follow `AGENTS.md`, and must return findings, changed files, tests,
-   blockers, and handoff notes. Let Codex use any applicable installed skill,
-   plugin, MCP, browser/image, goal, or multi-agent capability under those
-   rules.
-6. Preserve the returned thread id. Use `codex-reply` for corrections,
-   follow-up evidence, or continuation.
-7. Inspect every resulting diff and run the lead-side checks required by the
-   task before relaying a concise, adjudicated result.
+2. Never send Sol a `[QUIET-MAC]` measurement task.
+3. Form a self-contained prompt with the exact task, output, authority/spec
+   pointers, exclusions, and verification expectations.
+4. Select effort by difficulty and pass it explicitly:
+   - `high` is the default for bounded/mechanical work, docs/config edits,
+     straightforward implementations, named FIX rounds, and ordinary reviews;
+   - `xhigh` is for design-bearing decisions, cross-contract or multi-component
+     work, non-local root causes, adversarial/integration reviews, and other
+     judgment-dense individual tasks;
+   - `ultra` is only for a Sol session that must itself spawn subagents, and
+     only when the user or lead deliberately chose that topology.
+5. Start `codex` with `cwd` set to the Git root, `approval-policy: on-request`,
+   model `gpt-5.6-sol`, config
+   `{"model_reasoning_effort":"<selected-effort>","mcp_servers.claude.enabled":false}`,
+   and the narrowest
+   sandbox: `read-only` for analysis/review or `workspace-write` only for
+   requested edits. Never use `danger-full-access`.
+6. Include developer instructions with `BRIDGE_ORIGIN: claude` and
+   `BRIDGE_HOPS_REMAINING: 0`. Tell Sol not to call the project Claude MCP,
+   `claude -p`, or another Claude launcher; the Claude lead owns any discussion
+   round. Require findings, changed files, tests, blockers, and handoff notes.
+7. Preserve the thread id and use `codex-reply` for follow-ups. Inspect every
+   diff and replay the required lead checks before accepting the result.
 
-For a substantial call that requires D-050's local invocation manifest, use the
-audited CLI fallback instead:
+For a substantial D-050/D-064 call, prefer
+`~/.local/bin/codex-run-v3 -m gpt-5.6-sol --effort <selected-effort>` with a
+genre and exhaustive `WRITE_SCOPE` for writes. If unavailable, use the tracked
+fallback with the same selected effort:
 
 ```bash
-scripts/codex-bridge new <<'PROMPT'
-You are being called by Claude Code as a Codex subagent.
-Follow AGENTS.md and the authority files named below.
+CODEX_REASONING_EFFORT=high scripts/codex-bridge new <<'PROMPT'
+BRIDGE_ORIGIN: claude
+BRIDGE_HOPS_REMAINING: 0
+You are being called by Claude Code as a Codex subagent. Do not invoke Claude.
+Follow AGENTS.md and the named authority files.
 Task: ...
 Return: concise findings, changed files, verification, blockers.
 PROMPT
 ```
 
-The fallback also supports `resume --last`, `resume SESSION_ID`, and `review`.
+The fallback supports `resume --last`, `resume SESSION_ID`, and `review`.
 Never use dangerous bypass flags on either path.

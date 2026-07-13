@@ -14,6 +14,10 @@ Prompt text may also be piped on stdin. The last Codex response is mirrored to
 Each invocation also writes a durable local audit trail under .codex-bridge/:
 prompt snapshots, response snapshots, logs, status files, and
 invocation_manifest.jsonl rows with prompt/output hashes and session ids.
+
+Defaults: model gpt-5.6-sol, reasoning effort high. Callers select xhigh for
+hard individual work or ultra only for sessions that must spawn subagents by
+setting CODEX_REASONING_EFFORT deliberately.
 USAGE
 }
 
@@ -52,6 +56,10 @@ response_dir="$bridge_dir/responses"
 mkdir -p "$bridge_dir" "$prompt_dir" "$response_dir"
 
 codex_bin="${CODEX_BIN:-codex}"
+codex_model="${CODEX_MODEL:-gpt-5.6-sol}"
+codex_effort="${CODEX_REASONING_EFFORT:-high}"
+fresh_model_args=(-m "$codex_model" -c "model_reasoning_effort=$codex_effort" -c "mcp_servers.claude.enabled=false")
+resume_model_args=(-c "model=$codex_model" -c "model_reasoning_effort=$codex_effort" -c "mcp_servers.claude.enabled=false")
 last_message="$bridge_dir/last-message.md"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 manifest_file="$bridge_dir/invocation_manifest.jsonl"
@@ -144,6 +152,8 @@ finish_invocation() {
     printf ',"exit_code":%s' "$(json_quote "$rc")"
     printf ',"repo_root":%s' "$(json_quote "$repo_root")"
     printf ',"codex_bin":%s' "$(json_quote "$codex_bin")"
+    printf ',"model":%s' "$(json_quote "$codex_model")"
+    printf ',"reasoning_effort":%s' "$(json_quote "$codex_effort")"
     printf ',"session_id":%s' "$(json_quote "$session_id")"
     printf ',"target_session_id":%s' "$(json_quote "$target_session_id")"
     printf ',"prompt_source":%s' "$(json_quote "$prompt_source")"
@@ -179,26 +189,26 @@ case "$mode" in
   new)
     if [[ $# -gt 0 ]]; then
       write_prompt_from_args "$@"
-      run_and_record "" exec -C "$repo_root" -s workspace-write -o "$response_file" "$*"
+      run_and_record "" exec "${fresh_model_args[@]}" -C "$repo_root" -s workspace-write -o "$response_file" "$*"
     else
       write_prompt_from_stdin
-      run_and_record "$prompt_file" exec -C "$repo_root" -s workspace-write -o "$response_file" -
+      run_and_record "$prompt_file" exec "${fresh_model_args[@]}" -C "$repo_root" -s workspace-write -o "$response_file" -
     fi
     ;;
   resume)
     if [[ $# -eq 0 ]]; then
       target_session_id="--last"
       write_empty_prompt
-      run_and_record "" exec resume --last -o "$response_file"
+      run_and_record "" exec "${resume_model_args[@]}" resume --last -o "$response_file"
     elif [[ "$1" == "--last" ]]; then
       shift
       target_session_id="--last"
       if [[ $# -gt 0 ]]; then
         write_prompt_from_args "$@"
-        run_and_record "" exec resume --last -o "$response_file" "$*"
+        run_and_record "" exec "${resume_model_args[@]}" resume --last -o "$response_file" "$*"
       else
         write_prompt_from_stdin
-        run_and_record "$prompt_file" exec resume --last -o "$response_file" -
+        run_and_record "$prompt_file" exec "${resume_model_args[@]}" resume --last -o "$response_file" -
       fi
     else
       session_id="$1"
@@ -206,20 +216,20 @@ case "$mode" in
       target_session_id="$session_id"
       if [[ $# -gt 0 ]]; then
         write_prompt_from_args "$@"
-        run_and_record "" exec resume -o "$response_file" "$session_id" "$*"
+        run_and_record "" exec "${resume_model_args[@]}" resume -o "$response_file" "$session_id" "$*"
       else
         write_prompt_from_stdin
-        run_and_record "$prompt_file" exec resume -o "$response_file" "$session_id" -
+        run_and_record "$prompt_file" exec "${resume_model_args[@]}" resume -o "$response_file" "$session_id" -
       fi
     fi
     ;;
   review)
     if [[ $# -gt 0 ]]; then
       write_prompt_from_args "$@"
-      run_and_record "" exec review -o "$response_file" "$*"
+      run_and_record "" exec "${fresh_model_args[@]}" review -o "$response_file" "$*"
     else
       write_prompt_from_stdin
-      run_and_record "$prompt_file" exec review -o "$response_file" -
+      run_and_record "$prompt_file" exec "${fresh_model_args[@]}" review -o "$response_file" -
     fi
     ;;
   help|-h|--help)

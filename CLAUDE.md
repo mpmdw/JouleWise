@@ -13,6 +13,17 @@ overrides. The small MCP surface is a session launcher: the resulting Codex
 session can use the skills, plugins, MCP tools, browser/image tools, goals, and
 other capabilities available in that installed Codex runtime.
 
+The project server defaults to `gpt-5.6-sol` with `high` reasoning effort as a
+safe fallback. Claude selects and passes effort explicitly per task: `high` by
+default for bounded/mechanical work; `xhigh` for design-bearing,
+cross-contract, multi-component, non-local root-cause, adversarial, or
+integration work; `ultra` only when Sol itself must spawn subagents. A single
+fixed `xhigh` default is not allowed.
+
+The Claude-facing MCP server also sets `mcp_servers.claude.enabled=false` for
+its child Codex sessions. This enforces the one-hop rule at tool discovery, not
+only in prompt text; top-level Codex sessions still load the reverse server.
+
 On the first launch from a clone, run Claude Code and approve the project
 server when prompted; Claude intentionally requires per-project approval for
 tracked `.mcp.json` servers. Then verify the bridge:
@@ -35,8 +46,25 @@ For every new call:
   reporting success. Never delegate a `[QUIET-MAC]` measurement run: the agent
   load would contaminate it.
 
-The tracked Claude subagent `.claude/agents/codex.md` and `/codex` command in
-`.claude/commands/codex.md` encode this route for a clean clone.
+The tracked Claude subagent `.claude/agents/codex.md`, `/codex` command in
+`.claude/commands/codex.md`, and project skill `.claude/skills/codex/SKILL.md`
+encode this route for a clean clone and use the same model/effort defaults.
+
+## Reverse Path: Claude MCP for Codex
+
+The tracked `.codex/config.toml` starts `scripts/claude-bridge-mcp.mjs` for Codex
+and exposes only `consult_fable`. That tool is preapproved so non-interactive
+Codex runs can use the bridge; every other Claude operation remains unavailable.
+Direct Codex sessions use it for a bounded, read-only Fable judgment consult
+through `.agents/skills/claude-consult/SKILL.md`. The adapter launches the
+installed Claude Code runtime with model `fable`, effort `high`, plan mode, no
+session persistence, no slash commands, an empty MCP registry, and only the
+read-only `Read`, `Grep`, and `Glob` tools.
+
+Bridge depth is one hop. A Sol session started by Claude carries
+`BRIDGE_ORIGIN: claude` / `BRIDGE_HOPS_REMAINING: 0` and must not call back into
+Claude. Likewise, a Fable consult started by Codex must not invoke Sol. The
+current top-level model remains the lead and verifies any peer advice.
 
 ## Audited CLI Path
 
@@ -51,9 +79,10 @@ The current orchestration wrapper is `~/.local/bin/codex-run-v3` (personal
 tooling, not tracked here): claude-codex-report/v1 envelope injection via
 --genre, mechanical WRITE_SCOPE enforcement (exit 77 + evidence bundle),
 NEEDS_SCOPE/NEEDS_RULING early-return protocols, D-064 manifest v3 event
-stream, and a codex-usage quota guard. Current model: gpt-5.6-sol
-(effort: ultra only for subagent-spawning sessions, xhigh default, high
-for bounded/mechanical work). `scripts/codex-run` remains the older
+stream, and a codex-usage quota guard. Current model: gpt-5.6-sol. Effort is
+selected per the project policy above: high fallback/default, xhigh for named
+hard-task triggers, ultra only for subagent-spawning sessions.
+`scripts/codex-run` remains the older
 hardened, timeout-bounded single-call protocol. Do not use Codex's dangerous bypass
 flags through either path.
 

@@ -1,23 +1,26 @@
 ---
-description: Delegate a task to a full Codex session through the project MCP server
+description: Delegate a task to gpt-5.6-sol through the project MCP server
 argument-hint: <task, review request, or follow-up>
 ---
 
-Delegate `$ARGUMENTS` to the repo-local Codex MCP server and return an
+Delegate `$ARGUMENTS` through `.claude/agents/codex.md` and return an
 adjudicated summary.
 
-Follow `.claude/agents/codex.md`: read root `AGENTS.md`, honor stop cards and
-machine-state lanes, set the MCP call's `cwd` to the Git root, use `on-request`
-approvals, and choose `read-only` unless the request explicitly requires edits.
-Use `workspace-write` for requested edits; never use `danger-full-access`.
+Classify the task before calling Sol. Use `high` by default for bounded,
+mechanical, docs/config, straightforward implementation, FIX, and ordinary
+review work. Use `xhigh` for design-bearing, cross-contract, multi-component,
+non-local root-cause, adversarial, integration, or otherwise judgment-dense
+individual work. Use `ultra` only if the Sol session must itself spawn
+subagents and that topology was deliberately authorized.
 
-Tell Codex it is a Claude Code subagent and ask for findings, changed files,
-verification, blockers, and handoff notes. Permit any applicable capabilities
-available inside its installed runtime. Preserve the returned thread id and use
-`codex-reply` when `$ARGUMENTS` is a continuation of a Codex thread already in
-this Claude conversation.
+Pass model `gpt-5.6-sol` and config
+`{"model_reasoning_effort":"<selected-effort>","mcp_servers.claude.enabled":false}`
+explicitly. Set the Git-root
+`cwd`, use `on-request` approvals, and choose `read-only` unless edits are
+requested. Add `BRIDGE_ORIGIN: claude` and `BRIDGE_HOPS_REMAINING: 0` to the
+developer instructions so Sol cannot bounce back into Claude.
 
-If the task is substantial enough to require D-050's invocation manifest, use
-`scripts/codex-bridge` instead and consume `.codex-bridge/last-message.md`.
-Always inspect the diff and run the required lead-side verification before
-reporting success.
+Preserve the returned thread id and use `codex-reply` for continuations. For
+substantial D-050/D-064 work, use `codex-run-v3` with the selected explicit
+effort, genre, and exhaustive `WRITE_SCOPE`; fall back to
+`scripts/codex-bridge`. Always inspect the diff and replay the lead checks.

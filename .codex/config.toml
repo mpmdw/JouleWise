@@ -1,0 +1,12 @@
+[mcp_servers.claude]
+command = "node"
+args = ["scripts/claude-bridge-mcp.mjs"]
+enabled = true
+required = false
+enabled_tools = ["consult_fable"]
+default_tools_approval_mode = "prompt"
+startup_timeout_sec = 20
+tool_timeout_sec = 600
+
+[mcp_servers.claude.tools.consult_fable]
+approval_mode = "approve"

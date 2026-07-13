@@ -67,6 +67,26 @@ requires the user.
 Never present fixture-first or mock evidence as live hardware validation.
 Preserve PROVISIONAL labels until the owning live gate is actually satisfied.
 
+## Bidirectional Agent Bridge
+
+This repository supports one bounded cross-model hop in either direction:
+
+- Claude Code may start or continue Sol through the project Codex MCP server.
+  Such prompts must carry `BRIDGE_ORIGIN: claude` and
+  `BRIDGE_HOPS_REMAINING: 0`; the Claude-side MCP configuration also disables
+  the reverse Claude server inside that Sol session.
+- A top-level Codex session may request a read-only Fable judgment consult via
+  the project Claude MCP `consult_fable` tool and
+  `.agents/skills/claude-consult`. The tracked MCP adapter pins Fable/high,
+  plan mode, no session persistence, no slash commands, an empty MCP registry,
+  and only read/search tools. The project allowlists and preapproves only this
+  consult tool.
+
+Never bounce one bridge call back through the other, never use the reverse path
+from a Claude-originated Sol session, and never delegate final verification or
+authority decisions. The top-level caller remains lead and adjudicates the
+peer's advice.
+
 ## Work And Verification
 
 - Follow the repository contracts and keep raw evidence and run bundles

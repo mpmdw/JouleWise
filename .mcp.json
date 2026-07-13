@@ -2,7 +2,15 @@
   "mcpServers": {
     "codex": {
       "command": "codex",
-      "args": ["mcp-server"]
+      "args": [
+        "mcp-server",
+        "-c",
+        "model=\"gpt-5.6-sol\"",
+        "-c",
+        "model_reasoning_effort=\"high\"",
+        "-c",
+        "mcp_servers.claude.enabled=false"
+      ]
     }
   }
 }

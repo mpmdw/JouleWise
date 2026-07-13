@@ -15,6 +15,11 @@ report/
 !.claude/commands/
 .claude/commands/*
 !.claude/commands/codex.md
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/codex/
+.claude/skills/codex/*
+!.claude/skills/codex/SKILL.md
 .codex-bridge/
 .DS_Store
 
