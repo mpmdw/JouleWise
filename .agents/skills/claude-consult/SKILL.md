@@ -28,9 +28,16 @@ itself started by Claude.
    subagents, or delegate further.
    ```
 
-4. Give Fable a bounded question and the minimum necessary repository context.
-   Ask for findings, reasoning, risks, and a recommendation—not file changes.
-5. Treat the response as advice. The top-level Codex session remains lead,
+4. Structure the request per `docs/contracts/bridge_protocol.md` §8 — provide:
+   Decision question; Current Sol position; Alternatives; Evaluation criteria;
+   Settled constraints; Authority order; Repository pointers (exact paths —
+   Fable has read/search access, so never paste large files); Requested
+   counterargument; Requested output shape.
+5. Expect a `bridge-report/v1` return: the reply ends with the
+   `BRIDGE_REPORT_V1` sentinel plus one minified JSON line. A missing or
+   malformed envelope, or a transport failure, is `status: FAILED` — never
+   consume it as peer approval.
+6. Treat the response as advice. The top-level Codex session remains lead,
    checks the repository itself, and owns all final verification and decisions.
 
 Never call `claude` directly, request a write-capable mode, or take another

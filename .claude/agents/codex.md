@@ -16,8 +16,12 @@ Before delegation:
    Mission M0 and read `docs/orchestration.md`; an active stop card overrides
    the ordinary queue.
 2. Never send Sol a `[QUIET-MAC]` measurement task.
-3. Form a self-contained prompt with the exact task, output, authority/spec
-   pointers, exclusions, and verification expectations.
+3. Form a self-contained prompt per `docs/contracts/bridge_protocol.md`
+   (`bridge-protocol/v1`): begin with the `BRIDGE_TASK_V1` header (scope,
+   base head, acceptance, `OUTPUT_PROTOCOL: bridge-report/v1`). MCP turns use
+   the `BRIDGE_REPORT_V1` envelope; an audited CLI run with a valid
+   `claude-codex-report/v1` body is trailer-exempt. Missing required output is
+   a protocol failure.
 4. Select effort by difficulty and pass it explicitly:
    - `high` is the default for bounded/mechanical work, docs/config edits,
      straightforward implementations, named FIX rounds, and ordinary reviews;

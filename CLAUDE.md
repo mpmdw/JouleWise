@@ -32,6 +32,14 @@ tracked `.mcp.json` servers. Then verify the bridge:
 scripts/check-codex-mcp.mjs
 ```
 
+The wire contract for all bridge traffic — `BRIDGE_TASK_V1` prompt header,
+`BRIDGE_REPORT_V1` return envelope, `NEEDS_SCOPE`/`NEEDS_RULING` early
+returns, MCP-vs-CLI routing, thread reuse, workspace leases, and mechanical
+scope checking via `scripts/bridge` — is `docs/contracts/bridge_protocol.md`
+(`bridge-protocol/v1`). The operating sequence lives in
+`.claude/skills/codex/SKILL.md`; neither this file nor the skills restate the
+contract's normative rules.
+
 For every new call:
 
 - Set `cwd` to this repository root explicitly.

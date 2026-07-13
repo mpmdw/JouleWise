@@ -45,34 +45,146 @@ function resultText(text, isError = false) {
   return { content: [{ type: "text", text }], ...(isError ? { isError: true } : {}) };
 }
 
-function bridgePrompt(prompt) {
+function failedBridgeEnvelope(summary, flag) {
+  const report = {
+    status: "FAILED",
+    summary,
+    pathspec: [],
+    verification: [],
+    flags: [flag],
+  };
+  return `BRIDGE_REPORT_V1\n${JSON.stringify(report)}`;
+}
+
+function failedBridgeResult(summary, flag) {
+  return resultText(failedBridgeEnvelope(summary, flag), true);
+}
+
+function protocolDeviationResult(output, status) {
+  const failure = failedBridgeEnvelope(
+    `Claude Fable returned status ${status}; a one-shot read-only consult may end only DISCUSSION or NEEDS_RULING`,
+    "protocol_deviation",
+  );
+  return resultText(`${output.trim()}\n${failure}`, true);
+}
+
+function validateAndStripHeaders(prompt) {
+  const lines = prompt.split(/\r?\n/);
+  const originLines = lines.filter((line) => /^\s*BRIDGE_ORIGIN\s*:/.test(line));
+  const hopLines = lines.filter((line) => /^\s*BRIDGE_HOPS_REMAINING\s*:/.test(line));
+
+  if (originLines.length !== 1 || hopLines.length !== 1) {
+    return {
+      error:
+        "reverse bridge requires exactly one BRIDGE_ORIGIN header and exactly one BRIDGE_HOPS_REMAINING header",
+    };
+  }
+  if (originLines[0].trim() === "BRIDGE_ORIGIN: claude") {
+    return { error: "a Claude-originated Sol session cannot call the reverse bridge" };
+  }
+  if (lines[0]?.trim() !== "BRIDGE_ORIGIN: codex") {
+    return { error: "reverse bridge requires BRIDGE_ORIGIN: codex as the first line" };
+  }
+  if (lines[1]?.trim() !== "BRIDGE_HOPS_REMAINING: 0") {
+    return { error: "reverse bridge requires BRIDGE_HOPS_REMAINING: 0 as the second line" };
+  }
+  return { body: lines.slice(2).join("\n") };
+}
+
+function bridgePrompt(body) {
   return [
     "BRIDGE_ORIGIN: codex",
     "BRIDGE_HOPS_REMAINING: 0",
     "You are a read-only Fable peer consultant to a top-level Codex lead.",
     "Do not edit files, invoke Codex or Sol, use MCP, run shell commands, start agents, or delegate.",
     "Return concise findings, reasoning, risks, and a recommendation. The caller owns the decision.",
+    "Your response MUST end with exactly two nonempty lines: the literal sentinel " +
+      "BRIDGE_REPORT_V1, then one minified JSON object line.",
+    "That JSON object MUST contain exactly status, summary, pathspec, verification, and flags; " +
+      "status must be DISCUSSION, or NEEDS_RULING for an advisory question, pathspec must be [], " +
+      "and nothing may follow the JSON line.",
     "",
-    prompt,
+    body,
   ].join("\n");
+}
+
+function bridgeReportProblem(output) {
+  const trimmed = output.trim();
+  const lines = trimmed ? trimmed.split(/\r?\n/) : [];
+  const sentinelIndexes = [];
+  lines.forEach((line, index) => {
+    if (line.trim() === "BRIDGE_REPORT_V1") sentinelIndexes.push(index);
+  });
+  if (sentinelIndexes.length !== 1 || sentinelIndexes[0] !== lines.length - 2) {
+    return "the BRIDGE_REPORT_V1 sentinel must appear exactly once immediately before the final line";
+  }
+  const jsonLine = lines.at(-1);
+  let report;
+  try {
+    report = JSON.parse(jsonLine);
+  } catch {
+    return "the final bridge report line is not valid JSON";
+  }
+  if (!report || Array.isArray(report) || typeof report !== "object") {
+    return "the bridge report must be a JSON object";
+  }
+  let inString = false;
+  let escaped = false;
+  let insignificantWhitespace = false;
+  for (const character of jsonLine) {
+    if (escaped) {
+      escaped = false;
+    } else if (inString && character === "\\") {
+      escaped = true;
+    } else if (character === '"') {
+      inString = !inString;
+    } else if (!inString && /\s/.test(character)) {
+      insignificantWhitespace = true;
+      break;
+    }
+  }
+  if (insignificantWhitespace) {
+    return "the bridge report JSON line must be minified";
+  }
+  const requiredKeys = ["flags", "pathspec", "status", "summary", "verification"];
+  if (Object.keys(report).sort().join(",") !== requiredKeys.join(",")) {
+    return "the bridge report has missing or additional fields";
+  }
+  const statuses = new Set([
+    "DONE",
+    "PARTIAL",
+    "DISCUSSION",
+    "NEEDS_SCOPE",
+    "NEEDS_RULING",
+    "BLOCKED",
+    "FAILED",
+  ]);
+  if (!statuses.has(report.status)) return "the bridge report has an invalid status";
+  if (typeof report.summary !== "string" || !report.summary.trim()) {
+    return "the bridge report summary must be nonempty";
+  }
+  if (![report.pathspec, report.verification, report.flags].every(Array.isArray)) {
+    return "the bridge report pathspec, verification, and flags fields must be arrays";
+  }
+  if (report.pathspec.length !== 0) return "a read-only consult must return an empty pathspec";
+  if (![report.verification, report.flags].every((items) => items.every((item) => typeof item === "string"))) {
+    return "the bridge report verification and flags entries must be strings";
+  }
+  return null;
 }
 
 async function consultFable(prompt) {
   if (typeof prompt !== "string" || !prompt.trim()) {
-    return resultText("prompt must be a non-empty string", true);
+    return failedBridgeResult("prompt must be a non-empty string", "protocol_failure");
   }
   if (prompt.length > 100_000) {
-    return resultText("prompt exceeds the 100000-character bridge limit", true);
+    return failedBridgeResult(
+      "prompt exceeds the 100000-character bridge limit",
+      "protocol_failure",
+    );
   }
-  if (/^BRIDGE_ORIGIN:\s*claude\s*$/m.test(prompt)) {
-    return resultText("a Claude-originated Sol session cannot call the reverse bridge", true);
-  }
-  if (!/^BRIDGE_ORIGIN:\s*codex\s*$/m.test(prompt)) {
-    return resultText("reverse bridge requires BRIDGE_ORIGIN: codex", true);
-  }
-  if (!/^BRIDGE_HOPS_REMAINING:\s*0\s*$/m.test(prompt)) {
-    return resultText("reverse bridge requires BRIDGE_HOPS_REMAINING: 0", true);
-  }
+  const validated = validateAndStripHeaders(prompt);
+  if (validated.error) return failedBridgeResult(validated.error, "protocol_failure");
 
   const emptyMcpConfig = '{"mcpServers":{}}';
   const args = [
@@ -92,7 +204,7 @@ async function consultFable(prompt) {
     "--no-session-persistence",
     "--output-format",
     "text",
-    bridgePrompt(prompt),
+    bridgePrompt(validated.body),
   ];
 
   return await new Promise((resolvePromise) => {
@@ -113,6 +225,7 @@ async function consultFable(prompt) {
       resolvePromise(result);
     };
 
+    // Bound both streams; stdout is validated, while stderr supplies bounded failure detail.
     const appendBounded = (current, chunk) => {
       const combined = current + chunk;
       return combined.length > maxOutputCharacters
@@ -129,20 +242,39 @@ async function consultFable(prompt) {
       stderr = appendBounded(stderr, chunk);
     });
     child.on("error", (error) => {
-      finish(resultText(`could not start Claude Code: ${error.message}`, true));
+      finish(failedBridgeResult("Claude Fable transport could not be started", "transport_failure"));
     });
     child.on("close", (code, signal) => {
-      if (code === 0 && stdout.trim()) {
+      if (code === 0) {
+        const protocolProblem = bridgeReportProblem(stdout);
+        if (protocolProblem) {
+          finish(
+            failedBridgeResult(
+              `Claude Fable returned an invalid bridge-report/v1 envelope: ${protocolProblem}`,
+              "protocol_failure",
+            ),
+          );
+          return;
+        }
+        const report = JSON.parse(stdout.trim().split(/\r?\n/).at(-1));
+        if (!["DISCUSSION", "NEEDS_RULING"].includes(report.status)) {
+          finish(protocolDeviationResult(stdout, report.status));
+          return;
+        }
         finish(resultText(stdout.trim()));
         return;
       }
-      const detail = stderr.trim() || stdout.trim() || `signal ${signal || "unknown"}`;
-      finish(resultText(`Claude Fable consult failed (exit ${code}): ${detail}`, true));
+      const termination = signal ? `signal ${signal}` : `exit ${code}`;
+      const detail = stderr.trim();
+      const summary = detail
+        ? `Claude Fable transport failed (${termination}): ${detail}`
+        : `Claude Fable transport failed (${termination})`;
+      finish(failedBridgeResult(summary, "transport_failure"));
     });
 
     timer = setTimeout(() => {
       child.kill("SIGTERM");
-      finish(resultText(`Claude Fable consult timed out after ${timeoutMs} ms`, true));
+      finish(failedBridgeResult("Claude Fable transport timed out", "transport_failure"));
     }, timeoutMs);
   });
 }

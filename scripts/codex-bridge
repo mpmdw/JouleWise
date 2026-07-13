@@ -18,6 +18,10 @@ invocation_manifest.jsonl rows with prompt/output hashes and session ids.
 Defaults: model gpt-5.6-sol, reasoning effort high. Callers select xhigh for
 hard individual work or ultra only for sessions that must spawn subagents by
 setting CODEX_REASONING_EFFORT deliberately.
+
+Governed delegated runs follow docs/contracts/bridge_protocol.md: the prompt
+begins with a BRIDGE_TASK_V1 header; audited runs that emit a full
+claude-codex-report/v1 body are exempt from the bridge-report/v1 trailer.
 USAGE
 }
 
