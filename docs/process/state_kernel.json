@@ -2,8 +2,8 @@
   "active_stop_card": null,
   "authority": "NOT_AUTHORITATIVE_DERIVED_VIEW",
   "latest_report": {
-    "label": "Agent-lane triple: SITE-01 + P2-049 + P2-028 (PRs #61-#63)",
-    "path": "docs/run_reports/2026-07-12-agent-lane-triple.md"
+    "label": "Restart close: #61-#63 merged at audited heads, site live under cap",
+    "path": "docs/run_reports/2026-07-13-restart-merge-deploy.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 2,
@@ -1066,36 +1066,6 @@
       "status_note": "Environment locks, pack preparation, integrity tooling, and fail-closed privacy transformation are merged; publication and external re-reduction remain ED-EXTERNAL.",
       "stop_card": null
     },
-    "P2-028": {
-      "acceptance": {
-        "evidence": [
-          "Named verdict from 2+ strict-valid bundles",
-          "Existing real bundles pass formally"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/P2-028/acceptance",
-          "label": "P2-028 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Script emits a named verdict from 2+ strict-valid bundles."
-      },
-      "authority": {
-        "label": "CP-6 adjudication (CP-5 resume session record)",
-        "path": "docs/run_reports/2026-07-09-cp5-resume.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [],
-      "flags": [],
-      "goal": "Response-hash determinism gate script: formal check that repeated same-config bundles have byte-identical per-item response hashes within rep groups.",
-      "id": "P2-028",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 20,
-      "status": "active",
-      "status_note": "PR #62 open (2026-07-12); implementation + two lenses + fix rounds + lead gate done; fresh delta re-audit owed pre-merge.",
-      "stop_card": null
-    },
     "P2-035": {
       "acceptance": {
         "evidence": [
@@ -1521,5 +1491,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-07-12"
+  "updated": "2026-07-13"
 }

@@ -27,7 +27,7 @@ GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 EXPECTED_IDS = {
     # [AGENT]
     "P2-035", "P2-036", "P3-000", "P2-022", "P2-023",
-    "P2-024", "P2-028", "P3-001b", "P2-004", "P2-005", "P2-016",
+    "P2-024", "P3-001b", "P2-004", "P2-005", "P2-016",
     "P2-047A", "P2-048", "CI-003", "DOC-010",
     # [QUIET-MAC]
     "P2-015-SMOKE", "P2-015", "P2-006", "P2-010", "P2-019", "P2-020",
@@ -77,10 +77,10 @@ class TestKernelValidity(unittest.TestCase):
             ("bad schema_version", lambda k: k.update(schema_version=1)),
             ("missing authority", lambda k: k.pop("authority")),
             ("altered authority", lambda k: k.update(authority="AUTHORITATIVE")),
-            ("id/key mismatch", lambda k: k["tasks"]["P2-028"].update(id="P2-999")),
-            ("terminal status", lambda k: k["tasks"]["P2-028"].update(status="done")),
-            ("duplicate lane rank", lambda k: k["tasks"]["P2-028"].update(rank=0)),
-            ("blocked without hard start dep", lambda k: k["tasks"]["P2-028"].update(status="blocked")),
+            ("id/key mismatch", lambda k: k["tasks"]["P2-016"].update(id="P2-999")),
+            ("terminal status", lambda k: k["tasks"]["P2-016"].update(status="done")),
+            ("duplicate lane rank", lambda k: k["tasks"]["P2-016"].update(rank=0)),
+            ("blocked without hard start dep", lambda k: k["tasks"]["P1-008"].update(status="blocked")),
             ("queued with hard start dep", lambda k: k["tasks"]["P2-035"].update(status="queued")),
             ("dangling pending task dep",
              lambda k: k["tasks"]["P2-035"]["dependencies"][0].update(target="NOPE-1")),
@@ -90,11 +90,11 @@ class TestKernelValidity(unittest.TestCase):
              lambda k: k["tasks"]["P2-035"]["dependencies"][0].update(
                  evidence={"path": "docs/decision_log.md", "label": "x"})),
             ("missing pointer target",
-             lambda k: k["tasks"]["P2-028"]["authority"].update(path="docs/does_not_exist.md")),
+             lambda k: k["tasks"]["P2-016"]["authority"].update(path="docs/does_not_exist.md")),
             ("absolute pointer path",
-             lambda k: k["tasks"]["P2-028"]["authority"].update(path="/etc/passwd")),
-            ("pipe in goal", lambda k: k["tasks"]["P2-028"].update(goal="a | b")),
-            ("unknown flag", lambda k: k["tasks"]["P2-028"].update(flags=["nope"])),
+             lambda k: k["tasks"]["P2-016"]["authority"].update(path="/etc/passwd")),
+            ("pipe in goal", lambda k: k["tasks"]["P2-016"].update(goal="a | b")),
+            ("unknown flag", lambda k: k["tasks"]["P2-016"].update(flags=["nope"])),
             ("quiet_mac without lead_only",
              lambda k: k["tasks"]["P2-019"].update(flags=[])),
             ("blocked_post_2m without P2-006 dep",
@@ -126,9 +126,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_31(self):
+    def test_exact_live_id_set_30(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 31)
+        self.assertEqual(len(self.tasks), 30)
 
     def test_schema_v2_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 2)

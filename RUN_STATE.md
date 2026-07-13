@@ -1,12 +1,16 @@
 # JouleWise Run State
 
-Last updated: 2026-07-12 (Agent-lane triple session: PRs #61 P2-049 /
-#62 P2-028 / #63 SITE-01 all OPEN at fully-lead-gated heads — #61 needs
-only a merge click (harness denied lead self-merge); #62/#63 owe a fresh
-delta re-audit pre-merge (upstream Codex outage blocked three attempts);
-#63 owes the lead-run live Lakebed deploy post-merge. C-028 remains
-CLOSED; Window-A execution still requires a quiet machine + Ed. Full
-record: `docs/run_reports/2026-07-12-agent-lane-triple.md`.)
+Last updated: 2026-07-13 (Restart close: PRs #61-#63 MERGED at
+delta-audited heads — DRA-001 malformed-identity blocker fixed on #62;
+XSI-1 installed-wheel CI gap fixed on main; site deployed live under the
+Lakebed cap (measured 854,349 B), routes 5/5, freshness clear. The
+bidirectional Claude↔Sol bridge landed the same day (concurrent
+Ed-directed thread; lead-verified: 8/8 protocol checks, 4/4 bridge
+tests). **PAUSE POINT: Ed has declared a whole-project comprehensive
+audit as the next gate before further feature work; method proposal
+pending Ed's approval.** Window-A execution still requires a quiet
+machine + Ed. Records: `docs/run_reports/2026-07-13-restart-merge-deploy.md`
++ `docs/run_reports/2026-07-12-claude-sol-bridge.md`.)
 
 ## Start Here For Every Big Run
 
@@ -66,7 +70,7 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Restart By Machine-State Lane
 
-Source of truth: [state kernel](docs/process/state_kernel.json) (updated 2026-07-12). Latest report: [Agent-lane triple: SITE-01 + P2-049 + P2-028 (PRs #61-#63)](docs/run_reports/2026-07-12-agent-lane-triple.md).
+Source of truth: [state kernel](docs/process/state_kernel.json) (updated 2026-07-13). Latest report: [Restart close: #61-#63 merged at audited heads, site live under cap](docs/run_reports/2026-07-13-restart-merge-deploy.md).
 
 ### [ED-EXTERNAL]
 
@@ -78,7 +82,7 @@ Source of truth: [state kernel](docs/process/state_kernel.json) (updated 2026-07
 
 ### [AGENT]
 
-- CONTINUE — A20 `P2-028`: Response-hash determinism gate script: formal check that repeated same-config bundles have byte-identical per-item response hashes within rep groups.
+- READY — A22 `P2-004`: Close model selection (D-016): decision-log entry with models, revisions, artifact paths, local mirror, fallback candidate; mid-model pick, CUDA load, GGUF paths outstanding.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
@@ -132,27 +136,32 @@ PROVISIONAL pending P1-006 live evidence.
 
 **RESTART HERE (next session) — this is the ONLY next-action block; the
 queue owns ordering:**
-1. [ED or AGENT] Land the open PR triple: merge #61 (fully gated; harness
-   denied lead self-merge — needs Ed's click or re-authorization); run the
-   owed fresh delta re-audits over #62 and #63 final heads (read-only Sol,
-   `--effort xhigh` EXPLICITLY — see the effort-default defect in the
-   2026-07-12 run report), triage, then CI-green merge both.
-2. [AGENT, after #63 merges] Live Lakebed deploy from main: site regen →
-   pack (measured postcondition must pass) → `npx lakebed deploy` → verify
-   the five endpoints + instruction meter on a cold worst-shard request →
-   freshness banner clears → Lakebed feedback entry.
-3. [QUIET-MAC + ED] Begin Window A: C-019 production-shaped shakedown and
-   P2-015-SMOKE, then P2-015 floors and P2-006 baselines. Do not run this
-   lane while an agent session is active.
-4. [AGENT] Outside a quiet window, next compatible rows: P2-050
-   adjudication, P2-027 publication prep. P2-022/P2-023 remain blocked
-   until the 2M corpus exists.
+1. DONE 2026-07-13: #61-#63 merged at delta-audited heads; site deployed
+   live under the cap; XSI-1 CI hardening green on main; bridge landed
+   and lead-verified (8/8 protocol checks; suite 1318 OK).
+2. [ED + AGENT] **Comprehensive whole-project audit (declared gate).**
+   The audit method proposal is with Ed; no further feature work, queue
+   pulls, or campaign prep until the audit runs and its findings are
+   adjudicated. Audit focus per Ed: overproduction (excess code/tests),
+   plus everything a serious external review would check.
+3. [QUIET-MAC + ED] After the audit: Window A — C-019 production-shaped
+   shakedown and P2-015-SMOKE, then P2-015 floors and P2-006 baselines.
+   Do not run this lane while an agent session is active.
+4. [AGENT] Post-audit, outside a quiet window: P2-050 adjudication,
+   SITE-02 follow-ups, P2-027 publication prep. P2-022/P2-023 remain
+   blocked until the 2M corpus exists.
 
 ## Session History (pointers only — run reports own the narrative)
 
 Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the C-028 block above.
 
+- 2026-07-13 Restart close: #61-#63 merged at delta-audited heads
+  (DRA-001 fixed; XSI-1 CI hardening), site live under cap; audit gate
+  declared: `docs/run_reports/2026-07-13-restart-merge-deploy.md`
+- 2026-07-12 Claude↔Sol bidirectional bridge (concurrent Ed-directed
+  thread; lead-verified 2026-07-13):
+  `docs/run_reports/2026-07-12-claude-sol-bridge.md`
 - 2026-07-12 Agent-lane triple: SITE-01/P2-049/P2-028 → PRs #61-#63 at
   lead-gated heads; delta re-audits owed pre-merge on #62/#63:
   `docs/run_reports/2026-07-12-agent-lane-triple.md`
@@ -187,6 +196,8 @@ current restart instructions. Current state is the C-028 block above.
   report: `docs/run_reports/2026-07-09-c027-council-review.md`)
 - 2026-07-09 Claude Code → Codex MCP bridge hardening and live smoke:
   `docs/run_reports/2026-07-09-claude-codex-mcp-bridge.md`
+- 2026-07-12 adaptive Claude Code ↔ Sol/Fable bridge follow-up:
+  `docs/run_reports/2026-07-12-claude-sol-bridge.md`
 - 2026-07-09 P2-034 broad campaign packs (C-026; PR #39):
   `docs/run_reports/2026-07-09-p2034-broad-packs.md`
 - 2026-07-09 spec-fleshing wave 2, ultracode (C-025; PRs #33..#38;
@@ -222,7 +233,14 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Current Verification
 
-- Current `main@194ea39` (post #59 + #60 merges): canonical `Ran 1258
+- Current working tree (post #61-#63 merges + bridge landing, pre-commit
+  head `99b8640`): canonical `Ran 1318 tests in 111.017s`, `OK
+  (skipped=10)`, lead-run 2026-07-13 with the bridge + bookkeeping
+  changes in tree; bridge protocol checker 8/8 PASS; bridge focused
+  tests 4/4 OK. Merged-main backstop at `12131b0` was `Ran 1314 tests`,
+  `OK (skipped=10)`. Live capsule: measured artifact 854,349 B deployed,
+  routes 5/5 HTTP 200, freshness 14/14 current at `7d3ea57`.
+- Prior head `main@194ea39` (post #59 + #60 merges): canonical `Ran 1258
   tests`, `OK (skipped=10)`, lead-run 2026-07-11 fresh-thread intake.
   PRs #41-#60 are all merged.
 - Prior head `main@cc3afc3`: canonical `Ran 1220 tests`, `OK (skipped=10)`;
@@ -324,13 +342,20 @@ current restart instructions. Current state is the C-028 block above.
   required loud six-bundle acceptance-gate skip; the lead corpus gate then
   PASSED (6/6 strict via corpus symlink), plus mock e2e run+strict+reduce
   and the post-merge full suite (OK, skipped=12).
-- Claude Code 2.1.205 approved the project `codex` MCP server; Codex CLI
-  0.144.0 protocol handshake exposed `codex` + `codex-reply` with the
-  expected full-session controls. A real Claude → Codex read-only call
-  read `AGENTS.md`/`RUN_STATE.md`, and the same thread continued through
-  `codex-reply` (`JOULEWISE_CODEX_MCP_OK` /
-  `JOULEWISE_CODEX_REPLY_OK`). `scripts/check-codex-mcp.mjs` passes;
-  canonical suite `Ran 877 tests, OK (skipped=10)`.
+- Claude Code 2.1.207, Codex CLI 0.144.0, and Node 23.7.0 pass the
+  bidirectional protocol checker. Claude → Sol now uses `gpt-5.6-sol` with
+  `high` fallback/default and task-triggered xhigh/ultra escalation; the
+  final guarded `/codex` smoke returned `JOULEWISE_SOL_HIGH_GUARDED_OK`
+  (thread `019f5a2a-2f4a-7b33-8a6d-b44dcc5a7a26`) with source `mcp`, effort
+  `high`, read-only sandbox, and `on-request` approvals. Claude-originated
+  Sol sessions disable the reverse server. Top-level Sol → Fable uses the
+  sole `consult_fable` MCP tool; live token `JOULEWISE_FABLE_MCP_OK` on
+  thread `019f5a26-d8a6-7993-b48d-8131d88748b9`. Focused bridge tests pass
+  4/4 and `gen_state.py --check` passes. The current full suite ran 1,317
+  tests but is not green: one failure + one error in `test_gen_state` are
+  caused by the concurrent uncommitted state-kernel removal of `P2-028`
+  while the existing fidelity tests still require that ID; bridge tests are
+  unaffected. Full details: `docs/run_reports/2026-07-12-claude-sol-bridge.md`.
 - Last code-bearing verified head c095c83 (post PR #39; note: 36d5641
   later changed `scripts/build_site.py` on main without a recorded
   verification — flagged by C-027, covered by RETRO-001): suite `OK (skipped=10)` and
@@ -371,10 +396,13 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Known Workspace State
 
-- Main checkout is at `main@194ea39`, equal to `origin/main`, with PRs
-  #41-#60 all merged. `impl/int-findings` (#59) and `impl/doc008-kernel`
-  (#60) are merged branches; their worktrees under `~/code/JouleWise-wt/`
-  are removable at the next cleanup pass.
+- Main checkout began this bridge follow-up at `main@0e7616a`; concurrent
+  user work advanced it to `main@99b8640`, equal to `origin/main`. The
+  working tree contains the intended uncommitted bridge/tooling/docs changes
+  plus separately owned state-kernel/restart-report edits
+  (`docs/process/state_kernel.json` and
+  `docs/run_reports/2026-07-13-restart-merge-deploy.md`), which this bridge
+  work preserved rather than adjudicating.
 - The generated state-kernel blocks are explicitly non-authoritative;
   `RUN_STATE.md`, `TASK_QUEUE.md`, and `docs/decision_log.md` remain
   authoritative.
@@ -382,12 +410,13 @@ current restart instructions. Current state is the C-028 block above.
 
 ## What Is Next
 
-In the first clean quiet-machine window, Ed runs C-019/P2-015-SMOKE,
-followed by P2-015 floors and P2-006 baselines. Agent-safe work continues
-only outside that quiet window: SITE-01 (capsule under the 1 MiB Lakebed
-cap + redeploy), P2-049 (fail-closed analysis-manifest ROOT), and P2-028
-(determinism gate script) are the active [AGENT] heads. `TASK_QUEUE.md`
-remains the ordering authority.
+The comprehensive whole-project audit is the declared gate (Ed,
+2026-07-13): method proposal pending Ed's approval, then the audit runs
+and its findings are adjudicated before any further feature work. After
+that: Window A in the first clean quiet-machine window (C-019/P2-015-SMOKE,
+then P2-015 floors, P2-006 baselines), with post-audit [AGENT] heads
+P2-050 adjudication, SITE-02, and P2-027 publication prep outside quiet
+windows. `TASK_QUEUE.md` remains the ordering authority.
 
 Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
 C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),
