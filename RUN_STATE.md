@@ -1,19 +1,21 @@
 # JouleWise Run State
 
-Last updated: 2026-07-13 (Restart close: PRs #61-#63 MERGED at
-delta-audited heads — DRA-001 malformed-identity blocker fixed on #62;
-XSI-1 installed-wheel CI gap fixed on main; site deployed live under the
-Lakebed cap (measured 854,349 B), routes 5/5, freshness clear. The
-bidirectional Claude↔Sol bridge landed the same day (concurrent
-Ed-directed thread; lead-verified: 8/8 protocol checks, 4/4 bridge
-tests). **PAUSE POINT: Ed has declared a whole-project comprehensive
-audit as the next gate before further feature work; method proposal
-pending Ed's approval. Bridge v1 (PR #64) landed 2026-07-13 as
-Ed-directed preparation: all delegated work now runs under
-`docs/contracts/bridge_protocol.md` — leases, baselines, scope-check,
-envelopes (`scripts/bridge`).** Window-A execution still requires a quiet
-machine + Ed. Records: `docs/run_reports/2026-07-13-restart-merge-deploy.md`
-+ `docs/run_reports/2026-07-12-claude-sol-bridge.md`.)
+Last updated: 2026-07-13 (Bridge v1.1, Ed-directed same-day follow-on to
+PR #64: **PR #65 is GATE-COMPLETE and AWAITING ED'S MERGE** — the harness
+declined an agent self-merge of the agent-authored PR. All gates passed:
+Sol xhigh design consult → impl → 3 lenses → 3 fix rounds → 3 delta
+re-audits (findings 13→6→2→1), suite 1387 OK, CI green on final head
+`8b96bd4`, fresh pass over the post-review bench commit. v1.1 adds the
+discussion lane, `scripts/bridge session-open`/`session-close`
+(receipt-anchored, `session.lock`-serialized, write-only), tolerant
+envelopes, per-call reverse-consult effort, and peer channels + bounded
+proposal diffs (D-065). AFTER MERGE: regenerate + redeploy the site
+(front-facing docs changed). **PAUSE POINT unchanged: Ed's declared
+whole-project comprehensive audit remains the next gate before further
+feature work; this bridge session was Ed-directed preparation.**
+Window-A execution still requires a quiet machine + Ed. Records:
+`docs/run_reports/2026-07-13-bridge-v11.md` (this session) +
+`docs/run_reports/2026-07-13-restart-merge-deploy.md`.)
 
 ## Start Here For Every Big Run
 
@@ -239,13 +241,23 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Current Verification
 
-- Current working tree (post #61-#63 merges + bridge landing, pre-commit
+- PR #65 branch `impl/bridge-v1.1` final head `8b96bd4`: canonical
+  `Ran 1387 tests`, `OK (skipped=10)`, lead-run 2026-07-13 (four
+  lead-side full-suite runs across the fix arc: 1371→1381→1385→1387);
+  CI green on the final head (build, installed-wheel, tests 3.11 +
+  3.14); `scripts/check-codex-mcp.mjs` 5/5 PASS with the v1.1 adapter;
+  live session-open/close and reverse-consult probes recorded in
+  `docs/run_reports/2026-07-13-bridge-v11.md`.
+- Current main `37a7c5e` (bookkeeping-only tree): canonical main suite
+  re-run pending the #65 merge (main code unchanged this session; the
+  prior main verification below still describes main's code state).
+- Previous session (post #61-#63 merges + bridge v1 landing, pre-commit
   head `99b8640`): canonical `Ran 1318 tests in 111.017s`, `OK
-  (skipped=10)`, lead-run 2026-07-13 with the bridge + bookkeeping
-  changes in tree; bridge protocol checker 8/8 PASS; bridge focused
-  tests 4/4 OK. Merged-main backstop at `12131b0` was `Ran 1314 tests`,
-  `OK (skipped=10)`. Live capsule: measured artifact 854,349 B deployed,
-  routes 5/5 HTTP 200, freshness 14/14 current at `7d3ea57`.
+  (skipped=10)`, lead-run 2026-07-13; bridge protocol checker 8/8 PASS;
+  bridge focused tests 4/4 OK. Merged-main backstop at `12131b0` was
+  `Ran 1314 tests`, `OK (skipped=10)`. Live capsule: measured artifact
+  854,349 B deployed, routes 5/5 HTTP 200, freshness 14/14 current at
+  `7d3ea57`.
 - Prior head `main@194ea39` (post #59 + #60 merges): canonical `Ran 1258
   tests`, `OK (skipped=10)`, lead-run 2026-07-11 fresh-thread intake.
   PRs #41-#60 are all merged.
@@ -402,13 +414,15 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Known Workspace State
 
-- Main checkout began this bridge follow-up at `main@0e7616a`; concurrent
-  user work advanced it to `main@99b8640`, equal to `origin/main`. The
-  working tree contains the intended uncommitted bridge/tooling/docs changes
-  plus separately owned state-kernel/restart-report edits
-  (`docs/process/state_kernel.json` and
-  `docs/run_reports/2026-07-13-restart-merge-deploy.md`), which this bridge
-  work preserved rather than adjudicating.
+- Main checkout is at `main@37a7c5e` = `origin/main`; the only
+  uncommitted changes are this session's bookkeeping (this file,
+  `TASK_QUEUE.md`, council C-032 row, decision D-065, the bridge-v1.1
+  run report, and `docs/process_traces/2026-07-13-bridge-v11*`),
+  committed straight to main per convention. All bridge v1.1 code/doc
+  changes live only on `impl/bridge-v1.1` (PR #65) until Ed merges.
+  One stale nested worktree (`.claude/worktrees/magical-jones-79e5f4`,
+  detached, clean) was removed this session to satisfy strict-scope
+  preflight.
 - The generated state-kernel blocks are explicitly non-authoritative;
   `RUN_STATE.md`, `TASK_QUEUE.md`, and `docs/decision_log.md` remain
   authoritative.

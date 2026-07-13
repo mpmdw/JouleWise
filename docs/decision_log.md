@@ -3321,3 +3321,53 @@ exit-77/`failed_preserved` semantics (verified against the live
 p2043-impl / p2044-fixround status files), and the v2-valid-for-
 pre-v3 transition sentence all stand. One addition per lead
 dictation: the day-one-defects sentence appended to clause 2.
+
+## D-065: bridge-protocol/v1.1 — co-work lane, session wrappers, tolerant envelope
+
+- Date: 2026-07-13 (Ed-directed; spec ratified from a lead+Sol xhigh
+  design consult, thread `019f5d1d-b681-7db1-8714-812fdd2f198b`)
+- Status: accepted (C-032; process-layer). Contract text is the ONE
+  home for every wire rule; this entry records adoption and the
+  process-binding consequences only.
+- Phase: cross-project process instrumentation
+
+Context (state at recording: the v1.1 amendment is ratified and carried by PR #65, gate-complete and awaiting Ed's merge; it becomes the current contract on main when #65 merges): one production day of bridge-protocol/v1 showed the manual MCP
+write ceremony (~6 bookkeeping commands) pushing small writes off the
+bridge, a 13-field header taxing pure discussion turns, envelope
+strictness (minification, closed key set) failing substantively correct
+returns, a pinned reverse-consult effort, and effort-tier prose
+restated in four places. Ed directed a consult-first revision for
+"maximum co-work" with persistence in the top-level docs.
+
+Decision:
+
+1. `docs/contracts/bridge_protocol.md` is amended (via PR #65) to
+   `bridge-protocol/v1.1`: reduced discussion-lane header (+ context
+   capsule and continuation deltas), `scripts/bridge session-open`/
+   `session-close` as the PREFERRED write ceremony (receipt-anchored,
+   fail-closed, `session.lock`-serialized with primitives, write-only
+   in v1.1), tolerant single-final-line envelope with normative field
+   types, per-call reverse-consult `effort` (`high`|`xhigh`) with an
+   effort echo line and single-envelope deviation handling, and
+   per-objective peer channels with bounded proposal diffs
+   (aggregate ≈3 files/200 lines; durable provenance record when the
+   lead applies one).
+2. Process bindings: design consults default to the discussion lane on
+   a per-objective peer channel (never counted as independent review);
+   delegated writes open and close through the wrappers, with the
+   primitives reserved for recovery and adjudicated overrides;
+   effort-tier policy prose lives only in
+   `.claude/skills/codex/SKILL.md` §Effort selection (consumers carry
+   at most the ratified one-line pointer); enforcement-boundary
+   guardrails are exempt from dedup and stay explicit at their
+   surfaces.
+3. Deferred, revisit on demonstrated need: snapshot_read wrapper
+   sessions (v1.1 wrappers are write-only; the unreachable v1.1-draft
+   DISCUSSION-success path was removed rather than enabled), and any
+   expansion-receipt artifact (the lease event chain is the
+   authoritative expanded-scope record).
+
+Evidence: PR #65 (final head `8b96bd4`, CI green, suite 1387 OK);
+review arc and per-layer catches in
+`docs/run_reports/2026-07-13-bridge-v11.md`; tracked invocation
+manifest `docs/process_traces/2026-07-13-bridge-v11.manifest.jsonl`.
