@@ -269,12 +269,23 @@ class BridgeTests(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        self.assertIsNotNone(process.stdout)
-        ready, _, _ = select.select([process.stdout], [], [], 5)
-        self.assertTrue(ready, "child did not reach the session-lock attempt")
-        # If the command stops acquiring session.lock, the wrapper is never called:
-        # the first line will be command JSON (or EOF), not this sentinel.
-        self.assertEqual(process.stdout.readline().strip(), LOCK_ATTEMPT_SENTINEL)
+        try:
+            self.assertIsNotNone(process.stdout)
+            ready, _, _ = select.select([process.stdout], [], [], 5)
+            self.assertTrue(ready, "child did not reach the session-lock attempt")
+            # If the command stops acquiring session.lock, the wrapper is never called:
+            # the first line will be command JSON (or EOF), not this sentinel.
+            self.assertEqual(process.stdout.readline().strip(), LOCK_ATTEMPT_SENTINEL)
+        except BaseException:
+            # A failed handshake must not leak a child blocked on the lock
+            # (or its open pipes) into later tests.
+            process.terminate()
+            try:
+                process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate(timeout=5)
+            raise
         return process
 
     def test_mutating_commands_outside_repository_emit_command_errors(self) -> None:
