@@ -15,6 +15,11 @@ const timeoutMs = Number.isFinite(requestedTimeoutMs) && requestedTimeoutMs > 0
   ? requestedTimeoutMs
   : 600_000;
 const maxOutputCharacters = 1_000_000;
+const allowedEfforts = new Set(["high", "xhigh"]);
+const configuredDefaultEffort = process.env.CLAUDE_BRIDGE_EFFORT;
+const defaultEffort = allowedEfforts.has(configuredDefaultEffort)
+  ? configuredDefaultEffort
+  : "high";
 
 const consultTool = {
   name: "consult_fable",
@@ -30,6 +35,11 @@ const consultTool = {
         maxLength: 100_000,
         description:
           "A self-contained consult prompt beginning with BRIDGE_ORIGIN: codex and BRIDGE_HOPS_REMAINING: 0.",
+      },
+      effort: {
+        type: "string",
+        enum: ["high", "xhigh"],
+        description: "Per-call Fable effort. Defaults to validated CLAUDE_BRIDGE_EFFORT or high.",
       },
     },
     required: ["prompt"],
@@ -60,12 +70,30 @@ function failedBridgeResult(summary, flag) {
   return resultText(failedBridgeEnvelope(summary, flag), true);
 }
 
-function protocolDeviationResult(output, status) {
+function withEffortPrefix(text, effort) {
+  return `[consult effort: ${effort}]\n${text}`;
+}
+
+function failedBridgeResultWithEffort(summary, flag, effort) {
+  return resultText(withEffortPrefix(failedBridgeEnvelope(summary, flag), effort), true);
+}
+
+function stripBridgeTrailer(output) {
+  const lines = output.trim().split(/\r?\n/);
+  return lines.slice(0, -2).join("\n").trim();
+}
+
+function protocolDeviationResult(output, status, effort) {
   const failure = failedBridgeEnvelope(
     `Claude Fable returned status ${status}; a one-shot read-only consult may end only DISCUSSION or NEEDS_RULING`,
     "protocol_deviation",
   );
-  return resultText(`${output.trim()}\n${failure}`, true);
+  const body = stripBridgeTrailer(output);
+  const diagnostic = `Protocol deviation: Claude Fable child claimed status ${status}.`;
+  return resultText(
+    withEffortPrefix([body, diagnostic, failure].filter(Boolean).join("\n"), effort),
+    true,
+  );
 }
 
 function validateAndStripHeaders(prompt) {
@@ -99,10 +127,14 @@ function bridgePrompt(body) {
     "Do not edit files, invoke Codex or Sol, use MCP, run shell commands, start agents, or delegate.",
     "Return concise findings, reasoning, risks, and a recommendation. The caller owns the decision.",
     "Your response MUST end with exactly two nonempty lines: the literal sentinel " +
-      "BRIDGE_REPORT_V1, then one minified JSON object line.",
-    "That JSON object MUST contain exactly status, summary, pathspec, verification, and flags; " +
-      "status must be DISCUSSION, or NEEDS_RULING for an advisory question, pathspec must be [], " +
-      "and nothing may follow the JSON line.",
+      "BRIDGE_REPORT_V1, then one JSON object on one physical line.",
+    "That JSON object MUST contain status, summary, pathspec, verification, and flags; " +
+      "status must be DISCUSSION, or NEEDS_RULING for an advisory question; summary is a string; " +
+      "pathspec, verification, and flags are JSON arrays of strings and pathspec must be []; " +
+      "unknown additional keys are tolerated, and nothing may follow the JSON line.",
+    "Example final two lines:",
+    "BRIDGE_REPORT_V1",
+    '{"status":"DISCUSSION","summary":"<one-sentence outcome>","pathspec":[],"verification":[],"flags":[]}',
     "",
     body,
   ].join("\n");
@@ -128,27 +160,9 @@ function bridgeReportProblem(output) {
   if (!report || Array.isArray(report) || typeof report !== "object") {
     return "the bridge report must be a JSON object";
   }
-  let inString = false;
-  let escaped = false;
-  let insignificantWhitespace = false;
-  for (const character of jsonLine) {
-    if (escaped) {
-      escaped = false;
-    } else if (inString && character === "\\") {
-      escaped = true;
-    } else if (character === '"') {
-      inString = !inString;
-    } else if (!inString && /\s/.test(character)) {
-      insignificantWhitespace = true;
-      break;
-    }
-  }
-  if (insignificantWhitespace) {
-    return "the bridge report JSON line must be minified";
-  }
-  const requiredKeys = ["flags", "pathspec", "status", "summary", "verification"];
-  if (Object.keys(report).sort().join(",") !== requiredKeys.join(",")) {
-    return "the bridge report has missing or additional fields";
+  const requiredKeys = ["status", "summary", "pathspec", "verification", "flags"];
+  if (!requiredKeys.every((key) => Object.hasOwn(report, key))) {
+    return "the bridge report is missing a required field";
   }
   const statuses = new Set([
     "DONE",
@@ -173,7 +187,11 @@ function bridgeReportProblem(output) {
   return null;
 }
 
-async function consultFable(prompt) {
+async function consultFable(prompt, requestedEffort) {
+  if (requestedEffort !== undefined && !allowedEfforts.has(requestedEffort)) {
+    return failedBridgeResult("effort must be one of: high, xhigh", "protocol_failure");
+  }
+  const effort = requestedEffort ?? defaultEffort;
   if (typeof prompt !== "string" || !prompt.trim()) {
     return failedBridgeResult("prompt must be a non-empty string", "protocol_failure");
   }
@@ -192,7 +210,7 @@ async function consultFable(prompt) {
     "--model",
     "fable",
     "--effort",
-    "high",
+    effort,
     "--permission-mode",
     "plan",
     "--tools",
@@ -242,26 +260,33 @@ async function consultFable(prompt) {
       stderr = appendBounded(stderr, chunk);
     });
     child.on("error", (error) => {
-      finish(failedBridgeResult("Claude Fable transport could not be started", "transport_failure"));
+      finish(
+        failedBridgeResultWithEffort(
+          "Claude Fable transport could not be started",
+          "transport_failure",
+          effort,
+        ),
+      );
     });
     child.on("close", (code, signal) => {
       if (code === 0) {
         const protocolProblem = bridgeReportProblem(stdout);
         if (protocolProblem) {
           finish(
-            failedBridgeResult(
+            failedBridgeResultWithEffort(
               `Claude Fable returned an invalid bridge-report/v1 envelope: ${protocolProblem}`,
               "protocol_failure",
+              effort,
             ),
           );
           return;
         }
         const report = JSON.parse(stdout.trim().split(/\r?\n/).at(-1));
         if (!["DISCUSSION", "NEEDS_RULING"].includes(report.status)) {
-          finish(protocolDeviationResult(stdout, report.status));
+          finish(protocolDeviationResult(stdout, report.status, effort));
           return;
         }
-        finish(resultText(stdout.trim()));
+        finish(resultText(withEffortPrefix(stdout.trim(), effort)));
         return;
       }
       const termination = signal ? `signal ${signal}` : `exit ${code}`;
@@ -269,12 +294,18 @@ async function consultFable(prompt) {
       const summary = detail
         ? `Claude Fable transport failed (${termination}): ${detail}`
         : `Claude Fable transport failed (${termination})`;
-      finish(failedBridgeResult(summary, "transport_failure"));
+      finish(failedBridgeResultWithEffort(summary, "transport_failure", effort));
     });
 
     timer = setTimeout(() => {
       child.kill("SIGTERM");
-      finish(failedBridgeResult("Claude Fable transport timed out", "transport_failure"));
+      finish(
+        failedBridgeResultWithEffort(
+          "Claude Fable transport timed out",
+          "transport_failure",
+          effort,
+        ),
+      );
     }, timeoutMs);
   });
 }
@@ -291,7 +322,7 @@ async function handle(message) {
       result: {
         protocolVersion: message.params?.protocolVersion || "2025-06-18",
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "joulewise-claude-bridge", version: "1.0.0" },
+        serverInfo: { name: "joulewise-claude-bridge", version: "1.1.0" },
       },
     });
     return;
@@ -311,7 +342,10 @@ async function handle(message) {
       });
       return;
     }
-    const result = await consultFable(message.params?.arguments?.prompt);
+    const result = await consultFable(
+      message.params?.arguments?.prompt,
+      message.params?.arguments?.effort,
+    );
     send({ jsonrpc: "2.0", id: message.id, result });
     return;
   }

@@ -1,19 +1,51 @@
-"""Defect-shaped checks for the tracked bridge-protocol/v1 helper."""
+"""Defect-shaped checks for the tracked bridge-protocol/v1.1 helper."""
 
 from __future__ import annotations
 
+import argparse
+from contextlib import redirect_stdout
+import fcntl
 import hashlib
+import importlib.machinery
+import importlib.util
+import io
 import json
 import multiprocessing
 import os
 from pathlib import Path
+import select
 import subprocess
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BRIDGE = REPO_ROOT / "scripts" / "bridge"
+LOCK_ATTEMPT_SENTINEL = "bridge-test-about-to-attempt-session-lock"
+
+LOCK_HANDSHAKE_CODE = f"""
+import contextlib
+import importlib.machinery
+import importlib.util
+import sys
+
+loader = importlib.machinery.SourceFileLoader("bridge_lock_handshake", sys.argv[1])
+spec = importlib.util.spec_from_loader(loader.name, loader)
+module = importlib.util.module_from_spec(spec)
+loader.exec_module(module)
+real_session_lock = module.session_lock
+
+@contextlib.contextmanager
+def signaling_session_lock(root):
+    print({LOCK_ATTEMPT_SENTINEL!r}, flush=True)
+    with real_session_lock(root):
+        yield
+
+module.session_lock = signaling_session_lock
+raise SystemExit(module.main(sys.argv[2:]))
+"""
 
 
 def _racing_acquire(repo: str, barrier: multiprocessing.Barrier, queue: multiprocessing.Queue) -> None:
@@ -167,6 +199,151 @@ class BridgeTests(unittest.TestCase):
         if lease_id is not None:
             arguments.extend(("--lease-id", lease_id))
         return self.bridge(*arguments, expected=expected)[1]
+
+    def session_open(
+        self,
+        invocation_id: str = "session-worker",
+        *paths: str,
+        expected: int = 0,
+    ) -> dict:
+        return self.bridge(
+            "session-open",
+            "--invocation-id",
+            invocation_id,
+            "--owner-id",
+            invocation_id,
+            "--owner-kind",
+            "codex-cli",
+            "--access",
+            "write",
+            "--paths",
+            *(paths or ("tracked.txt",)),
+            "--task",
+            "bridge wrapper test",
+            "--role",
+            "test worker",
+            "--genre",
+            "implementation",
+            "--task-shape",
+            "bounded",
+            expected=expected,
+        )[1]
+
+    def session_close(
+        self,
+        invocation_id: str = "session-worker",
+        status: str = "DONE",
+        *,
+        expected: int = 0,
+    ) -> dict:
+        return self.bridge(
+            "session-close",
+            "--invocation-id",
+            invocation_id,
+            "--status",
+            status,
+            expected=expected,
+        )[1]
+
+    def jsonl_events(self, relative_path: str) -> list[dict]:
+        path = self.repo / relative_path
+        if not path.exists():
+            return []
+        return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+
+    def load_bridge_module(self):
+        loader = importlib.machinery.SourceFileLoader(
+            f"bridge_script_test_{id(self)}", str(BRIDGE)
+        )
+        spec = importlib.util.spec_from_loader(loader.name, loader)
+        self.assertIsNotNone(spec)
+        module = importlib.util.module_from_spec(spec)
+        loader.exec_module(module)
+        return module
+
+    def handshaking_bridge_process(self, *arguments: str) -> subprocess.Popen[str]:
+        process = subprocess.Popen(
+            [sys.executable, "-c", LOCK_HANDSHAKE_CODE, str(BRIDGE), *arguments],
+            cwd=self.repo,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        try:
+            self.assertIsNotNone(process.stdout)
+            ready, _, _ = select.select([process.stdout], [], [], 5)
+            self.assertTrue(ready, "child did not reach the session-lock attempt")
+            # If the command stops acquiring session.lock, the wrapper is never called:
+            # the first line will be command JSON (or EOF), not this sentinel.
+            self.assertEqual(process.stdout.readline().strip(), LOCK_ATTEMPT_SENTINEL)
+        except BaseException:
+            # A failed handshake must not leak a child blocked on the lock
+            # (or its open pipes) into later tests.
+            process.terminate()
+            try:
+                process.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.communicate(timeout=5)
+            raise
+        return process
+
+    def test_mutating_commands_outside_repository_emit_command_errors(self) -> None:
+        commands = (
+            ("baseline", "--invocation-id", "outside"),
+            ("thread-record", "--invocation-id", "outside", "--state", "pending"),
+            ("lease-release", "--lease-id", "lease-outside"),
+            (
+                "lease-abandon",
+                "--lease-id",
+                "lease-outside",
+                "--approved-by",
+                "test",
+                "--reason",
+                "outside repository",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as outside_repository:
+            for arguments in commands:
+                with self.subTest(command=arguments[0]):
+                    result = subprocess.run(
+                        [str(BRIDGE), *arguments],
+                        cwd=outside_repository,
+                        text=True,
+                        capture_output=True,
+                    )
+                    self.assertEqual(result.returncode, 5, result.stderr + result.stdout)
+                    error = json.loads(result.stdout)
+                    self.assertEqual(error["schema"], "bridge-command-error/v1")
+                    self.assertEqual(error["command"], arguments[0])
+                    self.assertEqual(error["stage"], "repository")
+                    self.assertTrue(error["error"])
+
+    def test_decorated_command_session_lock_open_failure_emits_command_error(self) -> None:
+        bridge_dir = self.repo / ".codex-bridge"
+        bridge_dir.mkdir()
+        (bridge_dir / "session.lock").mkdir()
+        result = subprocess.run(
+            [str(BRIDGE), "baseline", "--invocation-id", "lock-failure"],
+            cwd=self.repo,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 5, result.stderr + result.stdout)
+        error = json.loads(result.stdout)
+        self.assertEqual(
+            {
+                "schema": error["schema"],
+                "command": error["command"],
+                "stage": error["stage"],
+            },
+            {
+                "schema": "bridge-command-error/v1",
+                "command": "baseline",
+                "stage": "session-lock",
+            },
+        )
+        self.assertTrue(error["error"])
 
     def test_overlapping_write_lease_hard_blocks_with_json_conflicts(self) -> None:
         first = self.acquire("first", "tracked.txt")
@@ -328,6 +505,60 @@ class BridgeTests(unittest.TestCase):
         )
         self.assertEqual(len(events.splitlines()), 2)
 
+    def test_standalone_lease_expand_blocks_while_session_lock_is_held(self) -> None:
+        lease = self.acquire("worker", "tracked.txt")
+        bridge_dir = self.repo / ".codex-bridge"
+        lock_path = bridge_dir / "session.lock"
+        holder_code = (
+            "import fcntl, sys\n"
+            "handle = open(sys.argv[1], 'a+b')\n"
+            "fcntl.flock(handle.fileno(), fcntl.LOCK_EX)\n"
+            "print('locked', flush=True)\n"
+            "sys.stdin.read(1)\n"
+        )
+        holder = subprocess.Popen(
+            [sys.executable, "-c", holder_code, str(lock_path)],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        expand = None
+        try:
+            self.assertIsNotNone(holder.stdout)
+            self.assertEqual(holder.stdout.readline().strip(), "locked")
+            expand = self.handshaking_bridge_process(
+                "lease-expand",
+                "--lease-id",
+                lease["lease_id"],
+                "--paths",
+                "other.txt",
+            )
+            with self.assertRaises(subprocess.TimeoutExpired):
+                expand.wait(timeout=0.2)
+            self.assertEqual(
+                [event["event"] for event in self.jsonl_events(
+                    ".codex-bridge/workspace-lease-events.jsonl"
+                )],
+                ["acquire"],
+            )
+        finally:
+            if holder.stdin is not None and holder.poll() is None:
+                holder.stdin.write("x")
+                holder.stdin.flush()
+                holder.stdin.close()
+            holder.wait(timeout=5)
+            holder_stderr = holder.stderr.read() if holder.stderr is not None else ""
+            if holder.stdout is not None:
+                holder.stdout.close()
+            if holder.stderr is not None:
+                holder.stderr.close()
+        self.assertEqual(holder.returncode, 0, holder_stderr)
+        self.assertIsNotNone(expand)
+        stdout, stderr = expand.communicate(timeout=5)
+        self.assertEqual(expand.returncode, 0, stderr + stdout)
+        self.assertEqual(json.loads(stdout)["event"], "expand")
+
     def test_malformed_lease_log_fails_scope_and_acquire_closed(self) -> None:
         baseline = self.baseline()
         log = self.repo / ".codex-bridge" / "workspace-lease-events.jsonl"
@@ -405,6 +636,606 @@ class BridgeTests(unittest.TestCase):
             extra=("--pid", "4242"),
         )
         self.assertEqual(with_pid["pid"], 4242)
+
+    def test_session_open_creates_lease_baseline_pending_receipt_and_header(self) -> None:
+        opened = self.session_open()
+        requested_scope = [{"match": "exact", "path": "tracked.txt"}]
+        expected_head = self.git("rev-parse", "HEAD").stdout.strip()
+        expected_manifest_path = ".codex-bridge/baselines/session-worker.json"
+        manifest = json.loads(
+            (self.repo / expected_manifest_path).read_text(encoding="utf-8")
+        )
+        manifest_payload = {
+            key: value for key, value in manifest.items() if key != "manifest_sha256"
+        }
+        expected_manifest_digest = "sha256:" + hashlib.sha256(
+            json.dumps(
+                manifest_payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        expected_scope_digest = "sha256:" + hashlib.sha256(
+            json.dumps(
+                requested_scope,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        lease_event = self.jsonl_events(
+            ".codex-bridge/workspace-lease-events.jsonl"
+        )[0]
+
+        self.assertEqual(opened["schema"], "bridge-session-receipt/v1")
+        self.assertEqual(opened["base_head"], expected_head)
+        self.assertEqual(opened["baseline_manifest"], expected_manifest_path)
+        self.assertEqual(opened["baseline_digest"], expected_manifest_digest)
+        self.assertEqual(opened["write_scope"], requested_scope)
+        self.assertEqual(opened["write_scope_digest"], expected_scope_digest)
+        self.assertEqual(opened["lease_id"], lease_event["lease_id"])
+        self.assertEqual(opened["lease_acquired_at"], lease_event["timestamp"])
+        self.assertEqual(opened["owner"], {"id": "session-worker", "kind": "codex-cli"})
+        self.assertEqual(manifest["manifest_sha256"], expected_manifest_digest)
+        self.assertEqual(manifest["head_oid"], expected_head)
+        self.assertEqual(manifest["invocation_id"], "session-worker")
+        self.assertEqual(
+            opened["header_fragment"],
+            {
+                "BASE_HEAD": expected_head,
+                "BASELINE_MANIFEST": expected_manifest_path,
+                "BASELINE_DIGEST": expected_manifest_digest,
+                "WRITE_SCOPE": requested_scope,
+            },
+        )
+        receipt_path = self.repo / ".codex-bridge" / "receipts" / "session-worker.json"
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        self.assertEqual(receipt, {key: value for key, value in opened.items() if key != "header_fragment"})
+        self.assertTrue((self.repo / expected_manifest_path).exists())
+        leases = self.bridge("lease-list", "--active")[1]["leases"]
+        self.assertEqual(leases[0]["lease_id"], opened["lease_id"])
+        threads = self.bridge("thread-list", "--open")[1]["threads"]
+        self.assertEqual(threads[0]["state"], "pending")
+        self.assertEqual(threads[0]["baseline_digest"], opened["baseline_digest"])
+
+    def test_session_open_existing_receipt_fails_without_new_partial_state(self) -> None:
+        self.session_open()
+        lease_events_before = self.jsonl_events(
+            ".codex-bridge/workspace-lease-events.jsonl"
+        )
+        thread_events_before = self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl")
+        failed = self.session_open(expected=5)
+        self.assertIn("session_invocation_id_already_used", failed["error"])
+        self.assertIn("new invocation id", failed["error"])
+        self.assertEqual(failed["lease_disposition"], "not_acquired")
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/workspace-lease-events.jsonl"),
+            lease_events_before,
+        )
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl"),
+            thread_events_before,
+        )
+
+    def test_session_open_refuses_baseline_only_invocation_before_acquire(self) -> None:
+        self.baseline("baseline-collision")
+        lease_events_before = self.jsonl_events(
+            ".codex-bridge/workspace-lease-events.jsonl"
+        )
+        failed = self.session_open("baseline-collision", expected=5)
+        self.assertEqual(failed["stage"], "validate")
+        self.assertEqual(failed["lease_disposition"], "not_acquired")
+        self.assertIn("baselines", failed["error"])
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/workspace-lease-events.jsonl"),
+            lease_events_before,
+        )
+        self.assertFalse(
+            (self.repo / ".codex-bridge" / "receipts" / "baseline-collision.json").exists()
+        )
+
+    def test_session_open_refuses_lease_only_invocation_before_new_event(self) -> None:
+        bridge_dir = self.repo / ".codex-bridge"
+        bridge_dir.mkdir()
+        lock_path = bridge_dir / "session.lock"
+        with lock_path.open("a+b") as lock_handle:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+            acquire = self.handshaking_bridge_process(
+                "lease-acquire",
+                "--invocation-id",
+                "lease-only",
+                "--owner-id",
+                "lease-only",
+                "--owner-kind",
+                "codex-cli",
+                "--access",
+                "write",
+                "--paths",
+                "tracked.txt",
+            )
+            with self.assertRaises(subprocess.TimeoutExpired):
+                acquire.wait(timeout=0.2)
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+        stdout, stderr = acquire.communicate(timeout=5)
+        self.assertEqual(acquire.returncode, 0, stderr + stdout)
+        self.assertEqual(json.loads(stdout)["event"], "acquire")
+        events_before = self.jsonl_events(
+            ".codex-bridge/workspace-lease-events.jsonl"
+        )
+        failed = self.session_open("lease-only", expected=5)
+        self.assertEqual(failed["stage"], "validate")
+        self.assertIn("lease log", failed["error"])
+        self.assertIn("new invocation id", failed["error"])
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/workspace-lease-events.jsonl"),
+            events_before,
+        )
+        self.assertFalse(
+            (self.repo / ".codex-bridge/receipts/lease-only.json").exists()
+        )
+
+    def test_session_open_refuses_thread_only_invocation_before_acquire(self) -> None:
+        self.bridge(
+            "thread-record",
+            "--invocation-id",
+            "thread-only",
+            "--state",
+            "pending",
+        )
+        lease_events_before = self.jsonl_events(
+            ".codex-bridge/workspace-lease-events.jsonl"
+        )
+        failed = self.session_open("thread-only", expected=5)
+        self.assertEqual(failed["stage"], "validate")
+        self.assertIn("thread log", failed["error"])
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/workspace-lease-events.jsonl"),
+            lease_events_before,
+        )
+
+    def test_session_open_thread_record_failure_abandons_without_receipt(self) -> None:
+        bridge_dir = self.repo / ".codex-bridge"
+        bridge_dir.mkdir()
+        (bridge_dir / "mcp-thread-events.jsonl").mkdir()
+        failed = self.session_open("thread-failure", expected=5)
+        self.assertEqual(failed["stage"], "thread-record")
+        self.assertEqual(failed["lease_disposition"], "abandoned")
+        lease_events = self.jsonl_events(
+            ".codex-bridge/workspace-lease-events.jsonl"
+        )
+        self.assertEqual([event["event"] for event in lease_events], ["acquire", "abandon"])
+        self.assertIn("session-open thread-record failed", lease_events[-1]["reason"])
+        self.assertEqual(self.bridge("lease-list", "--active")[1]["leases"], [])
+        self.assertFalse(
+            (bridge_dir / "receipts" / "thread-failure.json").exists()
+        )
+
+    def test_session_open_receipt_write_failure_abandons_without_receipt(self) -> None:
+        bridge_dir = self.repo / ".codex-bridge"
+        bridge_dir.mkdir()
+        (bridge_dir / "receipts").write_text("not a directory\n", encoding="utf-8")
+        failed = self.session_open("receipt-failure", expected=5)
+        self.assertEqual(failed["stage"], "receipt")
+        self.assertEqual(failed["lease_disposition"], "abandoned")
+        lease_events = self.jsonl_events(
+            ".codex-bridge/workspace-lease-events.jsonl"
+        )
+        self.assertEqual([event["event"] for event in lease_events], ["acquire", "abandon"])
+        self.assertIn("session-open receipt failed", lease_events[-1]["reason"])
+        self.assertEqual(self.bridge("lease-list", "--active")[1]["leases"], [])
+        self.assertFalse(
+            (bridge_dir / "receipts" / "receipt-failure.json").exists()
+        )
+
+    def test_session_close_scope_ok_done_completes_and_releases(self) -> None:
+        opened = self.session_open()
+        self.assertTrue((self.repo / ".codex-bridge/session.lock").is_file())
+        (self.repo / "tracked.txt").write_text("allowed\n", encoding="utf-8")
+        closed = self.session_close()
+        self.assertEqual(closed["scope_verdict"], "SCOPE_OK")
+        self.assertEqual(closed["thread_state"], "complete")
+        self.assertEqual(closed["lease_disposition"], "released")
+        lease = next(
+            item
+            for item in self.bridge("lease-list")[1]["leases"]
+            if item["lease_id"] == opened["lease_id"]
+        )
+        self.assertEqual(lease["state"], "released")
+        thread = self.bridge("thread-list")[1]["threads"][0]
+        self.assertEqual(thread["last_bridge_status"], "DONE")
+        self.assertEqual(thread["scope_verdict"], "SCOPE_OK")
+
+    def test_session_close_honors_prospective_lease_expansion(self) -> None:
+        opened = self.session_open()
+        expanded = self.bridge(
+            "lease-expand",
+            "--lease-id",
+            opened["lease_id"],
+            "--paths",
+            "other.txt",
+        )[1]
+        (self.repo / "other.txt").write_text("expanded edit\n", encoding="utf-8")
+        closed = self.session_close()
+        expected_digest = "sha256:" + hashlib.sha256(
+            json.dumps(
+                expanded["paths"],
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        self.assertEqual(closed["scope_verdict"], "SCOPE_OK")
+        self.assertEqual(closed["thread_state"], "complete")
+        self.assertEqual(closed["lease_disposition"], "released")
+        self.assertEqual(closed["scope_check"]["scope"], expanded["paths"])
+        closing_thread = self.jsonl_events(
+            ".codex-bridge/mcp-thread-events.jsonl"
+        )[-1]
+        self.assertEqual(closing_thread["write_scope_digest"], expected_digest)
+        receipt = json.loads(
+            (self.repo / ".codex-bridge/receipts/session-worker.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(receipt["write_scope"], [{"match": "exact", "path": "tracked.txt"}])
+        self.assertNotEqual(receipt["write_scope_digest"], expected_digest)
+
+    def test_session_close_needs_ruling_waits_and_retains_lease(self) -> None:
+        opened = self.session_open()
+        closed = self.session_close(status="NEEDS_RULING")
+        self.assertEqual(closed["scope_verdict"], "SCOPE_OK")
+        self.assertEqual(closed["thread_state"], "waiting_lead")
+        self.assertEqual(closed["lease_disposition"], "retained")
+        active = self.bridge("lease-list", "--active")[1]["leases"]
+        self.assertEqual(active[0]["lease_id"], opened["lease_id"])
+        thread = self.bridge("thread-list", "--open")[1]["threads"][0]
+        self.assertEqual(thread["state"], "waiting_lead")
+        self.assertEqual(thread["last_bridge_status"], "NEEDS_RULING")
+
+    def test_session_close_edit_without_expand_violates_and_retains_lease(self) -> None:
+        opened = self.session_open()
+        (self.repo / "other.txt").write_text("outside scope\n", encoding="utf-8")
+        closed = self.session_close(expected=3)
+        self.assertEqual(closed["scope_verdict"], "SCOPE_VIOLATION")
+        self.assertEqual(closed["thread_state"], "waiting_lead")
+        self.assertEqual(closed["lease_disposition"], "retained")
+        active = self.bridge("lease-list", "--active")[1]["leases"]
+        self.assertEqual(active[0]["lease_id"], opened["lease_id"])
+        thread = self.bridge("thread-list", "--open")[1]["threads"][0]
+        self.assertEqual(thread["scope_verdict"], "SCOPE_VIOLATION")
+        thread_events = self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl")
+        repeated = self.session_close(expected=3)
+        self.assertIn("already recorded", repeated["notice"])
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl"),
+            thread_events,
+        )
+
+    def test_session_close_same_terminal_outcome_is_idempotent(self) -> None:
+        self.session_open()
+        self.session_close()
+        thread_events_before = self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl")
+        lease_events_before = self.jsonl_events(
+            ".codex-bridge/workspace-lease-events.jsonl"
+        )
+        repeated = self.session_close()
+        self.assertEqual(repeated["lease_disposition"], "already_released")
+        self.assertIn("already recorded", repeated["notice"])
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl"),
+            thread_events_before,
+        )
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/workspace-lease-events.jsonl"),
+            lease_events_before,
+        )
+        complete_events = [
+            event
+            for event in thread_events_before
+            if event["state"] == "complete"
+        ]
+        self.assertEqual(len(complete_events), 1)
+        release_events = [
+            event for event in lease_events_before if event["event"] == "release"
+        ]
+        self.assertEqual(len(release_events), 1)
+        refused = self.session_close(status="FAILED", expected=5)
+        self.assertIn("contradictory terminal event", refused["error"])
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl"),
+            thread_events_before,
+        )
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/workspace-lease-events.jsonl"),
+            lease_events_before,
+        )
+
+    def test_session_close_discussion_is_access_independent_hard_error(self) -> None:
+        errors = []
+        opened_sessions = []
+        for invocation_id, path, access in (
+            ("discussion-write", "tracked.txt", "write"),
+            ("discussion-snapshot", "other.txt", "snapshot_read"),
+        ):
+            opened = self.session_open(invocation_id, path)
+            opened_sessions.append(opened)
+            if access == "snapshot_read":
+                lease_events = self.jsonl_events(
+                    ".codex-bridge/workspace-lease-events.jsonl"
+                )
+                for event in lease_events:
+                    if event["lease_id"] == opened["lease_id"]:
+                        event["access"] = "snapshot_read"
+                log_path = self.repo / ".codex-bridge/workspace-lease-events.jsonl"
+                log_path.write_text(
+                    "".join(json.dumps(event) + "\n" for event in lease_events),
+                    encoding="utf-8",
+                )
+            thread_events_before = self.jsonl_events(
+                ".codex-bridge/mcp-thread-events.jsonl"
+            )
+            failed = self.session_close(
+                invocation_id, status="DISCUSSION", expected=5
+            )
+            errors.append(failed["error"])
+            self.assertEqual(failed["lease_disposition"], "retained")
+            self.assertEqual(
+                self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl"),
+                thread_events_before,
+            )
+        self.assertEqual(errors[0], errors[1])
+        self.assertIn("refuses --status DISCUSSION", errors[0])
+        active_ids = {
+            lease["lease_id"]
+            for lease in self.bridge("lease-list", "--active")[1]["leases"]
+        }
+        self.assertEqual(active_ids, {opened["lease_id"] for opened in opened_sessions})
+
+    def test_session_close_blocked_and_failed_wait_and_retain(self) -> None:
+        for status in ("BLOCKED", "FAILED"):
+            with self.subTest(status=status):
+                invocation_id = f"session-{status.lower()}"
+                opened = self.session_open(invocation_id)
+                closed = self.session_close(invocation_id, status=status)
+                self.assertEqual(closed["scope_verdict"], "SCOPE_OK")
+                self.assertEqual(closed["thread_state"], "waiting_lead")
+                self.assertEqual(closed["lease_disposition"], "retained")
+                latest = self.jsonl_events(
+                    ".codex-bridge/mcp-thread-events.jsonl"
+                )[-1]
+                self.assertEqual(latest["state"], "waiting_lead")
+                self.assertEqual(latest["last_bridge_status"], status)
+                active_ids = {
+                    lease["lease_id"]
+                    for lease in self.bridge("lease-list", "--active")[1]["leases"]
+                }
+                self.assertIn(opened["lease_id"], active_ids)
+                self.bridge(
+                    "lease-abandon",
+                    "--lease-id",
+                    opened["lease_id"],
+                    "--approved-by",
+                    "test",
+                    "--reason",
+                    "subtest cleanup",
+                )
+
+    def test_session_close_waiting_outcome_is_idempotent(self) -> None:
+        self.session_open()
+        first = self.session_close(status="NEEDS_RULING")
+        events_after_first = self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl")
+        repeated = self.session_close(status="NEEDS_RULING")
+        self.assertEqual(first["thread_state"], "waiting_lead")
+        self.assertEqual(repeated["thread_state"], "waiting_lead")
+        self.assertEqual(repeated["lease_disposition"], "retained")
+        self.assertIn("already recorded", repeated["notice"])
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl"),
+            events_after_first,
+        )
+        waiting = [event for event in events_after_first if event["state"] == "waiting_lead"]
+        self.assertEqual(len(waiting), 1)
+
+    def test_waiting_close_dedupe_includes_current_scope_digest(self) -> None:
+        opened = self.session_open()
+        self.session_close(status="NEEDS_RULING")
+        expanded = self.bridge(
+            "lease-expand",
+            "--lease-id",
+            opened["lease_id"],
+            "--paths",
+            "other.txt",
+        )[1]
+        repeated = self.session_close(status="NEEDS_RULING")
+        self.assertNotIn("notice", repeated)
+        waiting = [
+            event
+            for event in self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl")
+            if event["state"] == "waiting_lead"
+        ]
+        self.assertEqual(len(waiting), 2)
+        expected_digest = "sha256:" + hashlib.sha256(
+            json.dumps(
+                expanded["paths"],
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+            ).encode("utf-8")
+        ).hexdigest()
+        self.assertNotEqual(waiting[0]["write_scope_digest"], expected_digest)
+        self.assertEqual(waiting[1]["write_scope_digest"], expected_digest)
+
+    def test_session_close_after_abandon_fails_with_observed_state(self) -> None:
+        opened = self.session_open()
+        self.bridge(
+            "lease-abandon",
+            "--lease-id",
+            opened["lease_id"],
+            "--approved-by",
+            "test",
+            "--reason",
+            "explicit abandon before close",
+        )
+        lease_events_before = self.jsonl_events(
+            ".codex-bridge/workspace-lease-events.jsonl"
+        )
+        thread_events_before = self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl")
+        failed = self.session_close(expected=5)
+        self.assertEqual(failed["lease_disposition"], "abandoned")
+        self.assertIn("already abandoned", failed["error"])
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/workspace-lease-events.jsonl"),
+            lease_events_before,
+        )
+        self.assertFalse(any(event["event"] == "release" for event in lease_events_before))
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl"),
+            thread_events_before,
+        )
+
+    def test_session_close_lease_id_mismatch_reports_receipt_lease_state(self) -> None:
+        self.session_open()
+        failed = self.bridge(
+            "session-close",
+            "--invocation-id",
+            "session-worker",
+            "--status",
+            "DONE",
+            "--lease-id",
+            "lease-" + "0" * 32,
+            expected=5,
+        )[1]
+        self.assertEqual(failed["lease_disposition"], "retained")
+        self.assertIn("does not match", failed["error"])
+
+    def test_session_close_refreshes_disposition_after_abandon_during_release(self) -> None:
+        opened = self.session_open()
+        module = self.load_bridge_module()
+        original_primitive = module.run_bridge_primitive
+
+        def abandon_before_release(root: Path, arguments: list[str]):
+            if arguments and arguments[0] == "lease-release":
+                code, event = original_primitive(
+                    root,
+                    [
+                        "lease-abandon",
+                        "--lease-id",
+                        opened["lease_id"],
+                        "--approved-by",
+                        "test",
+                        "--reason",
+                        "simulate external abandon during release",
+                    ],
+                )
+                self.assertEqual(code, 0, event)
+            return original_primitive(root, arguments)
+
+        module.run_bridge_primitive = abandon_before_release
+        arguments = argparse.Namespace(
+            invocation_id="session-worker",
+            status="DONE",
+            lease_id=None,
+            expect_digest=None,
+        )
+        output = io.StringIO()
+        with mock.patch.object(module, "repository_root", return_value=self.repo):
+            with redirect_stdout(output):
+                code = module.command_session_close(arguments)
+        self.assertEqual(code, 5)
+        failed = json.loads(output.getvalue())
+        self.assertEqual(failed["lease_disposition"], "abandoned")
+        self.assertIn("already abandoned", failed["error"])
+
+    def test_session_close_uses_receipt_digest_not_tampered_manifest_digest(self) -> None:
+        opened = self.session_open()
+        thread_events_before = self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl")
+        path = self.repo / opened["baseline_manifest"]
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        manifest["captured_at"] = "2026-07-13T01:02:03.000000Z"
+        payload = {key: value for key, value in manifest.items() if key != "manifest_sha256"}
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        manifest["manifest_sha256"] = "sha256:" + hashlib.sha256(
+            canonical.encode("utf-8")
+        ).hexdigest()
+        path.write_text(json.dumps(manifest), encoding="utf-8")
+        closed = self.session_close(expected=5)
+        self.assertEqual(closed["scope_verdict"], "CHECK_ERROR")
+        self.assertEqual(closed["lease_disposition"], "retained")
+        self.assertIn("--expect-digest", closed["error"])
+        active = self.bridge("lease-list", "--active")[1]["leases"]
+        self.assertEqual(active[0]["lease_id"], opened["lease_id"])
+        self.assertEqual(
+            self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl"),
+            thread_events_before,
+        )
+
+    def test_session_close_receipt_tampering_fails_before_terminal_or_release(self) -> None:
+        zero_digest = "sha256:" + "0" * 64
+        cases = (
+            ("invocation_id", "tampered-invocation"),
+            ("lease_id", "lease-" + "0" * 32),
+            ("baseline_manifest", ".codex-bridge/baselines/missing.json"),
+            ("baseline_digest", zero_digest),
+            ("write_scope", [{"match": "exact", "path": "other.txt"}]),
+            ("write_scope_digest", zero_digest),
+            ("owner", {"id": "tampered-owner", "kind": "codex-cli"}),
+        )
+        for field, value in cases:
+            with self.subTest(field=field):
+                invocation_id = f"tamper-{field.replace('_', '-')}"
+                opened = self.session_open(invocation_id)
+                receipt_path = (
+                    self.repo
+                    / ".codex-bridge"
+                    / "receipts"
+                    / f"{invocation_id}.json"
+                )
+                receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+                receipt[field] = value
+                if field == "write_scope":
+                    receipt["write_scope_digest"] = "sha256:" + hashlib.sha256(
+                        json.dumps(
+                            value,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                            ensure_ascii=True,
+                        ).encode("utf-8")
+                    ).hexdigest()
+                receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+                lease_events_before = self.jsonl_events(
+                    ".codex-bridge/workspace-lease-events.jsonl"
+                )
+                thread_events_before = self.jsonl_events(
+                    ".codex-bridge/mcp-thread-events.jsonl"
+                )
+
+                failed = self.session_close(invocation_id, expected=5)
+                self.assertEqual(failed["scope_verdict"], "CHECK_ERROR")
+                self.assertEqual(
+                    self.jsonl_events(".codex-bridge/workspace-lease-events.jsonl"),
+                    lease_events_before,
+                )
+                self.assertFalse(
+                    any(
+                        event["event"] == "release"
+                        and event["lease_id"] == opened["lease_id"]
+                        for event in lease_events_before
+                    )
+                )
+                self.assertEqual(
+                    self.jsonl_events(".codex-bridge/mcp-thread-events.jsonl"),
+                    thread_events_before,
+                )
+                self.bridge(
+                    "lease-abandon",
+                    "--lease-id",
+                    opened["lease_id"],
+                    "--approved-by",
+                    "test",
+                    "--reason",
+                    "tamper subtest cleanup",
+                )
 
     def test_baseline_refuses_reused_invocation_id(self) -> None:
         first = self.baseline("stable")

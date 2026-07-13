@@ -6,15 +6,14 @@ argument-hint: <task, review request, or follow-up>
 Delegate `$ARGUMENTS` through `.claude/agents/codex.md` and return an
 adjudicated summary.
 
-Classify the task before calling Sol. Use `high` by default for bounded,
-mechanical, docs/config, straightforward implementation, FIX, and ordinary
-review work. Use `xhigh` for design-bearing, cross-contract, multi-component,
-non-local root-cause, adversarial, integration, or otherwise judgment-dense
-individual work. Use `ultra` only if the Sol session must itself spawn
-subagents and that topology was deliberately authorized.
+Select effort per `.claude/skills/codex/SKILL.md` §Effort selection: high
+default; xhigh for design-bearing/judgment-dense; ultra only for
+subagent-spawning.
 
-Follow `docs/contracts/bridge_protocol.md` for the prompt header, return
-envelope, early returns, and lease/scope steps (`scripts/bridge`).
+Follow `docs/contracts/bridge_protocol.md` (`bridge-protocol/v1.1`) for the
+full or discussion-lane prompt header, tolerant final-line return envelope,
+early returns, and lease/scope rules. Use `scripts/bridge session-open` and
+`session-close` for writes; primitives remain recovery tools.
 Pass model `gpt-5.6-sol` and config
 `{"model_reasoning_effort":"<selected-effort>","mcp_servers.claude.enabled":false}`
 explicitly. Set the Git-root

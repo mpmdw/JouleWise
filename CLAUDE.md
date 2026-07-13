@@ -13,12 +13,9 @@ overrides. The small MCP surface is a session launcher: the resulting Codex
 session can use the skills, plugins, MCP tools, browser/image tools, goals, and
 other capabilities available in that installed Codex runtime.
 
-The project server defaults to `gpt-5.6-sol` with `high` reasoning effort as a
-safe fallback. Claude selects and passes effort explicitly per task: `high` by
-default for bounded/mechanical work; `xhigh` for design-bearing,
-cross-contract, multi-component, non-local root-cause, adversarial, or
-integration work; `ultra` only when Sol itself must spawn subagents. A single
-fixed `xhigh` default is not allowed.
+Select effort per `.claude/skills/codex/SKILL.md` §Effort selection: high
+default; xhigh for design-bearing/judgment-dense; ultra only for
+subagent-spawning.
 
 The Claude-facing MCP server also sets `mcp_servers.claude.enabled=false` for
 its child Codex sessions. This enforces the one-hop rule at tool discovery, not
@@ -32,11 +29,12 @@ tracked `.mcp.json` servers. Then verify the bridge:
 scripts/check-codex-mcp.mjs
 ```
 
-The wire contract for all bridge traffic — `BRIDGE_TASK_V1` prompt header,
-`BRIDGE_REPORT_V1` return envelope, `NEEDS_SCOPE`/`NEEDS_RULING` early
-returns, MCP-vs-CLI routing, thread reuse, workspace leases, and mechanical
-scope checking via `scripts/bridge` — is `docs/contracts/bridge_protocol.md`
-(`bridge-protocol/v1`). The operating sequence lives in
+The wire contract for all bridge traffic — including the full and reduced
+discussion headers, tolerant final-line `BRIDGE_REPORT_V1` envelope,
+`NEEDS_SCOPE`/`NEEDS_RULING` early returns, MCP-vs-CLI routing, thread reuse,
+and receipt-anchored `scripts/bridge session-open`/`session-close` write
+ceremony — is `docs/contracts/bridge_protocol.md` (`bridge-protocol/v1.1`).
+The operating sequence lives in
 `.claude/skills/codex/SKILL.md`; neither this file nor the skills restate the
 contract's normative rules.
 
@@ -65,9 +63,9 @@ and exposes only `consult_fable`. That tool is preapproved so non-interactive
 Codex runs can use the bridge; every other Claude operation remains unavailable.
 Direct Codex sessions use it for a bounded, read-only Fable judgment consult
 through `.agents/skills/claude-consult/SKILL.md`. The adapter launches the
-installed Claude Code runtime with model `fable`, effort `high`, plan mode, no
-session persistence, no slash commands, an empty MCP registry, and only the
-read-only `Read`, `Grep`, and `Glob` tools.
+installed Claude Code runtime with model `fable`, a high default and optional
+per-call xhigh effort, plan mode, no session persistence, no slash commands,
+an empty MCP registry, and only the read-only `Read`, `Grep`, and `Glob` tools.
 
 Bridge depth is one hop. A Sol session started by Claude carries
 `BRIDGE_ORIGIN: claude` / `BRIDGE_HOPS_REMAINING: 0` and must not call back into
@@ -88,8 +86,7 @@ tooling, not tracked here): claude-codex-report/v1 envelope injection via
 --genre, mechanical WRITE_SCOPE enforcement (exit 77 + evidence bundle),
 NEEDS_SCOPE/NEEDS_RULING early-return protocols, D-064 manifest v3 event
 stream, and a codex-usage quota guard. Current model: gpt-5.6-sol. Effort is
-selected per the project policy above: high fallback/default, xhigh for named
-hard-task triggers, ultra only for subagent-spawning sessions.
+selected per `.claude/skills/codex/SKILL.md` §Effort selection.
 `scripts/codex-run` remains the older
 hardened, timeout-bounded single-call protocol. Do not use Codex's dangerous bypass
 flags through either path.

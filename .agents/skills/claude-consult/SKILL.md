@@ -15,10 +15,13 @@ itself started by Claude.
 1. Do not use this skill if the current prompt contains
    `BRIDGE_ORIGIN: claude`. A legitimate top-level reverse call identifies its
    origin as Codex and sets its remaining hop count to zero.
-2. Call the project Claude MCP `consult_fable` tool exactly once. The bridge
-   itself pins model `fable`, effort `high`, plan permission mode, no session
-   persistence, no slash commands, an empty MCP registry, and only Claude's
-   `Read`, `Grep`, and `Glob` tools.
+2. Call the project Claude MCP `consult_fable` tool exactly once. Pass the
+   optional `effort` parameter: `high` (default) for ordinary consults,
+   `xhigh` for judgment-dense ones; other values are rejected. The bridge
+   itself pins model `fable`, plan permission mode, no session persistence,
+   no slash commands, an empty MCP registry, and only Claude's `Read`,
+   `Grep`, and `Glob` tools, and echoes the selection as a
+   `[consult effort: ...]` first line of the result.
 3. Begin the consult prompt with:
 
    ```text
@@ -34,9 +37,9 @@ itself started by Claude.
    Fable has read/search access, so never paste large files); Requested
    counterargument; Requested output shape.
 5. Expect a `bridge-report/v1` return: the reply ends with the
-   `BRIDGE_REPORT_V1` sentinel plus one minified JSON line. A missing or
-   malformed envelope, or a transport failure, is `status: FAILED` — never
-   consume it as peer approval.
+   `BRIDGE_REPORT_V1` sentinel plus one JSON object on the final line. A
+   missing or malformed envelope, or a transport failure, is `status: FAILED`
+   — never consume it as peer approval.
 6. Treat the response as advice. The top-level Codex session remains lead,
    checks the repository itself, and owns all final verification and decisions.
 

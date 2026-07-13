@@ -1,6 +1,6 @@
 # Claude ↔ Codex Bridge Protocol
 
-`bridge-protocol/v1`
+`bridge-protocol/v1.1`
 
 This contract defines the task, return, scope, concurrency, continuation, and
 reverse-consult protocols used when Claude and Codex collaborate on JouleWise.
@@ -12,6 +12,16 @@ Provenance: co-designed by the Fable lead and gpt-5.6-sol over the MCP bridge
 itself (3 rounds, 2026-07-13; thread recorded in
 `docs/run_reports/2026-07-13-bridge-v1.md`).
 The five in-draft choices were adjudicated by the lead at review.
+
+Provenance for v1.1: amendments co-designed by the lead and a Sol xhigh
+consult on 2026-07-13, thread
+`019f5d1d-b681-7db1-8714-812fdd2f198b`.
+
+### Changes from v1
+
+Version 1.1 adds the read-only discussion lane, fail-closed session wrappers,
+tolerant single-line envelopes, per-call reverse-consult effort, peer channels
+and bounded proposal diffs, and a single-envelope protocol-deviation path.
 
 ## 1. Prompt contract
 
@@ -57,6 +67,33 @@ files, repository instructions, or work believed necessary for completion.
 
 Read-only sessions (`WRITE_SCOPE: []`) MAY omit `BASELINE_MANIFEST` and
 `BASELINE_DIGEST`; `BASE_HEAD` remains required.
+
+### Read-only discussion lane
+
+For an interactive MCP turn with `GENRE: discussion` that is read-only, the
+required header fields reduce to `TASK_SHAPE`, `GENRE`, `ROLE`, `OBJECTIVE`,
+`AUTHORITY`, and `OUTPUT_PROTOCOL`. `WRITE_SCOPE` MAY be omitted and then means
+`[]`; `EARLY_RETURN` MAY be omitted and then means `["NEEDS_RULING"]`.
+
+`BASE_HEAD` is REQUIRED whenever the advice depends on repository state,
+including code review, diagnosis, or any turn expected to carry a proposal
+diff. It MAY be omitted only for repository-independent discussion.
+`ACCEPTANCE`, `VERIFICATION`, `BASELINE_MANIFEST`, and `BASELINE_DIGEST` are
+omitted in this lane.
+
+The discussion context capsule SHOULD provide section-level authority anchors
+rather than bare file paths; current HEAD plus dirty-path and concurrent-writer
+state when repository-dependent; and the settled decisions, rejected
+alternatives, and remaining challengeable questions.
+
+A same-thread peer-channel continuation MAY use a compact delta prompt. It
+inherits `ROLE`, `GENRE`, `AUTHORITY`, and `OUTPUT_PROTOCOL` from the opening
+header and states only new rulings and repository changes since the previous
+turn. A change of role, authority, scope, or objective class REQUIRES a fresh
+full header and usually a fresh thread under §5.
+
+The full header remains mandatory whenever `WRITE_SCOPE` is nonempty or
+`TASK_SHAPE` is `autonomous`.
 
 Compact example:
 
@@ -106,8 +143,8 @@ nonempty lines:
 > `BRIDGE_REPORT_V1`
 > `{"status":"DONE","summary":"Lease support implemented.","pathspec":["scripts/bridge","tests/test_bridge.py"],"verification":["python3 -m unittest tests.test_bridge: OK"],"flags":[]}`
 
-The first line is the literal sentinel. The second line is one minified JSON
-object with exactly these required fields:
+The first line is the literal sentinel. The second line is one JSON object on
+one physical line with these required fields:
 
 - `status`: One status from the enum below.
 - `summary`: Concise outcome or blocker summary.
@@ -132,18 +169,26 @@ Statuses:
 
 The envelope is a protocol failure if its sentinel is absent, duplicated,
 malformed, or not final. No non-whitespace content may follow its JSON line.
+Interior whitespace on the JSON line is allowed. Unknown additional object
+keys are tolerated and ignored for forward compatibility; the five required
+fields and the status enum remain mandatory. Normatively, `status` and
+`summary` are JSON strings, `summary` is nonempty, and `pathspec`,
+`verification`, and `flags` are JSON arrays whose elements are strings.
 
 Malformed or missing envelopes MUST NOT be interpreted as successful
 completion, regardless of preceding prose.
 
-For `GENRE: discussion`, the human-readable body uses this order:
+For a substantive, multi-issue `GENRE: discussion` turn, the human-readable
+body uses this order:
 
 1. `Positions`
 2. `Disagreements`
 3. `Open questions`
 4. `Recommendation`
 
-Sections with no content MAY say `None`.
+Sections with no content MAY say `None`. A trivial single-question discussion
+MAY answer directly without these headings. The final envelope is always
+required.
 
 ## 3. Early returns
 
@@ -277,11 +322,27 @@ Lease events MUST include:
 - For overrides: conflicting lease ids, approver, reason, and resulting
   attribution policy
 
-Conflict detection and acquisition MUST occur under one exclusive lock:
-`.codex-bridge/bridge.lock` held via a Python standard-library `fcntl.flock`
-exclusive lock. The critical section reads active events, resolves stale
-state, checks conflicts, appends and flushes the event, then releases the
-lock.
+Conflict detection and acquisition MUST occur under the exclusive
+`.codex-bridge/bridge.lock`, held via a Python standard-library `fcntl.flock`.
+The inner critical section reads active events, resolves stale state, checks
+conflicts, appends and flushes the event, then releases the lock.
+
+Every public command that mutates bridge state -- `lease-acquire`,
+`lease-expand`, `lease-release`, `lease-abandon`, `baseline`, `thread-record`,
+`session-open`, and `session-close` -- MUST also acquire the exclusive
+`.codex-bridge/session.lock` as its outer lock before reading bridge state.
+The fixed order is always `session.lock` outer, then `bridge.lock` inner.
+The wrappers hold `session.lock` across their complete ceremony and set
+`BRIDGE_SESSION_LOCK_HELD=1` for every primitive subprocess they invoke; that
+trusted-local delegation tells a wrapper child not to reacquire the outer lock
+while still taking `bridge.lock` for its own critical sections. The environment
+flag is a local lock-ownership convention, not general permission to bypass
+serialization.
+
+The read-only `lease-list`, `thread-list`, and `scope-check` commands do not
+take `session.lock` when invoked standalone. A `scope-check` subprocess invoked
+by `session-close` inherits the same held-lock environment convention and runs
+inside the wrapper's already-held outer lock.
 
 Overlapping active write leases hard-block acquisition.
 
@@ -321,6 +382,87 @@ without acquiring a lease. Whole-project audits SHOULD therefore use a pinned
 clean commit or isolated worktrees, hold compatible `snapshot_read` leases,
 and defer writes until adjudication.
 
+### Session wrappers
+
+The preferred workspace-write ceremony layers two wrappers over the recovery
+primitives above:
+
+```text
+scripts/bridge session-open --invocation-id ID --owner-id OWNER \
+  --owner-kind KIND --access write --paths P... \
+  [--task ... --role ... --genre ... --task-shape ... --expires-in ... --note ...]
+scripts/bridge session-close --invocation-id ID --status STATUS \
+  [--lease-id ...] [--expect-digest sha256:...]
+```
+
+The session wrappers support write-access sessions only in v1.1.
+Snapshot-stable audits use the `snapshot_read` lease, baseline, scope-check,
+and terminal lease primitives directly under §6. Read-only advice turns need
+neither a lease nor a session wrapper.
+
+`session-open` MUST execute `lease-acquire`, `baseline`, and
+`thread-record --state pending` in that order and fail closed. If baseline
+capture, thread recording, or receipt creation fails after acquisition, it
+MUST abandon the lease with a recorded reason before returning nonzero. A hard
+process crash MAY leave the lease active; explicit recovery is then required.
+The invocation-id uniqueness check and the complete open ceremony are
+serialized by `session.lock`. Before acquiring a lease, `session-open` MUST
+refuse an invocation id already present in receipts, baseline manifests, the
+lease log, or the thread log. Every fresh attempt requires a new invocation
+id, including recovery after an abandoned pre-receipt attempt.
+
+On success it MUST create, without overwrite, an immutable
+`.codex-bridge/receipts/<invocation-id>.json` receipt with schema
+`bridge-session-receipt/v1`. The receipt binds the invocation and lease ids,
+base HEAD, baseline manifest and digest, canonical write-scope path specs and
+their digest, owner, and timestamps. An existing receipt is a hard error; a
+fresh attempt requires a fresh invocation id. Standard output contains the
+receipt plus a `header_fragment` with `BASE_HEAD`, `BASELINE_MANIFEST`,
+`BASELINE_DIGEST`, and `WRITE_SCOPE` ready for the task header.
+
+`session-close` MUST serialize its entire body under `session.lock`, beginning
+before receipt, lease, or terminal-thread reads and ending after its final
+output. After taking the lock it re-reads terminal state. It MUST load the
+receipt-bound lease's current canonical paths from the authoritative lease
+event chain, independently validate the receipt binding, and verify that the
+receipt scope is a subset of the current lease scope; a mismatch is a
+`CHECK_ERROR`-style hard error. Close scope is therefore the receipt scope plus
+recorded prospective `lease-expand` events on that same lease. The wrapper
+passes those current paths and their canonical digest to `scope-check` and to
+the closing thread event.
+
+The receipt's stored baseline digest, or an explicitly supplied
+`--expect-digest`, is the only external digest anchor; the wrapper MUST NOT
+rediscover an expected digest from the manifest being checked. It handles
+outcomes as follows:
+
+- For `SCOPE_OK` with `DONE`, it records `complete` and the last bridge
+  status, then releases the lease.
+- `session-close` refuses `--status DISCUSSION` unconditionally with a hard
+  error: no terminal thread event is appended and the lease is retained.
+  Advice turns use the read-only discussion lane without wrappers.
+- For `NEEDS_SCOPE`, `NEEDS_RULING`, `PARTIAL`, `BLOCKED`, or `FAILED`, it
+  records `waiting_lead` and the actual bridge status and retains the lease.
+  Scope-check still runs; a non-OK verdict still exits nonzero.
+- For `SCOPE_VIOLATION`, `ATTRIBUTION_INDETERMINATE`, or `CHECK_ERROR`, it
+  records the verdict in a `waiting_lead` thread event, retains the lease, and
+  exits nonzero. A non-OK verdict never causes automatic release; release or
+  abandonment after adjudication is an explicit lead action.
+
+Closing is idempotent for every outcome. If the most recent thread event
+already records the same state, last bridge status, current scope verdict, and
+current canonical write-scope digest, and the lease disposition is unchanged,
+another close is a no-op notice with the exit status that outcome normally
+has. A changed scope digest requires a new event even when the other fields
+match. A different status against an existing `complete` event is refused, and
+the wrapper MUST never append a contradictory terminal event. Standard output
+reports the scope-check verdict, recorded thread state, and observed lease
+disposition. Close observes the receipt-bound lease before validating optional
+argument consistency where possible, and after any subsequent error performs a
+best-effort locked re-read; errors therefore report the current `active` as
+`retained`, `released`, or `abandoned` state rather than a stale or unknown
+disposition.
+
 ## 7. Baseline and scope check
 
 Before every workspace-write session, `scripts/bridge baseline` MUST create
@@ -357,6 +499,10 @@ The prompt MUST provide `BASE_HEAD`, `BASELINE_MANIFEST`, and
 `--expect-digest sha256:...` argument, verify the manifest self-digest, and
 verify equality with that external anchor before using the manifest. A missing
 or mismatched anchor is `CHECK_ERROR`.
+
+When `scope-check` is invoked through `session-close`, that external anchor
+comes from the immutable open receipt (or an explicit close argument), never
+from the manifest being validated.
 
 After a workspace-write session, `scripts/bridge scope-check` compares
 persistent path-state changes against the baseline, declared scope, and lease
@@ -444,6 +590,19 @@ The adapter MUST:
 
 The adapter MUST NOT pass duplicate origin headers to Fable.
 
+The tool input MAY include `effort`, whose only accepted values are `high` and
+`xhigh`. Unsupported values are rejected with a synthesized `FAILED`
+`protocol_failure` envelope and are never silently coerced; `ultra` is not
+exposed. The process default comes from `CLAUDE_BRIDGE_EFFORT` only when that
+environment value is `high` or `xhigh`; every other value falls back to
+`high`. The effective default remains `high` to bound latency under the tool
+timeout.
+
+For reproducibility, the adapter MUST pass the selected effort explicitly and
+prefix returned child-result text with `[consult effort: <effort>]` as its
+first line. This prefix precedes the child output; the envelope-final rule
+still binds the end of the combined text.
+
 The consult remains one-shot because persistence would weaken independence,
 invite bridge recursion, and blur decision ownership. Fable provides advice;
 the top-level Codex caller adjudicates and verifies it.
@@ -452,9 +611,37 @@ Transport or protocol failure MUST return or synthesize `status: FAILED`; it
 MUST NOT be consumed as peer approval.
 
 A successful one-shot consult may end only `DISCUSSION` or `NEEDS_RULING`.
-Any other well-formed child status is a protocol deviation: the adapter passes
-through the child text, appends a synthesized `FAILED` envelope flagged
-`protocol_deviation`, and returns `isError: true`.
+Any other well-formed child status is a protocol deviation: the adapter strips
+the child's trailing sentinel and JSON line, passes through the remaining
+child text, names the claimed status in diagnostic prose, and appends one
+synthesized `FAILED` envelope flagged `protocol_deviation`. The returned text
+therefore contains exactly one sentinel, and the adapter returns
+`isError: true`.
+
+## Peer channels and proposal diffs
+
+A peer channel is a long-lived `GENRE: discussion` thread scoped to one
+coherent design objective or workstream. A new objective, changed role, or
+independent or adversarial review requires a fresh thread under §5. A peer
+channel MUST NOT be presented or counted as independent review.
+
+A `DISCUSSION` turn MAY carry a proposal diff as a unified diff in its body.
+The proposal is advice, not a write: the worker's `pathspec` stays `[]`, no
+workspace lease or baseline is involved, and the lead applies it at the bench
+and owns verification. The applying session MUST keep a durable run report or
+equivalent change record containing the thread id, the proposal diff or its
+SHA-256, the `BASE_HEAD` revision anchor, the proposer, changes the lead made
+while applying it, and the verification performed. A commit-message citation
+supplements but never substitutes for that durable record.
+
+Proposal diffs are bounded in aggregate per objective, not per turn, to about
+three files and 200 changed lines. Splitting a larger implementation across
+nominal discussion turns is prohibited. Regardless of size, generated
+artifacts, dependency or lock files, migrations, renames, broad mechanical
+rewrites, and security- or concurrency-sensitive implementation MUST route to
+a leased write session. The governing test is whether the lead can fully
+understand, apply, and verify the proposal at the bench without effectively
+rubber-stamping delegated implementation.
 
 ## 9. Known limitations
 
@@ -484,8 +671,9 @@ Authoritative contract:
 
 Tracked implementation:
 
-- `scripts/bridge`: leases, baseline manifests, scope checks, and thread
-  registry
+- `scripts/bridge`: session wrappers, leases, baseline manifests, scope checks,
+  and thread registry
+- `.codex-bridge/receipts/`: immutable local session-open receipts
 - `scripts/claude-bridge-mcp.mjs`: guarded reverse consult
 - `.mcp.json`: Claude-to-Codex server configuration
 - `.codex/config.toml`: Codex-to-Fable server registration

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Tracked bridge-protocol/v1 workspace helper.
+"""Tracked bridge-protocol/v1.1 workspace helper.
 
 This tool intentionally depends only on the Python standard library and Git.
 Bridge-owned mutable state lives below .codex-bridge in the current repository.
@@ -29,6 +29,10 @@ LEASE_SCHEMA = "bridge-lease-event/v1"
 BASELINE_SCHEMA = "bridge-baseline/v1"
 SCOPE_SCHEMA = "bridge-scope-report/v1"
 THREAD_SCHEMA = "bridge-thread-event/v1"
+SESSION_RECEIPT_SCHEMA = "bridge-session-receipt/v1"
+SESSION_OPEN_SCHEMA = "bridge-session-open/v1"
+SESSION_CLOSE_SCHEMA = "bridge-session-close/v1"
+COMMAND_ERROR_SCHEMA = "bridge-command-error/v1"
 
 EXIT_OK = 0
 EXIT_VIOLATION = 3
@@ -36,9 +40,18 @@ EXIT_INDETERMINATE = 4
 EXIT_ERROR = 5
 
 OPEN_THREAD_STATES = {"pending", "waiting_lead", "active"}
+SESSION_SUCCESS_STATUSES = {"DONE", "DISCUSSION"}
+SESSION_WAITING_STATUSES = {
+    "NEEDS_SCOPE",
+    "NEEDS_RULING",
+    "PARTIAL",
+    "BLOCKED",
+    "FAILED",
+}
 LEASE_ACQUIRE_EVENTS = {"acquire", "override"}
 LEASE_OWNER_KINDS = {"claude-thread", "codex-mcp", "codex-cli", "human"}
 LEASE_ACCESS_KINDS = {"write", "snapshot_read"}
+SESSION_LOCK_HELD_ENV = "BRIDGE_SESSION_LOCK_HELD"
 LEASE_ACQUIRE_FIELDS = {
     "schema",
     "event",
@@ -98,6 +111,18 @@ def emit(value: Any) -> None:
     sys.stdout.write(canonical_json(value) + "\n")
 
 
+def emit_command_error(command: str, stage: str, exc: BaseException) -> int:
+    emit(
+        {
+            "schema": COMMAND_ERROR_SCHEMA,
+            "command": command,
+            "stage": stage,
+            "error": str(exc),
+        }
+    )
+    return EXIT_ERROR
+
+
 def run_git(root: Path | None, args: Sequence[str], *, check: bool = True) -> bytes:
     command = ["git"]
     if root is not None:
@@ -144,6 +169,53 @@ def bridge_lock(root: Path) -> Iterator[None]:
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
+@contextmanager
+def session_lock(root: Path) -> Iterator[None]:
+    directory = bridge_directory(root)
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lock_path = directory / "session.lock"
+    with lock_path.open("a+b") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def state_mutation_lock(root: Path) -> Iterator[None]:
+    if os.environ.get(SESSION_LOCK_HELD_ENV) == "1":
+        yield
+        return
+    with session_lock(root):
+        yield
+
+
+def serialized_state_mutation(handler: Any) -> Any:
+    def serialized(args: argparse.Namespace) -> int:
+        command = getattr(
+            args,
+            "command",
+            handler.__name__.removeprefix("command_").replace("_", "-"),
+        )
+        try:
+            root = repository_root()
+        except (BridgeError, OSError) as exc:
+            return emit_command_error(command, "repository", exc)
+
+        lock_entered = False
+        try:
+            with state_mutation_lock(root):
+                lock_entered = True
+                return int(handler(args))
+        except (BridgeError, OSError) as exc:
+            if lock_entered:
+                raise
+            return emit_command_error(command, "session-lock", exc)
+
+    return serialized
+
+
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         return []
@@ -168,6 +240,23 @@ def append_jsonl(path: Path, event: dict[str, Any]) -> None:
         handle.write(canonical_json(event) + "\n")
         handle.flush()
         os.fsync(handle.fileno())
+
+
+def write_immutable_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    payload = (canonical_json(value) + "\n").encode("utf-8")
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except BaseException:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        raise
 
 
 def normalize_repo_path(raw: str) -> str:
@@ -486,6 +575,7 @@ def lease_conflicts(
     return sorted(conflicts, key=lambda item: item["lease_id"])
 
 
+@serialized_state_mutation
 def command_lease_acquire(args: argparse.Namespace) -> int:
     root = repository_root()
     try:
@@ -567,6 +657,7 @@ def command_lease_acquire(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
 
+@serialized_state_mutation
 def command_lease_expand(args: argparse.Namespace) -> int:
     root = repository_root()
     try:
@@ -649,6 +740,7 @@ def terminal_lease_event(
     return event
 
 
+@serialized_state_mutation
 def command_lease_release(args: argparse.Namespace) -> int:
     try:
         event = terminal_lease_event(repository_root(), args.lease_id, "release")
@@ -659,6 +751,7 @@ def command_lease_release(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
 
+@serialized_state_mutation
 def command_lease_abandon(args: argparse.Namespace) -> int:
     try:
         event = terminal_lease_event(
@@ -872,6 +965,7 @@ def validate_invocation_id(value: str) -> str:
     return value
 
 
+@serialized_state_mutation
 def command_baseline(args: argparse.Namespace) -> int:
     try:
         root = repository_root()
@@ -1205,6 +1299,599 @@ def scope_error_report(baseline: str, error: str) -> dict[str, Any]:
     }
 
 
+def run_bridge_primitive(root: Path, arguments: Sequence[str]) -> tuple[int, dict[str, Any]]:
+    environment = os.environ.copy()
+    environment[SESSION_LOCK_HELD_ENV] = "1"
+    result = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), *arguments],
+        cwd=root,
+        env=environment,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        value = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        detail = result.stderr.strip() or result.stdout.strip() or "no output"
+        raise BridgeError(
+            f"bridge primitive {' '.join(arguments[:1])} returned invalid JSON: {detail}"
+        ) from exc
+    if not isinstance(value, dict):
+        raise BridgeError(f"bridge primitive {' '.join(arguments[:1])} returned non-object JSON")
+    return result.returncode, value
+
+
+def session_receipt_path(root: Path, invocation_id: str) -> Path:
+    return bridge_directory(root) / "receipts" / f"{validate_invocation_id(invocation_id)}.json"
+
+
+def load_session_receipt(root: Path, invocation_id: str) -> dict[str, Any]:
+    path = session_receipt_path(root, invocation_id)
+    try:
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise BridgeError(f"session receipt does not exist: {path.relative_to(root)}") from exc
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BridgeError(f"could not parse session receipt: {exc}") from exc
+    if not isinstance(receipt, dict) or receipt.get("schema") != SESSION_RECEIPT_SCHEMA:
+        raise BridgeError("session receipt has an unsupported schema")
+    required = {
+        "invocation_id",
+        "lease_id",
+        "base_head",
+        "baseline_manifest",
+        "baseline_digest",
+        "write_scope",
+        "write_scope_digest",
+        "owner",
+        "lease_acquired_at",
+        "baseline_captured_at",
+        "opened_at",
+    }
+    missing = sorted(required - set(receipt))
+    if missing:
+        raise BridgeError("session receipt is missing fields: " + ", ".join(missing))
+    if receipt["invocation_id"] != invocation_id:
+        raise BridgeError("session receipt invocation id mismatch")
+    if not isinstance(receipt["lease_id"], str) or not receipt["lease_id"]:
+        raise BridgeError("session receipt has an invalid lease id")
+    if not isinstance(receipt["base_head"], str) or not re.fullmatch(
+        r"[0-9a-f]{40}", receipt["base_head"]
+    ):
+        raise BridgeError("session receipt has an invalid base head")
+    if not isinstance(receipt["baseline_manifest"], str) or not receipt["baseline_manifest"]:
+        raise BridgeError("session receipt has an invalid baseline manifest path")
+    if not isinstance(receipt["baseline_digest"], str) or not re.fullmatch(
+        r"sha256:[0-9a-f]{64}", receipt["baseline_digest"]
+    ):
+        raise BridgeError("session receipt has an invalid baseline digest")
+    scope = validate_path_spec_list(receipt["write_scope"], "write_scope")
+    if receipt["write_scope_digest"] != canonical_sha256(scope):
+        raise BridgeError("session receipt write-scope digest mismatch")
+    owner = receipt["owner"]
+    if (
+        not isinstance(owner, dict)
+        or not isinstance(owner.get("id"), str)
+        or not owner["id"]
+        or owner.get("kind") not in LEASE_OWNER_KINDS
+    ):
+        raise BridgeError("session receipt has an invalid owner")
+    for field in ("lease_acquired_at", "baseline_captured_at", "opened_at"):
+        parse_timestamp(receipt[field], field)
+    return receipt
+
+
+def primitive_failure_detail(value: dict[str, Any]) -> str:
+    error = value.get("error")
+    if isinstance(error, str) and error:
+        return error
+    verdict = value.get("verdict")
+    if isinstance(verdict, str):
+        reasons = value.get("reasons")
+        if isinstance(reasons, list) and reasons:
+            return f"{verdict}: {'; '.join(str(item) for item in reasons)}"
+        return verdict
+    status = value.get("status")
+    return str(status or value)
+
+
+def invocation_usage_sources(root: Path, invocation_id: str) -> list[str]:
+    sources: list[str] = []
+    receipt = session_receipt_path(root, invocation_id)
+    baseline = bridge_directory(root) / "baselines" / f"{invocation_id}.json"
+    if receipt.exists():
+        sources.append("receipts")
+    if baseline.exists():
+        sources.append("baselines")
+    with bridge_lock(root):
+        lease_log = bridge_directory(root) / "workspace-lease-events.jsonl"
+        if lease_log.is_file() and any(
+            event.get("invocation_id") == invocation_id
+            for event in load_lease_events(lease_log)
+        ):
+            sources.append("lease log")
+        thread_log = bridge_directory(root) / "mcp-thread-events.jsonl"
+        if thread_log.is_file() and any(
+            event.get("invocation_id") == invocation_id
+            for event in load_jsonl(thread_log)
+        ):
+            sources.append("thread log")
+    return sources
+
+
+def command_session_open_locked(root: Path, args: argparse.Namespace) -> int:
+    lease_id: str | None = None
+    stage = "validate"
+    try:
+        invocation_id = validate_invocation_id(args.invocation_id)
+        paths = parse_path_specs(args.paths)
+        receipt_path = session_receipt_path(root, invocation_id)
+        used_by = invocation_usage_sources(root, invocation_id)
+        if used_by:
+            raise BridgeError(
+                "session_invocation_id_already_used: "
+                f"found in {', '.join(used_by)}; a fresh attempt requires a new invocation id"
+            )
+
+        stage = "lease-acquire"
+        acquire_arguments = [
+            "lease-acquire",
+            "--invocation-id",
+            invocation_id,
+            "--owner-id",
+            args.owner_id,
+            "--owner-kind",
+            args.owner_kind,
+            "--access",
+            args.access,
+            "--paths",
+            *[f"{item['path']}:{item['match']}" for item in paths],
+        ]
+        for option, value in (
+            ("--task", args.task),
+            ("--role", args.role),
+            ("--expires-in", args.expires_in),
+            ("--note", args.note),
+        ):
+            if value is not None:
+                acquire_arguments.extend((option, str(value)))
+        code, lease = run_bridge_primitive(root, acquire_arguments)
+        if code != EXIT_OK:
+            emit(
+                {
+                    "schema": SESSION_OPEN_SCHEMA,
+                    "status": "ERROR",
+                    "stage": stage,
+                    "error": primitive_failure_detail(lease),
+                    "lease_disposition": "not_acquired",
+                }
+            )
+            return code
+        lease_id = lease["lease_id"]
+
+        stage = "baseline"
+        code, baseline = run_bridge_primitive(
+            root, ["baseline", "--invocation-id", invocation_id]
+        )
+        if code != EXIT_OK:
+            raise BridgeError(primitive_failure_detail(baseline))
+
+        scope_digest = canonical_sha256(paths)
+        stage = "thread-record"
+        thread_arguments = [
+            "thread-record",
+            "--invocation-id",
+            invocation_id,
+            "--state",
+            "pending",
+            "--base-head",
+            lease["base_head"],
+            "--baseline-digest",
+            baseline["manifest_sha256"],
+            "--scope-digest",
+            scope_digest,
+        ]
+        for option, value in (
+            ("--task", args.task),
+            ("--role", args.role),
+            ("--genre", args.genre),
+            ("--task-shape", args.task_shape),
+        ):
+            if value is not None:
+                thread_arguments.extend((option, str(value)))
+        code, thread = run_bridge_primitive(root, thread_arguments)
+        if code != EXIT_OK:
+            raise BridgeError(primitive_failure_detail(thread))
+
+        stage = "receipt"
+        manifest_path = root / baseline["path"]
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        receipt = {
+            "schema": SESSION_RECEIPT_SCHEMA,
+            "invocation_id": invocation_id,
+            "lease_id": lease_id,
+            "base_head": lease["base_head"],
+            "baseline_manifest": baseline["path"],
+            "baseline_digest": baseline["manifest_sha256"],
+            "write_scope": paths,
+            "write_scope_digest": scope_digest,
+            "owner": {"id": args.owner_id, "kind": args.owner_kind},
+            "lease_acquired_at": lease["timestamp"],
+            "baseline_captured_at": manifest["captured_at"],
+            "opened_at": utc_now(),
+        }
+        with bridge_lock(root):
+            write_immutable_json(receipt_path, receipt)
+        result = dict(receipt)
+        result["header_fragment"] = {
+            "BASE_HEAD": receipt["base_head"],
+            "BASELINE_MANIFEST": receipt["baseline_manifest"],
+            "BASELINE_DIGEST": receipt["baseline_digest"],
+            "WRITE_SCOPE": receipt["write_scope"],
+        }
+        emit(result)
+        return EXIT_OK
+    except (BridgeError, OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        disposition = "not_acquired"
+        abandon_error: str | None = None
+        if lease_id is not None:
+            reason = f"session-open {stage} failed: {exc}"
+            try:
+                code, abandoned = run_bridge_primitive(
+                    root,
+                    [
+                        "lease-abandon",
+                        "--lease-id",
+                        lease_id,
+                        "--approved-by",
+                        args.owner_id,
+                        "--reason",
+                        reason,
+                    ],
+                )
+                if code == EXIT_OK:
+                    disposition = "abandoned"
+                else:
+                    disposition = "retained"
+                    abandon_error = primitive_failure_detail(abandoned)
+            except BridgeError as abandon_exc:
+                disposition = "retained"
+                abandon_error = str(abandon_exc)
+        error: dict[str, Any] = {
+            "schema": SESSION_OPEN_SCHEMA,
+            "status": "ERROR",
+            "stage": stage,
+            "error": str(exc),
+            "lease_id": lease_id,
+            "lease_disposition": disposition,
+        }
+        if abandon_error is not None:
+            error["abandon_error"] = abandon_error
+        emit(error)
+        return EXIT_ERROR
+
+
+def command_session_open(args: argparse.Namespace) -> int:
+    try:
+        root = repository_root()
+    except (BridgeError, OSError) as exc:
+        return emit_command_error("session-open", "repository", exc)
+
+    lock_entered = False
+    try:
+        with state_mutation_lock(root):
+            lock_entered = True
+            return command_session_open_locked(root, args)
+    except (BridgeError, OSError) as exc:
+        if lock_entered:
+            raise
+        return emit_command_error("session-open", "session-lock", exc)
+
+
+def session_thread_events(root: Path, invocation_id: str) -> list[dict[str, Any]]:
+    with bridge_lock(root):
+        events = load_jsonl(bridge_directory(root) / "mcp-thread-events.jsonl")
+    return [event for event in events if event.get("invocation_id") == invocation_id]
+
+
+def lease_state(root: Path, lease_id: str) -> dict[str, Any]:
+    with bridge_lock(root):
+        events = load_lease_events(bridge_directory(root) / "workspace-lease-events.jsonl")
+        state = active_lease_index(events).get(lease_id)
+    if state is None:
+        raise BridgeError(f"session receipt names unknown lease {lease_id}")
+    return state
+
+
+def validate_receipt_binding(
+    root: Path, receipt: dict[str, Any]
+) -> tuple[dict[str, Any], list[dict[str, str]], str]:
+    lease_id = receipt["lease_id"]
+    with bridge_lock(root):
+        events = load_lease_events(bridge_directory(root) / "workspace-lease-events.jsonl")
+        state = active_lease_index(events).get(lease_id)
+    if state is None:
+        raise BridgeError(f"session receipt names unknown lease {lease_id}")
+    acquisition = next(
+        (
+            event
+            for event in events
+            if event.get("lease_id") == lease_id
+            and event.get("event") in LEASE_ACQUIRE_EVENTS
+        ),
+        None,
+    )
+    if acquisition is None:
+        raise BridgeError(f"session receipt lease {lease_id} has no acquisition event")
+    if acquisition.get("invocation_id") != receipt["invocation_id"]:
+        raise BridgeError("session receipt invocation id does not match its lease")
+    if acquisition.get("base_head") != receipt["base_head"]:
+        raise BridgeError("session receipt base head does not match its lease")
+    owner = receipt["owner"]
+    if (
+        acquisition.get("owner_id") != owner["id"]
+        or acquisition.get("owner_kind") != owner["kind"]
+    ):
+        raise BridgeError("session receipt owner does not match its lease")
+    if acquisition.get("timestamp") != receipt["lease_acquired_at"]:
+        raise BridgeError("session receipt acquisition timestamp does not match its lease")
+    if acquisition.get("paths") != receipt["write_scope"]:
+        raise BridgeError("session receipt write scope does not match its lease acquisition")
+
+    expected_manifest = (
+        bridge_directory(root)
+        / "baselines"
+        / f"{receipt['invocation_id']}.json"
+    )
+    expected_relative = str(expected_manifest.relative_to(root))
+    if receipt["baseline_manifest"] != expected_relative:
+        raise BridgeError("session receipt baseline manifest does not match its invocation")
+    manifest = load_and_validate_manifest(expected_manifest, receipt["baseline_digest"])
+    if manifest["invocation_id"] != receipt["invocation_id"]:
+        raise BridgeError("session receipt invocation id does not match its baseline")
+    if manifest["head_oid"] != receipt["base_head"]:
+        raise BridgeError("session receipt base head does not match its baseline")
+    if manifest["captured_at"] != receipt["baseline_captured_at"]:
+        raise BridgeError("session receipt capture timestamp does not match its baseline")
+
+    current_scope = validate_path_spec_list(state["lease"]["paths"], "lease paths")
+    if not spec_set_covers(current_scope, receipt["write_scope"]):
+        raise BridgeError(
+            "session receipt write scope is not a subset of the current lease scope"
+        )
+    return state, current_scope, canonical_sha256(current_scope)
+
+
+def record_session_close_thread(
+    root: Path,
+    receipt: dict[str, Any],
+    state: str,
+    status: str,
+    scope_verdict: str,
+    scope_digest: str,
+) -> None:
+    arguments = [
+        "thread-record",
+        "--invocation-id",
+        receipt["invocation_id"],
+        "--state",
+        state,
+        "--last-status",
+        status,
+        "--scope-verdict",
+        scope_verdict,
+        "--base-head",
+        receipt["base_head"],
+        "--baseline-digest",
+        receipt["baseline_digest"],
+        "--scope-digest",
+        scope_digest,
+    ]
+    if state == "waiting_lead":
+        arguments.extend(("--resume-policy", "preferred", "--resume-reason", scope_verdict))
+    code, event = run_bridge_primitive(root, arguments)
+    if code != EXIT_OK:
+        raise BridgeError(f"thread-record failed: {primitive_failure_detail(event)}")
+
+
+def observed_close_disposition(state: str | None) -> str:
+    if state == "active":
+        return "retained"
+    return state or "unknown"
+
+
+def command_session_close_locked(root: Path, args: argparse.Namespace) -> int:
+    observed_lease_state: str | None = None
+    receipt_lease_id: str | None = None
+    stage = "receipt"
+    try:
+        receipt = load_session_receipt(root, args.invocation_id)
+        receipt_lease_id = receipt["lease_id"]
+        stage = "lease-validation"
+        observed_lease_state = lease_state(root, receipt_lease_id)["state"]
+        lease_id = args.lease_id or receipt_lease_id
+        if lease_id != receipt_lease_id:
+            raise BridgeError("--lease-id does not match the immutable session receipt")
+        expected_digest = args.expect_digest or receipt["baseline_digest"]
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", expected_digest):
+            raise BridgeError("--expect-digest must be sha256 followed by 64 lowercase hex digits")
+
+        current_lease, current_scope, current_scope_digest = validate_receipt_binding(
+            root, receipt
+        )
+        observed_lease_state = current_lease["state"]
+        stage = "outcome"
+        thread_events = session_thread_events(root, args.invocation_id)
+        terminal = next(
+            (event for event in reversed(thread_events) if event.get("state") == "complete"),
+            None,
+        )
+        latest_thread = thread_events[-1] if thread_events else None
+        if terminal is not None:
+            recorded_status = terminal.get("last_bridge_status")
+            if recorded_status != args.status:
+                raise BridgeError(
+                    "refusing to append a contradictory terminal event: "
+                    f"thread already completed with {recorded_status}"
+                )
+        if current_lease["state"] not in {"active", "released"}:
+            raise BridgeError(f"session lease is already {current_lease['state']}")
+        if current_lease["state"] == "released" and terminal is None:
+            raise BridgeError("session lease is released without a matching terminal thread event")
+        if args.status == "DISCUSSION":
+            raise BridgeError(
+                "session-close refuses --status DISCUSSION in bridge-protocol/v1.1; "
+                "advice turns do not use session wrappers"
+            )
+
+        scope_arguments = [
+            "scope-check",
+            "--baseline",
+            receipt["baseline_manifest"],
+            "--expect-digest",
+            expected_digest,
+            "--scope",
+            *[
+                f"{item['path']}:{item['match']}"
+                for item in current_scope
+            ],
+            "--lease-id",
+            lease_id,
+        ]
+        code, scope_report = run_bridge_primitive(root, scope_arguments)
+        scope_verdict = str(scope_report.get("verdict") or "CHECK_ERROR")
+        thread_state = "waiting_lead"
+        lease_disposition = "retained"
+
+        if scope_verdict == "SCOPE_OK" and code == EXIT_OK:
+            if args.status == "DONE":
+                thread_state = "complete"
+            elif args.status in SESSION_WAITING_STATUSES:
+                pass
+            else:
+                raise BridgeError(f"unsupported session close status: {args.status}")
+        else:
+            if current_lease["state"] != "active":
+                raise BridgeError(
+                    f"non-OK scope verdict observed after lease became {current_lease['state']}"
+                )
+        normal_exit = code if scope_verdict != "SCOPE_OK" else EXIT_OK
+        unchanged_disposition = (
+            thread_state == "waiting_lead" and current_lease["state"] == "active"
+        ) or (
+            thread_state == "complete" and current_lease["state"] == "released"
+        )
+        if (
+            latest_thread is not None
+            and latest_thread.get("state") == thread_state
+            and latest_thread.get("last_bridge_status") == args.status
+            and latest_thread.get("scope_verdict") == scope_verdict
+            and latest_thread.get("write_scope_digest") == current_scope_digest
+            and unchanged_disposition
+        ):
+            repeated_disposition = (
+                "already_released" if current_lease["state"] == "released" else "retained"
+            )
+            emit(
+                {
+                    "schema": SESSION_CLOSE_SCHEMA,
+                    "invocation_id": args.invocation_id,
+                    "status": args.status,
+                    "scope_verdict": scope_verdict,
+                    "scope_check": scope_report,
+                    "thread_state": thread_state,
+                    "lease_disposition": repeated_disposition,
+                    "notice": "session close already recorded with the same outcome",
+                }
+            )
+            return normal_exit
+
+        if thread_state == "complete":
+            if terminal is None:
+                record_session_close_thread(
+                    root,
+                    receipt,
+                    thread_state,
+                    args.status,
+                    scope_verdict,
+                    current_scope_digest,
+                )
+            current_lease = lease_state(root, lease_id)
+            observed_lease_state = current_lease["state"]
+            if current_lease["state"] == "active":
+                release_code, released = run_bridge_primitive(
+                    root, ["lease-release", "--lease-id", lease_id]
+                )
+                if release_code != EXIT_OK:
+                    raise BridgeError(
+                        f"lease-release failed: {primitive_failure_detail(released)}"
+                    )
+                observed_lease_state = "released"
+            elif current_lease["state"] != "released":
+                raise BridgeError(
+                    f"session lease became {current_lease['state']} before release"
+                )
+            lease_disposition = "released"
+        else:
+            record_session_close_thread(
+                root,
+                receipt,
+                thread_state,
+                args.status,
+                scope_verdict,
+                current_scope_digest,
+            )
+
+        emit(
+            {
+                "schema": SESSION_CLOSE_SCHEMA,
+                "invocation_id": args.invocation_id,
+                "status": args.status,
+                "scope_verdict": scope_verdict,
+                "scope_check": scope_report,
+                "thread_state": thread_state,
+                "lease_disposition": lease_disposition,
+            }
+        )
+        return normal_exit
+    except (BridgeError, OSError, KeyError, TypeError) as exc:
+        if receipt_lease_id is not None:
+            try:
+                observed_lease_state = lease_state(root, receipt_lease_id)["state"]
+            except (BridgeError, OSError, KeyError, TypeError):
+                pass
+        error: dict[str, Any] = {
+            "schema": SESSION_CLOSE_SCHEMA,
+            "status": "ERROR",
+            "invocation_id": args.invocation_id,
+            "stage": stage,
+            "error": str(exc),
+            "lease_disposition": observed_close_disposition(observed_lease_state),
+        }
+        if stage in {"receipt", "lease-validation"}:
+            error["scope_verdict"] = "CHECK_ERROR"
+        emit(error)
+        return EXIT_ERROR
+
+
+def command_session_close(args: argparse.Namespace) -> int:
+    try:
+        root = repository_root()
+    except (BridgeError, OSError) as exc:
+        return emit_command_error("session-close", "repository", exc)
+
+    lock_entered = False
+    try:
+        with state_mutation_lock(root):
+            lock_entered = True
+            return command_session_close_locked(root, args)
+    except (BridgeError, OSError) as exc:
+        if lock_entered:
+            raise
+        return emit_command_error("session-close", "session-lock", exc)
+
+
 def command_scope_check(args: argparse.Namespace) -> int:
     baseline_argument = args.baseline
     try:
@@ -1388,6 +2075,7 @@ def command_scope_check(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
 
+@serialized_state_mutation
 def command_thread_record(args: argparse.Namespace) -> int:
     try:
         root = repository_root()
@@ -1407,6 +2095,7 @@ def command_thread_record(args: argparse.Namespace) -> int:
             "base_head": args.base_head,
             "baseline_digest": args.baseline_digest,
             "write_scope_digest": args.scope_digest,
+            "scope_verdict": args.scope_verdict,
             "last_bridge_status": args.last_status,
             "prompt_path": None,
             "prompt_sha256": None,
@@ -1487,6 +2176,40 @@ def build_parser() -> argparse.ArgumentParser:
     lease_list.add_argument("--active", action="store_true")
     lease_list.set_defaults(handler=command_lease_list)
 
+    session_open = subparsers.add_parser("session-open")
+    session_open.add_argument("--invocation-id", required=True)
+    session_open.add_argument("--owner-id", required=True)
+    session_open.add_argument("--owner-kind", required=True)
+    session_open.add_argument(
+        "--access",
+        required=True,
+        choices=["write"],
+        help="v1.1 session wrappers support write-access sessions only",
+    )
+    session_open.add_argument("--paths", required=True, nargs="+")
+    session_open.add_argument("--task")
+    session_open.add_argument("--role")
+    session_open.add_argument(
+        "--genre", choices=["discussion", "implementation", "review", "diagnosis"]
+    )
+    session_open.add_argument(
+        "--task-shape", choices=["interactive", "bounded", "autonomous"]
+    )
+    session_open.add_argument("--expires-in", type=int)
+    session_open.add_argument("--note")
+    session_open.set_defaults(handler=command_session_open)
+
+    session_close = subparsers.add_parser("session-close")
+    session_close.add_argument("--invocation-id", required=True)
+    session_close.add_argument(
+        "--status",
+        required=True,
+        choices=sorted(SESSION_SUCCESS_STATUSES | SESSION_WAITING_STATUSES),
+    )
+    session_close.add_argument("--lease-id")
+    session_close.add_argument("--expect-digest")
+    session_close.set_defaults(handler=command_session_close)
+
     baseline = subparsers.add_parser("baseline")
     baseline.add_argument("--invocation-id")
     baseline.set_defaults(handler=command_baseline)
@@ -1517,6 +2240,10 @@ def build_parser() -> argparse.ArgumentParser:
     thread.add_argument("--base-head")
     thread.add_argument("--baseline-digest")
     thread.add_argument("--scope-digest")
+    thread.add_argument(
+        "--scope-verdict",
+        choices=["SCOPE_OK", "SCOPE_VIOLATION", "ATTRIBUTION_INDETERMINATE", "CHECK_ERROR"],
+    )
     thread.set_defaults(handler=command_thread_record)
 
     thread_list = subparsers.add_parser("thread-list")
