@@ -40,15 +40,21 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit 0e7616a + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 0e7616a + uncommitted</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit c210c32"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit c210c32</span></span></div>
     <h1>JouleWise Run State</h1>
-<p>Last updated: 2026-07-12 (Agent-lane triple session: PRs #61 P2-049 /
-#62 P2-028 / #63 SITE-01 all OPEN at fully-lead-gated heads — #61 needs
-only a merge click (harness denied lead self-merge); #62/#63 owe a fresh
-delta re-audit pre-merge (upstream Codex outage blocked three attempts);
-#63 owes the lead-run live Lakebed deploy post-merge. C-028 remains
-CLOSED; Window-A execution still requires a quiet machine + Ed. Full
-record: <code>docs/run_reports/2026-07-12-agent-lane-triple.md</code>.)</p>
+<p>Last updated: 2026-07-13 (Restart close: PRs #61-#63 MERGED at
+delta-audited heads — DRA-001 malformed-identity blocker fixed on #62;
+XSI-1 installed-wheel CI gap fixed on main; site deployed live under the
+Lakebed cap (measured 854,349 B), routes 5/5, freshness clear. The
+bidirectional Claude↔Sol bridge landed the same day (concurrent
+Ed-directed thread; lead-verified: 8/8 protocol checks, 4/4 bridge
+tests). <strong>PAUSE POINT: Ed has declared a whole-project comprehensive
+audit as the next gate before further feature work; method proposal
+pending Ed&#39;s approval.</strong> Window-A execution still requires a quiet
+machine + Ed. Records: <code>docs/run_reports/2026-07-13-restart-merge-deploy.md</code></p>
+<ul>
+<li><code>docs/run_reports/2026-07-12-claude-sol-bridge.md</code>.)</li>
+</ul>
 <h2 id="start-here-for-every-big-run">Start Here For Every Big Run</h2>
 <p>Before starting substantial work:</p>
 <ol>
@@ -100,7 +106,7 @@ record below. Normal queue/mission pointers apply.</p>
 <h2>ACTIVE_STOP_CARD</h2>
 <p>Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 (<a href="docs/decision_log.md">decision log</a>).</p>
 <h2 id="restart-by-machine-state-lane">Restart By Machine-State Lane</h2>
-<p>Source of truth: <a href="docs/process/state_kernel.json">state kernel</a> (updated 2026-07-12). Latest report: <a href="docs/run_reports/2026-07-12-agent-lane-triple.md">Agent-lane triple: SITE-01 + P2-049 + P2-028 (PRs #61-#63)</a>.</p>
+<p>Source of truth: <a href="docs/process/state_kernel.json">state kernel</a> (updated 2026-07-13). Latest report: <a href="docs/run_reports/2026-07-13-restart-merge-deploy.md">Restart close: #61-#63 merged at audited heads, site live under cap</a>.</p>
 <h3>[ED-EXTERNAL]</h3>
 <ul>
 <li>READY — E1 <code>P1-008</code>: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).</li>
@@ -111,7 +117,7 @@ record below. Normal queue/mission pointers apply.</p>
 </ul>
 <h3>[AGENT]</h3>
 <ul>
-<li>CONTINUE — A20 <code>P2-028</code>: Response-hash determinism gate script: formal check that repeated same-config bundles have byte-identical per-item response hashes within rep groups.</li>
+<li>READY — A22 <code>P2-004</code>: Close model selection (D-016): decision-log entry with models, revisions, artifact paths, local mirror, fallback candidate; mid-model pick, CUDA load, GGUF paths outstanding.</li>
 </ul>
 <!-- END GENERATED: state-kernel run-state-intake --><h2 id="superseded-stop-card-c-028">Superseded stop card (C-028)</h2>
 <p>Status: <strong>CLEARED 2026-07-11.</strong> Every clearance criterion met: all
@@ -157,26 +163,33 @@ PROVISIONAL pending P1-006 live evidence.</p>
 <p><strong>RESTART HERE (next session) — this is the ONLY next-action block; the
 queue owns ordering:</strong></p>
 <ol>
-<li>[ED or AGENT] Land the open PR triple: merge #61 (fully gated; harness
-denied lead self-merge — needs Ed&#39;s click or re-authorization); run the
-owed fresh delta re-audits over #62 and #63 final heads (read-only Sol,
-<code>--effort xhigh</code> EXPLICITLY — see the effort-default defect in the
-2026-07-12 run report), triage, then CI-green merge both.</li>
-<li>[AGENT, after #63 merges] Live Lakebed deploy from main: site regen →
-pack (measured postcondition must pass) → <code>npx lakebed deploy</code> → verify
-the five endpoints + instruction meter on a cold worst-shard request →
-freshness banner clears → Lakebed feedback entry.</li>
-<li>[QUIET-MAC + ED] Begin Window A: C-019 production-shaped shakedown and
-P2-015-SMOKE, then P2-015 floors and P2-006 baselines. Do not run this
-lane while an agent session is active.</li>
-<li>[AGENT] Outside a quiet window, next compatible rows: P2-050
-adjudication, P2-027 publication prep. P2-022/P2-023 remain blocked
-until the 2M corpus exists.</li>
+<li>DONE 2026-07-13: #61-#63 merged at delta-audited heads; site deployed
+live under the cap; XSI-1 CI hardening green on main; bridge landed
+and lead-verified (8/8 protocol checks; suite 1318 OK).</li>
+<li>[ED + AGENT] <strong>Comprehensive whole-project audit (declared gate).</strong>
+The audit method proposal is with Ed; no further feature work, queue
+pulls, or campaign prep until the audit runs and its findings are
+adjudicated. Audit focus per Ed: overproduction (excess code/tests),
+plus everything a serious external review would check.</li>
+<li>[QUIET-MAC + ED] After the audit: Window A — C-019 production-shaped
+shakedown and P2-015-SMOKE, then P2-015 floors and P2-006 baselines.
+Do not run this lane while an agent session is active.</li>
+<li>[AGENT] Post-audit, outside a quiet window: P2-050 adjudication,
+SITE-02 follow-ups, P2-027 publication prep. P2-022/P2-023 remain
+blocked until the 2M corpus exists.</li>
 </ol>
 <h2 id="session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</h2>
 <p>Parenthetical states below are historical at each report&#39;s head; they are not
 current restart instructions. Current state is the C-028 block above.</p>
 <ul>
+<li><p>2026-07-13 Restart close: #61-#63 merged at delta-audited heads
+(DRA-001 fixed; XSI-1 CI hardening), site live under cap; audit gate
+declared: <code>docs/run_reports/2026-07-13-restart-merge-deploy.md</code></p>
+</li>
+<li><p>2026-07-12 Claude↔Sol bidirectional bridge (concurrent Ed-directed
+thread; lead-verified 2026-07-13):
+<code>docs/run_reports/2026-07-12-claude-sol-bridge.md</code></p>
+</li>
 <li><p>2026-07-12 Agent-lane triple: SITE-01/P2-049/P2-028 → PRs #61-#63 at
 lead-gated heads; delta re-audits owed pre-merge on #62/#63:
 <code>docs/run_reports/2026-07-12-agent-lane-triple.md</code></p>
@@ -222,7 +235,7 @@ report: <code>docs/run_reports/2026-07-09-c027-council-review.md</code>)</p>
 <li><p>2026-07-09 Claude Code → Codex MCP bridge hardening and live smoke:
 <code>docs/run_reports/2026-07-09-claude-codex-mcp-bridge.md</code></p>
 </li>
-<li><p>2026-07-12 Claude Code → <code>gpt-5.6-sol</code> deterministic bridge follow-up:
+<li><p>2026-07-12 adaptive Claude Code ↔ Sol/Fable bridge follow-up:
 <code>docs/run_reports/2026-07-12-claude-sol-bridge.md</code></p>
 </li>
 <li><p>2026-07-09 P2-034 broad campaign packs (C-026; PR #39):
@@ -274,7 +287,13 @@ D-038..D-042): <code>docs/run_reports/2026-07-08-suite-science-expansion.md</cod
 </ul>
 <h2 id="current-verification">Current Verification</h2>
 <ul>
-<li>Current <code>main@194ea39</code> (post #59 + #60 merges): canonical <code>Ran 1258 tests</code>, <code>OK (skipped=10)</code>, lead-run 2026-07-11 fresh-thread intake.
+<li>Current working tree (post #61-#63 merges + bridge landing, pre-commit
+head <code>99b8640</code>): canonical <code>Ran 1318 tests in 111.017s</code>, <code>OK (skipped=10)</code>, lead-run 2026-07-13 with the bridge + bookkeeping
+changes in tree; bridge protocol checker 8/8 PASS; bridge focused
+tests 4/4 OK. Merged-main backstop at <code>12131b0</code> was <code>Ran 1314 tests</code>,
+<code>OK (skipped=10)</code>. Live capsule: measured artifact 854,349 B deployed,
+routes 5/5 HTTP 200, freshness 14/14 current at <code>7d3ea57</code>.</li>
+<li>Prior head <code>main@194ea39</code> (post #59 + #60 merges): canonical <code>Ran 1258 tests</code>, <code>OK (skipped=10)</code>, lead-run 2026-07-11 fresh-thread intake.
 PRs #41-#60 are all merged.</li>
 <li>Prior head <code>main@cc3afc3</code>: canonical <code>Ran 1220 tests</code>, <code>OK (skipped=10)</code>;
 retained corpus strict gate 6/6; PR #59 pre-merge lead replay was
@@ -376,17 +395,20 @@ required loud six-bundle acceptance-gate skip; the lead corpus gate then
 PASSED (6/6 strict via corpus symlink), plus mock e2e run+strict+reduce
 and the post-merge full suite (OK, skipped=12).</p>
 </li>
-<li><p>Claude Code 2.1.207 approved the project <code>codex</code> MCP server; Codex CLI
-0.144.0 protocol handshake exposes <code>codex</code> + <code>codex-reply</code> and now
-verifies project defaults <code>gpt-5.6-sol</code> / <code>xhigh</code>. A direct read-only call
-and the actual <code>/codex</code> entry point returned <code>JOULEWISE_SOL_56_MCP_OK</code> and
-<code>JOULEWISE_SOL_56_SLASH_OK</code>; the slash-command thread is
-<code>019f5a10-d9d4-7250-b9b0-b4b481dd3909</code>. Both Codex session records
-independently confirm source <code>mcp</code>, model <code>gpt-5.6-sol</code>, effort <code>xhigh</code>,
-read-only sandbox, and <code>on-request</code> approvals. The earlier same-thread
-<code>codex-reply</code> smoke remains valid. <code>scripts/check-codex-mcp.mjs</code> passes;
-canonical suite <code>Ran 1258 tests in 99.408s, OK (skipped=11)</code> (the extra
-sandbox-local skip is the loud NV-5 localhost-socket gate).</p>
+<li><p>Claude Code 2.1.207, Codex CLI 0.144.0, and Node 23.7.0 pass the
+bidirectional protocol checker. Claude → Sol now uses <code>gpt-5.6-sol</code> with
+<code>high</code> fallback/default and task-triggered xhigh/ultra escalation; the
+final guarded <code>/codex</code> smoke returned <code>JOULEWISE_SOL_HIGH_GUARDED_OK</code>
+(thread <code>019f5a2a-2f4a-7b33-8a6d-b44dcc5a7a26</code>) with source <code>mcp</code>, effort
+<code>high</code>, read-only sandbox, and <code>on-request</code> approvals. Claude-originated
+Sol sessions disable the reverse server. Top-level Sol → Fable uses the
+sole <code>consult_fable</code> MCP tool; live token <code>JOULEWISE_FABLE_MCP_OK</code> on
+thread <code>019f5a26-d8a6-7993-b48d-8131d88748b9</code>. Focused bridge tests pass
+4/4 and <code>gen_state.py --check</code> passes. The current full suite ran 1,317
+tests but is not green: one failure + one error in <code>test_gen_state</code> are
+caused by the concurrent uncommitted state-kernel removal of <code>P2-028</code>
+while the existing fidelity tests still require that ID; bridge tests are
+unaffected. Full details: <code>docs/run_reports/2026-07-12-claude-sol-bridge.md</code>.</p>
 </li>
 <li><p>Last code-bearing verified head c095c83 (post PR #39; note: 36d5641
 later changed <code>scripts/build_site.py</code> on main without a recorded
@@ -436,23 +458,26 @@ the new era rule (PR #22 live gate: 6/6 valid, tamper fails named).</p>
 </ul>
 <h2 id="known-workspace-state">Known Workspace State</h2>
 <ul>
-<li>Main checkout began this bridge follow-up at <code>main@0e7616a</code>, equal to
-<code>origin/main</code>; the working tree now contains only the intended uncommitted
-Claude Code → Sol bridge/tooling/docs changes recorded in
-<code>docs/run_reports/2026-07-12-claude-sol-bridge.md</code>. PRs #61-#63 remain
-unmerged per the restart block above.</li>
+<li>Main checkout began this bridge follow-up at <code>main@0e7616a</code>; concurrent
+user work advanced it to <code>main@99b8640</code>, equal to <code>origin/main</code>. The
+working tree contains the intended uncommitted bridge/tooling/docs changes
+plus separately owned state-kernel/restart-report edits
+(<code>docs/process/state_kernel.json</code> and
+<code>docs/run_reports/2026-07-13-restart-merge-deploy.md</code>), which this bridge
+work preserved rather than adjudicating.</li>
 <li>The generated state-kernel blocks are explicitly non-authoritative;
 <code>RUN_STATE.md</code>, <code>TASK_QUEUE.md</code>, and <code>docs/decision_log.md</code> remain
 authoritative.</li>
 <li>Retained corpus and session scratchpad evidence are immutable.</li>
 </ul>
 <h2 id="what-is-next">What Is Next</h2>
-<p>In the first clean quiet-machine window, Ed runs C-019/P2-015-SMOKE,
-followed by P2-015 floors and P2-006 baselines. Agent-safe work continues
-only outside that quiet window: SITE-01 (capsule under the 1 MiB Lakebed
-cap + redeploy), P2-049 (fail-closed analysis-manifest ROOT), and P2-028
-(determinism gate script) are the active [AGENT] heads. <code>TASK_QUEUE.md</code>
-remains the ordering authority.</p>
+<p>The comprehensive whole-project audit is the declared gate (Ed,
+2026-07-13): method proposal pending Ed&#39;s approval, then the audit runs
+and its findings are adjudicated before any further feature work. After
+that: Window A in the first clean quiet-machine window (C-019/P2-015-SMOKE,
+then P2-015 floors, P2-006 baselines), with post-audit [AGENT] heads
+P2-050 adjudication, SITE-02, and P2-027 publication prep outside quiet
+windows. <code>TASK_QUEUE.md</code> remains the ordering authority.</p>
 <p>Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
 C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),
 calendar mapping (P1-008).</p>
@@ -476,7 +501,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit 0e7616a + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit c210c32 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

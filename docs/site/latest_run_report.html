@@ -27,263 +27,165 @@
 <main>
 <div class="doc-layout">
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#deliverable-check-0">Deliverable check (§0)</a>
-<a href="#product-outcomes">Product outcomes</a>
-<a href="#verification-ledger-lead-side-tails">Verification ledger (lead-side tails)</a>
-<a href="#restart-instructions-next-session">Restart instructions (next session)</a>
-<a href="#process-trace-appendix">Process Trace Appendix</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-12-agent-lane-triple-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-12-agent-lane-triple.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-12-agent-lane-triple.md · commit 0e7616a"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-12-agent-lane-triple.md</span><span class="source-commit">commit 0e7616a</span></span></div>
-    <h1>2026-07-12 — Agent-lane triple: SITE-01 + P2-049 + P2-028 (+ queue reconciliation)</h1>
+<a href="#what-landed">What landed</a>
+<a href="#verification-ledger-lead-side">Verification ledger (lead-side)</a>
+<a href="#process-trace-appendix">Process trace appendix</a>
+<a href="#state-at-close">State at close</a>
+<a href="#addendum-concurrent-bridge-landing-lead-verified-same-session">Addendum: concurrent bridge landing (lead-verified same session)</a></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-13-restart-merge-deploy-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-13-restart-merge-deploy.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-13-restart-merge-deploy.md · commit c210c32"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-13-restart-merge-deploy.md</span><span class="source-commit">commit c210c32</span></span></div>
+    <h1>Restart close: PRs #61–#63 merged at audited heads; site live under cap (2026-07-13)</h1>
+<p>Session shape: fresh-thread continuation executing the recorded restart
+sequence from <code>RUN_STATE.md</code> (authorized by Ed verbatim: merge #61, run
+the two delta re-audits at explicit xhigh, merge #62/#63, deploy the
+site and check the instruction meter live), ending at a deliberate
+whole-project pause point for a comprehensive audit (method consult
+separately recorded).</p>
 <h2 id="deliverable-check-0">Deliverable check (§0)</h2>
-<p>The session&#39;s primary deliverables were the next [AGENT]-lane artifacts after
-the C-028 close. SHIPPED to PR (not yet merged): P2-049 (PR #61, fully gated,
-merge blocked only by a harness permission denial on lead self-merge), P2-028
-(PR #62), SITE-01 (PR #63). Bookkeeping deliverables landed on main: the
-post-#59/#60 queue reconciliation (<code>ec7814b</code>), the C-028 spend-snapshot
-addendum (<code>7c075ae</code>), and the P2-028 kernel authority-pointer fix (<code>507f600</code>).
-NOT shipped: the live Lakebed redeploy (post-merge, lead-owned) and the two
-delta re-audits (blocked by upstream outage, owed pre-merge on #62/#63).</p>
-<h2 id="product-outcomes">Product outcomes</h2>
-<ul>
-<li><strong>Queue reconciliation</strong>: INT-59 + DOC-008 retired to Completed (D-023
-evidence cells); DOC-008 removed from the state kernel — DOC-010&#39;s trigger
-converted to an <code>event</code> dependency (the generator requires pending task
-deps to name live tasks); pinned fidelity tests updated (live set 32→31);
-<code>gen_state.py --check</code> green. Fresh-head verification: <code>Ran 1258 tests, OK (skipped=10)</code> at <code>194ea39</code>.</li>
-<li><strong>P2-049</strong> (PR #61): explicit-root-or-fail-closed resolution in
-<code>analysis_manifest.py</code> via a lazy <code>_resolve_repository_paths</code> resolver;
-installed layouts refuse with an actionable two-marker message; explicit
-roots stay authoritative; manifest identity untouched. Lens CLEAN; lead
-replay 24 focused OK + live refusal probe + suite 1261 OK/12; CI green.</li>
-<li><strong>P2-028</strong> (PR #62): <code>joulewise determinism-gate</code> CLI verb +
-<code>determinism_gate.py</code> (744 lines) + 38 tests. Named verdicts; canonical
-config-hash comparability; identity-provenance comparison with honest
-absence recording; per-item eligibility {succeeded, capped} with
-cross-sibling status matching; fail-closed on duplicate JSON keys,
-<code>--output</code>-inside-bundle, zero/one bundle, zero items. Both real rep
-groups formally <code>determinism_supported</code>. Lead gate: suite 1296 OK/13.</li>
-<li><strong>SITE-01</strong> (PR #63): eight bounded gzip+Base64 page shards, all 45
-pages/aliases kept; measured Lakebed artifact 865,973 B vs 1,048,576 cap
-(17.4% headroom); pack postcondition prefers MEASURED artifact (estimator
-demoted to labeled advisory — regression proves it misses non-generated
-growth); validator scan covers all server sources + omitted-initializer
-loop forms; node-driven shard round-trip test. Lead gate: measured-mode
-pack + suite 1271 OK/12.</li>
+<p>SHIPPED. All three agent-lane PRs are merged at delta-audited heads;
+the live capsule is deployed under the Lakebed cap with a clear
+freshness banner; the post-merge integration review ran and its one
+finding is fixed and CI-validated on main.</p>
+<h2 id="what-landed">What landed</h2>
+<ol>
+<li><strong>PR #61 (P2-049)</strong> merged unchanged (its audit had completed in the
+prior session&#39;s gate shape: fresh lens CLEAN + lead replay + CI).</li>
+<li><strong>PR #62 (P2-028)</strong> merged after its delta re-audit (fresh Sol xhigh,
+read-only) found one blocker, fixed at the lead bench:<ul>
+<li><strong>DRA-001 (blocker, FIXED):</strong> equal-but-malformed identity hashes
+were accepted as compared identity evidence (garbage == garbage →
+pass). Hash-shaped identity fields
+(<code>artifact_identity.sha256</code>/<code>folded_sha256</code>) now require valid
+sha256 hex; malformed values refuse with
+<code>identity_evidence_malformed</code>, surface per-bundle in
+<code>evidence_problems</code>, and appear in the new
+<code>identity_fields_malformed</code> payload array. Two regressions prove
+strict validation alone does NOT catch this. Ledger <code>P2028-5</code>.</li>
+<li><strong>DRA-002 (should-fix, FIXED):</strong> ledger completed to the promised
+P2028-1..5.</li>
 </ul>
-<h2 id="verification-ledger-lead-side-tails">Verification ledger (lead-side tails)</h2>
+</li>
+<li><strong>PR #63 (SITE-01)</strong> merged after its delta re-audit found <strong>no
+blockers</strong>; dispositions recorded on the PR:<ul>
+<li>D1 (executable discovery can falsely enter advisory mode off this
+machine) and D2 (node decode test executes rewritten JS, not the
+emitted TS) — ACCEPTED AS FOLLOW-UP, queue row SITE-02.</li>
+<li>D3 (ledger metric-snapshot mixing) — fixed on the branch.</li>
+</ul>
+</li>
+<li><strong>Post-merge integration review</strong> (fresh Sol xhigh over merged main):
+no cross-stream functional defects. One should-fix, <strong>XSI-1</strong>: the
+installed-wheel CI job ran only <code>--help</code>, exercising neither new
+fail-closed surface. FIXED at the lead bench: the job now smoke-tests
+the determinism-gate refusal envelope (exit 2,
+<code>fewer_than_two_bundles</code>) and the analysis-manifest installed-layout
+root refusal. Validated green on main CI.</li>
+<li><strong>Live deploy (SITE-01 acceptance):</strong> <code>npx lakebed deploy</code> ACCEPTED
+the 854,349-byte measured artifact (prior arc: rejected over the
+1,048,576-byte cap). Live checks: <code>/index</code>, <code>/status.html</code>,
+<code>/style.css</code>, <code>/api/freshness</code>, <code>/api/live-status</code> all 200; the worst
+shard (<code>/task_queue.html</code>, 71,864 B served) cold-decoded in ~0.5 s
+within the instruction meter; freshness reports deployed commit
+<code>7d3ea57</code> with 14/14 sources current, zero stale/moved.</li>
+</ol>
+<h2 id="verification-ledger-lead-side">Verification ledger (lead-side)</h2>
 <div class="table-scroll"><table>
 <thead>
 <tr>
 <th>Gate</th>
-<th>Tail</th>
+<th>Evidence</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>Main intake @194ea39</td>
-<td><code>Ran 1258 tests ... OK (skipped=10)</code></td>
+<td>P2-028 post-DRA focused</td>
+<td><code>Ran 40 tests … OK (skipped=1)</code></td>
 </tr>
 <tr>
-<td>p2049 focused</td>
-<td><code>Ran 24 tests ... OK</code> + live refusal probe</td>
+<td>P2-028 post-DRA full suite (worktree)</td>
+<td><code>Ran 1298 tests … OK (skipped=13)</code></td>
 </tr>
 <tr>
-<td>p2049 full (worktree)</td>
-<td><code>Ran 1261 tests ... OK (skipped=12)</code></td>
+<td>Real-corpus gate (both groups, post-DRA)</td>
+<td><code>determinism_supported</code>, <code>identity_fields_malformed: []</code></td>
 </tr>
 <tr>
-<td>p2028 focused (final head)</td>
-<td><code>Ran 38 tests ... OK (skipped=1)</code></td>
+<td>Merged-main canonical suite (lead backstop for the review&#39;s environment-blocked run)</td>
+<td><code>Ran 1314 tests in 116.911s — OK (skipped=10)</code></td>
 </tr>
 <tr>
-<td>p2028 full (final head)</td>
-<td><code>Ran 1296 tests ... OK (skipped=13)</code></td>
+<td>Main CI incl. new installed-wheel smokes</td>
+<td>green (<code>MAIN-CI-GREEN</code>)</td>
 </tr>
 <tr>
-<td>p2028 real corpus</td>
-<td>both groups <code>determinism_supported</code>, identity fields recorded absent</td>
+<td>Deploy</td>
+<td>accepted; measured mode (Lakebed 0.0.25); artifact 854,349 B / cap 1,048,576 B</td>
 </tr>
 <tr>
-<td>site01 pack (measured)</td>
-<td><code>865973 bytes (budget 943718; cap 1048576; Lakebed 0.0.25)</code></td>
-</tr>
-<tr>
-<td>site01 full (final head)</td>
-<td><code>Ran 1271 tests ... OK (skipped=12)</code></td>
+<td>Live routes</td>
+<td>5/5 HTTP 200; worst-shard cold decode OK; freshness 14/14 current</td>
 </tr>
 </tbody></table></div>
-<h2 id="restart-instructions-next-session">Restart instructions (next session)</h2>
-<ol>
-<li>Merge PR #61 (fully gated; harness denied lead self-merge — Ed clicks or
-re-authorizes). 2. When upstream is stable: run the two delta re-audits
-(fresh read-only Sol, <strong><code>--effort xhigh</code> EXPLICITLY</strong>) over the final
-heads of #62 and #63; triage; then CI-green merge both. 3. After #63
-merges: regen site on main, pack (measured mode must pass), <code>npx lakebed deploy</code>, verify the five endpoints + the instruction meter on a cold
-worst-shard request, clear the freshness-drift banner, append the Lakebed
-feedback entry. 4. Window A remains the [QUIET-MAC + ED] head.</li>
-</ol>
-<h2 id="process-trace-appendix">Process Trace Appendix</h2>
-<p><strong>Shape.</strong> S1 bookkeeping (bench) + three standard-tier Sol pipelines in
-worktrees (site01 / p2049 / p2028), disjoint footprints. Design rounds were
-folded into implementation prompts (DESIGN-section requirement) rather than
-separate pre-rounds — judged proportionate for these scopes.</p>
-<p><strong>Catches (unique per layer).</strong></p>
+<p>Suite-count conventions held: worktree replays <code>skipped=12–13</code>
+(sandbox/corpus gates), final main <code>skipped=10</code>.</p>
+<h2 id="process-trace-appendix">Process trace appendix</h2>
 <ul>
-<li>Implementer (p2028): kernel P2-028 authority pointer stale — REAL, but its
-proposed correct home was ALSO wrong; lead archaeology found the CP-5
-resume report. Fixed on main (<code>507f600</code>).</li>
-<li>Contract lens (p2028): 5 blocker claims → lead bench adjudication:
-B2 (True==1 config laundering) CONFIRMED; B5 (--output overwrites input
-evidence) CONFIRMED; B3 partially refuted (bundle-level covered; per-item
-variant real); B1 ruled as design (identity-provenance comparability with
-honest absence recording); B4 reproduce-first (confirmed in fix round).</li>
-<li>Test-audit lens (p2028): 6 should-fix coverage gaps incl. SUT-imported
-constants and the Unicode NFC trap — all inspection-verified, no refuters
-spent.</li>
-<li>Runtime lens (site01): estimator-drift proof (105 kB payload passes
-estimate, real artifact over cap) — drove the measured-mode postcondition
-(SITE01-4); narrower-than-Lakebed loop regex; incomplete source scan.</li>
-<li><strong>Lead gate (validated the doctrine again): the p2028 fix round&#39;s literal
-<code>succeeded</code>-only per-item rule would have refused legitimate <code>capped</code>
-campaign cells</strong> (AP capped-cell rules) — caught at the lead gate, fixed
-as FIX-14 with ledger supersession. Fix rounds introduce defects: third
-occurrence on record.</li>
+<li><strong>Shape:</strong> sequential restart execution (no parallel streams); two
+read-only delta audits + one integration review, all explicit
+<code>--effort xhigh</code> (verified in the manifest rows — the prior session&#39;s
+unintended-ultra defect did not recur); two lead bench fixes
+(DRA-001, XSI-1) each with defect-shaped regressions.</li>
+<li><strong>Catches:</strong> delta-audit layer 1 blocker (DRA-001) + 1 bookkeeping
+(DRA-002) on P2-028 — unique, no other layer saw it; 2 should-fix +
+1 nit on SITE-01 (D1/D2 deferred with dissent-free disposition, D3
+fixed); integration-review layer 1 unique should-fix (XSI-1,
+installed-wheel coverage). Lead-live layer: deploy acceptance +
+freshness + meter checks (not reachable by any static layer).</li>
+<li><strong>Interventions:</strong> none new; wrapper effort passthrough fixed in the
+prior session held.</li>
+<li><strong>Worktrees:</strong> p2049/p2028/site01 removed after merge (ledgers
+committed). ~25 stale worktrees from earlier arcs remain deliberately
+untouched pending the comprehensive audit (bridge dirs may hold
+evidence; R-016-class preservation applies before any removal).</li>
+<li><strong>Delegation calibration:</strong> delta-audit p2028 | Sol xhigh | review |
+judgment-call | 1 real blocker confirmed by bench (strong); delta-audit
+site01 | Sol xhigh | review | judgment-call | should-fixes, correctly
+no blocker; integration review | Sol xhigh | review | judgment-call |
+1 unique catch, suite environment-blocked (lead backstop required —
+recurring pattern: read-only sandboxes cannot run tempfile suites; the
+lead suite replay is structural, not optional).</li>
 </ul>
-<p><strong>Interventions.</strong></p>
+<h2 id="state-at-close">State at close</h2>
 <ul>
-<li>I-1: codex-run-v3 <code>--write-scope</code> requires a <code>WRITE_SCOPE:</code> field in the
-prompt body — 3 instant rc=64 launch failures; folded to codex-delegation.</li>
-<li>I-2: upstream (chatgpt.com backend) stream-disconnection outage killed the
-site01 fix round (206k tokens in), two delta-audit attempts (one exited
-&quot;OK&quot; with a THIN-OUTPUT empty report — wrapper defect: stream death can
-masquerade as success), and the site01 resume (watchdog SIGTERM 143).
-Recovery: session resume preserved the fix round&#39;s completed work (all
-FIX-1..5 verified landed by lead inspection); delta re-audits deferred.</li>
-<li>I-3: <strong>every Sol session this arc ran at <code>ultra</code> effort</strong> — 
-<code>~/.codex/config.toml</code> sets <code>model_reasoning_effort = &quot;ultra&quot;</code> (C-028
-residue) and codex-run-v3 passes it through when <code>--effort</code> is omitted.
-Violates the xhigh-default doctrine (global rule 10); explains the weekly
-quota draw 22%→32%. Mitigation: explicit <code>--effort</code> on every future call
-(skill fold); wrapper default fix queued on TOOL-01; config residue is
-Ed&#39;s call (also affects his interactive sessions).</li>
-<li>I-4: harness auto-mode classifier denied the lead self-merge of PR #61
-(policy-authorized but harness-blocked; not worked around) and was itself
-intermittently unavailable during the upstream outage.</li>
+<li><code>main</code> = <code>origin/main</code>, CI green, canonical 1314 OK (skipped=10).</li>
+<li>Live capsule current at the deployed commit; drift banner clear.</li>
+<li>Queue heads: Window A ([QUIET-MAC + ED]) is the next object-level
+work; agent-lane heads P2-050 (needs adjudication), SITE-02
+(follow-ups), TOOL-01 (lead tooling).</li>
+<li><strong>PAUSE POINT:</strong> whole-project comprehensive audit requested by Ed
+before further feature work; method proposal (Sol consult) recorded in
+the session summary and pending Ed&#39;s approval.</li>
 </ul>
-<p><strong>Delegation calibration (schema v2).</strong></p>
-<div class="table-scroll"><table>
-<thead>
-<tr>
-<th>id</th>
-<th>to</th>
-<th>unit</th>
-<th>altitude</th>
-<th>outcome</th>
-<th>catches</th>
-<th>lead-rework</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>p2049-impl</td>
-<td>sol-ultra*</td>
-<td>impl</td>
-<td>design-freedom</td>
-<td>one-shot-clean</td>
-<td>—</td>
-<td>none</td>
-</tr>
-<tr>
-<td>p2049-lens</td>
-<td>sol-ultra*</td>
-<td>review</td>
-<td>pinned</td>
-<td>clean-useful</td>
-<td>test-audit confirmations</td>
-<td>none</td>
-</tr>
-<tr>
-<td>p2028-impl</td>
-<td>sol-ultra*</td>
-<td>impl</td>
-<td>design-freedom</td>
-<td>clean+finding</td>
-<td>kernel pointer (half-right)</td>
-<td>pointer archaeology</td>
-</tr>
-<tr>
-<td>p2028-lens-contract</td>
-<td>sol-ultra*</td>
-<td>review</td>
-<td>pinned</td>
-<td>high-yield</td>
-<td>2 confirmed blockers + 1 design Q</td>
-<td>bench adjudication</td>
-</tr>
-<tr>
-<td>p2028-lens-tests</td>
-<td>sol-ultra*</td>
-<td>review</td>
-<td>pinned</td>
-<td>high-yield</td>
-<td>6 real gaps</td>
-<td>none</td>
-</tr>
-<tr>
-<td>p2028-fixround</td>
-<td>sol-ultra*</td>
-<td>fix</td>
-<td>pinned FIX-1..13</td>
-<td>clean-with-defect</td>
-<td>—</td>
-<td>FIX-14 ruling (capped)</td>
-</tr>
-<tr>
-<td>p2028-fix14</td>
-<td>sol-ultra*</td>
-<td>fix</td>
-<td>pinned ruling</td>
-<td>one-shot-clean</td>
-<td>—</td>
-<td>none</td>
-</tr>
-<tr>
-<td>site01-impl</td>
-<td>sol-ultra*</td>
-<td>impl</td>
-<td>design-freedom</td>
-<td>one-shot-clean (strong design)</td>
-<td>byte-breakdown scout</td>
-<td>none</td>
-</tr>
-<tr>
-<td>site01-lens</td>
-<td>sol-ultra*</td>
-<td>review</td>
-<td>pinned</td>
-<td>high-yield</td>
-<td>estimator-drift proof</td>
-<td>none</td>
-</tr>
-<tr>
-<td>site01-fixround(+resume)</td>
-<td>sol-ultra*</td>
-<td>fix</td>
-<td>pinned FIX-1..5</td>
-<td>complete-despite-outage</td>
-<td>—</td>
-<td>lead verified landing</td>
-</tr>
-</tbody></table></div>
-<p>*unintended ultra — see I-3. Design-freedom delegation again ran hot: the
-site01 shard design (instruction-budget-aware, Base85 alternative rejected
-with quantified loop-body evidence) beat the lead&#39;s rough pagination prior.</p>
-<p><strong>Yield + spend.</strong> Layers: implementer flags 2 real catches (1 half-right);
-fresh lenses 3-for-3 sessions with unique catches; lead gate 1 unique
-doctrine-grade catch (capped); delta re-audit layer produced nothing this
-session (outage) — no drop signal, it never ran. Spend: 13 Sol invocations
-(3 launch failures rc=64 excluded), ALL at unintended ultra; weekly quota
-22%→32%. Fable lead: heavy bench adjudication session.</p>
-<p><strong>Skill-usage rows appended to ~/.claude/skills/skill-usage-log.md.</strong></p>
+<h2 id="addendum-concurrent-bridge-landing-lead-verified-same-session">Addendum: concurrent bridge landing (lead-verified same session)</h2>
+<p>A concurrent Ed-directed thread landed the bidirectional Claude↔Sol
+bridge (<code>docs/run_reports/2026-07-12-claude-sol-bridge.md</code>) into the
+same working tree mid-session. Lead investigation and verification
+before commit: read the full diff set (reverse adapter
+<code>scripts/claude-bridge-mcp.mjs</code> — origin/hops guards before spawn,
+argv-array spawn, bounded output, timeout, empty strict MCP registry,
+plan mode, read-only tools; <code>.mcp.json</code> model/effort/one-hop pins;
+<code>codex-bridge</code> model+effort plumbing; policy surfaces coherent);
+re-ran its verification myself: protocol checker 8/8 PASS, bridge
+tests 4/4 OK, static checks clean. One cross-thread breakage found and
+fixed: my P2-028 kernel retirement broke two <code>tests/test_gen_state.py</code>
+fidelity cases (the bridge thread&#39;s suite run caught it; mutation
+subjects moved to P2-016/P1-008, exact-ID set updated). Final
+whole-tree canonical suite: <code>Ran 1318 tests in 111.017s — OK (skipped=10)</code>.</p>
+<p>Spend snapshot (2026-07-13 ~07:00Z, <code>codex-usage</code> 24h window): 3 xhigh
+sessions ≈ 7.0M tokens / 29.9 min (this session&#39;s two delta audits +
+integration review — explicit-effort fix holding); 3 ultra ≈ 17.7M /
+935.6 min (the prior session&#39;s unintended-ultra residue aging out).
+Weekly quota reset: 1% used.</p>
 
 
   </div>
@@ -292,7 +194,7 @@ session (outage) — no drop signal, it never ran. Spend: 13 Sol invocations
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-12-agent-lane-triple.md · commit 0e7616a · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-13-restart-merge-deploy.md · commit c210c32 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

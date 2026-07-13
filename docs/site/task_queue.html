@@ -38,7 +38,7 @@
 <a href="#queue-maintenance">Queue Maintenance</a></aside>
   <div class="doc-wrap doc-source-task-queue-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 0e7616a + uncommitted"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 0e7616a + uncommitted</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit c210c32"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit c210c32</span></span></div>
     <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -126,11 +126,13 @@ sessions.</li>
 purchases, destinations.</li>
 </ul>
 <h2 id="current-queue">Current Queue</h2>
-<p>C-028 was CLEARED 2026-07-11 and the arc is fully closed: PRs #41-#60 are
-ALL merged (incl. #59 integration findings and #60 DOC-008 kernel; both rows
-retired to Completed 2026-07-11). Every Window-A software gate and P0-003
-are satisfied. Normal ranking applies, subject to the machine-state lanes
-below.</p>
+<p>C-028 was CLEARED 2026-07-11 and the arc is fully closed: PRs #41-#63 are
+ALL merged (the 2026-07-13 restart-close session merged #61-#63 at
+delta-audited heads and deployed the shard capsule live under the Lakebed
+cap). Every Window-A software gate and P0-003 are satisfied. <strong>A
+whole-project comprehensive audit is the declared next gate before further
+feature work (Ed, 2026-07-13); method proposal pending Ed&#39;s approval.</strong>
+Normal ranking applies afterward, subject to the machine-state lanes below.</p>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -256,11 +258,11 @@ below.</p>
 </tr>
 <tr>
 <td align="right">11e</td>
-<td>P2-028</td>
-<td>P2 Next Slice</td>
-<td>NEW (CP-6 adjudication 2026-07-09: accepted cheap formal gate) [AGENT]</td>
-<td>Response-hash determinism gate script: formal check that repeated same-config bundles have byte-identical per-item response hashes within rep groups</td>
-<td>Script emits a named verdict from 2+ strict-valid bundles; existing real bundles already pass informally; rides any later agent session</td>
+<td>SITE-02</td>
+<td>P4 Polish</td>
+<td>NEW 2026-07-13 (SITE-01 delta-audit deferrals D1/D2, dispositions on PR #63) [AGENT]</td>
+<td>SITE-01 follow-ups: (D1) pack_capsule executable discovery must not silently enter advisory estimator mode off this machine (prefer explicit env/OS-path discovery + loud mode print); (D2) node decode test should execute the EMITTED TS (tsx/ts-node when available) instead of a rewritten JS mirror</td>
+<td>Both close with regressions; measured mode provably selected on a clean clone with lakebed available</td>
 </tr>
 <tr>
 <td align="right">11d</td>
@@ -335,22 +337,6 @@ below.</p>
 <td>P1-006 live checklist evidence is required before any promotion; software/localhost evidence is not live NVIDIA validation</td>
 </tr>
 <tr>
-<td align="right">16a2</td>
-<td>SITE-01</td>
-<td>P2 Next Slice</td>
-<td>PR #63 OPEN 2026-07-12 (gzip shards, measured artifact 865,973 B / 17.4% under cap; lead-gated); REMAINING: delta re-audit pre-merge + lead live deploy post-merge [AGENT]</td>
-<td>Trim/paginate the site capsule so deploys fit the cap; redeploy</td>
-<td>Live capsule current again; freshness drift banner clear; report <code>docs/run_reports/2026-07-12-agent-lane-triple.md</code></td>
-</tr>
-<tr>
-<td align="right">16b</td>
-<td>P2-049</td>
-<td>P3 Hardening Candidates</td>
-<td>PR #61 OPEN 2026-07-12, FULLY GATED (lens CLEAN, lead replay 1261 OK, CI green); needs only the merge click (harness denied lead self-merge) [ED or AGENT]</td>
-<td>analysis_manifest.py ROOT default (line 27) resolves to site-packages when installed — replace with explicit-root-or-fail-closed</td>
-<td>Installed-package manifest validation refuses with clear message instead of wrong-dir lookup</td>
-</tr>
-<tr>
 <td align="right">16c</td>
 <td>P2-050</td>
 <td>P3 Hardening Candidates</td>
@@ -411,11 +397,32 @@ below.</p>
 </tr>
 </thead>
 <tbody><tr>
+<td>SITE-01</td>
+<td>P2 Next Slice</td>
+<td>2026-07-13</td>
+<td>Site capsule under the 1 MiB Lakebed cap + live redeploy</td>
+<td>No matrix row exists in a phase exit checklist for this site-tooling task; PR #63 (gzip shards, measured-artifact postcondition); delta re-audit no-blockers (D3 fixed, D1/D2 → SITE-02); live deploy ACCEPTED at 854,349 B, routes 5/5 200, freshness 14/14 current; reports <code>2026-07-12-agent-lane-triple.md</code> + <code>2026-07-13-restart-merge-deploy.md</code></td>
+</tr>
+<tr>
+<td>P2-028</td>
+<td>P2 Next Slice</td>
+<td>2026-07-13</td>
+<td>Response-hash determinism gate (<code>joulewise determinism-gate</code>)</td>
+<td>No matrix row exists in <code>docs/phase_2/phase_2_exit_checklist.md</code> for this post-checklist gate task; PR #62 + DRA-001 malformed-identity fix; both retained corpus groups formally <code>determinism_supported</code>; ledger P2028-1..5; same two reports</td>
+</tr>
+<tr>
+<td>P2-049</td>
+<td>P3 Hardening Candidates</td>
+<td>2026-07-13</td>
+<td>analysis_manifest.py explicit-root-or-fail-closed resolution (C-028 SF3)</td>
+<td>No matrix row exists in a phase exit checklist for this hardening task; PR #61 (lens CLEAN, replay 1261 OK); installed-wheel CI now smokes the refusal (XSI-1 fix on main); same two reports</td>
+</tr>
+<tr>
 <td>CODEX-BRIDGE-2</td>
 <td>P0 Safety</td>
 <td>2026-07-12</td>
-<td>Pin <code>gpt-5.6-sol</code>/<code>xhigh</code> throughout the Claude Code harness and remove stale local-skill defaults</td>
-<td>Project MCP default + explicit Claude agent/command/skill controls; model-pinned audited fallback; protocol checker; live <code>/codex</code> smoke <code>JOULEWISE_SOL_56_SLASH_OK</code> on thread <code>019f5a10-d9d4-7250-b9b0-b4b481dd3909</code>; report <code>2026-07-12-claude-sol-bridge.md</code></td>
+<td>Make the Claude Code ↔ Sol/Fable bridge bidirectional with adaptive Sol effort (<code>high</code> default; xhigh/ultra only by trigger) and a hard one-hop guard</td>
+<td>Claude → Sol live <code>/codex</code> token <code>JOULEWISE_SOL_HIGH_GUARDED_OK</code>, thread <code>019f5a2a-2f4a-7b33-8a6d-b44dcc5a7a26</code>; Sol → Fable live <code>consult_fable</code> token <code>JOULEWISE_FABLE_MCP_OK</code>, thread <code>019f5a26-d8a6-7993-b48d-8131d88748b9</code>; protocol checker + 4 focused tests; report <code>2026-07-12-claude-sol-bridge.md</code></td>
 </tr>
 <tr>
 <td>INT-59</td>
@@ -1027,14 +1034,6 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <td>Explicit selection recorded after floors; selection cites floor/MDE headroom. Evidence: Selection recorded with floor/MDE headroom rationale; Selected campaign queued as a quiet_mac task. Authority: <a href="docs/research_question_bank.md">C-015 + RQ bank</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-024 acceptance</a>.</td>
 </tr>
 <tr>
-<td>A20</td>
-<td>P2-028</td>
-<td>P2 Next Slice</td>
-<td>ACTIVE</td>
-<td>Response-hash determinism gate script: formal check that repeated same-config bundles have byte-identical per-item response hashes within rep groups.</td>
-<td>Script emits a named verdict from 2+ strict-valid bundles. Evidence: Named verdict from 2+ strict-valid bundles; Existing real bundles pass formally. Authority: <a href="docs/run_reports/2026-07-09-cp5-resume.md">CP-6 adjudication (CP-5 resume session record)</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-028 acceptance</a>. Note: PR #62 open (2026-07-12); implementation + two lenses + fix rounds + lead gate done; fresh delta re-audit owed pre-merge.</td>
-</tr>
-<tr>
 <td>A21</td>
 <td>P3-001b</td>
 <td>P3 Research Expansion</td>
@@ -1117,14 +1116,14 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <td>P4 Polish</td>
 <td>SHELVED — trigger: DOC-008-proven-in-use (DOC-008 state kernel (merged PR #60, 2026-07-11) is proven in use)</td>
 <td>Audit non-authoritative historical material for bounded relocation after DOC-008 proves the state kernel.</td>
-<td>A post-DOC-008 audit relocates only non-authoritative history while preserving paths or redirects, citations, decision authority, and link integrity. Evidence: Only non-authoritative historical material moves; Paths or redir
+<td>A post-DOC-008 audit relocates only non-authoritative history while preserving paths or redirects, citations, decision authority, and link inte
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit 0e7616a + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit c210c32 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
