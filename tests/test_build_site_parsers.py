@@ -1,12 +1,24 @@
+import base64
 import contextlib
+import gzip
 import io
+import json
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
-from scripts import build_site
+from scripts import build_site, pack_capsule
 
 
 SESSION_HEADING = "Session History (pointers only \u2014 run reports own the narrative)"
+
+
+def gzip_decompress_base64(value: str) -> str:
+    return gzip.decompress(base64.b64decode(value)).decode("utf-8")
 
 
 class BuildSiteParserTests(unittest.TestCase):
@@ -263,6 +275,183 @@ Text.
         rendered = build_site.render_basic_markdown(trimmed)
         self.assertIn("&lt;Entry &amp; 2&gt;", rendered)
         self.assertNotIn("<Entry & 2>", rendered)
+
+    def _assert_production_build_output_packs_below_lakebed_budget(
+        self, *, force_offline_renderer: bool
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_root = Path(temp_dir)
+            site = temp_root / "site"
+            capsule = temp_root / "capsule"
+            content = capsule / "server" / "content"
+            site.mkdir()
+            for filename in build_site.HAND_PAGES:
+                shutil.copy2(build_site.OUT / filename, site / filename)
+            shutil.copy2(build_site.OUT / "style.css", site / "style.css")
+
+            build_stdout = io.StringIO()
+            build_stderr = io.StringIO()
+            with (
+                mock.patch.object(build_site, "OUT", site),
+                mock.patch.object(
+                    build_site,
+                    "MARKED_UNAVAILABLE",
+                    force_offline_renderer,
+                ),
+                mock.patch.object(build_site, "MARKED_FALLBACK_WARNED", False),
+                contextlib.redirect_stdout(build_stdout),
+                contextlib.redirect_stderr(build_stderr),
+            ):
+                build_site.build(no_marked=False)
+
+            pack_stdout = io.StringIO()
+            content.mkdir(parents=True)
+            (content / "styles.ts").write_text("legacy", encoding="utf-8")
+            with (
+                mock.patch.object(pack_capsule, "SITE", site),
+                mock.patch.object(pack_capsule, "CAPSULE", capsule),
+                mock.patch.object(pack_capsule, "CAPSULE_CONTENT", content),
+                mock.patch.object(
+                    pack_capsule,
+                    "discover_lakebed_executable",
+                    return_value=None,
+                ),
+                contextlib.redirect_stdout(pack_stdout),
+            ):
+                pages = pack_capsule.pack_pages()
+                total = pack_capsule.build(no_fonts=True)
+                packed_site, _ = pack_capsule.encode_site(pages, pack_capsule.stylesheet(no_fonts=True))
+                with mock.patch.object(pack_capsule, "LAKEBED_TARGET_ARTIFACT_BYTES", 0):
+                    with self.assertRaises(pack_capsule.CapsulePackError):
+                        pack_capsule.build(no_fonts=True)
+                with mock.patch.object(pack_capsule, "MAX_FIRST_REQUEST_DECODE_BYTES", 0):
+                    with self.assertRaisesRegex(pack_capsule.CapsulePackError, "byte-loop iterations"):
+                        pack_capsule.build(no_fonts=True)
+
+            shared = json.loads(gzip_decompress_base64(packed_site["shared"]))
+            decoded_pages = {}
+            decoded_shards = []
+            for shard in packed_site["shards"]:
+                decoded = json.loads(gzip_decompress_base64(shard))
+                self.assertTrue(set(decoded_pages).isdisjoint(decoded))
+                decoded_pages.update(decoded)
+                decoded_shards.append(decoded)
+            expected_names = {
+                "adapter_contracts.html", "agent_plan.html", "claims_ladder.html",
+                "council_log.html", "decision_log.html", "index.html",
+                "latest_run_report.html", "library.html", "measurement_methodology.html",
+                "milestones.html", "orchestration.html", "process.html",
+                "project_status.html", "readme.html", "record.html", "research.html",
+                "results.html", "risk_register.html", "roadmap.html", "run_state.html",
+                "status.html", "task_queue.html",
+            }
+            self.assertEqual({path.name for path in site.glob("*.html")}, expected_names)
+            expected_canonical = {
+                pack_capsule.canonical_path(pack_capsule.page_aliases(site / name))
+                for name in expected_names
+            } | {"/project_critique_review.html"}
+            self.assertEqual(set(packed_site["routes"]), expected_canonical)
+            for path, route in packed_site["routes"].items():
+                self.assertIn(path, decoded_shards[route["shard"]])
+            for name in expected_names:
+                aliases = pack_capsule.page_aliases(site / name)
+                canonical = pack_capsule.canonical_path(aliases)
+                expected_aliases = [
+                    alias
+                    for alias in aliases
+                    if alias != canonical and alias not in pack_capsule.RESERVED_PATHS
+                ]
+                self.assertEqual(packed_site["routes"][canonical]["aliases"], expected_aliases)
+            self.assertEqual(
+                packed_site["routes"]["/project_critique_review.html"]["aliases"],
+                ["/critique"],
+            )
+            expected_sources = {}
+            for page_path in site.glob("*.html"):
+                for stamp in pack_capsule.extract_stamps(page_path.name, page_path.read_text(encoding="utf-8")):
+                    expected_sources[stamp["source"]] = stamp["commit"]
+            self.assertEqual(
+                packed_site["sources"],
+                [{"source": source, "commit": expected_sources[source]} for source in sorted(expected_sources)],
+            )
+            self.assertEqual(set(decoded_pages), expected_canonical)
+            for path, entry in pages.items():
+                self.assertEqual(decoded_pages[path], entry["html"])
+                response_html = decoded_pages[path].replace(
+                    "</body>", shared["freshness"] + "\n</body>", 1
+                )
+                self.assertEqual(
+                    response_html,
+                    pack_capsule.inject_freshness(entry["html"], Path(path).name or "index.html"),
+                )
+            self.assertIn("built docs/site", build_stdout.getvalue())
+            if force_offline_renderer:
+                self.assertIn("offline fallback markdown renderer", build_stderr.getvalue())
+                self.assertTrue(
+                    any(
+                        "<!-- rendered: offline-fallback -->" in path.read_text(encoding="utf-8")
+                        for path in site.glob("*.html")
+                    )
+                )
+            else:
+                self.assertNotIn("offline fallback markdown renderer", build_stderr.getvalue())
+                for path in site.glob("*.html"):
+                    self.assertNotIn(
+                        "<!-- rendered: offline-fallback -->",
+                        path.read_text(encoding="utf-8"),
+                    )
+                readme_html = (site / "readme.html").read_text(encoding="utf-8")
+                self.assertIn("<h1>JouleWise</h1>", readme_html)
+                self.assertIn(
+                    '<pre><code class="language-bash">python3 -m unittest discover -s tests',
+                    readme_html,
+                )
+            self.assertIn("postcondition mode: estimator-only advisory", pack_stdout.getvalue())
+            self.assertLessEqual(
+                pack_capsule.estimate_lakebed_artifact_size(total),
+                pack_capsule.LAKEBED_TARGET_ARTIFACT_BYTES,
+            )
+            self.assertTrue((content / "pages.ts").is_file())
+            self.assertTrue((content / "buildinfo.ts").is_file())
+            self.assertFalse((content / "styles.ts").exists())
+
+    def test_production_build_output_packs_below_conservative_lakebed_budget(self):
+        self._assert_production_build_output_packs_below_lakebed_budget(
+            force_offline_renderer=True
+        )
+
+    def test_connected_marked_build_output_packs_below_lakebed_budget(self):
+        try:
+            probe = subprocess.run(
+                ["npx", "--yes", "marked", "--gfm"],
+                input="# Probe\n",
+                capture_output=True,
+                text=True,
+                check=True,
+                cwd=build_site.ROOT,
+                timeout=12,
+            )
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            if isinstance(exc, subprocess.CalledProcessError):
+                detail = (exc.stderr or "").strip() or f"exit {exc.returncode}"
+            else:
+                detail = str(exc)
+            message = (
+                "SITE-01 MARKED RENDERER GATE SKIP: npx marked unavailable "
+                f"({detail})"
+            )
+            print(message, file=sys.stderr)
+            self.skipTest(message)
+        if "<h1>Probe</h1>" not in probe.stdout:
+            message = (
+                "SITE-01 MARKED RENDERER GATE SKIP: npx marked unavailable "
+                "(probe did not return expected GFM HTML)"
+            )
+            print(message, file=sys.stderr)
+            self.skipTest(message)
+        self._assert_production_build_output_packs_below_lakebed_budget(
+            force_offline_renderer=False
+        )
 
 
 if __name__ == "__main__":

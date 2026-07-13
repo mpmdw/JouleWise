@@ -12,10 +12,12 @@ drift banner if so.
 - `docs/site/*.html` + `style.css` + `fonts/` are the source of truth (built
   by `scripts/build_site.py` from the repo's process docs).
 - `scripts/pack_capsule.py` packs that site into gitignored TypeScript
-  content modules under `server/content/` (gzip+base64 page bodies, one
-  shared stylesheet, per-source provenance stamps parsed from the pages).
+  content modules under `server/content/` (bounded gzip+Base64 page shards,
+  one shared style/freshness archive, a synchronous route/source manifest,
+  and provenance stamps parsed from the pages).
 - `server/index.ts` registers one HTTP endpoint per page (canonical path +
-  aliases), a `/style.css` endpoint, `/api/freshness` (live), `/api/health`.
+  aliases), lazily decodes and caches only the requested shard, and serves `/style.css`,
+  `/api/freshness` (live), and `/api/health`.
 - `client/index.tsx` is a tiny Preact shell that redirects `/` → `/index`
   (Lakebed reserves `/` and `/index.html` for the client shell).
 
@@ -27,6 +29,11 @@ python3 scripts/build_site.py
 python3 scripts/pack_capsule.py          # fonts OFF by default (see note)
 cd site_capsule && npx lakebed deploy    # updates the existing deployId
 ```
+
+The pack step prefers a cached or installed Lakebed executable to build and
+measure the real validator artifact, then fails before deploy if it exceeds 90%
+of the 1 MiB cap. If no executable is available, it falls back to the
+conservative estimator and labels that mode `estimator-only advisory`.
 
 `lakebed.json` pins the `deployId`, so `deploy` updates the same URL. The
 deploy is **claimed/owned** (needed for outbound `fetch` to GitHub); an
@@ -86,11 +93,13 @@ npx lakebed logs https://quiet-signal-6af8833395.lakebed.app
 
 ## Platform constraints worked around (so future edits don't reintroduce them)
 
-The Lakebed deploy validator textually scans server source (comments
-included) and rejects `process`, `fetch`, `globalThis`, `self`, unbounded
-`for(;;)` loops, and >2 MiB request bodies; the production runtime lacks a
-global object and has a broken `Response` constructor (`Buffer.alloc`).
-Hence: gzip+base64 page bodies emitted as chunked string literals, token
-escaping in the packer, a Unicode-escaped `fetch` identifier, a bounded
-decode loop, and a manual `DecompressionStream` + `TextDecoder` path (no
+The Lakebed deploy validator textually scans every file under `server/` and
+`shared/` (comments included) and rejects `process`, `fetch`, `globalThis`,
+`self`, any `for` loop with an omitted initializer (including `for(;;)`), and
+>2 MiB request bodies; the production runtime lacks a global object and has a
+broken `Response` constructor (`Buffer.alloc`).
+Hence: bounded gzip+Base64 shards emitted as chunked string literals, token
+escaping in the packer, a Unicode-escaped `fetch` identifier, bounded decode
+loops below the first-request instruction budget, and a manual
+`DecompressionStream` + `TextDecoder` path (no
 `Response`). Keep these if you edit `server/index.ts`.
