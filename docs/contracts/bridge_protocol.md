@@ -171,7 +171,9 @@ The envelope is a protocol failure if its sentinel is absent, duplicated,
 malformed, or not final. No non-whitespace content may follow its JSON line.
 Interior whitespace on the JSON line is allowed. Unknown additional object
 keys are tolerated and ignored for forward compatibility; the five required
-fields, their existing types, and the status enum remain mandatory.
+fields and the status enum remain mandatory. Normatively, `status` and
+`summary` are JSON strings, `summary` is nonempty, and `pathspec`,
+`verification`, and `flags` are JSON arrays whose elements are strings.
 
 Malformed or missing envelopes MUST NOT be interpreted as successful
 completion, regardless of preceding prose.
@@ -326,6 +328,12 @@ exclusive lock. The critical section reads active events, resolves stale
 state, checks conflicts, appends and flushes the event, then releases the
 lock.
 
+The session wrappers additionally serialize each complete open or close
+ceremony per repository under the exclusive
+`.codex-bridge/session.lock`. When both locks are needed, `session.lock` is
+always outer and `bridge.lock` inner; primitives called by a wrapper continue
+to hold `bridge.lock` only for their own critical sections.
+
 Overlapping active write leases hard-block acquisition.
 
 `lease-expand --lease-id ID --paths ...` is the atomic prospective-expansion
@@ -382,6 +390,11 @@ scripts/bridge session-close --invocation-id ID --status STATUS \
 capture, thread recording, or receipt creation fails after acquisition, it
 MUST abandon the lease with a recorded reason before returning nonzero. A hard
 process crash MAY leave the lease active; explicit recovery is then required.
+The invocation-id uniqueness check and the complete open ceremony are
+serialized by `session.lock`. Before acquiring a lease, `session-open` MUST
+refuse an invocation id already present in receipts, baseline manifests, the
+lease log, or the thread log. Every fresh attempt requires a new invocation
+id, including recovery after an abandoned pre-receipt attempt.
 
 On success it MUST create, without overwrite, an immutable
 `.codex-bridge/receipts/<invocation-id>.json` receipt with schema
@@ -392,26 +405,46 @@ fresh attempt requires a fresh invocation id. Standard output contains the
 receipt plus a `header_fragment` with `BASE_HEAD`, `BASELINE_MANIFEST`,
 `BASELINE_DIGEST`, and `WRITE_SCOPE` ready for the task header.
 
-`session-close` MUST load that receipt and run `scope-check`. The receipt's
-stored digest, or an explicitly supplied `--expect-digest`, is the only
-external digest anchor; the wrapper MUST NOT rediscover an expected digest
-from the manifest being checked. It handles outcomes as follows:
+`session-close` MUST serialize its entire body under `session.lock`, beginning
+before receipt, lease, or terminal-thread reads and ending after its final
+output. After taking the lock it re-reads terminal state. It MUST load the
+receipt-bound lease's current canonical paths from the authoritative lease
+event chain, independently validate the receipt binding, and verify that the
+receipt scope is a subset of the current lease scope; a mismatch is a
+`CHECK_ERROR`-style hard error. Close scope is therefore the receipt scope plus
+recorded prospective `lease-expand` events on that same lease. The wrapper
+passes those current paths and their canonical digest to `scope-check` and to
+the closing thread event.
 
-- For `SCOPE_OK` with `DONE`, or with `DISCUSSION` for a read-only session that
-  somehow held a lease, it records `complete` and the last bridge status, then
-  releases the lease.
-- For `NEEDS_SCOPE`, `NEEDS_RULING`, or `PARTIAL`, it records `waiting_lead`
-  and the last bridge status and retains the lease.
+The receipt's stored baseline digest, or an explicitly supplied
+`--expect-digest`, is the only external digest anchor; the wrapper MUST NOT
+rediscover an expected digest from the manifest being checked. It handles
+outcomes as follows:
+
+- For `SCOPE_OK` with `DONE`, it records `complete` and the last bridge
+  status, then releases the lease.
+- `DISCUSSION` may complete and release only when the receipt-bound lease has
+  `access: snapshot_read`, `scope-check` reports no persistent attributable
+  deltas, and no non-OK scope verdict applies. `DISCUSSION` against a write
+  lease is a hard error: no terminal thread event is appended and the lease
+  is retained.
+- For `NEEDS_SCOPE`, `NEEDS_RULING`, `PARTIAL`, `BLOCKED`, or `FAILED`, it
+  records `waiting_lead` and the actual bridge status and retains the lease.
+  Scope-check still runs; a non-OK verdict still exits nonzero.
 - For `SCOPE_VIOLATION`, `ATTRIBUTION_INDETERMINATE`, or `CHECK_ERROR`, it
   records the verdict in a `waiting_lead` thread event, retains the lease, and
   exits nonzero. A non-OK verdict never causes automatic release; release or
   abandonment after adjudication is an explicit lead action.
 
-Closing is idempotent: if a terminal thread event already records the same
-outcome and the lease is released, another close is a no-op notice with exit
-zero. The wrapper MUST NOT append contradictory terminal events. Its standard
-output reports the scope-check verdict, recorded thread state, and lease
-disposition.
+Closing is idempotent for every outcome. If the most recent thread event
+already records the same state, last bridge status, and current scope verdict,
+and the lease disposition is unchanged, another close is a no-op notice with
+the exit status that outcome normally has. A different status against an
+existing `complete` event is refused, and the wrapper MUST never append a
+contradictory terminal event. Standard output reports the scope-check verdict,
+recorded thread state, and observed lease disposition; errors after explicit
+release or abandonment report that actual state rather than claiming the
+lease was retained.
 
 ## 7. Baseline and scope check
 
