@@ -74,7 +74,7 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Restart By Machine-State Lane
 
-Source of truth: [state kernel](docs/process/state_kernel.json) (updated 2026-07-13). Latest report: [Restart close: #61-#63 merged at audited heads, site live under cap](docs/run_reports/2026-07-13-restart-merge-deploy.md).
+Source of truth: [state kernel](docs/process/state_kernel.json) (updated 2026-07-13). Latest report: [Bridge v1.1 merged (PR #65): co-work lane + session wrappers; steady state for audit gate](docs/run_reports/2026-07-13-bridge-v11.md).
 
 ### [ED-EXTERNAL]
 

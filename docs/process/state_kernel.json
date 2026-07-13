@@ -2,8 +2,8 @@
   "active_stop_card": null,
   "authority": "NOT_AUTHORITATIVE_DERIVED_VIEW",
   "latest_report": {
-    "label": "Restart close: #61-#63 merged at audited heads, site live under cap",
-    "path": "docs/run_reports/2026-07-13-restart-merge-deploy.md"
+    "label": "Bridge v1.1 merged (PR #65): co-work lane + session wrappers; steady state for audit gate",
+    "path": "docs/run_reports/2026-07-13-bridge-v11.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 2,
