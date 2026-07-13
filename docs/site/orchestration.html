@@ -36,7 +36,7 @@
 <a href="#where-to-read-the-evidence">Where to read the evidence</a></aside>
   <div class="doc-wrap doc-source-docs-orchestration-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/orchestration.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/orchestration.md · commit c0f8f48"><span class="source-file">docs/<wbr>orchestration.md</span><span class="source-commit">commit c0f8f48</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/orchestration.md · commit 5166e76"><span class="source-file">docs/<wbr>orchestration.md</span><span class="source-commit">commit 5166e76</span></span></div>
     <h1>The Orchestration Process</h1>
 <p>How this project is actually built: a human researcher directing a
 multi-model AI system whose workflow is itself a deliberate, versioned,
@@ -335,6 +335,10 @@ It writes <code>&lt;out&gt;.status</code>.</li>
 response snapshots, logs, status files, and
 <code>.codex-bridge/invocation_manifest.jsonl</code> rows with prompt/output/log
 hashes.</li>
+<li>Workspace-write bridge ceremony: <code>scripts/bridge session-open</code> and
+<code>session-close</code>; the reduced discussion header, tolerant return envelope,
+receipt anchoring, and recovery primitives are defined only in
+<code>docs/contracts/bridge_protocol.md</code> (<code>bridge-protocol/v1.1</code>).</li>
 <li>Skill-only mechanics on the operator&#39;s machine live under
 <code>~/.claude/skills</code>: <code>operation-loop</code> is the conductor,
 <code>codex-delegation</code> is the invocation/consumption contract,
@@ -370,7 +374,7 @@ design council; C-009 topology consensus; C-010 validation).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/orchestration.md · commit c0f8f48 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/orchestration.md · commit 5166e76 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

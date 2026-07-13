@@ -28,17 +28,17 @@
 <div class="doc-layout">
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#how-to-use-this-log">How To Use This Log</a>
 <a href="#index">Index</a>
-<a href="#d-059-claims-lint-mechanical-enforcement-in-ci">D-059: Claims-lint mechanical enforcement in CI</a>
 <a href="#d-060-depth-before-breadth-stop-line-ratified">D-060: Depth-before-breadth stop line (RATIFIED)</a>
 <a href="#d-061-review-layer-evaluation-rule-v2-replaces-the-two-zero-sessions-drop-rule">D-061: Review-layer evaluation rule v2 (replaces the two-zero-sessions drop rule)</a>
 <a href="#d-062-confirmatory-sampling-policy-fixed-n-explicit-demotion-no-silent-top-ups">D-062: Confirmatory sampling policy — fixed n, explicit demotion, no silent top-ups</a>
 <a href="#d-063-process-architecture-v2-machine-readable-state-kernel-first">D-063: Process architecture v2 — machine-readable state kernel first</a>
 <a href="#index-row">Index row</a>
 <a href="#d-064-delegated-invocation-compliance-surface-tracked-jsonl-event-stream-report-envelope-enforced-write-scope">D-064: Delegated-invocation compliance surface — tracked JSONL event stream, report envelope, enforced write scope</a>
-<a href="#adjudication-note-was-drafting-notes-for-the-lead">Adjudication note (was: drafting notes for the lead)</a></aside>
+<a href="#adjudication-note-was-drafting-notes-for-the-lead">Adjudication note (was: drafting notes for the lead)</a>
+<a href="#d-065-bridge-protocol-v1-1-co-work-lane-session-wrappers-tolerant-envelope">D-065: bridge-protocol/v1.1 — co-work lane, session wrappers, tolerant envelope</a></aside>
   <div class="doc-wrap doc-source-docs-decision-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/decision_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 55e67c2"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 55e67c2</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit e932027"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit e932027</span></span></div>
     <h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
@@ -385,33 +385,8 @@ must be re-examined, not quietly worked around.</li>
 </tbody></table></div>
 <hr>
 <blockquote>
-<p><strong>Site view:</strong> the complete entry index appears above; the 58 older full entries are omitted from this page for capsule size. The complete log is the repository file <a href="https://github.com/mpmdw/JouleWise/blob/main/docs/decision_log.md"><code>docs/decision_log.md</code></a>.</p>
+<p><strong>Site view:</strong> the complete entry index appears above; the 59 older full entries are omitted from this page for capsule size. The complete log is the repository file <a href="https://github.com/mpmdw/JouleWise/blob/main/docs/decision_log.md"><code>docs/decision_log.md</code></a>.</p>
 </blockquote>
-<h2 id="d-059-claims-lint-mechanical-enforcement-in-ci">D-059: Claims-lint mechanical enforcement in CI</h2>
-<ul>
-<li>Date: 2026-07-09</li>
-<li>Status: accepted</li>
-<li>Phase: cross-phase / claims tooling</li>
-</ul>
-<p>Decision (PR #37 + integration fix): <code>scripts/claims_lint.py</code> is the
-mechanical enforcement layer for the claims discipline — AP-row
-required-field/registry-field completeness (17-field contract, hard errors
-on malformed rows, strict multiplicity forms), registry integrity (closed
-sets incl. pre_hardware_preparable, duplicate IDs, AP-owner existence),
-campaign-pack draft AP linting (marker-gated; index/README files exempt),
-and a warning-only forbidden-language scan. A unittest lints the live repo
-in CI: breaking an AP row or the registry fails the build. The linter
-satisfies the C-023 cut-line condition for structural claim checks; the
-Phase 4 claims-index mode extends this tool rather than a new one.</p>
-<p>Consequences: the D-053 freeze discipline and D-055 registry are now
-machine-checked.</p>
-<p>Amendment (2026-07-11, P2-037): <code>claims_lint</code> gains an explicit
-<code>claim-index</code> mode over the canonical Phase-4 JSONL. It verifies the linked
-<code>joulewise.claim_verdicts.v1</code> bytes, canonical ID, AP/contrast/role/outcome,
-manifest/floor/bundle provenance, D-062 demotion, sensitivity caveats, and
-claim-level ceiling. The single pre-P2-037 manual-review L1 row is
-grandfathered only under its exact canonical row identity/hash and emits a
-warning; it does not become engine-supported evidence.</p>
 <h2 id="d-060-depth-before-breadth-stop-line-ratified">D-060: Depth-before-breadth stop line (RATIFIED)</h2>
 <ul>
 <li>Date: 2026-07-09; RATIFIED by Ed 2026-07-10 as written (C-028 session,
@@ -667,6 +642,54 @@ exit-77/<code>failed_preserved</code> semantics (verified against the live
 p2043-impl / p2044-fixround status files), and the v2-valid-for-
 pre-v3 transition sentence all stand. One addition per lead
 dictation: the day-one-defects sentence appended to clause 2.</p>
+<h2 id="d-065-bridge-protocol-v1-1-co-work-lane-session-wrappers-tolerant-envelope">D-065: bridge-protocol/v1.1 — co-work lane, session wrappers, tolerant envelope</h2>
+<ul>
+<li>Date: 2026-07-13 (Ed-directed; spec ratified from a lead+Sol xhigh
+design consult, thread <code>019f5d1d-b681-7db1-8714-812fdd2f198b</code>)</li>
+<li>Status: accepted (C-032; process-layer). Contract text is the ONE
+home for every wire rule; this entry records adoption and the
+process-binding consequences only.</li>
+<li>Phase: cross-project process instrumentation</li>
+</ul>
+<p>Context (state at recording: the v1.1 amendment is ratified and carried by PR #65, gate-complete and awaiting Ed&#39;s merge; it becomes the current contract on main when #65 merges): one production day of bridge-protocol/v1 showed the manual MCP
+write ceremony (~6 bookkeeping commands) pushing small writes off the
+bridge, a 13-field header taxing pure discussion turns, envelope
+strictness (minification, closed key set) failing substantively correct
+returns, a pinned reverse-consult effort, and effort-tier prose
+restated in four places. Ed directed a consult-first revision for
+&quot;maximum co-work&quot; with persistence in the top-level docs.</p>
+<p>Decision:</p>
+<ol>
+<li><code>docs/contracts/bridge_protocol.md</code> is amended (via PR #65) to
+<code>bridge-protocol/v1.1</code>: reduced discussion-lane header (+ context
+capsule and continuation deltas), <code>scripts/bridge session-open</code>/
+<code>session-close</code> as the PREFERRED write ceremony (receipt-anchored,
+fail-closed, <code>session.lock</code>-serialized with primitives, write-only
+in v1.1), tolerant single-final-line envelope with normative field
+types, per-call reverse-consult <code>effort</code> (<code>high</code>|<code>xhigh</code>) with an
+effort echo line and single-envelope deviation handling, and
+per-objective peer channels with bounded proposal diffs
+(aggregate ≈3 files/200 lines; durable provenance record when the
+lead applies one).</li>
+<li>Process bindings: design consults default to the discussion lane on
+a per-objective peer channel (never counted as independent review);
+delegated writes open and close through the wrappers, with the
+primitives reserved for recovery and adjudicated overrides;
+effort-tier policy prose lives only in
+<code>.claude/skills/codex/SKILL.md</code> §Effort selection (consumers carry
+at most the ratified one-line pointer); enforcement-boundary
+guardrails are exempt from dedup and stay explicit at their
+surfaces.</li>
+<li>Deferred, revisit on demonstrated need: snapshot_read wrapper
+sessions (v1.1 wrappers are write-only; the unreachable v1.1-draft
+DISCUSSION-success path was removed rather than enabled), and any
+expansion-receipt artifact (the lease event chain is the
+authoritative expanded-scope record).</li>
+</ol>
+<p>Evidence: PR #65 (final head <code>8b96bd4</code>, CI green, suite 1387 OK);
+review arc and per-layer catches in
+<code>docs/run_reports/2026-07-13-bridge-v11.md</code>; tracked invocation
+manifest <code>docs/process_traces/2026-07-13-bridge-v11.manifest.jsonl</code>.</p>
 
 
   </div>
@@ -675,7 +698,7 @@ dictation: the day-one-defects sentence appended to clause 2.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/decision_log.md · commit 55e67c2 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/decision_log.md · commit e932027 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

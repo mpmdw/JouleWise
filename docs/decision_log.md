@@ -3367,6 +3367,10 @@ Decision:
    expansion-receipt artifact (the lease event chain is the
    authoritative expanded-scope record).
 
+Addendum (same session, 2026-07-13): Ed named the merge; PR #65 MERGED
+as `d285989`; the v1.1 contract is now the current contract on main
+(merged-main suite lead-run: 1387 OK).
+
 Evidence: PR #65 (final head `8b96bd4`, CI green, suite 1387 OK);
 review arc and per-layer catches in
 `docs/run_reports/2026-07-13-bridge-v11.md`; tracked invocation

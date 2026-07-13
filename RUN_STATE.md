@@ -1,21 +1,20 @@
 # JouleWise Run State
 
-Last updated: 2026-07-13 (Bridge v1.1, Ed-directed same-day follow-on to
-PR #64: **PR #65 is GATE-COMPLETE and AWAITING ED'S MERGE** — the harness
-declined an agent self-merge of the agent-authored PR. All gates passed:
-Sol xhigh design consult → impl → 3 lenses → 3 fix rounds → 3 delta
-re-audits (findings 13→6→2→1), suite 1387 OK, CI green on final head
-`8b96bd4`, fresh pass over the post-review bench commit. v1.1 adds the
-discussion lane, `scripts/bridge session-open`/`session-close`
-(receipt-anchored, `session.lock`-serialized, write-only), tolerant
-envelopes, per-call reverse-consult effort, and peer channels + bounded
-proposal diffs (D-065). AFTER MERGE: regenerate + redeploy the site
-(front-facing docs changed). **PAUSE POINT unchanged: Ed's declared
-whole-project comprehensive audit remains the next gate before further
-feature work; this bridge session was Ed-directed preparation.**
-Window-A execution still requires a quiet machine + Ed. Records:
-`docs/run_reports/2026-07-13-bridge-v11.md` (this session) +
-`docs/run_reports/2026-07-13-restart-merge-deploy.md`.)
+Last updated: 2026-07-13 (STEADY STATE FOR THE AUDIT GATE. Bridge v1.1
+MERGED: PR #65 landed as `d285989` (Ed-named merge) — discussion lane,
+`scripts/bridge session-open`/`session-close` (receipt-anchored,
+`session.lock`-serialized, write-only), tolerant envelopes, per-call
+reverse-consult effort, peer channels + bounded proposal diffs (D-065,
+C-032). Merged-main suite lead-run: 1387 OK (skipped=10); bridge checker
+all PASS; no active leases; merged bridge branches deleted local+origin;
+site regenerated and packed (artifact 864,661 B, under cap) — the ONE
+outstanding action is the Lakebed upload, blocked by session permissions:
+`cd site_capsule && npx lakebed deploy` (Ed). **NEXT GATE unchanged:
+Ed's declared whole-project comprehensive audit precedes further feature
+work; method proposal pending Ed's approval.** Window-A execution still
+requires a quiet machine + Ed. Records:
+`docs/run_reports/2026-07-13-bridge-v11.md` (this session, incl. merge
+addendum) + `docs/run_reports/2026-07-13-restart-merge-deploy.md`.
 
 ## Start Here For Every Big Run
 
@@ -248,9 +247,9 @@ current restart instructions. Current state is the C-028 block above.
   3.14); `scripts/check-codex-mcp.mjs` 5/5 PASS with the v1.1 adapter;
   live session-open/close and reverse-consult probes recorded in
   `docs/run_reports/2026-07-13-bridge-v11.md`.
-- Current main `37a7c5e` (bookkeeping-only tree): canonical main suite
-  re-run pending the #65 merge (main code unchanged this session; the
-  prior main verification below still describes main's code state).
+- Merged main `d285989` (post #65): canonical `Ran 1387 tests`, `OK
+  (skipped=10)`, lead-run 2026-07-13 on the merged head;
+  `scripts/check-codex-mcp.mjs` all PASS; no active workspace leases.
 - Previous session (post #61-#63 merges + bridge v1 landing, pre-commit
   head `99b8640`): canonical `Ran 1318 tests in 111.017s`, `OK
   (skipped=10)`, lead-run 2026-07-13; bridge protocol checker 8/8 PASS;
@@ -414,15 +413,13 @@ current restart instructions. Current state is the C-028 block above.
 
 ## Known Workspace State
 
-- Main checkout is at `main@37a7c5e` = `origin/main`; the only
-  uncommitted changes are this session's bookkeeping (this file,
-  `TASK_QUEUE.md`, council C-032 row, decision D-065, the bridge-v1.1
-  run report, and `docs/process_traces/2026-07-13-bridge-v11*`),
-  committed straight to main per convention. All bridge v1.1 code/doc
-  changes live only on `impl/bridge-v1.1` (PR #65) until Ed merges.
-  One stale nested worktree (`.claude/worktrees/magical-jones-79e5f4`,
-  detached, clean) was removed this session to satisfy strict-scope
-  preflight.
+- Main checkout is at the post-#65 merge with the regenerated baked
+  site and merged-state bookkeeping committed straight to main per
+  convention; the tree is clean after the site-regen commit. Merged
+  bridge branches were deleted local+origin. One stale nested worktree
+  (`.claude/worktrees/magical-jones-79e5f4`, detached, clean) was
+  removed this session; the long-lived `JouleWise-wt/*` stream worktrees
+  are untouched. Only pending action: the Lakebed site upload (Ed).
 - The generated state-kernel blocks are explicitly non-authoritative;
   `RUN_STATE.md`, `TASK_QUEUE.md`, and `docs/decision_log.md` remain
   authoritative.

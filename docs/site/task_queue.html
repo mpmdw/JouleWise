@@ -38,7 +38,7 @@
 <a href="#queue-maintenance">Queue Maintenance</a></aside>
   <div class="doc-wrap doc-source-task-queue-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit c210c32"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit c210c32</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit e932027"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit e932027</span></span></div>
     <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -416,6 +416,13 @@ Normal ranking applies afterward, subject to the machine-state lanes below.</p>
 <td>2026-07-13</td>
 <td>analysis_manifest.py explicit-root-or-fail-closed resolution (C-028 SF3)</td>
 <td>No matrix row exists in a phase exit checklist for this hardening task; PR #61 (lens CLEAN, replay 1261 OK); installed-wheel CI now smokes the refusal (XSI-1 fix on main); same two reports</td>
+</tr>
+<tr>
+<td>CODEX-BRIDGE-3</td>
+<td>P0 Safety</td>
+<td>2026-07-13 (gate-complete; MERGE PENDING — move fully complete when Ed merges #65)</td>
+<td>bridge-protocol/v1.1 for maximum co-work (Ed-directed): discussion lane, session-open/close wrappers, tolerant envelope, per-call reverse effort, peer channels + proposal diffs</td>
+<td>PR #65 gate-complete AWAITING ED&#39;S MERGE (agent self-merge declined by harness); 3 lenses + 3 delta re-audits, findings 13→6→2→1; suite 1387 OK; CI green at <code>8b96bd4</code>; D-065; report <code>2026-07-13-bridge-v11.md</code></td>
 </tr>
 <tr>
 <td>CODEX-BRIDGE-2</td>
@@ -1108,22 +1115,14 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <td>P3 Research Expansion</td>
 <td>SHELVED — trigger: G6 (G6 reference milestone is complete)</td>
 <td>Evaluate post-reference developer polish: console entry point, macOS install/import CI, Ruff, and measured coverage reporting.</td>
-<td>Post-reference developer polish is adopted only from observed need; thresholds follow measurement rather than precedent. Evidence: Observed baseline justifies each adopted tool; Console entry point and macOS job only if useful; Measured coverage policy. Authority: <a href="docs/reviews/2026-07-10-hardening-adjudication.md">Hardening adjudication C10</a>. Acceptance: <a href="docs/process/state_kernel.json">CI-003 acceptance</a>.</td>
-</tr>
-<tr>
-<td>A28</td>
-<td>DOC-010</td>
-<td>P4 Polish</td>
-<td>SHELVED — trigger: DOC-008-proven-in-use (DOC-008 state kernel (merged PR #60, 2026-07-11) is proven in use)</td>
-<td>Audit non-authoritative historical material for bounded relocation after DOC-008 proves the state kernel.</td>
-<td>A post-DOC-008 audit relocates only non-authoritative history while preserving paths or redirects, citations, decision authority, and link inte
+<td>Post-reference developer polish is adopted only from observed need; thresholds follow measurement rather than precedent. Evidence: Observed baseline justifies each adopted tool; Console entry point and macOS job only if useful; Measured coverage policy. Authority: <a href="docs/reviews/2026-07-1
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit c210c32 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit e932027 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
