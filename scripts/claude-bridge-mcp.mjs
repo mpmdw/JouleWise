@@ -129,8 +129,12 @@ function bridgePrompt(body) {
     "Your response MUST end with exactly two nonempty lines: the literal sentinel " +
       "BRIDGE_REPORT_V1, then one JSON object on one physical line.",
     "That JSON object MUST contain status, summary, pathspec, verification, and flags; " +
-      "status must be DISCUSSION, or NEEDS_RULING for an advisory question, pathspec must be [], " +
+      "status must be DISCUSSION, or NEEDS_RULING for an advisory question; summary is a string; " +
+      "pathspec, verification, and flags are JSON arrays of strings and pathspec must be []; " +
       "unknown additional keys are tolerated, and nothing may follow the JSON line.",
+    "Example final two lines:",
+    "BRIDGE_REPORT_V1",
+    '{"status":"DISCUSSION","summary":"<one-sentence outcome>","pathspec":[],"verification":[],"flags":[]}',
     "",
     body,
   ].join("\n");
