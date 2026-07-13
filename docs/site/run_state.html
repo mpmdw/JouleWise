@@ -40,24 +40,23 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit e932027"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit e932027</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit a89195e"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit a89195e</span></span></div>
     <h1>JouleWise Run State</h1>
-<p>Last updated: 2026-07-13 (Bridge v1.1, Ed-directed same-day follow-on to
-PR #64: <strong>PR #65 is GATE-COMPLETE and AWAITING ED&#39;S MERGE</strong> — the harness
-declined an agent self-merge of the agent-authored PR. All gates passed:
-Sol xhigh design consult → impl → 3 lenses → 3 fix rounds → 3 delta
-re-audits (findings 13→6→2→1), suite 1387 OK, CI green on final head
-<code>8b96bd4</code>, fresh pass over the post-review bench commit. v1.1 adds the
-discussion lane, <code>scripts/bridge session-open</code>/<code>session-close</code>
-(receipt-anchored, <code>session.lock</code>-serialized, write-only), tolerant
-envelopes, per-call reverse-consult effort, and peer channels + bounded
-proposal diffs (D-065). AFTER MERGE: regenerate + redeploy the site
-(front-facing docs changed). <strong>PAUSE POINT unchanged: Ed&#39;s declared
-whole-project comprehensive audit remains the next gate before further
-feature work; this bridge session was Ed-directed preparation.</strong>
-Window-A execution still requires a quiet machine + Ed. Records:
-<code>docs/run_reports/2026-07-13-bridge-v11.md</code> (this session) +
-<code>docs/run_reports/2026-07-13-restart-merge-deploy.md</code>.)</p>
+<p>Last updated: 2026-07-13 (STEADY STATE FOR THE AUDIT GATE. Bridge v1.1
+MERGED: PR #65 landed as <code>d285989</code> (Ed-named merge) — discussion lane,
+<code>scripts/bridge session-open</code>/<code>session-close</code> (receipt-anchored,
+<code>session.lock</code>-serialized, write-only), tolerant envelopes, per-call
+reverse-consult effort, peer channels + bounded proposal diffs (D-065,
+C-032). Merged-main suite lead-run: 1387 OK (skipped=10); bridge checker
+all PASS; no active leases; merged bridge branches deleted local+origin;
+site regenerated and packed (artifact 864,661 B, under cap) — the ONE
+outstanding action is the Lakebed upload, blocked by session permissions:
+<code>cd site_capsule &amp;&amp; npx lakebed deploy</code> (Ed). <strong>NEXT GATE unchanged:
+Ed&#39;s declared whole-project comprehensive audit precedes further feature
+work; method proposal pending Ed&#39;s approval.</strong> Window-A execution still
+requires a quiet machine + Ed. Records:
+<code>docs/run_reports/2026-07-13-bridge-v11.md</code> (this session, incl. merge
+addendum) + <code>docs/run_reports/2026-07-13-restart-merge-deploy.md</code>.</p>
 <h2 id="start-here-for-every-big-run">Start Here For Every Big Run</h2>
 <p>Before starting substantial work:</p>
 <ol>
@@ -109,7 +108,7 @@ record below. Normal queue/mission pointers apply.</p>
 <h2>ACTIVE_STOP_CARD</h2>
 <p>Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 (<a href="docs/decision_log.md">decision log</a>).</p>
 <h2 id="restart-by-machine-state-lane">Restart By Machine-State Lane</h2>
-<p>Source of truth: <a href="docs/process/state_kernel.json">state kernel</a> (updated 2026-07-13). Latest report: <a href="docs/run_reports/2026-07-13-restart-merge-deploy.md">Restart close: #61-#63 merged at audited heads, site live under cap</a>.</p>
+<p>Source of truth: <a href="docs/process/state_kernel.json">state kernel</a> (updated 2026-07-13). Latest report: <a href="docs/run_reports/2026-07-13-bridge-v11.md">Bridge v1.1 merged (PR #65): co-work lane + session wrappers; steady state for audit gate</a>.</p>
 <h3>[ED-EXTERNAL]</h3>
 <ul>
 <li>READY — E1 <code>P1-008</code>: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).</li>
@@ -301,9 +300,8 @@ CI green on the final head (build, installed-wheel, tests 3.11 +
 3.14); <code>scripts/check-codex-mcp.mjs</code> 5/5 PASS with the v1.1 adapter;
 live session-open/close and reverse-consult probes recorded in
 <code>docs/run_reports/2026-07-13-bridge-v11.md</code>.</li>
-<li>Current main <code>37a7c5e</code> (bookkeeping-only tree): canonical main suite
-re-run pending the #65 merge (main code unchanged this session; the
-prior main verification below still describes main&#39;s code state).</li>
+<li>Merged main <code>d285989</code> (post #65): canonical <code>Ran 1387 tests</code>, <code>OK (skipped=10)</code>, lead-run 2026-07-13 on the merged head;
+<code>scripts/check-codex-mcp.mjs</code> all PASS; no active workspace leases.</li>
 <li>Previous session (post #61-#63 merges + bridge v1 landing, pre-commit
 head <code>99b8640</code>): canonical <code>Ran 1318 tests in 111.017s</code>, <code>OK (skipped=10)</code>, lead-run 2026-07-13; bridge protocol checker 8/8 PASS;
 bridge focused tests 4/4 OK. Merged-main backstop at <code>12131b0</code> was
@@ -475,15 +473,13 @@ the new era rule (PR #22 live gate: 6/6 valid, tamper fails named).</p>
 </ul>
 <h2 id="known-workspace-state">Known Workspace State</h2>
 <ul>
-<li>Main checkout is at <code>main@37a7c5e</code> = <code>origin/main</code>; the only
-uncommitted changes are this session&#39;s bookkeeping (this file,
-<code>TASK_QUEUE.md</code>, council C-032 row, decision D-065, the bridge-v1.1
-run report, and <code>docs/process_traces/2026-07-13-bridge-v11*</code>),
-committed straight to main per convention. All bridge v1.1 code/doc
-changes live only on <code>impl/bridge-v1.1</code> (PR #65) until Ed merges.
-One stale nested worktree (<code>.claude/worktrees/magical-jones-79e5f4</code>,
-detached, clean) was removed this session to satisfy strict-scope
-preflight.</li>
+<li>Main checkout is at the post-#65 merge with the regenerated baked
+site and merged-state bookkeeping committed straight to main per
+convention; the tree is clean after the site-regen commit. Merged
+bridge branches were deleted local+origin. One stale nested worktree
+(<code>.claude/worktrees/magical-jones-79e5f4</code>, detached, clean) was
+removed this session; the long-lived <code>JouleWise-wt/*</code> stream worktrees
+are untouched. Only pending action: the Lakebed site upload (Ed).</li>
 <li>The generated state-kernel blocks are explicitly non-authoritative;
 <code>RUN_STATE.md</code>, <code>TASK_QUEUE.md</code>, and <code>docs/decision_log.md</code> remain
 authoritative.</li>
@@ -520,7 +516,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit e932027 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit a89195e · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

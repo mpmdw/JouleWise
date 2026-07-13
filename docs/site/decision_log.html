@@ -38,7 +38,7 @@
 <a href="#d-065-bridge-protocol-v1-1-co-work-lane-session-wrappers-tolerant-envelope">D-065: bridge-protocol/v1.1 — co-work lane, session wrappers, tolerant envelope</a></aside>
   <div class="doc-wrap doc-source-docs-decision-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/decision_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit e932027"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit e932027</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 1844ffa"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 1844ffa</span></span></div>
     <h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
@@ -686,6 +686,9 @@ DISCUSSION-success path was removed rather than enabled), and any
 expansion-receipt artifact (the lease event chain is the
 authoritative expanded-scope record).</li>
 </ol>
+<p>Addendum (same session, 2026-07-13): Ed named the merge; PR #65 MERGED
+as <code>d285989</code>; the v1.1 contract is now the current contract on main
+(merged-main suite lead-run: 1387 OK).</p>
 <p>Evidence: PR #65 (final head <code>8b96bd4</code>, CI green, suite 1387 OK);
 review arc and per-layer catches in
 <code>docs/run_reports/2026-07-13-bridge-v11.md</code>; tracked invocation
@@ -698,7 +701,7 @@ manifest <code>docs/process_traces/2026-07-13-bridge-v11.manifest.jsonl</code>.<
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/decision_log.md · commit e932027 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/decision_log.md · commit 1844ffa · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
