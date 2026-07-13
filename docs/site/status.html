@@ -37,14 +37,14 @@
     <p data-live-field="snapshot-detail">Static fallback is shown until the live status endpoint responds.</p>
   </div>
   <div class="live-meta">
-    <span>Built <span class="mono" data-live-field="build">2302f33</span></span>
+    <span>Built <span class="mono" data-live-field="build">0e7616a</span></span>
     <span>Live check <span class="mono" data-live-field="checked-at">pending</span></span>
   </div>
 </section>
 <section class="console-strip">
   <div class="status-summary">
     <div><span class="card-label">Current phase</span><strong data-live-field="phase">Phase 2 in progress</strong></div>
-    <div><span class="card-label">Next</span><strong class="mono" data-live-field="next">INT-59</strong></div>
+    <div><span class="card-label">Next</span><strong class="mono" data-live-field="next">P2-015-SMOKE</strong></div>
     <div><span class="card-label">Verification</span><strong class="mono" data-live-field="verification">877 tests</strong></div>
     <div><span class="card-label">Corpus</span><strong class="mono" data-live-field="corpus">6 bundles</strong></div>
   </div>
@@ -79,31 +79,31 @@
       <div class="card-label">Next quiet-machine window <span class="status-chip amber">NO-AGENT-LOCK</span></div>
       <div><span class="mono">P2-010</span> P2-010b remainder: affine smoke campaign execution + envelope-gate verdict on its bundles</div>
 <div><span class="mono">P2-046B</span> Real-Mac counterbalanced load-transition alignment characterization validating (or widening) P2-038&#x27;s conservative interval-support bound</div>
-      <span class="source-chip" title="TASK_QUEUE.md · commit f16b83e"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit f16b83e</span></span>
+      <span class="source-chip" title="TASK_QUEUE.md · commit 0e7616a + uncommitted"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 0e7616a + uncommitted</span></span>
     </div>
   </div>
 </section>
 <section class="flight-recorder">
   <article class="station reveal-stagger" style="--delay:0ms">
     <div class="station-num">01</div><div><h2>What is true now</h2>
-    <p data-live-field="phase-line">Phase 1 closing; Phase 2 in progress - instrument pre-campaign software review CLEARED (Window A begins with C-019 shakedown and P2-015-SMOKE in a lead-controlled quiet-machine session; every software prerequisite and the external-backup gate are satisfied); P2-013 evidence-integrity and P2-014 provenance fixes are complete; workload-suite build is merged; CP-5 pre-campaign review is COMPLETE and CLEARED (2026-07-09, PRs #22..#28; see <code>docs/run_reports/2026-07-09-cp5-resume.md</code>); the P2-015 design doc is merged; P2-038/P2-039/P2-040/P2-041/P2-042 and P2-037 are landed; PR #59 remains open as a bounded follow-up and does not reopen C-028</p><p><span data-live-field="status-line"><strong>C-028 CLOSED (2026-07-11): the full hardening + analysis-engine arc is on main.</strong></span> <a href="run_state.html">RUN_STATE.md</a></p><span class="source-chip" title="PROJECT_STATUS.md · commit 55e67c2"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 55e67c2</span></span> <span class="source-chip" title="RUN_STATE.md · commit 2302f33"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 2302f33</span></span></div>
+    <p data-live-field="phase-line">Phase 1 closing; Phase 2 in progress - instrument pre-campaign software review CLEARED (Window A begins with C-019 shakedown and P2-015-SMOKE in a lead-controlled quiet-machine session; every software prerequisite and the external-backup gate are satisfied); P2-013 evidence-integrity and P2-014 provenance fixes are complete; workload-suite build is merged; CP-5 pre-campaign review is COMPLETE and CLEARED (2026-07-09, PRs #22..#28; see <code>docs/run_reports/2026-07-09-cp5-resume.md</code>); the P2-015 design doc is merged; P2-038/P2-039/P2-040/P2-041/P2-042 and P2-037 are landed; PR #59 remains open as a bounded follow-up and does not reopen C-028</p><p><span data-live-field="status-line"><strong>C-028 CLOSED (2026-07-11): the full hardening + analysis-engine arc is on main.</strong></span> <a href="run_state.html">RUN_STATE.md</a></p><span class="source-chip" title="PROJECT_STATUS.md · commit 55e67c2"><span class="source-file">PROJECT_STATUS.md</span><span class="source-commit">commit 55e67c2</span></span> <span class="source-chip" title="RUN_STATE.md · commit 0e7616a + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 0e7616a + uncommitted</span></span></div>
   </article>
   <article class="station reveal-stagger" style="--delay:90ms">
     <div class="station-num">02</div><div><h2>What changed</h2>
-    <p><span class="mono">2026-07-11</span> P2-041 vetted rebuild (uncommitted; lead pathspec review and commit pending)</p>
-    <p><a href="latest_run_report.html">docs/run_reports/2026-07-11-p2041-vetted-rebuild.md</a></p><span class="source-chip" title="RUN_STATE.md · commit 2302f33"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 2302f33</span></span></div>
+    <p><span class="mono">2026-07-12</span> Agent-lane triple</p>
+    <p><a href="latest_run_report.html">docs/run_reports/2026-07-12-agent-lane-triple.md</a></p><span class="source-chip" title="RUN_STATE.md · commit 0e7616a + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 0e7616a + uncommitted</span></span></div>
   </article>
   <article class="station reveal-stagger" style="--delay:180ms">
     <div class="station-num">03</div><div><h2>What happens next</h2>
-    <ol class="queue-mini"><li><span class="mono">#0 INT-59</span>
-        <span class="lane-chip lane-agent">AGENT</span>
-        <span>Merge the bounded integration-review cleanup/ratio-readiness follow-up</span></li>
-<li><span class="mono">#0a DOC-008</span>
-        <span class="lane-chip lane-agent">AGENT</span>
-        <span>Machine-readable state kernel with explicit <code>NOT_AUTHORITATIVE_DERIVED_VIEW</code> authority</span></li>
-<li><span class="mono">#1 P2-015-SMOKE</span>
+    <ol class="queue-mini"><li><span class="mono">#1 P2-015-SMOKE</span>
         
-        <span>Tasks-sampler overhead smoke + C-019 production-shaped shakedown (campaign runner → strict → reduce → backup)</span></li></ol><span class="source-chip" title="TASK_QUEUE.md · commit f16b83e"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit f16b83e</span></span></div>
+        <span>Tasks-sampler overhead smoke + C-019 production-shaped shakedown (campaign runner → strict → reduce → backup)</span></li>
+<li><span class="mono">#2 P2-015</span>
+        
+        <span>Detection-floor calibration campaign for gross request, idle-sub request, phase window, and item/level window, plus comparative MDE</span></li>
+<li><span class="mono">#3 P2-006</span>
+        
+        <span>Homogeneous baselines (slice 2M) on the Mac target</span></li></ol><span class="source-chip" title="TASK_QUEUE.md · commit 0e7616a + uncommitted"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 0e7616a + uncommitted</span></span></div>
   </article>
   <article class="station reveal-stagger" style="--delay:270ms">
     <div class="station-num">04</div><div><h2>What could invalidate it</h2>
@@ -115,7 +115,7 @@
   </article>
   <article class="station reveal-stagger" style="--delay:360ms">
     <div class="station-num">05</div><div><h2>Where the evidence lives</h2>
-    <p><span class="mono">6</span> real corpus bundles pass strict validation. Start from <a href="library.html">Sources</a>, <a href="risk_register.html">Risk Register</a>, and <a href="../project_critique_review.html">Independent critique · second-passed</a>.</p><span class="source-chip" title="RUN_STATE.md · commit 2302f33"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 2302f33</span></span></div>
+    <p><span class="mono">6</span> real corpus bundles pass strict validation. Start from <a href="library.html">Sources</a>, <a href="risk_register.html">Risk Register</a>, and <a href="../project_critique_review.html">Independent critique · second-passed</a>.</p><span class="source-chip" title="RUN_STATE.md · commit 0e7616a + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 0e7616a + uncommitted</span></span></div>
   </article>
 </section>
 <section class="advisor-depth-grid">
@@ -128,7 +128,7 @@
 <article class="advisor-card"><span class="mono">P1-003 · P1 Phase Gate</span><h3>Record wall-meter decision</h3><p>Meter make/model or &quot;unavailable&quot; verdict plus measurement/export method (exit-checklist wall-meter section; informs D-018 boundary calibration)</p></article>
 <article class="advisor-card"><span class="mono">P1-004 · P1 Phase Gate</span><h3>Fill network/interconnect topology plan</h3><p>Physical topology, link-speed paths, and throughput method recorded in the exit-checklist network section</p></article>
 <article class="advisor-card"><span class="mono">R-001</span><h3>Supervisor approval delayed or scope shifts</h3><p>Risk status: open</p></article></div>
-    <span class="source-chip" title="TASK_QUEUE.md · commit f16b83e"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit f16b83e</span></span> <span class="source-chip" title="docs/risk_register.md · commit 2a2047f"><span class="source-file">docs/<wbr>risk_register.md</span><span class="source-commit">commit 2a2047f</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 0e7616a + uncommitted"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 0e7616a + uncommitted</span></span> <span class="source-chip" title="docs/risk_register.md · commit 2a2047f"><span class="source-file">docs/<wbr>risk_register.md</span><span class="source-commit">commit 2a2047f</span></span>
   </article>
   <article class="advisor-panel">
     <div class="card-label">Campaign readiness</div>
@@ -140,7 +140,7 @@
 <tr><td>Real-tokenizer suites</td><td>P2-012 · MERGED</td><td>Campaign bundles strict-valid per AP-4; no category claims outside matched strata</td><td><a href="task_queue.html">P2-012</a></td></tr>
 <tr><td>Text-path hash guard</td><td>not in active queue</td><td>Fail-closed expected-vs-realized token-hash check before scale.</td><td><a href="task_queue.html">P2-025</a></td></tr>
 <tr><td>Publishable bundle pack</td><td>P2-027 · MERGED</td><td>Published pack + a documented external re-reduction; until then the review doc&#x27;s auditability claim stays L0-scoped</td><td><a href="task_queue.html">P2-027</a></td></tr></table></div>
-    <span class="source-chip" title="TASK_QUEUE.md · commit f16b83e"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit f16b83e</span></span>
+    <span class="source-chip" title="TASK_QUEUE.md · commit 0e7616a + uncommitted"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 0e7616a + uncommitted</span></span>
   </article>
   <article class="advisor-panel">
     <div class="card-label">Evidence board</div>
@@ -149,8 +149,8 @@
 <article class="evidence-card"><div class="card-label">L0 auditability until external re-reduction lands</div><h3>Real corpus auditability</h3><p>6 real corpus bundles pass strict validation without rewriting.</p><a href="project_status.html">Open evidence</a></article>
 <article class="evidence-card"><div class="card-label">Pre-campaign evidence; not yet campaign-backed claims</div><h3>Suite substrate</h3><p>Generic suite markers, per-item outputs, strict rollup provenance, mock and MLX gates.</p><a href="latest_run_report.html">Open evidence</a></article>
 <article class="evidence-card"><div class="card-label">Descriptive L1 unless AP rows/floors support more</div><h3>First energy numbers</h3><p>M3 Max MLX runs and flagship 122B run establish measured local inference baselines.</p><a href="results.html">Open evidence</a></article>
-<article class="evidence-card"><div class="card-label">Review provenance, not scientific evidence by itself</div><h3>Process record</h3><p>Latest report: 2026-07-11 P2-041 vetted rebuild (uncommitted; lead pathspec review and commit pending).</p><a href="record.html">Open evidence</a></article></div>
-    <span class="source-chip" title="RUN_STATE.md · commit 2302f33"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 2302f33</span></span> <span class="source-chip" title="docs/run_reports/2026-07-11-p2041-vetted-rebuild.md · commit f2c4701"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-11-p2041-vetted-rebuild.md</span><span class="source-commit">commit f2c4701</span></span>
+<article class="evidence-card"><div class="card-label">Review provenance, not scientific evidence by itself</div><h3>Process record</h3><p>Latest report: 2026-07-12 Agent-lane triple.</p><a href="record.html">Open evidence</a></article></div>
+    <span class="source-chip" title="RUN_STATE.md · commit 0e7616a + uncommitted"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit 0e7616a + uncommitted</span></span> <span class="source-chip" title="docs/run_reports/2026-07-12-agent-lane-triple.md · commit 0e7616a"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-12-agent-lane-triple.md</span><span class="source-commit">commit 0e7616a</span></span>
   </article>
   <article class="advisor-panel claim-guard">
     <div class="card-label">Claims allowed today</div>
@@ -231,7 +231,7 @@
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>PROJECT_STATUS.md · commit 55e67c2 · RUN_STATE.md · commit 2302f33 · TASK_QUEUE.md · commit f16b83e · docs/risk_register.md · commit 2a2047f · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>PROJECT_STATUS.md · commit 55e67c2 · RUN_STATE.md · commit 0e7616a + uncommitted · TASK_QUEUE.md · commit 0e7616a + uncommitted · docs/risk_register.md · commit 2a2047f · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

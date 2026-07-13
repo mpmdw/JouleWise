@@ -38,7 +38,7 @@
 <a href="#queue-maintenance">Queue Maintenance</a></aside>
   <div class="doc-wrap doc-source-task-queue-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>TASK_QUEUE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit f16b83e"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit f16b83e</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="TASK_QUEUE.md · commit 0e7616a + uncommitted"><span class="source-file">TASK_QUEUE.md</span><span class="source-commit">commit 0e7616a + uncommitted</span></span></div>
     <h1>JouleWise Task Queue</h1>
 <p>This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.</p>
@@ -126,10 +126,11 @@ sessions.</li>
 purchases, destinations.</li>
 </ul>
 <h2 id="current-queue">Current Queue</h2>
-<p>C-028 was CLEARED 2026-07-11. PRs #41-#58 are merged; PR #59 remains open
-as a bounded integration-review follow-up. Every Window-A software gate and
-P0-003 are satisfied. Normal ranking applies, subject to the machine-state
-lanes below.</p>
+<p>C-028 was CLEARED 2026-07-11 and the arc is fully closed: PRs #41-#60 are
+ALL merged (incl. #59 integration findings and #60 DOC-008 kernel; both rows
+retired to Completed 2026-07-11). Every Window-A software gate and P0-003
+are satisfied. Normal ranking applies, subject to the machine-state lanes
+below.</p>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -142,22 +143,6 @@ lanes below.</p>
 </tr>
 </thead>
 <tbody><tr>
-<td align="right">0</td>
-<td>INT-59</td>
-<td>P2 Next Slice</td>
-<td>PR #59 OPEN; lead worktree replay 1,224 OK (<code>skipped=12</code>) [AGENT]</td>
-<td>Merge the bounded integration-review cleanup/ratio-readiness follow-up</td>
-<td>CI green + final-head review; two-layer waiver reconciliation remains unwaivable at engine claim-readiness layer</td>
-</tr>
-<tr>
-<td align="right">0a</td>
-<td>DOC-008</td>
-<td>P2 Next Slice</td>
-<td>BRANCH PUSHED (<code>impl/doc008-kernel</code>); awaiting PR + lead gate (C-027/D-063) [AGENT]</td>
-<td>Machine-readable state kernel with explicit <code>NOT_AUTHORITATIVE_DERIVED_VIEW</code> authority</td>
-<td>Open PR; generated blocks byte-reproducible; authoritative Markdown surfaces remain authoritative</td>
-</tr>
-<tr>
 <td align="right">1</td>
 <td>P2-015-SMOKE</td>
 <td>P2 Next Slice</td>
@@ -350,10 +335,18 @@ lanes below.</p>
 <td>P1-006 live checklist evidence is required before any promotion; software/localhost evidence is not live NVIDIA validation</td>
 </tr>
 <tr>
+<td align="right">16a2</td>
+<td>SITE-01</td>
+<td>P2 Next Slice</td>
+<td>PR #63 OPEN 2026-07-12 (gzip shards, measured artifact 865,973 B / 17.4% under cap; lead-gated); REMAINING: delta re-audit pre-merge + lead live deploy post-merge [AGENT]</td>
+<td>Trim/paginate the site capsule so deploys fit the cap; redeploy</td>
+<td>Live capsule current again; freshness drift banner clear; report <code>docs/run_reports/2026-07-12-agent-lane-triple.md</code></td>
+</tr>
+<tr>
 <td align="right">16b</td>
 <td>P2-049</td>
 <td>P3 Hardening Candidates</td>
-<td>NEW (C-028 integration review SF3, lead-verified narrow, PRE-EXISTS #46) [AGENT]</td>
+<td>PR #61 OPEN 2026-07-12, FULLY GATED (lens CLEAN, lead replay 1261 OK, CI green); needs only the merge click (harness denied lead self-merge) [ED or AGENT]</td>
 <td>analysis_manifest.py ROOT default (line 27) resolves to site-packages when installed — replace with explicit-root-or-fail-closed</td>
 <td>Installed-package manifest validation refuses with clear message instead of wrong-dir lookup</td>
 </tr>
@@ -369,8 +362,8 @@ lanes below.</p>
 <td align="right">16d</td>
 <td>TOOL-01</td>
 <td>P3 Tooling</td>
-<td>NEW (C-028; personal tooling, non-repo) [LEAD]</td>
-<td>codex-run-v3 known defects: resume-after-NEEDS_SCOPE no-op; preventive permission profiles (phase 2); NEEDS_RULING runner recognition</td>
+<td>NEW (C-028; personal tooling, non-repo; +2 defects 2026-07-12) [LEAD]</td>
+<td>codex-run-v3 known defects: resume-after-NEEDS_SCOPE no-op; preventive permission profiles (phase 2); NEEDS_RULING runner recognition; effort default passes through ~/.codex config (ran a whole arc at unintended ultra — should default xhigh when --effort omitted); upstream stream-death can exit OK with thin/empty out-file (should be FAILED, not OK+warn)</td>
 <td>Fixes recorded in ~/.claude adapter ops lessons; next tooling round</td>
 </tr>
 <tr>
@@ -418,6 +411,27 @@ lanes below.</p>
 </tr>
 </thead>
 <tbody><tr>
+<td>CODEX-BRIDGE-2</td>
+<td>P0 Safety</td>
+<td>2026-07-12</td>
+<td>Pin <code>gpt-5.6-sol</code>/<code>xhigh</code> throughout the Claude Code harness and remove stale local-skill defaults</td>
+<td>Project MCP default + explicit Claude agent/command/skill controls; model-pinned audited fallback; protocol checker; live <code>/codex</code> smoke <code>JOULEWISE_SOL_56_SLASH_OK</code> on thread <code>019f5a10-d9d4-7250-b9b0-b4b481dd3909</code>; report <code>2026-07-12-claude-sol-bridge.md</code></td>
+</tr>
+<tr>
+<td>INT-59</td>
+<td>P2 Next Slice</td>
+<td>2026-07-11</td>
+<td>Bounded integration-review cleanup/ratio-readiness follow-up</td>
+<td>No matrix row exists in <code>docs/phase_2/phase_2_exit_checklist.md</code> for this integration-review follow-up; PR #59 MERGED 2026-07-11; post-merge main canonical 1,258 OK/10 skipped at <code>194ea39</code> (lead-run)</td>
+</tr>
+<tr>
+<td>DOC-008</td>
+<td>P2 Next Slice</td>
+<td>2026-07-11</td>
+<td>Machine-readable state kernel (schema v2, <code>NOT_AUTHORITATIVE_DERIVED_VIEW</code> authority) generating the RUN_STATE restart block + live queue view</td>
+<td>No matrix row exists in <code>docs/phase_2/phase_2_exit_checklist.md</code> for this process-infrastructure task; PR #60 MERGED 2026-07-11; <code>gen_state.py --check</code> exit 0; <code>tests.test_gen_state</code> green; DOC-010 trigger now an event dependency (kernel proven in use)</td>
+</tr>
+<tr>
 <td>C-028</td>
 <td>P0/P1 integration arc</td>
 <td>2026-07-11</td>
@@ -981,14 +995,6 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <td>Promotion decided per registry rules; harness gaps closed before promotion. Evidence: Registry promotion record per docs/research_question_bank.md rules; G-RQVAR-* harness gaps implemented with tests. Authority: <a href="docs/specs/rq_energy_variance_design.md">RQ-ENERGY-VARIANCE candidate design</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-035 acceptance</a>. Fence: C-004 quarantine binds; no promotion before floors exist (C-004 quarantine).</td>
 </tr>
 <tr>
-<td>A11</td>
-<td>DOC-008</td>
-<td>P2 Next Slice</td>
-<td>ACTIVE</td>
-<td>Machine-readable state kernel generating the RUN_STATE restart block and live queue view; PROJECT_STATUS compaction with history archive; retire the planning reflection protocol as standalone intake; two-writer rule and credential-boundary push procedure into docs/orchestration.md.</td>
-<td>Schema-version-2 kernel carries the fixed derived-view authority notice; generated blocks are byte-reproducible; one next-action surface remains. Evidence: Top-level authority notice is required and fixed; python3 scripts/gen_state.py --check exits 0; python3 -m unittest tests.test_gen_state passes; One next-action surface remains. Authority: <a href="docs/specs/c027/doc-008_state_kernel.md">DOC-008 spec (D-063 Stage 1)</a>. Acceptance: <a href="docs/process/state_kernel.json">DOC-008 acceptance</a>. Note: Final C-028 live-state refresh is in progress; live RUN_STATE/TASK_QUEUE marker conversion remains lead-owned.</td>
-</tr>
-<tr>
 <td>A16</td>
 <td>P3-000</td>
 <td>P3 Research Expansion</td>
@@ -1024,9 +1030,9 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <td>A20</td>
 <td>P2-028</td>
 <td>P2 Next Slice</td>
-<td>READY</td>
+<td>ACTIVE</td>
 <td>Response-hash determinism gate script: formal check that repeated same-config bundles have byte-identical per-item response hashes within rep groups.</td>
-<td>Script emits a named verdict from 2+ strict-valid bundles. Evidence: Named verdict from 2+ strict-valid bundles; Existing real bundles pass formally. Authority: <a href="docs/reviews/2026-07-09-c027-whole-project-review.md">CP-6 adjudication record</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-028 acceptance</a>.</td>
+<td>Script emits a named verdict from 2+ strict-valid bundles. Evidence: Named verdict from 2+ strict-valid bundles; Existing real bundles pass formally. Authority: <a href="docs/run_reports/2026-07-09-cp5-resume.md">CP-6 adjudication (CP-5 resume session record)</a>. Acceptance: <a href="docs/process/state_kernel.json">P2-028 acceptance</a>. Note: PR #62 open (2026-07-12); implementation + two lenses + fix rounds + lead gate done; fresh delta re-audit owed pre-merge.</td>
 </tr>
 <tr>
 <td>A21</td>
@@ -1109,21 +1115,16 @@ D-027 rail rows, 2N.3 observed-token fallback).</li>
 <td>A28</td>
 <td>DOC-010</td>
 <td>P4 Polish</td>
-<td>SHELVED — trigger: DOC-008 (DOC-008 state kernel is complete and proven in use)</td>
+<td>SHELVED — trigger: DOC-008-proven-in-use (DOC-008 state kernel (merged PR #60, 2026-07-11) is proven in use)</td>
 <td>Audit non-authoritative historical material for bounded relocation after DOC-008 proves the state kernel.</td>
-<td>A post-DOC-008 audit relocates only non-authoritative history while preserving paths or redirects, citations, decision authority, and link integrity. Evidence: Only non-authoritative historical material moves; Paths or redirects preserve citations; Decision and evidence links remain intact. Authority: <a href="docs/reviews/2026-07-10-hardening-adjudication.md">Hardening adjudication C11</a>. Acceptance: <a href="docs/process/state_kernel.json">DOC-010 acceptance</a>. Fence: Do not move cited evidence, decisions, council records, or authoritative histories (Hardening adjudication C11).</td>
-</tr>
-</tbody></table></div>
-<!-- END GENERATED: state-kernel current-queue -->
-
-
+<td>A post-DOC-008 audit relocates only non-authoritative history while preserving paths or redirects, citations, decision authority, and link integrity. Evidence: Only non-authoritative historical material moves; Paths or redir
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>TASK_QUEUE.md · commit f16b83e · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>TASK_QUEUE.md · commit 0e7616a + uncommitted · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

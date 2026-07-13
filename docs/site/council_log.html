@@ -37,7 +37,7 @@
 <a href="#c-028-c-027-adjudication-and-integration-arc-infrastructure-wave-prs-49-54-55-and-the-integration-window-2026-07-10-11">C-028: C-027 adjudication and integration arc — infrastructure wave, PRs 49/54/55, and the integration window (2026-07-10/11)</a></aside>
   <div class="doc-wrap doc-source-docs-council-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/council_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/council_log.md · commit 55e67c2"><span class="source-file">docs/<wbr>council_log.md</span><span class="source-commit">commit 55e67c2</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/council_log.md · commit 0e7616a"><span class="source-file">docs/<wbr>council_log.md</span><span class="source-commit">commit 0e7616a</span></span></div>
     <h1>Council Log</h1>
 <p>Chronicle of multi-model review councils: sessions where more than one
 model reviews, counterreviews, or votes on JouleWise work before it
@@ -410,7 +410,8 @@ twice. NOT a promotion; the pre-registered sealed A/B remains the gate
 before delegation-boundary changes.</p>
 <hr>
 <h2 id="index-row">Index row</h2>
-<p>| C-028 | 2026-07-09/11 | C-027 adjudication → integration arc under the Fable-lead / gpt-5.6-sol division of labor (this segment: infrastructure wave + PRs #49/#54/#55 + integration window) | PRs #49, #54, #55 merged mid-arc; held wave #50–#53, #56–#58 integration-reviewed and merged (SHA-guarded) after the integration tree caught 38 cross-stream failures pre-merge; follow-up PR #59 opened from the cross-stream review; refuter tier narrowed 2 blockers via contradictory verdicts; delta re-audits caught 2 fresh blockers in newly-reachable paths; claude-codex-report/v1 + codex-run-v3 + WRITE_SCOPE backstop + NEEDS_RULING adopted (D-064); ~57 recorded Sol invocations |</p>
+<p>| C-028 | 2026-07-09/11 | C-027 adjudication → integration arc under the Fable-lead / gpt-5.6-sol division of labor (this segment: infrastructure wave + PRs #49/#54/#55 + integration window) | PRs #49, #54, #55 merged mid-arc; held wave #50–#53, #56–#58 integration-reviewed and merged (SHA-guarded) after the integration tree caught 38 cross-stream failures pre-merge; follow-up PR #59 opened from the cross-stream review; refuter tier narrowed 2 blockers via contradictory verdicts; delta re-audits caught 2 fresh blockers in newly-reachable paths; claude-codex-report/v1 + codex-run-v3 + WRITE_SCOPE backstop + NEEDS_RULING adopted (D-064); ~57 recorded Sol invocations |
+| C-029 | 2026-07-11/12 | Agent-lane triple (SITE-01 / P2-049 / P2-028): three standard-tier Sol pipelines, per-stream lenses, lead bench adjudication of 5 blocker claims (2 confirmed, 1 partially refuted, 1 design ruling, 1 reproduce-first — refuters replaced by lead code-reading where cheaper); trace + calibration table in <code>docs/run_reports/2026-07-12-agent-lane-triple.md</code> §Process Trace Appendix (the ONE home; no full entry here) | PRs #61/#62/#63 opened at lead-gated heads; lead-gate unique catch: fix round&#39;s <code>succeeded</code>-only rule would refuse legitimate <code>capped</code> cells (FIX-14; third &quot;fix rounds introduce defects&quot; datum); implementer caught a stale kernel authority pointer (half-right — lead archaeology completed it, <code>507f600</code>); process defects logged: WRITE_SCOPE in-prompt requirement (3 rc=64), unintended ULTRA effort on all 13 invocations (config passthrough; TOOL-01), upstream outage killed 3 delta-audit attempts (re-audits owed pre-merge on #62/#63) |</p>
 <hr>
 <h2 id="full-entry">Full entry</h2>
 <h2>C-028: C-027 adjudication and integration arc — infrastructure wave, PRs #49/#54/#55, and the integration window (2026-07-10/11)</h2>
@@ -510,6 +511,19 @@ rows) — local 24h accounting shows 50 xhigh sessions ≈ 171M tokens;
 sessions) ≈ 40M. Fable lead: ~1.8M generation / ~14.8M billed-ish /
 ~570M cache reads. Two v3 sessions (doc008-r3, pr59-review) still
 RUNNING at the manifest snapshot.</p>
+<p>Spend snapshot addendum (2026-07-11 ~20:00Z, <code>codex-usage</code> 24h
+window, arc-close truth for the table above; estimates, not billing):
+59 Sol sessions / 330.6M tokens / ~17.5h session time — xhigh 55 ≈
+190.4M, ultra 2 ≈ 100.3M, high 2 ≈ 40.0M (both FAILED). Composition
+(measured from raw session records): ~97.4% of Sol input is cached,
+output ≈ 0.37% of volume. API-list-price equivalent (GPT-5.6-sol
+$5/$30, cached $0.50; Fable 5 $10/$50, cache reads $1): Sol ≈ $240,
+Fable ≈ $810 — combined ≈ $1,050 for the recorded arc; upper bound
+≈ $2,300 counting all local Codex sessions (includes non-manifest
+sessions; resume rows may double-count). Note the inversion: Sol is
+~180x the token volume but Fable is ~3.4x the cost — cache reads
+dominate the lead&#39;s footprint. Snapshot convention now standing in
+the council skill §Recording + instrumentation.</p>
 <p>Process artifacts adopted this arc (ratified as/alongside D-064):</p>
 <ul>
 <li><strong>claude-codex-report/v1</strong> — canonical machine-parsed session
@@ -545,7 +559,7 @@ before any delegation-boundary change.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/council_log.md · commit 55e67c2 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/council_log.md · commit 0e7616a · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

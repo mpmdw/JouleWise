@@ -26,473 +26,264 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#outcome">Outcome</a>
-<a href="#intake-and-planning-reflection">Intake And Planning Reflection</a>
-<a href="#composition-by-category">Composition By Category</a>
-<a href="#lead-rulings-and-reverted-hardenings">Lead Rulings And Reverted Hardenings</a>
-<a href="#flagged-uncertainties-and-follow-ups">Flagged Uncertainties And Follow-Ups</a>
-<a href="#review-fixes">Review Fixes</a>
-<a href="#verification">Verification</a>
-<a href="#recipe-steps-not-completed">Recipe Steps Not Completed</a>
-<a href="#process-trace">Process Trace</a>
-<a href="#next-exact-step">Next Exact Step</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-11-p2041-vetted-rebuild-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-11-p2041-vetted-rebuild.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-11-p2041-vetted-rebuild.md · commit f2c4701"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-11-p2041-vetted-rebuild.md</span><span class="source-commit">commit f2c4701</span></span></div>
-    <h1>P2-041 Vetted Rebuild (2026-07-11)</h1>
-<h2 id="outcome">Outcome</h2>
-<p>P2-041 was rebuilt manually on <code>impl/p2041-vetted</code> from post-PR-#49 commit
-<code>1b0f1f6578b60487cc6bb375cdc13008258740e5</code>, using
-<code>docs/reviews/2026-07-11-p2041-red-tranche-triage.md</code> as the authoritative
-per-file A/B/C recipe. The raw <code>impl/p2041</code> diff was not applied wholesale.
-No commit, push, merge, site regeneration, live hardware command, or
-<code>[QUIET-MAC]</code> measurement was performed.</p>
-<p>The resulting implementation keeps the wire name <code>claim_readiness</code>, applies
-the first-run exemption once per physical campaign session, retains the
-adjudicated <code>joulewise.campaign_verdict.v2</code> sampling-audit shape, and advances
-current reducer output to <code>0.4.0</code> with <code>window_evidence_precheck</code>. The reducer,
-<code>MeasurementQuality</code>, JSON Schema, and strict comparison retain both
-<code>runtime_cleanup_ok</code> and post-#49 <code>remote_cleanup_failed</code>. The strict raw-lineage
-registry, mock exemption, powermetrics current/legacy arms, and NVIDIA
-<code>nvidia_smi</code> verifier remain intact.</p>
-<p>The historical tranche report
-<code>docs/run_reports/2026-07-10-p2041-campaign-verdict-split.md</code> was copied exactly
-as required. Its stale deviations are historical; this report is the current
-rebuild authority.</p>
-<h2 id="intake-and-planning-reflection">Intake And Planning Reflection</h2>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#deliverable-check-0">Deliverable check (§0)</a>
+<a href="#product-outcomes">Product outcomes</a>
+<a href="#verification-ledger-lead-side-tails">Verification ledger (lead-side tails)</a>
+<a href="#restart-instructions-next-session">Restart instructions (next session)</a>
+<a href="#process-trace-appendix">Process Trace Appendix</a></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-12-agent-lane-triple-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-12-agent-lane-triple.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-12-agent-lane-triple.md · commit 0e7616a"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-12-agent-lane-triple.md</span><span class="source-commit">commit 0e7616a</span></span></div>
+    <h1>2026-07-12 — Agent-lane triple: SITE-01 + P2-049 + P2-028 (+ queue reconciliation)</h1>
+<h2 id="deliverable-check-0">Deliverable check (§0)</h2>
+<p>The session&#39;s primary deliverables were the next [AGENT]-lane artifacts after
+the C-028 close. SHIPPED to PR (not yet merged): P2-049 (PR #61, fully gated,
+merge blocked only by a harness permission denial on lead self-merge), P2-028
+(PR #62), SITE-01 (PR #63). Bookkeeping deliverables landed on main: the
+post-#59/#60 queue reconciliation (<code>ec7814b</code>), the C-028 spend-snapshot
+addendum (<code>7c075ae</code>), and the P2-028 kernel authority-pointer fix (<code>507f600</code>).
+NOT shipped: the live Lakebed redeploy (post-merge, lead-owned) and the two
+delta re-audits (blocked by upstream outage, owed pre-merge on #62/#63).</p>
+<h2 id="product-outcomes">Product outcomes</h2>
 <ul>
-<li><p>Read the authoritative triage recipe first, then the active stop card,
-Current Project Status, Known Workspace State, What Is Next, current queue,
-Do-Not-Do-Yet list, Mission M0, orchestration process, source-of-truth map,
-planning-reflection protocol, Component C, D-030, D-050, and D-057.</p>
-</li>
-<li><p>Confirmed the worktree was clean at the requested <code>1b0f1f6</code> branch point.</p>
-</li>
-<li><p>Baseline canonical suite:</p>
-<pre><code class="language-text">Ran 1041 tests in 67.995s
-
-OK (skipped=13)
-</code></pre>
-</li>
-<li><p>Goal: land only audited P2-041/C5 A behavior plus required post-#49 A+B
-unions, while preserving every unrelated P2-038/P2-040/P2-042/#49 behavior.</p>
-</li>
-<li><p>Fences: no pure-B deletion hunk, no <code>docs/site/*</code>, no quiet-Mac work, no
-speculative version compatibility, and no commit.</p>
-</li>
+<li><strong>Queue reconciliation</strong>: INT-59 + DOC-008 retired to Completed (D-023
+evidence cells); DOC-008 removed from the state kernel — DOC-010&#39;s trigger
+converted to an <code>event</code> dependency (the generator requires pending task
+deps to name live tasks); pinned fidelity tests updated (live set 32→31);
+<code>gen_state.py --check</code> green. Fresh-head verification: <code>Ran 1258 tests, OK (skipped=10)</code> at <code>194ea39</code>.</li>
+<li><strong>P2-049</strong> (PR #61): explicit-root-or-fail-closed resolution in
+<code>analysis_manifest.py</code> via a lazy <code>_resolve_repository_paths</code> resolver;
+installed layouts refuse with an actionable two-marker message; explicit
+roots stay authoritative; manifest identity untouched. Lens CLEAN; lead
+replay 24 focused OK + live refusal probe + suite 1261 OK/12; CI green.</li>
+<li><strong>P2-028</strong> (PR #62): <code>joulewise determinism-gate</code> CLI verb +
+<code>determinism_gate.py</code> (744 lines) + 38 tests. Named verdicts; canonical
+config-hash comparability; identity-provenance comparison with honest
+absence recording; per-item eligibility {succeeded, capped} with
+cross-sibling status matching; fail-closed on duplicate JSON keys,
+<code>--output</code>-inside-bundle, zero/one bundle, zero items. Both real rep
+groups formally <code>determinism_supported</code>. Lead gate: suite 1296 OK/13.</li>
+<li><strong>SITE-01</strong> (PR #63): eight bounded gzip+Base64 page shards, all 45
+pages/aliases kept; measured Lakebed artifact 865,973 B vs 1,048,576 cap
+(17.4% headroom); pack postcondition prefers MEASURED artifact (estimator
+demoted to labeled advisory — regression proves it misses non-generated
+growth); validator scan covers all server sources + omitted-initializer
+loop forms; node-driven shard round-trip test. Lead gate: measured-mode
+pack + suite 1271 OK/12.</li>
 </ul>
-<h2 id="composition-by-category">Composition By Category</h2>
-<h3>Clean A files copied exactly from <code>impl/p2041</code></h3>
-<p>The working blobs match <code>impl/p2041:5135c1d</code> exactly:</p>
-<ul>
-<li><code>docs/run_reports/2026-07-10-p2041-campaign-verdict-split.md</code></li>
-<li><code>docs/specs/c027/p2-040_reducer_gate_correctness.md</code></li>
-<li><code>tests/test_analysis_manifest.py</code></li>
-<li><code>tests/test_uncertainty_p2029.py</code></li>
-</ul>
-<h3>Mixed files composed from main</h3>
+<h2 id="verification-ledger-lead-side-tails">Verification ledger (lead-side tails)</h2>
 <div class="table-scroll"><table>
 <thead>
 <tr>
-<th>File</th>
-<th>Composition decision</th>
+<th>Gate</th>
+<th>Tail</th>
 </tr>
 </thead>
 <tbody><tr>
-<td><code>RUN_STATE.md</code></td>
-<td>Preserve post-#49 state; add only the rebuilt P2-041 handoff, verification, workspace, and report pointers.</td>
+<td>Main intake @194ea39</td>
+<td><code>Ran 1258 tests ... OK (skipped=10)</code></td>
 </tr>
 <tr>
-<td><code>TASK_QUEUE.md</code></td>
-<td>Preserve main; update only P2-038&#39;s C5 request path and the P2-041 row.</td>
+<td>p2049 focused</td>
+<td><code>Ran 24 tests ... OK</code> + live refusal probe</td>
 </tr>
 <tr>
-<td><code>docs/contracts/run_bundle_layout.md</code></td>
-<td>Preserve config warnings, full P2-038 evidence, and cleanup fields; add 0.4.0/current-0.3.x dispatch, C5 precheck shape, and the original per-session campaign-provenance contract.</td>
+<td>p2049 full (worktree)</td>
+<td><code>Ran 1261 tests ... OK (skipped=12)</code></td>
 </tr>
 <tr>
-<td><code>docs/decision_log.md</code></td>
-<td>Preserve D-060 and the P2-038/P2-040 D-030 chain; union both cleanup fields, append 0.4.0, and append only the original closed-v1 P2-041 vocabulary.</td>
+<td>p2028 focused (final head)</td>
+<td><code>Ran 38 tests ... OK (skipped=1)</code></td>
 </tr>
 <tr>
-<td><code>docs/phase_2/detection_floor.md</code></td>
-<td>Rename only the reducer field; preserve sentinel economics and landed-state tense.</td>
+<td>p2028 full (final head)</td>
+<td><code>Ran 1296 tests ... OK (skipped=13)</code></td>
 </tr>
 <tr>
-<td><code>docs/specs/c027/analysis_engine_trio.md</code></td>
-<td>Resolve H3 to the landed campaign gate while retaining <code>claim_readiness</code>, per-physical-session exemption, and adjudicated v2/top-up shape.</td>
+<td>p2028 real corpus</td>
+<td>both groups <code>determinism_supported</code>, identity fields recorded absent</td>
 </tr>
 <tr>
-<td><code>docs/specs/c027/p2-038_production_uncertainty_evidence.md</code></td>
-<td>Re-derive request paths to <code>window_evidence_precheck.idle_subtracted_request</code>; preserve the pending/null guard block.</td>
+<td>site01 pack (measured)</td>
+<td><code>865973 bytes (budget 943718; cap 1048576; Lakebed 0.0.25)</code></td>
 </tr>
 <tr>
-<td><code>joulewise/cli.py</code></td>
-<td>Make 0.4.0 exact; reject current-era 0.3.0 and 0.3.1; retain frozen legacy arms, P2-038 uncertainty re-derivation, <code>RAW_TO_TRACE_VERIFIERS</code>, and NVIDIA verification.</td>
-</tr>
-<tr>
-<td><code>joulewise/reduce.py</code></td>
-<td>Rename helpers/output, remove the generic request alias, retain per-token evidence plus both cleanup fields.</td>
-</tr>
-<tr>
-<td><code>joulewise/schemas.py</code></td>
-<td>Set reducer 0.4.0 and rename the governed summary field while preserving ConfigKeyWarning and both cleanup fields/schema properties.</td>
-</tr>
-<tr>
-<td><code>scripts/run_campaign.py</code></td>
-<td>Apply the original audited verdict split; union P2-042&#39;s authoritative validator and both sidecar exclusions; preserve P2-038 shakedown and integer backup return; keep simple per-session cooldown provenance.</td>
-</tr>
-<tr>
-<td><code>tests/test_cli_run.py</code></td>
-<td>Re-derive exact 0.4.0 tests, explicit 0.3.0/0.3.1 rejection, old-field failure, and missing-either-cleanup-field exactness while retaining raw-lineage coverage.</td>
-</tr>
-<tr>
-<td><code>tests/test_p2038_production_path.py</code></td>
-<td>Preserve main&#39;s full production path and change only the three C5 request paths.</td>
-</tr>
-<tr>
-<td><code>tests/test_run_campaign.py</code></td>
-<td>Apply verdict/readiness mutations, all seven fixture repairs, real P2-042 validation, approved per-session provenance, sampling-audit shape, and P2-038 shakedown tests; omit rejected hardening tests.</td>
-</tr>
-<tr>
-<td><code>tests/test_schemas.py</code></td>
-<td>Expect 0.4.0 and assert both cleanup fields plus the renamed schema surface.</td>
+<td>site01 full (final head)</td>
+<td><code>Ran 1271 tests ... OK (skipped=12)</code></td>
 </tr>
 </tbody></table></div>
-<h3>Pure-B preservation</h3>
-<p>All recipe-listed pure-B configs, production code, tests, contracts, plans,
-reviews, reports, and generated <code>docs/site/*</code> files remain unchanged from the
-branch base, with one disclosed post-#49 union exception below. In particular,
-P2-038 clock/adapter/controller/uncertainty code, P2-040 warning/warmup/cleanup
-code, the production shakedown configs, and their tests were not replaced by
-tranche content. No site file was regenerated.</p>
-<p>The recipe predates #49. Keeping post-#49 tests byte-untouched makes the
-canonical suite fail after the required object/API rename, while adding a
-<code>claim_eligibility</code> compatibility property would violate C5. The bounded A+B
-union exception changes two assertions in <code>tests/test_reduce.py</code> and one in
-<code>tests/test_nvidia_node_integration.py</code> only to
-<code>summary.window_evidence_precheck</code>. No test behavior or production semantics
-changed, and no production compatibility alias was added.</p>
-<h2 id="lead-rulings-and-reverted-hardenings">Lead Rulings And Reverted Hardenings</h2>
+<h2 id="restart-instructions-next-session">Restart instructions (next session)</h2>
 <ol>
-<li><strong>Wire name:</strong> all tranche <code>analysis_readiness</code> changes were rejected.
-Current JSON, console output, helpers, specs, and tests use
-<code>claim_readiness</code> / <code>CLAIM-INPUT READINESS</code>.</li>
-<li><strong>First-run identity:</strong> the landing exempts the first physical invocation
-once per physical campaign session. A final review found a fail-open where
-persisted provenance could fan one session&#39;s exemption out to every member.
-The bounded v1 fix accepts at most one exemption-bearing physical member per
-provenance session, tied to <code>session_id</code>, <code>first_physical_run_id</code>,
-<code>following_run_id</code>, and that member&#39;s bundle IDs. Malformed/fanned-out notes
-normalize to <code>unknown</code>; counting does not cross sessions or manifests.
-Only <code>execution: invoked</code> rows may originate evidence, and resumed
-<code>execution: existing</code> bookkeeping rows carry no copied cooldown note, so a
-later resume cannot shadow the valid physical origin.</li>
-<li><strong>Cooldown/top-up hardening:</strong> the landing keeps raw cooldown JSONL
-path/hash/record-count provenance and the adjudicated sampling-audit keys.
-It does not add trace-v2 adjacency/timestamp/re-derivation fields, scoped
-runs-directory scanning, <code>detection_scope</code>, new hardening reasons, or an
-<code>analysis_readiness</code> wire.</li>
+<li>Merge PR #61 (fully gated; harness denied lead self-merge — Ed clicks or
+re-authorizes). 2. When upstream is stable: run the two delta re-audits
+(fresh read-only Sol, <strong><code>--effort xhigh</code> EXPLICITLY</strong>) over the final
+heads of #62 and #63; triage; then CI-green merge both. 3. After #63
+merges: regen site on main, pack (measured mode must pass), <code>npx lakebed deploy</code>, verify the five endpoints + the instruction meter on a cold
+worst-shard request, clear the freshness-drift banner, append the Lakebed
+feedback entry. 4. Window A remains the [QUIET-MAC + ED] head.</li>
 </ol>
-<p>Queue candidates are recorded here, not added as live queue rows:</p>
+<h2 id="process-trace-appendix">Process Trace Appendix</h2>
+<p><strong>Shape.</strong> S1 bookkeeping (bench) + three standard-tier Sol pipelines in
+worktrees (site01 / p2049 / p2028), disjoint footprints. Design rounds were
+folded into implementation prompts (DESIGN-section requirement) rather than
+separate pre-rounds — judged proportionate for these scopes.</p>
+<p><strong>Catches (unique per layer).</strong></p>
 <ul>
-<li><strong>Resume-spanning first-run identity.</strong> Candidate: separately adjudicate an
-across-resumes, once-per-analysis-manifest exemption. Dissent: that rejected
-form is more fail-closed because repeated resumes cannot each gain an
-exemption. The lead&#39;s per-physical-session ruling governs this landing.</li>
-<li><strong>Cooldown trace hardening.</strong> Candidate: version and review stronger
-adjacency/timestamp binding, row-shape checks, line-count validation, and
-independent rolling-decision re-derivation. Dissent: stronger binding would
-better detect stale or self-attested evidence. It is not silently folded
-into the adjudicated trace contract here.</li>
-<li><strong>Scoped top-up detection.</strong> Candidate: define a complete search scope before
-adding scanning and fail-closed vocabulary. Dissent:
-<code>top_up_suspected: false</code> cannot prove absence outside an inspected scope.
-The landing keeps the adjudicated v2 shape exactly.</li>
+<li>Implementer (p2028): kernel P2-028 authority pointer stale — REAL, but its
+proposed correct home was ALSO wrong; lead archaeology found the CP-5
+resume report. Fixed on main (<code>507f600</code>).</li>
+<li>Contract lens (p2028): 5 blocker claims → lead bench adjudication:
+B2 (True==1 config laundering) CONFIRMED; B5 (--output overwrites input
+evidence) CONFIRMED; B3 partially refuted (bundle-level covered; per-item
+variant real); B1 ruled as design (identity-provenance comparability with
+honest absence recording); B4 reproduce-first (confirmed in fix round).</li>
+<li>Test-audit lens (p2028): 6 should-fix coverage gaps incl. SUT-imported
+constants and the Unicode NFC trap — all inspection-verified, no refuters
+spent.</li>
+<li>Runtime lens (site01): estimator-drift proof (105 kB payload passes
+estimate, real artifact over cap) — drove the measured-mode postcondition
+(SITE01-4); narrower-than-Lakebed loop regex; incomplete source scan.</li>
+<li><strong>Lead gate (validated the doctrine again): the p2028 fix round&#39;s literal
+<code>succeeded</code>-only per-item rule would have refused legitimate <code>capped</code>
+campaign cells</strong> (AP capped-cell rules) — caught at the lead gate, fixed
+as FIX-14 with ledger supersession. Fix rounds introduce defects: third
+occurrence on record.</li>
 </ul>
-<h2 id="flagged-uncertainties-and-follow-ups">Flagged Uncertainties And Follow-Ups</h2>
-<ol>
-<li><strong>Frozen stored-field mapper gap.</strong> Component C5 describes an internal
-mapping for a frozen legacy summary that actually contains
-<code>claim_eligibility</code>, including <code>source_field</code> and
-<code>legacy_precheck_not_claim_evaluator</code>. Neither main nor the tranche defines
-that mapper or stable reason. The six real frozen summaries apparently
-predate the field; current code preserves their provenance-less absence
-tolerance. No hypothetical mapper was invented. Lead/spec adjudication is
-required before claiming the broader mapping behavior.</li>
-<li><strong>Recipe-vintage pure-B conflict.</strong> The three post-#49 assertion-only edits
-described above are necessary for C5 plus a green canonical suite. They are
-intentionally flagged for lead authorization because the older recipe says
-every pure-B file remains byte-untouched.</li>
-<li><strong>Exact-clean P2-040 note.</strong> The copied P2-040 spec&#39;s supersession note names
-current-era 0.3.0 but predates #49&#39;s 0.3.1. It remains blob-exact by the
-clean-file instruction. Current D-030, the run-bundle contract, code, and
-explicit tests reject both 0.3.0 and 0.3.1.</li>
-<li><strong>Status-authority gap.</strong> The Phase-2 plan/checklist contain no P2-041 matrix
-row. D-023 would normally call for a closure row, but both files are pure-B
-under the recipe. They remain untouched; lead/DOC-009 should reconcile the
-missing status authority.</li>
-<li><strong>Top-up contract tension.</strong> Component C still describes eventual top-up
-detection, while the binding ruling excludes this tranche&#39;s scoped
-detector. The current log therefore reports the adjudicated empty arrays and
-<code>top_up_suspected: false</code>; it does not claim a complete absence proof.</li>
-<li><strong>Moving remote.</strong> <code>origin/main</code> advanced after this worktree was created.
-The rebuild intentionally remains anchored at the user-specified post-#49
-commit <code>1b0f1f6</code>; no later bookkeeping commits were merged into the
-reconstruction. Consequently the anchored active stop card retains item
-1&#39;s pre-merge #49 narrative even though HEAD is the #49 merge; the P2-041
-handoff labels that inherited text superseded rather than importing later
-main state wholesale.</li>
-</ol>
-<h2 id="review-fixes">Review Fixes</h2>
+<p><strong>Interventions.</strong></p>
 <ul>
-<li>B1 narrowed-confirmed → fixed: verdict-time cooldown raw provenance now fail-closes through one shared fresh/resume verifier for path, existence, current-byte SHA-256, JSONL parsing, and declared positive record count.</li>
-<li>S1 confirmed → fixed: every physically present expected member in the incomplete-existing branch is evaluated, while only absent paths enter the missing category.</li>
-<li>S2/R1 refuted empirically → queue candidate <code>frozen-legacy claim_eligibility mapper</code>.</li>
-<li>Semantic cooldown-row verification → queue candidate; row-field consistency and finite-value checks remain explicitly out of scope for this fix.</li>
-<li>N1 fixed: the current-reality critique cell now uses collection usable/partial/blocked/invalid plus <code>claim_readiness</code>.</li>
+<li>I-1: codex-run-v3 <code>--write-scope</code> requires a <code>WRITE_SCOPE:</code> field in the
+prompt body — 3 instant rc=64 launch failures; folded to codex-delegation.</li>
+<li>I-2: upstream (chatgpt.com backend) stream-disconnection outage killed the
+site01 fix round (206k tokens in), two delta-audit attempts (one exited
+&quot;OK&quot; with a THIN-OUTPUT empty report — wrapper defect: stream death can
+masquerade as success), and the site01 resume (watchdog SIGTERM 143).
+Recovery: session resume preserved the fix round&#39;s completed work (all
+FIX-1..5 verified landed by lead inspection); delta re-audits deferred.</li>
+<li>I-3: <strong>every Sol session this arc ran at <code>ultra</code> effort</strong> — 
+<code>~/.codex/config.toml</code> sets <code>model_reasoning_effort = &quot;ultra&quot;</code> (C-028
+residue) and codex-run-v3 passes it through when <code>--effort</code> is omitted.
+Violates the xhigh-default doctrine (global rule 10); explains the weekly
+quota draw 22%→32%. Mitigation: explicit <code>--effort</code> on every future call
+(skill fold); wrapper default fix queued on TOOL-01; config residue is
+Ed&#39;s call (also affects his interactive sessions).</li>
+<li>I-4: harness auto-mode classifier denied the lead self-merge of PR #61
+(policy-authorized but harness-blocked; not worked around) and was itself
+intermittently unavailable during the upstream outage.</li>
 </ul>
-<h2 id="verification">Verification</h2>
-<p>Required recipe commands were run without piping suite exit status. Final
-tails:</p>
-<h3>Focused modules</h3>
-<pre><code class="language-text">----------------------------------------------------------------------
-Ran 398 tests in 54.964s
-
-OK (skipped=1)
-</code></pre>
-<h3>Canonical suite</h3>
-<p>The canonical command writes to
-<code>/private/tmp/p2041-vetted-canonical-final.log</code>.</p>
-<pre><code class="language-text">----------------------------------------------------------------------
-Ran 1062 tests in 76.436s
-
-OK (skipped=13)
-</code></pre>
-<p>The canonical run emitted the existing loud skips for the absent retained
-six-bundle corpus and sandbox-denied localhost socket gate. The
-<code>make_figures</code> hash-mismatch line is expected output from its negative fixture;
-the suite exit status was zero.</p>
-<h3>Other gates</h3>
-<pre><code class="language-text">git diff --check
-(no output; exit 0)
-
-rg -n &#39;_window_claim_eligibility|_windows_claim_eligibility&#39; joulewise scripts tests
-(no matches; exit 1 as required)
-</code></pre>
-<p>The focused pre-final iteration passed <code>Ran 392 tests in 51.128s</code>,
-<code>OK (skipped=1)</code>. The strengthened campaign module passed <code>Ran 72 tests in 18.229s</code>, <code>OK</code> after the exemption-fan-out and resume-shadow fixes and added
-ruling locks.</p>
-<h2 id="recipe-steps-not-completed">Recipe Steps Not Completed</h2>
-<p>Recipe step 6 (regenerate <code>docs/site/*</code>) was intentionally not run because the
-user&#39;s post-recipe instruction explicitly reserves source-settled site
-generation for the lead. No other recipe step was omitted. No commit was made,
-also by explicit instruction; lead review, pathspec commit, and integrated-head
-review remain handoff work rather than incomplete reconstruction work.</p>
-<h2 id="process-trace">Process Trace</h2>
-<ul>
-<li>Active stop card at start: <code>RUN_STATE.md#ACTIVE_STOP_CARD</code>.</li>
-<li>Skills/playbooks used: Mission M0, planning-reflection protocol,
-<code>docs/orchestration.md</code>, authoritative P2-041 triage recipe. No installed
-artifact skill was applicable.</li>
-<li>Worktree / branch: <code>/Users/edr/code/JouleWise-wt/p2041-vetted</code>,
-<code>impl/p2041-vetted</code>; no PR or commit created.</li>
-<li>Invocation manifest path: none. Native collaboration sessions expose stable
-task paths but not file-backed prompt/output hashes; D-064 promotion remains
-pending in the active stop card. Unavailable fields are not fabricated.</li>
-<li>Council/debate: none; three pinned-spec read-only review roles plus final
-re-audits.</li>
-</ul>
-<h3>Delegated invocation ledger</h3>
+<p><strong>Delegation calibration (schema v2).</strong></p>
 <div class="table-scroll"><table>
 <thead>
 <tr>
-<th>Run</th>
-<th>Parent report</th>
-<th>Role/lens</th>
-<th>Model/wrapper</th>
-<th>Session ID</th>
-<th>Prompt hash/path</th>
-<th>Output path</th>
-<th>Status</th>
-<th>Consumed by</th>
-<th>Disposition</th>
-<th>Commit/PR</th>
+<th>id</th>
+<th>to</th>
+<th>unit</th>
+<th>altitude</th>
+<th>outcome</th>
+<th>catches</th>
+<th>lead-rework</th>
 </tr>
 </thead>
 <tbody><tr>
-<td>p2041-core-1</td>
-<td>this report</td>
-<td>core reducer/CLI union audit</td>
-<td>Codex subagent / native collaboration</td>
-<td><code>/root/core_union_audit</code></td>
-<td>unavailable (native)</td>
-<td>conversation result</td>
-<td>complete</td>
-<td>root</td>
-<td>accepted; drove dispatch union and flagged post-#49 test conflict</td>
+<td>p2049-impl</td>
+<td>sol-ultra*</td>
+<td>impl</td>
+<td>design-freedom</td>
+<td>one-shot-clean</td>
+<td>—</td>
 <td>none</td>
 </tr>
 <tr>
-<td>p2041-campaign-1</td>
-<td>this report</td>
-<td>campaign runner/test composition audit</td>
-<td>Codex subagent / native collaboration</td>
-<td><code>/root/campaign_audit</code></td>
-<td>unavailable (native)</td>
-<td>conversation result</td>
-<td>complete</td>
-<td>root</td>
-<td>accepted; defined approved/rejected campaign surface</td>
+<td>p2049-lens</td>
+<td>sol-ultra*</td>
+<td>review</td>
+<td>pinned</td>
+<td>clean-useful</td>
+<td>test-audit confirmations</td>
 <td>none</td>
 </tr>
 <tr>
-<td>p2041-docs-1</td>
-<td>this report</td>
-<td>docs/contracts composition audit</td>
-<td>Codex subagent / native collaboration</td>
-<td><code>/root/docs_audit</code></td>
-<td>unavailable (native)</td>
-<td>conversation result</td>
-<td>complete</td>
-<td>root</td>
-<td>accepted; drove D-030/D-057 and dissent wording</td>
+<td>p2028-impl</td>
+<td>sol-ultra*</td>
+<td>impl</td>
+<td>design-freedom</td>
+<td>clean+finding</td>
+<td>kernel pointer (half-right)</td>
+<td>pointer archaeology</td>
+</tr>
+<tr>
+<td>p2028-lens-contract</td>
+<td>sol-ultra*</td>
+<td>review</td>
+<td>pinned</td>
+<td>high-yield</td>
+<td>2 confirmed blockers + 1 design Q</td>
+<td>bench adjudication</td>
+</tr>
+<tr>
+<td>p2028-lens-tests</td>
+<td>sol-ultra*</td>
+<td>review</td>
+<td>pinned</td>
+<td>high-yield</td>
+<td>6 real gaps</td>
 <td>none</td>
 </tr>
 <tr>
-<td>p2041-core-2</td>
-<td>this report</td>
-<td>final core diff audit</td>
-<td>Codex subagent / native collaboration</td>
-<td><code>/root/core_union_audit</code></td>
-<td>unavailable (native)</td>
-<td>conversation result</td>
-<td>complete</td>
-<td>root</td>
-<td>clean verification; two documentation flags consumed</td>
+<td>p2028-fixround</td>
+<td>sol-ultra*</td>
+<td>fix</td>
+<td>pinned FIX-1..13</td>
+<td>clean-with-defect</td>
+<td>—</td>
+<td>FIX-14 ruling (capped)</td>
+</tr>
+<tr>
+<td>p2028-fix14</td>
+<td>sol-ultra*</td>
+<td>fix</td>
+<td>pinned ruling</td>
+<td>one-shot-clean</td>
+<td>—</td>
 <td>none</td>
 </tr>
 <tr>
-<td>p2041-docs-2</td>
-<td>this report</td>
-<td>final docs diff audit</td>
-<td>Codex subagent / native collaboration</td>
-<td><code>/root/docs_audit</code></td>
-<td>unavailable (native)</td>
-<td>conversation result</td>
-<td>complete</td>
-<td>root</td>
-<td>clean verification; wording/status gaps consumed</td>
+<td>site01-impl</td>
+<td>sol-ultra*</td>
+<td>impl</td>
+<td>design-freedom</td>
+<td>one-shot-clean (strong design)</td>
+<td>byte-breakdown scout</td>
 <td>none</td>
 </tr>
 <tr>
-<td>p2041-campaign-2</td>
-<td>this report</td>
-<td>final campaign diff audit</td>
-<td>Codex subagent / native collaboration</td>
-<td><code>/root/campaign_audit</code></td>
-<td>unavailable (native)</td>
-<td>conversation result</td>
-<td>complete</td>
-<td>root</td>
-<td>found exemption fan-out blocker plus coverage gaps; fixed</td>
+<td>site01-lens</td>
+<td>sol-ultra*</td>
+<td>review</td>
+<td>pinned</td>
+<td>high-yield</td>
+<td>estimator-drift proof</td>
 <td>none</td>
 </tr>
 <tr>
-<td>p2041-campaign-3</td>
-<td>this report</td>
-<td>exemption/resume-fix final audit</td>
-<td>Codex subagent / native collaboration</td>
-<td><code>/root/campaign_audit</code></td>
-<td>unavailable (native)</td>
-<td>conversation result</td>
-<td>complete</td>
-<td>root</td>
-<td>clean; adversarial inferential-member double resume and non-originating existing rows verified</td>
-<td>none</td>
+<td>site01-fixround(+resume)</td>
+<td>sol-ultra*</td>
+<td>fix</td>
+<td>pinned FIX-1..5</td>
+<td>complete-despite-outage</td>
+<td>—</td>
+<td>lead verified landing</td>
 </tr>
 </tbody></table></div>
-<h3>Review yield and delegation calibration</h3>
-<div class="table-scroll"><table>
-<thead>
-<tr>
-<th>Role</th>
-<th>Altitude</th>
-<th>Lead-assigned outcome</th>
-<th>Unique useful findings</th>
-<th>Lead rework</th>
-<th>Prompt vs model defect</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Core audit</td>
-<td>pinned-spec / post-merge union</td>
-<td>accepted</td>
-<td>post-#49 pure-B conflict; frozen mapper gap; missing remote-cleanup contract prose</td>
-<td>not instrumented</td>
-<td>recipe-vintage gap, not model defect</td>
-</tr>
-<tr>
-<td>Campaign audit</td>
-<td>pinned-spec with composition judgment</td>
-<td>accepted after fixes</td>
-<td>first-exemption fan-out fail-open; copied-existing resume shadow; exact valid/rejected test split; session-local identity nuance</td>
-<td>not instrumented</td>
-<td>implementation defects caught by reviewer</td>
-</tr>
-<tr>
-<td>Docs audit</td>
-<td>pinned-spec</td>
-<td>accepted</td>
-<td>D-030 two-field union; D-057 wording; status-authority gap; dissent language</td>
-<td>not instrumented</td>
-<td>no prompt/model defect assigned</td>
-</tr>
-</tbody></table></div>
-<p>The campaign audit found the two accepted production defects in the final
-review rounds: exemption fan-out and copied-existing resume shadow. Other
-findings were contract/documentation drift or clean verification. No
-false-positive finding was applied.</p>
-<h3>Ephemeral artifacts</h3>
-<div class="table-scroll"><table>
-<thead>
-<tr>
-<th>Path</th>
-<th>SHA-256 / stable ID</th>
-<th>Promoted to</th>
-<th>Not promoted reason</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>/private/tmp/p2041-vetted-baseline.log</code></td>
-<td><code>91105c89f2b5fc20f99881a13c36628a891957559a99fd146932f4218350e867</code></td>
-<td>baseline tail in this report</td>
-<td>raw dot stream is disposable</td>
-</tr>
-<tr>
-<td><code>/private/tmp/p2041-vetted-focused-final.log</code></td>
-<td><code>f7a962361ddc09ad679c195afb29cc38afa5d90778e5b23fffc7239921809e49</code></td>
-<td>final tail in this report</td>
-<td>raw dot stream is disposable</td>
-</tr>
-<tr>
-<td><code>/private/tmp/p2041-vetted-canonical-final.log</code></td>
-<td><code>17eff0ec5fa4a029d64659bb9a7ff4b2b9adf70ba05a25884ac3283996a372c7</code></td>
-<td>final tail in this report</td>
-<td>raw dot stream is disposable</td>
-</tr>
-</tbody></table></div>
-<ul>
-<li>Stop state at end: implementation and local verification complete, dirty
-only with the intended uncommitted rebuild; lead owns final diff review,
-pathspec commit, review stack, and integration/merge decisions.</li>
-</ul>
-<h2 id="next-exact-step">Next Exact Step</h2>
-<p>Lead-review this diff against the triage recipe, explicitly adjudicate the
-three assertion-only post-#49 pure-B exceptions and the frozen-mapper gap, run
-the canonical suite unpiped in the lead environment, then commit only the
-reviewed P2-041 rebuild pathspecs. Do not regenerate <code>docs/site/*</code> until source
-composition is accepted.</p>
+<p>*unintended ultra — see I-3. Design-freedom delegation again ran hot: the
+site01 shard design (instruction-budget-aware, Base85 alternative rejected
+with quantified loop-body evidence) beat the lead&#39;s rough pagination prior.</p>
+<p><strong>Yield + spend.</strong> Layers: implementer flags 2 real catches (1 half-right);
+fresh lenses 3-for-3 sessions with unique catches; lead gate 1 unique
+doctrine-grade catch (capped); delta re-audit layer produced nothing this
+session (outage) — no drop signal, it never ran. Spend: 13 Sol invocations
+(3 launch failures rc=64 excluded), ALL at unintended ultra; weekly quota
+22%→32%. Fable lead: heavy bench adjudication session.</p>
+<p><strong>Skill-usage rows appended to ~/.claude/skills/skill-usage-log.md.</strong></p>
 
 
   </div>
@@ -501,7 +292,7 @@ composition is accepted.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-11-p2041-vetted-rebuild.md · commit f2c4701 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-12-agent-lane-triple.md · commit 0e7616a · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
