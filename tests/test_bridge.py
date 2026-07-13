@@ -13,6 +13,7 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
+import select
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,29 @@ from unittest import mock
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BRIDGE = REPO_ROOT / "scripts" / "bridge"
+LOCK_ATTEMPT_SENTINEL = "bridge-test-about-to-attempt-session-lock"
+
+LOCK_HANDSHAKE_CODE = f"""
+import contextlib
+import importlib.machinery
+import importlib.util
+import sys
+
+loader = importlib.machinery.SourceFileLoader("bridge_lock_handshake", sys.argv[1])
+spec = importlib.util.spec_from_loader(loader.name, loader)
+module = importlib.util.module_from_spec(spec)
+loader.exec_module(module)
+real_session_lock = module.session_lock
+
+@contextlib.contextmanager
+def signaling_session_lock(root):
+    print({LOCK_ATTEMPT_SENTINEL!r}, flush=True)
+    with real_session_lock(root):
+        yield
+
+module.session_lock = signaling_session_lock
+raise SystemExit(module.main(sys.argv[2:]))
+"""
 
 
 def _racing_acquire(repo: str, barrier: multiprocessing.Barrier, queue: multiprocessing.Queue) -> None:
@@ -237,6 +261,79 @@ class BridgeTests(unittest.TestCase):
         loader.exec_module(module)
         return module
 
+    def handshaking_bridge_process(self, *arguments: str) -> subprocess.Popen[str]:
+        process = subprocess.Popen(
+            [sys.executable, "-c", LOCK_HANDSHAKE_CODE, str(BRIDGE), *arguments],
+            cwd=self.repo,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        self.assertIsNotNone(process.stdout)
+        ready, _, _ = select.select([process.stdout], [], [], 5)
+        self.assertTrue(ready, "child did not reach the session-lock attempt")
+        # If the command stops acquiring session.lock, the wrapper is never called:
+        # the first line will be command JSON (or EOF), not this sentinel.
+        self.assertEqual(process.stdout.readline().strip(), LOCK_ATTEMPT_SENTINEL)
+        return process
+
+    def test_mutating_commands_outside_repository_emit_command_errors(self) -> None:
+        commands = (
+            ("baseline", "--invocation-id", "outside"),
+            ("thread-record", "--invocation-id", "outside", "--state", "pending"),
+            ("lease-release", "--lease-id", "lease-outside"),
+            (
+                "lease-abandon",
+                "--lease-id",
+                "lease-outside",
+                "--approved-by",
+                "test",
+                "--reason",
+                "outside repository",
+            ),
+        )
+        with tempfile.TemporaryDirectory() as outside_repository:
+            for arguments in commands:
+                with self.subTest(command=arguments[0]):
+                    result = subprocess.run(
+                        [str(BRIDGE), *arguments],
+                        cwd=outside_repository,
+                        text=True,
+                        capture_output=True,
+                    )
+                    self.assertEqual(result.returncode, 5, result.stderr + result.stdout)
+                    error = json.loads(result.stdout)
+                    self.assertEqual(error["schema"], "bridge-command-error/v1")
+                    self.assertEqual(error["command"], arguments[0])
+                    self.assertEqual(error["stage"], "repository")
+                    self.assertTrue(error["error"])
+
+    def test_decorated_command_session_lock_open_failure_emits_command_error(self) -> None:
+        bridge_dir = self.repo / ".codex-bridge"
+        bridge_dir.mkdir()
+        (bridge_dir / "session.lock").mkdir()
+        result = subprocess.run(
+            [str(BRIDGE), "baseline", "--invocation-id", "lock-failure"],
+            cwd=self.repo,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 5, result.stderr + result.stdout)
+        error = json.loads(result.stdout)
+        self.assertEqual(
+            {
+                "schema": error["schema"],
+                "command": error["command"],
+                "stage": error["stage"],
+            },
+            {
+                "schema": "bridge-command-error/v1",
+                "command": "baseline",
+                "stage": "session-lock",
+            },
+        )
+        self.assertTrue(error["error"])
+
     def test_overlapping_write_lease_hard_blocks_with_json_conflicts(self) -> None:
         first = self.acquire("first", "tracked.txt")
         blocked = self.acquire("second", "tracked.txt", expected=3)
@@ -419,19 +516,12 @@ class BridgeTests(unittest.TestCase):
         try:
             self.assertIsNotNone(holder.stdout)
             self.assertEqual(holder.stdout.readline().strip(), "locked")
-            expand = subprocess.Popen(
-                [
-                    str(BRIDGE),
-                    "lease-expand",
-                    "--lease-id",
-                    lease["lease_id"],
-                    "--paths",
-                    "other.txt",
-                ],
-                cwd=self.repo,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+            expand = self.handshaking_bridge_process(
+                "lease-expand",
+                "--lease-id",
+                lease["lease_id"],
+                "--paths",
+                "other.txt",
             )
             with self.assertRaises(subprocess.TimeoutExpired):
                 expand.wait(timeout=0.2)
@@ -640,25 +730,18 @@ class BridgeTests(unittest.TestCase):
         lock_path = bridge_dir / "session.lock"
         with lock_path.open("a+b") as lock_handle:
             fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
-            acquire = subprocess.Popen(
-                [
-                    str(BRIDGE),
-                    "lease-acquire",
-                    "--invocation-id",
-                    "lease-only",
-                    "--owner-id",
-                    "lease-only",
-                    "--owner-kind",
-                    "codex-cli",
-                    "--access",
-                    "write",
-                    "--paths",
-                    "tracked.txt",
-                ],
-                cwd=self.repo,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+            acquire = self.handshaking_bridge_process(
+                "lease-acquire",
+                "--invocation-id",
+                "lease-only",
+                "--owner-id",
+                "lease-only",
+                "--owner-kind",
+                "codex-cli",
+                "--access",
+                "write",
+                "--paths",
+                "tracked.txt",
             )
             with self.assertRaises(subprocess.TimeoutExpired):
                 acquire.wait(timeout=0.2)

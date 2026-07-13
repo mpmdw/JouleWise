@@ -32,6 +32,7 @@ THREAD_SCHEMA = "bridge-thread-event/v1"
 SESSION_RECEIPT_SCHEMA = "bridge-session-receipt/v1"
 SESSION_OPEN_SCHEMA = "bridge-session-open/v1"
 SESSION_CLOSE_SCHEMA = "bridge-session-close/v1"
+COMMAND_ERROR_SCHEMA = "bridge-command-error/v1"
 
 EXIT_OK = 0
 EXIT_VIOLATION = 3
@@ -110,6 +111,18 @@ def emit(value: Any) -> None:
     sys.stdout.write(canonical_json(value) + "\n")
 
 
+def emit_command_error(command: str, stage: str, exc: BaseException) -> int:
+    emit(
+        {
+            "schema": COMMAND_ERROR_SCHEMA,
+            "command": command,
+            "stage": stage,
+            "error": str(exc),
+        }
+    )
+    return EXIT_ERROR
+
+
 def run_git(root: Path | None, args: Sequence[str], *, check: bool = True) -> bytes:
     command = ["git"]
     if root is not None:
@@ -180,9 +193,25 @@ def state_mutation_lock(root: Path) -> Iterator[None]:
 
 def serialized_state_mutation(handler: Any) -> Any:
     def serialized(args: argparse.Namespace) -> int:
-        root = repository_root()
-        with state_mutation_lock(root):
-            return int(handler(args))
+        command = getattr(
+            args,
+            "command",
+            handler.__name__.removeprefix("command_").replace("_", "-"),
+        )
+        try:
+            root = repository_root()
+        except (BridgeError, OSError) as exc:
+            return emit_command_error(command, "repository", exc)
+
+        lock_entered = False
+        try:
+            with state_mutation_lock(root):
+                lock_entered = True
+                return int(handler(args))
+        except (BridgeError, OSError) as exc:
+            if lock_entered:
+                raise
+            return emit_command_error(command, "session-lock", exc)
 
     return serialized
 
@@ -1544,22 +1573,20 @@ def command_session_open_locked(root: Path, args: argparse.Namespace) -> int:
 
 
 def command_session_open(args: argparse.Namespace) -> int:
-    root = repository_root()
+    try:
+        root = repository_root()
+    except (BridgeError, OSError) as exc:
+        return emit_command_error("session-open", "repository", exc)
+
+    lock_entered = False
     try:
         with state_mutation_lock(root):
+            lock_entered = True
             return command_session_open_locked(root, args)
-    except OSError as exc:
-        emit(
-            {
-                "schema": SESSION_OPEN_SCHEMA,
-                "status": "ERROR",
-                "stage": "session-lock",
-                "error": str(exc),
-                "lease_id": None,
-                "lease_disposition": "not_acquired",
-            }
-        )
-        return EXIT_ERROR
+    except (BridgeError, OSError) as exc:
+        if lock_entered:
+            raise
+        return emit_command_error("session-open", "session-lock", exc)
 
 
 def session_thread_events(root: Path, invocation_id: str) -> list[dict[str, Any]]:
@@ -1849,22 +1876,20 @@ def command_session_close_locked(root: Path, args: argparse.Namespace) -> int:
 
 
 def command_session_close(args: argparse.Namespace) -> int:
-    root = repository_root()
+    try:
+        root = repository_root()
+    except (BridgeError, OSError) as exc:
+        return emit_command_error("session-close", "repository", exc)
+
+    lock_entered = False
     try:
         with state_mutation_lock(root):
+            lock_entered = True
             return command_session_close_locked(root, args)
-    except OSError as exc:
-        emit(
-            {
-                "schema": SESSION_CLOSE_SCHEMA,
-                "status": "ERROR",
-                "invocation_id": args.invocation_id,
-                "stage": "session-lock",
-                "error": str(exc),
-                "lease_disposition": "unknown",
-            }
-        )
-        return EXIT_ERROR
+    except (BridgeError, OSError) as exc:
+        if lock_entered:
+            raise
+        return emit_command_error("session-close", "session-lock", exc)
 
 
 def command_scope_check(args: argparse.Namespace) -> int:
