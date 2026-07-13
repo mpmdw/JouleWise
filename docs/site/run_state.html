@@ -40,7 +40,7 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit c210c32"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit c210c32</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit ef53497"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit ef53497</span></span></div>
     <h1>JouleWise Run State</h1>
 <p>Last updated: 2026-07-13 (Restart close: PRs #61-#63 MERGED at
 delta-audited heads — DRA-001 malformed-identity blocker fixed on #62;
@@ -50,7 +50,10 @@ bidirectional Claude↔Sol bridge landed the same day (concurrent
 Ed-directed thread; lead-verified: 8/8 protocol checks, 4/4 bridge
 tests). <strong>PAUSE POINT: Ed has declared a whole-project comprehensive
 audit as the next gate before further feature work; method proposal
-pending Ed&#39;s approval.</strong> Window-A execution still requires a quiet
+pending Ed&#39;s approval. Bridge v1 (PR #64) landed 2026-07-13 as
+Ed-directed preparation: all delegated work now runs under
+<code>docs/contracts/bridge_protocol.md</code> — leases, baselines, scope-check,
+envelopes (<code>scripts/bridge</code>).</strong> Window-A execution still requires a quiet
 machine + Ed. Records: <code>docs/run_reports/2026-07-13-restart-merge-deploy.md</code></p>
 <ul>
 <li><code>docs/run_reports/2026-07-12-claude-sol-bridge.md</code>.)</li>
@@ -182,6 +185,10 @@ blocked until the 2M corpus exists.</li>
 <p>Parenthetical states below are historical at each report&#39;s head; they are not
 current restart instructions. Current state is the C-028 block above.</p>
 <ul>
+<li><p>2026-07-13 Bridge v1: bridge-protocol/v1 contract + scripts/bridge tooling
+(PR #64; co-designed with Sol over the bridge itself):
+<code>docs/run_reports/2026-07-13-bridge-v1.md</code></p>
+</li>
 <li><p>2026-07-13 Restart close: #61-#63 merged at delta-audited heads
 (DRA-001 fixed; XSI-1 CI hardening), site live under cap; audit gate
 declared: <code>docs/run_reports/2026-07-13-restart-merge-deploy.md</code></p>
@@ -501,7 +508,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit c210c32 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit ef53497 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

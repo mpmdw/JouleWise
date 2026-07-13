@@ -27,69 +27,72 @@
 <main>
 <div class="doc-layout">
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#deliverable-check-0">Deliverable check (§0)</a>
-<a href="#what-landed">What landed</a>
-<a href="#verification-ledger-lead-side">Verification ledger (lead-side)</a>
-<a href="#process-trace-appendix">Process trace appendix</a>
-<a href="#state-at-close">State at close</a>
-<a href="#addendum-concurrent-bridge-landing-lead-verified-same-session">Addendum: concurrent bridge landing (lead-verified same session)</a></aside>
-  <div class="doc-wrap doc-source-docs-run-reports-2026-07-13-restart-merge-deploy-md">
-    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-13-restart-merge-deploy.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-13-restart-merge-deploy.md · commit c210c32"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-13-restart-merge-deploy.md</span><span class="source-commit">commit c210c32</span></span></div>
-    <h1>Restart close: PRs #61–#63 merged at audited heads; site live under cap (2026-07-13)</h1>
-<p>Session shape: fresh-thread continuation executing the recorded restart
-sequence from <code>RUN_STATE.md</code> (authorized by Ed verbatim: merge #61, run
-the two delta re-audits at explicit xhigh, merge #62/#63, deploy the
-site and check the instruction meter live), ending at a deliberate
-whole-project pause point for a comprehensive audit (method consult
-separately recorded).</p>
+<a href="#the-design-discussion-held-over-the-bridge-being-designed">The design discussion (held over the bridge being designed)</a>
+<a href="#review-shape-and-catches">Review shape and catches</a>
+<a href="#verification-ledger">Verification ledger</a>
+<a href="#process-trace-appendix">Process trace appendix</a></aside>
+  <div class="doc-wrap doc-source-docs-run-reports-2026-07-13-bridge-v1-md">
+    <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-13-bridge-v1.md</code></p>
+    <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-13-bridge-v1.md · commit ef53497"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-13-bridge-v1.md</span><span class="source-commit">commit ef53497</span></span></div>
+    <h1>Bridge v1: contract, tooling, and the discussion that designed it (2026-07-13)</h1>
+<p>Ed&#39;s directive: examine the new Claude↔Codex bridge, discuss improvements
+with Sol (high) over the bridge itself, land guidance in the project, and
+improve the bridge substantially for the next batches of work.</p>
 <h2 id="deliverable-check-0">Deliverable check (§0)</h2>
-<p>SHIPPED. All three agent-lane PRs are merged at delta-audited heads;
-the live capsule is deployed under the Lakebed cap with a clear
-freshness banner; the post-merge integration review ran and its one
-finding is fixed and CI-validated on main.</p>
-<h2 id="what-landed">What landed</h2>
-<ol>
-<li><strong>PR #61 (P2-049)</strong> merged unchanged (its audit had completed in the
-prior session&#39;s gate shape: fresh lens CLEAN + lead replay + CI).</li>
-<li><strong>PR #62 (P2-028)</strong> merged after its delta re-audit (fresh Sol xhigh,
-read-only) found one blocker, fixed at the lead bench:<ul>
-<li><strong>DRA-001 (blocker, FIXED):</strong> equal-but-malformed identity hashes
-were accepted as compared identity evidence (garbage == garbage →
-pass). Hash-shaped identity fields
-(<code>artifact_identity.sha256</code>/<code>folded_sha256</code>) now require valid
-sha256 hex; malformed values refuse with
-<code>identity_evidence_malformed</code>, surface per-bundle in
-<code>evidence_problems</code>, and appear in the new
-<code>identity_fields_malformed</code> payload array. Two regressions prove
-strict validation alone does NOT catch this. Ledger <code>P2028-5</code>.</li>
-<li><strong>DRA-002 (should-fix, FIXED):</strong> ledger completed to the promised
-P2028-1..5.</li>
+<p>SHIPPED as PR #64 (<code>impl/bridge-v1</code>): <code>docs/contracts/bridge_protocol.md</code>
+(<code>bridge-protocol/v1</code>), <code>scripts/bridge</code> (leases / baselines / scope-check /
+thread registry), reverse-adapter hardening, and every consumer surface
+updated. Suite 1358 OK at the PR head.</p>
+<h2 id="the-design-discussion-held-over-the-bridge-being-designed">The design discussion (held over the bridge being designed)</h2>
+<p>Three rounds, Fable lead ↔ Sol (gpt-5.6-sol, high effort), project MCP
+server, thread <code>019f5a67-00f5-7cb1-9c9a-d0cd4916ee82</code>:</p>
+<ul>
+<li><strong>Round 1</strong> — Sol answered six pain points with a field-complete prompt
+contract, a sentinel envelope it demonstrated live in its own reply, thread
+continue-vs-fresh rules, and four gaps the lead had missed entirely
+(cancellation semantics, concurrent workspace ownership, protocol version
+negotiation, thread closure/GC).</li>
+<li><strong>Round 2</strong> — lead adjudications; Sol out-designed the lead in three
+places, all accepted: hard-block atomic leases (lead had proposed
+warn-only; Sol: &quot;warn-only would reproduce yesterday&#39;s failure while
+creating the appearance of protection&quot;), path-level baseline manifests
+(lead had proposed a status-digest; Sol showed four ways it is not
+attribution-sound), and separate lease/thread event logs joined by
+invocation_id. Sol also named the design&#39;s highest-risk failure mode:
+false confidence in scope attribution over a moving shared tree — and the
+audit-batch mitigation (pinned commit, isolated worktrees, snapshot_read
+leases, no writes until adjudication).</li>
+<li><strong>Round 3</strong> — Sol drafted the full contract in-band with five marked
+draft-choices; the lead adjudicated all five (JSON header sentinel,
+{path, match} scope entries, flock locking, warn-don&#39;t-auto-abandon
+expiry, bridge-internal path exemption).</li>
 </ul>
-</li>
-<li><strong>PR #63 (SITE-01)</strong> merged after its delta re-audit found <strong>no
-blockers</strong>; dispositions recorded on the PR:<ul>
-<li>D1 (executable discovery can falsely enter advisory mode off this
-machine) and D2 (node decode test executes rewritten JS, not the
-emitted TS) — ACCEPTED AS FOLLOW-UP, queue row SITE-02.</li>
-<li>D3 (ledger metric-snapshot mixing) — fixed on the branch.</li>
+<p>Lead dissents recorded: caller origin-markers KEPT on the reverse path
+(contract-compliance lint, not security); AGENTS.md deliberately restates
+Sol-side obligations (always-read enforcement surface) against the lens&#39;s
+one-fact-one-home nit.</p>
+<h2 id="review-shape-and-catches">Review shape and catches</h2>
+<p>Implementation (Sol xhigh, CLI path — per the new routing rule the bridge
+itself prescribes) → fresh lens (xhigh) → fix round 1 (xhigh) → delta
+re-audit (xhigh) → fix round 2 (high) → lead direct verification.</p>
+<ul>
+<li><strong>Lens (4 blockers, all confirmed at the lead bench):</strong> leaseless
+SCOPE_OK; net-state HEAD checking blind to commit-then-revert; scope-check
+never anchored to the prompt-supplied digest; prospective scope expansion
+self-conflicted.</li>
+<li><strong>Delta re-audit (1 NEW blocker):</strong> malformed override events could erase
+attribution ambiguity → SCOPE_OK. Fifth recorded instance of the
+fix-rounds-inject-defects pattern; the delta-re-audit layer keeps paying
+for itself.</li>
+<li><strong>Lead gate:</strong> live probes on the real tool (overlap hard-block rc=3 with
+CONFLICT JSON; expired-lease conflict-until-abandoned semantics confirmed
+contract-correct; digest omission → CHECK_ERROR; malformed override →
+CHECK_ERROR unhealthy_lease_log; expand races; adapter FAILED-envelope
+synthesis), plus the audit-loop termination ruling: after fix round 2 the
+residual surface was verified by direct lead inspection instead of a
+fourth Sol audit.</li>
 </ul>
-</li>
-<li><strong>Post-merge integration review</strong> (fresh Sol xhigh over merged main):
-no cross-stream functional defects. One should-fix, <strong>XSI-1</strong>: the
-installed-wheel CI job ran only <code>--help</code>, exercising neither new
-fail-closed surface. FIXED at the lead bench: the job now smoke-tests
-the determinism-gate refusal envelope (exit 2,
-<code>fewer_than_two_bundles</code>) and the analysis-manifest installed-layout
-root refusal. Validated green on main CI.</li>
-<li><strong>Live deploy (SITE-01 acceptance):</strong> <code>npx lakebed deploy</code> ACCEPTED
-the 854,349-byte measured artifact (prior arc: rejected over the
-1,048,576-byte cap). Live checks: <code>/index</code>, <code>/status.html</code>,
-<code>/style.css</code>, <code>/api/freshness</code>, <code>/api/live-status</code> all 200; the worst
-shard (<code>/task_queue.html</code>, 71,864 B served) cold-decoded in ~0.5 s
-within the instruction meter; freshness reports deployed commit
-<code>7d3ea57</code> with 14/14 sources current, zero stale/moved.</li>
-</ol>
-<h2 id="verification-ledger-lead-side">Verification ledger (lead-side)</h2>
+<h2 id="verification-ledger">Verification ledger</h2>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -98,94 +101,39 @@ within the instruction meter; freshness reports deployed commit
 </tr>
 </thead>
 <tbody><tr>
-<td>P2-028 post-DRA focused</td>
-<td><code>Ran 40 tests … OK (skipped=1)</code></td>
+<td>Focused bridge tests</td>
+<td><code>Ran 40 tests … OK</code> (fix1 head); adapter 11 ok; expand races 3 OK</td>
 </tr>
 <tr>
-<td>P2-028 post-DRA full suite (worktree)</td>
-<td><code>Ran 1298 tests … OK (skipped=13)</code></td>
+<td>Full suite at PR head</td>
+<td><code>Ran 1358 tests … OK (skipped=13)</code> (worktree convention)</td>
 </tr>
 <tr>
-<td>Real-corpus gate (both groups, post-DRA)</td>
-<td><code>determinism_supported</code>, <code>identity_fields_malformed: []</code></td>
+<td>Defect-first discipline</td>
+<td>fix round 1 V0: 23 regression failures BEFORE fixes, green after</td>
 </tr>
 <tr>
-<td>Merged-main canonical suite (lead backstop for the review&#39;s environment-blocked run)</td>
-<td><code>Ran 1314 tests in 116.911s — OK (skipped=10)</code></td>
+<td>Live probes</td>
+<td>hard-block rc=3; no-lease → ATTRIBUTION_INDETERMINATE; tampered/omitted digest → CHECK_ERROR; malformed acquire/override → fail closed</td>
 </tr>
 <tr>
-<td>Main CI incl. new installed-wheel smokes</td>
-<td>green (<code>MAIN-CI-GREEN</code>)</td>
-</tr>
-<tr>
-<td>Deploy</td>
-<td>accepted; measured mode (Lakebed 0.0.25); artifact 854,349 B / cap 1,048,576 B</td>
-</tr>
-<tr>
-<td>Live routes</td>
-<td>5/5 HTTP 200; worst-shard cold decode OK; freshness 14/14 current</td>
+<td>Static</td>
+<td>node --check both adapters; bash -n codex-bridge; git diff --check</td>
 </tr>
 </tbody></table></div>
-<p>Suite-count conventions held: worktree replays <code>skipped=12–13</code>
-(sandbox/corpus gates), final main <code>skipped=10</code>.</p>
 <h2 id="process-trace-appendix">Process trace appendix</h2>
 <ul>
-<li><strong>Shape:</strong> sequential restart execution (no parallel streams); two
-read-only delta audits + one integration review, all explicit
-<code>--effort xhigh</code> (verified in the manifest rows — the prior session&#39;s
-unintended-ultra defect did not recur); two lead bench fixes
-(DRA-001, XSI-1) each with defect-shaped regressions.</li>
-<li><strong>Catches:</strong> delta-audit layer 1 blocker (DRA-001) + 1 bookkeeping
-(DRA-002) on P2-028 — unique, no other layer saw it; 2 should-fix +
-1 nit on SITE-01 (D1/D2 deferred with dissent-free disposition, D3
-fixed); integration-review layer 1 unique should-fix (XSI-1,
-installed-wheel coverage). Lead-live layer: deploy acceptance +
-freshness + meter checks (not reachable by any static layer).</li>
-<li><strong>Interventions:</strong> none new; wrapper effort passthrough fixed in the
-prior session held.</li>
-<li><strong>Worktrees:</strong> p2049/p2028/site01 removed after merge (ledgers
-committed). ~25 stale worktrees from earlier arcs remain deliberately
-untouched pending the comprehensive audit (bridge dirs may hold
-evidence; R-016-class preservation applies before any removal).</li>
-<li><strong>Delegation calibration:</strong> delta-audit p2028 | Sol xhigh | review |
-judgment-call | 1 real blocker confirmed by bench (strong); delta-audit
-site01 | Sol xhigh | review | judgment-call | should-fixes, correctly
-no blocker; integration review | Sol xhigh | review | judgment-call |
-1 unique catch, suite environment-blocked (lead backstop required —
-recurring pattern: read-only sandboxes cannot run tempfile suites; the
-lead suite replay is structural, not optional).</li>
+<li>Shape: one stream (worktree impl/bridge-v1); MCP for the 3-round design
+discussion (interactive → MCP per the routing rule), CLI xhigh/high for
+implementation and reviews; two lead bench passes for consumer pointers.</li>
+<li>Spend: 3 MCP discussion turns (high) + 5 CLI sessions (impl xhigh, lens
+xhigh, fix1 xhigh, delta xhigh, fix2 high).</li>
+<li>Calibration: Sol design-consult on its own working conditions was the
+session&#39;s highest-yield unit — three lead proposals overturned with
+strictly better designs, four missed dimensions surfaced. The
+delegation-calibration ledger gains another design-freedom WIN row.</li>
+<li>Cross-links: C-031 council row; PR #64; contract provenance points here.</li>
 </ul>
-<h2 id="state-at-close">State at close</h2>
-<ul>
-<li><code>main</code> = <code>origin/main</code>, CI green, canonical 1314 OK (skipped=10).</li>
-<li>Live capsule current at the deployed commit; drift banner clear.</li>
-<li>Queue heads: Window A ([QUIET-MAC + ED]) is the next object-level
-work; agent-lane heads P2-050 (needs adjudication), SITE-02
-(follow-ups), TOOL-01 (lead tooling).</li>
-<li><strong>PAUSE POINT:</strong> whole-project comprehensive audit requested by Ed
-before further feature work; method proposal (Sol consult) recorded in
-the session summary and pending Ed&#39;s approval.</li>
-</ul>
-<h2 id="addendum-concurrent-bridge-landing-lead-verified-same-session">Addendum: concurrent bridge landing (lead-verified same session)</h2>
-<p>A concurrent Ed-directed thread landed the bidirectional Claude↔Sol
-bridge (<code>docs/run_reports/2026-07-12-claude-sol-bridge.md</code>) into the
-same working tree mid-session. Lead investigation and verification
-before commit: read the full diff set (reverse adapter
-<code>scripts/claude-bridge-mcp.mjs</code> — origin/hops guards before spawn,
-argv-array spawn, bounded output, timeout, empty strict MCP registry,
-plan mode, read-only tools; <code>.mcp.json</code> model/effort/one-hop pins;
-<code>codex-bridge</code> model+effort plumbing; policy surfaces coherent);
-re-ran its verification myself: protocol checker 8/8 PASS, bridge
-tests 4/4 OK, static checks clean. One cross-thread breakage found and
-fixed: my P2-028 kernel retirement broke two <code>tests/test_gen_state.py</code>
-fidelity cases (the bridge thread&#39;s suite run caught it; mutation
-subjects moved to P2-016/P1-008, exact-ID set updated). Final
-whole-tree canonical suite: <code>Ran 1318 tests in 111.017s — OK (skipped=10)</code>.</p>
-<p>Spend snapshot (2026-07-13 ~07:00Z, <code>codex-usage</code> 24h window): 3 xhigh
-sessions ≈ 7.0M tokens / 29.9 min (this session&#39;s two delta audits +
-integration review — explicit-effort fix holding); 3 ultra ≈ 17.7M /
-935.6 min (the prior session&#39;s unintended-ultra residue aging out).
-Weekly quota reset: 1% used.</p>
 
 
   </div>
@@ -194,7 +142,7 @@ Weekly quota reset: 1% used.</p>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/run_reports/2026-07-13-restart-merge-deploy.md · commit c210c32 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/run_reports/2026-07-13-bridge-v1.md · commit ef53497 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
