@@ -87,6 +87,19 @@ from a Claude-originated Sol session, and never delegate final verification or
 authority decisions. The top-level caller remains lead and adjudicates the
 peer's advice.
 
+The full wire contract is `docs/contracts/bridge_protocol.md`
+(`bridge-protocol/v1`) — prompt header, return envelope, early returns,
+routing, thread semantics, leases, and scope checking. A Sol session working
+under this bridge MUST: honor the `BRIDGE_TASK_V1` header (especially
+`WRITE_SCOPE` — never infer extra scope); end every MCP turn with the
+`BRIDGE_REPORT_V1` sentinel plus one minified JSON line (an audited CLI run
+with a valid `claude-codex-report/v1` body is trailer-exempt); return
+`NEEDS_SCOPE`/`NEEDS_RULING` instead of guessing; return `PARTIAL` with a
+`route_cli` flag when MCP work outgrows a short bounded turn; and run the
+end-of-turn self scope audit against the provided baseline manifest. Claude
+verifies mechanically with `scripts/bridge scope-check`; the self-audit is
+defense-in-depth, not the backstop.
+
 ## Work And Verification
 
 - Follow the repository contracts and keep raw evidence and run bundles

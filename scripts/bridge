@@ -1,0 +1,1535 @@
+#!/usr/bin/env python3
+"""Tracked bridge-protocol/v1 workspace helper.
+
+This tool intentionally depends only on the Python standard library and Git.
+Bridge-owned mutable state lives below .codex-bridge in the current repository.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import re
+import socket
+import stat
+import subprocess
+import sys
+from typing import Any, Iterator, Sequence
+import uuid
+
+
+LEASE_SCHEMA = "bridge-lease-event/v1"
+BASELINE_SCHEMA = "bridge-baseline/v1"
+SCOPE_SCHEMA = "bridge-scope-report/v1"
+THREAD_SCHEMA = "bridge-thread-event/v1"
+
+EXIT_OK = 0
+EXIT_VIOLATION = 3
+EXIT_INDETERMINATE = 4
+EXIT_ERROR = 5
+
+OPEN_THREAD_STATES = {"pending", "waiting_lead", "active"}
+LEASE_ACQUIRE_EVENTS = {"acquire", "override"}
+LEASE_OWNER_KINDS = {"claude-thread", "codex-mcp", "codex-cli", "human"}
+LEASE_ACCESS_KINDS = {"write", "snapshot_read"}
+LEASE_ACQUIRE_FIELDS = {
+    "schema",
+    "event",
+    "lease_id",
+    "invocation_id",
+    "owner_id",
+    "owner_kind",
+    "access",
+    "paths",
+    "base_head",
+    "baseline_manifest",
+    "baseline_digest",
+    "repository_state_digest",
+    "task",
+    "role",
+    "thread_id",
+    "host",
+    "pid",
+    "timestamp",
+    "expires_at",
+    "note",
+}
+LEASE_OVERRIDE_FIELDS = {
+    "conflicting_lease_ids",
+    "approved_by",
+    "reason",
+    "attribution_policy",
+}
+
+
+class BridgeError(RuntimeError):
+    """An operational or data-integrity error suitable for structured output."""
+
+
+def canonical_json(value: Any) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def canonical_sha256(value: Any) -> str:
+    return "sha256:" + hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace("+00:00", "Z")
+
+
+def parse_timestamp(value: Any, field: str) -> datetime:
+    if not isinstance(value, str):
+        raise BridgeError(f"{field} must be a timestamp string")
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise BridgeError(f"invalid {field}: {value!r}") from exc
+
+
+def emit(value: Any) -> None:
+    sys.stdout.write(canonical_json(value) + "\n")
+
+
+def run_git(root: Path | None, args: Sequence[str], *, check: bool = True) -> bytes:
+    command = ["git"]
+    if root is not None:
+        command.extend(["-C", str(root)])
+    command.extend(args)
+    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if check and result.returncode != 0:
+        detail = result.stderr.decode("utf-8", "replace").strip()
+        raise BridgeError(f"git {' '.join(args)} failed: {detail or f'exit {result.returncode}'}")
+    return result.stdout
+
+
+def repository_root() -> Path:
+    raw = run_git(None, ["rev-parse", "--show-toplevel"])
+    return Path(os.fsdecode(raw.rstrip(b"\n"))).resolve()
+
+
+def head_oid(root: Path) -> str:
+    return run_git(root, ["rev-parse", "HEAD"]).decode("ascii").strip()
+
+
+def git_common_directory(root: Path) -> str:
+    raw = os.fsdecode(run_git(root, ["rev-parse", "--git-common-dir"]).rstrip(b"\n"))
+    common = Path(raw)
+    if not common.is_absolute():
+        common = root / common
+    return str(common.resolve())
+
+
+def bridge_directory(root: Path) -> Path:
+    return root / ".codex-bridge"
+
+
+@contextmanager
+def bridge_lock(root: Path) -> Iterator[None]:
+    directory = bridge_directory(root)
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    lock_path = directory / "bridge.lock"
+    with lock_path.open("a+b") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def load_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    events: list[dict[str, Any]] = []
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, 1):
+                if not line.strip():
+                    continue
+                value = json.loads(line)
+                if not isinstance(value, dict):
+                    raise BridgeError(f"{path}: line {line_number} is not a JSON object")
+                events.append(value)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BridgeError(f"could not parse {path}: {exc}") from exc
+    return events
+
+
+def append_jsonl(path: Path, event: dict[str, Any]) -> None:
+    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="\n") as handle:
+        handle.write(canonical_json(event) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def normalize_repo_path(raw: str) -> str:
+    if not isinstance(raw, str) or not raw:
+        raise BridgeError("scope paths must be non-empty strings")
+    if raw == "*":
+        return raw
+    path = PurePosixPath(raw)
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+        raise BridgeError(f"path must be normalized and repository-relative: {raw!r}")
+    normalized = str(path)
+    if normalized in {"", "."}:
+        raise BridgeError(f"invalid repository path: {raw!r}")
+    return normalized
+
+
+def parse_path_specs(values: Sequence[str]) -> list[dict[str, str]]:
+    specs: list[dict[str, str]] = []
+    for value in values:
+        raw_path = value
+        match = "exact"
+        if ":" in value:
+            candidate, separator, suffix = value.rpartition(":")
+            if separator and suffix in {"exact", "subtree", "all"}:
+                raw_path, match = candidate, suffix
+        path = normalize_repo_path(raw_path)
+        if match == "all" and path != "*":
+            raise BridgeError("match=all is valid only for the '*' path")
+        if path == "*" and match != "all":
+            raise BridgeError("'*' must use match=all (write '*:all')")
+        specs.append({"path": path, "match": match})
+    unique = {(spec["path"], spec["match"]): spec for spec in specs}
+    return [unique[key] for key in sorted(unique)]
+
+
+def path_matches(path: str, spec: dict[str, str]) -> bool:
+    match = spec["match"]
+    root = spec["path"]
+    if match == "all":
+        return True
+    if match == "exact":
+        return path == root
+    return path == root or path.startswith(root + "/")
+
+
+def specs_overlap(left: dict[str, str], right: dict[str, str]) -> bool:
+    if left["match"] == "all" or right["match"] == "all":
+        return True
+    if left["match"] == "exact":
+        return path_matches(left["path"], right)
+    if right["match"] == "exact":
+        return path_matches(right["path"], left)
+    return path_matches(left["path"], right) or path_matches(right["path"], left)
+
+
+def spec_sets_overlap(left: Sequence[dict[str, str]], right: Sequence[dict[str, str]]) -> bool:
+    return any(specs_overlap(a, b) for a in left for b in right)
+
+
+def spec_covers(cover: dict[str, str], requested: dict[str, str]) -> bool:
+    if cover["match"] == "all":
+        return True
+    if requested["match"] == "all":
+        return False
+    if cover["match"] == "exact":
+        return requested["match"] == "exact" and cover["path"] == requested["path"]
+    return requested["path"] == cover["path"] or requested["path"].startswith(
+        cover["path"] + "/"
+    )
+
+
+def spec_set_covers(
+    cover: Sequence[dict[str, str]], requested: Sequence[dict[str, str]]
+) -> bool:
+    return all(any(spec_covers(item, need) for item in cover) for need in requested)
+
+
+def validate_path_spec_list(value: Any, field: str = "paths") -> list[dict[str, str]]:
+    if not isinstance(value, list) or not value:
+        raise BridgeError(f"{field} must be a non-empty list")
+    serialized: list[str] = []
+    for item in value:
+        if not isinstance(item, dict) or set(item) != {"path", "match"}:
+            raise BridgeError(f"{field} contains an invalid path specification")
+        path = item.get("path")
+        match = item.get("match")
+        if not isinstance(path, str) or match not in {"exact", "subtree", "all"}:
+            raise BridgeError(f"{field} contains an invalid path specification")
+        serialized.append(f"{path}:{match}")
+    canonical = parse_path_specs(serialized)
+    if canonical != value:
+        raise BridgeError(f"{field} must be canonical, sorted, and deduplicated")
+    return canonical
+
+
+def validate_lease_event(event: dict[str, Any]) -> None:
+    if event.get("schema") != LEASE_SCHEMA:
+        raise BridgeError("unsupported schema")
+    event_name = event.get("event")
+    if event_name not in LEASE_ACQUIRE_EVENTS | {"expand", "release", "abandon"}:
+        raise BridgeError(f"unknown event {event_name!r}")
+    for field in ("lease_id", "invocation_id", "owner_id"):
+        if not isinstance(event.get(field), str) or not event[field]:
+            raise BridgeError(f"missing or invalid {field}")
+    if event.get("owner_kind") not in LEASE_OWNER_KINDS:
+        raise BridgeError("missing or unknown owner_kind")
+    if event.get("access") not in LEASE_ACCESS_KINDS:
+        raise BridgeError("missing or unknown access")
+    validate_path_spec_list(event.get("paths"))
+    parse_timestamp(event.get("timestamp"), "timestamp")
+    if event_name == "override":
+        unknown = sorted(set(event) - LEASE_ACQUIRE_FIELDS - LEASE_OVERRIDE_FIELDS)
+        if unknown:
+            raise BridgeError("override contains unknown fields: " + ", ".join(unknown))
+        conflicting_ids = event.get("conflicting_lease_ids")
+        if (
+            not isinstance(conflicting_ids, list)
+            or not conflicting_ids
+            or any(not isinstance(item, str) or not item for item in conflicting_ids)
+            or conflicting_ids != sorted(set(conflicting_ids))
+        ):
+            raise BridgeError(
+                "override conflicting_lease_ids must be a non-empty sorted unique string list"
+            )
+        if event["lease_id"] in conflicting_ids:
+            raise BridgeError("override cannot conflict with its own lease id")
+        for field in ("approved_by", "reason"):
+            if not isinstance(event.get(field), str) or not event[field].strip():
+                raise BridgeError(f"override missing or invalid {field}")
+        if event.get("attribution_policy") != "INDETERMINATE":
+            raise BridgeError("override attribution_policy must be INDETERMINATE")
+    if event_name == "expand":
+        validate_path_spec_list(event.get("expanded_paths"), "expanded_paths")
+
+
+def load_lease_events(path: Path) -> list[dict[str, Any]]:
+    try:
+        events = load_jsonl(path)
+        for line_number, event in enumerate(events, 1):
+            try:
+                validate_lease_event(event)
+            except BridgeError as exc:
+                raise BridgeError(f"line {line_number}: {exc}") from exc
+        try:
+            active_lease_index(events)
+        except BridgeError as exc:
+            raise BridgeError(f"invalid event sequence: {exc}") from exc
+        return events
+    except BridgeError as exc:
+        raise BridgeError(f"unhealthy_lease_log: {exc}") from exc
+
+
+def append_lease_event(path: Path, event: dict[str, Any]) -> None:
+    try:
+        validate_lease_event(event)
+    except BridgeError as exc:
+        raise BridgeError(f"invalid_lease_event: {exc}") from exc
+    append_jsonl(path, event)
+
+
+def expanded_path_specs(
+    existing: Sequence[dict[str, str]], additions: Sequence[dict[str, str]]
+) -> list[dict[str, str]]:
+    serialized = [f"{item['path']}:{item['match']}" for item in (*existing, *additions)]
+    return parse_path_specs(serialized)
+
+
+def validate_expansion_transition(
+    current: dict[str, Any], expansion: dict[str, Any]
+) -> None:
+    for field in ("lease_id", "invocation_id", "owner_id", "owner_kind", "access"):
+        if expansion.get(field) != current.get(field):
+            raise BridgeError(f"lease expansion changes {field}")
+    expected_paths = expanded_path_specs(current["paths"], expansion["expanded_paths"])
+    if expansion["paths"] != expected_paths:
+        raise BridgeError("lease expansion paths do not equal the canonical expanded scope")
+    prior_timestamp = current.get("last_expanded_at") or current.get("timestamp")
+    if parse_timestamp(expansion["timestamp"], "timestamp") < parse_timestamp(
+        prior_timestamp, "prior lease timestamp"
+    ):
+        raise BridgeError("lease expansion predates the prior lease event")
+
+
+def validate_terminal_transition(current: dict[str, Any], terminal: dict[str, Any]) -> None:
+    for field in (
+        "lease_id",
+        "invocation_id",
+        "owner_id",
+        "owner_kind",
+        "access",
+        "paths",
+    ):
+        if terminal.get(field) != current.get(field):
+            raise BridgeError(f"terminal lease event changes {field}")
+    prior_timestamp = current.get("last_expanded_at") or current.get("timestamp")
+    if parse_timestamp(terminal["timestamp"], "timestamp") < parse_timestamp(
+        prior_timestamp, "prior lease timestamp"
+    ):
+        raise BridgeError("terminal lease event predates the prior lease event")
+
+
+def active_lease_index(events: Sequence[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    leases: dict[str, dict[str, Any]] = {}
+    for event in events:
+        if event.get("schema") != LEASE_SCHEMA:
+            raise BridgeError("lease log contains an unsupported schema")
+        event_name = event.get("event")
+        lease_id = event.get("lease_id")
+        if not isinstance(lease_id, str) or not lease_id:
+            raise BridgeError("lease log event has no lease_id")
+        if event_name in LEASE_ACQUIRE_EVENTS:
+            if lease_id in leases:
+                raise BridgeError(f"lease log contains duplicate acquisition for {lease_id}")
+            leases[lease_id] = {
+                "lease": dict(event),
+                "state": "active",
+                "terminal_event": None,
+            }
+        elif event_name == "expand":
+            if lease_id not in leases:
+                raise BridgeError(f"lease log expands unknown lease {lease_id}")
+            if leases[lease_id]["state"] != "active":
+                raise BridgeError(f"lease log expands inactive lease {lease_id}")
+            validate_expansion_transition(leases[lease_id]["lease"], event)
+            leases[lease_id]["lease"]["paths"] = event["paths"]
+            leases[lease_id]["lease"]["last_expanded_at"] = event["timestamp"]
+        elif event_name in {"release", "abandon"}:
+            if lease_id not in leases:
+                raise BridgeError(f"lease log terminates unknown lease {lease_id}")
+            if leases[lease_id]["state"] != "active":
+                raise BridgeError(f"lease log terminates lease {lease_id} more than once")
+            validate_terminal_transition(leases[lease_id]["lease"], event)
+            leases[lease_id]["state"] = "released" if event_name == "release" else "abandoned"
+            leases[lease_id]["terminal_event"] = event
+        else:
+            raise BridgeError(f"lease log contains unknown event {event_name!r}")
+    return leases
+
+
+def lease_warnings(lease: dict[str, Any], now: datetime) -> list[str]:
+    warnings: list[str] = []
+    expires_at = lease.get("expires_at")
+    if expires_at is not None and parse_timestamp(expires_at, "expires_at") <= now:
+        warnings.append("lease expiry has passed; explicit release or abandonment is still required")
+    return warnings
+
+
+def current_repository_pin(root: Path) -> tuple[str, str]:
+    head = head_oid(root)
+    state = capture_git_state(root)
+    visible_status = {
+        path: value for path, value in state["status"].items() if not is_internal_path(path)
+    }
+    visible_index = {
+        path: value for path, value in state["index"].items() if not is_internal_path(path)
+    }
+    visible_entries = [
+        value for value in state["entries"] if not is_internal_path(value["path"])
+    ]
+    return head, canonical_sha256(
+        {
+            "head_oid": head,
+            "status": visible_status,
+            "index": visible_index,
+            "dirty_paths": visible_entries,
+        }
+    )
+
+
+def baseline_for_invocation(root: Path, invocation_id: str) -> tuple[str | None, str | None]:
+    path = bridge_directory(root) / "baselines" / f"{invocation_id}.json"
+    if not path.exists():
+        return None, None
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BridgeError(f"could not read baseline for {invocation_id}: {exc}") from exc
+    digest = value.get("manifest_sha256")
+    return str(path.relative_to(root)), digest if isinstance(digest, str) else None
+
+
+def lease_conflicts(
+    requested_access: str,
+    requested_paths: Sequence[dict[str, str]],
+    requested_pin: str,
+    leases: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    conflicts: list[dict[str, Any]] = []
+    for lease_id, state in leases.items():
+        if state["state"] != "active":
+            continue
+        lease = state["lease"]
+        paths = lease.get("paths")
+        if not isinstance(paths, list):
+            raise BridgeError(f"lease {lease_id} has invalid paths")
+        if not spec_sets_overlap(requested_paths, paths):
+            continue
+        existing_access = lease.get("access")
+        reason: str | None = None
+        if requested_access == "write" or existing_access == "write":
+            reason = "overlapping write access"
+        elif requested_access == existing_access == "snapshot_read":
+            existing_pin = lease.get("repository_state_digest")
+            if existing_pin != requested_pin:
+                reason = "overlapping snapshot_read leases do not share the same repository pin"
+        if reason is not None:
+            conflicts.append(
+                {
+                    "lease_id": lease_id,
+                    "owner_id": lease.get("owner_id"),
+                    "access": existing_access,
+                    "paths": paths,
+                    "reason": reason,
+                }
+            )
+    return sorted(conflicts, key=lambda item: item["lease_id"])
+
+
+def command_lease_acquire(args: argparse.Namespace) -> int:
+    root = repository_root()
+    try:
+        validate_invocation_id(args.invocation_id)
+        paths = parse_path_specs(args.paths)
+        if args.owner_kind not in LEASE_OWNER_KINDS:
+            raise BridgeError("missing or unknown owner_kind")
+        if args.access not in LEASE_ACCESS_KINDS:
+            raise BridgeError("missing or unknown access")
+        if args.override and (not args.approved_by or not args.reason):
+            raise BridgeError("--override requires --approved-by and --reason")
+        if not args.override and (args.approved_by or args.reason):
+            raise BridgeError("--approved-by and --reason require --override")
+        if args.expires_in is not None and args.expires_in <= 0:
+            raise BridgeError("--expires-in must be greater than zero")
+        if args.pid is not None and args.pid <= 0:
+            raise BridgeError("--pid must be greater than zero")
+        base_head, repository_pin = current_repository_pin(root)
+        baseline_manifest, baseline_digest = baseline_for_invocation(root, args.invocation_id)
+        log_path = bridge_directory(root) / "workspace-lease-events.jsonl"
+        with bridge_lock(root):
+            events = load_lease_events(log_path)
+            leases = active_lease_index(events)
+            conflicts = lease_conflicts(args.access, paths, repository_pin, leases)
+            if conflicts and not args.override:
+                emit(
+                    {
+                        "schema": "bridge-lease-conflict/v1",
+                        "status": "CONFLICT",
+                        "conflicts": conflicts,
+                    }
+                )
+                return EXIT_VIOLATION
+            lease_id = "lease-" + uuid.uuid4().hex
+            timestamp = utc_now()
+            event: dict[str, Any] = {
+                "schema": LEASE_SCHEMA,
+                "event": "override" if conflicts else "acquire",
+                "lease_id": lease_id,
+                "invocation_id": args.invocation_id,
+                "owner_id": args.owner_id,
+                "owner_kind": args.owner_kind,
+                "access": args.access,
+                "paths": paths,
+                "base_head": base_head,
+                "baseline_manifest": baseline_manifest,
+                "baseline_digest": baseline_digest,
+                "repository_state_digest": repository_pin,
+                "task": args.task,
+                "role": args.role,
+                "thread_id": args.thread_id,
+                "host": socket.gethostname(),
+                "timestamp": timestamp,
+                "expires_at": (
+                    (parse_timestamp(timestamp, "timestamp") + timedelta(seconds=args.expires_in))
+                    .isoformat(timespec="microseconds")
+                    .replace("+00:00", "Z")
+                    if args.expires_in is not None
+                    else None
+                ),
+                "note": args.note,
+            }
+            if args.pid is not None:
+                event["pid"] = args.pid
+            if conflicts:
+                event.update(
+                    {
+                        "conflicting_lease_ids": [item["lease_id"] for item in conflicts],
+                        "approved_by": args.approved_by,
+                        "reason": args.reason,
+                        "attribution_policy": "INDETERMINATE",
+                    }
+                )
+            append_lease_event(log_path, event)
+        emit(event)
+        return EXIT_OK
+    except BridgeError as exc:
+        emit({"schema": LEASE_SCHEMA, "status": "ERROR", "error": str(exc)})
+        return EXIT_ERROR
+
+
+def command_lease_expand(args: argparse.Namespace) -> int:
+    root = repository_root()
+    try:
+        additions = parse_path_specs(args.paths)
+        log_path = bridge_directory(root) / "workspace-lease-events.jsonl"
+        with bridge_lock(root):
+            events = load_lease_events(log_path)
+            leases = active_lease_index(events)
+            state = leases.get(args.lease_id)
+            if state is None:
+                raise BridgeError(f"unknown lease id: {args.lease_id}")
+            if state["state"] != "active":
+                raise BridgeError(f"lease {args.lease_id} is already {state['state']}")
+            lease = state["lease"]
+            if lease["access"] != "write":
+                raise BridgeError("lease-expand requires an active write lease")
+            other_leases = {
+                lease_id: other
+                for lease_id, other in leases.items()
+                if lease_id != args.lease_id
+            }
+            conflicts = lease_conflicts(
+                "write",
+                additions,
+                str(lease.get("repository_state_digest") or ""),
+                other_leases,
+            )
+            if conflicts:
+                emit(
+                    {
+                        "schema": "bridge-lease-conflict/v1",
+                        "status": "CONFLICT",
+                        "reason": "lease_expand_foreign_overlap",
+                        "conflicts": conflicts,
+                    }
+                )
+                return EXIT_VIOLATION
+            event = dict(lease)
+            event.update(
+                {
+                    "event": "expand",
+                    "paths": expanded_path_specs(lease["paths"], additions),
+                    "expanded_paths": additions,
+                    "timestamp": utc_now(),
+                }
+            )
+            event.pop("last_expanded_at", None)
+            append_lease_event(log_path, event)
+        emit(event)
+        return EXIT_OK
+    except BridgeError as exc:
+        emit({"schema": LEASE_SCHEMA, "status": "ERROR", "error": str(exc)})
+        return EXIT_ERROR
+
+
+def terminal_lease_event(
+    root: Path,
+    lease_id: str,
+    event_name: str,
+    approved_by: str | None = None,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    log_path = bridge_directory(root) / "workspace-lease-events.jsonl"
+    with bridge_lock(root):
+        events = load_lease_events(log_path)
+        leases = active_lease_index(events)
+        state = leases.get(lease_id)
+        if state is None:
+            raise BridgeError(f"unknown lease id: {lease_id}")
+        if state["state"] != "active":
+            raise BridgeError(f"lease {lease_id} is already {state['state']}")
+        event = dict(state["lease"])
+        event.pop("last_expanded_at", None)
+        event["event"] = event_name
+        event["timestamp"] = utc_now()
+        if event_name == "abandon":
+            event["approved_by"] = approved_by
+            event["reason"] = reason
+        append_lease_event(log_path, event)
+    return event
+
+
+def command_lease_release(args: argparse.Namespace) -> int:
+    try:
+        event = terminal_lease_event(repository_root(), args.lease_id, "release")
+        emit(event)
+        return EXIT_OK
+    except BridgeError as exc:
+        emit({"schema": LEASE_SCHEMA, "status": "ERROR", "error": str(exc)})
+        return EXIT_ERROR
+
+
+def command_lease_abandon(args: argparse.Namespace) -> int:
+    try:
+        event = terminal_lease_event(
+            repository_root(), args.lease_id, "abandon", args.approved_by, args.reason
+        )
+        emit(event)
+        return EXIT_OK
+    except BridgeError as exc:
+        emit({"schema": LEASE_SCHEMA, "status": "ERROR", "error": str(exc)})
+        return EXIT_ERROR
+
+
+def command_lease_list(args: argparse.Namespace) -> int:
+    try:
+        root = repository_root()
+        log_path = bridge_directory(root) / "workspace-lease-events.jsonl"
+        with bridge_lock(root):
+            events = load_lease_events(log_path)
+            leases = active_lease_index(events)
+        now = datetime.now(timezone.utc)
+        rows: list[dict[str, Any]] = []
+        warnings: list[dict[str, Any]] = []
+        for lease_id, state in sorted(leases.items()):
+            if args.active and state["state"] != "active":
+                continue
+            row = dict(state["lease"])
+            row["state"] = state["state"]
+            if state["terminal_event"] is not None:
+                row["terminal_timestamp"] = state["terminal_event"].get("timestamp")
+            row_warnings = lease_warnings(row, now) if state["state"] == "active" else []
+            row["warnings"] = row_warnings
+            rows.append(row)
+            warnings.extend({"lease_id": lease_id, "warning": item} for item in row_warnings)
+        emit({"schema": "bridge-lease-list/v1", "leases": rows, "warnings": warnings})
+        return EXIT_OK
+    except BridgeError as exc:
+        emit({"schema": "bridge-lease-list/v1", "status": "ERROR", "error": str(exc)})
+        return EXIT_ERROR
+
+
+def parse_porcelain_v2(raw: bytes) -> dict[str, dict[str, Any]]:
+    fields = raw.split(b"\0")
+    records: dict[str, dict[str, Any]] = {}
+    index = 0
+    while index < len(fields):
+        record = fields[index]
+        index += 1
+        if not record:
+            continue
+        prefix = record[:2]
+        if prefix == b"1 ":
+            parts = record.split(b" ", 8)
+            if len(parts) != 9:
+                raise BridgeError("malformed ordinary porcelain-v2 record")
+            path = os.fsdecode(parts[8])
+            records[path] = {"kind": "ordinary", "xy": parts[1].decode("ascii")}
+        elif prefix == b"2 ":
+            parts = record.split(b" ", 9)
+            if len(parts) != 10 or index >= len(fields):
+                raise BridgeError("malformed rename porcelain-v2 record")
+            path = os.fsdecode(parts[9])
+            original = os.fsdecode(fields[index])
+            index += 1
+            records[path] = {
+                "kind": "rename",
+                "xy": parts[1].decode("ascii"),
+                "original_path": original,
+            }
+            records[original] = {"kind": "rename_source", "xy": parts[1].decode("ascii")}
+        elif prefix == b"u ":
+            parts = record.split(b" ", 10)
+            if len(parts) != 11:
+                raise BridgeError("malformed unmerged porcelain-v2 record")
+            path = os.fsdecode(parts[10])
+            records[path] = {"kind": "unmerged", "xy": parts[1].decode("ascii")}
+        elif prefix == b"? ":
+            path = os.fsdecode(record[2:])
+            records[path] = {"kind": "untracked", "xy": "??"}
+        elif prefix == b"! ":
+            continue
+        elif record.startswith(b"# "):
+            continue
+        else:
+            raise BridgeError(f"unsupported porcelain-v2 record prefix: {record[:8]!r}")
+    return records
+
+
+def parse_ls_files_stage(raw: bytes) -> dict[str, list[tuple[str, str, int]]]:
+    result: dict[str, list[tuple[str, str, int]]] = {}
+    for record in raw.split(b"\0"):
+        if not record:
+            continue
+        try:
+            metadata, path_bytes = record.split(b"\t", 1)
+            mode_bytes, oid_bytes, stage_bytes = metadata.split(b" ")
+            path = os.fsdecode(path_bytes)
+            value = (mode_bytes.decode("ascii"), oid_bytes.decode("ascii"), int(stage_bytes))
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise BridgeError("malformed git ls-files --stage record") from exc
+        result.setdefault(path, []).append(value)
+    for values in result.values():
+        values.sort(key=lambda item: item[2])
+    return result
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def file_mode(st: os.stat_result, entry_type: str) -> str:
+    if entry_type == "file":
+        return "100755" if st.st_mode & stat.S_IXUSR else "100644"
+    if entry_type == "symlink":
+        return "120000"
+    if entry_type == "directory":
+        return "040" + format(stat.S_IMODE(st.st_mode), "03o")
+    return format(stat.S_IMODE(st.st_mode), "06o")
+
+
+def capture_path_entry(
+    root: Path,
+    path: str,
+    index_state: dict[str, list[tuple[str, str, int]]],
+) -> dict[str, Any]:
+    target = root / path
+    try:
+        st = target.lstat()
+    except FileNotFoundError:
+        return {
+            "path": path,
+            "entry_type": "missing",
+            "mode": None,
+            "content_sha256": None,
+        }
+    stage_zero = next((item for item in index_state.get(path, []) if item[2] == 0), None)
+    if stage_zero is not None and stage_zero[0] == "160000":
+        submodule_oid = stage_zero[1]
+        if target.is_dir():
+            current = subprocess.run(
+                ["git", "-C", str(target), "rev-parse", "HEAD"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            if current.returncode == 0:
+                submodule_oid = current.stdout.decode("ascii").strip()
+        return {
+            "path": path,
+            "entry_type": "submodule",
+            "mode": "160000",
+            "submodule_oid": submodule_oid,
+        }
+    if stat.S_ISLNK(st.st_mode):
+        target_bytes = os.fsencode(os.readlink(target))
+        return {
+            "path": path,
+            "entry_type": "symlink",
+            "mode": file_mode(st, "symlink"),
+            "symlink_target_sha256": hashlib.sha256(target_bytes).hexdigest(),
+        }
+    if stat.S_ISREG(st.st_mode):
+        return {
+            "path": path,
+            "entry_type": "file",
+            "mode": file_mode(st, "file"),
+            "content_sha256": sha256_file(target),
+        }
+    if stat.S_ISDIR(st.st_mode):
+        return {
+            "path": path,
+            "entry_type": "directory",
+            "mode": file_mode(st, "directory"),
+            "content_sha256": None,
+        }
+    return {
+        "path": path,
+        "entry_type": "other",
+        "mode": format(stat.S_IMODE(st.st_mode), "06o"),
+        "content_sha256": None,
+    }
+
+
+def capture_git_state(root: Path) -> dict[str, Any]:
+    status_raw = run_git(root, ["status", "--porcelain=v2", "-z", "--untracked-files=all"])
+    stage_raw = run_git(root, ["ls-files", "--stage", "-z"])
+    status = parse_porcelain_v2(status_raw)
+    index_state = parse_ls_files_stage(stage_raw)
+    entries = [capture_path_entry(root, path, index_state) for path in sorted(status)]
+    return {
+        "status_raw": status_raw,
+        "stage_raw": stage_raw,
+        "status": status,
+        "index": index_state,
+        "entries": entries,
+    }
+
+
+def manifest_digest_payload(manifest: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in manifest.items() if key != "manifest_sha256"}
+
+
+def validate_invocation_id(value: str) -> str:
+    if not value or value in {".", ".."} or "/" in value or "\0" in value:
+        raise BridgeError("invocation id must be a non-empty filename component")
+    return value
+
+
+def command_baseline(args: argparse.Namespace) -> int:
+    try:
+        root = repository_root()
+        invocation_id = validate_invocation_id(args.invocation_id or ("inv-" + uuid.uuid4().hex))
+        state = capture_git_state(root)
+        manifest: dict[str, Any] = {
+            "schema": BASELINE_SCHEMA,
+            "invocation_id": invocation_id,
+            "repository_root": str(root),
+            "git_common_directory": git_common_directory(root),
+            "captured_at": utc_now(),
+            "head_oid": head_oid(root),
+            "git_status_porcelain_v2_z_base64": base64.b64encode(state["status_raw"]).decode("ascii"),
+            "git_ls_files_stage_z_base64": base64.b64encode(state["stage_raw"]).decode("ascii"),
+            "dirty_paths": state["entries"],
+        }
+        manifest["manifest_sha256"] = canonical_sha256(manifest_digest_payload(manifest))
+        destination = bridge_directory(root) / "baselines" / f"{invocation_id}.json"
+        with bridge_lock(root):
+            destination.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            if destination.exists():
+                raise BridgeError(
+                    "baseline_already_exists: fresh capture requires a new invocation id"
+                )
+            payload = (canonical_json(manifest) + "\n").encode("utf-8")
+            descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            try:
+                with os.fdopen(descriptor, "wb") as handle:
+                    handle.write(payload)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+            except BaseException:
+                try:
+                    destination.unlink()
+                except FileNotFoundError:
+                    pass
+                raise
+        emit(
+            {
+                "schema": BASELINE_SCHEMA,
+                "invocation_id": invocation_id,
+                "path": str(destination.relative_to(root)),
+                "manifest_sha256": manifest["manifest_sha256"],
+            }
+        )
+        return EXIT_OK
+    except (BridgeError, OSError, json.JSONDecodeError) as exc:
+        emit({"schema": BASELINE_SCHEMA, "status": "ERROR", "error": str(exc)})
+        return EXIT_ERROR
+
+
+def load_and_validate_manifest(
+    path: Path, expected_digest: str | None = None
+) -> dict[str, Any]:
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise BridgeError(f"could not parse baseline manifest: {exc}") from exc
+    if not isinstance(manifest, dict) or manifest.get("schema") != BASELINE_SCHEMA:
+        raise BridgeError("baseline manifest has an unsupported schema")
+    required = {
+        "invocation_id",
+        "repository_root",
+        "git_common_directory",
+        "captured_at",
+        "head_oid",
+        "git_status_porcelain_v2_z_base64",
+        "git_ls_files_stage_z_base64",
+        "dirty_paths",
+        "manifest_sha256",
+    }
+    missing = sorted(required - manifest.keys())
+    if missing:
+        raise BridgeError("baseline manifest is missing fields: " + ", ".join(missing))
+    if not isinstance(manifest["invocation_id"], str) or not manifest["invocation_id"]:
+        raise BridgeError("baseline invocation_id must be a nonempty string")
+    if not isinstance(manifest["repository_root"], str) or not isinstance(
+        manifest["git_common_directory"], str
+    ):
+        raise BridgeError("baseline repository paths must be strings")
+    if not isinstance(manifest["head_oid"], str) or not re.fullmatch(
+        r"(?:[0-9a-f]{40}|[0-9a-f]{64})", manifest["head_oid"]
+    ):
+        raise BridgeError("baseline head_oid is not a full Git object id")
+    if not isinstance(manifest["manifest_sha256"], str) or not re.fullmatch(
+        r"sha256:[0-9a-f]{64}", manifest["manifest_sha256"]
+    ):
+        raise BridgeError("baseline manifest_sha256 is malformed")
+    expected = canonical_sha256(manifest_digest_payload(manifest))
+    if manifest.get("manifest_sha256") != expected:
+        raise BridgeError("baseline manifest digest mismatch")
+    if expected_digest is not None and manifest["manifest_sha256"] != expected_digest:
+        raise BridgeError("baseline manifest digest does not match --expect-digest")
+    try:
+        status_raw = base64.b64decode(manifest["git_status_porcelain_v2_z_base64"], validate=True)
+        stage_raw = base64.b64decode(manifest["git_ls_files_stage_z_base64"], validate=True)
+    except (ValueError, TypeError) as exc:
+        raise BridgeError("baseline manifest contains invalid base64 Git state") from exc
+    manifest["_status"] = parse_porcelain_v2(status_raw)
+    manifest["_index"] = parse_ls_files_stage(stage_raw)
+    dirty_paths = manifest["dirty_paths"]
+    if not isinstance(dirty_paths, list):
+        raise BridgeError("baseline dirty_paths must be a list")
+    entries: dict[str, dict[str, Any]] = {}
+    for entry in dirty_paths:
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            raise BridgeError("baseline dirty_paths contains an invalid entry")
+        if entry["path"] in entries:
+            raise BridgeError(f"baseline contains duplicate dirty path {entry['path']!r}")
+        entry_type = entry.get("entry_type")
+        mode = entry.get("mode")
+        if entry_type not in {"file", "symlink", "submodule", "missing", "directory", "other"}:
+            raise BridgeError(f"baseline path {entry['path']!r} has an invalid entry_type")
+        if mode is not None and (not isinstance(mode, str) or not re.fullmatch(r"[0-7]{6}", mode)):
+            raise BridgeError(f"baseline path {entry['path']!r} has an invalid mode")
+        digest_field = {
+            "file": "content_sha256",
+            "symlink": "symlink_target_sha256",
+        }.get(entry_type)
+        if digest_field is not None and (
+            not isinstance(entry.get(digest_field), str)
+            or not re.fullmatch(r"[0-9a-f]{64}", entry[digest_field])
+        ):
+            raise BridgeError(
+                f"baseline path {entry['path']!r} has an invalid {digest_field}"
+            )
+        if entry_type == "submodule" and (
+            not isinstance(entry.get("submodule_oid"), str)
+            or not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", entry["submodule_oid"])
+        ):
+            raise BridgeError(f"baseline path {entry['path']!r} has an invalid submodule_oid")
+        entries[entry["path"]] = entry
+    if set(entries) != set(manifest["_status"]):
+        raise BridgeError("baseline dirty path entries do not match raw Git status")
+    manifest["_entries"] = entries
+    parse_timestamp(manifest["captured_at"], "captured_at")
+    return manifest
+
+
+def sha256_git_object(root: Path, oid: str, cache: dict[str, str]) -> str:
+    if oid not in cache:
+        content = run_git(root, ["cat-file", "blob", oid])
+        cache[oid] = hashlib.sha256(content).hexdigest()
+    return cache[oid]
+
+
+def clean_index_entry(
+    root: Path,
+    path: str,
+    index_state: dict[str, list[tuple[str, str, int]]],
+    object_cache: dict[str, str],
+) -> dict[str, Any]:
+    stage_zero = next((item for item in index_state.get(path, []) if item[2] == 0), None)
+    if stage_zero is None:
+        return {"path": path, "entry_type": "missing", "mode": None, "content_sha256": None}
+    mode, oid, _stage = stage_zero
+    if mode == "160000":
+        return {"path": path, "entry_type": "submodule", "mode": mode, "submodule_oid": oid}
+    digest = sha256_git_object(root, oid, object_cache)
+    if mode == "120000":
+        return {
+            "path": path,
+            "entry_type": "symlink",
+            "mode": mode,
+            "symlink_target_sha256": digest,
+        }
+    return {"path": path, "entry_type": "file", "mode": mode, "content_sha256": digest}
+
+
+def path_state(
+    root: Path,
+    path: str,
+    index_state: dict[str, list[tuple[str, str, int]]],
+    dirty_entries: dict[str, dict[str, Any]],
+    object_cache: dict[str, str],
+) -> dict[str, Any]:
+    index_value = [list(item) for item in index_state.get(path, [])]
+    worktree = dirty_entries.get(path)
+    if worktree is None:
+        worktree = clean_index_entry(root, path, index_state, object_cache)
+    return {"index": index_value, "worktree": worktree}
+
+
+def is_internal_path(path: str) -> bool:
+    return path == ".codex-bridge" or path.startswith(".codex-bridge/")
+
+
+def lease_intervals(events: Sequence[dict[str, Any]]) -> list[dict[str, Any]]:
+    active: dict[str, dict[str, Any]] = {}
+    intervals: list[dict[str, Any]] = []
+    for event in events:
+        if event.get("schema") != LEASE_SCHEMA:
+            raise BridgeError("lease log contains an unsupported schema")
+        event_name = event.get("event")
+        lease_id = event.get("lease_id")
+        if event_name in LEASE_ACQUIRE_EVENTS:
+            if lease_id in active:
+                raise BridgeError(f"duplicate active lease {lease_id}")
+            interval = {
+                "lease": dict(event),
+                "started_at": parse_timestamp(event.get("timestamp"), "timestamp"),
+                "ended_at": None,
+            }
+            active[lease_id] = interval
+            intervals.append(interval)
+        elif event_name == "expand":
+            interval = active.get(lease_id)
+            if interval is None:
+                raise BridgeError(f"expansion event for inactive lease {lease_id}")
+            validate_expansion_transition(interval["lease"], event)
+            interval["lease"]["paths"] = event["paths"]
+            interval["lease"]["last_expanded_at"] = event["timestamp"]
+        elif event_name in {"release", "abandon"}:
+            interval = active.pop(lease_id, None)
+            if interval is None:
+                raise BridgeError(f"terminal event for unknown lease {lease_id}")
+            validate_terminal_transition(interval["lease"], event)
+            interval["ended_at"] = parse_timestamp(event.get("timestamp"), "timestamp")
+        else:
+            raise BridgeError(f"unknown lease event {event_name!r}")
+    return intervals
+
+
+def concurrent_foreign_writers(
+    root: Path,
+    manifest: dict[str, Any],
+    changed_paths: Sequence[str],
+    events: Sequence[dict[str, Any]],
+    governing_lease_id: str | None,
+) -> dict[str, list[str]]:
+    if not events or not changed_paths:
+        return {}
+    start = parse_timestamp(manifest["captured_at"], "captured_at")
+    end = datetime.now(timezone.utc)
+    invocation_id = manifest["invocation_id"]
+    overlaps: dict[str, list[str]] = {}
+    for interval in lease_intervals(events):
+        lease = interval["lease"]
+        if interval["started_at"] > end:
+            continue
+        if interval["ended_at"] is not None and interval["ended_at"] < start:
+            continue
+        is_foreign_writer = (
+            lease.get("access") == "write"
+            and lease.get("invocation_id") != invocation_id
+            and lease.get("lease_id") != governing_lease_id
+        )
+        is_indeterminate_override = lease.get("attribution_policy") == "INDETERMINATE"
+        if not is_foreign_writer and not is_indeterminate_override:
+            continue
+        paths = lease.get("paths")
+        if not isinstance(paths, list):
+            raise BridgeError(f"lease {lease.get('lease_id')} has invalid paths")
+        for path in changed_paths:
+            if any(path_matches(path, spec) for spec in paths):
+                overlaps.setdefault(path, []).append(str(lease.get("lease_id")))
+    for path in overlaps:
+        overlaps[path].sort()
+    return overlaps
+
+
+def governing_writer_lease(
+    leases: dict[str, dict[str, Any]],
+    invocation_id: str,
+    scope: Sequence[dict[str, str]],
+    selected_lease_id: str | None,
+    baseline_timestamp: datetime,
+) -> dict[str, Any] | None:
+    if selected_lease_id is not None:
+        candidates = [(selected_lease_id, leases.get(selected_lease_id))]
+    else:
+        candidates = sorted(leases.items())
+    for lease_id, state in candidates:
+        if state is None or state["state"] not in {"active", "released"}:
+            continue
+        if state["state"] == "released" and parse_timestamp(
+            state["terminal_event"].get("timestamp"), "release timestamp"
+        ) < baseline_timestamp:
+            continue
+        lease = state["lease"]
+        if selected_lease_id is None and lease.get("invocation_id") != invocation_id:
+            continue
+        if lease.get("access") != "write":
+            continue
+        if not spec_set_covers(lease["paths"], scope):
+            continue
+        return {"lease_id": lease_id, "state": state["state"], "lease": lease}
+    return None
+
+
+def commit_history_paths(
+    root: Path, base_head: str, current_head: str
+) -> tuple[set[str], list[str]]:
+    raw = run_git(root, ["rev-list", "--reverse", "--parents", f"{base_head}..{current_head}"])
+    paths: set[str] = set()
+    merge_commits: list[str] = []
+    for line in raw.decode("ascii").splitlines():
+        fields = line.split()
+        if not fields:
+            continue
+        commit = fields[0]
+        if len(fields) > 2:
+            merge_commits.append(commit)
+            continue
+        touched = run_git(
+            root,
+            [
+                "diff-tree",
+                "--root",
+                "--no-commit-id",
+                "--name-only",
+                "-r",
+                "--no-renames",
+                "-z",
+                commit,
+            ],
+        )
+        paths.update(
+            os.fsdecode(item) for item in touched.split(b"\0") if item
+        )
+    return paths, merge_commits
+
+
+def scope_error_report(baseline: str, error: str) -> dict[str, Any]:
+    return {
+        "schema": SCOPE_SCHEMA,
+        "verdict": "CHECK_ERROR",
+        "baseline": baseline,
+        "paths": [],
+        "reasons": [error],
+    }
+
+
+def command_scope_check(args: argparse.Namespace) -> int:
+    baseline_argument = args.baseline
+    try:
+        root = repository_root()
+        if args.expect_digest is None:
+            raise BridgeError("--expect-digest is required")
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", args.expect_digest):
+            raise BridgeError("--expect-digest must be sha256 followed by 64 lowercase hex digits")
+        baseline_path = Path(baseline_argument)
+        if not baseline_path.is_absolute():
+            baseline_path = root / baseline_path
+        manifest = load_and_validate_manifest(baseline_path, args.expect_digest)
+        scope = parse_path_specs(args.scope)
+        lease_events = load_lease_events(
+            bridge_directory(root) / "workspace-lease-events.jsonl"
+        )
+        leases = active_lease_index(lease_events)
+        governing = governing_writer_lease(
+            leases,
+            manifest["invocation_id"],
+            scope,
+            args.lease_id,
+            parse_timestamp(manifest["captured_at"], "captured_at"),
+        )
+        governing_lease_id = governing["lease_id"] if governing is not None else None
+        if Path(manifest["repository_root"]).resolve() != root:
+            report = {
+                "schema": SCOPE_SCHEMA,
+                "verdict": "ATTRIBUTION_INDETERMINATE",
+                "baseline": baseline_argument,
+                "baseline_digest": manifest["manifest_sha256"],
+                "base_head": manifest["head_oid"],
+                "current_head": head_oid(root),
+                "allow_commits": args.allow_commits,
+                "scope": scope,
+                "paths": [],
+                "reasons": ["baseline repository root does not match the current repository"],
+            }
+            emit(report)
+            return EXIT_INDETERMINATE
+
+        current_head = head_oid(root)
+        base_head = manifest["head_oid"]
+        head_changed = current_head != base_head
+        head_disposition = "unchanged"
+        report_reasons: list[str] = []
+        has_violation = False
+        has_indeterminate = False
+        committed_paths: set[str] = set()
+        if governing is None:
+            has_indeterminate = True
+            report_reasons.append("no_governing_lease")
+        if head_changed and not args.allow_commits:
+            head_disposition = "unauthorized"
+            has_violation = True
+            report_reasons.append("HEAD moved but commits were not authorized")
+        elif head_changed:
+            ancestor = subprocess.run(
+                ["git", "-C", str(root), "merge-base", "--is-ancestor", base_head, current_head],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            if ancestor.returncode == 1:
+                head_disposition = "invalid_baseline_relationship"
+                has_indeterminate = True
+                report_reasons.append("current HEAD is not a descendant of baseline HEAD")
+            elif ancestor.returncode != 0:
+                detail = ancestor.stderr.decode("utf-8", "replace").strip()
+                raise BridgeError(f"could not inspect HEAD relationship: {detail}")
+            else:
+                committed_paths, merge_commits = commit_history_paths(
+                    root, base_head, current_head
+                )
+                if merge_commits:
+                    head_disposition = "merge_history_indeterminate"
+                    has_indeterminate = True
+                    report_reasons.append(
+                        "authorized commit range contains merge commits: "
+                        + ",".join(merge_commits)
+                    )
+                elif governing is None:
+                    head_disposition = "ownership_unproven"
+                    report_reasons.append(
+                        "authorized HEAD movement has no governing invocation write lease"
+                    )
+                else:
+                    head_disposition = "authorized"
+                    report_reasons.append(
+                        "authorized descendant HEAD movement is owned by the governing write lease"
+                    )
+
+        current = capture_git_state(root)
+        current_entries = {entry["path"]: entry for entry in current["entries"]}
+        all_index_paths = set(manifest["_index"]) | set(current["index"])
+        changed_index_paths = {
+            path
+            for path in all_index_paths
+            if manifest["_index"].get(path) != current["index"].get(path)
+        }
+        candidate_paths = set(manifest["_status"]) | set(current["status"]) | changed_index_paths
+        object_cache: dict[str, str] = {}
+        changed_paths: list[str] = []
+        for path in sorted(candidate_paths):
+            baseline_state = path_state(
+                root, path, manifest["_index"], manifest["_entries"], object_cache
+            )
+            current_state = path_state(root, path, current["index"], current_entries, object_cache)
+            if baseline_state != current_state:
+                changed_paths.append(path)
+        inspected_paths = sorted(set(changed_paths) | committed_paths)
+        foreign_writers = concurrent_foreign_writers(
+            root,
+            manifest,
+            inspected_paths,
+            lease_events,
+            governing_lease_id,
+        )
+        dispositions: list[dict[str, Any]] = []
+        for path in inspected_paths:
+            reasons: list[str] = []
+            lease_ids = foreign_writers.get(path, [])
+            history_touched = path in committed_paths
+            persistently_changed = path in changed_paths
+            if is_internal_path(path):
+                disposition = "exempt"
+                reasons.append(".codex-bridge/** is bridge-internal state")
+            elif lease_ids:
+                disposition = "attribution_indeterminate"
+                reasons.append("changed path overlaps attribution-invalidating lease history")
+                has_indeterminate = True
+            elif any(path_matches(path, spec) for spec in scope):
+                disposition = "in_scope"
+                if history_touched:
+                    reasons.append("commit history touched a path within declared scope")
+                if persistently_changed:
+                    reasons.append("persistent delta matches declared scope")
+            else:
+                disposition = "out_of_scope"
+                if history_touched:
+                    reasons.append("commit history touched a path outside declared scope")
+                if persistently_changed:
+                    reasons.append("persistent delta does not match declared scope")
+                has_violation = True
+            row: dict[str, Any] = {
+                "path": path,
+                "disposition": disposition,
+                "reasons": reasons,
+            }
+            if lease_ids:
+                row["conflicting_lease_ids"] = lease_ids
+            dispositions.append(row)
+
+        if has_indeterminate:
+            verdict = "ATTRIBUTION_INDETERMINATE"
+            exit_code = EXIT_INDETERMINATE
+        elif has_violation:
+            verdict = "SCOPE_VIOLATION"
+            exit_code = EXIT_VIOLATION
+        else:
+            verdict = "SCOPE_OK"
+            exit_code = EXIT_OK
+        report = {
+            "schema": SCOPE_SCHEMA,
+            "verdict": verdict,
+            "baseline": baseline_argument,
+            "baseline_digest": manifest["manifest_sha256"],
+            "base_head": base_head,
+            "current_head": current_head,
+            "head_disposition": head_disposition,
+            "governing_lease_id": governing_lease_id,
+            "governing_lease_state": governing["state"] if governing is not None else None,
+            "allow_commits": args.allow_commits,
+            "scope": scope,
+            "paths": dispositions,
+            "reasons": report_reasons,
+        }
+        emit(report)
+        return exit_code
+    except (BridgeError, OSError, TypeError, KeyError) as exc:
+        emit(scope_error_report(baseline_argument, str(exc)))
+        return EXIT_ERROR
+
+
+def command_thread_record(args: argparse.Namespace) -> int:
+    try:
+        root = repository_root()
+        event = {
+            "schema": THREAD_SCHEMA,
+            "event": "record",
+            "invocation_id": args.invocation_id,
+            "timestamp": utc_now(),
+            "thread_id": args.thread_id,
+            "task": args.task,
+            "role": args.role,
+            "genre": args.genre,
+            "task_shape": args.task_shape,
+            "state": args.state,
+            "resume_policy": args.resume_policy,
+            "resume_reason": args.resume_reason,
+            "base_head": args.base_head,
+            "baseline_digest": args.baseline_digest,
+            "write_scope_digest": args.scope_digest,
+            "last_bridge_status": args.last_status,
+            "prompt_path": None,
+            "prompt_sha256": None,
+            "output_path": None,
+            "output_sha256": None,
+        }
+        path = bridge_directory(root) / "mcp-thread-events.jsonl"
+        with bridge_lock(root):
+            append_jsonl(path, event)
+        emit(event)
+        return EXIT_OK
+    except (BridgeError, OSError) as exc:
+        emit({"schema": THREAD_SCHEMA, "status": "ERROR", "error": str(exc)})
+        return EXIT_ERROR
+
+
+def command_thread_list(args: argparse.Namespace) -> int:
+    try:
+        root = repository_root()
+        path = bridge_directory(root) / "mcp-thread-events.jsonl"
+        with bridge_lock(root):
+            events = load_jsonl(path)
+        latest: dict[str, dict[str, Any]] = {}
+        for event in events:
+            if event.get("schema") != THREAD_SCHEMA or event.get("event") != "record":
+                raise BridgeError("thread log contains an unsupported event")
+            invocation_id = event.get("invocation_id")
+            if not isinstance(invocation_id, str) or not invocation_id:
+                raise BridgeError("thread event has no invocation_id")
+            latest[invocation_id] = event
+        rows = [latest[key] for key in sorted(latest)]
+        if args.open:
+            rows = [row for row in rows if row.get("state") in OPEN_THREAD_STATES]
+        emit({"schema": "bridge-thread-list/v1", "threads": rows})
+        return EXIT_OK
+    except (BridgeError, OSError) as exc:
+        emit({"schema": "bridge-thread-list/v1", "status": "ERROR", "error": str(exc)})
+        return EXIT_ERROR
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    acquire = subparsers.add_parser("lease-acquire")
+    acquire.add_argument("--invocation-id", required=True)
+    acquire.add_argument("--owner-id", required=True)
+    acquire.add_argument("--owner-kind", required=True)
+    acquire.add_argument("--access", required=True)
+    acquire.add_argument("--paths", required=True, nargs="+")
+    acquire.add_argument("--task")
+    acquire.add_argument("--role")
+    acquire.add_argument("--thread-id")
+    acquire.add_argument("--expires-in", type=int)
+    acquire.add_argument("--pid", type=int)
+    acquire.add_argument("--note")
+    acquire.add_argument("--override", action="store_true")
+    acquire.add_argument("--approved-by")
+    acquire.add_argument("--reason")
+    acquire.set_defaults(handler=command_lease_acquire)
+
+    expand = subparsers.add_parser("lease-expand")
+    expand.add_argument("--lease-id", required=True)
+    expand.add_argument("--paths", required=True, nargs="+")
+    expand.set_defaults(handler=command_lease_expand)
+
+    release = subparsers.add_parser("lease-release")
+    release.add_argument("--lease-id", required=True)
+    release.set_defaults(handler=command_lease_release)
+
+    abandon = subparsers.add_parser("lease-abandon")
+    abandon.add_argument("--lease-id", required=True)
+    abandon.add_argument("--approved-by", required=True)
+    abandon.add_argument("--reason", required=True)
+    abandon.set_defaults(handler=command_lease_abandon)
+
+    lease_list = subparsers.add_parser("lease-list")
+    lease_list.add_argument("--active", action="store_true")
+    lease_list.set_defaults(handler=command_lease_list)
+
+    baseline = subparsers.add_parser("baseline")
+    baseline.add_argument("--invocation-id")
+    baseline.set_defaults(handler=command_baseline)
+
+    scope = subparsers.add_parser("scope-check")
+    scope.add_argument("--baseline", required=True)
+    scope.add_argument("--expect-digest")
+    scope.add_argument("--scope", required=True, nargs="+")
+    scope.add_argument("--lease-id")
+    scope.add_argument("--allow-commits", action="store_true")
+    scope.set_defaults(handler=command_scope_check)
+
+    thread = subparsers.add_parser("thread-record")
+    thread.add_argument("--invocation-id", required=True)
+    thread.add_argument(
+        "--state",
+        required=True,
+        choices=["pending", "waiting_lead", "active", "complete", "abandoned", "lost_before_return"],
+    )
+    thread.add_argument("--thread-id")
+    thread.add_argument("--task")
+    thread.add_argument("--role")
+    thread.add_argument("--genre", choices=["discussion", "implementation", "review", "diagnosis"])
+    thread.add_argument("--task-shape", choices=["interactive", "bounded", "autonomous"])
+    thread.add_argument("--resume-policy", choices=["preferred", "allowed", "fresh_required"])
+    thread.add_argument("--resume-reason")
+    thread.add_argument("--last-status")
+    thread.add_argument("--base-head")
+    thread.add_argument("--baseline-digest")
+    thread.add_argument("--scope-digest")
+    thread.set_defaults(handler=command_thread_record)
+
+    thread_list = subparsers.add_parser("thread-list")
+    thread_list.add_argument("--open", action="store_true")
+    thread_list.set_defaults(handler=command_thread_list)
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    return int(args.handler(args))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

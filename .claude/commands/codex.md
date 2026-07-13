@@ -13,6 +13,8 @@ non-local root-cause, adversarial, integration, or otherwise judgment-dense
 individual work. Use `ultra` only if the Sol session must itself spawn
 subagents and that topology was deliberately authorized.
 
+Follow `docs/contracts/bridge_protocol.md` for the prompt header, return
+envelope, early returns, and lease/scope steps (`scripts/bridge`).
 Pass model `gpt-5.6-sol` and config
 `{"model_reasoning_effort":"<selected-effort>","mcp_servers.claude.enabled":false}`
 explicitly. Set the Git-root
