@@ -543,6 +543,43 @@ class DeterminismGateTests(unittest.TestCase):
         self.assertEqual(result["verdict"], "bundle_refused")
         self.assertIn("identity_evidence_mismatch", result["reason_codes"])
 
+    def test_equal_malformed_identity_hashes_are_refused(self) -> None:
+        first, second = self.make_group("identity-malformed-equal")
+
+        def poison_hash(metadata: dict[str, Any]) -> None:
+            metadata["workload_provenance"]["model"]["artifact_identity"]["sha256"] = (
+                "not-a-real-hash"
+            )
+
+        self.rewrite_metadata(first, poison_hash)
+        self.rewrite_metadata(second, poison_hash)
+
+        result = self.verdict([first, second])
+        self.assertEqual(result["verdict"], "bundle_refused")
+        self.assertIn("identity_evidence_malformed", result["reason_codes"])
+        self.assertIn(
+            "metadata.workload_provenance.model.artifact_identity.sha256",
+            result["identity_fields_malformed"],
+        )
+        self.assertNotIn(
+            "metadata.workload_provenance.model.artifact_identity.sha256",
+            result["identity_fields_compared"],
+        )
+
+    def test_one_malformed_identity_hash_refuses_as_malformed(self) -> None:
+        first, second = self.make_group("identity-malformed-single")
+
+        def poison_hash(metadata: dict[str, Any]) -> None:
+            metadata["workload_provenance"]["model"]["artifact_identity"]["sha256"] = (
+                "ZZ" * 32
+            )
+
+        self.rewrite_metadata(second, poison_hash)
+
+        result = self.verdict([first, second])
+        self.assertEqual(result["verdict"], "bundle_refused")
+        self.assertIn("identity_evidence_malformed", result["reason_codes"])
+
     def test_all_absent_identity_fields_remain_comparable_and_recorded(self) -> None:
         first, second = self.make_group("legacy-identity-absence")
         for bundle in (first, second):
@@ -963,6 +1000,7 @@ class DeterminismGateTests(unittest.TestCase):
             "REASON_DUPLICATE_REPETITION": "duplicate_repetition",
             "REASON_DIFFERENT_CONFIGS": "different_configs",
             "REASON_IDENTITY_EVIDENCE_MISMATCH": "identity_evidence_mismatch",
+            "REASON_IDENTITY_EVIDENCE_MALFORMED": "identity_evidence_malformed",
             "REASON_ITEM_SET_MISMATCH": "item_set_mismatch",
             "REASON_ITEM_NOT_SUCCEEDED": "item_not_succeeded",
             "REASON_ITEM_STATUS_MISMATCH": "item_status_mismatch",
@@ -994,6 +1032,7 @@ class DeterminismGateTests(unittest.TestCase):
                 "item_status_mismatches",
                 "identity_fields_compared",
                 "identity_fields_absent",
+                "identity_fields_malformed",
             },
         )
         self.assertEqual(
@@ -1054,6 +1093,7 @@ class DeterminismGateTests(unittest.TestCase):
                 "refusal_message",
                 "identity_fields_compared",
                 "identity_fields_absent",
+                "identity_fields_malformed",
             },
         )
 

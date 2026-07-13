@@ -38,6 +38,7 @@ REASON_DIFFERENT_REPETITION_GROUPS = "different_repetition_groups"
 REASON_DUPLICATE_REPETITION = "duplicate_repetition"
 REASON_DIFFERENT_CONFIGS = "different_configs"
 REASON_IDENTITY_EVIDENCE_MISMATCH = "identity_evidence_mismatch"
+REASON_IDENTITY_EVIDENCE_MALFORMED = "identity_evidence_malformed"
 REASON_ITEM_SET_MISMATCH = "item_set_mismatch"
 REASON_ITEM_NOT_SUCCEEDED = "item_not_succeeded"
 REASON_ITEM_STATUS_MISMATCH = "item_status_mismatch"
@@ -88,6 +89,14 @@ _TOKENIZER_IDENTITY_KEYS = ("backend", "identifier", "revision", "class", "vocab
 _GENERATOR_IDENTITY_KEYS = ("name", "version")
 _PACKAGE_IDENTITIES = ("mlx", "mlx-lm", "transformers")
 _PACKAGE_IDENTITY_KEYS = ("present", "version")
+#: Identity fields whose values must be sha256 hex to count as evidence;
+#: equal-but-malformed values must refuse, never support (DRA-001).
+_HASH_SHAPED_IDENTITY_FIELDS = frozenset(
+    {
+        "metadata.workload_provenance.model.artifact_identity.folded_sha256",
+        "metadata.workload_provenance.model.artifact_identity.sha256",
+    }
+)
 
 
 class _DuplicateJsonKeyError(ValueError):
@@ -148,15 +157,19 @@ def analyze_determinism_gate(
 
     identity_fields_compared: list[str] = []
     identity_fields_absent: list[str] = []
+    identity_fields_malformed: list[str] = []
     item_status_mismatches: list[dict[str, Any]] = []
     if len(inspections) == len(paths) and len(inspections) >= 2:
         (
             identity_fields_compared,
             identity_fields_absent,
             identity_fields_mismatched,
+            identity_fields_malformed,
         ) = _identity_field_classification(inspections)
         if identity_fields_mismatched:
             reason_codes.append(REASON_IDENTITY_EVIDENCE_MISMATCH)
+        if identity_fields_malformed:
+            reason_codes.append(REASON_IDENTITY_EVIDENCE_MALFORMED)
         comparability_reasons, item_status_mismatches = _comparability_reasons(
             inspections
         )
@@ -168,6 +181,7 @@ def analyze_determinism_gate(
             reason_codes,
             identity_fields_compared=identity_fields_compared,
             identity_fields_absent=identity_fields_absent,
+            identity_fields_malformed=identity_fields_malformed,
             item_status_mismatches=item_status_mismatches,
         )
 
@@ -209,6 +223,7 @@ def analyze_determinism_gate(
         "item_status_mismatches": [],
         "identity_fields_compared": identity_fields_compared,
         "identity_fields_absent": identity_fields_absent,
+        "identity_fields_malformed": [],
     }
 
 
@@ -638,28 +653,43 @@ def _project_identity_value(field_name: str, value: Any) -> Any:
 
 def _identity_field_classification(
     inspections: list[_Inspection],
-) -> tuple[list[str], list[str], list[str]]:
+) -> tuple[list[str], list[str], list[str], list[str]]:
     compared: list[str] = []
     absent: list[str] = []
     mismatched: list[str] = []
+    malformed: list[str] = []
     for field_name in IDENTITY_FIELD_NAMES:
-        present_values = [
-            inspection.identity_evidence[field_name]
+        present = [
+            (inspection, inspection.identity_evidence[field_name])
             for inspection in inspections
             if field_name in inspection.identity_evidence
         ]
-        if not present_values:
+        if not present:
             absent.append(field_name)
             continue
-        if len(present_values) != len(inspections):
+        if field_name in _HASH_SHAPED_IDENTITY_FIELDS:
+            bad = [
+                (inspection, value)
+                for inspection, value in present
+                if not isinstance(value, str) or _SHA256_HEX.fullmatch(value) is None
+            ]
+            if bad:
+                malformed.append(field_name)
+                for inspection, value in bad:
+                    inspection.record["evidence_problems"].append(
+                        f"identity field {field_name} has malformed "
+                        f"sha256 value {value!r}"
+                    )
+                continue
+        if len(present) != len(inspections):
             mismatched.append(field_name)
             continue
-        hashes = {_canonical_json_sha256(value) for value in present_values}
+        hashes = {_canonical_json_sha256(value) for _, value in present}
         if len(hashes) == 1:
             compared.append(field_name)
         else:
             mismatched.append(field_name)
-    return compared, absent, mismatched
+    return compared, absent, mismatched, malformed
 
 
 def _canonical_json_sha256(value: Any) -> str:
@@ -727,6 +757,7 @@ def _refused(
     *,
     identity_fields_compared: list[str] | None = None,
     identity_fields_absent: list[str] | None = None,
+    identity_fields_malformed: list[str] | None = None,
     item_status_mismatches: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
@@ -741,4 +772,5 @@ def _refused(
         "refusal_message": "inputs are not comparable strict-valid repetition bundles",
         "identity_fields_compared": identity_fields_compared or [],
         "identity_fields_absent": identity_fields_absent or [],
+        "identity_fields_malformed": identity_fields_malformed or [],
     }
