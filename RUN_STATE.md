@@ -7,9 +7,9 @@ MERGED: PR #65 landed as `d285989` (Ed-named merge) — discussion lane,
 reverse-consult effort, peer channels + bounded proposal diffs (D-065,
 C-032). Merged-main suite lead-run: 1387 OK (skipped=10); bridge checker
 all PASS; no active leases; merged bridge branches deleted local+origin;
-site regenerated and packed (artifact 864,661 B, under cap) — the ONE
-outstanding action is the Lakebed upload, blocked by session permissions:
-`cd site_capsule && npx lakebed deploy` (Ed). **NEXT GATE unchanged:
+site regenerated, packed, and DEPLOYED live by Ed (2026-07-13T23:49Z,
+lakebed 0.0.29; lead-verified routes 3/3 HTTP 200 and /api/freshness
+serving, baked commit `a89195e`). No outstanding actions. **NEXT GATE unchanged:
 Ed's declared whole-project comprehensive audit precedes further feature
 work; method proposal pending Ed's approval.** Window-A execution still
 requires a quiet machine + Ed. Records:
@@ -419,7 +419,8 @@ current restart instructions. Current state is the C-028 block above.
   bridge branches were deleted local+origin. One stale nested worktree
   (`.claude/worktrees/magical-jones-79e5f4`, detached, clean) was
   removed this session; the long-lived `JouleWise-wt/*` stream worktrees
-  are untouched. Only pending action: the Lakebed site upload (Ed).
+  are untouched. The Lakebed upload was completed by Ed and
+  lead-verified live; no pending actions remain.
 - The generated state-kernel blocks are explicitly non-authoritative;
   `RUN_STATE.md`, `TASK_QUEUE.md`, and `docs/decision_log.md` remain
   authoritative.
