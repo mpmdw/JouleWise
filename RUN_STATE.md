@@ -8,7 +8,10 @@ bidirectional Claude↔Sol bridge landed the same day (concurrent
 Ed-directed thread; lead-verified: 8/8 protocol checks, 4/4 bridge
 tests). **PAUSE POINT: Ed has declared a whole-project comprehensive
 audit as the next gate before further feature work; method proposal
-pending Ed's approval.** Window-A execution still requires a quiet
+pending Ed's approval. Bridge v1 (PR #64) landed 2026-07-13 as
+Ed-directed preparation: all delegated work now runs under
+`docs/contracts/bridge_protocol.md` — leases, baselines, scope-check,
+envelopes (`scripts/bridge`).** Window-A execution still requires a quiet
 machine + Ed. Records: `docs/run_reports/2026-07-13-restart-merge-deploy.md`
 + `docs/run_reports/2026-07-12-claude-sol-bridge.md`.)
 
@@ -156,6 +159,9 @@ queue owns ordering:**
 Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the C-028 block above.
 
+- 2026-07-13 Bridge v1: bridge-protocol/v1 contract + scripts/bridge tooling
+  (PR #64; co-designed with Sol over the bridge itself):
+  `docs/run_reports/2026-07-13-bridge-v1.md`
 - 2026-07-13 Restart close: #61-#63 merged at delta-audited heads
   (DRA-001 fixed; XSI-1 CI hardening), site live under cap; audit gate
   declared: `docs/run_reports/2026-07-13-restart-merge-deploy.md`
