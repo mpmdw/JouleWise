@@ -76,3 +76,35 @@ jobs:
           python -m pip install --no-deps "$wheel"
           cd "$RUNNER_TEMP"
           python -m joulewise --help
+          # Installed-layout behavioral smokes (post-merge integration
+          # review XSI-1): both surfaces must fail closed outside a
+          # checkout, never resolve into site-packages or guess.
+          rc=0
+          python -m joulewise determinism-gate > determinism_out.json || rc=$?
+          test "$rc" -eq 2
+          python - determinism_out.json <<'PY'
+          import json, sys
+          payload = json.load(open(sys.argv[1]))
+          assert payload["verdict"] == "bundle_refused", payload["verdict"]
+          assert "fewer_than_two_bundles" in payload["reason_codes"], payload
+          PY
+          python - <<'PY'
+          from joulewise.analysis_manifest import validate_analysis_manifest
+          from joulewise.analysis_manifest import SCHEMA_VERSION
+          errors = validate_analysis_manifest(
+              {
+                  "schema_version": SCHEMA_VERSION,
+                  "manifest_id": "am-" + "0" * 64,
+                  "freeze_status": "frozen",
+                  "design": {},
+                  "source": {},
+                  "entries": [],
+                  "sentinel_links": [],
+                  "families": [],
+                  "contrasts": [],
+              }
+          )
+          assert any(
+              e.startswith("cannot infer the JouleWise repository root") for e in errors
+          ), errors
+          PY
