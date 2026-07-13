@@ -50,6 +50,7 @@ SESSION_WAITING_STATUSES = {
 LEASE_ACQUIRE_EVENTS = {"acquire", "override"}
 LEASE_OWNER_KINDS = {"claude-thread", "codex-mcp", "codex-cli", "human"}
 LEASE_ACCESS_KINDS = {"write", "snapshot_read"}
+SESSION_LOCK_HELD_ENV = "BRIDGE_SESSION_LOCK_HELD"
 LEASE_ACQUIRE_FIELDS = {
     "schema",
     "event",
@@ -166,6 +167,24 @@ def session_lock(root: Path) -> Iterator[None]:
             yield
         finally:
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def state_mutation_lock(root: Path) -> Iterator[None]:
+    if os.environ.get(SESSION_LOCK_HELD_ENV) == "1":
+        yield
+        return
+    with session_lock(root):
+        yield
+
+
+def serialized_state_mutation(handler: Any) -> Any:
+    def serialized(args: argparse.Namespace) -> int:
+        root = repository_root()
+        with state_mutation_lock(root):
+            return int(handler(args))
+
+    return serialized
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -527,6 +546,7 @@ def lease_conflicts(
     return sorted(conflicts, key=lambda item: item["lease_id"])
 
 
+@serialized_state_mutation
 def command_lease_acquire(args: argparse.Namespace) -> int:
     root = repository_root()
     try:
@@ -608,6 +628,7 @@ def command_lease_acquire(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
 
+@serialized_state_mutation
 def command_lease_expand(args: argparse.Namespace) -> int:
     root = repository_root()
     try:
@@ -690,6 +711,7 @@ def terminal_lease_event(
     return event
 
 
+@serialized_state_mutation
 def command_lease_release(args: argparse.Namespace) -> int:
     try:
         event = terminal_lease_event(repository_root(), args.lease_id, "release")
@@ -700,6 +722,7 @@ def command_lease_release(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
 
+@serialized_state_mutation
 def command_lease_abandon(args: argparse.Namespace) -> int:
     try:
         event = terminal_lease_event(
@@ -913,6 +936,7 @@ def validate_invocation_id(value: str) -> str:
     return value
 
 
+@serialized_state_mutation
 def command_baseline(args: argparse.Namespace) -> int:
     try:
         root = repository_root()
@@ -1247,9 +1271,12 @@ def scope_error_report(baseline: str, error: str) -> dict[str, Any]:
 
 
 def run_bridge_primitive(root: Path, arguments: Sequence[str]) -> tuple[int, dict[str, Any]]:
+    environment = os.environ.copy()
+    environment[SESSION_LOCK_HELD_ENV] = "1"
     result = subprocess.run(
         [sys.executable, str(Path(__file__).resolve()), *arguments],
         cwd=root,
+        env=environment,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -1519,7 +1546,7 @@ def command_session_open_locked(root: Path, args: argparse.Namespace) -> int:
 def command_session_open(args: argparse.Namespace) -> int:
     root = repository_root()
     try:
-        with session_lock(root):
+        with state_mutation_lock(root):
             return command_session_open_locked(root, args)
     except OSError as exc:
         emit(
@@ -1641,16 +1668,6 @@ def record_session_close_thread(
         raise BridgeError(f"thread-record failed: {primitive_failure_detail(event)}")
 
 
-def scope_report_has_persistent_delta(scope_report: dict[str, Any]) -> bool:
-    paths = scope_report.get("paths")
-    if not isinstance(paths, list):
-        return True
-    return any(
-        not isinstance(row, dict) or row.get("disposition") != "exempt"
-        for row in paths
-    )
-
-
 def observed_close_disposition(state: str | None) -> str:
     if state == "active":
         return "retained"
@@ -1659,18 +1676,20 @@ def observed_close_disposition(state: str | None) -> str:
 
 def command_session_close_locked(root: Path, args: argparse.Namespace) -> int:
     observed_lease_state: str | None = None
+    receipt_lease_id: str | None = None
     stage = "receipt"
     try:
         receipt = load_session_receipt(root, args.invocation_id)
-        lease_id = args.lease_id or receipt["lease_id"]
-        if lease_id != receipt["lease_id"]:
+        receipt_lease_id = receipt["lease_id"]
+        stage = "lease-validation"
+        observed_lease_state = lease_state(root, receipt_lease_id)["state"]
+        lease_id = args.lease_id or receipt_lease_id
+        if lease_id != receipt_lease_id:
             raise BridgeError("--lease-id does not match the immutable session receipt")
         expected_digest = args.expect_digest or receipt["baseline_digest"]
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", expected_digest):
             raise BridgeError("--expect-digest must be sha256 followed by 64 lowercase hex digits")
 
-        stage = "lease-validation"
-        observed_lease_state = lease_state(root, lease_id)["state"]
         current_lease, current_scope, current_scope_digest = validate_receipt_binding(
             root, receipt
         )
@@ -1693,9 +1712,10 @@ def command_session_close_locked(root: Path, args: argparse.Namespace) -> int:
             raise BridgeError(f"session lease is already {current_lease['state']}")
         if current_lease["state"] == "released" and terminal is None:
             raise BridgeError("session lease is released without a matching terminal thread event")
-        if args.status == "DISCUSSION" and current_lease["lease"].get("access") != "snapshot_read":
+        if args.status == "DISCUSSION":
             raise BridgeError(
-                "DISCUSSION close requires a snapshot_read lease; write lease is retained"
+                "session-close refuses --status DISCUSSION in bridge-protocol/v1.1; "
+                "advice turns do not use session wrappers"
             )
 
         scope_arguments = [
@@ -1720,12 +1740,6 @@ def command_session_close_locked(root: Path, args: argparse.Namespace) -> int:
         if scope_verdict == "SCOPE_OK" and code == EXIT_OK:
             if args.status == "DONE":
                 thread_state = "complete"
-            elif args.status == "DISCUSSION":
-                if scope_report_has_persistent_delta(scope_report):
-                    raise BridgeError(
-                        "DISCUSSION close found persistent deltas; snapshot_read lease is retained"
-                    )
-                thread_state = "complete"
             elif args.status in SESSION_WAITING_STATUSES:
                 pass
             else:
@@ -1746,6 +1760,7 @@ def command_session_close_locked(root: Path, args: argparse.Namespace) -> int:
             and latest_thread.get("state") == thread_state
             and latest_thread.get("last_bridge_status") == args.status
             and latest_thread.get("scope_verdict") == scope_verdict
+            and latest_thread.get("write_scope_digest") == current_scope_digest
             and unchanged_disposition
         ):
             repeated_disposition = (
@@ -1814,6 +1829,11 @@ def command_session_close_locked(root: Path, args: argparse.Namespace) -> int:
         )
         return normal_exit
     except (BridgeError, OSError, KeyError, TypeError) as exc:
+        if receipt_lease_id is not None:
+            try:
+                observed_lease_state = lease_state(root, receipt_lease_id)["state"]
+            except (BridgeError, OSError, KeyError, TypeError):
+                pass
         error: dict[str, Any] = {
             "schema": SESSION_CLOSE_SCHEMA,
             "status": "ERROR",
@@ -1831,7 +1851,7 @@ def command_session_close_locked(root: Path, args: argparse.Namespace) -> int:
 def command_session_close(args: argparse.Namespace) -> int:
     root = repository_root()
     try:
-        with session_lock(root):
+        with state_mutation_lock(root):
             return command_session_close_locked(root, args)
     except OSError as exc:
         emit(
@@ -2030,6 +2050,7 @@ def command_scope_check(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
 
+@serialized_state_mutation
 def command_thread_record(args: argparse.Namespace) -> int:
     try:
         root = repository_root()
@@ -2134,7 +2155,12 @@ def build_parser() -> argparse.ArgumentParser:
     session_open.add_argument("--invocation-id", required=True)
     session_open.add_argument("--owner-id", required=True)
     session_open.add_argument("--owner-kind", required=True)
-    session_open.add_argument("--access", required=True, choices=["write"])
+    session_open.add_argument(
+        "--access",
+        required=True,
+        choices=["write"],
+        help="v1.1 session wrappers support write-access sessions only",
+    )
     session_open.add_argument("--paths", required=True, nargs="+")
     session_open.add_argument("--task")
     session_open.add_argument("--role")

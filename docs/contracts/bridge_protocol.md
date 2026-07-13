@@ -322,17 +322,27 @@ Lease events MUST include:
 - For overrides: conflicting lease ids, approver, reason, and resulting
   attribution policy
 
-Conflict detection and acquisition MUST occur under one exclusive lock:
-`.codex-bridge/bridge.lock` held via a Python standard-library `fcntl.flock`
-exclusive lock. The critical section reads active events, resolves stale
-state, checks conflicts, appends and flushes the event, then releases the
-lock.
+Conflict detection and acquisition MUST occur under the exclusive
+`.codex-bridge/bridge.lock`, held via a Python standard-library `fcntl.flock`.
+The inner critical section reads active events, resolves stale state, checks
+conflicts, appends and flushes the event, then releases the lock.
 
-The session wrappers additionally serialize each complete open or close
-ceremony per repository under the exclusive
-`.codex-bridge/session.lock`. When both locks are needed, `session.lock` is
-always outer and `bridge.lock` inner; primitives called by a wrapper continue
-to hold `bridge.lock` only for their own critical sections.
+Every public command that mutates bridge state -- `lease-acquire`,
+`lease-expand`, `lease-release`, `lease-abandon`, `baseline`, `thread-record`,
+`session-open`, and `session-close` -- MUST also acquire the exclusive
+`.codex-bridge/session.lock` as its outer lock before reading bridge state.
+The fixed order is always `session.lock` outer, then `bridge.lock` inner.
+The wrappers hold `session.lock` across their complete ceremony and set
+`BRIDGE_SESSION_LOCK_HELD=1` for every primitive subprocess they invoke; that
+trusted-local delegation tells a wrapper child not to reacquire the outer lock
+while still taking `bridge.lock` for its own critical sections. The environment
+flag is a local lock-ownership convention, not general permission to bypass
+serialization.
+
+The read-only `lease-list`, `thread-list`, and `scope-check` commands do not
+take `session.lock` when invoked standalone. A `scope-check` subprocess invoked
+by `session-close` inherits the same held-lock environment convention and runs
+inside the wrapper's already-held outer lock.
 
 Overlapping active write leases hard-block acquisition.
 
@@ -385,6 +395,11 @@ scripts/bridge session-close --invocation-id ID --status STATUS \
   [--lease-id ...] [--expect-digest sha256:...]
 ```
 
+The session wrappers support write-access sessions only in v1.1.
+Snapshot-stable audits use the `snapshot_read` lease, baseline, scope-check,
+and terminal lease primitives directly under §6. Read-only advice turns need
+neither a lease nor a session wrapper.
+
 `session-open` MUST execute `lease-acquire`, `baseline`, and
 `thread-record --state pending` in that order and fail closed. If baseline
 capture, thread recording, or receipt creation fails after acquisition, it
@@ -423,11 +438,9 @@ outcomes as follows:
 
 - For `SCOPE_OK` with `DONE`, it records `complete` and the last bridge
   status, then releases the lease.
-- `DISCUSSION` may complete and release only when the receipt-bound lease has
-  `access: snapshot_read`, `scope-check` reports no persistent attributable
-  deltas, and no non-OK scope verdict applies. `DISCUSSION` against a write
-  lease is a hard error: no terminal thread event is appended and the lease
-  is retained.
+- `session-close` refuses `--status DISCUSSION` unconditionally with a hard
+  error: no terminal thread event is appended and the lease is retained.
+  Advice turns use the read-only discussion lane without wrappers.
 - For `NEEDS_SCOPE`, `NEEDS_RULING`, `PARTIAL`, `BLOCKED`, or `FAILED`, it
   records `waiting_lead` and the actual bridge status and retains the lease.
   Scope-check still runs; a non-OK verdict still exits nonzero.
@@ -437,14 +450,18 @@ outcomes as follows:
   abandonment after adjudication is an explicit lead action.
 
 Closing is idempotent for every outcome. If the most recent thread event
-already records the same state, last bridge status, and current scope verdict,
-and the lease disposition is unchanged, another close is a no-op notice with
-the exit status that outcome normally has. A different status against an
-existing `complete` event is refused, and the wrapper MUST never append a
-contradictory terminal event. Standard output reports the scope-check verdict,
-recorded thread state, and observed lease disposition; errors after explicit
-release or abandonment report that actual state rather than claiming the
-lease was retained.
+already records the same state, last bridge status, current scope verdict, and
+current canonical write-scope digest, and the lease disposition is unchanged,
+another close is a no-op notice with the exit status that outcome normally
+has. A changed scope digest requires a new event even when the other fields
+match. A different status against an existing `complete` event is refused, and
+the wrapper MUST never append a contradictory terminal event. Standard output
+reports the scope-check verdict, recorded thread state, and observed lease
+disposition. Close observes the receipt-bound lease before validating optional
+argument consistency where possible, and after any subsequent error performs a
+best-effort locked re-read; errors therefore report the current `active` as
+`retained`, `released`, or `abandoned` state rather than a stale or unknown
+disposition.
 
 ## 7. Baseline and scope check
 
