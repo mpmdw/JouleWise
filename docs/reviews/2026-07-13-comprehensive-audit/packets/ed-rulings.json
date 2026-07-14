@@ -21,5 +21,20 @@
     "question": "May a no-idle-baseline reduction remain SUCCEEDED with energy_request_j=None? (court T02)",
     "ruling": "Lead-ruled under Ed's deferral, informed by the court's T02 litigation: SUCCEEDED with absent request energy becomes a DISTINCT machine-readable admission state (energy evidence: absent) \u2014 runs stay SUCCEEDED, but every claim gate requiring request energy fails closed on that state. Preserves salvage/v0.1 compatibility; no silent admission flips. WO-002 implements the canonical predicate against this ruling.",
     "process": "adversarial court (challenger/defender/judge) stood in for the pre-decision consult"
+  },
+  "R4": {
+    "ruling_id": "R4",
+    "question": "WO-009 per-field manifest policy-knob semantics (court SF-C requirement: lead rules before mechanical implementation)",
+    "ruling": {
+      "execution_policy.order_policy": "enforce (already full; record as enforced policy)",
+      "execution_policy.within_bundle_repeats": "reserved-compat (validation pins 1; documented reserved)",
+      "execution_policy.cooldown_policy": "descriptive-provenance (D-014 experiment-level cooldown is the enforced mechanism)",
+      "execution_policy.cache_policy": "descriptive-provenance WITH mandatory declared-not-verified marker (unenforced warm/cold declaration must never read as verified state in an energy benchmark)",
+      "execution_policy.warmup_policy": "reserved-compat (authority defers then forbids; single legal value validated)",
+      "execution_policy.default_output_policy": "descriptive-provenance (label-only, stated)",
+      "items[].output_policy": "enforce (already full; record as enforced policy)",
+      "items[].status_policy": "REMOVE (no reader; only default validates; manifests carrying non-default values rejected with clear error)"
+    },
+    "basis": "Sol high scout field table with consumption evidence (packets/wo009-field-scout.md); Ed deferred rulings to lead+Sol judgment"
   }
 }
