@@ -1,0 +1,1309 @@
+{
+  "integrity": {
+    "double_claimed": [
+      "D1-001",
+      "D1-002",
+      "D1-003",
+      "D1-005",
+      "D1-007",
+      "D2-001",
+      "D2-002",
+      "D2-003",
+      "D2-004",
+      "D2-005",
+      "D2-006",
+      "D2-007",
+      "D3-001",
+      "D5-001",
+      "D5-002",
+      "D5-003",
+      "D5-004",
+      "D5-005",
+      "D5-006",
+      "D7-001",
+      "D7-002",
+      "D7-003",
+      "D7-004",
+      "D7-005",
+      "D7-006"
+    ],
+    "missing_members": [],
+    "notes": "85 receipt rows total across 15 receipts (W4-exec rows use W4X-* ids); all claimed at least once (no orphans), no duplicates within a single packet, and every cited member id resolves to a receipt row. FAIL cause: 25 D-cell rows are claimed by BOTH packets, and the set is exactly C2 overlaps_note.c1_exclude_member_ids \u2014 C2 consolidated these seam-handoff rows (e.g. D1-001 -> C2-002, D2-001/D2-003 -> C2-030, D7-001..003 -> C2-021; D1-005, D1-007, D2-006, D2-007 as nit-riders in both) and instructed C1 to exclude them, but C1 claims all 25 anyway (C1-001..C1-024 and C1 nit_riders). Each packet's internal unaccounted_member_check PASS is true per-packet; the cross-packet exclusivity invariant is what fails. Resolution path: apply C2's exclusion list to C1 (drop those member_ids/nit-riders and any C1 cids left with empty membership). Charter section 3 conformance otherwise good: severity enum valid everywhere, receipt ids scan-prefixed, receipts carry scope/exclusions/checks/uncertainties/rows, work_order_sketch uniformly {action, bounded_scope, effort, non_goals}, tier_suggestion in 0-3, dropped lists empty. Two deviations flagged: (1) consolidated packet rows carry no evidence_refs/dedupe_of/mission_tags/verification/adjudication of their own \u2014 evidence resolves only via member receipt rows, so packet rows are not register-row-complete per section 3 if promoted verbatim; (2) receipts/W4-exec.json uses an executed-repro shape (steps/boundaries/verdict) instead of the section 3 receipt fields. Also: C2 ran while receipts/D4.json was absent (per its overlaps_note); D4.json now exists and its 4 rows are C1-claimed only, so no coverage gap resulted. register.jsonl does not exist yet.",
+    "orphan_rows": [],
+    "pass": false
+  },
+  "verdicts": [
+    {
+      "cid": "C1-001",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified in code: exported config schema (schemas.py:502-616) omits prompt-exclusivity, suite ref/hash pairing, SSH-host conditional that validate() enforces; exported summary schema requires only status; writer validate() checks only failure_reason while _check_summary demands finite succeeded metrics. Duplicate of C2-002 (blocker, members W1-002/W1-004/D1-001) \u2014 merge work orders; claim_affecting mandates Sol final.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-002"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/schemas.py",
+        "joulewise/bundle_read.py",
+        "joulewise/cli.py",
+        "tests/test_schemas.py",
+        "tests/test_bundle_read.py",
+        "tests/test_audit_schema_edges.py",
+        "docs/contracts/run_bundle_layout.md"
+      ]
+    },
+    {
+      "cid": "C1-002",
+      "ed_table": false,
+      "fix_route": "bench",
+      "pass_to_sol_final": true,
+      "rationale": "bundle.py:379 confirmed: json.dumps(default=str) silently coerces on ALL paths (not just failure paths \u2014 packet slightly understates scope); controller _jsonable only handles Enum/dict/list; poison test pins the behavior. str(object()) is nondeterministic and would defeat determinism_gate.py. Claim-affecting evidence integrity, so Sol final round required. C2-028 duplicates this from the same member D1-002. Fix must preserve D-011 finalization.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-028"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/bundle.py",
+        "joulewise/controller.py",
+        "tests/test_controller.py",
+        "tests/test_bundle.py"
+      ]
+    },
+    {
+      "cid": "C1-003",
+      "ed_table": false,
+      "fix_route": "bench",
+      "pass_to_sol_final": true,
+      "rationale": "bundle.py _git_commit records only rev-parse HEAD; write_metadata has no dirty field; test_bundle.py:277-279 accepts only unknown/40-hex. package_bundle_pack.py's clean_provenance gate runs at pack time, so a dirty-tree run committed before packing publishes as clean \u2014 the outer gate cannot recover run-time dirtiness. Additive metadata field is bench-sized. Passes to Sol because claim_affecting.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-029"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/bundle.py",
+        "tests/test_bundle.py",
+        "docs/contracts/run_bundle_layout.md",
+        "docs/contracts/measurement_methodology.md"
+      ]
+    },
+    {
+      "cid": "C1-004",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "narrowed_statement": "",
+      "pass_to_sol_final": true,
+      "rationale": "Verified directly: controller's only self._transport call is connection_metadata (controller.py:407); run_command/collect_artifact have test-only callers; remote runs build two SshTransports (adapters/__init__.py:104-105 vs 203), making the connection_metadata clock_alignment enrichment unreachable. Contract doc and LocalTransport docstring overclaim interchangeability. SshTransport run/put_file/collect stay load-bearing via NodeWorkerClient \u2014 deletion must stay bounded; C2-030 duplicates this.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-030"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/interfaces.py",
+        "joulewise/adapters/__init__.py",
+        "joulewise/adapters/local_transport.py",
+        "joulewise/adapters/ssh_transport.py",
+        "joulewise/controller.py",
+        "tests/test_interfaces.py",
+        "tests/test_mock_adapters.py",
+        "tests/test_ssh_transport.py",
+        "docs/contracts/adapter_contracts.md"
+      ]
+    },
+    {
+      "cid": "C1-005",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: run_suite bodies differ in only ~50/408 lines (all backend-specific); _suite_identity and _suite_prompt_closure_problem duplicated verbatim, mlx already textually drifted (extra affine branch, same behavior). Contract pins identical marker/status policy; no parity tests; vllm would be a third copy. Keep-defender invariant (independent mock oracle) preserved by work-order non-goals. Dup of C2-031.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-031"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/adapters/mock_runtime.py",
+        "joulewise/adapters/mlx_runtime.py",
+        "joulewise/adapters/suite_control.py",
+        "tests/test_mock_adapters.py",
+        "tests/test_mlx_runtime.py",
+        "tests/test_suite_control_parity.py"
+      ]
+    },
+    {
+      "cid": "C1-006",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified verbatim: five controller helpers duplicated across vllm_runtime.py:273-336 and nvidia_smi.py:292-357 (no shared base), plus two byte-parallel termination stacks inside node_worker.py (1235-1288 vs 1412/1567-1609). Keep-defense (worker self-containment, separate detached-process maps/timeouts) survives via within-file parameterization; non_goals fence it. No current defect, so should-fix/tier-3. C2-030 consolidates the same D2-003 row.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-030"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/adapters/vllm_runtime.py",
+        "joulewise/adapters/nvidia_smi.py",
+        "joulewise/adapters/node_worker.py",
+        "joulewise/adapters/node_client.py",
+        "tests/test_vllm_runtime.py",
+        "tests/test_nvidia_smi.py",
+        "tests/test_node_worker.py",
+        "tests/test_node_worker_subprocess.py",
+        "tests/test_node_client.py"
+      ]
+    },
+    {
+      "cid": "C1-007",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified in tree: run_task and worker validate_task accept any non-empty run_id/task_id; posixpath.join makes absolute run_id replace remote_work_root, and _with_remote_cleanup rm -rf's derived paths including run_dir. Protocol doc imposes no safe-component syntax. Canonical path sanitized upstream (bundle.py), so should-fix, not blocker. Same members/root-cause as C2-014 \u2014 cross-packet dup. Fix spans client+worker+contract+tests: sol-fix, not bench.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-014"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/adapters/node_client.py",
+        "joulewise/adapters/node_worker.py",
+        "docs/contracts/node_worker_protocol.md",
+        "tests/test_node_client.py",
+        "tests/test_node_worker.py"
+      ]
+    },
+    {
+      "cid": "C1-008",
+      "ed_table": false,
+      "fix_route": "bench",
+      "narrowed_statement": "The verdict gap is real: verdict_for (scripts/spike_mlx_prompt_cache.py:447-458) accepts equal empty/truncated decodes and the report records requested, not observed, token counts. But this is a rediscovery of an already-adjudicated deferred should-fix (stream log 2026-07-07-kv-spike-301.md C-8 finding 2, with a designed fix); the retained 3.0.1 replay_supported verdict was live-verified at 64/64 and is not evidentially undermined. Exposure is limited to future reruns and 3.0.2 harness reuse.",
+      "pass_to_sol_final": false,
+      "rationale": "Verified: verdict_for gates only on token identity + cache tolerance; no emitted==requested assertion; report stores requested decode_tokens only. Real defect, but already caught, recorded, and deferred with a designed fix in stream log C-8.2 (2026-07-07); retained verdict observed 64/64 live. D2-005 is also a member of C2-003 \u2014 consolidation double-counted it.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-003"
+      ],
+      "tier_final": 2,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "scripts/spike_mlx_prompt_cache.py",
+        "tests/test_spike_mlx_prompt_cache.py",
+        "docs/phase_3/kv_feasibility.md"
+      ]
+    },
+    {
+      "cid": "C1-009",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "narrowed_statement": "Drift is real: eight campaign packs, docs/specs/rq_energy_variance_design.md, and TASK_QUEUE.md rows still direct outcome-dependent top-ups without D-062 demotion language, and claims_lint's good AP fixture blesses unqualified \"top-up near floor\" text. But the absent lint check was explicitly deferred by the SPLIT-AP/AP-EDIT spec's fences (\"no new lint rules implemented\"), not omitted in breach of it \u2014 the actual defect is that the deferred lint implication is untracked (no queue row), leaving authoring-time enforcement unowned while packs approach registry freeze.",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: canonical frozen-n/demotion rule (analysis_plans.md:30) vs eight packs plus RQ doc and TASK_QUEUE rows retaining outcome-dependent top-ups; lint fixture asserts \"n=5; top-up near floor.\" yields zero findings. Narrowed: the lint check was spec-fenced as deferred, not breached \u2014 but untracked. Downstream engine/claims-index demotion caps consequence to preventive; migration must preserve per-pack sizing rows.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-006"
+      ],
+      "tier_final": 2,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "docs/campaign_packs/c5_2_3_kv_economics.md",
+        "docs/campaign_packs/c5_2_7_device_perf_w_rankings.md",
+        "docs/campaign_packs/c5_2_8_placement_optimality.md",
+        "docs/campaign_packs/c5_3_1_3_5_replication.md",
+        "docs/campaign_packs/c5_i_1_i_2_i_5_import_family.md",
+        "docs/campaign_packs/c5_i_3_flores_fertility.md",
+        "docs/campaign_packs/c5_i_4_harness_overhead_floor.md",
+        "docs/campaign_packs/q6_c5_2_10_rail_vs_wall.md",
+        "docs/campaign_packs/split_suite_q1_q2_q3.md",
+        "docs/specs/rq_energy_variance_design.md",
+        "docs/contracts/analysis_plans.md",
+        "scripts/claims_lint.py",
+        "tests/test_claims_lint.py",
+        "TASK_QUEUE.md"
+      ]
+    },
+    {
+      "cid": "C1-010",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified directly: suite.py:280-316 defines five fields with no runtime consumer (repo grep clean; order/output policies ARE consumed in both adapters), within_bundle_repeats pinned to 1 (suite.py:771), status_policy pinned to \"none\", 84 constant repeats reproduce. Generators emit divergent unenforced cache_policy values (warm_cache vs cold_between_bundles) inside hashed manifests \u2014 genuine claim-affecting provenance hazard. Blind deletion would invalidate existing hashed manifests under _reject_unknown; adjudication session per work order is right.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/suite.py",
+        "joulewise/workloads.py",
+        "joulewise/gensuite/__init__.py",
+        "configs/suite_manifests/",
+        "tests/test_suite.py",
+        "tests/test_workloads.py",
+        "tests/test_gensuite.py",
+        "tests/test_mlx_runtime.py",
+        "tests/test_mock_adapters.py",
+        "docs/decision_log.md"
+      ]
+    },
+    {
+      "cid": "C1-011",
+      "ed_table": false,
+      "fix_route": "defer-roadmap",
+      "narrowed_statement": "The concentration is real and exactly as measured (2917 lines, 76 functions, 9 classes; CLI, locks, subprocess, backup, shakedown/waivers, prompt hashes, cooldown provenance, claim readiness in one module), but it has no current-defect component \u2014 83 focused tests pass and the PR59-pinned waiver/claim-readiness invariant is intact. The stated consequence materializes only when campaign-scale or split/multi-node work forces edits to this path, so the split is a roadmap-conditioned refactor (extract pure validation/provenance first, behavior-preserving, keeping the full test portfolio), not a near-term should-fix work order.",
+      "pass_to_sol_final": true,
+      "rationale": "Verified exactly: 2917 lines, 76 fns, 9 classes; all 10 line refs land as cited; 83 tests. Real concentration, but no current defect and the consequence is explicitly campaign-scale/multi-node \u2014 priority rules mandate defer-roadmap. Keep-defender: a wrong split risks leaking waivers into claim readiness (PR59 invariant), so any future extraction must be behavior-preserving. Claim-affecting flag forces Sol final.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 2,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "scripts/run_campaign.py",
+        "scripts/campaign/",
+        "tests/test_run_campaign.py"
+      ]
+    },
+    {
+      "cid": "C1-012",
+      "ed_table": false,
+      "fix_route": "defer-roadmap",
+      "narrowed_statement": "Split-suite and KV-economics packs prescribe commands (transfer-bench, split replay, composite validate/reduce, kv-economics-reduce, generate_matrix extension) that are absent from the CLI and have no TASK_QUEUE owner rows \u2014 a real ownership gap. But every such command is explicitly labeled PLANNED with a named phase-plan owner, README discloses the gap, and split execution is gated by SPLIT-AP/P3-001b; the \"mistaken for executable plans\" risk is not a present defect. This is roadmap sequencing debt: assign bounded queue owners when Phase-3 split work is scheduled; do NOT collapse the packs, which carry settled pre-registration requirements.",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: transfer-bench/kv-economics-reduce absent from joulewise/cli.py; no queue owner rows (grep). But packs label each \"PLANNED... no current TASK_QUEUE row\" and README discloses gaps, so no operator-confusion defect today; split gated by SPLIT-AP/P3-001b. Keep-defender: collapsing packs would destroy settled pre-registration content (sentinels, order manifests, D-062, RIG-5) \u2014 only the assign-owners branch is safe.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 2,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "TASK_QUEUE.md",
+        "docs/campaign_packs/README.md",
+        "docs/campaign_packs/split_suite_q1_q2_q3.md",
+        "docs/campaign_packs/c5_2_3_kv_economics.md",
+        "docs/phase_3/phase_3_plan.md",
+        "AGENT_PLAN.md"
+      ]
+    },
+    {
+      "cid": "C1-013",
+      "ed_table": false,
+      "fix_route": "bench",
+      "pass_to_sol_final": true,
+      "rationale": "Verified directly: spec's closed vocabulary (p2-038 spec lines 500-508) omits contamination_evidence_unknown, which uncertainty_evidence.py:239 emits and both cited tests assert as valid; f91421e introduced it after the list. No runtime validator enforces the vocabulary, so drift is contract-prose only \u2014 should-fix, one-line bench doc fix; claim_affecting mandates Sol final pass.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "docs/specs/c027/p2-038_production_uncertainty_evidence.md"
+      ]
+    },
+    {
+      "cid": "C1-014",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "narrowed_statement": "claims_lint's B15 artifact validator genuinely duplicates the engine's envelope validation (~270 lines that must be co-evolved) and its fixed_n-only sampling gate diverges from the engine's lattice; but the two validators' errors are unioned (claims_lint.py:1667-1673), so the composite gate is strictly fail-closed and cannot admit an invalid claim, and the fixed_n restriction matches the spec's current reservation of two_look_alpha_spending (trio spec 129-131). This is a maintainability/duplication defect with latent false-rejection risk on a future approved two-look campaign \u2014 not a current claim-integrity defect, so \"claim_affecting\" overstates it. The fixed_n gate carries no comment marking it as deliberate policy, which is the real drift hazard: a future \"fix the divergence\" edit could delete the only claims-index-side machine gate on two-look admission.",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: both validators run with unioned errors (claims_lint.py:1667-1673) \u2014 fail-closed, so no claim-integrity exposure; fixed_n-only (1183-1184) vs engine's two-look admission (artifact.py:832-836) matches spec 129-131 reserving two-look. Duplication burden real. Keep-defender: fixed_n gate and absolute-path/B15 checks are invariants; work-order non_goals preserve them. Overlaps C2-022 (W5-004 shared); coordinate one unification session.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-022"
+      ],
+      "tier_final": 3,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "scripts/claims_lint.py",
+        "tests/test_claims_index_lint.py",
+        "tests/test_claims_lint.py",
+        "joulewise/analysis_engine/artifact.py",
+        "docs/decision_log.md"
+      ]
+    },
+    {
+      "cid": "C1-015",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Reproduced directly: make_figures.py:90 tab-line fold vs publication_privacy.py:303 NUL fold yield different digests for the identical (path,sha,size) entry; spec rpt-001 \u00a73.1 mandates the packer's identity semantics. No verifier equates them yet, but analysis/rpt001-v1 manifests embed the tab digest, so unification needs explicit versioning \u2014 beyond bench minutes. Exact duplicate: C2-032.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-032"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/make_figures.py",
+        "tests/test_rpt001_report_slice.py",
+        "tests/test_publication_privacy.py",
+        "analysis/rpt001-v1/",
+        "docs/specs/c027/rpt-001_report_vertical_slice.md"
+      ]
+    },
+    {
+      "cid": "C1-016",
+      "ed_table": false,
+      "fix_route": "bench",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: _preflight_bundle line 209 hashes the entire private tree via _file_entries; no consumer reads that key (package_bundles uses public_files from line 346), and audit_private_bundle already hashes the same tree. _git_commit line 95 has zero callers. Keep-defender invariant (public-tree verification, pre/post audits) is protected by the work order's non-goals. Duplicate of C2-033.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-033"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/package_bundle_pack.py",
+        "tests/test_package_bundle_pack.py"
+      ]
+    },
+    {
+      "cid": "C1-017",
+      "ed_table": false,
+      "fix_route": "bench",
+      "pass_to_sol_final": false,
+      "rationale": "Verified directly: REGEN_COMMAND (build_capstone.py:51-53) hardcodes /Users/edr/code/JouleWise/runs though --runs-root defaults to repo-relative \"runs\" (line 301); path propagates into tracked generated slice line 66, violating the spec's own absolute-path prohibition (rpt-001:458). Docs cite it twice. Bench fix. Member D5-003 also lives in C2-016 (blocker superset); this row is its narrow, independently-fixable subset.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-016"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/build_capstone.py",
+        "docs/report_src/README.md",
+        "docs/report_src/appendices/A_reproducibility.md",
+        "docs/report_src/generated/rpt001_vertical_slice.md",
+        "tests/test_rpt001_report_slice.py"
+      ]
+    },
+    {
+      "cid": "C1-018",
+      "ed_table": false,
+      "fix_route": "no-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: pack_capsule packs every docs/site/*.html (13 mirrored DocPages+hand pages); quietWindow/externalAsks/highOpenRisks/queue/docStates exist only in server/index.ts serialization \u2014 renderLiveStatus consumes phase/status/next/verification/bundleCount only; risk_register fetch feeds nothing consumed. Real but demo-surface (Ed deprioritized), fully reversible, cap pressure documented; unrefuted destructive flag forces Sol final. Dup of C2-034.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-034"
+      ],
+      "tier_final": 1,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/build_site.py",
+        "scripts/pack_capsule.py",
+        "site_capsule/server/index.ts",
+        "site_capsule/README.md",
+        "tests/test_build_site_parsers.py",
+        "tests/test_pack_capsule.py"
+      ]
+    },
+    {
+      "cid": "C1-019",
+      "ed_table": false,
+      "fix_route": "no-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: build_site.py:402-436 runs unversioned npx marked with custom fallback plus --no-marked mode; no lockfile exists; pack_capsule.py bakes branch+time. Real but fallback is marked/tested, not silent. Member set is a strict subset of C2-018, which adds the repo-health (red clean-clone suite) component \u2014 fix belongs there; this row is a duplicate. Destructive-simplification risk (offline buildability, ENOTFOUND evidence) unrefuted, so Sol final must see it.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-018"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/build_site.py",
+        "scripts/pack_capsule.py",
+        "tests/test_build_site_parsers.py",
+        "package.json",
+        "package-lock.json",
+        "site_capsule/LAKEBED_FEEDBACK.md",
+        "docs/site/"
+      ]
+    },
+    {
+      "cid": "C1-020",
+      "ed_table": false,
+      "fix_route": "bench",
+      "pass_to_sol_final": true,
+      "rationale": "Verified in-tree: malicious-HTML assertions exist only against private _key_value_table (test_audit_report.py:10), clock selection only against private _select_clock (test_audit_cli_examples.py:28); no generate_report or CLI-run test carries either case. Helpers are currently wired (report.py:385-388, cli.py:264), so no live defect \u2014 vacuity risk under refactor is real. Passing to Sol final because claim_affecting.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "tests/test_audit_report.py",
+        "tests/test_audit_cli_examples.py",
+        "tests/test_report.py",
+        "tests/test_cli_run.py"
+      ]
+    },
+    {
+      "cid": "C1-021",
+      "ed_table": true,
+      "fix_route": "fable-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Every clause verified: kernel has no audit task and null stop card yet RUN_STATE:77 calls it source of truth while RUN_STATE:424 disclaims it; READY lanes contradict the declared audit gate; DOC-008 closed (TASK_QUEUE:145) violating its own spec fence \u2014 PROJECT_STATUS uncompacted (696 lines), CI lacks gen_state --check, orchestration inserts unapplied, reflection protocol still mandatory. Understated: missing CI drift gate. Fix is judgment-dense authority work; mechanical parts sub-delegable to Sol.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-021"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "docs/process/state_kernel.json",
+        "docs/process/state_kernel.schema.json",
+        "scripts/gen_state.py",
+        "tests/test_gen_state.py",
+        "RUN_STATE.md",
+        "TASK_QUEUE.md",
+        "PROJECT_STATUS.md",
+        "docs/planning_reflection_protocol.md",
+        "docs/orchestration.md",
+        "docs/specs/c027/doc-008_orchestration_inserts.md",
+        "docs/agent_playbook.md",
+        "AGENT_PLAN.md",
+        "README.md",
+        "docs/decision_log.md",
+        ".github/workflows/ci.yml"
+      ]
+    },
+    {
+      "cid": "C1-022",
+      "ed_table": true,
+      "fix_route": "sol-fix",
+      "narrowed_statement": "Effort-policy duplication is already resolved: D-065's dedup landed in commit 5166e76, and CLAUDE.md, .claude/agents/codex.md, and .claude/commands/codex.md now carry only the ratified one-line pointer to .claude/skills/codex/SKILL.md \u00a7Effort selection. What survives is wire-contract detail duplication beyond the D-065 enforcement-boundary exemption: envelope shape/field counts, session-open/close lease semantics, thread-reuse rules, the proposal-diff ceiling (~3 files/200 lines, stated in both AGENTS.md and the contract), and the \u00a78 consult structure list in the reverse-consult skill \u2014 plus the Claude agent/command/skill trio near-duplicating each other's operating sequence, against bridge_protocol \u00a710's summarize-and-link SHOULD. Enforcement-boundary guardrails (one-hop, sandbox, WRITE_SCOPE, quiet-mac, envelope-failure-is-not-success) must remain locally explicit per D-065.",
+      "pass_to_sol_final": true,
+      "rationale": "Root cause real but half-stale: D-065's effort dedup already landed (5166e76) \u2014 all entry surfaces carry only the one-line pointer, so the consolidated statement overclaims. Surviving duplication is wire detail (envelope fields, lease semantics, 3-files/200-lines ceiling in AGENTS.md:104-107, \u00a78 list in claude-consult) plus agent/command/skill mutual restatement. Destructive risk (stripping locally-read guardrails) unrefuted; author_conflict; dup of C2-035.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-035"
+      ],
+      "tier_final": 3,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "CLAUDE.md",
+        "AGENTS.md",
+        ".claude/agents/codex.md",
+        ".claude/commands/codex.md",
+        ".claude/skills/codex/SKILL.md",
+        ".agents/skills/claude-consult/SKILL.md",
+        "docs/contracts/bridge_protocol.md",
+        "tests/test_bridge.py",
+        "scripts/check-bridge-docs.mjs"
+      ]
+    },
+    {
+      "cid": "C1-023",
+      "ed_table": true,
+      "fix_route": "fable-fix",
+      "narrowed_statement": "The genuine gap is the absence of an explicit numeric time/token/calendar budget for review/process work and any spend-based tripwire tied to deliverable progress. The claimed absence of a process-innovation freeze trigger and risk-scaled review is overstated: D-060 (ratified 2026-07-10) freezes new breadth including meta-process growth behind four deliverable gates, and orchestration.md \u00a72 tiers review by cost-of-being-wrong. The real defect is that D-060 is qualitative and porous in practice \u2014 Ed-directed bridge v1/v1.1 (~3,000 lines of process infrastructure) landed post-ratification while Window A execution still waited \u2014 so the fix is numeric budget bands plus a mechanical spend-vs-deliverable trigger, not a new freeze concept.",
+      "pass_to_sol_final": true,
+      "rationale": "All refs verified: R-018 real; C-028 snapshot confirms 59 sessions/330.6M tokens/~$1,050; bridge 2,262+702 lines exact. But D-060 (ratified) already freezes meta-process growth behind deliverable gates and orchestration \u00a72 risk-tiers review \u2014 root cause overstated. True gap: no numeric budget, freeze porous (Ed-directed bridge work post-ratification). Keep-defender: crude caps kill proven-unique-catch layers; non_goals preserve them. Dup: C2-036.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-036"
+      ],
+      "tier_final": 2,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "docs/orchestration.md",
+        "docs/decision_log.md",
+        "docs/risk_register.md",
+        "TASK_QUEUE.md",
+        "RUN_STATE.md"
+      ]
+    },
+    {
+      "cid": "C1-024",
+      "ed_table": true,
+      "fix_route": "bench",
+      "pass_to_sol_final": false,
+      "rationale": "Directly verified at current tree: README:75/86 asserts 1,220 tests and PR #59 open; PROJECT_STATUS:8 same, :585 names gpt-5.5; orchestration.md gpt-5.5 as-of 2026-07-08. RUN_STATE records 1,387 tests, PR #65 merged; gh confirms #59/#65 MERGED. Root cause (no freshness owner/check) accurate. Near-duplicate of C2-023, which shares members D7-006/W4X-002/W5-007.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-023"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "README.md",
+        "PROJECT_STATUS.md",
+        "docs/orchestration.md",
+        "tests/"
+      ]
+    },
+    {
+      "cid": "C1-025",
+      "ed_table": true,
+      "fix_route": "bench",
+      "pass_to_sol_final": true,
+      "rationale": "Orphan confirmed mechanically: pinned-tree grep finds only self-references, single content commit 38ee666, codex-run:9-10 says \"no separate watcher, no polling\"; no post-pin drift. Keep-defense (only live view of in-flight CLI rollouts; used in 7698b4f checkpoint) is real but satisfied by the work order's mandated recipe preservation; watchdog+status sentinels bound the blind window.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/codex-watch",
+        ".claude/skills/codex/SKILL.md",
+        "docs/orchestration.md"
+      ]
+    },
+    {
+      "cid": "C2-001",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Code-verified at all three sites: powermetrics.py:307-321 unlinks the sole capture and clears recovery state before any bundle write; controller.py:322-345 has no BaseException/finally boundary and unguarded sequential salvage (674-688); node_client.py routes transport/post-marker/collect failures into unconditional remote rm -rf (375-378) before custody. Irreversible evidence loss; blocker/tier-3 stands.",
+      "severity_final": "blocker",
+      "suspected_dup_of": [],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/adapters/powermetrics.py",
+        "joulewise/controller.py",
+        "joulewise/adapters/node_client.py",
+        "tests/test_powermetrics.py",
+        "tests/test_controller.py",
+        "tests/test_experiment.py",
+        "tests/test_node_client.py"
+      ]
+    },
+    {
+      "cid": "C2-002",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified in code: bundle_read.py:589-591 skips _check_summary for JSON-null summary (is_complete:305-308 disagrees); reduce.py:137-140+896-901+960-962 emits SUCCEEDED with energy_request_j=None, violating _SUCCEEDED_FINITE_FIELDS; cli.py:1291-1296 exits 0 on status alone; schemas.py:502-616/770-831 omit validate() invariants. Claim-affecting in canonical validate/reduce admission flow.",
+      "severity_final": "blocker",
+      "suspected_dup_of": [
+        "C1-001"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/schemas.py",
+        "joulewise/bundle_read.py",
+        "joulewise/reduce.py",
+        "joulewise/cli.py",
+        "tests/test_schemas.py",
+        "tests/test_bundle_read.py",
+        "tests/test_reduce.py",
+        "tests/test_cli.py",
+        "tests/test_audit_reduce_degenerate.py"
+      ]
+    },
+    {
+      "cid": "C2-003",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified in code: mlx_runtime.py:248 labels single-run output fixed_budget_exact even when _suppress_eos fails (1029-1037); strict validation (cli.py:608-614, 703-756) never enforces requested==emitted, unlike the suite underrun check (571-574). inputs.py:1126 sources stop_reason from policy.stop_condition (constant \"suite_completed\" for suites) against claims_ladder.md:29-32; ratio.py:212-214 accepts any string. Spike verdict_for ignores decode length.",
+      "severity_final": "blocker",
+      "suspected_dup_of": [
+        "C2-009",
+        "C1-008"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/adapters/mlx_runtime.py",
+        "joulewise/provenance.py",
+        "joulewise/cli.py",
+        "joulewise/controller.py",
+        "joulewise/bundle_read.py",
+        "joulewise/analysis_engine/inputs.py",
+        "joulewise/analysis_engine/ratio.py",
+        "scripts/spike_mlx_prompt_cache.py",
+        "tests/test_controller.py",
+        "tests/test_analysis_ratio_integration.py",
+        "tests/test_cli.py",
+        "docs/contracts/run_bundle_layout.md"
+      ]
+    },
+    {
+      "cid": "C2-004",
+      "ed_table": false,
+      "fix_route": "bench",
+      "narrowed_statement": "The ordering defect is real: run_experiment computes the aggregate (controller.py:1384) before the incremental manifest write (1387), so an exception or interrupt in that window leaves a completed member bundle unregistered (and no manifest at all on rep 1), violating the D-005 docstring guarantee. However, aggregate_experiment is deliberately non-raising (tolerant JSON reads, OverflowError caught, degenerate members recorded), so the practical exposure is a process interrupt in a millisecond-scale window or a latent bug \u2014 not routine aggregation fallibility. The member bundle survives intact and the aggregate is reconstructable, so consequence is recoverable evidence-discovery friction, not evidence loss.",
+      "pass_to_sol_final": false,
+      "rationale": "Ordering confirmed at controller.py:1381-1387; docstring's own D-005 guarantee (1327-1328) is violated in the aggregation window, and no failure-injection test covers it. But aggregate.py is engineered non-raising (tolerant reads, OverflowError caught), member bundles survive, and the aggregate is reconstructable \u2014 so tier drops to 1. Fix mirrors the existing cooldown double-write; bench-sized.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 1,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "joulewise/controller.py",
+        "tests/test_experiment.py"
+      ]
+    },
+    {
+      "cid": "C2-005",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "detection_floor.py:14-18 itself declares v1 floors not claim-consumable until bundle-byte binding, yet cli.py:1310 consumes them: exact resolution (inputs.py:1284) matches only (bundle_id,config_sha256) subsets \u2014 circular by construction \u2014 bundle_sha256 is shape-checked only, the typed FloorRequest resolver is private-seam-only, and floor_gate_j directly decides supported outcomes (claims.py:243). Both prongs verified; fix before Window A analysis.",
+      "severity_final": "blocker",
+      "suspected_dup_of": [],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/detection_floor.py",
+        "joulewise/analysis_engine/inputs.py",
+        "joulewise/analysis_engine/__init__.py",
+        "joulewise/cli.py",
+        "tests/test_detection_floor.py",
+        "tests/test_analysis_integration.py",
+        "docs/specs/c027/p2-039_floor_artifact.md"
+      ]
+    },
+    {
+      "cid": "C2-006",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified directly: AP-2 (analysis_plans.md:137) authorizes n=10 at freeze, but generate_matrix.py:61 and analysis_manifest.py:750/984/1289/1353 hardcode and enforce n=5; eight packs plus the RQ-VAR draft still authorize outcome-dependent top-ups D-062 forbids. Split-suite shows the safe migration preserving per-pack minima (keep-defender satisfied via non_goals). Doc-side half overlaps C1-009 (shared member D3-001).",
+      "severity_final": "blocker",
+      "suspected_dup_of": [
+        "C1-009"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/generate_matrix.py",
+        "joulewise/analysis_manifest.py",
+        "configs/analysis_registry/",
+        "docs/contracts/analysis_plans.md",
+        "docs/specs/rq_energy_variance_design.md",
+        "docs/campaign_packs/c5_2_3_kv_economics.md",
+        "docs/campaign_packs/c5_2_7_device_perf_w_rankings.md",
+        "docs/campaign_packs/c5_2_8_placement_optimality.md",
+        "docs/campaign_packs/c5_3_1_3_5_replication.md",
+        "docs/campaign_packs/c5_i_1_i_2_i_5_import_family.md",
+        "docs/campaign_packs/c5_i_3_flores_fertility.md",
+        "docs/campaign_packs/c5_i_4_harness_overhead_floor.md",
+        "docs/campaign_packs/q6_c5_2_10_rail_vs_wall.md",
+        "docs/campaign_packs/split_suite_q1_q2_q3.md",
+        "tests/test_analysis_manifest.py",
+        "tests/test_generate_matrix.py"
+      ]
+    },
+    {
+      "cid": "C2-007",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified all cited lines: absent inferred sidecar yields not_applicable (run_campaign.py:930-937, 1193-1194), which emits no integrity flags (131-136), so member stays usable (196-202) \u2014 identical to the ID-native exemption. Mock manifest has text_prompt items; no test covers missing-sidecar-for-text-suite. Fail-open in defense-in-depth (manifests still canonically hashed), so should-fix tier 2, not 3; claim_affecting forces Sol final. Fix needs manifest inspection plus a new status and tests \u2014 bounded sol-fix, not bench.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/run_campaign.py",
+        "tests/test_run_campaign.py"
+      ]
+    },
+    {
+      "cid": "C2-008",
+      "ed_table": false,
+      "fix_route": "bench",
+      "pass_to_sol_final": true,
+      "rationale": "report.py:311 headlines energy/token with no request-energy, tokenizer, boundary, gating, or diagnostic label (grep for strict/validate/energy_request_j empty), violating token_normalization.md:28-31/44-46/109-111; energy_request_j exists in every summary (reduce.py:901). Confirmed, but tier 3 is inflated: no established publication use, reversible bench fix \u2014 tier 2. Sol final required (claim_affecting).",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/report.py",
+        "tests/test_report.py"
+      ]
+    },
+    {
+      "cid": "C2-009",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "make_figures.py:233 writes configured workload_profile.output_tokens into the runtime_output_tokens column; :235-236 hardcode stop/policy unknown while figure/T1 claim runtime-observed. Mitigations verified: reduce.py refuses config-fallback denominators, and energy_request_j/energy_output_token_j equals 512.0 exactly in all six rows, so published values coincide today. Still false provenance in a sealed claim-affecting dataset. C2-003 is the upstream sibling, fixes disjoint.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-003"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/make_figures.py",
+        "tests/test_rpt001_report_slice.py",
+        "scripts/claims_lint.py",
+        "analysis/rpt001-v1/",
+        "figures/rpt001-v1/"
+      ]
+    },
+    {
+      "cid": "C2-010",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "node_client.py:293-311 accepts any status.json with status==\"succeeded\"; no protocol_version check or task_id/type/operation/role correlation despite worker writing all fields (node_worker.py:1836-1841). Adapters persist only the open metadata dict, dropping the formal version. No mismatch negative tests exist. Claim-affecting measurement provenance tiers to 3; fix spans client+2 adapters+tests, so sol-fix not bench.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/adapters/node_client.py",
+        "joulewise/adapters/nvidia_smi.py",
+        "joulewise/adapters/vllm_runtime.py",
+        "tests/test_node_client.py",
+        "tests/test_node_worker_subprocess.py",
+        "docs/contracts/node_worker_protocol.md"
+      ]
+    },
+    {
+      "cid": "C2-011",
+      "ed_table": false,
+      "fix_route": "defer-roadmap",
+      "pass_to_sol_final": false,
+      "rationale": "Verified: TASK_BLOCK_KEYS (node_worker.py:86) closes the payload union; validate_task rejects any transfer-specific block as failed/unknown_error, and the future-task test (test_2k_amplification.py:388) passes only by borrowing telemetry. But no current code dispatches transfer tasks and the protocol pins version-bump evolution \u2014 roadmap-only consequence, so defer-roadmap despite honest should-fix severity.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/adapters/node_worker.py",
+        "docs/contracts/node_worker_protocol.md",
+        "docs/contracts/adapter_contracts.md",
+        "tests/test_2k_amplification.py"
+      ]
+    },
+    {
+      "cid": "C2-012",
+      "ed_table": false,
+      "fix_route": "defer-roadmap",
+      "pass_to_sol_final": false,
+      "rationale": "Verified: prepare/start_sampling delete pidfile/output state before Popen (node_worker.py:142-144, 610-612), zero lock/lease constructs exist, protocol doc offers run-id isolation only. But no retry/concurrency exists today \u2014 reps are sequential (controller.py:1366) and delivery never auto-retries \u2014 so the ownership gap only bites at campaign scale-up or operator error. Roadmap-dependent, no current defect.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/adapters/node_worker.py",
+        "joulewise/adapters/node_client.py",
+        "joulewise/controller.py",
+        "docs/contracts/node_worker_protocol.md",
+        "tests/test_node_worker.py",
+        "tests/test_node_client.py"
+      ]
+    },
+    {
+      "cid": "C2-013",
+      "ed_table": false,
+      "fix_route": "defer-roadmap",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: contract header is PROVISIONAL-only prose; nv-gate-2 spec gates promotion via human checklist; grep shows zero PROVISIONAL/promotion tokens in bundle/validation/schemas/NVIDIA adapters; claim path (window_evidence_precheck) is promotion-blind; cited test passes strict on a stub bundle. Real gap, claim_affecting, but no NVIDIA claims exist and \"promoted\" has no machine source of truth until NV-GATE-2 \u2014 queue it with NV-GATE-2 code-now units.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/bundle.py",
+        "joulewise/validation.py",
+        "joulewise/schemas.py",
+        "joulewise/adapters/node_worker.py",
+        "joulewise/analysis_engine/inputs.py",
+        "tests/test_nvidia_node_integration.py",
+        "tests/test_corpus_strict_validation.py",
+        "docs/specs/c027/nv-gate-2_live_promotion.md",
+        "docs/phase_1/2k_live_verification_checklist.md",
+        "TASK_QUEUE.md"
+      ]
+    },
+    {
+      "cid": "C2-014",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": false,
+      "rationale": "Verified: node_client.py:151-176,464 joins raw run_id/task_id (posixpath.join lets absolute ids replace remote_work_root); lines 370-376 rm -rf the derived run_dir; worker validate_task (1784-1788) and protocol doc require only non-empty strings. Canonical path is sanitized upstream (bundle.py:58-90), so latent boundary defect, not current exploit \u2014 should-fix stands. Duplicates C1-007. Fix spans two modules plus contract plus tests: Sol-shaped.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-007"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/adapters/node_client.py",
+        "joulewise/adapters/node_worker.py",
+        "docs/contracts/node_worker_protocol.md",
+        "tests/test_node_client.py",
+        "tests/test_node_worker.py"
+      ]
+    },
+    {
+      "cid": "C2-015",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": false,
+      "rationale": "Verified in code: ssh_transport.py:77-92 classifies any nonzero exit with phrase-matched stderr as transport failure; node_client.py:225-240 then skips status collection and rm -rf's remote evidence (line 375). Contract 198-200 and local_transport.py:60-69 contradict this. Tests lack the non-255+phrase case. If anything understated: \"connection refused\" is plausible on-node runtime stderr. Coordinate with C2-001 (shared cleanup path, distinct root cause).",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/adapters/ssh_transport.py",
+        "joulewise/adapters/node_client.py",
+        "tests/test_ssh_transport.py",
+        "tests/test_node_client.py",
+        "docs/contracts/node_worker_protocol.md"
+      ]
+    },
+    {
+      "cid": "C2-016",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "All three legs verified at HEAD: runs/ empty at pin, six bundles gitignored with no acquisition contract, public pack explicitly non-re-reducible (publication_privacy.md:11-17); --check false-drifts on any clean clone since build/capstone/rpt001/report.md is untracked (build_capstone.py:317-321); tracked generated/rpt001_vertical_slice.md:66 embeds /Users/edr/code/JouleWise/runs, violating the spec's repo-relative rule (rpt-001 spec:458). C1-017 duplicates only the path leg. Fix needs Ed's privacy/publication approval.",
+      "severity_final": "blocker",
+      "suspected_dup_of": [
+        "C1-017"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/build_capstone.py",
+        "docs/report_src/README.md",
+        "docs/report_src/appendices/A_reproducibility.md",
+        "docs/report_src/generated/rpt001_vertical_slice.md",
+        "docs/specs/c027/rpt-001_report_vertical_slice.md",
+        "docs/contracts/evidence_handoff.md"
+      ]
+    },
+    {
+      "cid": "C2-017",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "narrowed_statement": "The integrated clean-clone release gate is genuinely absent, but the repo already tracks the quickstart transcript and report CI hook as pending Phase 5 deliverables (README:23-24, docs/report_src/README.md:73, phase_5_exit_checklist item 5.0). The unacknowledged defect component is narrower: env/bundle_pack_selection.md omits the required package_bundle_pack.py construction invocation, and CI does not exercise the already-implemented non-secret seams (capstone regeneration check, site build, capsule pack, bundle-pack construction), leaving publication-chain drift detectable only at a manual release attempt.",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: ci.yml has no capstone/site/capsule/pack steps; bundle_pack_selection.md lacks the pack invocation; no ordered release doc exists. But README:23-24, report_src/README.md:73, and phase-5 checklist 5.0 already declare this pending work, so scope narrows to the doc gap plus wiring existing non-secret seams into CI. Tier 3 is blocker-reserved; this is reversible should-fix, tier 2. Claim-affecting (M3) so Sol final round.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C2-016",
+        "C2-019"
+      ],
+      "tier_final": 2,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        ".github/workflows/ci.yml",
+        "env/bundle_pack_selection.md",
+        "README.md",
+        "docs/phase_5/phase_5_exit_checklist.md",
+        "docs/publication_release_checklist.md",
+        "scripts/release_check.py"
+      ]
+    },
+    {
+      "cid": "C2-018",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Every citation verified at current tree (post-pin commits touched only audit dir). I independently reproduced the red test: cached lakebed 0.0.29 rejects index.ts where()/all() at lines 373/563, breaking the README verify anchor \u2014 repo health overrides Lakebed deprioritization. Unpinned npx marked/lakebed and time/branch-stamped build_info confirmed; no lockfiles exist. Keep-defender: offline buildability and hermetic --no-marked tests must survive pinning.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-019"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/build_site.py",
+        "scripts/pack_capsule.py",
+        "site_capsule/server/index.ts",
+        "site_capsule/package.json",
+        "site_capsule/package-lock.json",
+        "tests/test_pack_capsule.py",
+        "tests/test_build_site_parsers.py",
+        "site_capsule/LAKEBED_FEEDBACK.md"
+      ]
+    },
+    {
+      "cid": "C2-019",
+      "ed_table": false,
+      "fix_route": "no-fix",
+      "narrowed_statement": "The fresh-publisher gap is real but is a documentation-organization gap, not a missing-diagnosis gap: the claim/ownership requirement and the exact authorization failure are already documented in-tree (site_capsule/README.md:39,85-92; LAKEBED_FEEDBACK.md:62-65,81-111); what is absent is one consolidated bootstrap checklist, and full credential/ownership transfer of the pinned deployId is a Lakebed platform limitation (account-bound claim, browser-interactive auth only) that no secret-free repo doc can solve.",
+      "pass_to_sol_final": false,
+      "rationale": "Evidence confirms: .lakebed/ and .env.lakebed.server gitignored, deploy flow assumes claimed state. But README:39/85-92 and LAKEBED_FEEDBACK:62-65,81-111 already document the requirement and failure mode; only a checklist is missing, and ownership handoff is platform-impossible (account-bound, browser-only auth). Demo surface per Ed's priority rule; downgrade to nit, record only.",
+      "severity_final": "nit",
+      "suspected_dup_of": [],
+      "tier_final": 1,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "site_capsule/README.md"
+      ]
+    },
+    {
+      "cid": "C2-020",
+      "ed_table": false,
+      "fix_route": "bench",
+      "pass_to_sol_final": false,
+      "rationale": "Verified in tree: README.md:104 and agent_playbook.md:361 document bare `pip install 'joulewise[...]'` (no PyPI dist; W4X-003 executed the failure and the working `-e .` form), pyproject.toml:16 leaves matplotlib unbounded, and env/README.md's analysis lock/reconstruction intentionally excludes it. Bench doc+pin fix; must respect lock-what-IS \u2014 do not install matplotlib into the locked env.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "README.md",
+        "docs/agent_playbook.md",
+        "pyproject.toml",
+        "env/README.md"
+      ]
+    },
+    {
+      "cid": "C2-021",
+      "ed_table": true,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified live: kernel is NOT_AUTHORITATIVE_DERIVED_VIEW yet the generated block claims \"Source of truth\" and renders P2-004/P2-038/P1-008 READY against the declared audit gate (gen_state --check exit 0, byte-only). DOC-010 kernel deps omit the ratified post-G6 fence; RUN_STATE:28 still mandates the D-063-retired planning protocol; orchestration inserts unapplied. Keep-defender: hand-authored prose is currently the only home of the global gate \u2014 retire only after kernel gains gate semantics plus fidelity tests, as the work order already requires.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-021"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "docs/process/state_kernel.json",
+        "docs/process/state_kernel.schema.json",
+        "scripts/gen_state.py",
+        "tests/test_gen_state.py",
+        "RUN_STATE.md",
+        "TASK_QUEUE.md",
+        "PROJECT_STATUS.md",
+        "docs/planning_reflection_protocol.md",
+        "docs/orchestration.md",
+        "docs/specs/c027/doc-008_orchestration_inserts.md",
+        "AGENT_PLAN.md",
+        "README.md",
+        "docs/decision_log.md"
+      ]
+    },
+    {
+      "cid": "C2-022",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "narrowed_statement": "Confirmed: phase4 and claim-index validators demand incompatible row shapes on the same canonical JSONL (claims_lint.py:70-105, 938, 1472), claim-index is excluded from default and bare --mode all (1948-1957), and the forbidden-language gate misses docs/report_src/report.md, slides, captions, and tables while scanning contract-exempt dated run reports (832-842 vs claims_ladder.md:7-10). Narrowed: warning-only prose exit is D-059-ratified design, not a validator disagreement; and CI's repo-level dual-mode test (tests/test_claims_index_lint.py) runs claim-index on the live index, so the dual-schema conflict is a loud forward deadlock on the first post-legacy claims-index row, not a silent bypass of the amended validator.",
+      "pass_to_sol_final": true,
+      "rationale": "Mechanically verified: incompatible PHASE4 vs CLAIM_INDEX required-field sets target one JSONL; claim-index absent from default/all modes; docs/report_src/report.md exists outside reader_facing_surfaces while exempt run_reports are scanned. Narrowed because warning-only prose is D-059-ratified and CI's dual-mode repo test makes the conflict fail loudly. Keep-defender: unification must preserve the hash-pinned legacy grandfather and D-059 warning-only prose. Claim-affecting, so Sol final required.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-014"
+      ],
+      "tier_final": 3,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "scripts/claims_lint.py",
+        "tests/test_claims_lint.py",
+        "tests/test_claims_index_lint.py",
+        "docs/contracts/claims_ladder.md",
+        "docs/decision_log.md"
+      ]
+    },
+    {
+      "cid": "C2-023",
+      "ed_table": true,
+      "fix_route": "bench",
+      "pass_to_sol_final": false,
+      "rationale": "All four members verified live at pin e3fc14a: README:75/86 say 1,220 tests vs RUN_STATE's 1,387; README/PROJECT_STATUS call merged PR #59 open; PROJECT_STATUS:586 and orchestration.md:27 still name gpt-5.5; decision-log index ends D-063, D-064's index row orphaned at 3183, D-065 unindexed. C1-024 shares D7-006. Doc-only, reversible: tier 2 bench refresh.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-024"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "README.md",
+        "PROJECT_STATUS.md",
+        "docs/orchestration.md",
+        "docs/decision_log.md",
+        "tests/"
+      ]
+    },
+    {
+      "cid": "C2-024",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Every cited line verified at HEAD; both numeric traces reproduced exactly (idle delta 2.797e-4 W; counter cross-check 306.397 J, max 5.9e-6 J/record). My independent support-overlap reconstruction shows an even larger gross-energy gap (-0.93%) than reported. Raw counters agree with power-times-elapsed to microjoules, so the reducer discards a strictly better estimand its own spec documents; uncertainty bounds cover only window edges.",
+      "severity_final": "blocker",
+      "suspected_dup_of": [],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/interfaces.py",
+        "joulewise/adapters/powermetrics.py",
+        "joulewise/reduce.py",
+        "joulewise/idle_dependence.py",
+        "tests/",
+        "docs/specs/c027/p2-038_production_uncertainty_evidence.md",
+        "docs/contracts/run_bundle_layout.md"
+      ]
+    },
+    {
+      "cid": "C2-025",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified in code: bundle_read.py:396-397 silently drops unmatched phase_end, returns without checking leftover starts; _check_events (1585-1632) has no balance/overlap check; reduce.py:921-923 and token_timestamps consume the windows for claim-bearing phase energy and decode-token filtering. Member's oversized-window trace reproduces from the code. Nominal path balanced, gross energy independent \u2014 should-fix, not blocker. Scope exceeds bench; route sol-fix. Claim-affecting \u2192 Sol final round.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/bundle_read.py",
+        "joulewise/reduce.py",
+        "tests/test_bundle_read.py",
+        "tests/test_reduce.py",
+        "tests/test_audit_bundle_validation.py",
+        "docs/contracts/run_bundle_layout.md"
+      ]
+    },
+    {
+      "cid": "C2-026",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "narrowed_statement": "The false-Hz contract is real but confined to the JouleWise-authored derived field gpu_freq_hz_mean (IdleBaseline in schemas.py, propagated through reduce.py, cli.py, run_campaign.py) which advertises Hz for MHz values with no unit qualification. The rich-telemetry freq_hz is powermetrics' own verbatim field name whose MHz quirk is documented in run_bundle_layout.md and whose verbatim preservation is a deliberate byte-regenerability invariant \u2014 values inside rich records must NOT be converted. No current claim is numerically wrong: the contamination gate compares MHz-to-MHz (IDLE_GPU_FREQ_MEAN_MHZ_THRESHOLD). This is a latent factor-of-1e6 hazard for exports, future backends, and cross-node comparison, not an active defect.",
+      "pass_to_sol_final": true,
+      "rationale": "All five evidence refs verified in current tree (= pin). gpu_freq_hz_mean genuinely serializes MHz under an Hz name (schemas.py:628, powermetrics.py:942). Narrowed: rich freq_hz is powermetrics-verbatim per documented regenerability contract, and the MHz gate is unit-consistent, so no active claim error \u2014 tier 2 not 3. Additive rename spans ~10 files: sol-fix. Passing to Sol because packet marks claim_affecting and I contest that.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 2,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "joulewise/schemas.py",
+        "joulewise/adapters/powermetrics.py",
+        "joulewise/reduce.py",
+        "joulewise/cli.py",
+        "scripts/run_campaign.py",
+        "docs/contracts/run_bundle_layout.md",
+        "tests/test_schemas.py",
+        "tests/test_powermetrics.py",
+        "tests/test_reduce.py",
+        "tests/test_cli_run.py",
+        "tests/test_controller.py"
+      ]
+    },
+    {
+      "cid": "C2-027",
+      "ed_table": false,
+      "fix_route": "bench",
+      "narrowed_statement": "The E1-E4 envelope thresholds DO have documented rationale: docs/phase_2/suite_implementation_research.md pins them (lines 553-558) and explicitly declares them design-pinned judgment calls justified by the ~4%-of-window energy bound with a re-pin path via decision-log entry once P2-015 floors exist (line 614); D-047 clause 3 ratifies E1's n=8 zero-tolerance behavior and clause 7 re-anchors the defensibility arithmetic on the first smoke bundle, and the gate output itself carries a zero_tolerance_note (envelope_gate.py:471-474). What is genuinely missing: (a) any sensitivity/robustness analysis of nearby alternative thresholds, anywhere in the repo; (b) traceability from the AP-5 authority row (docs/contracts/analysis_plans.md:188-207), which names envelope pass as a claim disqualifier but points to no threshold definition or rationale \u2014 a reviewer reading only the contract set cannot find the justification. The scanner's bounded search (contracts + W2 test oracles only) missed the phase-2 design doc and D-047.",
+      "pass_to_sol_final": true,
+      "rationale": "Rationale exists but scanner's bounded set missed it: suite_implementation_research.md:614 declares thresholds design-pinned judgment calls with a P2-015 re-pin path; D-047.3/7 ratify E1 small-n zero tolerance. Surviving gap is narrower: no sensitivity analysis anywhere, and AP-5's contract row lacks a rationale pointer. Tier 3 over-tiered \u2014 no current verdict wrong, fully reversible doc/analysis work.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [],
+      "tier_final": 2,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "docs/contracts/analysis_plans.md",
+        "docs/decision_log.md",
+        "docs/phase_2/",
+        "tests/test_envelope_gate.py"
+      ]
+    },
+    {
+      "cid": "C2-028",
+      "ed_table": false,
+      "fix_route": "bench",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: bundle.py write_metadata uses json.dumps(default=str) with a comment declaring the D-011 intent; controller._jsonable converts only enums; tests/test_controller.py poison test pins silent coercion. Real evidence-provenance gap, claim-affecting, so Sol final round. Tier 3 overstated \u2014 deliberate, pinned, reversible: Tier 2. Exact duplicate of C1-002 (same sole member D1-002). Fix is bench-sized; non_goal correctly preserves failure-path bundle completion.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-002"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/bundle.py",
+        "joulewise/controller.py",
+        "tests/test_bundle.py",
+        "tests/test_controller.py"
+      ]
+    },
+    {
+      "cid": "C2-029",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": true,
+      "rationale": "Verified directly: joulewise/bundle.py:221-237 records only `git rev-parse HEAD`; metadata base (357-366) carries no dirty marker; tests/test_bundle.py:277-279 accepts only unknown/40-hex. Dirty detection exists only at pack time (scripts/package_bundle_pack.py:86-88, 225), which cannot recover run-time tree state \u2014 provenance is irrecoverably lost per run. Claim-affecting; same root cause as C1-003. Routed sol-fix: touches privacy allowlist and admission gating, beyond bench minutes.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-003"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/bundle.py",
+        "joulewise/publication_privacy.py",
+        "tests/test_bundle.py",
+        "tests/test_publication_privacy.py",
+        "scripts/package_bundle_pack.py",
+        "tests/test_package_bundle_pack.py",
+        "docs/contracts/measurement_methodology.md"
+      ]
+    },
+    {
+      "cid": "C2-030",
+      "ed_table": false,
+      "fix_route": "defer-roadmap",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: controller.py:377/407 calls only connection_metadata on the resolved transport; adapters/__init__.py:104 vs :203 builds two SshTransport instances (second with a fresh SystemClock); run_command/collect_artifact have test-only callers, though put_file IS production-consumed. Lifecycle helpers duplicate near-verbatim across vllm/nvidia adapters and inside node_worker. Keep-defender invariants (per-adapter timeouts, node_worker self-containment) survive in the sketch's non-goals. No current defect; boundary choice is the multi-node roadmap decision.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-004",
+        "C1-006"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/adapters/__init__.py",
+        "joulewise/adapters/ssh_transport.py",
+        "joulewise/adapters/local_transport.py",
+        "joulewise/adapters/node_client.py",
+        "joulewise/adapters/vllm_runtime.py",
+        "joulewise/adapters/nvidia_smi.py",
+        "joulewise/adapters/node_worker.py",
+        "joulewise/interfaces.py",
+        "joulewise/controller.py",
+        "docs/contracts/adapter_contracts.md",
+        "tests/"
+      ]
+    },
+    {
+      "cid": "C2-031",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": false,
+      "rationale": "Verified: run_suite traversal, _run_suite_item framing, and _suite_identity/_suite_prompt_closure_problem are near-verbatim copies (mock:195/398/648/656 vs mlx:256/463/1090/1098); the closure helpers diff by one redundant mlx-only \"affine\" branch \u2014 drift already begun. Contract (adapter_contracts.md:179) mandates identical semantics; no cross-backend parity test. Work order's non-goals preserve the mock-oracle invariant. Same member as C1-005.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-005"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "joulewise/adapters/mock_runtime.py",
+        "joulewise/adapters/mlx_runtime.py",
+        "joulewise/adapters/suite_execution.py",
+        "tests/test_mock_adapters.py",
+        "tests/test_mlx_runtime.py",
+        "tests/test_suite_execution_parity.py"
+      ]
+    },
+    {
+      "cid": "C2-032",
+      "ed_table": false,
+      "fix_route": "sol-fix",
+      "pass_to_sol_final": false,
+      "rationale": "Verified in code: make_figures.py:90 hashes tab-delimited text; publication_privacy.py:303 folds NUL-delimited bytes \u2014 same tree, different digests, against rpt-001's \"same file-identity semantics\" clause. No verifier equates them yet, but sealed analysis/rpt001-v1 manifests carry tab digests, so fix needs explicit versioned migration (exceeds bench). C1-015 consolidates the identical member D5-001.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-015"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/make_figures.py",
+        "joulewise/publication_privacy.py",
+        "scripts/package_bundle_pack.py",
+        "analysis/rpt001-v1/",
+        "tests/test_rpt001_report_slice.py",
+        "tests/test_publication_privacy.py",
+        "tests/test_package_bundle_pack.py",
+        "docs/specs/c027/rpt-001_report_vertical_slice.md"
+      ]
+    },
+    {
+      "cid": "C2-033",
+      "ed_table": false,
+      "fix_route": "bench",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: _git_commit (pack script :95) has no callers; preflight \"files\" key (:209) never read by package_bundles (:309-366) or tests (tests read manifest public files only). audit_private_bundle (:551) subsumes the inventory with identical guards; transform re-checks source hash. Keep-defender: _file_entries and preflight audit must survive \u2014 sketch non-goals fence this. C1-016 is an exact dup.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-016"
+      ],
+      "tier_final": 3,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/package_bundle_pack.py",
+        "tests/test_package_bundle_pack.py"
+      ]
+    },
+    {
+      "cid": "C2-034",
+      "ed_table": false,
+      "fix_route": "defer-roadmap",
+      "pass_to_sol_final": false,
+      "rationale": "Verified directly: liveStatusPayload (server/index.ts:484-552) serializes queue/quietWindow/externalAsks/highOpenRisks/docStates; the generated browser script (build_site.py ~1002) reads only phase/status/next/verification/bundleCount. Risk-register fetch feeds only unused highOpenRisks. Cap pressure is real: LAKEBED_FEEDBACK.md records two organic 1 MiB cap hits including a rejected deploy. Demo surface per Ed, so deferred to a queue row; C1-018 duplicates the same members.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-018"
+      ],
+      "tier_final": 2,
+      "verdict": "confirmed",
+      "write_scope_suggestion": [
+        "scripts/build_site.py",
+        "scripts/pack_capsule.py",
+        "site_capsule/server/index.ts",
+        "site_capsule/client/index.tsx",
+        "site_capsule/README.md",
+        "tests/test_build_site_parsers.py",
+        "tests/test_pack_capsule.py"
+      ]
+    },
+    {
+      "cid": "C2-035",
+      "ed_table": true,
+      "fix_route": "sol-fix",
+      "narrowed_statement": "Normative bridge policy is duplicated beyond the ratified pointer forms, but not uniformly: the violations are CLAUDE.md's twice-restated multi-clause effort-trigger list (vs D-065's one-line-pointer rule) and normative wire/envelope/ceremony restatement in AGENTS.md, .claude/agents/codex.md, and .claude/commands/codex.md. The skill is the designated operating-sequence home and the agent/command one-line effort pointers already comply; dedup must preserve D-065's enforcement-boundary exemption (one-hop, sandbox, WRITE_SCOPE, quiet-mac) verbatim at each always-read surface.",
+      "pass_to_sol_final": true,
+      "rationale": "Verified: bridge_protocol \u00a710 and D-065 clause 2 designate one home; CLAUDE.md restates effort triggers twice, AGENTS.md/agent/command restate wire duties, and the agent vs skill carry divergent config-override shapes (live drift). But skill is the sanctioned sequence home and one-line pointers comply, so narrowed. Destructive-simplification unrefuted (prompt-text IS enforcement at unvalidated surfaces) tiers up; exact dup of C1-022.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-022"
+      ],
+      "tier_final": 3,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "AGENTS.md",
+        "CLAUDE.md",
+        ".claude/agents/codex.md",
+        ".claude/commands/codex.md",
+        ".claude/skills/codex/SKILL.md",
+        ".agents/skills/claude-consult/SKILL.md",
+        "docs/contracts/bridge_protocol.md",
+        "tests/"
+      ]
+    },
+    {
+      "cid": "C2-036",
+      "ed_table": true,
+      "fix_route": "fable-fix",
+      "narrowed_statement": "Review tiers have no explicit time/token/cost bands or per-arc spend ceiling despite recorded ~$1,050/330.6M-token arc evidence (council_log.md:1603-1625; orchestration.md tiers by \"cost of being wrong\" only). But a milestone-tied freeze trigger DOES exist: D-060 (RATIFIED 2026-07-10, decision_log.md:3048) freezes new breadth including meta-process growth until four deliverable gates pass; risk_register.md R-018 stale-cites it as \"awaiting Ed\" and should be corrected. Residual gap: cost bands per review tier + a named-failure bar for further process innovation, not a missing freeze mechanism.",
+      "pass_to_sol_final": true,
+      "rationale": "Cost evidence verified exactly (council_log.md:1603-1625: 59 sessions/330.6M/$1,050; bridge 2,262+702 lines). No per-tier cost bands exist \u2014 that half stands. But D-060 is a ratified milestone-gated freeze covering meta-process growth; the scanner relied on stale R-018 text (\"awaiting Ed\"). Destructive-simplification flag not refuted; work order's non-goals already protect the catch-bearing gates. Ed-facing budget ratification.",
+      "severity_final": "should-fix",
+      "suspected_dup_of": [
+        "C1-023"
+      ],
+      "tier_final": 2,
+      "verdict": "narrowed",
+      "write_scope_suggestion": [
+        "docs/orchestration.md",
+        "docs/risk_register.md",
+        "docs/decision_log.md",
+        "TASK_QUEUE.md"
+      ]
+    }
+  ]
+}
