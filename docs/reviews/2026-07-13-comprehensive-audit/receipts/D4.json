@@ -1,0 +1,151 @@
+{
+  "checks_performed": [
+    "Resolved and read all 33 manifest files from pinned commit e3fc14a01ca047e779fa7924fdf128b25762d063 using git show with numbered-line chunking.",
+    "Read the frozen audit charter sections 2-4 from docs/reviews/2026-07-13-comprehensive-audit/report.md.",
+    "Ran git status --short --branch before and after review; result was clean: ## main...origin/main.",
+    "Compiled all 21 manifest Python sources in memory with compile(..., 'exec'); all succeeded.",
+    "Parsed both manifest JSON files with Python json.load from git-show streams; both succeeded.",
+    "Ran bounded git-grep consumer and absence searches for legacy_interpolation_edge, _config_prompt_tokens, contamination_evidence_unknown, D-062/top-up language, claim-verdict validators, sampling designs, and outcome reason codes.",
+    "Inspected bounded cross-boundary test, contract, decision-log, and run-report excerpts needed to test candidate invariants.",
+    "Ran git log, git log -S, and git blame on reducer compatibility residue, the RQ variance plan, the P2-038 reason vocabulary, and claims-lint validator history."
+  ],
+  "exclusions": [],
+  "rows": [
+    {
+      "consequence": "The current reducer carries a second interpolation eligibility/output shape that can drift from the governed joint-edge path and makes the private helper appear to support a legacy projection that is actually owned elsewhere. The unused prompt helper adds smaller dead surface.",
+      "counterevidence": "The legacy mode was intentionally introduced by commit 0136b80 to preserve the then-restored generic request alias, and tests/test_uncertainty_p2029.py explicitly locks its one-edge behavior. However, the later C5 decision removes that alias from reducer 0.4.0 output, the current run-bundle contract says legacy mapping is only an internal strict-comparison concern, and the bounded Python search found no production caller. Frozen reducer/version dispatch arms themselves were not proposed for deletion.",
+      "domain": "reducer compatibility residue",
+      "evidence_refs": [
+        "joulewise/reduce.py:280-281",
+        "joulewise/reduce.py:622-710",
+        "tests/test_uncertainty_p2029.py:482-517",
+        "docs/decision_log.md:1588-1598",
+        "docs/contracts/run_bundle_layout.md:383",
+        "Bounded absence search: git grep -n -E '_config_prompt_tokens\\\\(|legacy_interpolation_edge' e3fc14a01ca047e779fa7924fdf128b25762d063 -- '*.py' returned only the helper definition, legacy branches, and the direct test call.",
+        "History trace: git blame assigns legacy_interpolation_edge and its branches to 0136b80; git log shows 4a7b009 subsequently removed the generic request alias."
+      ],
+      "finding": "The current reducer retains a test-only legacy_interpolation_edge mode inside the current window-precheck helper, plus the wholly unreferenced _config_prompt_tokens helper. No production caller reaches either legacy branch or prompt helper.",
+      "id": "D4-001",
+      "mission_tags": [
+        "M2"
+      ],
+      "proposed_disposition": "delete",
+      "seams": [],
+      "severity": "nit"
+    },
+    {
+      "consequence": "A consumer implementing the documented closed vocabulary can reject a valid fail-closed uncertainty component or silently translate it, splitting the provenance contract across prose, implementation, and tests.",
+      "counterevidence": "The implementation behavior is intentional and safety-preserving: commit f91421e introduced it so unknown contamination can never be treated as clean, and tests cover both emission and strict re-derivation. The appropriate repair is to synchronize the contract vocabulary, not remove or weaken the reason.",
+      "domain": "uncertainty evidence contract",
+      "evidence_refs": [
+        "docs/specs/c027/p2-038_production_uncertainty_evidence.md:498-508",
+        "joulewise/uncertainty_evidence.py:238-241",
+        "tests/test_p2038_production_path.py:142",
+        "tests/test_uncertainty_evidence.py:176",
+        "Bounded search: git grep -n 'contamination_evidence_unknown' e3fc14a01ca047e779fa7924fdf128b25762d063 -- . found implementation/tests/run reports but no occurrence in the P2-038 allowed-reason list.",
+        "History trace: git log -S contamination_evidence_unknown identifies f91421e as the intentional fail-closed introduction; blame shows the allowed-reason list predates it."
+      ],
+      "finding": "The P2-038 contract enumerates its allowed local provenance reasons but omits contamination_evidence_unknown, while the implementation emits that exact reason for tri-state contamination evidence and regression tests treat it as valid.",
+      "id": "D4-002",
+      "mission_tags": [
+        "M1"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Outcome-dependent sampling language can pass the pre-execution prose gate, leaving the frozen plan inconsistent with the one normative D-062 rule. Downstream mechanical top-up detection still demotes executed contrasts, so this is a preventable plan/lint defect rather than current claim invalidation.",
+      "counterevidence": "The RQ variance document is explicitly candidate/design-only and requires a council round plus registry freeze before execution. The analysis engine independently detects unregistered top-ups, preserves the original fixed-n result, and permanently demotes the affected contrast; integration and claims-index tests cover that safeguard.",
+      "domain": "analysis-plan claim gate",
+      "evidence_refs": [
+        "docs/specs/c027/split-ap_ap-edit_amendments.md:185-193",
+        "docs/contracts/analysis_plans.md:30",
+        "scripts/claims_lint.py:481-605",
+        "tests/test_claims_lint.py:63-80",
+        "tests/test_claims_lint.py:204-209",
+        "docs/specs/rq_energy_variance_design.md:1-5",
+        "docs/specs/rq_energy_variance_design.md:300-316",
+        "docs/specs/c027/analysis_engine_trio.md:101-103",
+        "joulewise/analysis_engine/__init__.py:554",
+        "scripts/claims_lint.py:1786-1790",
+        "Bounded absence search: git grep for D-062/top-up combinations across scripts/claims_lint.py and tests/test_claims_lint.py returned only the downstream demotion message, with no AP/pack prose rule."
+      ],
+      "finding": "The accepted split-AP amendment says claims_lint/pack-lint must flag confirmatory top-up language lacking a D-062 pointer, but lint_ap_document implements no such check. Its nominally good test fixture uses unqualified 'n=5; top-up near floor.' and asserts zero findings; the RQ variance candidate consequently carries CI/floor-triggered top-ups with no D-062 demotion statement.",
+      "id": "D4-003",
+      "mission_tags": [
+        "M1"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Every verdict schema evolution must be synchronized across two in-process validators, and a future otherwise-valid two-look artifact would pass the owning validator but be rejected by the claims-index gate. This is avoidable indirection and version-lattice drift in a claim-bearing chain.",
+      "counterevidence": "The local validator adds real B15 value that should remain: pinned key-order checks, index-linkage shape, nested absolute-path rejection, and claims-index-specific editorial constraints. Current P2-042 production manifests are fixed_n, and the trio spec says the current integration rejects alpha-spending inputs, so the observed lattice difference is latent rather than a current canonical-flow failure.",
+      "domain": "claim-verdict validation chain",
+      "evidence_refs": [
+        "scripts/claims_lint.py:20-30",
+        "scripts/claims_lint.py:1071-1341",
+        "scripts/claims_lint.py:1667-1673",
+        "joulewise/analysis_engine/artifact.py:586-657",
+        "joulewise/analysis_engine/artifact.py:825-840",
+        "joulewise/analysis_engine/artifact.py:1055-1089",
+        "scripts/claims_lint.py:1183-1184",
+        "docs/specs/c027/analysis_engine_trio.md:122-130",
+        "tests/test_claims_index_lint.py:469-585",
+        "History trace: commit 2917687 introduced both the owning artifact validator and the overlapping claims-lint validator in the same change."
+      ],
+      "finding": "claims_lint defines a second broad claim-verdict schema validator and then runs it beside analysis_engine.artifact.validate_claim_verdicts. The overlap already encodes a different sampling lattice: the engine validator admits fixed_n and two_look_alpha_spending, while the local validator requires fixed_n.",
+      "id": "D4-004",
+      "mission_tags": [
+        "M1",
+        "M2"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [],
+      "severity": "should-fix"
+    }
+  ],
+  "scan_id": "D4",
+  "scope_examined": [
+    "configs/analysis_registry/slice_2m_ap2.v1.json",
+    "configs/calibration/p2_046_load_transition/manifest.json",
+    "docs/contracts/analysis_plans.md",
+    "docs/contracts/claims_ladder.md",
+    "docs/contracts/load_transition_alignment.md",
+    "docs/contracts/token_normalization.md",
+    "docs/specs/c027/analysis_engine_trio.md",
+    "docs/specs/c027/p2-038_production_uncertainty_evidence.md",
+    "docs/specs/c027/p2-039_floor_artifact.md",
+    "docs/specs/c027/p2-040_reducer_gate_correctness.md",
+    "docs/specs/c027/split-ap_ap-edit_amendments.md",
+    "docs/specs/rq_energy_variance_design.md",
+    "joulewise/aggregate.py",
+    "joulewise/analysis_engine/__init__.py",
+    "joulewise/analysis_engine/artifact.py",
+    "joulewise/analysis_engine/claims.py",
+    "joulewise/analysis_engine/distributions.py",
+    "joulewise/analysis_engine/estimators.py",
+    "joulewise/analysis_engine/inputs.py",
+    "joulewise/analysis_engine/multiplicity.py",
+    "joulewise/analysis_engine/ratio.py",
+    "joulewise/analysis_engine/sensitivity.py",
+    "joulewise/analysis_manifest.py",
+    "joulewise/detection_floor.py",
+    "joulewise/determinism_gate.py",
+    "joulewise/envelope_gate.py",
+    "joulewise/idle_dependence.py",
+    "joulewise/kv_size.py",
+    "joulewise/load_transition_alignment.py",
+    "joulewise/reduce.py",
+    "joulewise/uncertainty_evidence.py",
+    "scripts/characterize_load_transition.py",
+    "scripts/claims_lint.py"
+  ],
+  "uncertainties": [
+    "No dynamic test suite or bundle-corpus execution was performed; the pinned tree was inspected through git objects under a read-only filesystem, with syntax and JSON parsing only.",
+    "No live hardware, quiet-Mac evidence, production campaign, generated verdict corpus, or numerical-correctness re-derivation was examined.",
+    "Non-manifest files were not comprehensively reviewed; cross-boundary inspection was limited to cited consumer searches and bounded test, decision, contract, history, and protocol excerpts."
+  ]
+}
