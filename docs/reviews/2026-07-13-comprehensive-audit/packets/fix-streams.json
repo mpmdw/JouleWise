@@ -1,6 +1,6 @@
 {
- "generated_by": "register-integrity fable agent, 2026-07-13",
- "lease_rule": "streams have strictly disjoint union write scopes over the PARALLEL phase (mechanically verified); precursor orders (currently WO-023) land and merge before any stream body work opens, so their scopes are exempt from the parallel invariant and listed in precursor_scope_exempt; orders within a stream run in suggested_order; bench/fable conflicts with stream scopes are serialized by the lead as noted per item",
+ "generated_by": "register-repair session, 2026-07-13; PA-1 post-court coherence resolutions",
+ "lease_rule": "streams have strictly disjoint union write scopes over the PARALLEL phase (mechanically verified); precursor orders (currently WO-023) land and merge before any stream body work opens, so their scopes are exempt from the parallel invariant and listed in precursor_scope_exempt; orders within a stream run in suggested_order, except S1 pauses before WO-004 until hard predecessor S2 WO-016 has landed; bench/fable conflicts with stream scopes are serialized by the lead as noted per item",
  "streams": [
   {
    "stream_id": "S1",
@@ -22,6 +22,8 @@
     "configs/suite_manifests/",
     "docs/contracts/node_worker_protocol.md",
     "docs/contracts/run_bundle_layout.md",
+    "docs/reviews/2026-07-13-comprehensive-audit/receipts/WO-003-sealed-bundle-compatibility.json",
+    "docs/reviews/2026-07-13-comprehensive-audit/receipts/WO-005-powermetrics-reconciliation.json",
     "docs/specs/c027/p2-038_production_uncertainty_evidence.md",
     "docs/specs/c027/p2-039_floor_artifact.md",
     "joulewise/adapters/mlx_runtime.py",
@@ -48,6 +50,8 @@
     "joulewise/schemas.py",
     "joulewise/suite.py",
     "joulewise/workloads.py",
+    "scripts/check_sealed_bundle_compatibility.py",
+    "scripts/reconcile_retained_powermetrics.py",
     "scripts/run_campaign.py",
     "scripts/spike_mlx_prompt_cache.py",
     "tests/test_analysis_integration.py",
@@ -61,6 +65,7 @@
     "tests/test_cli.py",
     "tests/test_cli_run.py",
     "tests/test_controller.py",
+    "tests/test_corpus_strict_validation.py",
     "tests/test_detection_floor.py",
     "tests/test_experiment.py",
     "tests/test_gensuite.py",
@@ -73,9 +78,11 @@
     "tests/test_node_worker_subprocess.py",
     "tests/test_nvidia_smi.py",
     "tests/test_powermetrics.py",
+    "tests/test_reconcile_retained_powermetrics.py",
     "tests/test_reduce.py",
     "tests/test_run_campaign.py",
     "tests/test_schemas.py",
+    "tests/test_sealed_bundle_compatibility.py",
     "tests/test_spike_mlx_prompt_cache.py",
     "tests/test_ssh_transport.py",
     "tests/test_suite.py",
@@ -115,8 +122,9 @@
     "WO-014",
     "WO-015",
     "WO-016",
-    "WO-017",
-    "WO-029"
+    "WO-029",
+    "WO-040",
+    "WO-017"
    ],
    "union_write_scope": [
     "TASK_QUEUE.md",
@@ -159,7 +167,6 @@
     "tests/test_bundle.py",
     "tests/test_claims_index_lint.py",
     "tests/test_claims_lint.py",
-    "tests/test_corpus_strict_validation.py",
     "tests/test_envelope_gate.py",
     "tests/test_generate_matrix.py",
     "tests/test_package_bundle_pack.py",
@@ -175,6 +182,7 @@
     "WO-015",
     "WO-016",
     "WO-029",
+    "WO-040",
     "WO-017"
    ]
   },
@@ -229,7 +237,6 @@
     "WO-020"
    ],
    "union_write_scope": [
-    ".agents/skills/claude-consult/SKILL.md",
     ".claude/agents/codex.md",
     ".claude/commands/codex.md",
     ".claude/skills/codex/SKILL.md",
@@ -250,16 +257,16 @@
    "cids": [
     "C2-021 (merged C1-021)"
    ],
-   "note": "State-kernel authority completion. ROUTE SYNTHESIS flagged: C1-021 fable-fix vs C2-021 sol-fix; fable-lead with Sol sub-delegation of mechanical parts, lead to confirm. Serialize around WO-012 (TASK_QUEUE.md), WO-019 (ci.yml), bench WO-030/031. SF-E 2026-07-13: AWAITING ED RULING — complete-or-narrow authority choice (A: generic global-gate semantics + fidelity fixtures + then-current live gate + DOC-010 post-G6 dependency; B: explicit narrowing removing generated authority claims, manual authority retained). No implementation planning until ruled.",
-   "state": "awaiting-ed-ruling"
+   "note": "State-kernel authority completion under accepted R1 choice A. Fable-lead with Sol sub-delegation of mechanical parts; after S4 WO-019, freeze the then-current gate, obtain the required independent pre-demotion cross-check, and land before final freshness order WO-031.",
+   "state": "ruled-planned"
   },
   {
    "work_order_id": "WO-022",
    "cids": [
     "C2-036 (merged C1-023)"
    ],
-   "note": "Numeric review budget bands + spend tripwire; Ed-facing ratification; R-018 stale-citation fix. SF-E 2026-07-13: AWAITING ED RULING — ratification proposal content prepared (accounting source, denominator, arc/window boundaries, cached-token treatment, deliverable-progress measure, exceptions, owner, trigger consequence; executable checker if mechanical — gen_state --check cannot verify this policy); caps not presupposed. R-018 stale-citation fix is SF-designated independent and may be peeled to the bench.",
-   "state": "awaiting-ed-ruling"
+   "note": "Implement accepted R2 numeric review-budget bands and spend tripwire verbatim; correct R-018; attach the audit-close accounting/session-inclusion receipt. Run after S4 WO-019 and before final freshness order WO-031.",
+   "state": "ruled-planned"
   }
  ],
  "bench_checklist": [
@@ -291,7 +298,7 @@
   {
    "work_order_id": "WO-030",
    "cid": "C2-020",
-   "fix": "Install docs -> pip install -e '.[analysis]'; bound matplotlib; lock policy; rider D1-006 deletes stale [tool.joulewise] block."
+   "fix": "Install docs -> pip install -e '.[analysis]'; bound matplotlib; lock policy; rider D1-006 deletes stale [tool.joulewise] block. Post-court residual remains scheduled at bench close: run both clean-venv forms, store the WO-030 receipt, then transition landed-with-residual to landed."
   },
   {
    "work_order_id": "(fold-in WO-003)",
@@ -311,12 +318,21 @@
  ],
  "global_notes": [
   "docs/decision_log.md stripped from all delegated sol scopes (it would have fused S1+S2); decision entries are lead-applied at landing — now also covers WO-031's D-064/D-065 index repair (WO-031 re-routed into S4).",
-  "Blockers lead each stream: S1 opens WO-023 (SF precursor) then WO-001..WO-005 (five blockers); S2 opens WO-032 then WO-012; WO-017 (blocker) closes S2 by dependency and needs an Ed privacy/handoff ruling.",
-  "Bench items WO-025/WO-028 must land BEFORE S1; WO-024 before S2; WO-026/WO-027/WO-030 sequenced at the bench (WO-027 blocked on Ed confirmation per SF).",
-  "SF re-routes 2026-07-13: WO-023 (C2-028) bench->S1 DO-FIRST precursor (also precedes S2 via bundle.py); WO-032 (C2-027) bench->S2 first; WO-029 (C2-008) bench->S2 before WO-017; WO-031 (C2-023) bench->S4 last.",
-  "SF fold-in 2026-07-13: all 30 sol-final amendments ACCEPTED and baked into work orders; 7 proceed verdicts carry risk_note. WO-021 (C2-021) and WO-022 (C2-036) are awaiting-ed-ruling — no implementation planning.",
-  "WO-019 dependencies hardened per SF (C2-017): WO-017 and WO-018 are now HARD dependencies — S4 starts only after S2/S3 close.",
-  "Cross-stream seam (SF, C2-029): the analysis claim-admission hook for dirty-source exclusion lives in joulewise/analysis_engine/inputs.py (S1 WO-004 scope); WO-016 lands capture + validation.py enforcement; the inputs.py hook folds into WO-004 or is lead-applied at landing.",
+  "Blockers lead each stream: S1 opens WO-023 then WO-001..WO-003, pauses WO-004 on hard predecessor S2 WO-016, and continues WO-004..WO-005; S2 opens WO-032 then WO-012, runs WO-040 before WO-017, and closes only after WO-017. S4 releases only after WO-040, WO-017, and WO-018.",
+  "Bench items WO-025/WO-028 must land BEFORE S1; WO-024 before S2; WO-026/WO-027 are sequenced at the bench. WO-030 has a scheduled post-court bench-close residual: both clean-venv forms, durable receipt, then landed transition.",
+  "SF re-routes 2026-07-13: WO-023 (C2-028) bench->S1 DO-FIRST precursor (also precedes S2 via bundle.py); WO-032 (C2-027) bench->S2 first; WO-029 (C2-008) bench->S2 before WO-040 and WO-017; WO-040 (C2-016) is an S2 member before WO-017; WO-031 (C2-023) runs last of all.",
+  "SF fold-in 2026-07-13: all 30 sol-final amendments ACCEPTED and baked into work orders; 7 proceed verdicts carry risk_note. R1 and R2 are accepted; WO-021 and WO-022 are ruled-planned after WO-019 and before WO-031.",
+  "WO-019 dependencies are exact hard work-order edges: WO-040, WO-017, and WO-018. Its clean-clone release dry-run completes before WO-021/WO-022 begin.",
+  "Cross-stream seam (SF, C2-029): WO-016 is a hard predecessor of WO-004. WO-016 lands provenance capture + field semantics and validation.py enforcement; WO-004 then lands the analysis claim-admission path and tests/test_corpus_strict_validation.py under S1 ownership.",
+  "Final serial order: S4 WO-019, then ruled Fable orders WO-021 and WO-022, then S4 WO-031 as the landing-head freshness pass.",
   "Deferred-roadmap orders WO-033..WO-039 are queue-promotion material, not in any wave (SF amendments to WO-034/WO-037/WO-038/WO-039 and risk_note on WO-033 baked for promotion time)."
+ ],
+ "post_court_bench_close": [
+  {
+   "work_order_id": "WO-030",
+   "state": "scheduled-residual",
+   "after": "all court/register repairs",
+   "step": "Run both clean-venv verification forms from WO-030, store docs/reviews/2026-07-13-comprehensive-audit/receipts/WO-030-clean-venv-smoke.json, and transition WO-030 to landed only after the receipt records pass."
+  }
  ]
 }
