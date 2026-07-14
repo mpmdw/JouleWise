@@ -3,6 +3,7 @@ import contextlib
 import gzip
 import io
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -493,16 +494,7 @@ console.log(JSON.stringify({
         self.assertIn("postcondition mode: measured", stdout.getvalue())
         self.assertNotIn("estimator-only advisory", stdout.getvalue())
 
-    def test_measured_postcondition_catches_large_unestimated_server_payload(self):
-        executable = pack_capsule.discover_lakebed_executable()
-        if executable is None:
-            message = (
-                "SITE-01 LAKEBED MEASUREMENT GATE SKIP: cached Lakebed executable "
-                "unavailable; real validator artifact was not built"
-            )
-            print(message, file=sys.stderr)
-            self.skipTest(message)
-
+    def test_fixture_postcondition_catches_large_unestimated_server_payload(self):
         with TemporaryDirectory() as temp_dir:
             capsule = Path(temp_dir) / "capsule"
             shutil.copytree(
@@ -554,12 +546,38 @@ console.log(JSON.stringify({
             )
             self.assertEqual(pack_capsule.estimate_lakebed_artifact_size(total), estimate)
 
+            def deterministic_fixture_measure(_executable, fixture_capsule):
+                source = b"\n".join(
+                    path.read_bytes()
+                    for path in pack_capsule.lakebed_source_paths(fixture_capsule)
+                )
+                encoded = base64.b64encode(source).decode("ascii")
+                artifact = {
+                    "createdWith": {"lakebed": pack_capsule.LAKEBED_VERSION},
+                    "server": {
+                        "source": encoded,
+                        "sourceMap": encoded,
+                        "validatorCopy": encoded,
+                    },
+                }
+                return (
+                    pack_capsule.lakebed_stable_json_size(artifact),
+                    pack_capsule.LAKEBED_VERSION,
+                )
+
+            fixture_size, _ = deterministic_fixture_measure(None, capsule)
+            self.assertGreater(fixture_size, pack_capsule.LAKEBED_ARTIFACT_CAP_BYTES)
             stdout = io.StringIO()
             with (
                 mock.patch.object(
                     pack_capsule,
                     "discover_lakebed_executable",
-                    return_value=executable,
+                    return_value=Path("/fixture/lakebed"),
+                ),
+                mock.patch.object(
+                    pack_capsule,
+                    "measure_lakebed_artifact",
+                    side_effect=deterministic_fixture_measure,
                 ),
                 contextlib.redirect_stdout(stdout),
                 self.assertRaisesRegex(
@@ -574,6 +592,78 @@ console.log(JSON.stringify({
         match = re.search(r"measured Lakebed validator artifact: (\d+) bytes", output)
         self.assertIsNotNone(match)
         self.assertGreater(int(match.group(1)), pack_capsule.LAKEBED_ARTIFACT_CAP_BYTES)
+
+    def test_configured_pinned_lakebed_validator_accepts_capsule(self):
+        executable = pack_capsule.discover_lakebed_executable()
+        if executable is None:
+            message = (
+                "WO-018 LAKEBED INTEGRATION GATE SKIP: pinned local Lakebed "
+                "0.0.29 unavailable; run npm ci in site_capsule or set "
+                "JOULEWISE_LAKEBED_BIN to an exact 0.0.29 package binary"
+            )
+            print(message, file=sys.stderr)
+            self.skipTest(message)
+
+        with TemporaryDirectory() as temp_dir:
+            capsule = Path(temp_dir) / "capsule"
+            shutil.copytree(
+                pack_capsule.CAPSULE,
+                capsule,
+                ignore=shutil.ignore_patterns(".lakebed"),
+            )
+            content = capsule / "server" / "content"
+            with (
+                mock.patch.object(pack_capsule, "CAPSULE", capsule),
+                mock.patch.object(pack_capsule, "CAPSULE_CONTENT", content),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                pack_capsule.build(no_fonts=True, enforce_budget=False)
+            measured, version = pack_capsule.measure_lakebed_artifact(executable, capsule)
+
+        self.assertEqual(version, pack_capsule.LAKEBED_VERSION)
+        self.assertLessEqual(measured, pack_capsule.LAKEBED_TARGET_ARTIFACT_BYTES)
+
+    def test_build_info_records_identity_and_explicit_reproducibility_inputs(self):
+        with TemporaryDirectory() as temp_dir:
+            site = Path(temp_dir)
+            (site / "build_manifest.json").write_text(
+                json.dumps(
+                    {
+                        "schema": "joulewise-site-build/v1",
+                        "renderer": {
+                            "mode": "marked",
+                            "markedVersion": pack_capsule.MARKED_VERSION,
+                            "offlineImplementation": "builtin-v1",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with (
+                mock.patch.object(pack_capsule, "SITE", site),
+                mock.patch.object(pack_capsule, "run_git", return_value="abc1234"),
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "SOURCE_DATE_EPOCH": "0",
+                        "JOULEWISE_BUILD_BRANCH": "reproducible-branch",
+                    },
+                    clear=False,
+                ),
+            ):
+                info = pack_capsule.build_info()
+
+        self.assertEqual(
+            info,
+            {
+                "commit": "abc1234",
+                "branch": "reproducible-branch",
+                "builtAt": "1970-01-01T00:00:00Z",
+                "siteRenderer": "marked",
+                "markedVersion": pack_capsule.MARKED_VERSION,
+                "lakebedVersion": pack_capsule.LAKEBED_VERSION,
+            },
+        )
 
     def test_lakebed_source_discovery_scans_unimported_server_helper(self):
         with TemporaryDirectory() as temp_dir:
@@ -654,6 +744,13 @@ console.log(JSON.stringify({
                 with self.subTest(variant=variant):
                     source.write_text('const value = "f\\u0065tch";\n' + loop, encoding="utf-8")
                     pack_capsule.validate_lakebed_sources([source])
+            for legacy_api in ['db.items.where("source", value)', "db.items.all()"]:
+                with self.subTest(legacy_api=legacy_api):
+                    source.write_text(legacy_api, encoding="utf-8")
+                    with self.assertRaisesRegex(
+                        pack_capsule.CapsulePackError, "legacy database API remains"
+                    ):
+                        pack_capsule.validate_lakebed_sources([source])
 
     def test_inline_fonts_merges_identical_family_and_file_hash(self):
         with TemporaryDirectory() as temp_dir:

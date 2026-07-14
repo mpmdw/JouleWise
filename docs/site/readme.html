@@ -33,8 +33,9 @@
 <a href="#documentation-map">Documentation Map</a></aside>
   <div class="doc-wrap doc-source-readme-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>README.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="README.md · commit 55e67c2"><span class="source-file">README.md</span><span class="source-commit">commit 55e67c2</span></span></div>
-    <h1>JouleWise</h1>
+    <div class="provenance-plate"><span class="source-chip" title="README.md · commit dd2c9f1"><span class="source-file">README.md</span><span class="source-commit">commit dd2c9f1</span></span></div>
+    <!-- rendered: marked@18.0.6 -->
+<h1>JouleWise</h1>
 <p>JouleWise is an extensible benchmark for energy-wise LLM inference across
 heterogeneous local hardware. The name is a deliberate nod to JouleSort and
 Splitwise: energy measurement as the spine, split inference as the first major
@@ -125,7 +126,7 @@ python3 -m joulewise validate-bundle runs/example-mock-local
 # Re-derive summary metrics from a bundle&#39;s recorded trace/events (post-hoc):
 python3 -m joulewise reduce runs/example-mock-local
 
-# Render a static HTML run browser (needs: pip install &#39;joulewise[analysis]&#39;):
+# Render a static HTML run browser (first: pip install -e &#39;.[analysis]&#39;):
 python3 -m joulewise report runs --output report
 </code></pre>
 <p>A run bundle (<code>runs/&lt;run_id&gt;/</code>) contains the normalized <code>config.json</code>,
@@ -171,7 +172,7 @@ constraints live in <code>docs/milestones.md</code>; cross-model review sessions
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>README.md · commit 55e67c2 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>README.md · commit dd2c9f1 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
