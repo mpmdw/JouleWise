@@ -52,6 +52,9 @@ REGEN_COMMAND = (
     "python3 scripts/build_capstone.py --profile rpt001 --full --offline "
     "--runs-root runs"
 )
+CHECK_COMMAND = (
+    "python3 scripts/build_capstone.py --profile rpt001 --offline --check"
+)
 
 # This report-text scan is only a tripwire; claims_lint phase4 is the gate of record.
 FORBIDDEN_PHRASES = [re.compile(p, re.IGNORECASE) for p in (
@@ -235,7 +238,17 @@ are unavailable, and neither is inferred from the configured cap (D-058).
 
 Claims row: `{claims["claim_id"]}` in `analysis/rpt001-v2/claims_index.jsonl`.
 
-### Regeneration
+### Reproducibility boundary
+
+Source-only assembly and check (reproducible from a pristine clone):
+
+```sh
+{CHECK_COMMAND}
+```
+
+**Controlled/internal full regeneration** requires controlled access to the
+internal six-bundle corpus; it is not available from a pristine clone or the
+transformed public projection:
 
 ```sh
 {REGEN_COMMAND}

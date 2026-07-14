@@ -62,7 +62,17 @@ are unavailable, and neither is inferred from the configured cap (D-058).
 
 Claims row: `CLM-RPT001-LEGACY-L1-001` in `analysis/rpt001-v2/claims_index.jsonl`.
 
-### Regeneration
+### Reproducibility boundary
+
+Source-only assembly and check (reproducible from a pristine clone):
+
+```sh
+python3 scripts/build_capstone.py --profile rpt001 --offline --check
+```
+
+**Controlled/internal full regeneration** requires controlled access to the
+internal six-bundle corpus; it is not available from a pristine clone or the
+transformed public projection:
 
 ```sh
 python3 scripts/build_capstone.py --profile rpt001 --full --offline --runs-root runs

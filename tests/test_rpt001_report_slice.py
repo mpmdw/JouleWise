@@ -428,6 +428,34 @@ class TestRpt001Artifacts(unittest.TestCase):
             self.assertFalse((clone / "runs").exists())
             self.assertFalse((clone / "build").exists())
 
+            built = subprocess.run(
+                [sys.executable, "scripts/build_capstone.py", "--profile", "rpt001"],
+                cwd=clone,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(built.returncode, 0, built.stderr)
+            generated_text = (
+                clone / "docs/report_src/generated/rpt001_vertical_slice.md"
+            ).read_text(encoding="utf-8")
+            assembled_text = (
+                clone / "build/capstone/rpt001/report.md"
+            ).read_text(encoding="utf-8")
+            self.assertIn("Controlled/internal full regeneration", generated_text)
+            self.assertIn(build_capstone.CHECK_COMMAND, generated_text)
+            self.assertIn(
+                "Source-only assembly and `--check` are reproducible from a pristine clone",
+                assembled_text,
+            )
+            self.assertIn(
+                "Full evidence re-derivation is controlled/internal",
+                assembled_text,
+            )
+            self.assertIn(
+                "the full command is not claimed as external full reproducibility",
+                " ".join(assembled_text.lower().split()),
+            )
+
             generated = clone / "docs/report_src/generated/rpt001_vertical_slice.md"
             generated.write_text(
                 generated.read_text(encoding="utf-8") + "drift\n",

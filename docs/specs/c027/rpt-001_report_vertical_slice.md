@@ -88,16 +88,19 @@ change should alter their behavior.
 The six legacy bundles are ignored by Git and total approximately 110 MB.
 They will not be present in a clean hosted-CI checkout. Therefore:
 
-- the lead acceptance gate runs the complete bundle-to-report command locally
-  against the real six bundles;
+- full evidence re-derivation is controlled/internal and requires controlled
+  access to the real six-bundle corpus;
+- a pristine clone can reproducibly assemble and check the report from tracked
+  sources, but cannot re-derive the evidence artifacts;
 - hosted CI exercises bundle ingestion with synthetic strict-valid fixtures;
 - hosted CI regenerates downstream artifacts from a committed sealed dataset
   produced by the local real-bundle gate;
 - CI output must say that real-bundle ingestion was not rerun;
 - no fixture or sealed dataset may be described as live hardware validation.
 
-A future published bundle pack may enable full real-corpus CI, but RPT-001
-does not depend on REPRO-001 or external publication.
+The private corpus is not supplied by the clone or by the current transformed
+public projection. RPT-001 therefore makes no external full-reproducibility
+claim and defines no evidence handoff.
 
 ### 0.5 Claims tooling
 
@@ -990,20 +993,23 @@ is rendered adjacent to the result.
 
 ### 6.1 Commands
 
-Full local real-bundle build:
+Controlled/internal full evidence re-derivation (requires controlled access to
+the internal six-bundle corpus; not available from a pristine clone):
 
 ```sh
 python3 scripts/build_capstone.py \
   --profile rpt001 \
+  --full \
+  --offline \
   --runs-root runs
 ```
 
-Read-only comparison against committed output:
+Pristine-clone source-only assembly and comparison against committed output:
 
 ```sh
 python3 scripts/build_capstone.py \
   --profile rpt001 \
-  --runs-root runs \
+  --offline \
   --check
 ```
 
@@ -1011,6 +1017,9 @@ python3 scripts/build_capstone.py \
 tracked analysis and report sources, compares that tracked projection, and
 validates full-report assembly in memory. It does not require `runs/` and does
 not compare against the untracked `build/capstone/rpt001/report.md` product.
+This source-only path is reproducible from a pristine clone. The full command
+is controlled/internal evidence re-derivation, not external full
+reproducibility, because the required internal corpus is not supplied.
 
 Hosted-CI offline build:
 
@@ -1125,7 +1134,8 @@ file inventory.
 8. D-052 single-unit limitation language;
 9. D-058 tokenizer-scope limitation;
 10. claims row ID `CLM-RPT001-LEGACY-L1-001`;
-11. artifact regeneration command;
+11. pristine-clone source-only check command plus an explicit
+    controlled/internal label on the full-regeneration command;
 12. a link/path to `artifact_manifest.json`.
 
 Forbidden on the page:
@@ -1385,6 +1395,11 @@ RPT-001 passes only when all boxes are true:
 - [ ] P2-042/P2-037 references are null and fail closed for the L1 slice.
 - [ ] One command regenerates dataset, aggregate, figure, tables, claim row,
       report page, and assembled report.
+- [ ] Source-only assembly and `--check` pass from a pristine clone using only
+      tracked sources.
+- [ ] Full evidence re-derivation is labeled controlled/internal and requires
+      controlled access to the internal corpus; it is not claimed as
+      clean-clone or external full reproducibility.
 - [ ] Two builds produce identical output hashes.
 - [ ] Hosted CI passes without analysis extras.
 - [ ] Hosted CI labels its offline evidence boundary.
