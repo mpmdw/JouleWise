@@ -504,6 +504,7 @@ Allowed reasons are local provenance vocabulary, not additions to D-057’s redu
 - `post_idle_unavailable`
 - `insufficient_idle_samples`
 - `sentinel_contaminated`
+- `contamination_evidence_unknown`
 - `calibration_cell_missing`
 - `calibration_artifact_invalid`
 

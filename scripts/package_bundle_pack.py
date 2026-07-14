@@ -92,10 +92,6 @@ def _git_provenance() -> dict[str, str]:
     }
 
 
-def _git_commit() -> str:
-    return _git_provenance()["project_commit"]
-
-
 def _validate_plain_name(value: str, label: str) -> None:
     if (
         value in {".", ".."}
@@ -206,7 +202,6 @@ def _preflight_bundle(bundle: Path) -> dict[str, Any]:
         "source_config_sha256": sha256_file(bundle / "config.json"),
         "effective_manifest_sha256": _suite_effective_manifest_sha256(bundle),
         "summary_status": summary_status,
-        "files": _file_entries(bundle),
         "classification_counts": privacy_audit.classification_counts,
     }
 

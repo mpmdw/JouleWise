@@ -472,6 +472,50 @@ class KillAfterRepTwoTests(unittest.TestCase):
         if r3.exists():
             self.assertFalse((r3 / "summary_metrics.json").exists())
 
+    def test_interrupt_before_aggregation_leaves_completed_member_registered(self) -> None:
+        config = make_config("exp-aggregate-interrupt", repetitions=1)
+
+        with patch(
+            "joulewise.controller.aggregate_experiment",
+            side_effect=KeyboardInterrupt("simulated aggregate interrupt"),
+        ), self.assertRaises(KeyboardInterrupt):
+            run_experiment(config, self.runs_root, FakeClock())
+
+        manifest_path = self.runs_root / "experiments" / "exp-aggregate-interrupt.json"
+        manifest = json.loads(manifest_path.read_text())
+        self.assertEqual(manifest["members"], ["exp-aggregate-interrupt__r1"])
+        self.assertNotIn("aggregate", manifest)
+        self.assertEqual(
+            aggregate_experiment(self.runs_root, manifest)["members_read"],
+            1,
+        )
+
+    def test_aggregate_exception_is_recorded_for_retry(self) -> None:
+        config = make_config("exp-aggregate-error", repetitions=1)
+
+        with patch(
+            "joulewise.controller.aggregate_experiment",
+            side_effect=RuntimeError("simulated aggregate failure"),
+        ), self.assertRaisesRegex(RuntimeError, "simulated aggregate failure"):
+            run_experiment(config, self.runs_root, FakeClock())
+
+        manifest_path = self.runs_root / "experiments" / "exp-aggregate-error.json"
+        manifest = json.loads(manifest_path.read_text())
+        self.assertEqual(manifest["members"], ["exp-aggregate-error__r1"])
+        self.assertNotIn("aggregate", manifest)
+        self.assertEqual(
+            manifest["aggregate_error"],
+            {
+                "error_type": "RuntimeError",
+                "message": "simulated aggregate failure",
+                "retryable": True,
+            },
+        )
+        self.assertEqual(
+            aggregate_experiment(self.runs_root, manifest)["members_read"],
+            1,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Test 3: cooldown gate (stub telemetry + FakeClock)

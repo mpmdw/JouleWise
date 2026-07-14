@@ -26,7 +26,7 @@ from joulewise.adapters.powermetrics import (
     RAW_SAMPLES_NAME,
     parse_powermetrics_records,
 )
-from joulewise.clock import FakeClock
+from joulewise.clock import FakeClock, SystemClock
 from joulewise.cli import _STRICT_LEGACY_BUNDLE_IDENTITIES, main, validate_bundle
 from joulewise.bundle_read import Window
 from joulewise.controller import run_benchmark
@@ -122,6 +122,33 @@ class CliRunTestCase(unittest.TestCase):
 
 
 class RunVerbTests(CliRunTestCase):
+    def test_run_verb_binds_fake_clock_only_for_all_mock_backends(self) -> None:
+        cases = [
+            ("mock", "mock", FakeClock),
+            ("mock", "powermetrics", SystemClock),
+            ("mlx", "mock", SystemClock),
+            ("mlx", "powermetrics", SystemClock),
+        ]
+        for index, (runtime, telemetry, expected_type) in enumerate(cases):
+            data = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+            data["run_id"] = f"cli-clock-{index}"
+            data["hardware_target"]["runtime_backend"] = runtime
+            data["hardware_target"]["telemetry_backend"] = telemetry
+            config_path = self.tmp / f"clock-{index}.json"
+            config_path.write_text(json.dumps(data))
+            summary = type(
+                "Summary",
+                (),
+                {"status": RunStatus.SUCCEEDED, "failure_reason": None},
+            )()
+            with self.subTest(runtime=runtime, telemetry=telemetry), patch(
+                "joulewise.cli.run_benchmark",
+                return_value=(self.runs_dir / data["run_id"], summary),
+            ) as run:
+                exit_code, _stdout, stderr = self.run_verb(config_path)
+                self.assertEqual(exit_code, 0, stderr)
+                self.assertIsInstance(run.call_args.args[2], expected_type)
+
     def test_mock_e2e_succeeds_with_greppable_line(self) -> None:
         config_path = self.write_config("cli-run-success")
         exit_code, stdout, stderr = self.run_verb(config_path)

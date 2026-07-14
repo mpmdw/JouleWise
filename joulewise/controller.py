@@ -1381,9 +1381,22 @@ def run_experiment(
         manifest["members"].append(bundle_path.name)
         manifest["member_gaps"].append(_member_gap_note(bundle_path))
         manifest["condition_order"].append(condition_name)
-        manifest["aggregate"] = aggregate_experiment(runs_root, manifest)
-        # Incremental write: a kill before the next rep leaves a valid manifest
-        # listing exactly the members that completed (D-005 acceptance).
+        # Commit member custody before the reconstructable aggregate derivation.
+        # Removing the prior aggregate prevents an interrupt from leaving a
+        # newly extended member list beside a stale aggregate.
+        manifest.pop("aggregate", None)
+        manifest_path = write_experiment_manifest(runs_root, manifest)
+        try:
+            manifest["aggregate"] = aggregate_experiment(runs_root, manifest)
+        except Exception as exc:
+            manifest["aggregate_error"] = {
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+                "retryable": True,
+            }
+            write_experiment_manifest(runs_root, manifest)
+            raise
+        manifest.pop("aggregate_error", None)
         manifest_path = write_experiment_manifest(runs_root, manifest)
 
         if rep < repetitions:

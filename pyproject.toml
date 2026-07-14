@@ -13,12 +13,8 @@ dependencies = []
 # live behind extras and adapters import them lazily. CI installs no extras, so
 # every command that needs one degrades to a structured failure without it.
 [project.optional-dependencies]
-analysis = ["matplotlib"]
+analysis = ["matplotlib>=3.9,<4"]
 mac = ["mlx-lm>=0.31.3", "transformers<5.13"]
 
 [tool.setuptools.packages.find]
 include = ["joulewise*"]
-
-[tool.joulewise]
-phase = "2"
-status = "phase-2-mock-vertical-slice"

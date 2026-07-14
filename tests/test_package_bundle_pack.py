@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from joulewise import publication_privacy
 from joulewise.adapters.powermetrics import RAW_SAMPLES_NAME
 from joulewise.clock import FakeClock
 from joulewise.cli import main as joulewise_main
@@ -146,7 +147,17 @@ class BundlePackTests(unittest.TestCase):
             if path.is_file() and not path.is_symlink()
         }
 
-        manifest = package_bundle_pack.package_bundles([source_bundle], pack_dir)
+        with patch(
+            "joulewise.publication_privacy.audit_private_bundle",
+            wraps=publication_privacy.audit_private_bundle,
+        ) as transformation_audit:
+            manifest = package_bundle_pack.package_bundles([source_bundle], pack_dir)
+
+        source_audits = [
+            call for call in transformation_audit.call_args_list
+            if call.args == (source_bundle,)
+        ]
+        self.assertEqual(len(source_audits), 2)
 
         self.assertEqual(manifest["schema"], package_bundle_pack.PACK_SCHEMA)
         self.assertEqual(manifest["bundle_count"], 1)

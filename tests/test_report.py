@@ -105,6 +105,36 @@ class BadRunsDirTests(unittest.TestCase):
             generate_report(missing, Path(tmp.name) / "report")
 
 
+class PublicReportSecurityTests(unittest.TestCase):
+    def test_generate_report_escapes_malicious_metadata_and_summary_values(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        runs_dir = root / "runs"
+        output_dir = root / "report"
+        bundle = _build_bundle(runs_dir, "report-malicious")
+
+        metadata_path = bundle / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["notes"] = "<script>alert(1)</script>"
+        metadata_path.write_text(json.dumps(metadata, indent=2))
+        summary_path = bundle / "summary_metrics.json"
+        summary = json.loads(summary_path.read_text())
+        summary["failure_message"] = "<b>bad</b>"
+        summary_path.write_text(json.dumps(summary, indent=2))
+
+        with mock.patch(
+            "joulewise.report._require_matplotlib", return_value=object()
+        ), mock.patch("joulewise.report._render_chart", return_value=False):
+            generate_report(runs_dir, output_dir)
+
+        page = (output_dir / "run" / "report-malicious.html").read_text()
+        self.assertNotIn("<script>", page)
+        self.assertNotIn("<b>bad</b>", page)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", page)
+        self.assertIn("&lt;b&gt;bad&lt;/b&gt;", page)
+
+
 # ---------------------------------------------------------------------------
 # Chart-producing rendering (gated on matplotlib)
 
