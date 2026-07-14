@@ -1,0 +1,927 @@
+{
+  "consolidated": [
+    {
+      "author_conflict": false,
+      "cid": "C2-001",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "evidence_loss": true,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W1-001",
+        "W1-005",
+        "W3-001"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Local telemetry, controller failure handling, and remote execution lack a shared custody-before-cleanup transaction boundary.",
+      "severity": "blocker",
+      "tier_suggestion": 3,
+      "title": "Destructive cleanup precedes durable evidence custody",
+      "work_order_sketch": {
+        "action": "Retain native and remote artifacts until durable bundle custody is confirmed; add an outer controller finalization boundary and independent salvage steps.",
+        "bounded_scope": "controller failure handling, powermetrics capture lifecycle, NodeWorkerClient cleanup policy, and focused failure-injection tests",
+        "effort": "session",
+        "non_goals": "Live hardware validation, broad adapter refactoring, or recovery from SIGKILL/power loss"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-002",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W1-002",
+        "W1-004",
+        "D1-001"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Config, summary, reducer, exported-schema, BundleReader, and CLI validity semantics are maintained independently rather than derived from shared predicates.",
+      "severity": "blocker",
+      "tier_suggestion": 3,
+      "title": "Duplicated validity rules allow contradictory success and admission states",
+      "work_order_sketch": {
+        "action": "Define canonical config and succeeded-summary predicates and enforce parity in writers, reducers, exported schemas, readers, and CLI exit decisions.",
+        "bounded_scope": "schemas.py, bundle_read.py, reduce.py, CLI validation/reduction paths, and rejection-equivalence tests",
+        "effort": "session",
+        "non_goals": "Schema-version redesign or unrelated bundle-format changes"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-003",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W1-003",
+        "D2-005",
+        "SCI2-002"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Runtime, replay, and ratio gates lack one authoritative realized-output record and therefore infer exactness, replay support, and stop provenance from configured policy.",
+      "severity": "blocker",
+      "tier_suggestion": 3,
+      "title": "Configured output intent is substituted for realized output evidence",
+      "work_order_sketch": {
+        "action": "Create and consume a normalized realized-output outcome containing emitted count and realized stop reason; reject exact/replay/ratio eligibility when it is absent or inconsistent.",
+        "bounded_scope": "MLX single-run and cache-spike paths, output provenance, strict validation, ratio input extraction, and negative tests",
+        "effort": "session",
+        "non_goals": "Changing generation policy or defining new token-normalized estimands"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-004",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W1-006"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Durable member registration and reconstructable aggregate computation are ordered as one operation instead of committing custody first.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Experiment manifests are committed after fallible aggregation",
+      "work_order_sketch": {
+        "action": "Commit each completed member to the incremental manifest before aggregation, then record aggregate failure separately and retryably.",
+        "bounded_scope": "run_experiment ordering, manifest schema-compatible failure recording, and aggregation-failure tests",
+        "effort": "bench",
+        "non_goals": "Campaign concurrency or aggregate-method changes"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-005",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W2-001",
+        "SCI2-001"
+      ],
+      "priority_note": "normal",
+      "root_cause": "The default exact-floor path couples calibration identity to claim bundles while failing to bind stored floor observations to the named bundle bytes and metrics; the independent typed resolver remains private.",
+      "severity": "blocker",
+      "tier_suggestion": 3,
+      "title": "Floor resolution is neither independently consumable nor evidence-bound",
+      "work_order_sketch": {
+        "action": "Expose a production FloorRequest path and bind every calibration observation to strict-validated bundle bytes, config identity, metric, and summary value before exact or transported resolution.",
+        "bounded_scope": "detection-floor artifact validation, analysis input loading/resolution, public analyze-claims interface, and independent-calibration integration tests",
+        "effort": "session",
+        "non_goals": "Collecting Window-A floors or changing floor formulas"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-006",
+      "claim_affecting": true,
+      "destructive_simplification": true,
+      "evidence_loss": false,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "W2-002",
+        "SCI2-003",
+        "D3-001"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Frozen-n policy has multiple handwritten representations: the executable AP-2 path cannot encode authorized n=10 cells, while copied and candidate plans authorize outcome-dependent growth forbidden by D-062.",
+      "severity": "blocker",
+      "tier_suggestion": 3,
+      "title": "Sample-size authority is fragmented across contracts, generators, and copied campaign rows",
+      "work_order_sketch": {
+        "action": "Make pre-freeze sample size explicit and parameterized in the canonical registry/generator, then replace copied top-up rules with references to one frozen-n authority and exploratory-demotion rule.",
+        "bounded_scope": "AP-2 generator/manifest validation plus affected campaign-pack and RQ-variance sizing rows",
+        "effort": "session",
+        "non_goals": "Selecting actual n before Window-A evidence or deleting scientific sizing safeguards"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-007",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W2-003"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Campaign integrity logic treats absence of expected token evidence as a modality exemption instead of explicit missing evidence for text-tokenized suites.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Missing prompt-token sidecars fail open as not applicable",
+      "work_order_sketch": {
+        "action": "Require an explicit sidecar or explicit policy exemption for text suites and downgrade member usability when expected token evidence is absent.",
+        "bounded_scope": "run_campaign prompt-hash resolution, integrity flags, and missing-sidecar tests",
+        "effort": "bench",
+        "non_goals": "Changing ID-native suite handling"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-008",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W2-004"
+      ],
+      "priority_note": "normal",
+      "root_cause": "The report browser equates a parseable summary with completeness and presents governed token metrics without strict admission, claim status, or required stack identity.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Generic HTML reports bypass evidence and claim-readiness gates",
+      "work_order_sketch": {
+        "action": "Label the surface explicitly diagnostic or add strict-validation and claim-readiness states; co-display request energy, tokenizer, boundary, and provenance wherever token metrics appear.",
+        "bounded_scope": "joulewise/report.py and public-behavior tests",
+        "effort": "bench",
+        "non_goals": "Turning the browser into the capstone report system"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-009",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W2-005",
+        "SCI2-004"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Publication regeneration copies workload_profile.output_tokens into a runtime_output_tokens field while omitting realized stop/policy evidence required for the token-normalized companion.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "RPT-001 mislabels configured output budgets as runtime observations",
+      "work_order_sketch": {
+        "action": "Populate publication token fields only from realized artifacts, propagate stop reason and output policy, and downgrade or omit the companion when provenance is incomplete.",
+        "bounded_scope": "make_figures.py, RPT-001 dataset generation, claim-index provenance, and regeneration tests",
+        "effort": "session",
+        "non_goals": "Changing the verified request-energy result or silently rewriting grandfathered artifacts"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-010",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W3-002"
+      ],
+      "priority_note": "normal",
+      "root_cause": "NodeWorkerClient trusts any collected succeeded status without validating protocol version or correlating it to the dispatched task, and adapters do not persist the formal response version.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Remote responses lack version and request-identity validation",
+      "work_order_sketch": {
+        "action": "Validate response version and task identity before success or cleanup, persist the accepted protocol version, and add stale/collided-response tests.",
+        "bounded_scope": "NodeWorkerClient response parsing, runtime/telemetry metadata, and protocol-negative tests",
+        "effort": "bench",
+        "non_goals": "A general migration framework for future protocol versions"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-011",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W3-003"
+      ],
+      "priority_note": "normal",
+      "root_cause": "task_type is documented as extensible, but payload validation is a closed runtime/workload/telemetry union and the future-task test uses an unrelated telemetry block.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "The advertised split-task extension point cannot carry a split payload",
+      "work_order_sketch": {
+        "action": "Define a versioned discriminated payload path for future transfer tasks and test a realistic unsupported transfer request without overloading telemetry.",
+        "bounded_scope": "node-worker task validation, protocol contract, and future-task tests",
+        "effort": "session",
+        "non_goals": "Implementing split execution or transfer benchmarking"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-012",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W3-004"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Filesystem run isolation is mistaken for physical-resource serialization; prepare/start operations are neither leased nor idempotent.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Remote node and GPU resources have no ownership or retry discipline",
+      "work_order_sketch": {
+        "action": "Specify and implement a pre-launch node/GPU ownership primitive plus idempotent duplicate-delivery behavior.",
+        "bounded_scope": "remote lifecycle entry points, ownership state, cleanup semantics, and concurrency tests",
+        "effort": "session",
+        "non_goals": "Running concurrent hardware campaigns or claiming live correctness"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-013",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W3-005"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Live-promotion state exists only in governance documents; bundles and strict/claim paths cannot distinguish fixture-first evidence from promoted live evidence.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "NVIDIA PROVISIONAL status is not machine-enforced at claim admission",
+      "work_order_sketch": {
+        "action": "Add machine-readable promotion provenance and fail closed when unpromoted NVIDIA evidence enters a claim-bearing path.",
+        "bounded_scope": "bundle provenance, strict/claim admission, and fixture-vs-promoted tests",
+        "effort": "session",
+        "non_goals": "Performing NV-GATE-2 or de-provisionalizing any hardware result"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-014",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "evidence_loss": true,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W3-006",
+        "D2-004"
+      ],
+      "priority_note": "normal",
+      "root_cause": "The client and wire contract accept arbitrary nonempty run/task identifiers and use them directly in joined remote paths and rm -rf cleanup.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Unvalidated remote identifiers reach recursive deletion paths",
+      "work_order_sketch": {
+        "action": "Require safe single-component identifiers, prove containment under remote_work_root before all operations, and add absolute/traversal rejection tests.",
+        "bounded_scope": "NodeWorkerClient, worker request validation, protocol contract, and destructive-cleanup tests",
+        "effort": "bench",
+        "non_goals": "Changing canonical sanitized controller run IDs"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-015",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "evidence_loss": true,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W3-007"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Failure classification privileges selected stderr phrases over process return semantics, causing application failures to be treated as transport loss before status collection.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "SSH stderr heuristics can suppress authoritative status recovery",
+      "work_order_sketch": {
+        "action": "Make return code and transport execution state primary, attempt status collection whenever the worker may have run, and retain remote evidence on ambiguity.",
+        "bounded_scope": "SSH classification, NodeWorkerClient recovery branches, and adversarial stderr tests",
+        "effort": "bench",
+        "non_goals": "Redesigning the SSH transport protocol"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-016",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W4-001",
+        "W4-003",
+        "D5-003"
+      ],
+      "priority_note": "normal",
+      "root_cause": "The canonical report path assumes unpublished private bundles, an untracked comparison target, and an authored absolute runs path without an acquisition or portable reconstruction contract.",
+      "severity": "blocker",
+      "tier_suggestion": 3,
+      "title": "Capstone regeneration depends on undeclared machine-local evidence and outputs",
+      "work_order_sketch": {
+        "action": "Define a privacy-reviewed input handoff or re-reducible evidence pack, remove absolute paths, and make --check derive or obtain its reference output reproducibly.",
+        "bounded_scope": "capstone input contract, build_capstone check mode, authored regeneration instructions, and clean-clone verification",
+        "effort": "session",
+        "non_goals": "Publishing private raw bundles or weakening privacy rules"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-017",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W4-002",
+        "W4-007"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Installation, doctor, strict admission, regeneration, privacy packaging, capsule build, and publication exist as disconnected instructions and are not exercised as an integrated clean-clone gate.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Publication has no single executable, enforced release workflow",
+      "work_order_sketch": {
+        "action": "Create one ordered release command/checklist with explicit network and credential gates, then run its non-secret reproducibility portion in CI or a pinned release check.",
+        "bounded_scope": "publication documentation, capstone/site/pack orchestration entry points, and CI gating",
+        "effort": "session",
+        "non_goals": "Automated deployment with credentials or quiet-machine execution"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-018",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "evidence_loss": false,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "W4-004",
+        "D5-006",
+        "W4X-001"
+      ],
+      "priority_note": "normal-repo-health",
+      "root_cause": "Marked and Lakebed are discovered from ambient npx state while renderer fallbacks produce divergent output; external Lakebed validator drift now makes the clean-clone suite red.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Unpinned site tooling makes the canonical suite and publication bytes environment-dependent",
+      "work_order_sketch": {
+        "action": "Pin or explicitly gate the external site toolchain, migrate rejected Lakebed database calls, and make the size-postcondition test deterministic when the measured builder is unavailable or incompatible.",
+        "bounded_scope": "site build dependency resolution, capsule measurement, server query APIs, and clean-clone tests",
+        "effort": "session",
+        "non_goals": "Deploying the site, removing offline resilience without a defender, or redesigning the presentation"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-019",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W4-005"
+      ],
+      "priority_note": "deprioritized-demo-surface",
+      "root_cause": "The tracked deploy ID is insufficient without private deployment state, authentication, and ownership, but the publication procedure does not specify bootstrap or credential transfer.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Lakebed deployment ownership has no fresh-publisher handoff",
+      "work_order_sketch": {
+        "action": "Document a secret-free ownership/bootstrap checklist and verification boundary for an authorized fresh publisher.",
+        "bounded_scope": "site publication documentation and credential-boundary checks",
+        "effort": "bench",
+        "non_goals": "Committing secrets, transferring ownership automatically, or executing a deploy"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-020",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W4-006",
+        "W4X-003"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Documentation uses a nonexistent PyPI distribution while the working local analysis install is omitted from the lock workflow and leaves matplotlib unbounded.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Optional-feature installation is neither correct nor reproducibly locked",
+      "work_order_sketch": {
+        "action": "Document local editable extras correctly and add a reproducible analysis-extra lock or explicit supported-version policy.",
+        "bounded_scope": "README/agent-playbook install commands, pyproject analysis dependency, env lock documentation, and clean-venv smoke",
+        "effort": "bench",
+        "non_goals": "Publishing JouleWise to PyPI"
+      }
+    },
+    {
+      "author_conflict": true,
+      "cid": "C2-021",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "evidence_loss": false,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "W5-001",
+        "W5-002",
+        "D7-001",
+        "D7-002",
+        "D7-003"
+      ],
+      "priority_note": "normal",
+      "root_cause": "The repository simultaneously maintains old and generated work-selection surfaces; global gates and dependencies were not fully migrated, while retirement of the old planning protocol was not completed.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "The state-kernel migration is marked complete without semantic authority parity",
+      "work_order_sketch": {
+        "action": "Reconcile the authoritative state model, encode global audit gates and DOC-010's G6 dependency, add semantic fidelity tests, and retire old intake surfaces only after equivalence is demonstrated.",
+        "bounded_scope": "state kernel/schema/generator, generated restart projections, DOC-008 acceptance, planning-reflection retirement, and fidelity tests",
+        "effort": "session",
+        "non_goals": "Deleting historical evidence or weakening stop-card and machine-lane safeguards"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-022",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "W5-003",
+        "W5-004"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Legacy and amended claim validators disagree on schema, command-mode inclusion, governed surface coverage, and whether violations are warnings or failures.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Claim enforcement is split across incomplete, incompatible validator paths",
+      "work_order_sketch": {
+        "action": "Define one version-aware claims-lint entry point, reconcile legacy/new row dispatch, enumerate actual governed report/slide/caption/table surfaces, and make binding violations fail appropriately.",
+        "bounded_scope": "claims_lint modes/schema dispatch, surface enumeration, CI invocation, and authority-case tests",
+        "effort": "session",
+        "non_goals": "Weakening valid conservative wording gates or rewriting historical claims"
+      }
+    },
+    {
+      "author_conflict": true,
+      "cid": "C2-023",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "W5-006",
+        "W5-007",
+        "D7-006",
+        "W4X-002"
+      ],
+      "priority_note": "normal",
+      "root_cause": "README, PROJECT_STATUS, orchestration prose, suite counts, and the decision-log index are manually derived without a check that they track authoritative state after advisor-visible changes.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Current-state and decision-index surfaces lack an enforced freshness owner",
+      "work_order_sketch": {
+        "action": "Refresh stale current facts, repair the D-064/D-065 index, remove fragile concrete counts where possible, and add a bounded freshness/consistency check.",
+        "bounded_scope": "README, PROJECT_STATUS, orchestration model label, decision-log index, and consistency tests",
+        "effort": "bench",
+        "non_goals": "Rewriting historical dated records"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-024",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "SCI1-001",
+        "SCI1-002"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Interval-average records are converted to endpoint point samples; active energy is trapezoidally interpolated and idle power is unweighted even though elapsed support and energy counters are retained.",
+      "severity": "blocker",
+      "tier_suggestion": 3,
+      "title": "Powermetrics interval support is discarded in active and idle estimands",
+      "work_order_sketch": {
+        "action": "Make interval support first-class, use support-overlap or counter-consistent integration for active windows, duration-weight idle baselines, and quantify effects on retained bundles.",
+        "bounded_scope": "powermetrics sample representation, reducer integration, idle estimator, uncertainty evidence, and immutable-corpus re-reduction comparison",
+        "effort": "session",
+        "non_goals": "Modifying raw corpus bytes, asserting sensor truth, or running quiet-machine captures"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-025",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "SCI1-003"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Strict event validation checks event shape and timestamp ordering but not balanced, non-overlapping phase pairs; FIFO pairing silently discards unmatched markers.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Phase-marker missingness and overlap fail open",
+      "work_order_sketch": {
+        "action": "Validate phase-pair balance/order and emit explicit exclusion reasons before phase energy or decode-token attribution.",
+        "bounded_scope": "BundleReader event validation/pairing, reducer phase eligibility, and malformed-marker tests",
+        "effort": "bench",
+        "non_goals": "Changing nominal runtime marker names or gross request windows"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-026",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "SCI1-004"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Native MHz values are retained numerically but serialized through freq_hz/gpu_freq_hz_mean fields without conversion or unit-qualified naming.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Apple GPU frequency is persisted under a false Hz contract",
+      "work_order_sketch": {
+        "action": "Choose a canonical unit, convert or rename fields additively, preserve native-unit provenance, and test cross-backend serialization.",
+        "bounded_scope": "powermetrics rich telemetry, schemas/contracts, compatibility handling, and unit tests",
+        "effort": "bench",
+        "non_goals": "Recalibrating the current MHz contamination threshold"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-027",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "SCI2-005"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Several point thresholds jointly control the future claim prerequisite, but the supplied authority and oracle set contains no robustness analysis or scientific rationale for nearby alternatives.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "AP-5's binary envelope thresholds lack rationale and sensitivity evidence",
+      "work_order_sketch": {
+        "action": "Run a bounded threshold-rationale and sensitivity analysis, then ratify or revise the frozen constants with explicit small-n behavior.",
+        "bounded_scope": "AP-5 envelope constants, authority note, synthetic boundary cases, and sensitivity artifact",
+        "effort": "bench",
+        "non_goals": "Running the production envelope campaign or choosing thresholds from claim outcomes"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-028",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": true,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D1-002"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Bundle metadata serialization uses default=str as an unmarked fallback, converting malformed adapter evidence into apparently ordinary strings.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Metadata coercion silently destroys type and value provenance",
+      "work_order_sketch": {
+        "action": "Replace silent stringification with structured coercion diagnostics or quarantined values while retaining failure-path bundle completion.",
+        "bounded_scope": "metadata writer, controller adapter metadata capture, and poison-value tests",
+        "effort": "bench",
+        "non_goals": "Allowing serialization failures to erase the failure bundle"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-029",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "evidence_loss": true,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D1-003"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Harness provenance records HEAD only and omits working-tree state at execution time.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Per-bundle source provenance cannot distinguish clean and modified code",
+      "work_order_sketch": {
+        "action": "Record clean/dirty status and a privacy-safe tracked-diff identity or fail closed for claim-bearing runs.",
+        "bounded_scope": "bundle provenance capture, schema-compatible metadata, strict/claim admission, and clean/dirty tests",
+        "effort": "bench",
+        "non_goals": "Embedding source diffs, untracked file contents, or secrets in bundles"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-030",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "evidence_loss": false,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D2-001",
+        "D2-003"
+      ],
+      "priority_note": "normal",
+      "root_cause": "The generic TransportAdapter is mostly disconnected from production execution while runtime and telemetry adapters duplicate NodeWorker lifecycle, log, clock, cleanup, and PID safeguards.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Remote platform ownership is split between unused and duplicated abstractions",
+      "work_order_sketch": {
+        "action": "Choose one owned remote execution boundary, consolidate shared lifecycle evidence handling, and remove only proven-unconsumed transport surface.",
+        "bounded_scope": "transport resolution, NodeWorkerClient integration, vLLM/NVIDIA adapter shared lifecycle code, and focused parity tests",
+        "effort": "session",
+        "non_goals": "Removing clock/log/cleanup safeguards or implementing future split transport"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-031",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D2-002"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Mock and MLX runtimes duplicate traversal, framing, status aggregation, output assembly, and provenance instead of sharing a tested suite-execution kernel.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Runtime adapters independently implement suite execution semantics",
+      "work_order_sketch": {
+        "action": "Extract a narrow shared suite traversal/result-assembly component while retaining backend-specific tokenization and generation behavior.",
+        "bounded_scope": "MockRuntimeAdapter, MlxRuntimeAdapter, shared helper, and backend parity tests",
+        "effort": "session",
+        "non_goals": "Unifying backend-specific execution or weakening provenance fields"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-032",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D5-001"
+      ],
+      "priority_note": "normal",
+      "root_cause": "The report pipeline reimplements the canonical publication identity fold with different delimiters.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Report and publication pipelines assign different identities to the same bundle tree",
+      "work_order_sketch": {
+        "action": "Use one canonical tree-identity helper and migrate or version existing report identities explicitly.",
+        "bounded_scope": "report/publication hashing helpers, artifact manifests, and same-tree identity tests",
+        "effort": "bench",
+        "non_goals": "Changing file-level hashes or silently reidentifying sealed artifacts"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-033",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "evidence_loss": false,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D5-002"
+      ],
+      "priority_note": "normal",
+      "root_cause": "A complete private-file inventory and an orphaned git wrapper remain after consumers moved to the privacy transformer and transformed-tree verifier.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Publication preflight performs an unused full private-tree inventory",
+      "work_order_sketch": {
+        "action": "Prove the inventory result and wrapper unconsumed, remove only that redundant pass, and retain source-immutability plus pre/post privacy audits.",
+        "bounded_scope": "package_bundle_pack preflight and focused privacy/package tests",
+        "effort": "bench",
+        "non_goals": "Removing any consumed privacy, immutability, or transformed-output inventory safeguard"
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C2-034",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "evidence_loss": false,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D5-004",
+        "D5-005"
+      ],
+      "priority_note": "deprioritized-demo-surface",
+      "root_cause": "The capsule mirrors a broad repository library and computes dormant live payloads beyond the status/roadmap/results cockpit that provides the primary capstone value.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "The advisor site carries cap-expensive document and live-data surfaces with no active consumer",
+      "work_order_sketch": {
+        "action": "Measure page/payload value and bytes, then trim unconsumed live fields and low-value mirrored pages while preserving provenance and core cockpit navigation.",
+        "bounded_scope": "site page selection, live-status payload construction, browser consumers, and size/value tests",
+        "effort": "session",
+        "non_goals": "Removing core status, roadmap, results, freshness, or provenance surfaces"
+      }
+    },
+    {
+      "author_conflict": true,
+      "cid": "C2-035",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "evidence_loss": false,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D7-004"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Full wire and launch rules are restated in multiple always-read files despite a designated contract and effort-policy home.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Bridge policy is normatively duplicated across entry points",
+      "work_order_sketch": {
+        "action": "Reduce entry points to concise invocation guidance and contract links while retaining local enforcement-boundary guardrails and one-hop/scope prohibitions.",
+        "bounded_scope": "tracked bridge-facing AGENTS/CLAUDE/agent/command/skill documents and consistency checks",
+        "effort": "session",
+        "non_goals": "Removing WRITE_SCOPE precedence, sandbox restrictions, one-hop rules, or executable enforcement"
+      }
+    },
+    {
+      "author_conflict": true,
+      "cid": "C2-036",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "evidence_loss": false,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D7-005"
+      ],
+      "priority_note": "normal",
+      "root_cause": "Review topology is risk-sensitive in principle but lacks explicit time/token/cost bands or a freeze trigger tied to delivery milestones.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Review and bridge process has no capstone-facing cost ceiling",
+      "work_order_sketch": {
+        "action": "Ratify risk-tiered review budgets, freeze further process innovation absent a named failure, and preserve full gates for evidence-, claim-, concurrency-, and measurement-bearing changes.",
+        "bounded_scope": "orchestration policy, risk register trigger, and review-tier decision table",
+        "effort": "session",
+        "non_goals": "Automatically deleting final-head, integration, lead-live, or claim/evidence safeguards"
+      }
+    }
+  ],
+  "dropped": [],
+  "nit_riders": {
+    "D1": [
+      {
+        "claim_affecting": false,
+        "destructive_simplification": false,
+        "evidence_loss": false,
+        "id": "D1-005",
+        "note": "Deduplicate the tolerant JSONL readers only if the accepted validity-parity work already touches those CLI helpers; preserve tolerant multi-problem diagnostics.",
+        "rides_on": "C2-002"
+      },
+      {
+        "claim_affecting": false,
+        "destructive_simplification": false,
+        "evidence_loss": false,
+        "id": "D1-007",
+        "note": "Correct backup bundle counting only if accepted evidence-accounting work already includes runs-tree classification; otherwise reject rather than expand scope.",
+        "rides_on": "C2-004"
+      }
+    ],
+    "D2": [
+      {
+        "claim_affecting": false,
+        "destructive_simplification": false,
+        "evidence_loss": false,
+        "id": "D2-006",
+        "note": "Remove obsolete NodeWorkerClient compatibility state only during the accepted remote-boundary consolidation and after an absence trace.",
+        "rides_on": "C2-030"
+      },
+      {
+        "claim_affecting": false,
+        "destructive_simplification": false,
+        "evidence_loss": false,
+        "id": "D2-007",
+        "note": "Remove or explicitly reserve unreachable vLLM options only while the same work order is already reconciling the remote producer/consumer contract.",
+        "rides_on": "C2-030"
+      }
+    ],
+    "D4": [
+      {
+        "claim_affecting": true,
+        "destructive_simplification": true,
+        "evidence_loss": false,
+        "id": "W5-005",
+        "note": "Make the legacy wording gate level-aware only inside the accepted claims-validator reconciliation, with a keep-defender proving valid conservative L1 behavior remains.",
+        "rides_on": "C2-022"
+      }
+    ],
+    "D5": [
+      {
+        "claim_affecting": false,
+        "destructive_simplification": false,
+        "evidence_loss": false,
+        "id": "W4X-004",
+        "note": "Address one-commit generated-site lag only if the accepted publication workflow already defines regeneration timing; generated mirrors remain non-authoritative.",
+        "priority_note": "deprioritized-demo-surface",
+        "rides_on": "C2-017"
+      }
+    ]
+  },
+  "overlaps_note": {
+    "c1_exclude_member_ids": [
+      "D1-001",
+      "D1-002",
+      "D1-003",
+      "D1-005",
+      "D1-007",
+      "D2-001",
+      "D2-002",
+      "D2-003",
+      "D2-004",
+      "D2-005",
+      "D2-006",
+      "D2-007",
+      "D3-001",
+      "D5-001",
+      "D5-002",
+      "D5-003",
+      "D5-004",
+      "D5-005",
+      "D5-006",
+      "D7-001",
+      "D7-002",
+      "D7-003",
+      "D7-004",
+      "D7-005",
+      "D7-006"
+    ],
+    "d_receipts_scanned": [
+      "D1",
+      "D2",
+      "D3",
+      "D5",
+      "D6",
+      "D7"
+    ],
+    "message_for_C1": "Exclude the following D rows from C1 because C2 consolidated them with walk/science root causes or retained them as C2 nit riders.",
+    "missing_receipt": "receipts/D4.json was absent; no D4 handoff row could be scanned.",
+    "remaining_d_rows": "All other D rows remain C1-owned.",
+    "selection_basis": "Twenty-four rows had literal W1-W5 seam handoffs; D3-001 was additionally claimed because its copied outcome-dependent top-up policy is the same root cause as SCI2-003 and W2-002."
+  },
+  "packet_id": "C2",
+  "unaccounted_member_check": "every input row id appears exactly once across consolidated/dropped/nit_riders: PASS"
+}
