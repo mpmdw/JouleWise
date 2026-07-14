@@ -928,7 +928,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
                         return_value={"capture_scope": "test"},
                     ),
                     patch("joulewise.bundle.platform.platform", return_value="test"),
-                    patch("joulewise.bundle._git_commit", return_value=None),
+                    patch("joulewise.bundle._capture_source_state", return_value={"git_commit": "unknown", "tracked": "unknown", "staged": "unknown", "untracked": "unknown", "diff_sha256": "unknown"}),
                 ):
                     bundle_path, _summary = run_benchmark(
                         config,

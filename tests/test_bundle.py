@@ -40,6 +40,14 @@ EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
 
 EVENT_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
 
+_CLEAN_SOURCE_STATE = {
+    "git_commit": "a" * 40,
+    "tracked": "clean",
+    "staged": "clean",
+    "untracked": "clean",
+    "diff_sha256": "0" * 64,
+}
+
 
 class StrReprTrap:
     """Poison value whose textual fallback must never be consulted."""
@@ -496,7 +504,6 @@ class RunBundleWriterTests(unittest.TestCase):
                 self.assertTrue((finalized / "summary_metrics.json").is_file())
 
     def test_valid_metadata_serialization_is_byte_unchanged(self) -> None:
-        writer = self.make_writer()
         extra = {
             "runtime_adapter": "mock",
             "nested": {"enabled": True, "samples": [1, 2.5, None]},
@@ -507,8 +514,9 @@ class RunBundleWriterTests(unittest.TestCase):
             mock.patch(
                 "joulewise.bundle.platform.python_version", return_value="3.test"
             ),
-            mock.patch("joulewise.bundle._capture_source_state", return_value={"git_commit": "a" * 40, "tracked": "clean", "staged": "clean", "untracked": "clean", "diff_sha256": "0" * 64}),
+            mock.patch("joulewise.bundle._capture_source_state", return_value=dict(_CLEAN_SOURCE_STATE)),
         ):
+            writer = self.make_writer()
             writer.write_metadata(extra)
         expected = {
             "platform": "test-platform",
@@ -520,6 +528,18 @@ class RunBundleWriterTests(unittest.TestCase):
             "run_id": writer.run_id,
             "git_commit": "a" * 40,
             "clock": self.clock.info(),
+            "source_provenance": {
+                "schema": bundle_module.SOURCE_PROVENANCE_SCHEMA,
+                "diff_identity": {
+                    "algorithm": bundle_module.SOURCE_DIFF_IDENTITY_ALGORITHM,
+                    "version": bundle_module.SOURCE_DIFF_IDENTITY_VERSION,
+                },
+                "start": _CLEAN_SOURCE_STATE,
+                "end": _CLEAN_SOURCE_STATE,
+                "changed_during_run": False,
+                "claim_eligible": True,
+                "reason_codes": [],
+            },
             **extra,
         }
         self.assertEqual(
