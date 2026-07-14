@@ -42,9 +42,9 @@ from typing import Any
 
 from joulewise.schemas import (
     BenchmarkConfig,
-    FailureReason,
     RunStatus,
     SchemaError,
+    summary_validation_problems,
 )
 from joulewise.provenance import normalized_sha256_hex, prompt_token_ids_sha256, sha256_hex
 from joulewise.suite import (
@@ -83,33 +83,6 @@ EVENT_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
 
 _REQUIRED_ARTIFACTS = ("config.json", "metadata.json", "events.jsonl", "summary_metrics.json")
 _JSON_ARTIFACTS = ("config.json", "metadata.json", "summary_metrics.json")
-_SUMMARY_WRITER_KEYS_V0_1 = {
-    "status",
-    "energy_request_j",
-    "energy_token_j",
-    "energy_output_token_j",
-    "gross_energy_j",
-    "idle_subtracted_energy_j",
-    "ttft_s",
-    "decode_latency_s",
-    "throughput_tokens_s",
-    "idle_baseline",
-    "uncertainty",
-    "measurement_quality",
-    "phase_energy_j",
-    "failure_reason",
-    "failure_message",
-}
-_SUCCEEDED_FINITE_FIELDS = {"energy_request_j", "gross_energy_j"}
-_SUCCEEDED_NULLABLE_NUMBER_FIELDS = {
-    "energy_token_j",
-    "energy_output_token_j",
-    "idle_subtracted_energy_j",
-    "ttft_s",
-    "decode_latency_s",
-    "throughput_tokens_s",
-    "inter_token_throughput_tokens_s",
-}
 
 
 class BundleReadError(Exception):
@@ -587,7 +560,7 @@ class BundleReader:
             problems.extend(_check_config_sha256(path, metadata))
 
         summary = parsed.get("summary_metrics.json")
-        if summary is not None:
+        if "summary_metrics.json" in parsed:
             problems.extend(_check_summary(summary))
 
         if "events.jsonl" not in missing:
@@ -1490,48 +1463,7 @@ def _window_contains(outer: Window, inner: Window) -> bool:
 
 def _check_summary(summary: Any) -> list[str]:
     """Shared summary validity policy used by validation and completion."""
-    if not isinstance(summary, dict):
-        return ["summary_metrics.json is not a JSON object"]
-    problems: list[str] = []
-    raw_status = summary.get("status")
-    try:
-        status = RunStatus(raw_status)
-    except ValueError:
-        return [f"summary status is not a valid RunStatus: {raw_status!r}"]
-    raw_reason = summary.get("failure_reason")
-    if status in {RunStatus.FAILED, RunStatus.UNSUPPORTED}:
-        if raw_reason is None:
-            problems.append(f"summary status is {status.value} but failure_reason is missing")
-        else:
-            try:
-                FailureReason(raw_reason)
-            except ValueError:
-                problems.append(
-                    f"summary failure_reason is not a valid FailureReason: {raw_reason!r}"
-                )
-    elif raw_reason is not None:
-        problems.append(
-            f"summary status is succeeded but carries failure_reason {raw_reason!r}"
-        )
-    if status == RunStatus.SUCCEEDED:
-        missing = sorted(_SUMMARY_WRITER_KEYS_V0_1 - set(summary))
-        for key in missing:
-            problems.append(f"summary status is succeeded but {key} is missing")
-        for key in sorted(_SUCCEEDED_FINITE_FIELDS):
-            value = summary.get(key)
-            if not is_finite_number(value):
-                problems.append(
-                    f"summary status is succeeded but {key} is not a finite "
-                    f"number: {value!r}"
-                )
-        for key in sorted(_SUCCEEDED_NULLABLE_NUMBER_FIELDS):
-            value = summary.get(key)
-            if value is not None and not is_finite_number(value):
-                problems.append(
-                    f"summary status is succeeded but nullable numeric field "
-                    f"{key} is not null or finite: {value!r}"
-                )
-    return problems
+    return summary_validation_problems(summary)
 
 
 def _validate_trace_rows(rows: list[dict[str, str]], manifest: list[str]) -> _TraceValidation:

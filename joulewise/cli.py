@@ -58,6 +58,7 @@ from joulewise.reduce import reduce_bundle
 from joulewise.report import ReportError, generate_report
 from joulewise.schemas import (
     BenchmarkConfig,
+    is_admissible_succeeded_summary,
     RunStatus,
     RuntimeBackend,
     SchemaError,
@@ -794,24 +795,9 @@ def _strict_budgeted_suite_prompt_count_problems(reader: BundleReader) -> list[s
 
 
 def _strict_suite_item_records(reader: BundleReader) -> list[tuple[int, dict[str, Any]]]:
-    path = reader.path / "outputs" / "suite_items.jsonl"
-    if not path.is_file():
-        return []
-    try:
-        text = path.read_text()
-    except OSError:
-        return []
-    records: list[tuple[int, dict[str, Any]]] = []
-    for index, line in enumerate(text.splitlines(), start=1):
-        if not line.strip():
-            continue
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(record, dict):
-            records.append((index, record))
-    return records
+    return _tolerant_jsonl_object_records(
+        reader.path / "outputs" / "suite_items.jsonl"
+    )
 
 
 def _strict_required_object_keys(
@@ -895,7 +881,7 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
         problems.append(
             "strict: uncertainty evidence: sample_phase does not match paired-clock/raw-plist derivation"
         )
-    events = _strict_suite_item_records_from_path(reader.path / "events.jsonl")
+    events = _tolerant_jsonl_object_records(reader.path / "events.jsonl")
     marker_epochs: dict[str, float] = {}
     for _line, event in events:
         event_type = event.get("event_type")
@@ -1024,13 +1010,17 @@ def _strict_uncertainty_scalar(
         )
 
 
-def _strict_suite_item_records_from_path(path: Path) -> list[tuple[int, dict[str, Any]]]:
+def _tolerant_jsonl_object_records(path: Path) -> list[tuple[int, dict[str, Any]]]:
+    """Collect numbered JSON-object rows without hiding adjacent diagnostics."""
+
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return []
     records: list[tuple[int, dict[str, Any]]] = []
     for index, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
         try:
             value = json.loads(line)
         except json.JSONDecodeError:
@@ -1289,11 +1279,16 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
         )
         return 2
     summary = reduce_bundle(bundle_path)
+    try:
+        payload = summary.to_dict()
+    except SchemaError as exc:
+        print(f"reduced summary is not admissible: {exc}", file=sys.stderr)
+        return 3
     (bundle_path / "summary_metrics.json").write_text(
-        json.dumps(summary.to_dict(), indent=2, sort_keys=True) + "\n"
+        json.dumps(payload, indent=2, sort_keys=True) + "\n"
     )
     print(_bundle_line(bundle_path, summary))
-    return 0 if summary.status == RunStatus.SUCCEEDED else 3
+    return 0 if is_admissible_succeeded_summary(payload) else 3
 
 
 # ---------------------------------------------------------------------------

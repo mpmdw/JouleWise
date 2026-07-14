@@ -1,8 +1,13 @@
 import io
+import json
+import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
+from unittest import mock
 
 from joulewise.cli import main
+from joulewise.schemas import EnergyEvidence, FailureReason, RunStatus, SummaryMetrics
 
 
 class CliTests(unittest.TestCase):
@@ -27,6 +32,72 @@ class CliTests(unittest.TestCase):
             exit_code = main(["print-output-schema"])
         self.assertEqual(exit_code, 0)
         self.assertIn("JouleWise SummaryMetrics", stdout.getvalue())
+
+    def test_reducer_output_and_cli_admission_parity_matrix(self) -> None:
+        cases = (
+            (
+                "succeeded-with-energy",
+                SummaryMetrics(
+                    status=RunStatus.SUCCEEDED,
+                    energy_request_j=1.0,
+                    gross_energy_j=2.0,
+                ),
+                0,
+            ),
+            (
+                "succeeded-without-request-energy",
+                SummaryMetrics(
+                    status=RunStatus.SUCCEEDED,
+                    gross_energy_j=2.0,
+                    window_evidence_precheck={
+                        "idle_subtracted_request": {
+                            "energy_evidence": EnergyEvidence.ABSENT.value,
+                            "eligible": False,
+                            "reasons": ["idle_baseline_unrecorded"],
+                        }
+                    },
+                ),
+                0,
+            ),
+            (
+                "failed",
+                SummaryMetrics(
+                    status=RunStatus.FAILED,
+                    failure_reason=FailureReason.UNKNOWN_ERROR,
+                ),
+                3,
+            ),
+            (
+                "unsupported",
+                SummaryMetrics(
+                    status=RunStatus.UNSUPPORTED,
+                    failure_reason=FailureReason.UNSUPPORTED_WORKLOAD,
+                ),
+                3,
+            ),
+            (
+                "invalid-succeeded",
+                SummaryMetrics(
+                    status=RunStatus.SUCCEEDED,
+                    energy_request_j=1.0,
+                ),
+                3,
+            ),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            bundle.mkdir()
+            (bundle / "config.json").write_text(json.dumps({}) + "\n")
+            for label, summary, expected in cases:
+                (bundle / "summary_metrics.json").unlink(missing_ok=True)
+                with self.subTest(label=label), mock.patch(
+                    "joulewise.cli.reduce_bundle", return_value=summary
+                ), redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    self.assertEqual(main(["reduce", str(bundle)]), expected)
+                    self.assertEqual(
+                        (bundle / "summary_metrics.json").is_file(),
+                        label != "invalid-succeeded",
+                    )
 
 
 if __name__ == "__main__":

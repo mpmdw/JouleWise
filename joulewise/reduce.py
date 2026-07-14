@@ -53,6 +53,7 @@ from joulewise.idle_dependence import (
 )
 from joulewise.schemas import (
     BenchmarkConfig,
+    EnergyEvidence,
     FailureReason,
     IdleBaseline,
     MeasurementQuality,
@@ -930,6 +931,10 @@ def _reduce(
     window_evidence_precheck = _window_evidence_precheck(
         reader, metadata, curve, window, energy_bound_terms_j, idle_baseline
     )
+    if idle_baseline is None:
+        window_evidence_precheck["idle_subtracted_request"]["energy_evidence"] = (
+            EnergyEvidence.ABSENT.value
+        )
     runtime_token_source = _runtime_token_count_source(metadata)
     if runtime_token_source is not None:
         fallback = runtime_token_source == "stream_chunk_fallback"

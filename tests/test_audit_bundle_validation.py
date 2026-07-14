@@ -89,11 +89,15 @@ class BundleValidationBugPins(BundleAuditCase):
         problems = validate_bundle(bundle)
         self.assertTrue(any("energy_request_j" in problem for problem in problems), problems)
 
-    def test_is_complete_false_for_status_only_succeeded_summary(self) -> None:
-        bundle = self.make_complete_bundle("audit-status-only-complete")
-        (bundle / "summary_metrics.json").write_text('{"status": "succeeded"}\n')
+    def test_json_null_summary_is_not_complete_or_valid(self) -> None:
+        bundle = self.make_complete_bundle("audit-json-null-summary")
+        (bundle / "summary_metrics.json").write_text("null\n")
 
         self.assertFalse(BundleReader(bundle).is_complete())
+        self.assertIn(
+            "summary_metrics.json is not a JSON object",
+            validate_bundle(bundle),
+        )
 
     def test_summary_validator_consistency_for_completion(self) -> None:
         cases = [
@@ -281,7 +285,7 @@ class StrictValidateZeroWindowTests(BundleAuditCase):
     """P2-040 FIX-1 (ARC-3): strict admission of succeeded zero-window bundles."""
 
     def make_succeeded_zero_window_bundle(self, run_id: str) -> Path:
-        from joulewise.schemas import RunStatus, SummaryMetrics
+        from joulewise.schemas import EnergyEvidence, RunStatus, SummaryMetrics
 
         writer = RunBundleWriter.create(self.runs_root, load_config(run_id), self.clock)
         writer.append_event(RuntimeEvent(2.0, "stage_started", "measured_run", "start"))
@@ -301,7 +305,17 @@ class StrictValidateZeroWindowTests(BundleAuditCase):
         )
         # A (wrongly) succeeded stored summary over the zero window.
         writer.write_summary(
-            SummaryMetrics(status=RunStatus.SUCCEEDED, gross_energy_j=0.0)
+            SummaryMetrics(
+                status=RunStatus.SUCCEEDED,
+                gross_energy_j=0.0,
+                window_evidence_precheck={
+                    "idle_subtracted_request": {
+                        "energy_evidence": EnergyEvidence.ABSENT.value,
+                        "eligible": False,
+                        "reasons": ["idle_baseline_unrecorded"],
+                    }
+                },
+            )
         )
         self.clock.sleep(3.0)
         return writer.finalize()

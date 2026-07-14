@@ -255,8 +255,8 @@ class CompletionStateTests(ReaderTestCase):
             status=RunStatus.SUCCEEDED,
             energy_request_j=1.0,
             gross_energy_j=1.0,
-            inter_token_throughput_tokens_s=float("inf"),
         ).to_dict()
+        summary["inter_token_throughput_tokens_s"] = float("inf")
         (writer.path / "summary_metrics.json").write_text(json.dumps(summary))
 
         problems = BundleReader(writer.path).problems()
@@ -1080,11 +1080,16 @@ class SuiteReaderTests(ReaderTestCase):
         records = read_jsonl(output_path)
         records[0]["emitted_token_ids"] = [1]
         write_jsonl(output_path, records)
+        output_path.write_text("\nnot-json\n" + output_path.read_text())
 
         problems = _strict_emitted_token_ids_problems(BundleReader(writer.path))
 
         self.assertTrue(
-            any("emitted_token_ids length 1 does not equal emitted_tokens 3" in p for p in problems),
+            any(
+                "outputs/suite_items.jsonl line 3.emitted_token_ids length 1 "
+                "does not equal emitted_tokens 3" in problem
+                for problem in problems
+            ),
             problems,
         )
 

@@ -295,11 +295,19 @@ reader policy:
   `energy_output_token_j`, `gross_energy_j`, `idle_subtracted_energy_j`,
   `ttft_s`, `decode_latency_s`, `throughput_tokens_s`, `idle_baseline`,
   `uncertainty`, `measurement_quality`, `phase_energy_j`, `failure_reason`,
-  and `failure_message`. `energy_request_j` and `gross_energy_j` must be
-  finite numbers. Token-derived fields (`energy_token_j`,
-  `energy_output_token_j`) and idle-subtracted energy
-  (`idle_subtracted_energy_j`) may be `null`; when non-null, nullable numeric
-  fields must be finite. `failure_reason` must be `null`.
+  and `failure_message`. `gross_energy_j` must be finite. A finite
+  `energy_request_j` retains the historical request-energy admission state. A
+  successful new reduction with no idle baseline records the distinct
+  machine-readable state
+  `window_evidence_precheck.idle_subtracted_request.energy_evidence = absent`.
+  That state requires `energy_request_j`,
+  `idle_subtracted_energy_j`, both token-derived energy fields, and
+  `idle_baseline` to be `null`. The latter run remains `succeeded`, while every
+  request-energy claim gate fails closed because no finite request-energy value
+  or eligible idle-subtracted precheck exists. Historical v0.1 summaries
+  retain their prior finite-`energy_request_j` meaning and retained bundles
+  are not reclassified. Other nullable
+  numeric fields must be finite when non-null. `failure_reason` must be `null`.
 - `failed` and `unsupported`: must include `status` and a valid
   `failure_reason`. Other metric keys remain optional/nullable so partial
   evidence failure bundles stay complete.
@@ -339,6 +347,12 @@ analysis-engine claim.
 
 A status-only `{"status": "succeeded"}` summary is neither a complete bundle
 nor default-validation-valid.
+JSON `null` is likewise not a summary object and is neither complete nor
+default-validation-valid. Completion, writer validation, exported summary
+schema semantics, default validation, and reduce-CLI success admission share
+the same status-specific predicate. Failed and unsupported salvage summaries
+remain valid with only their status and a valid `failure_reason`; additive
+optional fields remain permitted.
 
 New summaries may additionally include top-level `summary_provenance` with
 `summary_schema_version`, `reducer_id`, `reducer_version`, and
@@ -356,8 +370,8 @@ the bundle-pack hash chain (P2-027/REPRO-001), outside a single local
 `validate-bundle` invocation.
 
 Reducer `0.4.2` summaries use exact strict comparison. Current-era reducer
-`0.4.1` summaries may omit only `inter_token_throughput_tokens_s`; if the
-field is stored, its value remains an exact claim. Current-era summaries
+`0.4.1` summaries may omit `inter_token_throughput_tokens_s`; if the field is
+stored, its value remains an exact claim. Current-era summaries
 recording reducer `0.4.0` are unsupported and require explicit re-reduction;
 the governed idle-variance meaning changed, so there is no absence projection
 for `0.4.0`. Current-era `0.3.0` and `0.3.1` summaries remain unsupported.

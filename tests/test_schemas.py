@@ -1,12 +1,18 @@
+import copy
 import hashlib
 import importlib.util
 import json
+import tempfile
 import unittest
+import warnings
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
+from joulewise.bundle_read import BundleReader
 from joulewise.schemas import (
     BenchmarkConfig,
+    EnergyEvidence,
     FailureReason,
     RunStatus,
     SchemaError,
@@ -14,6 +20,7 @@ from joulewise.schemas import (
     SUMMARY_REDUCER_VERSION,
     SUMMARY_SCHEMA_VERSION,
     SummaryMetrics,
+    summary_validation_problems,
 )
 
 
@@ -46,6 +53,103 @@ OMITTED_OPTIONAL_KEYS = {
         "generator_sidecar_ref",
     },
 }
+
+
+def valid_succeeded_summary(**changes: Any) -> SummaryMetrics:
+    values = {
+        "status": RunStatus.SUCCEEDED,
+        "energy_request_j": 1.0,
+        "gross_energy_j": 2.0,
+        **changes,
+    }
+    return SummaryMetrics(**values)
+
+
+def _fragment_matches(instance: Any, fragment: dict[str, Any]) -> bool:
+    """Evaluate the exported schemas' semantic-condition subset in bare CI."""
+
+    expected_type = fragment.get("type")
+    if expected_type is not None:
+        allowed = [expected_type] if isinstance(expected_type, str) else expected_type
+        type_matches = {
+            "null": instance is None,
+            "object": isinstance(instance, dict),
+            "string": isinstance(instance, str),
+            "number": isinstance(instance, (int, float)) and not isinstance(instance, bool),
+            "integer": isinstance(instance, int) and not isinstance(instance, bool),
+            "array": isinstance(instance, list),
+        }
+        if not any(type_matches.get(name, True) for name in allowed):
+            return False
+    if "const" in fragment and instance != fragment["const"]:
+        return False
+    if "enum" in fragment and instance not in fragment["enum"]:
+        return False
+    if "required" in fragment:
+        if not isinstance(instance, dict) or any(
+            key not in instance for key in fragment["required"]
+        ):
+            return False
+    if isinstance(instance, dict):
+        for key, child in fragment.get("properties", {}).items():
+            if key in instance and not _fragment_matches(instance[key], child):
+                return False
+    if "not" in fragment and _fragment_matches(instance, fragment["not"]):
+        return False
+    if "allOf" in fragment and not all(
+        _fragment_matches(instance, child) for child in fragment["allOf"]
+    ):
+        return False
+    if "oneOf" in fragment and sum(
+        _fragment_matches(instance, child) for child in fragment["oneOf"]
+    ) != 1:
+        return False
+    if "contains" in fragment and not (
+        isinstance(instance, list)
+        and any(_fragment_matches(item, fragment["contains"]) for item in instance)
+    ):
+        return False
+    condition = fragment.get("if")
+    if condition is not None and _fragment_matches(instance, condition):
+        if not _fragment_matches(instance, fragment.get("then", {})):
+            return False
+    return True
+
+
+def exported_config_semantics_accept(data: dict[str, Any]) -> bool:
+    schema = BenchmarkConfig.json_schema()
+    return _fragment_matches(
+        data["workload_profile"],
+        {"allOf": schema["$defs"]["workload_profile"]["allOf"]},
+    ) and _fragment_matches(
+        data["hardware_target"],
+        {"allOf": schema["$defs"]["hardware_target"]["allOf"]},
+    )
+
+
+def exported_summary_semantics_accept(data: Any) -> bool:
+    if not isinstance(data, dict):
+        return False
+    schema = SummaryMetrics.json_schema()
+    relevant = {
+        "type": schema["type"],
+        "required": schema["required"],
+        "properties": {
+            key: schema["properties"][key]
+            for key in (
+                "status",
+                "energy_request_j",
+                "energy_token_j",
+                "energy_output_token_j",
+                "gross_energy_j",
+                "idle_subtracted_energy_j",
+                "failure_reason",
+            )
+            if key in data
+        },
+        "allOf": schema["allOf"],
+    }
+    return _fragment_matches(data, relevant)
 
 
 class BenchmarkConfigTests(unittest.TestCase):
@@ -103,6 +207,77 @@ class BenchmarkConfigTests(unittest.TestCase):
         self.assertIn("workload_profile", schema["required"])
         self.assertIn("mlx", schema["$defs"]["hardware_target"]["properties"]["runtime_backend"]["enum"])
 
+    def test_config_validate_and_exported_schema_semantic_parity_matrix(self) -> None:
+        base = json.loads(
+            (ROOT / "configs" / "examples" / "mock_local.json").read_text()
+        )
+        cases: list[tuple[str, dict[str, Any], bool]] = []
+
+        def add(label: str, mutate, accepted: bool) -> None:
+            data = copy.deepcopy(base)
+            mutate(data)
+            cases.append((label, data, accepted))
+
+        add("valid", lambda data: None, True)
+        add(
+            "multiple-prompt-sources",
+            lambda data: data["workload_profile"].update(prompt_text="hello"),
+            False,
+        )
+        add(
+            "no-prompt-source",
+            lambda data: data["workload_profile"].pop("prompt_tokens"),
+            False,
+        )
+        add(
+            "suite-ref-without-hash",
+            lambda data: (
+                data["workload_profile"].pop("prompt_tokens"),
+                data["workload_profile"].update(suite_manifest_ref="suite.json"),
+            ),
+            False,
+        )
+        add(
+            "suite-pair",
+            lambda data: (
+                data["workload_profile"].pop("prompt_tokens"),
+                data["workload_profile"].update(
+                    suite_manifest_ref="suite.json", suite_manifest_sha256="abc"
+                ),
+            ),
+            True,
+        )
+        add(
+            "ssh-without-host",
+            lambda data: data["hardware_target"].update(transport="ssh"),
+            False,
+        )
+        add(
+            "ssh-with-host",
+            lambda data: data["hardware_target"].update(
+                transport="ssh", host="benchmark-host"
+            ),
+            True,
+        )
+        add(
+            "additive-unknown",
+            lambda data: data["workload_profile"].update(additive_optional=True),
+            True,
+        )
+
+        for label, data, accepted in cases:
+            with self.subTest(label=label):
+                try:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        BenchmarkConfig.from_mapping(data)
+                except SchemaError:
+                    validator_accepted = False
+                else:
+                    validator_accepted = True
+                self.assertEqual(validator_accepted, accepted)
+                self.assertEqual(exported_config_semantics_accept(data), accepted)
+
 
 class SummaryMetricsTests(unittest.TestCase):
     def test_failed_summary_requires_reason(self) -> None:
@@ -133,6 +308,141 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertIn("status", schema["required"])
         self.assertIn("failure_reason", schema["properties"])
 
+    def test_writer_schema_and_bundle_reader_summary_parity_matrix(self) -> None:
+        available = valid_succeeded_summary().to_dict()
+        absent = valid_succeeded_summary(
+            energy_request_j=None,
+            window_evidence_precheck={
+                "idle_subtracted_request": {
+                    "energy_evidence": EnergyEvidence.ABSENT.value,
+                    "eligible": False,
+                    "reasons": ["idle_baseline_unrecorded"],
+                }
+            },
+        ).to_dict()
+        additive = {**available, "future_optional_evidence": {"version": 1}}
+        cases: list[tuple[str, Any, bool]] = [
+            ("succeeded", available, True),
+            ("succeeded-no-idle-baseline", absent, True),
+            ("legacy-v0.1-succeeded", available, True),
+            ("failed-salvage", {"status": "failed", "failure_reason": "unknown_error"}, True),
+            (
+                "unsupported-salvage",
+                {"status": "unsupported", "failure_reason": "unsupported_workload"},
+                True,
+            ),
+            ("additive-optional", additive, True),
+            ("json-null", None, False),
+            ("status-only-succeeded", {"status": "succeeded"}, False),
+            (
+                "legacy-null-request-energy",
+                {**available, "energy_request_j": None},
+                False,
+            ),
+            (
+                "absent-state-with-request-energy",
+                {**absent, "energy_request_j": 1.0},
+                False,
+            ),
+            ("failed-without-reason", {"status": "failed"}, False),
+        ]
+
+        # This is deliberately the full status x energy-field x validity
+        # product. A failed or unsupported summary may omit/null energy, but
+        # no status may carry a non-numeric value through the writer, reader,
+        # or exported schema boundary.
+        status_bases = {
+            "succeeded": available,
+            "failed": {"status": "failed", "failure_reason": "unknown_error"},
+            "unsupported": {
+                "status": "unsupported",
+                "failure_reason": "unsupported_workload",
+            },
+        }
+        energy_fields = (
+            "energy_request_j",
+            "energy_token_j",
+            "energy_output_token_j",
+            "gross_energy_j",
+            "idle_subtracted_energy_j",
+        )
+        field_validities = {
+            "absent": object(),
+            "null": None,
+            "number": 1.0,
+            "non-numeric-string": "bad",
+            "non-numeric-bool": True,
+        }
+        for status, base in status_bases.items():
+            for field in energy_fields:
+                for validity, value in field_validities.items():
+                    payload = copy.deepcopy(base)
+                    if validity == "absent":
+                        payload.pop(field, None)
+                    else:
+                        payload[field] = value
+
+                    accepted = True
+                    if validity in {"non-numeric-string", "non-numeric-bool"}:
+                        accepted = False
+                    elif status == "succeeded" and validity == "absent":
+                        accepted = False
+                    elif status == "succeeded" and validity == "null":
+                        accepted = field not in {
+                            "energy_request_j",
+                            "gross_energy_j",
+                        }
+                    cases.append(
+                        (f"{status}-{field}-{validity}", payload, accepted)
+                    )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            summary_path = Path(tmp) / "summary_metrics.json"
+            for label, payload, accepted in cases:
+                summary_path.write_text(json.dumps(payload) + "\n")
+                with self.subTest(label=label):
+                    # Feed the exact serialized cell to the writer validator.
+                    # Constructing from ``payload`` would normalize omitted
+                    # dataclass fields to None before validate() sees them.
+                    with patch.object(SummaryMetrics, "_payload", return_value=payload):
+                        try:
+                            SummaryMetrics(status=RunStatus.SUCCEEDED).validate()
+                        except SchemaError:
+                            writer_accepted = False
+                        else:
+                            writer_accepted = True
+
+                    surfaces = {
+                        "summary_validation_problems": not summary_validation_problems(payload),
+                        "SummaryMetrics.validate": writer_accepted,
+                        "SummaryMetrics.json_schema": exported_summary_semantics_accept(payload),
+                        "BundleReader.is_complete": BundleReader(Path(tmp)).is_complete(),
+                    }
+                    for surface, observed in surfaces.items():
+                        self.assertEqual(
+                            observed,
+                            accepted,
+                            f"{label}: {surface} acceptance diverged",
+                        )
+
+    def test_summary_metrics_writer_uses_canonical_succeeded_predicate(self) -> None:
+        valid_succeeded_summary().validate()
+        valid_succeeded_summary(
+            energy_request_j=None,
+            window_evidence_precheck={
+                "idle_subtracted_request": {
+                    "energy_evidence": EnergyEvidence.ABSENT.value,
+                    "eligible": False,
+                    "reasons": ["idle_baseline_unrecorded"],
+                }
+            },
+        ).validate()
+        with self.assertRaisesRegex(SchemaError, "gross_energy_j"):
+            SummaryMetrics(
+                status=RunStatus.SUCCEEDED,
+                energy_request_j=1.0,
+            ).validate()
+
     def test_summary_metrics_schema_has_phase_energy_field(self) -> None:
         # Additive Phase 2 (Slice 2D) output field per R-015.
         schema = SummaryMetrics.json_schema()
@@ -140,8 +450,8 @@ class SummaryMetricsTests(unittest.TestCase):
             schema["properties"]["phase_energy_j"], {"type": ["object", "null"]}
         )
         self.assertNotIn("phase_energy_j", schema["required"])
-        payload = SummaryMetrics(
-            status=RunStatus.SUCCEEDED, phase_energy_j={"prefill": 1.0, "decode": 2.0}
+        payload = valid_succeeded_summary(
+            phase_energy_j={"prefill": 1.0, "decode": 2.0}
         ).to_dict()
         self.assertEqual(payload["phase_energy_j"], {"prefill": 1.0, "decode": 2.0})
 
@@ -154,7 +464,7 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertIn("floor_cmp_j", suite_summary["required"])
         self.assertEqual(suite_summary["properties"]["floor_abs_j"], {"type": ["number", "null"]})
         self.assertEqual(suite_summary["properties"]["floor_cmp_j"], {"type": ["number", "null"]})
-        payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()
+        payload = valid_succeeded_summary().to_dict()
         self.assertIsNone(payload["suite_metrics"])
         self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.4.2")
 
@@ -165,7 +475,7 @@ class SummaryMetricsTests(unittest.TestCase):
             {"type": ["number", "null"]},
         )
         self.assertNotIn("inter_token_throughput_tokens_s", schema["required"])
-        payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()
+        payload = valid_succeeded_summary().to_dict()
         self.assertIn("inter_token_throughput_tokens_s", payload)
         self.assertIsNone(payload["inter_token_throughput_tokens_s"])
 
@@ -231,7 +541,7 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertEqual(quality_props["phase_identifiability"], {"type": ["object", "null"]})
 
     def test_summary_metrics_emit_summary_provenance(self) -> None:
-        payload = SummaryMetrics(status=RunStatus.SUCCEEDED).to_dict()
+        payload = valid_succeeded_summary().to_dict()
         self.assertEqual(
             payload["summary_provenance"],
             {

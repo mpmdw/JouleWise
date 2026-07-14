@@ -697,6 +697,9 @@ class ControllerTestCase(unittest.TestCase):
         )
         SummaryMetrics(
             status=status,
+            energy_request_j=data["energy_request_j"],
+            gross_energy_j=data["gross_energy_j"],
+            window_evidence_precheck=data.get("window_evidence_precheck"),
             failure_reason=reason,
             failure_message=data["failure_message"],
         ).validate()
@@ -1088,7 +1091,11 @@ class HappyPathTests(ControllerTestCase):
 
     def test_injected_reducer_summary_is_written(self) -> None:
         # The 2D seam: swapping the reducer changes the written summary.
-        sentinel = SummaryMetrics(status=RunStatus.SUCCEEDED, energy_request_j=12.5)
+        sentinel = SummaryMetrics(
+            status=RunStatus.SUCCEEDED,
+            energy_request_j=12.5,
+            gross_energy_j=14.0,
+        )
         seen: list[Path] = []
 
         def reducer(bundle_path: Path) -> SummaryMetrics:

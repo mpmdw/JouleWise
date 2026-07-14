@@ -8,10 +8,11 @@ semantics.
 
 from __future__ import annotations
 
+import math
 import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Mapping
 
 from joulewise.validation import finite_float
 
@@ -19,6 +20,51 @@ CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
 SUMMARY_REDUCER_VERSION = "0.4.2"
+
+_PROMPT_SOURCE_FIELDS = (
+    "prompt_text",
+    "prompt_tokens",
+    "dataset_ref",
+    "suite_manifest_ref",
+)
+_SUITE_MANIFEST_PAIR = ("suite_manifest_ref", "suite_manifest_sha256")
+
+SUMMARY_WRITER_KEYS_V0_1 = frozenset(
+    {
+        "status",
+        "energy_request_j",
+        "energy_token_j",
+        "energy_output_token_j",
+        "gross_energy_j",
+        "idle_subtracted_energy_j",
+        "ttft_s",
+        "decode_latency_s",
+        "throughput_tokens_s",
+        "idle_baseline",
+        "uncertainty",
+        "measurement_quality",
+        "phase_energy_j",
+        "failure_reason",
+        "failure_message",
+    }
+)
+SUCCEEDED_NULLABLE_NUMBER_FIELDS = frozenset(
+    {
+        "ttft_s",
+        "decode_latency_s",
+        "throughput_tokens_s",
+        "inter_token_throughput_tokens_s",
+    }
+)
+SUMMARY_ENERGY_NUMBER_FIELDS = frozenset(
+    {
+        "energy_request_j",
+        "energy_token_j",
+        "energy_output_token_j",
+        "gross_energy_j",
+        "idle_subtracted_energy_j",
+    }
+)
 
 
 class SchemaError(ValueError):
@@ -139,6 +185,13 @@ class RunStatus(str, Enum):
     UNSUPPORTED = "unsupported"
 
 
+class EnergyEvidence(str, Enum):
+    """Admission state for request-energy evidence in a succeeded summary."""
+
+    AVAILABLE = "available"
+    ABSENT = "absent"
+
+
 class FailureReason(str, Enum):
     DID_NOT_FIT = "did_not_fit"
     RUNTIME_UNAVAILABLE = "runtime_unavailable"
@@ -149,6 +202,66 @@ class FailureReason(str, Enum):
     UNSUPPORTED_WORKLOAD = "unsupported_workload"
     CLEANUP_FAILED = "cleanup_failed"
     UNKNOWN_ERROR = "unknown_error"
+
+
+def _is_finite_number(value: Any) -> bool:
+    return (
+        isinstance(value, int | float)
+        and not isinstance(value, bool)
+        and math.isfinite(float(value))
+    )
+
+
+def _semantic_prompt_sources(values: Mapping[str, Any]) -> list[str]:
+    return [name for name in _PROMPT_SOURCE_FIELDS if values.get(name) is not None]
+
+
+def _validate_workload_semantics(values: Mapping[str, Any]) -> None:
+    if (values.get(_SUITE_MANIFEST_PAIR[0]) is None) != (
+        values.get(_SUITE_MANIFEST_PAIR[1]) is None
+    ):
+        raise SchemaError(
+            "workload_profile.suite_manifest_ref and "
+            "suite_manifest_sha256 are required together"
+        )
+    prompt_sources = _semantic_prompt_sources(values)
+    if not prompt_sources:
+        raise SchemaError(
+            "workload_profile must define prompt_text, prompt_tokens, "
+            "or dataset_ref, or suite_manifest_ref"
+        )
+    if len(prompt_sources) > 1:
+        raise SchemaError(
+            "workload_profile prompt sources are mutually exclusive: "
+            + ", ".join(prompt_sources)
+        )
+
+
+def _exactly_one_non_null_schema(names: tuple[str, ...]) -> dict[str, Any]:
+    return {
+        "oneOf": [
+            {
+                "required": [selected],
+                "properties": {
+                    name: ({"not": {"type": "null"}} if name == selected else {"type": "null"})
+                    for name in names
+                },
+            }
+            for selected in names
+        ]
+    }
+
+
+def _paired_nullable_fields_schema(names: tuple[str, str]) -> dict[str, Any]:
+    return {
+        "oneOf": [
+            {
+                "required": list(names),
+                "properties": {name: {"not": {"type": "null"}} for name in names},
+            },
+            {"properties": {name: {"type": "null"} for name in names}},
+        ]
+    }
 
 
 def _require_mapping(value: Any, field_name: str) -> dict[str, Any]:
@@ -329,31 +442,7 @@ class WorkloadProfile:
         )
 
     def validate(self) -> None:
-        if (self.suite_manifest_ref is None) != (self.suite_manifest_sha256 is None):
-            raise SchemaError(
-                "workload_profile.suite_manifest_ref and "
-                "suite_manifest_sha256 are required together"
-            )
-        prompt_sources = [
-            name
-            for name, value in (
-                ("prompt_text", self.prompt_text),
-                ("prompt_tokens", self.prompt_tokens),
-                ("dataset_ref", self.dataset_ref),
-                ("suite_manifest_ref", self.suite_manifest_ref),
-            )
-            if value is not None
-        ]
-        if not prompt_sources:
-            raise SchemaError(
-                "workload_profile must define prompt_text, prompt_tokens, "
-                "or dataset_ref, or suite_manifest_ref"
-            )
-        if len(prompt_sources) > 1:
-            raise SchemaError(
-                "workload_profile prompt sources are mutually exclusive: "
-                + ", ".join(prompt_sources)
-            )
+        _validate_workload_semantics(asdict(self))
 
 
 @dataclass(frozen=True)
@@ -568,6 +657,18 @@ class BenchmarkConfig:
                         "device_kind": nullable_string,
                         "notes": nullable_string,
                     },
+                    "allOf": [
+                        {
+                            "if": {
+                                "required": ["transport"],
+                                "properties": {"transport": {"const": TransportKind.SSH.value}},
+                            },
+                            "then": {
+                                "required": ["host"],
+                                "properties": {"host": non_empty_string},
+                            },
+                        }
+                    ],
                 },
                 "workload_profile": {
                     "type": "object",
@@ -584,6 +685,10 @@ class BenchmarkConfig:
                         "repetitions": {"type": "integer", "minimum": 1},
                         "warmup_runs": {"type": "integer", "minimum": 1},
                     },
+                    "allOf": [
+                        _exactly_one_non_null_schema(_PROMPT_SOURCE_FIELDS),
+                        _paired_nullable_fields_schema(_SUITE_MANIFEST_PAIR),
+                    ],
                 },
                 "interconnect": {
                     "type": "object",
@@ -724,6 +829,128 @@ class SuiteSummary:
     floor_source: str | None
 
 
+def summary_validation_problems(summary: Any) -> list[str]:
+    """Return canonical status-specific summary admission problems.
+
+    A finite ``energy_request_j`` retains the historical v0.1 admission
+    meaning. New reducers distinguish a successful measurement without an
+    idle baseline through the existing request precheck object.
+    """
+
+    if not isinstance(summary, Mapping):
+        return ["summary_metrics.json is not a JSON object"]
+    problems: list[str] = []
+    raw_status = summary.get("status")
+    try:
+        status = RunStatus(raw_status)
+    except (TypeError, ValueError):
+        return [f"summary status is not a valid RunStatus: {raw_status!r}"]
+
+    # These fields have the same nullable-number shape for every status in
+    # the exported schema. Failure summaries may omit or null them, but a
+    # present value cannot bypass the shared type boundary merely because the
+    # run failed before producing complete energy evidence.
+    for key in sorted(SUMMARY_ENERGY_NUMBER_FIELDS):
+        if key not in summary or summary[key] is None:
+            continue
+        if not _is_finite_number(summary[key]):
+            problems.append(
+                f"summary status is {status.value} but energy field {key} is "
+                f"not null or a finite number: {summary[key]!r}"
+            )
+
+    raw_reason = summary.get("failure_reason")
+    if status in {RunStatus.FAILED, RunStatus.UNSUPPORTED}:
+        if raw_reason is None:
+            problems.append(
+                f"summary status is {status.value} but failure_reason is missing"
+            )
+        else:
+            try:
+                FailureReason(raw_reason)
+            except (TypeError, ValueError):
+                problems.append(
+                    "summary failure_reason is not a valid FailureReason: "
+                    f"{raw_reason!r}"
+                )
+        return problems
+
+    if raw_reason is not None:
+        problems.append(
+            "summary status is succeeded and must not include failure_reason "
+            f"{raw_reason!r}"
+        )
+    missing = sorted(SUMMARY_WRITER_KEYS_V0_1 - set(summary))
+    for key in missing:
+        problems.append(f"summary status is succeeded but {key} is missing")
+
+    gross_energy_j = summary.get("gross_energy_j")
+    if gross_energy_j is None:
+        problems.append(
+            "summary status is succeeded but gross_energy_j is not a finite "
+            f"number: {gross_energy_j!r}"
+        )
+
+    energy_request_j = summary.get("energy_request_j")
+    precheck = summary.get("window_evidence_precheck")
+    request_precheck = (
+        precheck.get("idle_subtracted_request")
+        if isinstance(precheck, Mapping)
+        else None
+    )
+    energy_evidence = (
+        request_precheck.get("energy_evidence")
+        if isinstance(request_precheck, Mapping)
+        else None
+    )
+    if energy_evidence == EnergyEvidence.ABSENT.value:
+        for key in (
+            "energy_request_j",
+            "energy_token_j",
+            "energy_output_token_j",
+            "idle_subtracted_energy_j",
+            "idle_baseline",
+        ):
+            if summary.get(key) is not None:
+                problems.append(
+                    "summary status is succeeded with energy_evidence 'absent' "
+                    f"but {key} is not null: {summary.get(key)!r}"
+                )
+        reasons = request_precheck.get("reasons")
+        if request_precheck.get("eligible") is not False or not (
+            isinstance(reasons, list) and "idle_baseline_unrecorded" in reasons
+        ):
+            problems.append(
+                "summary status is succeeded with energy_evidence 'absent' but "
+                "idle_subtracted_request does not fail closed for an unrecorded "
+                "idle baseline"
+            )
+    elif energy_request_j is None:
+        problems.append(
+            "summary status is succeeded with request-energy evidence but "
+            f"energy_request_j is not a finite number: {energy_request_j!r}"
+        )
+
+    for key in sorted(SUCCEEDED_NULLABLE_NUMBER_FIELDS):
+        value = summary.get(key)
+        if value is not None and not _is_finite_number(value):
+            problems.append(
+                "summary status is succeeded but nullable numeric field "
+                f"{key} is not null or finite: {value!r}"
+            )
+    return problems
+
+
+def is_admissible_succeeded_summary(summary: Any) -> bool:
+    """Whether ``summary`` is a canonical succeeded admission state."""
+
+    return (
+        isinstance(summary, Mapping)
+        and summary.get("status") == RunStatus.SUCCEEDED.value
+        and not summary_validation_problems(summary)
+    )
+
+
 @dataclass(frozen=True)
 class SummaryMetrics:
     """Reducer output for one run.
@@ -768,14 +995,16 @@ class SummaryMetrics:
     failure_message: str | None = None
 
     def validate(self) -> None:
-        if self.status in {RunStatus.FAILED, RunStatus.UNSUPPORTED} and self.failure_reason is None:
-            raise SchemaError("failed or unsupported summaries require failure_reason")
-        if self.status == RunStatus.SUCCEEDED and self.failure_reason is not None:
-            raise SchemaError("succeeded summaries must not include failure_reason")
+        problems = summary_validation_problems(self._payload())
+        if problems:
+            raise SchemaError(problems[0])
+
+    def _payload(self) -> dict[str, Any]:
+        return _enum_to_value(asdict(self))
 
     def to_dict(self) -> dict[str, Any]:
         self.validate()
-        return _enum_to_value(asdict(self))
+        return self._payload()
 
     @staticmethod
     def json_schema() -> dict[str, Any]:
@@ -829,6 +1058,101 @@ class SummaryMetrics:
                 },
                 "failure_message": {"type": ["string", "null"]},
             },
+            "allOf": [
+                {
+                    "if": {
+                        "required": ["status"],
+                        "properties": {"status": {"const": RunStatus.SUCCEEDED.value}},
+                    },
+                    "then": {
+                        "required": sorted(SUMMARY_WRITER_KEYS_V0_1),
+                        "properties": {
+                            "gross_energy_j": {"type": "number"},
+                            "failure_reason": {"type": "null"},
+                        },
+                        "oneOf": [
+                            {
+                                "properties": {"energy_request_j": {"type": "number"}},
+                                "not": {
+                                    "required": ["window_evidence_precheck"],
+                                    "properties": {
+                                        "window_evidence_precheck": {
+                                            "type": "object",
+                                            "required": ["idle_subtracted_request"],
+                                            "properties": {
+                                                "idle_subtracted_request": {
+                                                    "type": "object",
+                                                    "required": ["energy_evidence"],
+                                                    "properties": {
+                                                        "energy_evidence": {
+                                                            "const": EnergyEvidence.ABSENT.value
+                                                        }
+                                                    },
+                                                }
+                                            },
+                                        }
+                                    },
+                                },
+                            },
+                            {
+                                "required": ["window_evidence_precheck"],
+                                "properties": {
+                                    "energy_request_j": {"type": "null"},
+                                    "energy_token_j": {"type": "null"},
+                                    "energy_output_token_j": {"type": "null"},
+                                    "idle_subtracted_energy_j": {"type": "null"},
+                                    "idle_baseline": {"type": "null"},
+                                    "window_evidence_precheck": {
+                                        "type": "object",
+                                        "required": ["idle_subtracted_request"],
+                                        "properties": {
+                                            "idle_subtracted_request": {
+                                                "type": "object",
+                                                "required": [
+                                                    "energy_evidence",
+                                                    "eligible",
+                                                    "reasons",
+                                                ],
+                                                "properties": {
+                                                    "energy_evidence": {
+                                                        "const": EnergyEvidence.ABSENT.value
+                                                    },
+                                                    "eligible": {"const": False},
+                                                    "reasons": {
+                                                        "type": "array",
+                                                        "contains": {
+                                                            "const": "idle_baseline_unrecorded"
+                                                        },
+                                                    },
+                                                },
+                                            }
+                                        },
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                },
+                {
+                    "if": {
+                        "required": ["status"],
+                        "properties": {
+                            "status": {
+                                "enum": [
+                                    RunStatus.FAILED.value,
+                                    RunStatus.UNSUPPORTED.value,
+                                ]
+                            }
+                        },
+                    },
+                    "then": {
+                        "required": ["failure_reason"],
+                        "properties": {
+                            "failure_reason": _string_enum_schema(FailureReason)
+                        },
+                    },
+                },
+            ],
             "$defs": {
                 "idle_baseline": {
                     "type": "object",

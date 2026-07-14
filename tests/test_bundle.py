@@ -26,8 +26,10 @@ from joulewise.clock import FakeClock
 from joulewise.interfaces import PowerSample, RunContext, RuntimeEvent
 from joulewise.schemas import (
     BenchmarkConfig,
+    EnergyEvidence,
     FailureReason,
     RunStatus,
+    SchemaError,
     SummaryMetrics,
 )
 
@@ -62,10 +64,16 @@ def load_example_config(**overrides) -> BenchmarkConfig:
 def make_summary() -> SummaryMetrics:
     return SummaryMetrics(
         status=RunStatus.SUCCEEDED,
-        energy_request_j=1.25,
-        energy_token_j=0.03125,
+        gross_energy_j=1.25,
         ttft_s=0.05,
         throughput_tokens_s=80.0,
+        window_evidence_precheck={
+            "idle_subtracted_request": {
+                "energy_evidence": EnergyEvidence.ABSENT.value,
+                "eligible": False,
+                "reasons": ["idle_baseline_unrecorded"],
+            }
+        },
     )
 
 
@@ -228,7 +236,14 @@ class RunBundleWriterTests(unittest.TestCase):
 
         summary = json.loads((writer.path / "summary_metrics.json").read_text())
         self.assertEqual(summary["status"], "succeeded")
-        self.assertEqual(summary["energy_request_j"], 1.25)
+        self.assertEqual(summary["gross_energy_j"], 1.25)
+        self.assertIsNone(summary["energy_request_j"])
+        self.assertEqual(
+            summary["window_evidence_precheck"]["idle_subtracted_request"][
+                "energy_evidence"
+            ],
+            "absent",
+        )
 
     def test_events_jsonl_lines_parse_with_exact_key_set(self) -> None:
         writer = self.make_writer()
@@ -455,6 +470,20 @@ class RunBundleWriterTests(unittest.TestCase):
         summary = json.loads((writer.path / "summary_metrics.json").read_text())
         self.assertEqual(summary["status"], "failed")
         self.assertEqual(summary["failure_reason"], "permission_denied")
+
+    def test_failed_summary_with_non_numeric_energy_is_rejected(self) -> None:
+        writer = self.make_writer()
+        writer.write_metadata({})
+        summary = SummaryMetrics(
+            status=RunStatus.FAILED,
+            failure_reason=FailureReason.UNKNOWN_ERROR,
+            gross_energy_j="bad",  # type: ignore[arg-type]
+        )
+
+        with self.assertRaisesRegex(
+            SchemaError, "energy field gross_energy_j.*finite number"
+        ):
+            writer.write_summary(summary)
 
     def test_finalize_without_staged_summary_raises(self) -> None:
         writer = self.make_writer()

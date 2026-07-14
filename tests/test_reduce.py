@@ -23,6 +23,7 @@ from joulewise.controller import run_benchmark
 from joulewise.interfaces import PowerSample, RuntimeEvent
 from joulewise.schemas import (
     BenchmarkConfig,
+    EnergyEvidence,
     FailureReason,
     RunStatus,
     TelemetryBackend,
@@ -405,6 +406,25 @@ class PhaseAttributionTests(ReduceTestCase):
 
 
 class DegenerateTests(ReduceTestCase):
+    def test_no_idle_baseline_is_succeeded_absent_energy_evidence(self) -> None:
+        builder = self.builder()
+        builder.measured_window(0.0, 2.0)
+        builder.write_trace(constant_samples(0.0, 2.0, hz=1.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"], idle=None)
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertIsNone(summary.energy_request_j)
+        self.assertEqual(summary.gross_energy_j, 15.0)
+        request_gate = summary.window_evidence_precheck["idle_subtracted_request"]
+        self.assertEqual(
+            request_gate["energy_evidence"], EnergyEvidence.ABSENT.value
+        )
+        self.assertFalse(request_gate["eligible"])
+        self.assertIn("idle_baseline_unrecorded", request_gate["reasons"])
+        summary.to_dict()
+
     def test_fewer_than_two_samples_is_structured_failure(self) -> None:
         builder = self.builder()
         builder.measured_window(0.0, 10.0)
