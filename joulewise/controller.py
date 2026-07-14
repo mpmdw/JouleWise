@@ -55,7 +55,7 @@ import hashlib
 import json
 import traceback
 from collections.abc import Callable
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
@@ -100,7 +100,7 @@ from joulewise.schemas import (
 from joulewise.suite import (
     SuiteManifest,
     canonical_effective_manifest,
-    load_suite_manifest,
+    migrate_suite_manifest,
     order_seed,
     suite_manifest_sha256,
 )
@@ -188,6 +188,9 @@ def run_benchmark(
     which the reducer copies into the run's ``measurement_quality``.
     """
     config.validate()
+    config, suite_preparation, suite_preparation_failure = (
+        _prepare_suite_manifest_for_new_bundle(config)
+    )
     if registry is None:
         registry = joulewise.adapters
     writer = RunBundleWriter.create(runs_root, config, clock)
@@ -199,6 +202,8 @@ def run_benchmark(
         reducer,
         extra_metadata,
         environment_snapshot,
+        suite_preparation,
+        suite_preparation_failure,
     ).execute()
 
 
@@ -217,6 +222,69 @@ class _StageFailure(Exception):
         self.reason = reason
         self.message = message
         self.traceback_text = traceback_text
+
+
+@dataclass(frozen=True)
+class _PreparedSuiteManifest:
+    manifest: SuiteManifest
+    effective_manifest: dict[str, Any]
+    manifest_sha256: str
+    source_file_sha256: str
+
+
+def _prepare_suite_manifest_for_new_bundle(
+    config: BenchmarkConfig,
+) -> tuple[
+    BenchmarkConfig,
+    _PreparedSuiteManifest | None,
+    _StageFailure | None,
+]:
+    """Authenticate a source manifest and normalize new-bundle identity to v2.
+
+    Legacy v1 source pins remain accepted as source authentication and remain
+    unchanged in ``config.json`` so campaign registration identity is stable.
+    The bundle metadata, marker events, and embedded ``suite_manifest.json``
+    all use the canonical v2 digest; the reader verifies the deterministic
+    source-pin-to-artifact migration.
+    """
+
+    profile = config.workload_profile
+    if profile.suite_manifest_ref is None:
+        return config, None, None
+    ref_path = Path(profile.suite_manifest_ref)
+    try:
+        source_bytes = ref_path.read_bytes()
+        raw_manifest = json.loads(source_bytes)
+        source_effective = canonical_effective_manifest(raw_manifest)
+        source_hash = suite_manifest_sha256(source_effective)
+        effective = migrate_suite_manifest(raw_manifest)
+        manifest = SuiteManifest.from_mapping(effective)
+        manifest_hash = suite_manifest_sha256(effective)
+    except Exception as exc:  # noqa: BLE001 - becomes a complete failure bundle
+        return config, None, _StageFailure(
+            "validate",
+            FailureReason.UNKNOWN_ERROR,
+            f"suite manifest cannot be loaded from {profile.suite_manifest_ref!r}: "
+            f"{type(exc).__name__}: {exc}",
+        )
+    if profile.suite_manifest_sha256 not in {source_hash, manifest_hash}:
+        return config, None, _StageFailure(
+            "validate",
+            FailureReason.UNKNOWN_ERROR,
+            "suite manifest hash mismatch: "
+            f"config has {profile.suite_manifest_sha256!r}, "
+            f"{profile.suite_manifest_ref!r} hashes to {source_hash!r}",
+        )
+    return (
+        config,
+        _PreparedSuiteManifest(
+            manifest=manifest,
+            effective_manifest=effective,
+            manifest_sha256=manifest_hash,
+            source_file_sha256=hashlib.sha256(source_bytes).hexdigest(),
+        ),
+        None,
+    )
 
 
 def _jsonable(value: Any) -> Any:
@@ -252,6 +320,8 @@ class _Execution:
         reducer: Reducer | None,
         extra_metadata: dict[str, Any] | None = None,
         environment_snapshot: dict[str, Any] | None | object = _ENVIRONMENT_UNSET,
+        suite_preparation: _PreparedSuiteManifest | None = None,
+        suite_preparation_failure: _StageFailure | None = None,
     ) -> None:
         self._config = config
         self._writer = writer
@@ -260,6 +330,8 @@ class _Execution:
         self._reducer = reducer
         self._extra_metadata = dict(extra_metadata) if extra_metadata else {}
         self._environment_snapshot = environment_snapshot
+        self._suite_preparation = suite_preparation
+        self._suite_preparation_failure = suite_preparation_failure
         # D-024: one immutable context, constructed after bundle creation,
         # passed to every adapter lifecycle call. Context is data (paths and
         # identity), never the writer.
@@ -1119,32 +1191,21 @@ class _Execution:
                 FailureReason.UNSUPPORTED_WORKLOAD,
                 "runtime adapter does not support suite workloads",
             )
-        ref_path = Path(profile.suite_manifest_ref)
-        try:
-            source_bytes = ref_path.read_bytes()
-            manifest = load_suite_manifest(ref_path)
-            effective = canonical_effective_manifest(json.loads(source_bytes))
-        except Exception as exc:  # noqa: BLE001 - fail closed into a complete bundle
+        if self._suite_preparation_failure is not None:
+            raise self._suite_preparation_failure
+        preparation = self._suite_preparation
+        if preparation is None:  # defensive: suite refs always preflight above
             raise _StageFailure(
                 "validate",
                 FailureReason.UNKNOWN_ERROR,
-                f"suite manifest cannot be loaded from {profile.suite_manifest_ref!r}: "
-                f"{type(exc).__name__}: {exc}",
-            ) from exc
-        actual_hash = suite_manifest_sha256(effective)
-        if actual_hash != profile.suite_manifest_sha256:
-            raise _StageFailure(
-                "validate",
-                FailureReason.UNKNOWN_ERROR,
-                "suite manifest hash mismatch: "
-                f"config has {profile.suite_manifest_sha256!r}, "
-                f"{profile.suite_manifest_ref!r} hashes to {actual_hash!r}",
+                "suite manifest preparation is missing",
             )
+        manifest = preparation.manifest
         rep_index = _suite_rep_index_from_run_id(self._config.run_id)
         self._suite_manifest = manifest
-        self._suite_effective_manifest = effective
-        self._suite_manifest_sha256 = actual_hash
-        self._suite_source_file_sha256 = hashlib.sha256(source_bytes).hexdigest()
+        self._suite_effective_manifest = preparation.effective_manifest
+        self._suite_manifest_sha256 = preparation.manifest_sha256
+        self._suite_source_file_sha256 = preparation.source_file_sha256
         self._suite_order_seed = order_seed(
             manifest.suite_seed,
             manifest.execution_policy.order_policy,

@@ -39,6 +39,7 @@ from joulewise.suite import (
     BLOCK_START,
     LEVEL_END,
     LEVEL_START,
+    LEGACY_SUITE_SCHEMA_VERSION,
     SuiteManifest,
     canonical_effective_manifest,
     order_seed,
@@ -152,6 +153,25 @@ class ReaderTestCase(unittest.TestCase):
 
 
 class StrictAccessorTests(ReaderTestCase):
+    def test_legacy_v1_suite_manifest_names_synthesized_cache_marker(self) -> None:
+        writer = self.make_bundle("legacy-suite-manifest")
+        legacy = json.loads(SUITE_MANIFEST_PATH.read_text())
+        self.assertEqual(legacy["schema_version"], LEGACY_SUITE_SCHEMA_VERSION)
+        writer.write_suite_manifest(canonical_effective_manifest(legacy))
+
+        manifest = BundleReader(writer.path).suite_manifest()
+
+        self.assertIsNotNone(manifest)
+        assert manifest is not None
+        self.assertEqual(
+            manifest.execution_policy.cache_policy_verification,
+            "declared_not_verified",
+        )
+        self.assertEqual(
+            manifest.synthesized_fields,
+            ("execution_policy.cache_policy_verification",),
+        )
+
     def test_missing_config_is_structured_read_error(self) -> None:
         reader = BundleReader(self.runs_root / "does-not-exist")
         with self.assertRaises(BundleReadError) as ctx:

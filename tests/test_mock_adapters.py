@@ -83,7 +83,7 @@ def make_config(**overrides: Any) -> BenchmarkConfig:
 def make_suite_manifest() -> SuiteManifest:
     return SuiteManifest.from_mapping(
         {
-            "schema_version": "suite_manifest.v1",
+            "schema_version": "suite_manifest.v2",
             "suite_id": "mock_suite",
             "suite_profile": "mock_suite_v1",
             "suite_revision": "test",
@@ -102,7 +102,8 @@ def make_suite_manifest() -> SuiteManifest:
                 "order_policy": "manifest_order",
                 "within_bundle_repeats": 1,
                 "cooldown_policy": "bundle_only",
-                "cache_policy": "warm_cache",
+                "declared_cache_policy": "warm_cache",
+                "cache_policy_verification": "declared_not_verified",
                 "warmup_policy": "adapter_default",
                 "default_output_policy": "fixed_budget_exact",
             },
@@ -164,7 +165,6 @@ def _suite_item(
             "prefix_group_id": None,
         },
         "output_policy": "fixed_budget_exact",
-        "status_policy": "none",
         "tags": tags,
     }
 

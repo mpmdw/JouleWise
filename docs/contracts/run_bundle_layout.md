@@ -70,9 +70,39 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
 - `config.json`: normalized benchmark config (sorted keys; hash in
   metadata).
 - `suite_manifest.json`: for suite runs, the canonical effective suite
-  manifest with pinned defaults materialized. The SHA-256 is computed over
-  sorted-key, 2-space JSON plus trailing newline, matching D-001's config
-  hash convention and D-044's suite hash chain.
+  manifest with pinned defaults materialized. New bundles persist
+  `suite_manifest.v2`; its SHA-256 is computed over the v2 sorted-key,
+  2-space JSON plus trailing newline, matching D-001's config hash convention
+  and D-044's suite hash chain. A v1 source pin in `config.json` authenticates
+  the historical source before migration and remains byte-stable for campaign
+  registration; `metadata.suite.manifest_sha256`, suite marker metadata, and
+  the embedded artifact bind the v2 bytes. Historical bundles retain their v1
+  bytes and v1 hashes. `BundleReader` verifies the deterministic v1-pin/v2-
+  artifact migration, accepts historical v1 bytes, and reports
+  `execution_policy.cache_policy_verification` in `synthesized_fields` when it
+  supplies that compatibility marker.
+
+  The v2 policy portion has this shape (unrelated fields omitted):
+
+  ```json
+  {
+    "schema_version": "suite_manifest.v2",
+    "execution_policy": {
+      "order_policy": "manifest_order",
+      "within_bundle_repeats": 1,
+      "cooldown_policy": "bundle_only",
+      "declared_cache_policy": "cold_between_bundles",
+      "cache_policy_verification": "declared_not_verified",
+      "warmup_policy": "adapter_default",
+      "default_output_policy": "fixed_budget_exact"
+    },
+    "items": [
+      {
+        "output_policy": "fixed_budget_exact"
+      }
+    ]
+  }
+  ```
 - `metadata.json`: a JSON object containing device, runtime, telemetry,
   model, environment, clock, `config_sha256`, rail-manifest metadata, and
   optional workload provenance. Valid JSON with any non-object top-level

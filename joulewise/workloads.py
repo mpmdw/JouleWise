@@ -14,7 +14,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from joulewise.suite import ORDER_POLICY_MANIFEST, SuiteManifest, suite_manifest_sha256
+from joulewise.suite import (
+    ORDER_POLICY_MANIFEST,
+    SUITE_SCHEMA_VERSION,
+    SuiteManifest,
+    suite_manifest_sha256,
+)
 
 
 DOMAIN = "joulewise.workload.affine_mod_ladder.v1"
@@ -244,7 +249,6 @@ def _item_mapping(
             "prefix_group_id": None,
         },
         "output_policy": OUTPUT_POLICY,
-        "status_policy": "none",
         "tags": list(tags or []),
     }
     annotation = {
@@ -324,7 +328,7 @@ def build_affine_smoke_manifest(
         separators=(",", ":"),
     )
     manifest = {
-        "schema_version": "suite_manifest.v1",
+        "schema_version": SUITE_SCHEMA_VERSION,
         "suite_id": "affine_smoke_v1",
         "suite_profile": "affine_mod_ladder_v1_smoke",
         "suite_revision": "2026-07-08.p2-010b-unit1",
@@ -347,7 +351,8 @@ def build_affine_smoke_manifest(
             "order_policy": order_policy,
             "within_bundle_repeats": 1,
             "cooldown_policy": "bundle_only",
-            "cache_policy": "warm_cache",
+            "declared_cache_policy": "warm_cache",
+            "cache_policy_verification": "declared_not_verified",
             "warmup_policy": "adapter_default",
             "default_output_policy": OUTPUT_POLICY,
         },

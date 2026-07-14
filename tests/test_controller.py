@@ -27,7 +27,12 @@ from joulewise.schemas import (
     RunStatus,
     SummaryMetrics,
 )
-from joulewise.suite import order_seed, suite_manifest_sha256
+from joulewise.suite import (
+    SUITE_SCHEMA_VERSION,
+    migrate_suite_manifest,
+    order_seed,
+    suite_manifest_sha256,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
@@ -1725,8 +1730,37 @@ class SuiteControllerTests(ControllerTestCase):
         self.assertIsNotNone(summary.suite_metrics)
         self.assertTrue((bundle_path / "suite_manifest.json").is_file())
         self.assertTrue((bundle_path / "outputs" / "suite_items.jsonl").is_file())
+        persisted_manifest = json.loads(
+            (bundle_path / "suite_manifest.json").read_text()
+        )
+        self.assertEqual(persisted_manifest["schema_version"], SUITE_SCHEMA_VERSION)
+        self.assertEqual(
+            persisted_manifest["execution_policy"]["cache_policy_verification"],
+            "declared_not_verified",
+        )
+        self.assertNotIn(
+            "cache_policy", persisted_manifest["execution_policy"]
+        )
+        self.assertTrue(
+            all("status_policy" not in item for item in persisted_manifest["items"])
+        )
         metadata = json.loads((bundle_path / "metadata.json").read_text())
         self.assertEqual(metadata["suite"]["suite_id"], "mock_suite_smoke")
+        persisted_hash = suite_manifest_sha256(persisted_manifest)
+        self.assertEqual(metadata["suite"]["manifest_sha256"], persisted_hash)
+        persisted_config = json.loads((bundle_path / "config.json").read_text())
+        source_manifest = json.loads(SUITE_MANIFEST_PATH.read_text())
+        self.assertEqual(
+            persisted_config["workload_profile"]["suite_manifest_sha256"],
+            suite_manifest_sha256(source_manifest),
+        )
+        self.assertNotEqual(
+            persisted_config["workload_profile"]["suite_manifest_sha256"],
+            persisted_hash,
+        )
+        self.assertEqual(
+            persisted_manifest, migrate_suite_manifest(source_manifest)
+        )
         events = self.read_events(bundle_path)
         types = [event["event_type"] for event in events]
         sampling_started = types.index("sampling_started")

@@ -54,6 +54,7 @@ from joulewise.suite import (
     ITEM_START,
     LEVEL_END,
     LEVEL_START,
+    LEGACY_SUITE_SCHEMA_VERSION,
     MARKER_REQUIRED_METADATA_KEYS,
     REDUCER_ASSIGNABLE,
     RUNTIME_ASSIGNABLE,
@@ -448,6 +449,10 @@ class BundleReader:
 
         Returns ``None`` when ``suite_manifest.json`` is absent. If the file
         exists, it must parse and validate as a :class:`SuiteManifest`.
+        Legacy v1 reads synthesize the v2 cache verification marker; the exact
+        synthesized field name is exposed in ``manifest.synthesized_fields``
+        so consumers cannot mistake compatibility interpretation for bytes
+        that were present in the historical artifact.
         """
         if "suite_manifest" not in self._cache:
             if not (self._path / "suite_manifest.json").is_file():
@@ -971,7 +976,17 @@ def _suite_problems(
     except SchemaError as exc:
         return [f"suite_manifest.json does not re-validate: {exc}"]
 
-    if config_hash is not None and config_hash != actual_hash:
+    accepted_config_hashes = {actual_hash}
+    if manifest.schema_version != LEGACY_SUITE_SCHEMA_VERSION:
+        # New bundles may originate from a hash-pinned v1 source. The
+        # registered config remains byte-stable while the persisted artifact
+        # is v2; this deterministic projection authenticates that migration.
+        accepted_config_hashes.add(
+            suite_manifest_sha256(
+                manifest.to_dict(schema_version=LEGACY_SUITE_SCHEMA_VERSION)
+            )
+        )
+    if config_hash is not None and config_hash not in accepted_config_hashes:
         problems.append(
             "config.workload_profile.suite_manifest_sha256 mismatch: "
             f"config has {config_hash!r}, suite_manifest.json hashes to {actual_hash!r}"
