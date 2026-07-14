@@ -1,20 +1,17 @@
 # JouleWise Run State
 
-Last updated: 2026-07-13 (STEADY STATE FOR THE AUDIT GATE. Bridge v1.1
-MERGED: PR #65 landed as `d285989` (Ed-named merge) — discussion lane,
-`scripts/bridge session-open`/`session-close` (receipt-anchored,
-`session.lock`-serialized, write-only), tolerant envelopes, per-call
-reverse-consult effort, peer channels + bounded proposal diffs (D-065,
-C-032). Merged-main suite lead-run: 1387 OK (skipped=10); bridge checker
-all PASS; no active leases; merged bridge branches deleted local+origin;
-site regenerated, packed, and DEPLOYED live by Ed (2026-07-13T23:49Z,
-lakebed 0.0.29; lead-verified routes 3/3 HTTP 200 and /api/freshness
-serving, baked commit `a89195e`). No outstanding actions. **NEXT GATE unchanged:
-Ed's declared whole-project comprehensive audit precedes further feature
-work; method proposal pending Ed's approval.** Window-A execution still
-requires a quiet machine + Ed. Records:
-`docs/run_reports/2026-07-13-bridge-v11.md` (this session, incl. merge
-addendum) + `docs/run_reports/2026-07-13-restart-merge-deploy.md`.
+Last updated: 2026-07-13 (COMPREHENSIVE AUDIT: method + execution through
+the fix wave's bench batch, CHECKPOINTED mid-wave for Ed's resume — read
+`docs/reviews/2026-07-13-comprehensive-audit/CHECKPOINT.md` FIRST; it is
+the resume authority for the fix wave. Audit: 15/15 scans, 61 verified
+findings (0 refuted), 43 operative + 39 work orders, Sol final round
+30 amendments baked, R1/R2 rulings ALIGNED+accepted (state-kernel
+choice-A; spend guardrails), bench batch landed on `impl/audit-wave`
+(Fable checker PASS x5). KNOWN RED: canonical suite fails 1 test on any
+machine with cached Lakebed 0.0.29 (audit finding C2-018 self-demonstrated
+post-deploy); stream S3/WO-018 fixes it FIRST on resume. Streams S1-S5
+NOT yet launched. Bridge v1.1 + steady-state records: earlier this file's
+history and `docs/run_reports/2026-07-13-bridge-v11.md`.)
 
 ## Start Here For Every Big Run
 
