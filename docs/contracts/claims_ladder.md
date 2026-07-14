@@ -9,6 +9,26 @@ captions, and tables that a reader could treat as a result. Dated run reports,
 stream logs, council logs, and decision logs may preserve historical wording,
 but later reader-facing summaries must use the current level.
 
+The warning-only prose scan mechanically enumerates `README.md`,
+`PROJECT_STATUS.md`, `docs/report_src/**`, the generated Phase-4 claims
+projection, Markdown tables/captions under analysis and figure artifacts, and
+present or future `slides/`, `captions/`, and `tables/` publication trees.
+Historical `docs/run_reports/**` records and the decision/council/stream logs
+are deliberately outside that scan. Warning-only exit behavior remains the
+D-059 policy: these findings require editorial review but are not structural
+claim-gate failures.
+
+The canonical JSONL accepts two authority-distinct row dialects through one
+fail-closed validator: the single pre-P2-037 legacy L1 row only under its exact
+hash-pinned identity, and current rows linked to a governed
+`joulewise.claim_verdicts.v1` artifact. Rows with unknown authority fields or a
+mixture of legacy and engine-linked authority fields are invalid. Verdict
+semantics belong to `joulewise.analysis_engine`; the claims-index layer adds
+only linkage, canonical ordering/rendering, relative-path, editorial, and
+current production-admission checks. `two_look_alpha_spending` remains outside
+claims-index production admission until separately ruled in; current admission
+is deliberately `fixed_n` only.
+
 ## Global Rules
 
 - Strict validation is the entry ticket for evidence. A run bundle that cannot
