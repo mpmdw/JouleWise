@@ -1,0 +1,79 @@
+{
+ "generated_by": "register-integrity fable agent, 2026-07-13 (lead-dictated adjudication rules)",
+ "source": "packets/fable-verdicts.json over packets/C1.json + packets/C2.json; canonical cids post-dedupe",
+ "semantics": "pass_to_sol_final OR-ed across merged clusters (C2-014/C2-032/C2-034 included via merged partner); C2-023 force-included per the every-ed_table-row rule despite pass_to_sol_final=false on both verdicts",
+ "batches": [
+  {
+   "batch_id": "SF-A",
+   "focus": "Evidence and claim-integrity blockers: custody-before-cleanup, validity-rule fragmentation, configured-vs-realized output, floor binding, frozen-n authority, capstone evidence dependence, interval-support estimand. All seven audit blockers.",
+   "cids": [
+    "C2-001",
+    "C2-002",
+    "C2-003",
+    "C2-005",
+    "C2-006",
+    "C2-016",
+    "C2-024"
+   ],
+   "keep_defender_emphasis": false
+  },
+  {
+   "batch_id": "SF-B",
+   "focus": "Measurement, SCI, and claim-gate validity: phase pairing, unit contracts, threshold rationale, token-evidence fail-open, diagnostic report surfaces, RPT-001 provenance, P2-038 vocabulary, claims-lint unification pair (C2-022 carries a keep-defender: fail-closed composite gate), helper-pinned regressions.",
+   "cids": [
+    "C2-025",
+    "C2-026",
+    "C2-027",
+    "C2-007",
+    "C2-008",
+    "C2-009",
+    "C1-013",
+    "C1-014",
+    "C2-022",
+    "C1-020"
+   ],
+   "keep_defender_emphasis": false
+  },
+  {
+   "batch_id": "SF-C",
+   "focus": "Destructive simplifications and right-sizing \u2014 keep-defender emphasis: every deletion/extraction here must name and preserve its defended invariant (mock oracle, worker self-containment, PR59 waiver invariant, settled pre-registration content, privacy audits, offline buildability, consumed cockpit surfaces, hashed-manifest compatibility).",
+   "cids": [
+    "C1-005",
+    "C1-010",
+    "C1-011",
+    "C1-012",
+    "C2-030",
+    "C2-033",
+    "C2-018",
+    "C2-034"
+   ],
+   "keep_defender_emphasis": true
+  },
+  {
+   "batch_id": "SF-D",
+   "focus": "Remote-boundary and publication/reproducibility architecture: identifier/version/classification hardening, PROVISIONAL machine enforcement, release workflow, tree identity, metadata coercion, dirty provenance.",
+   "cids": [
+    "C2-010",
+    "C2-014",
+    "C2-013",
+    "C2-017",
+    "C2-032",
+    "C2-028",
+    "C2-029"
+   ],
+   "keep_defender_emphasis": false
+  },
+  {
+   "batch_id": "SF-E",
+   "focus": "Process and governance \u2014 includes EVERY ed_table row (author-conflict D7 family; surfaced to Ed, never self-decided): state-kernel migration, bridge-doc dedup, cost ceiling, status freshness, codex-watch.",
+   "cids": [
+    "C2-021",
+    "C2-035",
+    "C2-036",
+    "C2-023",
+    "C1-025"
+   ],
+   "keep_defender_emphasis": false
+  }
+ ]
+}
