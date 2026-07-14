@@ -1,13 +1,17 @@
 {
   "analysis_manifest_ref": null,
   "artifact_version": "rpt001-v2",
+  "bundle_tree_identity": {
+    "algorithm": "sha256",
+    "version": "joulewise.bundle-tree.nul-v1"
+  },
   "bundle_tree_sha256": {
-    "example-mac-mlx-local__r1": "ec05d3d2c2bd262cb3488c887e4a561ef6c70d6271058f3fb0c0e823e38699cc",
-    "example-mac-mlx-local__r2": "1ffe1ec76e3022bac5bd651b261a044d0865a1d5877c165aa45f96018ff0e1ca",
-    "example-mac-mlx-local__r3": "36d3b109ac3a2e88b27434361ccb5b85c84d653b4cb7fabf25b3e222506f57ef",
-    "example-mac-mlx-qwen35-122b-512t__r1": "9be1c5df4bb566fbe057735bac5377d6826828f0061f11fee2b48cd74f982ff4",
-    "example-mac-mlx-qwen35-122b-512t__r2": "f9f5896c8edf8b8dc1fd56dee977f5a5b7b4d5a04cc76b1405c865d817f9e279",
-    "example-mac-mlx-qwen35-122b-512t__r3": "b029e14b53a085f74653857a62194ed50a47d63e4bc49d15238ec77ff94cc2b5"
+    "example-mac-mlx-local__r1": "9376dbc16848e03d3bd54e4fac5598b34e1391d376ef11db527ac1fe25f08773",
+    "example-mac-mlx-local__r2": "8a99d7a851c55e53631df6f910d17ee097cbf8bd19f33d44bcef911a6502e82f",
+    "example-mac-mlx-local__r3": "5ec71ed301ba9c0a48b137b5bdce00b8893c62d4f1397f55aac3c1943ccc9180",
+    "example-mac-mlx-qwen35-122b-512t__r1": "9f162f058bfceb949f34e0c24042c83e8d7f353f97d87b4cf6e0e6dff0912398",
+    "example-mac-mlx-qwen35-122b-512t__r2": "2888c9d205df62e1136a376997ea8a6947683e4311eedaee20e3135bd559e213",
+    "example-mac-mlx-qwen35-122b-512t__r3": "c72cdc34ef3ce9ccfb0a015bed5ace8e4efa7d18f457ac5cd8a0c894acc21268"
   },
   "claim_verdict_ref": {
     "path": null,

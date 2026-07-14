@@ -25,6 +25,8 @@ TRANSFORMATION_SCHEMA = "joulewise.publication_transformation.v1"
 REDACTED_TEXT = "[REDACTED:PUBLICATION_PRIVACY]"
 REDACTED_PATH = "[REDACTED:ABSOLUTE_PATH]"
 REDACTED_IDENTITY = "[REDACTED:USER_OR_HOST_IDENTITY]"
+TREE_IDENTITY_ALGORITHM = "sha256"
+TREE_IDENTITY_VERSION = "joulewise.bundle-tree.nul-v1"
 REDACTED_CONTENT = "[REDACTED:PROMPT_OR_RESPONSE_CONTENT]"
 REDACTED_CLEANUP_PATH = "[REDACTED:REMOTE_CLEANUP_PATH]"
 
@@ -300,7 +302,22 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def tree_identity_descriptor() -> dict[str, str]:
+    """Return the canonical bundle-tree identity algorithm/version descriptor."""
+
+    return {
+        "algorithm": TREE_IDENTITY_ALGORITHM,
+        "version": TREE_IDENTITY_VERSION,
+    }
+
+
 def tree_sha256(entries: list[dict[str, Any]] | tuple[AuditedFile, ...]) -> str:
+    """Fold sorted path/hash/size entries with NUL field delimiters.
+
+    This is the canonical ``joulewise.bundle-tree.nul-v1`` identity primitive
+    shared by publication packs and versioned report artifacts.
+    """
+
     digest = hashlib.sha256()
     for item in sorted(entries, key=lambda value: value.path if isinstance(value, AuditedFile) else value["path"]):
         if isinstance(item, AuditedFile):
@@ -809,6 +826,7 @@ def transform_public_bundle(source: Path, destination: Path) -> dict[str, Any]:
     return {
         "schema": TRANSFORMATION_SCHEMA,
         "privacy_policy_schema": POLICY_SCHEMA,
+        "bundle_tree_identity": tree_identity_descriptor(),
         "public_bundle_id": public_id,
         "source_bundle_sha256": audit.source_bundle_sha256,
         "output_bundle_sha256": output_tree_hash,

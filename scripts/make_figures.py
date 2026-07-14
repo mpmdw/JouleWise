@@ -42,6 +42,12 @@ sys.path.insert(0, str(REPO_ROOT))
 from joulewise.aggregate import aggregate_experiment  # noqa: E402
 from joulewise.bundle_read import BundleReader  # noqa: E402
 from joulewise.cli import validate_bundle  # noqa: E402
+from joulewise.publication_privacy import (  # noqa: E402
+    TREE_IDENTITY_ALGORITHM,
+    TREE_IDENTITY_VERSION,
+    tree_identity_descriptor,
+    tree_sha256,
+)
 
 SCHEMA_INPUT = "joulewise.report_analysis_input.v1"
 ARTIFACT_VERSION = "rpt001-v2"
@@ -72,6 +78,8 @@ DATASET_COLUMNS = [
 ]
 
 UNKNOWN = "unknown"
+LEGACY_V1_TREE_IDENTITY_ALGORITHM = "sha256"
+LEGACY_V1_TREE_IDENTITY_VERSION = "rpt001.bundle-tree.tab-v1"
 
 
 def fail(msg: str) -> None:
@@ -87,14 +95,49 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def bundle_tree_entries(bundle_dir: Path) -> list[dict[str, object]]:
+    """Inventory a bundle tree using the publication packer's entry shape."""
+
+    entries: list[dict[str, object]] = []
+    for path in sorted(bundle_dir.rglob("*")):
+        rel = path.relative_to(bundle_dir).as_posix()
+        if path.is_symlink():
+            fail(f"bundle tree contains a symlink: {bundle_dir}/{rel}")
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            fail(f"bundle tree contains a non-file artifact: {bundle_dir}/{rel}")
+        entries.append({
+            "path": rel,
+            "sha256": sha256_file(path),
+            "size_bytes": path.stat().st_size,
+        })
+    return entries
+
+
 def bundle_tree_sha256(bundle_dir: Path) -> str:
-    """SHA-256 of the canonical sorted list of relpath, byte sha256, size."""
+    """Canonical NUL-delimited bundle identity used by publication packs."""
+
+    return tree_sha256(bundle_tree_entries(bundle_dir))
+
+
+def legacy_v1_bundle_tree_sha256(bundle_dir: Path) -> str:
+    """Sealed rpt001-v1 tab-delimited path/hash/size identity algorithm."""
+
     lines = []
     for p in sorted(bundle_dir.rglob("*")):
         if p.is_file():
             rel = p.relative_to(bundle_dir).as_posix()
             lines.append(f"{rel}\t{sha256_file(p)}\t{p.stat().st_size}\n")
     return hashlib.sha256("".join(sorted(lines)).encode("utf-8")).hexdigest()
+
+
+def validate_bundle_tree_identity_descriptor(value: object) -> None:
+    if value != tree_identity_descriptor():
+        fail(
+            "bundle_tree_identity must identify the canonical publication fold "
+            f"({TREE_IDENTITY_ALGORITHM}, {TREE_IDENTITY_VERSION}), got {value!r}"
+        )
 
 
 def dump_json(obj) -> str:
@@ -128,6 +171,7 @@ def build_input_manifest(runs_root: Path) -> dict:
     return {
         "schema": SCHEMA_INPUT,
         "artifact_version": ARTIFACT_VERSION,
+        "bundle_tree_identity": tree_identity_descriptor(),
         "evidence_class": EVIDENCE_CLASS,
         "runs_root": "runs",
         "experiments": experiments,
@@ -150,6 +194,7 @@ def gate_inputs(runs_root: Path, input_manifest: dict) -> dict:
             "input manifest artifact_version must be "
             f"{ARTIFACT_VERSION!r}, got {input_manifest.get('artifact_version')!r}"
         )
+    validate_bundle_tree_identity_descriptor(input_manifest.get("bundle_tree_identity"))
     exps = input_manifest.get("experiments", [])
     if len(exps) != 2:
         fail("input manifest must pin exactly two experiments")
@@ -690,6 +735,7 @@ def main() -> int:
         "schema": "joulewise.report_artifact_manifest.v1",
         "artifact_version": ARTIFACT_VERSION,
         "build_mode": "real-bundles",
+        "bundle_tree_identity": tree_identity_descriptor(),
         "input_manifest_sha256": hashlib.sha256((out_root / args.input_manifest).read_bytes()).hexdigest(),
         "experiment_manifest_sha256": {
             e["experiment_id"]: e["manifest_sha256"]

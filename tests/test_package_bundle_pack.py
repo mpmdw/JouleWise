@@ -160,6 +160,10 @@ class BundlePackTests(unittest.TestCase):
         self.assertEqual(len(source_audits), 2)
 
         self.assertEqual(manifest["schema"], package_bundle_pack.PACK_SCHEMA)
+        self.assertEqual(
+            manifest["bundle_tree_identity"],
+            publication_privacy.tree_identity_descriptor(),
+        )
         self.assertEqual(manifest["bundle_count"], 1)
         entry = manifest["bundles"][0]
         self.assertTrue(entry["bundle_id"].startswith("public-"))
@@ -206,6 +210,14 @@ class BundlePackTests(unittest.TestCase):
             )
         )
         transform_entry = transformation["bundles"][0]
+        self.assertEqual(
+            transformation["bundle_tree_identity"],
+            publication_privacy.tree_identity_descriptor(),
+        )
+        self.assertEqual(
+            transform_entry["bundle_tree_identity"],
+            publication_privacy.tree_identity_descriptor(),
+        )
         self.assertEqual(transform_entry["source_bundle_sha256"], entry["source_bundle_sha256"])
         self.assertEqual(transform_entry["output_bundle_sha256"], entry["public_bundle_sha256"])
         self.assertIs(transform_entry["byte_identical_to_private_source"], False)
@@ -526,6 +538,20 @@ class BundlePackTests(unittest.TestCase):
         problems = package_bundle_pack.verify_pack(pack_dir)
         self.assertTrue(any("bundle_count" in problem for problem in problems), problems)
         manifest["bundle_count"] = 1
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+
+        canonical_identity = publication_privacy.tree_identity_descriptor()
+        manifest["bundle_tree_identity"] = {
+            **canonical_identity,
+            "version": "wrong-version",
+        }
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+        problems = package_bundle_pack.verify_pack(pack_dir)
+        self.assertTrue(
+            any("bundle_tree_identity" in problem for problem in problems),
+            problems,
+        )
+        manifest["bundle_tree_identity"] = canonical_identity
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
         (pack_dir / "bundles" / "fabricated").mkdir()

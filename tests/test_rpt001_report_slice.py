@@ -18,6 +18,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from joulewise.clock import FakeClock
+from joulewise.controller import run_benchmark
+from joulewise.publication_privacy import audit_private_bundle, tree_identity_descriptor
+from joulewise.schemas import BenchmarkConfig, RunStatus
+from scripts import package_bundle_pack
+
 REPO = Path(__file__).resolve().parent.parent
 ANALYSIS = REPO / "analysis" / "rpt001-v2"
 SEALED_ANALYSIS = REPO / "analysis" / "rpt001-v1"
@@ -72,6 +78,95 @@ class TestRpt001Artifacts(unittest.TestCase):
             claims_lint.DEFAULT_CLAIMS_INDEX_PATH,
             Path("analysis/rpt001-v2/claims_index.jsonl"),
         )
+
+    def test_cross_pipeline_bundle_tree_identity_is_equal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp) / "runs"
+            config_data = json.loads(
+                (REPO / "configs/examples/mock_local.json").read_text(encoding="utf-8")
+            )
+            config_data["run_id"] = "cross-pipeline-identity"
+            bundle, summary = run_benchmark(
+                BenchmarkConfig.from_mapping(config_data),
+                runs_root,
+                FakeClock(start=1_783_394_100.0),
+            )
+            self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+
+            experiments = runs_root / "experiments"
+            experiments.mkdir()
+            for experiment_id in make_figures.EXPERIMENTS:
+                (experiments / f"{experiment_id}.json").write_text(
+                    json.dumps({"members": [bundle.name]}),
+                    encoding="utf-8",
+                )
+
+            # Pins both producer entry points: make_figures.build_input_manifest()
+            # and package_bundle_pack._preflight_bundle().
+            report_manifest = make_figures.build_input_manifest(runs_root)
+            publication_preflight = package_bundle_pack._preflight_bundle(bundle)
+            report_digest = report_manifest["bundle_tree_sha256"][bundle.name]
+            publication_digest = publication_preflight["source_bundle_sha256"]
+
+            canonical_fold = hashlib.sha256()
+            for path in sorted(bundle.rglob("*")):
+                if not path.is_file():
+                    continue
+                canonical_fold.update(path.relative_to(bundle).as_posix().encode("utf-8"))
+                canonical_fold.update(b"\0")
+                canonical_fold.update(hashlib.sha256(path.read_bytes()).hexdigest().encode("ascii"))
+                canonical_fold.update(b"\0")
+                canonical_fold.update(str(path.stat().st_size).encode("ascii"))
+                canonical_fold.update(b"\n")
+            nul_canonical_digest = canonical_fold.hexdigest()
+            legacy_digest = make_figures.legacy_v1_bundle_tree_sha256(bundle)
+
+        self.assertEqual(
+            report_manifest["bundle_tree_identity"],
+            {"algorithm": "sha256", "version": "joulewise.bundle-tree.nul-v1"},
+        )
+        self.assertEqual(report_digest, publication_digest)
+        self.assertEqual(report_digest, nul_canonical_digest)
+        self.assertNotEqual(report_digest, legacy_digest)
+
+    def test_legacy_v1_tree_identity_is_named_and_stable(self):
+        self.assertEqual(
+            make_figures.LEGACY_V1_TREE_IDENTITY_ALGORITHM,
+            "sha256",
+        )
+        self.assertEqual(
+            make_figures.LEGACY_V1_TREE_IDENTITY_VERSION,
+            "rpt001.bundle-tree.tab-v1",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            (bundle / "nested").mkdir(parents=True)
+            (bundle / "a.txt").write_bytes(b"alpha\n")
+            (bundle / "nested" / "b.bin").write_bytes(b"\x00\xff")
+            digest = make_figures.legacy_v1_bundle_tree_sha256(bundle)
+        self.assertEqual(
+            digest,
+            "54bf3cdb2bab54e8240c946c081bb577926b729e3abe92135684305966b00452",
+        )
+
+    @unittest.skipUnless(RUNS.is_dir(), "real runs corpus unavailable")
+    def test_real_corpus_v1_legacy_and_v2_publication_identities_validate(self):
+        v1_manifest = json.loads((SEALED_ANALYSIS / "input_manifest.json").read_text())
+        v2_manifest = json.loads((ANALYSIS / "input_manifest.json").read_text())
+        for member, expected in v1_manifest["bundle_tree_sha256"].items():
+            with self.subTest(member=member):
+                self.assertEqual(
+                    make_figures.legacy_v1_bundle_tree_sha256(RUNS / member),
+                    expected,
+                )
+                self.assertEqual(
+                    make_figures.bundle_tree_sha256(RUNS / member),
+                    audit_private_bundle(RUNS / member).source_bundle_sha256,
+                )
+                self.assertEqual(
+                    v2_manifest["bundle_tree_sha256"][member],
+                    audit_private_bundle(RUNS / member).source_bundle_sha256,
+                )
 
     def test_realized_tokens_come_from_artifact_without_stop_inference(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -238,6 +333,9 @@ class TestRpt001Artifacts(unittest.TestCase):
     def test_v2_artifact_manifest_references_only_v2_outputs(self):
         manifest = json.loads((ANALYSIS / "artifact_manifest.json").read_text())
         self.assertEqual(manifest["artifact_version"], "rpt001-v2")
+        self.assertEqual(manifest["bundle_tree_identity"], tree_identity_descriptor())
+        input_manifest = json.loads((ANALYSIS / "input_manifest.json").read_text())
+        self.assertEqual(input_manifest["bundle_tree_identity"], tree_identity_descriptor())
         self.assertTrue(manifest["outputs"])
         self.assertTrue(all("rpt001-v2" in path for path in manifest["outputs"]))
 

@@ -59,6 +59,31 @@ class PublicationPrivacyTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.tmp = Path(tmp.name)
 
+    def test_canonical_tree_identity_algorithm_is_versioned_and_stable(self) -> None:
+        entries = [
+            {
+                "path": "a.txt",
+                "sha256": "b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51060",
+                "size_bytes": 6,
+            },
+            {
+                "path": "nested/b.bin",
+                "sha256": "06eb7d6a69ee19e5fbdf749018d3d2abfa04bcbd1365db312eb86dc7169389b8",
+                "size_bytes": 2,
+            },
+        ]
+        self.assertEqual(
+            publication_privacy.tree_identity_descriptor(),
+            {
+                "algorithm": "sha256",
+                "version": "joulewise.bundle-tree.nul-v1",
+            },
+        )
+        self.assertEqual(
+            publication_privacy.tree_sha256(entries),
+            "001e3ed0f152ef0dd6443cf3b6f5fce7fb1029582fc588afaee242de78824317",
+        )
+
     def make_secret_bundle(self, name: str = "private-bundle") -> Path:
         bundle = self.tmp / name
         bundle.mkdir()
@@ -238,6 +263,10 @@ class PublicationPrivacyTests(unittest.TestCase):
 
         self.assertEqual(source_hashes, _file_hashes(source))
         self.assertEqual(transformation["source_bundle_sha256"], audit.source_bundle_sha256)
+        self.assertEqual(
+            transformation["bundle_tree_identity"],
+            publication_privacy.tree_identity_descriptor(),
+        )
         self.assertNotEqual(
             transformation["source_bundle_sha256"], transformation["output_bundle_sha256"]
         )
