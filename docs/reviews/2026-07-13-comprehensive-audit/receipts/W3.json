@@ -1,0 +1,238 @@
+{
+  "checks_performed": [
+    "Verified BASE_HEAD e3fc14a01ca047e779fa7924fdf128b25762d063 exists, recorded every manifest blob identity/line count, and read every manifest file from that object with numbered lines.",
+    "Ran bounded BASE_HEAD greps for protocol/status correlation, schema migration, cleanup retention, concurrency tests, resource locks, and PROVISIONAL enforcement.",
+    "Lock search across the five production seam files for fcntl, F_SETLK, O_EXCL, flock, lockf, mutex, semaphore, lease, lockfile, resource_lock, and atomic claim constructs returned 0 matches.",
+    "PROVISIONAL/NV-GATE/live-promotion search across manifest production files and tests returned 0 matches.",
+    "Status-version/identity search found no NodeWorkerClient validation; four raw_status task_id reads were only worker-log naming in nvidia_smi.py and vllm_runtime.py.",
+    "Executed a read-only posixpath trace: absolute run_id resolved to /var/tmp/other-run; parent run_id resolved to /tmp/joulewise/../other-run; traversing task_id resolved outside its artifacts directory.",
+    "Executed pinned ssh_transport.py in memory with returncode 3 and stderr 'Permission denied opening /data on node'; result was transport_unavailable with ssh_error_class=ssh_transport.",
+    "Parsed all 11 manifest Python files directly from BASE_HEAD with ast.parse: 11/11 OK.",
+    "Followed consumers narrowly into adapter resolution, local transport, bundle run-id sanitization, RunContext construction, and the current sequential experiment loop.",
+    "End scope audit found 0 tracked dirty paths and no worker edits."
+  ],
+  "exclusions": [],
+  "rows": [
+    {
+      "consequence": "A transient SSH, SCP, timeout, or post-marker failure can delete the sole status and raw measurement evidence, preventing diagnosis and offline replay. If the remote worker is still running after transport loss, deletion also races its writes. This is evidence-loss behavior and therefore a blocker under the charter.",
+      "counterevidence": "Successful collection copies every flat artifact into memory before cleanup, cleanup outcomes are reported, and a failed rm may leave recoverable data. The protocol also requires cleanup after collection and status parsing. Those safeguards do not protect the failure branches, which invoke cleanup before those prerequisites hold.",
+      "domain": "D2",
+      "evidence_refs": [
+        "joulewise/adapters/node_client.py:225-255",
+        "joulewise/adapters/node_client.py:263-321",
+        "joulewise/adapters/node_client.py:346-404",
+        "docs/contracts/node_worker_protocol.md:127-164",
+        "docs/contracts/node_worker_protocol.md:247-248",
+        "docs/contracts/node_worker_protocol.md:270-276",
+        "docs/contracts/node_worker_protocol.md:328-333",
+        "docs/contracts/adapter_contracts.md:26-31",
+        "tests/test_node_client.py:241-261",
+        "Bounded absence search across manifest tests for collect/post-marker failure retention found structured-failure assertions but no assertion that uncollected remote evidence survives."
+      ],
+      "finding": "NodeWorkerClient performs destructive remote cleanup before evidence custody is established. Worker-command transport failure, post-task clock-marker failure, and artifact-collection failure all immediately route through rm -rf of the remote task and artifact paths, even though status/raw artifacts were not safely collected or parsed.",
+      "id": "W3-001",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "remote artifact custody",
+        "SSH failure recovery",
+        "offline replay",
+        "cleanup"
+      ],
+      "severity": "blocker"
+    },
+    {
+      "consequence": "A stale, path-collided, or future-version status can be silently attributed to the wrong task and accepted as success. Schema evolution can therefore change artifact semantics without a rejection/migration path, while persisted bundle metadata lacks the formal status schema version needed to select an offline replay parser.",
+      "counterevidence": "The current worker writes status atomically with protocol_version 1, per-task directories reduce accidental collision, input task versions are rejected strictly, and the real subprocess parity test exercises the normal v1 producer/consumer pair. None of those checks validate the collected response at the client boundary.",
+      "domain": "D2",
+      "evidence_refs": [
+        "joulewise/adapters/node_client.py:280-311",
+        "joulewise/adapters/node_worker.py:1823-1863",
+        "joulewise/adapters/nvidia_smi.py:331-342",
+        "joulewise/adapters/vllm_runtime.py:312-321",
+        "docs/contracts/node_worker_protocol.md:143-164",
+        "tests/test_2k_amplification.py:306-342",
+        "tests/test_node_worker_subprocess.py:341-345",
+        "Bounded BASE_HEAD search found no NodeWorkerClient response-version or request-identity validation and no mismatch negative test; raw_status task_id consumers only name copied log files."
+      ],
+      "finding": "The client does not validate status.json protocol_version or correlate task_id, task_type, operation, or node_role with the dispatched request. It treats any collected object whose status string is 'succeeded' as success. The formal response protocol version is then not propagated by the runtime/telemetry metadata adapters; only the open worker metadata dictionary is retained.",
+      "id": "W3-002",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "status schema evolution",
+        "request-response correlation",
+        "offline replay"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "The first realistic split transfer task carrying a new transfer-specific block fails validation as failed/unknown_error rather than producing a capability-level unsupported response. Landing split execution therefore requires either overloading an unrelated v1 block or changing the wire format without a negotiated version/coexistence plan.",
+      "counterevidence": "Unknown task_type values paired with an existing recognized block reach the handler table and return unsupported_workload, and protocol_version can be bumped when the future design is pinned. No current adapter promises transfer execution.",
+      "domain": "D2",
+      "evidence_refs": [
+        "joulewise/adapters/node_worker.py:86-88",
+        "joulewise/adapters/node_worker.py:1777-1820",
+        "docs/contracts/node_worker_protocol.md:51-63",
+        "docs/contracts/node_worker_protocol.md:322-335",
+        "docs/contracts/adapter_contracts.md:162-163",
+        "tests/test_2k_amplification.py:345-403"
+      ],
+      "finding": "FIRST SPLIT BREAK / weakest schema seam: the protocol advertises task_type as an open enum with future transfer-send/transfer-receive tasks, but worker validation closes the payload discriminator to runtime, workload, or telemetry and requires exactly one of those blocks. The future-task test passes only by attaching a telemetry block to transfer-send, so it does not represent a real transfer payload.",
+      "id": "W3-003",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "future split",
+        "transfer tasks",
+        "wire schema evolution"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Parallel campaign dispatch, duplicate delivery, or retry after an ambiguous timeout can orphan the first process, replace its control record, contend for GPU memory, and contaminate another run's power baseline. Campaign scale-up is unsafe until single-writer ownership or explicit concurrency policy exists.",
+      "counterevidence": "Current run_experiment dispatches repetitions sequentially, per-run state directories prevent ordinary cross-run filename collision, and PID fingerprint checks make cleanup safer. Those controls do not reserve the physical GPU or make prepare/start idempotent.",
+      "domain": "D2",
+      "evidence_refs": [
+        "joulewise/adapters/node_worker.py:141-159",
+        "joulewise/adapters/node_worker.py:177-245",
+        "joulewise/adapters/node_worker.py:588-692",
+        "docs/contracts/node_worker_protocol.md:251-276",
+        "tests/test_node_worker.py:286-341",
+        "Boundary follow joulewise/controller.py:1360-1399 shows current repetitions are sequential.",
+        "Bounded grep across the five production seam files for fcntl/F_SETLK/O_EXCL/flock/lockf/mutex/semaphore/lease/lockfile/resource_lock/atomic claim constructs returned 0 matches.",
+        "Manifest concurrency-test search returned only tensor_parallel_size occurrences, not simultaneous writer cases."
+      ],
+      "finding": "Weakest operational seam after the split schema is accepted: run IDs isolate files but nothing leases a node/GPU or serializes lifecycle writers. A second prepare/start_sampling removes that run's existing pidfile/output state before launching another process, while distinct run IDs can independently launch competing vLLM servers and samplers on the same hardware.",
+      "id": "W3-004",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "investigate",
+      "seams": [
+        "campaign scale-up",
+        "node resource ownership",
+        "retry concurrency",
+        "GPU process lifecycle"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Code cannot distinguish fixture-first, pre-promotion live, and de-provisionalized NVIDIA evidence or fail closed when such a bundle enters a claim path. Correctness depends entirely on operators consulting external checklist state.",
+      "counterevidence": "The contract and adjudicated spec label the protocol PROVISIONAL prominently and define a lead-controlled checklist/waiver gate. No claim-bearing NVIDIA evidence currently exists, so disciplined governance can enforce the boundary manually.",
+      "domain": "D2",
+      "evidence_refs": [
+        "docs/contracts/node_worker_protocol.md:1-5",
+        "docs/specs/c027/nv-gate-2_live_promotion.md:10-23",
+        "docs/specs/c027/nv-gate-2_live_promotion.md:264-304",
+        "docs/specs/c027/nv-gate-2_live_promotion.md:306-313",
+        "tests/test_nvidia_node_integration.py:418-469",
+        "Bounded grep for PROVISIONAL, provisional, NV-GATE-2, live promotion, and de-provisional across manifest production files and tests returned 0 matches."
+      ],
+      "finding": "The NVIDIA live-promotion boundary is governance-only in the examined implementation. The hard-acceptance spec requires live rows before any claim-bearing bundle, but production seam code and tests contain no PROVISIONAL or promotion-state signal; a fixture-backed NVIDIA bundle can succeed and pass strict validation.",
+      "id": "W3-005",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "investigate",
+      "seams": [
+        "PROVISIONAL boundary",
+        "live promotion",
+        "claim eligibility"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "A future transfer/split caller or direct protocol user can escape remote_work_root, collide with another run, or direct final cleanup at an unintended directory. This becomes destructive because successful runtime cleanup removes the computed run_dir recursively.",
+      "counterevidence": "The current canonical controller passes the bundle writer's sanitized run ID through RunContext, and current runtime/telemetry adapters generate fixed safe task IDs. The unsafe surface remains reachable through the public NodeWorkerClient/task protocol and is not stated as a caller precondition.",
+      "domain": "D2",
+      "evidence_refs": [
+        "joulewise/adapters/node_client.py:151-176",
+        "joulewise/adapters/node_client.py:346-404",
+        "joulewise/adapters/node_client.py:463-487",
+        "joulewise/adapters/node_worker.py:1784-1799",
+        "docs/contracts/node_worker_protocol.md:51-60",
+        "docs/specs/c027/nv-gate-2_live_promotion.md:327-331",
+        "Read-only behavior trace: posixpath.join('/tmp/joulewise','/var/tmp/other-run') -> '/var/tmp/other-run'; '../other-run' -> '/tmp/joulewise/../other-run'; task '../sibling' escapes its artifacts directory.",
+        "Boundary counterevidence: joulewise/bundle.py:58-90 and joulewise/controller.py:262-273 sanitize the current canonical run identity."
+      ],
+      "finding": "The node protocol requires only non-empty run_id/task_id strings, yet the client feeds them directly to posixpath.join and later rm -rf. Absolute paths and '..' components are not rejected at this boundary, so the documented run-root isolation is not an invariant of NodeWorkerClient itself.",
+      "id": "W3-006",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "remote path isolation",
+        "identifier validation",
+        "destructive cleanup"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Local and remote execution silently disagree about the same application failure. On future transfer/file operations, an on-node permission error can be misreported as connectivity loss and trigger W3-001's destructive early cleanup instead of collecting the worker's structured permission/status evidence.",
+      "counterevidence": "Real SSH authentication/name-resolution failures commonly use the matched phrases and normally exit 255, so the heuristic catches useful transport cases. Existing tests cover returncode 255 authentication and a generic returncode 3 application failure, but not a non-255 application error containing a heuristic phrase.",
+      "domain": "D2",
+      "evidence_refs": [
+        "joulewise/adapters/ssh_transport.py:77-92",
+        "joulewise/adapters/ssh_transport.py:191-208",
+        "joulewise/adapters/node_client.py:225-240",
+        "docs/contracts/node_worker_protocol.md:183-200",
+        "tests/test_ssh_transport.py:89-122",
+        "Boundary comparison joulewise/adapters/local_transport.py:48-69.",
+        "Pinned in-memory behavior trace: RunnerCompleted(returncode=3, stderr='Permission denied opening /data on node') produced failure_reason=transport_unavailable and ssh_error_class=ssh_transport."
+      ],
+      "finding": "SSH failure classification treats selected stderr phrases as transport failure regardless of return code. Thus an on-node application failure such as returncode 3 with 'Permission denied' is classified transport_unavailable, whereas the local transport classifies an ordinary nonzero command as unknown_error. NodeWorkerClient then treats the SSH result as transport loss and skips authoritative status collection.",
+      "id": "W3-007",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "local-to-SSH failure semantics",
+        "worker status authority",
+        "artifact recovery"
+      ],
+      "severity": "should-fix"
+    }
+  ],
+  "scan_id": "W3",
+  "scope_examined": [
+    "docs/reviews/2026-07-13-comprehensive-audit/report.md",
+    "AGENTS.md",
+    "joulewise/adapters/ssh_transport.py",
+    "joulewise/adapters/node_client.py",
+    "joulewise/adapters/node_worker.py",
+    "joulewise/adapters/nvidia_smi.py",
+    "joulewise/adapters/vllm_runtime.py",
+    "docs/contracts/node_worker_protocol.md",
+    "docs/contracts/adapter_contracts.md",
+    "docs/specs/c027/nv-gate-2_live_promotion.md",
+    "tests/test_node_client.py",
+    "tests/test_node_worker.py",
+    "tests/test_node_worker_subprocess.py",
+    "tests/test_nvidia_node_integration.py",
+    "tests/test_ssh_transport.py",
+    "tests/test_2k_amplification.py",
+    "docs/contracts/bridge_protocol.md",
+    "joulewise/adapters/__init__.py",
+    "joulewise/adapters/local_transport.py",
+    "joulewise/bundle.py",
+    "joulewise/controller.py",
+    "joulewise/schemas.py"
+  ],
+  "uncertainties": [
+    "No live SSH, NVIDIA, vLLM, Orin, multi-node, quiet-machine, or hardware behavior was exercised; PROVISIONAL remains PROVISIONAL.",
+    "The pinned test suite was not executed because the live worktree is post-pin and WRITE_SCOPE is empty; verification used pinned source reads, AST parsing, bounded searches, and in-memory behavior traces.",
+    "Resource-collision outcomes were not dynamically reproduced on a GPU; they are inferred from unconditional process launch/state removal and the complete absence of ownership primitives.",
+    "The claim/reducer/reporting stack was not line-reviewed beyond the bounded repository-wide PROVISIONAL search; an indirectly named external governance mechanism may exist, but the manifest code cannot express or inspect promotion state.",
+    "The live HEAD moved externally during the scan from 995f1ec030a32847d44720f775cf2674e1ca01dd to ed933c13a4ab03529ca762c09e43cbfa4b4d2982. All audit-object reads explicitly used BASE_HEAD, so post-pin movement did not affect evidence.",
+    "Outside-manifest reads were limited to authority-linked bridge-envelope lines and narrow call/import follows needed to verify current sanitization, sequencing, and local/remote semantics."
+  ]
+}

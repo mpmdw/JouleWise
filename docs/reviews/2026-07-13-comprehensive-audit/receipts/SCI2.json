@@ -1,0 +1,212 @@
+{
+  "checks_performed": [
+    "Confirmed BASE_HEAD e3fc14a01ca047e779fa7924fdf128b25762d063 exists; inspected git status and preserved the untracked audit receipt directory without writes.",
+    "Enumerated every explicit manifest blob at BASE_HEAD and read each non-generated file using git show with line-numbered slices, function/constant inventories, and targeted semantic traces.",
+    "Ran git diff --name-status BASE_HEAD..HEAD over the entire SCI2 manifest: no manifest file differed, so focused executable checks used code byte-equivalent to the pinned tree.",
+    "Bounded floor-resolution search: git grep for _floor_request_factory and FloorRequest( found no production FloorRequest construction; only the private analyze_claims seam and tests construct requests.",
+    "Bounded stop-provenance search across pinned contracts, implementation, and tests traced runtime stop reasons to item_end/events and outputs/suite_items.jsonl, while token_provenance_from_artifacts reads metadata.workload_provenance.output_policy.stop_condition.",
+    "Executed token_provenance_from_artifacts with output_token_count=3 and configured stop_condition=configured_cap; result reported stop_reason=configured_cap despite receiving no runtime-stop artifact.",
+    "Ran PYTHONDONTWRITEBYTECODE=1 python3 -B -m unittest tests/test_analysis_ratio_integration.py: 9 tests passed.",
+    "Validated the frozen AP-2 registry programmatically: zero validation errors, four metrics, six contrasts per local model/metric family, Holm alpha=0.05 with frozen m=6.",
+    "Enumerated verdict-changing constants: reducer minimum three samples, cadence ratios 2/4, and clock bound one-quarter window; idle HAC bandwidth 10 seconds and cadence ratio 1.25; floor minimum n=5/reference n=10 guard; Holm alpha=0.05/m=6; interpolation bound strictly below both the floor and one-half the effect; positive ratio denominators; and envelope denominator 8 with E1 0.05/0.05, E2 1 token, E3 p=0.01 over 10000 permutations, and E4 4/2 tokens. LOO 0.25-of-threshold and aggregate MAD 3.5 were confirmed diagnostic rather than claim-verdict switches.",
+    "RPT-001 regeneration sample: verified scripts/make_figures.py and the sampled generated inputs are unchanged from BASE_HEAD; ran gate_inputs read-only over the real corpus, which passed all six pinned bundle-tree hashes and strict validation; recomputed example-mac-mlx-local energy_request_j from 40.651390505883796, 46.31701654002997, and 46.309333376402556 J to mean 44.42591347410544 J, exactly matching aggregates.json and claims_index.jsonl.",
+    "Ran three focused RPT-001 tests for source-summary means, claim-row shape, and figure honesty: 3 tests passed.",
+    "Searched the exact authorized oracle-test set for envelope-gate threshold tests; no envelope-gate consumer was present.",
+    "No files were changed."
+  ],
+  "exclusions": [
+    "No non-generated manifest path was omitted.",
+    "analysis/rpt001-v1/artifact_manifest.json and analysis/rpt001-v1/tables/** were not line-audited because RATIFICATION.md item 1 classifies generated RPT-001 artifacts as excluded; input_manifest.json, dataset.csv, aggregates.json, claims_index.jsonl, and the source-bundle regeneration path were sampled instead.",
+    "figures/** was excluded from line audit under RATIFICATION.md item 1; F1_legacy_l1_instrument_results.svg was inspected only for the sampled number's labels and provenance wording.",
+    "Post-BASE_HEAD commits were not audited except the frozen charter and ratification artifacts that define this review.",
+    "No quiet-Mac, production campaign, powermetrics capture, or physical-hardware validation was performed."
+  ],
+  "rows": [
+    {
+      "consequence": "A scientifically independent calibration artifact is mapped to unavailable/not-resolvable by the default CLI. Conversely, following the only passing default example derives the detection threshold from the claim-outcome bundles it gates, destroying oracle independence and making floor clearance outcome-dependent. This is both a claim-validity defect and failure of the canonical reproducible campaign-to-claim flow.",
+      "counterevidence": "The independent-floor failure is conservative, and P2-039 artifacts are structurally and arithmetically validated. A typed FloorRequest resolver exists and can perform exact or conservative transported resolution, but it is reachable from analyze_claims only through the private test seam. The same-bundle integration fixture is synthetic and does not itself publish a claim.",
+      "domain": "D4",
+      "evidence_refs": [
+        "joulewise/analysis_engine/__init__.py:271-305",
+        "joulewise/analysis_engine/__init__.py:1022-1033",
+        "joulewise/analysis_engine/__init__.py:1069-1079",
+        "joulewise/analysis_engine/inputs.py:1227-1287",
+        "docs/specs/c027/p2-039_floor_artifact.md:655-704",
+        "tests/test_analysis_integration.py:360-451",
+        "Bounded absence search: git grep -n -E '_floor_request_factory|FloorRequest\\(' BASE_HEAD -- '*.py' found the private engine parameter, one private integration injection, and unit-test constructors, but no production/CLI FloorRequest factory."
+      ],
+      "finding": "The canonical public claim path cannot consume an independently calibrated exact or transported P2-039 floor: analyze_claims exposes only a private request-factory seam defaulting to None, while its fallback exact resolver accepts a cell only when every consumer claim bundle/config pair is also present among that floor cell's calibration bundle observations. The integration oracle makes this circular condition pass by rewriting floor observations to the claim bundles themselves.",
+      "id": "SCI2-001",
+      "mission_tags": [
+        "SCI",
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W2"
+      ],
+      "severity": "blocker"
+    },
+    {
+      "consequence": "A J/output-token contrast can satisfy stop_reason_required even when no realized stop reason was ingested. For suites, the configured value suite_completed can mask heterogeneous EOS, length, malformed, or runtime-failure outcomes, invalidating denominator comparability and any resulting per-token claim.",
+      "counterevidence": "Runtime-observed output-token counts, tokenizer identity, and policy identity receive separate checks; empty configured stop conditions fail closed. The frozen AP-2 registry currently has ratio_estimand=null for all four metrics, so no present AP-2 verdict is affected. Runtime stop reasons are recorded elsewhere in valid bundles.",
+      "domain": "D4",
+      "evidence_refs": [
+        "joulewise/analysis_engine/inputs.py:1102-1132",
+        "joulewise/analysis_engine/ratio.py:195-240",
+        "docs/contracts/claims_ladder.md:29-32",
+        "docs/contracts/run_bundle_layout.md:192-202",
+        "docs/contracts/run_bundle_layout.md:229-232",
+        "docs/contracts/token_normalization.md:103-105",
+        "tests/test_analysis_ratio_integration.py:236-292",
+        "Behavior trace: token_provenance_from_artifacts with output_token_count=3 and policy.stop_condition=configured_cap returned stop_reason=configured_cap despite receiving no runtime-stop artifact.",
+        "Focused test result: tests/test_analysis_ratio_integration.py ran 9 tests, all OK; its artifact-extraction test supplies differing policy.stop_condition values as if they were realized stops, so it restates rather than independently detects this source-selection error."
+      ],
+      "finding": "The ratio provenance gate labels configured output policy as runtime-observed stop evidence. token_provenance_from_artifacts assigns stop_reason from metadata.workload_provenance.output_policy.stop_condition rather than the realized item_end/output stop_reason artifacts required by the claims ladder.",
+      "id": "SCI2-002",
+      "mission_tags": [
+        "SCI",
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W2"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "If promoted unchanged, optional stopping on interval width or floor clearance would change the sampling distribution and nominal coverage while the row still permits an L2 ceiling. The design could preferentially add evidence to headline-controlling paths and report anti-conservative tail or replay claims.",
+      "counterevidence": "The document is explicitly a candidate design sketch, cannot execute claim-bearing work without a council round and frozen registry, and distinguishes fixed stronger designs from the minimal design. Those promotion gates prevent an immediate claim defect and provide an opportunity to repair the row.",
+      "domain": "D4",
+      "evidence_refs": [
+        "docs/contracts/analysis_plans.md:22-31",
+        "docs/specs/rq_energy_variance_design.md:1-10",
+        "docs/specs/rq_energy_variance_design.md:273-291",
+        "docs/specs/rq_energy_variance_design.md:293-317",
+        "docs/specs/rq_energy_variance_design.md:344-366"
+      ],
+      "finding": "The RQ-ENERGY-VARIANCE candidate analysis-plan row contradicts binding D-062 by authorizing outcome-dependent sample growth: Phase A grows from N=80 to N=100 when the observed P90/P10 interval is too wide, and replay grows from k=6 to k=10 when an observed replay interval or floor status controls the headline, without mandatory exploratory demotion.",
+      "id": "SCI2-003",
+      "mission_tags": [
+        "SCI",
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W2"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "The generated dataset can assert runtime_observed provenance for a configured cap, and the reader-facing figure/table companion can claim a runtime-observed denominator without regenerating or testing its realized stop provenance. If emitted count differs from the cap, the provenance row is false; under the current ladder the missing stop/policy evidence would ordinarily force L0 rather than L1.",
+      "counterevidence": "energy_output_token_j itself is copied from the validated source summary rather than recomputed using the mislabeled dataset column; all six published rows show 512 and make no cross-stack efficiency claim. The exact legacy row is intentionally hash-grandfathered, prominently caveated for unknown tokenizer/policy evidence, and the principal request-energy mean 44.42591347410544 J was independently reproduced from hash-pinned strict-valid bundles.",
+      "domain": "D4",
+      "evidence_refs": [
+        "scripts/make_figures.py:197-247 (cross-boundary regeneration trace authorized by the sampling clause)",
+        "scripts/make_figures.py:595-631 (cross-boundary regeneration trace)",
+        "analysis/rpt001-v1/dataset.csv:1-7",
+        "analysis/rpt001-v1/claims_index.jsonl:1",
+        "docs/contracts/claims_ladder.md:29-32",
+        "scripts/claims_lint.py:1397-1471",
+        "tests/test_rpt001_report_slice.py:101-111",
+        "tests/test_rpt001_report_slice.py:139-147",
+        "Read-only regeneration trace: all six input hashes and strict validators passed; source energy_request_j values 40.651390505883796, 46.31701654002997, and 46.309333376402556 yielded the exact published mean 44.42591347410544 J."
+      ],
+      "finding": "The RPT-001 regeneration path populates dataset.runtime_output_tokens from configured workload_profile.output_tokens while separately copying token_count_source from measurement quality, then labels the per-token companion as runtime-observed. It hardcodes runtime_stop_reason and output_policy to unknown, although the ladder requires both for an energy-per-output-token claim.",
+      "id": "SCI2-004",
+      "mission_tags": [
+        "SCI",
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W2"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "A one-item or one-token boundary change can enable or block the entire scored campaign and its eventual AP-5 claims, but reviewers cannot tell whether the verdict is robust to nearby defensible thresholds or why these cutoffs represent a valid envelope rather than an arbitrary policy choice.",
+      "counterevidence": "The constants are frozen in code, emitted in the verdict artifact, deterministic, and mostly conservative; E1 explicitly reports that 5% means zero tolerance at n=8. E5's n=10 threshold is advisory and does not gate. The finding does not assert that a current verdict is wrong, only that the future claim prerequisite lacks an auditable threshold rationale/sensitivity record in the authorized evidence set.",
+      "domain": "D4",
+      "evidence_refs": [
+        "joulewise/envelope_gate.py:44-56",
+        "joulewise/envelope_gate.py:158-205",
+        "joulewise/envelope_gate.py:452-526",
+        "joulewise/envelope_gate.py:564-631",
+        "docs/contracts/analysis_plans.md:188-207",
+        "Bounded authority search: grepped the exact in-scope contracts/specifications for the envelope constants and their rationale; AP-5 names envelope pass as a prerequisite but does not define or justify these thresholds.",
+        "Bounded oracle search: grepped the five authorized W2 test files for envelope_gate/E1-E4/denominator-8 consumers; no envelope threshold oracle was present."
+      ],
+      "finding": "The AP-5 prerequisite envelope verdict is controlled by un-rationalized point thresholds with no sensitivity result in the supplied authority/oracle set: exactly eight items per level; E1 non-EOS rate and spread <=0.05, which degenerates to zero tolerated non-EOS items at n=8; E2 mean spread <=1 token; E3 permutation p>=0.01 with 10000 draws; and E4 prompt range/mean spread <=4/2 tokens. Any one flips the overall validated/failed verdict.",
+      "id": "SCI2-005",
+      "mission_tags": [
+        "SCI",
+        "M3"
+      ],
+      "proposed_disposition": "investigate",
+      "seams": [
+        "W2"
+      ],
+      "severity": "should-fix"
+    }
+  ],
+  "scan_id": "SCI2",
+  "scope_examined": [
+    "AGENTS.md",
+    "docs/reviews/2026-07-13-comprehensive-audit/report.md",
+    "docs/reviews/2026-07-13-comprehensive-audit/manifests/RATIFICATION.md",
+    "docs/contracts/bridge_protocol.md",
+    "configs/analysis_registry/slice_2m_ap2.v1.json",
+    "configs/calibration/p2_046_load_transition/manifest.json",
+    "docs/contracts/analysis_plans.md",
+    "docs/contracts/claims_ladder.md",
+    "docs/contracts/load_transition_alignment.md",
+    "docs/contracts/token_normalization.md",
+    "docs/specs/c027/analysis_engine_trio.md",
+    "docs/specs/c027/p2-038_production_uncertainty_evidence.md",
+    "docs/specs/c027/p2-039_floor_artifact.md",
+    "docs/specs/c027/p2-040_reducer_gate_correctness.md",
+    "docs/specs/c027/split-ap_ap-edit_amendments.md",
+    "docs/specs/rq_energy_variance_design.md",
+    "joulewise/aggregate.py",
+    "joulewise/analysis_engine/__init__.py",
+    "joulewise/analysis_engine/artifact.py",
+    "joulewise/analysis_engine/claims.py",
+    "joulewise/analysis_engine/distributions.py",
+    "joulewise/analysis_engine/estimators.py",
+    "joulewise/analysis_engine/inputs.py",
+    "joulewise/analysis_engine/multiplicity.py",
+    "joulewise/analysis_engine/ratio.py",
+    "joulewise/analysis_engine/sensitivity.py",
+    "joulewise/analysis_manifest.py",
+    "joulewise/detection_floor.py",
+    "joulewise/determinism_gate.py",
+    "joulewise/envelope_gate.py",
+    "joulewise/idle_dependence.py",
+    "joulewise/kv_size.py",
+    "joulewise/load_transition_alignment.py",
+    "joulewise/reduce.py",
+    "joulewise/uncertainty_evidence.py",
+    "scripts/characterize_load_transition.py",
+    "scripts/claims_lint.py",
+    "tests/test_run_campaign.py",
+    "tests/test_p2038_production_path.py",
+    "tests/test_analysis_integration.py",
+    "tests/test_analysis_ratio_integration.py",
+    "tests/test_rpt001_report_slice.py",
+    "docs/contracts/run_bundle_layout.md",
+    "scripts/make_figures.py",
+    "analysis/rpt001-v1/input_manifest.json",
+    "analysis/rpt001-v1/dataset.csv",
+    "analysis/rpt001-v1/aggregates.json",
+    "analysis/rpt001-v1/claims_index.jsonl",
+    "figures/rpt001-v1/F1_legacy_l1_instrument_results.svg"
+  ],
+  "uncertainties": [
+    "No current AP-2 claim-verdict corpus or independent P2-039 calibration artifact was in the manifest, so numerical verdict sensitivity on real AP-2 contrasts could not be measured.",
+    "Serial dependence among future paired campaign blocks could not be estimated without a claim-bearing campaign corpus; the review verified the frozen paired-block estimand and within-idle-trace HAC implementation only.",
+    "Tests outside the exact authorized manifest, including the separately located envelope-gate test module, were not examined; conclusions about oracle independence are limited to the supplied W2 oracle set.",
+    "Write-requiring integration suites were not executed in the read-only session; their source was inspected, while pure ratio tests and read-only RPT checks were executed.",
+    "The principal published RPT-001 request-energy number was verified, but the generated tables were not independently regenerated because their writer would modify excluded generated artifacts."
+  ]
+}

@@ -1,0 +1,295 @@
+{
+  "checks_performed": [
+    "Read every manifest file completely and traced controlling decisions/contracts through gate implementations, tests, generated state, queue, and advisor-facing status.",
+    "git diff --exit-code e3fc14a01ca047e779fa7924fdf128b25762d063 -- <all 19 manifest paths>: exit 0; assigned files are byte-unchanged from BASE_HEAD.",
+    "git diff --name-only e3fc14a01ca047e779fa7924fdf128b25762d063 --: only post-pin comprehensive-audit artifacts appeared; none of the W5 manifest paths changed.",
+    "PYTHONDONTWRITEBYTECODE=1 python3 -B scripts/gen_state.py --check: exit 0.",
+    "Read-only AST/JSON parse probe: AST_OK=9 and JSON_OK=2.",
+    "State-kernel behavior probe: authority=NOT_AUTHORITATIVE_DERIVED_VIEW; active_stop_card=None; audit_gate_task_hits=[]; DOC-010_deps=[('DOC-008-proven-in-use', 'pending')].",
+    "Claims behavior probe: default and --mode all exclude claim-index; the level-insensitive legacy regex matches 'Condition A uses less energy than condition B.'; reader_facing_surfaces enumerated 76 files from only README.md, PROJECT_STATUS.md, docs/contracts/*.md, and docs/run_reports/*.md.",
+    "Claims schema probe using the new claim-index test fixture: it satisfies every CLAIM_INDEX_REQUIRED_FIELDS member but lacks 19 PHASE4_REQUIRED_FIELDS members; only five required fields are shared.",
+    "Bounded absence searches: no D-065 row exists in the decision-log index; no state-kernel task contains the comprehensive/whole-project audit gate; claims tests contain no report_src, slide, or caption surface oracle.",
+    "Final git status --short --branch: clean main branch; final manifest diff against BASE_HEAD: exit 0."
+  ],
+  "exclusions": [],
+  "rows": [
+    {
+      "consequence": "A consumer following the generated source-of-truth block can begin feature work that the controlling manual gate forbids. gen_state --check remains green because it proves byte agreement with the kernel, not semantic agreement with higher-priority work-selection authority.",
+      "counterevidence": "RUN_STATE and TASK_QUEUE state the audit gate prominently, the active audit is respecting it, and the generated task details remain useful after that gate clears.",
+      "domain": "D7",
+      "evidence_refs": [
+        "docs/reviews/2026-07-10-hardening-adjudication.md:64",
+        "docs/decision_log.md:3162",
+        "docs/decision_log.md:3165",
+        "docs/process/state_kernel.schema.json:12",
+        "docs/process/state_kernel.json:2",
+        "docs/process/state_kernel.json:3",
+        "scripts/gen_state.py:214",
+        "scripts/gen_state.py:415",
+        "scripts/gen_state.py:500",
+        "RUN_STATE.md:13",
+        "RUN_STATE.md:77",
+        "RUN_STATE.md:89",
+        "RUN_STATE.md:141",
+        "RUN_STATE.md:146",
+        "RUN_STATE.md:424",
+        "TASK_QUEUE.md:94",
+        "TASK_QUEUE.md:98",
+        "TASK_QUEUE.md:249",
+        "TASK_QUEUE.md:288",
+        "tests/test_gen_state.py:55",
+        "tests/test_gen_state.py:79",
+        "tests/test_gen_state.py:129",
+        "tests/test_gen_state.py:245",
+        "command: python3 -B scripts/gen_state.py --check => exit 0 despite audit_gate_task_hits=[]",
+        "bounded absence search: searched comprehensive/whole-project audit gate terms across docs/process/state_kernel.json tasks; no task consumer found"
+      ],
+      "finding": "Work-selection authority is contradictory and cannot represent the current global gate. The accepted adjudication assigns work selection to the state kernel, but the schema, generator, kernel, and tests require NOT_AUTHORITATIVE_DERIVED_VIEW; the generated restart block nevertheless calls the kernel the source of truth, while RUN_STATE later says the generated blocks are non-authoritative. The manually authoritative surfaces prohibit feature work until the comprehensive audit, yet the kernel has neither an audit task nor an active stop card and renders P2-004 as READY.",
+      "id": "W5-001",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "authority\u2192state kernel",
+        "state kernel\u2192generated restart/queue",
+        "generated state\u2192tests"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Once DOC-008-proven-in-use is marked satisfied, the machine state offers no G6 guard against prematurely starting an archive operation that can relocate historical evidence surfaces.",
+      "counterevidence": "DOC-010 is still shelved and its DOC-008 event remains pending. Its fence also prohibits moving cited evidence, decisions, council records, or authoritative histories.",
+      "domain": "D7",
+      "evidence_refs": [
+        "docs/reviews/2026-07-10-hardening-adjudication.md:14",
+        "docs/reviews/2026-07-10-hardening-adjudication.md:87",
+        "docs/process/state_kernel.json:51",
+        "docs/process/state_kernel.json:69",
+        "docs/process/state_kernel.json:77",
+        "docs/process/state_kernel.json:87",
+        "TASK_QUEUE.md:210",
+        "TASK_QUEUE.md:300",
+        "tests/test_gen_state.py:236",
+        "tests/test_gen_state.py:240",
+        "tests/test_gen_state.py:243",
+        "behavior probe: DOC-010_deps=[('DOC-008-proven-in-use', 'pending')]; no G6 dependency"
+      ],
+      "finding": "DOC-010's ratified post-G6 start fence was dropped during state-kernel migration. The owning adjudication places rows 10-11 on the post-G6 shelf and labels DOC-010 P4/post-G6, but the kernel and both queue projections expose only DOC-008-proven-in-use as its trigger. The fidelity test explicitly pins that single event dependency rather than the two-part authority.",
+      "id": "W5-002",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "adjudication\u2192kernel dependency",
+        "kernel dependency\u2192queue projection",
+        "queue projection\u2192test oracle"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "A forbidden upgrade, missing boundary qualification, or token-denominator wording defect can enter the final report or slides without failing the mechanical gate, while exempt historical prose creates warning noise. Tests exercise only a temporary README and preserve the warning-only exit.",
+      "counterevidence": "D-059 deliberately ratified warning-only prose scanning because wording needs judgment, and the Phase-4 index provides strong structural checks for claims that are actually indexed.",
+      "domain": "D4",
+      "evidence_refs": [
+        "docs/contracts/claims_ladder.md:3",
+        "docs/contracts/claims_ladder.md:7",
+        "docs/contracts/claims_ladder.md:10",
+        "docs/contracts/claims_ladder.md:14",
+        "docs/contracts/claims_ladder.md:35",
+        "docs/decision_log.md:3026",
+        "docs/decision_log.md:3032",
+        "scripts/claims_lint.py:832",
+        "scripts/claims_lint.py:838",
+        "scripts/claims_lint.py:845",
+        "scripts/claims_lint.py:860",
+        "scripts/claims_lint.py:872",
+        "scripts/claims_lint.py:1961",
+        "tests/test_claims_lint.py:411",
+        "tests/test_claims_lint.py:425",
+        "tests/test_claims_lint.py:540",
+        "tests/test_claims_lint.py:547",
+        "bounded absence search: grepped reader_facing_surfaces, report_src, slides, and captions across scripts/claims_lint.py and both claims test files; only the enumerator and a README fixture were consumers",
+        "behavior probe: reader_facing_surfaces returned 76 paths from the four hard-coded roots; forbidden warnings retain exit 0"
+      ],
+      "finding": "Several binding claims norms remain human-review conventions rather than enforced gates. The ladder governs reports, slides, README/status prose, figure captions, and result tables, but reader_facing_surfaces scans only README.md, PROJECT_STATUS.md, top-level docs/contracts/*.md, and docs/run_reports/*.md. It therefore omits report-source/slide/caption/table surfaces while scanning dated run reports that the contract expressly exempts, and every prose hit is warning-only with a clean exit.",
+      "id": "W5-003",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "claims contract\u2192prose scanner",
+        "prose scanner\u2192CI result",
+        "CI result\u2192reader-facing surfaces"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "A future engine-linked claim row can bypass the amended validator under the normal gate, or be rejected by the legacy validator when claim-index is explicitly added. This leaves the first post-legacy claims-index expansion without a canonical reproducible lint flow.",
+      "counterevidence": "The current file contains only the exactly grandfathered pre-P2-037 legacy row and passes the existing tests. A hybrid row could mechanically carry both field sets, but no authority or test defines how duplicated old/new status, level, linkage, and figure fields reconcile.",
+      "domain": "D4",
+      "evidence_refs": [
+        "docs/decision_log.md:3040",
+        "docs/decision_log.md:3046",
+        "scripts/claims_lint.py:42",
+        "scripts/claims_lint.py:70",
+        "scripts/claims_lint.py:88",
+        "scripts/claims_lint.py:938",
+        "scripts/claims_lint.py:1422",
+        "scripts/claims_lint.py:1472",
+        "scripts/claims_lint.py:1948",
+        "scripts/claims_lint.py:1953",
+        "scripts/claims_lint.py:2061",
+        "tests/test_claims_lint.py:559",
+        "tests/test_claims_lint.py:565",
+        "tests/test_claims_index_lint.py:269",
+        "tests/test_claims_index_lint.py:324",
+        "tests/test_claims_index_lint.py:333",
+        "behavior probe: default_modes and all_modes omitted claim-index",
+        "behavior probe: new fixture missing old fields=['analysis_function','analysis_manifest_ref','artifact_manifest','boundary_labels','bundle_ids','claim_ceiling_reason_codes','claim_level','evidence_class','figure_ids','floor_ref','legacy_label','manifest_ids','metrics','quality_waivers','stack_ids','status','strict_validation','table_ids','verdict_ref']; missing new fields=[]"
+      ],
+      "finding": "The old phase4 validator and amended claim-index validator target the same canonical JSONL path but require incompatible row shapes, while claim-index is excluded from both default and --mode all. The new validator's own supported-row fixture satisfies every new required field yet lacks 19 fields that phase4 hard-requires; requesting all plus claim-index runs both validators.",
+      "id": "W5-004",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "D-059 amendment\u2192CLI mode selection",
+        "old claims schema\u2192new claims schema",
+        "validator\u2192test fixture"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "A valid L2 claim can be rejected or forced into less transparent wording even when its direction, boundary, repetitions, uncertainty, and floor clearance are supported.",
+      "counterevidence": "The conservative phrase rule prevents easy overclaiming, and the newer claim-index validator applies its directional-prose prohibition specifically to unresolved outcomes rather than every supported L2 row.",
+      "domain": "D4",
+      "evidence_refs": [
+        "docs/contracts/claims_ladder.md:41",
+        "docs/contracts/claims_ladder.md:43",
+        "scripts/claims_lint.py:80",
+        "scripts/claims_lint.py:975",
+        "scripts/claims_lint.py:1903",
+        "tests/test_claims_lint.py:565",
+        "tests/test_claims_lint.py:574",
+        "behavior probe: PHASE4_FORBIDDEN.search('Condition A uses less energy than condition B.') => True"
+      ],
+      "finding": "The legacy phase4 wording gate is stricter than the claims ladder because PHASE4_FORBIDDEN is level-insensitive. It rejects 'uses less energy' for every claim level, although L2 expressly permits a supported within-boundary directional difference after its evidence gates. The regression test mutates a legacy L1 row, so it does not test the valid L2 authority case.",
+      "id": "W5-005",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "claims ladder level\u2192legacy wording gate",
+        "legacy wording gate\u2192test oracle"
+      ],
+      "severity": "nit"
+    },
+    {
+      "consequence": "Agents or reviewers using the canonical index can miss the current bridge-protocol decision and land on older session-envelope language, increasing compliance and audit-trace ambiguity.",
+      "counterevidence": "The D-065 body is present and searchable, RUN_STATE and TASK_QUEUE cite it, and bridge_protocol/v1.1 explicitly resolves the layering: D-064 remains the audited-CLI report while bridge-report/v1 is the MCP trailer.",
+      "domain": "D7",
+      "evidence_refs": [
+        "docs/decision_log.md:22",
+        "docs/decision_log.md:88",
+        "docs/decision_log.md:2267",
+        "docs/decision_log.md:2272",
+        "docs/decision_log.md:2286",
+        "docs/decision_log.md:2293",
+        "docs/decision_log.md:3183",
+        "docs/decision_log.md:3185",
+        "docs/decision_log.md:3325",
+        "docs/decision_log.md:3372",
+        "RUN_STATE.md:7",
+        "TASK_QUEUE.md:142",
+        "docs/contracts/bridge_protocol.md:132",
+        "docs/contracts/bridge_protocol.md:138",
+        "bounded absence search: rg '\\| D-065 \\|' docs/decision_log.md returned no match"
+      ],
+      "finding": "The decision log's canonical index ends at D-063; D-064 has an orphaned local 'Index row' near its body, and accepted D-065 has no index row. This repeats the stale-index failure mode cited by D-043 and leaves the current bridge wire-rule decision undiscoverable through the log's primary index.",
+      "id": "W5-006",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "accepted decision\u2192canonical index",
+        "supersession discipline\u2192current protocol discovery"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "An advisor reading the promised standalone document receives an obsolete current branch, verification count, decision frontier, and next action, so its public status claims are not derivable from the pinned current evidence.",
+      "counterevidence": "PROJECT_STATUS clearly labels its update as 2026-07-11, links the evidence trail, and the live cockpit is documented to show a drift banner and fail-soft overlays when the repository advances.",
+      "domain": "D7",
+      "evidence_refs": [
+        "docs/reviews/2026-07-10-hardening-adjudication.md:64",
+        "PROJECT_STATUS.md:3",
+        "PROJECT_STATUS.md:8",
+        "PROJECT_STATUS.md:26",
+        "PROJECT_STATUS.md:32",
+        "PROJECT_STATUS.md:43",
+        "PROJECT_STATUS.md:70",
+        "PROJECT_STATUS.md:78",
+        "PROJECT_STATUS.md:265",
+        "PROJECT_STATUS.md:276",
+        "RUN_STATE.md:3",
+        "RUN_STATE.md:8",
+        "RUN_STATE.md:13",
+        "RUN_STATE.md:146",
+        "TASK_QUEUE.md:94",
+        "TASK_QUEUE.md:98",
+        "TASK_QUEUE.md:142",
+        "TASK_QUEUE.md:144"
+      ],
+      "finding": "PROJECT_STATUS is designated standalone advisor monitoring and derived advisor prose, but its 'current' facts were not refreshed after advisor-visible state changed. It says PR #59 is open, current main has 1,220 tests, and the decision log runs through D-064; the pinned RUN_STATE/TASK_QUEUE record #59 merged, 1,387 tests, D-065 merged, and the comprehensive audit as the next gate.",
+      "id": "W5-007",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "recorded evidence\u2192derived advisor prose",
+        "derived advisor prose\u2192public/current status claim"
+      ],
+      "severity": "should-fix"
+    }
+  ],
+  "scan_id": "W5",
+  "scope_examined": [
+    "AGENTS.md",
+    "docs/reviews/2026-07-13-comprehensive-audit/report.md",
+    "docs/agent_playbook.md",
+    "docs/contracts/bridge_protocol.md",
+    "docs/contracts/capstone_scope.md",
+    "docs/contracts/claims_ladder.md",
+    "docs/council_log.md",
+    "docs/decision_log.md",
+    "docs/process/state_kernel.json",
+    "docs/process/state_kernel.schema.json",
+    "docs/reviews/2026-07-10-hardening-adjudication.md",
+    "joulewise/determinism_gate.py",
+    "joulewise/envelope_gate.py",
+    "PROJECT_STATUS.md",
+    "RUN_STATE.md",
+    "scripts/claims_lint.py",
+    "scripts/gen_state.py",
+    "TASK_QUEUE.md",
+    "tests/test_claims_index_lint.py",
+    "tests/test_claims_lint.py",
+    "tests/test_determinism_gate.py",
+    "tests/test_envelope_gate.py",
+    "tests/test_gen_state.py"
+  ],
+  "uncertainties": [
+    "The owning P2-028 ledgers/run reports, AP-5, strict-validator implementation, BundleReader implementation, final report sources, and slide artifacts were outside the manifest and were not source-reviewed.",
+    "The retained corpus, live status site, hardware, and quiet-machine gates were not exercised.",
+    "The full unittest suite and focused test modules were not executed because they create temporary bundles/files; their source was read completely and only read-only probes were run.",
+    "Because P2-028's owning authority was outside scope, the intentional compatibility policy that permits determinism_supported when every optional identity field is absent was not classified as a finding.",
+    "Envelope-gate constants and tests were internally consistent with the in-scope D-047 authority; AP-5 and campaign artifacts were outside scope, so this was not a complete scientific revalidation of those thresholds."
+  ]
+}

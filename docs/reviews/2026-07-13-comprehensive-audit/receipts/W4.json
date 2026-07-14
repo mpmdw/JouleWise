@@ -1,0 +1,241 @@
+{
+  "checks_performed": [
+    "Verified BASE_HEAD e3fc14a01ca047e779fa7924fdf128b25762d063 as a commit and read every manifest file from that tree with git show/git grep, using bounded line-numbered chunks for large files.",
+    "Derived the documented path as: install the constrained Python environment; run the doctor preflight; execute and validate a mock run; reduce and render results; obtain the six selected private bundles; regenerate the capstone; construct and privacy-check a transformed bundle pack; build the site; pack the capsule; authenticate or claim the Lakebed deployment; deploy; then run HTTP smoke checks.",
+    "Existence-checked cross-boundary prerequisites named by scoped files. Tracked at BASE_HEAD: the example configs, site HTML/CSS/font inputs, project critique, citation data, generated report slice, report analysis manifests/tables/figure, figure and claims scripts, and all report chapters/appendices named by report.json.",
+    "Checked absent preconditions with git cat-file/git ls-tree. BASE_HEAD lacks build/capstone/rpt001/report.md, site_capsule/package.json, site_capsule/package-lock.json, site_capsule/server/content/pages.ts, site_capsule/server/content/buildinfo.ts, and any tracked runs/ content.",
+    "Followed one cross-boundary generated artifact solely to verify portability: docs/report_src/generated/rpt001_vertical_slice.md:66 contains the hard-coded /Users/edr/code/JouleWise/runs path emitted by build_capstone.py.",
+    "Ran bounded searches across the scoped documentation for install, doctor, bundle-pack construction, capstone checking, marked/Lakebed versioning, and matplotlib-lock consumers; no documented invocation constructing a bundle pack with package_bundle_pack.py was found.",
+    "Compared site_capsule/AGENTS.md and site_capsule/CLAUDE.md by blob identity; their scoped contents are identical.",
+    "Performed an end-of-turn read-only scope audit with git status, git rev-parse, and git diff --name-only BASE_HEAD; differences from BASE_HEAD were post-pin comprehensive-audit artifacts, and this cell made no writes."
+  ],
+  "exclusions": [],
+  "rows": [
+    {
+      "consequence": "A fresh external user cannot reproduce the canonical report from the clone or from the documented public projection. This is a canonical reproducible-flow failure under the charter's blocker definition.",
+      "counterevidence": "The limitation is disclosed rather than hidden; tracked analysis artifacts preserve the current report evidence, and the mock end-to-end path works without the private corpus. A separately supplied private corpus could unblock execution, but the pinned documentation does not define that supply path.",
+      "domain": "D5",
+      "evidence_refs": [
+        "docs/report_src/README.md:22-35",
+        "env/bundle_pack_selection.md:1-10",
+        "env/bundle_pack_selection.md:27-32",
+        "docs/contracts/publication_privacy.md:11-17",
+        "docs/contracts/publication_privacy.md:132-140",
+        "scripts/package_bundle_pack.py:240-260",
+        "Command: git ls-tree -r --name-only e3fc14a01ca047e779fa7924fdf128b25762d063 -- runs; result: exit 0 with empty stdout"
+      ],
+      "finding": "The pinned tree cannot execute its documented full capstone regeneration: that path requires six selected legacy bundles which are intentionally untracked, local-only, unpublished, and have no documented acquisition or handoff mechanism. The public transformed pack is explicitly not independently re-reducible.",
+      "id": "W4-001",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "clean-clone",
+        "artifact-regeneration",
+        "publication"
+      ],
+      "severity": "blocker"
+    },
+    {
+      "consequence": "A fresh publisher must infer both ordering and required arguments, increasing the risk of skipping strict validation or the privacy gate and preventing the documented path from being executed literally.",
+      "counterevidence": "The individual installation, doctor, privacy-verification, regeneration, and deployment contracts exist, and argparse exposes the packaging parameters. The root README explicitly identifies the verified end-user quickstart as unfinished work.",
+      "domain": "D5",
+      "evidence_refs": [
+        "README.md:23-24",
+        "README.md:80-116",
+        "env/README.md:43-58",
+        "docs/contracts/doctor_preflight.md:7-28",
+        "env/bundle_pack_selection.md:27-32",
+        "docs/contracts/publication_privacy.md:116",
+        "scripts/package_bundle_pack.py:759-799",
+        "Bounded absence search: grepped package_bundle_pack.py and bundle-pack creation syntax across README.md, env/*.md, docs/contracts/*.md, docs/report_src/README.md, and site_capsule/*.md; only a tooling pointer and verification command were documented, with no pack-construction invocation"
+      ],
+      "finding": "The clean-clone-to-publication procedure exists only as disconnected component instructions. There is no ordered checklist joining environment installation, doctor, strict validation, regeneration, privacy packaging, and publication, and the bundle-selection document says to pack with tooling without giving the required package_bundle_pack.py construction command.",
+      "id": "W4-002",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "installation",
+        "preflight",
+        "packaging",
+        "documentation"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "A pristine clone reports drift before any genuine source drift exists, and the displayed regeneration command fails on another machine unless manually rewritten. This prevents the check from serving as a portable publication gate.",
+      "counterevidence": "The documentation tells users to substitute another corpus path, and the committed report inputs use repo-relative paths elsewhere. The CI wiring gap is also explicitly acknowledged.",
+      "domain": "D5",
+      "evidence_refs": [
+        "docs/report_src/README.md:26-35",
+        "docs/report_src/README.md:41-42",
+        "docs/report_src/README.md:73",
+        "scripts/build_capstone.py:51-54",
+        "scripts/build_capstone.py:314-324",
+        "docs/report_src/generated/rpt001_vertical_slice.md:66 (cross-boundary verification only)",
+        "Command: git cat-file -e e3fc14a01ca047e779fa7924fdf128b25762d063:build/capstone/rpt001/report.md; result: object absent"
+      ],
+      "finding": "The advertised capstone --check path is not clean-clone clean: it compares against build/capstone/rpt001/report.md even though that output is untracked and absent at BASE_HEAD. The generated regeneration command also embeds Ed's absolute runs path, which is retained in a committed generated report slice despite the documentation's repo-relative portability claim.",
+      "id": "W4-003",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "artifact-regeneration",
+        "verification",
+        "portability"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Two clean clones at the same commit can emit materially different HTML and capsule metadata depending on registry state, cache contents, branch, and execution time, without a single pinned provenance record.",
+      "counterevidence": "Both connected and offline renderers are deliberately tested, the fallback makes offline work possible, and LAKEBED_FEEDBACK.md already recommends a pinned Lakebed invocation.",
+      "domain": "D5",
+      "evidence_refs": [
+        "scripts/build_site.py:402-444",
+        "tests/test_build_site_parsers.py:213-232",
+        "tests/test_build_site_parsers.py:279-417",
+        "tests/test_build_site_parsers.py:423-451",
+        "scripts/pack_capsule.py:103-108",
+        "site_capsule/AGENTS.md:9-10",
+        "site_capsule/LAKEBED_FEEDBACK.md:135-159",
+        "Commands: git cat-file -e BASE_HEAD:site_capsule/package.json and :site_capsule/package-lock.json; result: both absent"
+      ],
+      "finding": "Site publication is not hermetic: build_site.py invokes unversioned npx marked and silently changes to a different offline renderer after selected failures; Lakebed is likewise invoked through unversioned npx with no package manifest or lockfile; capsule metadata incorporates the current time and branch.",
+      "id": "W4-004",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "site-build",
+        "capsule-packaging",
+        "toolchain-reproducibility"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "A fresh clone can possess the committed deployId yet still be unable to inspect, update, configure, or verify the existing deployment and its freshness behavior.",
+      "counterevidence": "The README states that the deployment must be claimed or owned, the feedback document diagnoses the private-state requirement, public endpoint smoke checks need no credentials, and excluding secrets from Git is correct.",
+      "domain": "D5",
+      "evidence_refs": [
+        "site_capsule/README.md:24-40",
+        "site_capsule/.gitignore:1-3",
+        "site_capsule/AGENTS.md:20-24",
+        "site_capsule/AGENTS.md:69-70",
+        "site_capsule/LAKEBED_FEEDBACK.md:62-65",
+        "site_capsule/LAKEBED_FEEDBACK.md:81-111"
+      ],
+      "finding": "The canonical Lakebed update flow depends on private deployment state, interactive authentication, and ownership or claim state excluded from the tree, but the scoped publication README does not provide a bootstrap or credential-handoff procedure for a fresh publisher.",
+      "id": "W4-005",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "clean-clone",
+        "deployment",
+        "credentials",
+        "ownership"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "There is no locked reconstruction command for the documented analysis/reporting feature: a user must either omit it or resolve an unpinned matplotlib version.",
+      "counterevidence": "The omission is explicitly documented as lock-what-IS, and core reduction plus the capstone/site scripts do not require matplotlib.",
+      "domain": "D1",
+      "evidence_refs": [
+        "pyproject.toml:15-17",
+        "README.md:104-105",
+        "env/README.md:10-16",
+        "env/README.md:43-58",
+        "env/analysis-lock.txt:7-13"
+      ],
+      "finding": "The documented HTML-report feature requires the analysis extra, but pyproject.toml leaves matplotlib unbounded while env/analysis-lock.txt intentionally excludes it and env/README.md installs only the core editable package under that lock.",
+      "id": "W4-006",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "installation",
+        "environment-lock",
+        "reporting"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Drift across the report-to-site-to-package publication chain can merge without an automated clean-clone signal, leaving the first integrated detection to a manual release attempt.",
+      "counterevidence": "The unit suite has substantial focused coverage for privacy, bundle packaging, capsule packing, and both renderer modes, and the mock pipeline is run strictly. The report documentation explicitly states that the capstone CI hook is not yet wired.",
+      "domain": "D5",
+      "evidence_refs": [
+        ".github/workflows/ci.yml:20-110",
+        "docs/report_src/README.md:73",
+        "tests/test_env_locks.py:47-49",
+        "tests/test_build_site_parsers.py:423-451",
+        "tests/test_pack_capsule.py:1",
+        "tests/test_package_bundle_pack.py:1",
+        "tests/test_publication_privacy.py:1"
+      ],
+      "finding": "CI verifies compilation, unit tests, a strict mock pipeline, and wheel smoke, but it does not run the capstone regeneration check, full site build, capsule pack, or publication-pack construction seam. Network-backed marked coverage and corpus-lock cross-checks can also skip in clean environments.",
+      "id": "W4-007",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "CI",
+        "artifact-regeneration",
+        "publication"
+      ],
+      "severity": "should-fix"
+    }
+  ],
+  "scan_id": "W4",
+  "scope_examined": [
+    "pyproject.toml",
+    ".github/workflows/ci.yml",
+    "env/README.md",
+    "env/analysis-lock.txt",
+    "env/bundle_pack_selection.md",
+    "env/mac-measurement-lock.txt",
+    "README.md",
+    "joulewise/doctor.py",
+    "joulewise/publication_privacy.py",
+    "docs/contracts/doctor_preflight.md",
+    "docs/contracts/publication_privacy.md",
+    "scripts/build_site.py",
+    "scripts/build_capstone.py",
+    "scripts/pack_capsule.py",
+    "scripts/package_bundle_pack.py",
+    "site_capsule/.gitignore",
+    "site_capsule/AGENTS.md",
+    "site_capsule/CLAUDE.md",
+    "site_capsule/LAKEBED_FEEDBACK.md",
+    "site_capsule/README.md",
+    "site_capsule/client/index.tsx",
+    "site_capsule/lakebed.json",
+    "site_capsule/server/index.ts",
+    "docs/report_src/README.md",
+    "docs/report_src/report.json",
+    "docs/report_src/report.md",
+    "docs/report_src/source_map.json",
+    "tests/test_doctor.py",
+    "tests/test_env_locks.py",
+    "tests/test_pack_capsule.py",
+    "tests/test_package_bundle_pack.py",
+    "tests/test_publication_privacy.py",
+    "tests/test_build_site_parsers.py",
+    "tests/test_audit_cli_examples.py"
+  ],
+  "uncertainties": [
+    "The separately assigned executed clean-clone reproduction was not run here; no build, test, run, pack, deployment, network, credential, or hardware command was executed.",
+    "Out-of-manifest dependencies were only existence-checked, except for the single bounded generated-artifact path verification; their implementations were not reviewed.",
+    "The pinned tree cannot establish whether the six private corpus bundles, a release asset containing them, or Lakebed ownership credentials are available through an external handoff.",
+    "Live registry behavior, current marked/Lakebed package versions, authentication behavior, and deployed-site state were not examined."
+  ]
+}

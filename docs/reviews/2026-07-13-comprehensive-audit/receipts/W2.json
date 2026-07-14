@@ -1,0 +1,203 @@
+{
+  "checks_performed": [
+    "Read all 40 manifest paths from BASE_HEAD with git show; an in-memory verifier read 1,380,085 bytes and successfully parsed 28 Python files with ast, 10 JSON files with json.loads, and 2 Markdown files; rollup SHA-256 d21143a967db11c0b562327fbde4e310ff5e3df0d92abefc462ebce8a2d2a632.",
+    "Ran git diff --name-only BASE_HEAD over all 40 manifest paths; result was empty.",
+    "Ran git status --short --branch at completion; result was a clean main branch.",
+    "Validated the four suite manifests with SuiteManifest.from_mapping and recomputed their canonical hashes; all passed, and p2038_production_shakedown's declared sentinel hash matched 0316283dde8afd5fc0dea66b56037a1aea34b42d415aec57af4831a119af8471.",
+    "Traced campaign order, strict-bundle evaluation, partial-input handling, floor resolution, estimator-to-claim evaluation, artifact validation, legacy figure input gates, and generic report rendering with pinned git-show line views.",
+    "Executed an in-memory missing-sidecar control-flow probe using mock_suite_manifest.json; inferred_sidecar=None produced status=not_applicable, checked_items=0, problems=().",
+    "Bounded absence search in the exact-floor path found no comparison of floor observation bundle_sha256 or metric_value_j against consumer bundle bytes or summaries.",
+    "Bounded search of joulewise/report.py for validate_bundle, claim_verdict, energy_request_j, tokenizer, boundary, or strict returned no matches.",
+    "Bounded consumer trace confirmed scripts/make_figures.py gates bundle tree hashes and strict validation before calling aggregate_experiment.",
+    "The initial whole-manifest verifier form failed before Python execution because the read-only shell could not allocate a heredoc temporary file; the same verifier was rerun without a heredoc and succeeded."
+  ],
+  "exclusions": [],
+  "rows": [
+    {
+      "consequence": "A self-consistent artifact containing fabricated low-variance observations can understate the active floor, suppress effect_not_above_floor, and permit a direction-supported claim whose detection-floor premise is not evidence-bound. This is claim invalidation.",
+      "counterevidence": "The artifact validator enforces schema, finite hashes, uniqueness, internal arithmetic, eligibility, and provenance-list consistency; the loader hashes the artifact file, strict-validates consumer bundles, and binds their config identities. Those controls detect malformed artifacts but do not prove that the stored floor measurements came from the named bundle bytes.",
+      "domain": "D4",
+      "evidence_refs": [
+        "joulewise/detection_floor.py:14-18 explicitly states that v1 does not bind provenance to bundle bytes or the frozen order log and is not claim-consumable until that binding lands.",
+        "joulewise/detection_floor.py:751-806 recomputes floor arithmetic solely from the artifact's own metric_value_j values and checks bundle_sha256 only for hexadecimal shape.",
+        "joulewise/analysis_engine/inputs.py:203-208 loads a floor after validate_floor_artifact only.",
+        "joulewise/analysis_engine/inputs.py:1227-1285 resolves an exact cell using consumer_pairs.issubset(source_pairs), where both sets contain only bundle_id and config_sha256.",
+        "joulewise/analysis_engine/__init__.py:271-304 gives declared exact resolution priority over transport resolution.",
+        "joulewise/analysis_engine/claims.py:197-268 uses floor_gate_j directly when deciding effect_not_above_floor and the supported outcome.",
+        "tests/test_analysis_integration.py:360-450 changes only fixture bundle_id and config_sha256 values, then asserts that all gross floors resolve exact.",
+        "tests/test_detection_floor.py:278-337 (cross-boundary helper) shows those test cells retain fixture metric values and constant synthetic bundle_sha256 values.",
+        "Bounded absence search across detection_floor.py, analysis_engine/inputs.py, analysis_engine/__init__.py, and test_analysis_integration.py found no consumer comparison for observation bundle_sha256 or metric_value_j."
+      ],
+      "finding": "An artifact can resolve as an exact claim floor without binding its bundle_sha256 values or metric_value_j observations to the referenced bundle bytes or summary metrics. Exact resolution matches only telemetry/metric/window/condition plus a subset of (bundle_id, config_sha256) pairs.",
+      "id": "W2-001",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "floor artifact -> typed analysis inputs",
+        "strict bundles -> exact floor resolution",
+        "floor gate -> claim outcome"
+      ],
+      "severity": "blocker"
+    },
+    {
+      "consequence": "The near-floor branch of the frozen design cannot be represented by the canonical campaign-to-analysis flow. Campaign scale-up would require bypassing or forking the generator and validator, making the next roadmap gate unsafe and non-reproducible.",
+      "counterevidence": "n=5 remains valid when Window-A is not near-floor, and the current registry enumerates estimands without embedding a sample-size value. A future versioned generator and registry could add the n=10 design, but no such path exists at the pinned tree.",
+      "domain": "D3",
+      "evidence_refs": [
+        "docs/contracts/analysis_plans.md:125-141, especially line 137, requires n=5 raised to n=10 at freeze when Window-A marks the contrast near-floor.",
+        "scripts/generate_matrix.py:61 fixes REPETITIONS=5.",
+        "scripts/generate_matrix.py:68-73 exposes no repetition-count argument.",
+        "scripts/generate_matrix.py:159-170,290-315,436-445 uses REPETITIONS for generated paths, order blocks, and emitted configurations.",
+        "joulewise/analysis_manifest.py:726-752 sets planned_n_blocks=5 unconditionally.",
+        "joulewise/analysis_manifest.py:980-984 rejects any sampling plan other than fixed_n=5.",
+        "joulewise/analysis_manifest.py:1289-1294 constructs semantic block linkage with range(1,6).",
+        "joulewise/analysis_manifest.py:1353-1367 performs frozen-registry comparison only when planned_n==5.",
+        "configs/analysis_registry/slice_2m_ap2.v1.json:1-68 contains the frozen estimand registry but no alternate sizing representation."
+      ],
+      "finding": "The binding AP-2 plan permits n to be raised from 5 to 10 at registry freeze when Window-A evidence is near-floor, but the canonical generator and analysis-manifest builder/validator hard-code n=5 with no parameterized n=10 path.",
+      "id": "W2-002",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "analysis-plan sizing rule -> campaign generator",
+        "generated order -> frozen analysis manifest",
+        "campaign scale-up -> manifest validation"
+      ],
+      "severity": "blocker"
+    },
+    {
+      "consequence": "A campaign member can remain collection-usable even though expected prompt-token hashes are unavailable. Corpus provenance therefore downgrades according to incidental filesystem shape instead of producing an explicit missing-evidence flag.",
+      "counterevidence": "Suite manifests are canonically hashed in configuration, strict bundle validation protects internal manifest/realized-artifact consistency, and present malformed or mismatching sidecars fail closed. ID-native prompts also carry token IDs directly and do not need this text-tokenization comparison.",
+      "domain": "D3",
+      "evidence_refs": [
+        "scripts/run_campaign.py:930-937 returns None when the inferred sibling sidecar is absent.",
+        "scripts/run_campaign.py:1188-1198 converts that absence directly to PromptHashCheck(not_applicable).",
+        "scripts/run_campaign.py:124-136 emits integrity flags only for mismatch or error, not not_applicable.",
+        "scripts/run_campaign.py:1295-1305 incorporates only those emitted flags into member usability.",
+        "configs/suite_manifests/mock_suite_manifest.json:107-131 provides a concrete text_prompt requiring runtime tokenization.",
+        "Behavior probe result: inferred_sidecar=None, status=not_applicable, checked_items=0, problems=().",
+        "tests/test_run_campaign.py:2161-2245 covers present/matching and present/malformed inferred sidecars; bounded search found no test requiring a missing inferred sidecar for a text suite to downgrade."
+      ],
+      "finding": "Expected-versus-realized prompt-token integrity silently becomes not_applicable when a text suite has no explicit generator sidecar reference and the inferred sibling annotation file is absent.",
+      "id": "W2-003",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "suite manifest -> generator annotation sidecar",
+        "realized prompt corpus -> campaign integrity verdict"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "A strict-invalid or claim-unready intermediate bundle can be presented as a JouleWise run report. If the report is reused as a reader-facing surface, its token metric violates the binding primary-metric and stack-identity rules and can be mistaken for publishable evidence.",
+      "counterevidence": "The module describes itself as a run browser rather than a formal claim artifact, exposes full raw metadata and summary details, and omits the chart when the reducer-compatible power curve is unreadable. Its actual publication use was not established.",
+      "domain": "D5",
+      "evidence_refs": [
+        "joulewise/report.py:1-32 defines a static HTML run browser and makes parseable summary_metrics.json the completeness criterion.",
+        "joulewise/report.py:141-165 loads raw config, metadata, and summary without a strict validator.",
+        "joulewise/report.py:290-322 renders energy/token and TTFT in the report index but no request-energy, tokenizer, or boundary columns.",
+        "joulewise/report.py:353-391 renders flattened raw metadata and summary as the detail report.",
+        "docs/contracts/token_normalization.md:16-31 requires request energy at equal or greater salience whenever token-normalized metrics appear.",
+        "docs/contracts/token_normalization.md:39-55 requires runtime-observed denominators and named tokenizer identity.",
+        "docs/contracts/token_normalization.md:84-111 requires every governed surface to carry the complete stack identity or explicit unknown values.",
+        "Bounded command git grep -n -E 'validate_bundle|claim_verdict|energy_request_j|tokenizer|boundary|strict' BASE_HEAD -- joulewise/report.py returned no matches."
+      ],
+      "finding": "The generic HTML report treats any parseable summary as complete, renders raw metadata and summary values without strict-bundle or claim-verdict gates, and headlines energy/token without co-displaying request energy, tokenizer identity, or measurement boundary.",
+      "id": "W2-004",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "raw bundle summary -> HTML report",
+        "claim readiness -> reader-facing presentation",
+        "token metric -> stack-identity contract"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Dataset consumers can treat a planned cap as realized evidence, particularly for early stops or failures, and may recompute or audit token denominators using false provenance.",
+      "counterevidence": "The actual energy_output_token_j metric is read from reducer output, whose denominator logic refuses config fallback; the figure and table label it runtime-observed, retain token_count_source, and explicitly downgrade the legacy evidence. The audited bundles were not in scope, so configured and realized counts may coincide for these fixed-budget runs.",
+      "domain": "D5",
+      "evidence_refs": [
+        "scripts/make_figures.py:62-72 declares the runtime_output_tokens dataset column.",
+        "scripts/make_figures.py:197-248, especially line 233, assigns runtime_output_tokens from workload.get('output_tokens').",
+        "joulewise/reduce.py:987-1008 (cross-boundary trace) accepts only server usage or runtime token events and returns no denominator for config_fallback.",
+        "docs/contracts/token_normalization.md:41-43 requires runtime-observed token denominators.",
+        "scripts/make_figures.py:335-378 renders the companion metric as runtime-observed and co-displays request energy.",
+        "tests/test_rpt001_report_slice.py:139-147 checks the rendered runtime-observed label but does not verify dataset runtime_output_tokens provenance."
+      ],
+      "finding": "The sealed legacy publication dataset names a column runtime_output_tokens but populates it from workload_profile.output_tokens, which is the configured output budget rather than a runtime-observed count.",
+      "id": "W2-005",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "bundle evidence -> sealed publication dataset",
+        "configured output budget -> runtime-token provenance"
+      ],
+      "severity": "should-fix"
+    }
+  ],
+  "scan_id": "W2",
+  "scope_examined": [
+    "joulewise/suite.py",
+    "joulewise/workloads.py",
+    "joulewise/gensuite/__init__.py",
+    "joulewise/aggregate.py",
+    "joulewise/analysis_manifest.py",
+    "joulewise/analysis_engine/__init__.py",
+    "joulewise/analysis_engine/artifact.py",
+    "joulewise/analysis_engine/claims.py",
+    "joulewise/analysis_engine/distributions.py",
+    "joulewise/analysis_engine/estimators.py",
+    "joulewise/analysis_engine/inputs.py",
+    "joulewise/analysis_engine/multiplicity.py",
+    "joulewise/analysis_engine/ratio.py",
+    "joulewise/analysis_engine/sensitivity.py",
+    "joulewise/detection_floor.py",
+    "joulewise/uncertainty_evidence.py",
+    "joulewise/idle_dependence.py",
+    "joulewise/report.py",
+    "scripts/run_campaign.py",
+    "scripts/generate_matrix.py",
+    "scripts/gen_affine_smoke.py",
+    "scripts/gen_jw_mixed.py",
+    "scripts/make_figures.py",
+    "configs/suite_manifests/affine_smoke_v1.json",
+    "configs/suite_manifests/affine_smoke_v1_annotations.json",
+    "configs/suite_manifests/jw_mixed_v1_qwen25_15b.json",
+    "configs/suite_manifests/jw_mixed_v1_qwen25_15b_annotations.json",
+    "configs/suite_manifests/jw_sentinel_v1_qwen25_15b.json",
+    "configs/suite_manifests/jw_sentinel_v1_qwen25_15b_annotations.json",
+    "configs/suite_manifests/mock_suite_manifest.json",
+    "configs/campaigns/p2_015_smoke/production_shakedown/order_manifest.json",
+    "configs/campaigns/p2_015_smoke/production_shakedown/p2038_production_shakedown.json",
+    "configs/analysis_registry/slice_2m_ap2.v1.json",
+    "docs/contracts/analysis_plans.md",
+    "docs/contracts/token_normalization.md",
+    "tests/test_run_campaign.py",
+    "tests/test_p2038_production_path.py",
+    "tests/test_analysis_integration.py",
+    "tests/test_analysis_ratio_integration.py",
+    "tests/test_rpt001_report_slice.py",
+    "tests/test_detection_floor.py:278-337 (cross-boundary helper trace only)",
+    "joulewise/reduce.py:987-1008 (cross-boundary denominator trace only)",
+    "docs/reviews/2026-07-13-comprehensive-audit/report.md:1-190 (frozen authority)",
+    "docs/contracts/bridge_protocol.md:132-178 (output-protocol authority)"
+  ],
+  "uncertainties": [
+    "No live campaign, hardware run, retained run corpus, or publication deployment was examined; those are outside this manifest and the bridge's machine-state lane.",
+    "The unit suites were not executed because this was a read-only pinned-tree review and the tests allocate temporary files; test sources were read and behavior contracts traced statically.",
+    "Statistical and numerical correctness of estimators, multiplicity, ratios, and floor formulae is deferred to SCI2; this receipt reports only seam and governance defects.",
+    "The generic HTML report's actual downstream publication use could not be established from this manifest, so its finding is conditional on reader-facing reuse.",
+    "The sealed legacy bundles were outside scope, so whether configured output budgets happened to equal every realized output count was not independently checked."
+  ]
+}

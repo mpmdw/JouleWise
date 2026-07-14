@@ -1,0 +1,247 @@
+{
+  "checks_performed": [
+    "Read every manifest file from pinned tree e3fc14a01ca047e779fa7924fdf128b25762d063 with git show and numbered-line slices.",
+    "Computed SHA-256 for all 16 pinned manifest blobs; hashes were produced successfully.",
+    "Compiled all 13 pinned Python manifest files in memory with compile(..., 'exec'); all succeeded.",
+    "Grepped production and test trees for TransportAdapter, LocalTransport, resolve_transport, run_command, collect_artifact, NodeWorkerClient, and SshTransport consumers.",
+    "Grepped for duplicated suite-policy helpers, remote-adapter plumbing helpers, and node-worker process-termination helpers.",
+    "Grepped node-client compatibility fields, powermetrics stop paths, dead constants/state, vLLM option producers, and spike-script references across the pinned tree.",
+    "Followed boundary calls into pinned joulewise/controller.py:365-410, joulewise/bundle.py:58-90, and joulewise/schemas.py:435-482 to verify transport use and canonical run-id sanitization.",
+    "Executed a pure posixpath trace: an absolute run_id joined to /tmp/joulewise resolves to /var/tmp, while traversal components remain in cleanup targets.",
+    "Executed pinned spike helpers with equal empty and equal one-token outputs; both returned replay_supported.",
+    "Ran final git status/diff scope audit; no tracked, staged, or untracked changes remained."
+  ],
+  "exclusions": [],
+  "rows": [
+    {
+      "consequence": "The code maintains two overlapping transport APIs and, for remote runs, two SSH transport instances without delivering the documented interchangeable composition. Local command/copy implementation and its tests preserve surface that the canonical run path does not consume.",
+      "counterevidence": "Connection metadata is genuinely consumed; the generic methods are directly tested; NodeWorkerClient needs richer run/put/collect operations; future transfer work may need a transport boundary.",
+      "domain": "D2 platform boundaries",
+      "evidence_refs": [
+        "docs/contracts/adapter_contracts.md:136",
+        "joulewise/interfaces.py:226",
+        "joulewise/adapters/__init__.py:83",
+        "joulewise/adapters/__init__.py:188",
+        "joulewise/adapters/local_transport.py:42",
+        "joulewise/adapters/ssh_transport.py:127",
+        "boundary trace joulewise/controller.py:377-410: resolve_transport result is stored, then only connection_metadata is called",
+        "bounded absence search: git grep for run_command( and collect_artifact( outside tests found definitions only; tests contain the callers",
+        "bounded construction search: production NodeWorkerClient/SshTransport construction occurs at joulewise/adapters/__init__.py:104-105, separately from resolve_transport's SSH construction at line 203"
+      ],
+      "finding": "The generic TransportAdapter execution/copy abstraction has no production execution role. The controller resolves it and calls only connection_metadata, while remote runtime and telemetry resolution separately constructs another SshTransport plus NodeWorkerClient. LocalTransport.run_command/collect_artifact and the equivalent generic SSH wrappers have only test callers.",
+      "id": "D2-001",
+      "mission_tags": [
+        "M1",
+        "M2"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "W1",
+        "W3"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Cross-runtime suite semantics occupy hundreds of parallel lines and can drift even though the contract requires identical marker and status policy across runtimes.",
+      "counterevidence": "Generation and prompt materialization are backend-specific, and keeping the mock partially independent has oracle value; simplification should retain independent backend behavior rather than sharing the generation implementation.",
+      "domain": "D2 platform boundaries",
+      "evidence_refs": [
+        "joulewise/adapters/mock_runtime.py:195",
+        "joulewise/adapters/mock_runtime.py:398",
+        "joulewise/adapters/mock_runtime.py:648",
+        "joulewise/adapters/mock_runtime.py:656",
+        "joulewise/adapters/mlx_runtime.py:256",
+        "joulewise/adapters/mlx_runtime.py:463",
+        "joulewise/adapters/mlx_runtime.py:1090",
+        "joulewise/adapters/mlx_runtime.py:1098",
+        "docs/contracts/adapter_contracts.md:179"
+      ],
+      "finding": "MockRuntimeAdapter and MlxRuntimeAdapter independently implement the same suite-order traversal, block/level/item framing, status aggregation, output assembly, suite provenance, suite identity, and prompt-closure policy.",
+      "id": "D2-002",
+      "mission_tags": [
+        "M2",
+        "M1"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "W1"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Cleanup, evidence preservation, and clock metadata are integrity-sensitive seams; parallel implementations increase maintenance cost and permit runtime/telemetry behavior to diverge unintentionally.",
+      "counterevidence": "Runtime and telemetry operations have different artifacts, failure semantics, timeouts, and detached-process maps; node_worker.py must remain self-contained and cannot import controller-side helpers.",
+      "domain": "D2 platform boundaries",
+      "evidence_refs": [
+        "joulewise/adapters/vllm_runtime.py:273",
+        "joulewise/adapters/vllm_runtime.py:312",
+        "joulewise/adapters/vllm_runtime.py:323",
+        "joulewise/adapters/vllm_runtime.py:328",
+        "joulewise/adapters/nvidia_smi.py:292",
+        "joulewise/adapters/nvidia_smi.py:331",
+        "joulewise/adapters/nvidia_smi.py:344",
+        "joulewise/adapters/nvidia_smi.py:349",
+        "joulewise/adapters/node_worker.py:1235",
+        "joulewise/adapters/node_worker.py:1248",
+        "joulewise/adapters/node_worker.py:1412",
+        "joulewise/adapters/node_worker.py:1567"
+      ],
+      "finding": "Remote lifecycle plumbing is duplicated both between VllmRuntimeAdapter and NvidiaSmiTelemetryAdapter and inside node_worker.py: worker-log preservation, result metadata, clock-alignment capture, run-id selection, process-object shutdown, and PID termination each have parallel implementations.",
+      "id": "D2-003",
+      "mission_tags": [
+        "M2"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "W1",
+        "W3"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "A future or noncanonical caller can make an absolute run_id escape remote_work_root or use traversal components in either identifier, turning cleanup into deletion outside the task's isolated run directory.",
+      "counterevidence": "The canonical controller passes RunBundleWriter.run_id, which is sanitized to [a-z0-9_-], and current adapters generate fixed-format task IDs. The present canonical run path is therefore protected upstream.",
+      "domain": "D2 platform boundaries",
+      "evidence_refs": [
+        "docs/contracts/node_worker_protocol.md:54",
+        "docs/contracts/node_worker_protocol.md:259",
+        "joulewise/adapters/node_client.py:151",
+        "joulewise/adapters/node_client.py:169",
+        "joulewise/adapters/node_client.py:263",
+        "joulewise/adapters/node_client.py:346",
+        "joulewise/adapters/node_worker.py:1784",
+        "bounded absence search: grepped sanitize|normpath|isabs|basename across node_client.py, node_worker.py, and node_worker_protocol.md; no identifier-path validation found",
+        "behavior trace: posixpath.join('/tmp/joulewise','/var/tmp') produced '/var/tmp'; traversal task IDs remained in generated artifact paths",
+        "counterevidence boundary trace joulewise/bundle.py:58-90: canonical generated/config run IDs are sanitized before RunContext construction"
+      ],
+      "finding": "The node-client boundary accepts any nonempty run_id and task_id, embeds them directly into remote paths, and later passes the derived paths to rm -rf. Neither the client, worker validation, nor protocol contract constrains them to safe path components.",
+      "id": "D2-004",
+      "mission_tags": [
+        "M1"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W3"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Equal empty or equally short monolithic/resumed outputs pass the feasibility gate, so the 593-line retained spike can emit a false-positive roadmap verdict.",
+      "counterevidence": "collect_decode_tokens requests max_tokens from mlx_lm.generate_step, and retained campaign/phase documentation still invokes the script; no evidence in this scan shows that the recorded live spike actually returned short outputs.",
+      "domain": "D2 platform boundaries",
+      "evidence_refs": [
+        "scripts/spike_mlx_prompt_cache.py:159",
+        "scripts/spike_mlx_prompt_cache.py:403",
+        "scripts/spike_mlx_prompt_cache.py:447",
+        "scripts/spike_mlx_prompt_cache.py:461",
+        "behavior trace against pinned helpers: equal [] returned replay_supported; equal [1] returned replay_supported",
+        "bounded use search: git grep spike_mlx_prompt_cache found active campaign-pack and Phase 3 documentation consumers"
+      ],
+      "finding": "The MLX prompt-cache spike declares replay_supported from equality plus cache-size tolerance without verifying that either decode produced the requested number of tokens.",
+      "id": "D2-005",
+      "mission_tags": [
+        "M1"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W3"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "The result type exposes two artifact ownership models and a misleading constructor option, adding branches and test setup for behavior absent from the production client.",
+      "counterevidence": "Runtime and telemetry unit tests construct NodeTaskResult with artifacts_path directly, so removing the fallback requires converting those fixtures to the byte-artifact model; external constructors cannot be ruled out.",
+      "domain": "D2 platform boundaries",
+      "evidence_refs": [
+        "joulewise/adapters/node_client.py:61",
+        "joulewise/adapters/node_client.py:96",
+        "joulewise/adapters/node_client.py:107",
+        "joulewise/adapters/node_client.py:263",
+        "joulewise/adapters/node_client.py:312",
+        "joulewise/adapters/vllm_runtime.py:247",
+        "joulewise/adapters/nvidia_smi.py:266",
+        "bounded absence search: self.run_id has no read in node_client.py or pinned tests",
+        "bounded consumer search: artifacts_path outside node_client appears only in vllm/nvidia fallback branches and directly constructed test results; test_node_client asserts the production result path is None"
+      ],
+      "finding": "NodeWorkerClient retains obsolete compatibility state: its constructor accepts and stores run_id but never reads it, while NodeTaskResult.artifacts_path and adapter filesystem fallbacks are not produced by the client after local staging was changed to byte collection plus immediate deletion.",
+      "id": "D2-006",
+      "mission_tags": [
+        "M2"
+      ],
+      "proposed_disposition": "delete",
+      "seams": [
+        "W3"
+      ],
+      "severity": "nit"
+    },
+    {
+      "consequence": "The remote protocol carries speculative launch surface, including arbitrary argument forwarding, that cannot be selected by the actual JouleWise runtime path.",
+      "counterevidence": "The runtime options object is intentionally open for protocol evolution, and direct worker tests need a port override; future heterogeneous NVIDIA targets may need some of these launch controls.",
+      "domain": "D2 platform boundaries",
+      "evidence_refs": [
+        "joulewise/adapters/node_worker.py:900",
+        "joulewise/adapters/node_worker.py:918",
+        "joulewise/adapters/node_worker.py:930",
+        "joulewise/adapters/vllm_runtime.py:200",
+        "bounded absence search: git grep max_model_len|download_dir|extra_args|dtype outside node_worker.py found no production producer; only historical documentation mentioned the fields"
+      ],
+      "finding": "The shipped worker implements vLLM options dtype, max_model_len, download_dir, and arbitrary extra_args, but VllmRuntimeAdapter never emits them and the benchmark config exposes no producer for them.",
+      "id": "D2-007",
+      "mission_tags": [
+        "M1",
+        "M2"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "W3"
+      ],
+      "severity": "nit"
+    },
+    {
+      "consequence": "These placeholders imply lifecycle behavior or retained state that does not exist and add minor maintenance noise.",
+      "counterevidence": "WARMUP_POWER_W is explicitly documented as reserved for possible trace extension; retaining it may preserve a future deterministic fixture convention.",
+      "domain": "D2 platform boundaries",
+      "evidence_refs": [
+        "joulewise/adapters/mock_telemetry.py:42",
+        "joulewise/adapters/mlx_runtime.py:88",
+        "joulewise/adapters/mlx_runtime.py:151",
+        "joulewise/adapters/mlx_runtime.py:875",
+        "bounded use search: WARMUP_POWER_W has only one test import/assertion; _original_eos_token_ids has no load anywhere in the pinned tree"
+      ],
+      "finding": "Two adapter members are shipped without runtime consumers: MockTelemetryAdapter.WARMUP_POWER_W is only asserted by a test, and MlxRuntimeAdapter._original_eos_token_ids is assigned during prepare and cleared during cleanup but never read.",
+      "id": "D2-008",
+      "mission_tags": [
+        "M2"
+      ],
+      "proposed_disposition": "delete",
+      "seams": [],
+      "severity": "nit"
+    }
+  ],
+  "scan_id": "D2",
+  "scope_examined": [
+    "docs/contracts/adapter_contracts.md",
+    "docs/contracts/node_worker_protocol.md",
+    "docs/specs/c027/nv-gate-2_live_promotion.md",
+    "joulewise/adapters/__init__.py",
+    "joulewise/adapters/local_transport.py",
+    "joulewise/adapters/mlx_runtime.py",
+    "joulewise/adapters/mock_runtime.py",
+    "joulewise/adapters/mock_telemetry.py",
+    "joulewise/adapters/node_client.py",
+    "joulewise/adapters/node_worker.py",
+    "joulewise/adapters/nvidia_smi.py",
+    "joulewise/adapters/powermetrics.py",
+    "joulewise/adapters/ssh_transport.py",
+    "joulewise/adapters/vllm_runtime.py",
+    "joulewise/interfaces.py",
+    "scripts/spike_mlx_prompt_cache.py"
+  ],
+  "uncertainties": [
+    "No live Mac powermetrics, NVIDIA/vLLM, SSH, Orin, or multi-node behavior was exercised; PROVISIONAL hardware claims remain provisional.",
+    "The full unit suite was not run; verification was read-only source analysis, bounded behavior traces, and in-memory syntax compilation.",
+    "Tests and non-manifest files were searched or read only at targeted boundary locations, not line-reviewed.",
+    "Unknown external consumers of public adapter classes cannot be excluded; repository-wide absence searches cover only the pinned tracked tree.",
+    "Post-BASE_HEAD audit artifacts and later code changes were not examined as audit objects."
+  ]
+}

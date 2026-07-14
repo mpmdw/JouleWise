@@ -1,0 +1,213 @@
+{
+  "checks_performed": [
+    "Read all 32 manifest files from BASE_HEAD with git show e3fc14a01ca047e779fa7924fdf128b25762d063:<path> | nl -ba; long files were read in contiguous chunks through EOF.",
+    "Parsed all seven scoped Python files with ast.parse and all nine scoped JSON files with json.loads: AST_OK=7 JSON_OK=9.",
+    "Loaded the four executable suite manifests through SuiteManifest.from_mapping and recomputed their canonical hashes: affine=24fb008b7c38484b6a7cb36a4fef1fce4c47a669e3db23131bce06088340f7a9, mixed=855be4e5b40c70bd017d83c9c576b07e6912e9200ea5bbd90985f9a376a6c5f1, sentinel=0316283dde8afd5fc0dea66b56037a1aea34b42d415aec57af4831a119af8471, mock=16c2d67f8c5e84b369938ee8d633dec01c594f5f7fcbf22fcaa2301d986e1267.",
+    "Cross-boundary verification followed only cited contracts, queue/roadmap entries, runtime consumers, and tests: docs/contracts/analysis_plans.md, TASK_QUEUE.md, AGENT_PLAN.md, joulewise/adapters, joulewise/controller.py, joulewise/reduce.py, scripts/claims_lint.py, and targeted tests.",
+    "Ran bounded git grep searches at BASE_HEAD for campaign-pack top-up rules, suite policy-field consumers, suite-next references, manifest consumers, and queue ownership.",
+    "AST-inventoried scripts/run_campaign.py: 2917 lines, 76 top-level functions, 9 classes, and 24 imports; enumerated 83 tests in tests/test_run_campaign.py.",
+    "Ran git status --short --branch before and after review; workspace remained unchanged, with only the pre-existing untracked docs/reviews/2026-07-13-comprehensive-audit/receipts/ directory."
+  ],
+  "exclusions": [],
+  "rows": [
+    {
+      "consequence": "An operator following the stale packs could add observations after seeing the outcome while retaining confirmatory language, invalidating nominal confirmatory coverage. Repeating the normative rule in each pack multiplies the repair and future-drift surface.",
+      "counterevidence": "The affected packs are pre-hardware drafts; registry freeze and the downstream claims linter provide later control points. The split-suite pack correctly freezes n and names exploratory demotion, so the canonical behavior is available as a migration pattern.",
+      "domain": "D3 campaign and workload orchestration",
+      "evidence_refs": [
+        "docs/contracts/analysis_plans.md:30",
+        "docs/campaign_packs/c5_2_3_kv_economics.md:22",
+        "docs/campaign_packs/c5_2_7_device_perf_w_rankings.md:37",
+        "docs/campaign_packs/c5_2_8_placement_optimality.md:33",
+        "docs/campaign_packs/c5_3_1_3_5_replication.md:33",
+        "docs/campaign_packs/c5_3_1_3_5_replication.md:55",
+        "docs/campaign_packs/c5_i_1_i_2_i_5_import_family.md:38",
+        "docs/campaign_packs/c5_i_1_i_2_i_5_import_family.md:60",
+        "docs/campaign_packs/c5_i_1_i_2_i_5_import_family.md:82",
+        "docs/campaign_packs/c5_i_3_flores_fertility.md:42",
+        "docs/campaign_packs/c5_i_4_harness_overhead_floor.md:32",
+        "docs/campaign_packs/q6_c5_2_10_rail_vs_wall.md:21",
+        "docs/campaign_packs/split_suite_q1_q2_q3.md:28",
+        "docs/campaign_packs/split_suite_q1_q2_q3.md:78",
+        "docs/campaign_packs/split_suite_q1_q2_q3.md:100",
+        "Bounded absence/contrast search: git grep -n -E 'top up|top-up|Top up|Top-up' BASE_HEAD -- docs/campaign_packs returned the stale rows above and the three D-062-compliant split-suite rows."
+      ],
+      "finding": "Eight campaign-pack files duplicate the MDE/sample-size rule and direct outcome-dependent top-ups when an observed confidence interval touches the floor or leave-one-out changes the verdict, without the permanent exploratory demotion required by canonical D-062. The split-suite pack has already been updated to the canonical frozen-n rule, demonstrating policy drift among copied rows.",
+      "id": "D3-001",
+      "mission_tags": [
+        "M2",
+        "M1"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "campaign-pack analysis rows \u2194 canonical analysis-plan contract",
+        "campaign sizing instructions \u2194 confirmatory claim eligibility"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Manifest readers can reasonably infer that values such as cold_between_bundles or bundle_only are enforced when they are not enforced through these fields. The constants also add generator, schema, manifest, and test surface without enabling a behavior choice.",
+      "counterevidence": "Other execution-policy fields are real: adapters consume order_policy and default_output_policy. Cooldown/cache behavior may be enforced independently by controller/config/process lifecycle, and retaining descriptive declarations inside hashed manifests can aid provenance.",
+      "domain": "D3 campaign and workload orchestration",
+      "evidence_refs": [
+        "joulewise/suite.py:279",
+        "joulewise/suite.py:309",
+        "joulewise/suite.py:313",
+        "joulewise/suite.py:316",
+        "joulewise/suite.py:319",
+        "joulewise/suite.py:553",
+        "joulewise/suite.py:601",
+        "joulewise/suite.py:771",
+        "configs/suite_manifests/affine_smoke_v1.json:11",
+        "configs/suite_manifests/jw_mixed_v1_qwen25_15b.json:12",
+        "configs/suite_manifests/jw_sentinel_v1_qwen25_15b.json:12",
+        "configs/suite_manifests/mock_suite_manifest.json:19",
+        "Bounded absence search: for each of cooldown_policy, cache_policy, warmup_policy, within_bundle_repeats, status_policy, git grep across BASE_HEAD joulewise/ and scripts/ excluding suite.py and the two manifest generators returned no runtime consumer.",
+        "Bounded counter-search found order_policy/default_output_policy consumers at joulewise/adapters/mlx_runtime.py:276,439,455 and joulewise/adapters/mock_runtime.py:211,364,385."
+      ],
+      "finding": "The suite schema exposes execution_policy.cooldown_policy, cache_policy, warmup_policy, and within_bundle_repeats plus per-item status_policy as operational-looking knobs, but the pinned runtime has no consumer for them. within_bundle_repeats is only accepted when equal to 1, status_policy only accepts 'none', and 84 manifest items repeat that constant.",
+      "id": "D3-002",
+      "mission_tags": [
+        "M2"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "suite manifest schema \u2194 runtime enforcement",
+        "generator output \u2194 campaign semantics"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Campaign-scale and split/multi-node additions must modify the same high-churn critical path as validation and claim-readiness logic, increasing regression and merge-collision risk and making individual policies harder to test or reuse independently.",
+      "counterevidence": "Size alone is not a failure: the current sequential runner is exercised by campaign-pack commands and has 83 focused tests covering dry-run/resume, locks, waivers, prompt hashes, cooldown provenance, order manifests, backups, and shakedown behavior. No canonical flow failure was observed.",
+      "domain": "D3 campaign and workload orchestration",
+      "evidence_refs": [
+        "scripts/run_campaign.py:153",
+        "scripts/run_campaign.py:260",
+        "scripts/run_campaign.py:283",
+        "scripts/run_campaign.py:618",
+        "scripts/run_campaign.py:818",
+        "scripts/run_campaign.py:1082",
+        "scripts/run_campaign.py:1257",
+        "scripts/run_campaign.py:1803",
+        "scripts/run_campaign.py:2137",
+        "scripts/run_campaign.py:2370",
+        "Command result: wc/AST inspection at BASE_HEAD reported 2917 lines, 76 top-level functions, 9 classes, and 24 imports.",
+        "Bounded test inventory: tests/test_run_campaign.py contains 83 test methods across 3675 lines."
+      ],
+      "finding": "scripts/run_campaign.py is a 2917-line orchestration nucleus combining CLI parsing, order discovery, doctor/preflight, locks, subprocess execution, backup, production-shakedown gates and waivers, prompt/hash validation, cooldown telemetry acquisition, provenance logging, collection verdicts, and scientific claim-input readiness. These separable responsibilities are not reused through narrower modules.",
+      "id": "D3-003",
+      "mission_tags": [
+        "M1",
+        "M2"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "campaign CLI \u2194 execution engine",
+        "acquisition provenance \u2194 scientific readiness",
+        "current single-node runner \u2194 campaign scale-up"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "The packs cannot yet serve as reproducible operator procedures. Without one owned implementation sequence, Phase-3 preparation can fragment into hand-authored manifests and ad hoc commands precisely where multi-node provenance and composite validation need consistency.",
+      "counterevidence": "The missing paths are prominently labeled PLANNED, preventing them from masquerading as current commands. Split execution is still gated by P1-006, P3-001b, SPLIT-AP, and Phase-3 feasibility work, so this is roadmap debt rather than a present canonical-flow blocker.",
+      "domain": "D3 campaign and workload orchestration",
+      "evidence_refs": [
+        "docs/campaign_packs/README.md:84",
+        "docs/campaign_packs/c5_2_3_kv_economics.md:226",
+        "docs/campaign_packs/c5_2_3_kv_economics.md:249",
+        "docs/campaign_packs/split_suite_q1_q2_q3.md:353",
+        "docs/campaign_packs/split_suite_q1_q2_q3.md:359",
+        "docs/campaign_packs/split_suite_q1_q2_q3.md:379",
+        "docs/campaign_packs/split_suite_q1_q2_q3.md:385",
+        "TASK_QUEUE.md:119",
+        "TASK_QUEUE.md:120",
+        "TASK_QUEUE.md:125",
+        "TASK_QUEUE.md:133",
+        "AGENT_PLAN.md:164",
+        "Bounded ownership search: searched BASE_HEAD TASK_QUEUE.md for transfer-bench, split-offline, composite reader/reducer, kv-economics reducer, and split matrix extension; no command-level owner row was found."
+      ],
+      "finding": "The split-suite and KV-economics packs prescribe transfer-bench, split replay, composite validation/reduction, KV-economics reduction, and matrix-generation extensions that do not exist as currently owned queue work; the files explicitly state 'no current TASK_QUEUE row'. The detailed runbooks therefore outpace the executable orchestration plan for the next split/KV roadmap gate.",
+      "id": "D3-004",
+      "mission_tags": [
+        "M1"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "Phase-3 campaign packs \u2194 executable command surface",
+        "campaign design \u2194 queue ownership"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Agents encounter a stale restart instruction and must distinguish durable suite guidance from orphan proposals, adding authority and maintenance noise without current campaign payoff.",
+      "counterevidence": "The packet clearly labels itself draft and non-authorizing. checkpoint_metrics_spec.md and prompt_sequencing_spec.md do have external consumers and should remain; the issue is packet pruning/index repair, not deletion of the whole suite-next design record.",
+      "domain": "D3 campaign and workload orchestration",
+      "evidence_refs": [
+        "docs/specs/suite_next/README.md:3",
+        "docs/specs/suite_next/README.md:25",
+        "docs/specs/suite_next/README.md:48",
+        "docs/specs/suite_next/next_observer_spec.md:120",
+        "docs/specs/suite_next/instruction_tuning_spec.md:28",
+        "docs/specs/suite_next/instruction_tuning_spec.md:140",
+        "docs/specs/suite_next/decision_review_log.md:1",
+        "docs/specs/suite_next/decision_review_log.md:155",
+        "TASK_QUEUE.md:102",
+        "Bounded absence search: git grep at BASE_HEAD for next_observer_spec, instruction_tuning_spec, and decision_review_log outside docs/specs/suite_next/** returned no matches; equivalent searches found external references for checkpoint_metrics_spec and prompt_sequencing_spec."
+      ],
+      "finding": "The suite-next index still says RESUME-CP5 is the active P0 pause, while the pinned queue has moved on, and three draft files\u2014next_observer_spec.md, instruction_tuning_spec.md, and decision_review_log.md\u2014have no reference outside their own packet. The directory mixes used suite contracts with unqueued speculative surfaces.",
+      "id": "D3-005",
+      "mission_tags": [
+        "M2",
+        "M1"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "suite-next planning packet \u2194 current queue",
+        "draft specifications \u2194 maintained orchestration authority"
+      ],
+      "severity": "nit"
+    }
+  ],
+  "scan_id": "D3",
+  "scope_examined": [
+    "configs/campaigns/p2_015_smoke/production_shakedown/order_manifest.json",
+    "configs/campaigns/p2_015_smoke/production_shakedown/p2038_production_shakedown.json",
+    "configs/suite_manifests/affine_smoke_v1.json",
+    "configs/suite_manifests/affine_smoke_v1_annotations.json",
+    "configs/suite_manifests/jw_mixed_v1_qwen25_15b.json",
+    "configs/suite_manifests/jw_mixed_v1_qwen25_15b_annotations.json",
+    "configs/suite_manifests/jw_sentinel_v1_qwen25_15b.json",
+    "configs/suite_manifests/jw_sentinel_v1_qwen25_15b_annotations.json",
+    "configs/suite_manifests/mock_suite_manifest.json",
+    "docs/campaign_packs/README.md",
+    "docs/campaign_packs/c5_2_3_kv_economics.md",
+    "docs/campaign_packs/c5_2_7_device_perf_w_rankings.md",
+    "docs/campaign_packs/c5_2_8_placement_optimality.md",
+    "docs/campaign_packs/c5_3_1_3_5_replication.md",
+    "docs/campaign_packs/c5_i_1_i_2_i_5_import_family.md",
+    "docs/campaign_packs/c5_i_3_flores_fertility.md",
+    "docs/campaign_packs/c5_i_4_harness_overhead_floor.md",
+    "docs/campaign_packs/q6_c5_2_10_rail_vs_wall.md",
+    "docs/campaign_packs/split_suite_q1_q2_q3.md",
+    "docs/specs/suite_next/README.md",
+    "docs/specs/suite_next/checkpoint_metrics_spec.md",
+    "docs/specs/suite_next/decision_review_log.md",
+    "docs/specs/suite_next/instruction_tuning_spec.md",
+    "docs/specs/suite_next/next_observer_spec.md",
+    "docs/specs/suite_next/prompt_sequencing_spec.md",
+    "joulewise/gensuite/__init__.py",
+    "joulewise/suite.py",
+    "joulewise/workloads.py",
+    "scripts/gen_affine_smoke.py",
+    "scripts/gen_jw_mixed.py",
+    "scripts/generate_matrix.py",
+    "scripts/run_campaign.py"
+  ],
+  "uncertainties": [
+    "No campaign, hardware, quiet-machine measurement, or filesystem-writing test suite was run; this was a pinned-tree read-only review.",
+    "The intent behind currently unconsumed suite policy fields could not be established from the pinned tree; they may be reserved metadata, but no runtime consumer or queued extension was found.",
+    "Behavior outside the exact manifest was not generally audited; cross-boundary reading was limited to the verification follows named in checks_performed."
+  ]
+}

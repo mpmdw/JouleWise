@@ -1,0 +1,236 @@
+{
+  "checks_performed": [
+    "Read every manifest file in full from e3fc14a01ca047e779fa7924fdf128b25762d063 using line-numbered git show reads.",
+    "git rev-parse verified BASE_HEAD=e3fc14a01ca047e779fa7924fdf128b25762d063; current HEAD was ed933c13a4ab03529ca762c09e43cbfa4b4d2982.",
+    "git diff --name-only BASE_HEAD -- <all manifest paths> produced no paths, confirming the current copies of the manifest files match the pinned tree.",
+    "Bounded git grep across the manifest traced fixed_budget_exact/requested_tokens/emitted_tokens consumers, null-summary coverage, aggregate failure coverage, unknown-config handling, KeyboardInterrupt/BaseException handling, missing-idle tests, and salvage-write tests.",
+    "In-memory null-summary probe returned ordinary_problems=[], strict_problems=[], is_complete=false.",
+    "In-memory reducer probe without idle_baseline returned status=succeeded and energy_request_j=null; the shared summary checker returned 'summary status is succeeded but energy_request_j is not a finite number: None'.",
+    "In-memory MLX short-stream probe returned output_policy={name: fixed_budget_exact, requested_tokens: 64, emitted_tokens: 1, stop_condition: stop}; strict workload-provenance problems were empty.",
+    "In-memory powermetrics capture probe observed actions [read, unlink] and adapter capture/process state cleared before any bundle write.",
+    "In-memory controller secondary-failure probe observed OSError from output salvage escape execute(), with finish, trace salvage, and metadata salvage all uncalled.",
+    "In-memory controller interrupt probe observed KeyboardInterrupt escape execute(), with failure handler and finish both uncalled.",
+    "Final git status --short --branch returned only '## main...origin/main'; no writes were made."
+  ],
+  "exclusions": [],
+  "rows": [
+    {
+      "consequence": "A crash, interrupt, or raw-artifact write failure between capture deletion and bundle write irreversibly loses backend-native source evidence. The failure-path retry cannot recover it because _process, _capture_path, and clock state were already cleared. The same ordering exists for bounded idle captures, preventing post-hoc parser repair or re-reduction without rerunning hardware.",
+      "counterevidence": "On the ordinary success path the in-memory bytes are immediately written, and the bundle raw writer itself uses a temporary file plus replace. Parse failures occurring after a successful raw write retain the source artifact.",
+      "domain": "D2",
+      "evidence_refs": [
+        "joulewise/adapters/powermetrics.py:147-150",
+        "joulewise/adapters/powermetrics.py:251-280",
+        "joulewise/adapters/powermetrics.py:307-321",
+        "joulewise/adapters/powermetrics.py:512-529",
+        "joulewise/controller.py:674-680",
+        "joulewise/controller.py:691-731",
+        "joulewise/bundle.py:156-179",
+        "docs/contracts/run_bundle_layout.md:107-119",
+        "docs/contracts/run_bundle_layout.md:121-127",
+        "docs/contracts/measurement_methodology.md:6-18",
+        "behavior trace: mocked _take_measured_capture produced actions ['read', 'unlink'], returned the native bytes, and left adapter_capture_path=null and adapter_process=null before any bundle write"
+      ],
+      "finding": "The powermetrics adapter deletes its sole native capture and clears its recovery state before the run bundle has durably preserved the bytes.",
+      "id": "W1-001",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "telemetry-to-raw-bundle",
+        "failure-salvage",
+        "D1"
+      ],
+      "severity": "blocker"
+    },
+    {
+      "consequence": "The canonical validate-bundle flow can return success and print 'valid bundle' for an incomplete bundle whose completion marker is not a JSON object. This creates contradictory admission vocabulary at the completion/validation seam and can bless a non-reproducible artifact set.",
+      "counterevidence": "BundleReader.is_complete() returns false for this case, and missing, malformed-JSON, or non-null non-object summaries are otherwise rejected.",
+      "domain": "D1",
+      "evidence_refs": [
+        "joulewise/bundle_read.py:568-596",
+        "joulewise/bundle_read.py:1491-1534",
+        "joulewise/bundle_read.py:1635-1644",
+        "joulewise/bundle_read.py:298-308",
+        "joulewise/bundle_read.py:618-626",
+        "joulewise/cli.py:301-317",
+        "joulewise/cli.py:1260-1265",
+        "docs/contracts/run_bundle_layout.md:107-114",
+        "docs/contracts/run_bundle_layout.md:288-305",
+        "behavior trace: isolated virtual bundle with summary_metrics.json='null' returned ordinary_problems=[], strict_problems=[], is_complete=false",
+        "bounded absence search: grepped null-summary and non-object-summary cases across all manifest source/tests; tests cover status-only objects and generic non-object wording but no JSON-null summary"
+      ],
+      "finding": "A required summary_metrics.json containing valid JSON null passes both ordinary and strict bundle validation even though the same BundleReader correctly reports the bundle incomplete.",
+      "id": "W1-002",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "bundle-completion-to-validation",
+        "strict-validation"
+      ],
+      "severity": "blocker"
+    },
+    {
+      "consequence": "An early-EOS MLX run can finalize as succeeded and pass strict provenance admission while failing its prescribed output budget, invalidating fixed-budget comparability and downstream per-request or per-token claims.",
+      "counterevidence": "The mismatch remains visible in provenance and phase-event metadata. Suite items have an explicit fixed_budget_exact equality check and are marked malformed on underrun; the defect is confined to the single-workload path.",
+      "domain": "D2",
+      "evidence_refs": [
+        "joulewise/adapters/mlx_runtime.py:199-254",
+        "joulewise/adapters/mlx_runtime.py:680-697",
+        "joulewise/adapters/mlx_runtime.py:717-853",
+        "joulewise/adapters/mlx_runtime.py:1029-1037",
+        "joulewise/controller.py:500-550",
+        "joulewise/cli.py:496-615",
+        "joulewise/cli.py:703-755",
+        "joulewise/bundle_read.py:1110-1119",
+        "tests/test_controller.py:857-875",
+        "behavior trace: injected one-token MLX stream produced fixed_budget_exact requested_tokens=64, emitted_tokens=1, stop_condition='stop'; _strict_workload_provenance_problems returned []",
+        "bounded absence search: grepped fixed_budget_exact/requested_tokens/emitted_tokens across the complete manifest; equality enforcement was found for suite items but not the single-workload policy"
+      ],
+      "finding": "The single-prompt MLX path always records fixed_budget_exact even when EOS suppression is unavailable and generation emits fewer tokens than requested; neither the controller nor strict validation enforces requested_tokens == emitted_tokens for that path.",
+      "id": "W1-003",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "runtime-output-policy-to-controller",
+        "strict-validation-to-claim-admission",
+        "D1",
+        "D4"
+      ],
+      "severity": "blocker"
+    },
+    {
+      "consequence": "The canonical post-hoc reduction flow can overwrite a bundle's completion marker with a summary its own validator rejects while reporting successful reduction. This contradicts the documented structured-failure behavior for degenerate bundles and breaks reproducible reduction/admission.",
+      "counterevidence": "The normal controller lifecycle measures an idle baseline before reduction, and a subsequent validate-bundle invocation detects the invalid energy_request_j. The precheck also records idle_baseline_unrecorded, but that does not change the returned status.",
+      "domain": "D4",
+      "evidence_refs": [
+        "joulewise/reduce.py:137-151",
+        "joulewise/reduce.py:833-844",
+        "joulewise/reduce.py:865-902",
+        "joulewise/reduce.py:960-980",
+        "joulewise/reduce.py:688-691",
+        "joulewise/schemas.py:740-778",
+        "joulewise/bundle_read.py:1516-1526",
+        "joulewise/cli.py:1269-1296",
+        "docs/contracts/run_bundle_layout.md:288-305",
+        "behavior trace: _reduce over a valid positive window and two-point trace with metadata={} and idle_baseline=None returned status='succeeded', energy_request_j=None; _check_summary returned the finite-energy_request_j error",
+        "bounded absence search: grepped the manifest test set for missing-idle successful reduction and energy_request_j=None coverage; no matching regression test was found"
+      ],
+      "finding": "The reducer returns status=succeeded when idle_baseline is absent, even though this makes energy_request_j null and violates the shared succeeded-summary validity contract; the reduce CLI writes that summary and exits 0 based only on status.",
+      "id": "W1-004",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "reduction-to-summary-schema",
+        "reduce-cli-to-validation",
+        "D1"
+      ],
+      "severity": "blocker"
+    },
+    {
+      "consequence": "An operator interrupt during a measured run can leave telemetry or runtime resources active and native evidence outside the bundle. Separately, one failed output salvage can prevent available trace, metadata, logs, events, and failure-summary evidence from being preserved.",
+      "counterevidence": "Structured failures and ordinary Exceptions are handled, best-effort telemetry/runtime cleanup exists inside that handler, and an unfinalized bundle remains detectably incomplete. Fatal process termination such as SIGKILL cannot be repaired in-process.",
+      "domain": "D1",
+      "evidence_refs": [
+        "joulewise/controller.py:173-182",
+        "joulewise/controller.py:322-345",
+        "joulewise/controller.py:462-478",
+        "joulewise/controller.py:661-689",
+        "joulewise/controller.py:691-752",
+        "joulewise/controller.py:757-780",
+        "joulewise/controller.py:1082-1095",
+        "joulewise/interfaces.py:85-92",
+        "tests/test_experiment.py:251-279",
+        "tests/test_experiment.py:453-473",
+        "behavior trace: injected KeyboardInterrupt escaped execute(); failure_handler_called=false and finish_called=false",
+        "behavior trace: injected primary lifecycle ValueError followed by OSError in _write_outputs; the OSError escaped, finish_called=false, trace_salvage_called=false, metadata_salvage_called=false",
+        "bounded absence search: grepped KeyboardInterrupt/BaseException across the manifest; only a prepare-stage experiment interruption is tested, with no active-sampling cleanup assertion",
+        "bounded absence search: grepped manifest tests for salvage-write exception injection; no coverage was found"
+      ],
+      "finding": "The controller lacks an outer cleanup/finalization boundary: KeyboardInterrupt and other BaseException exits bypass all cleanup, while an exception in any failure-salvage write aborts the remaining independent salvage steps and finalization.",
+      "id": "W1-005",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "controller-to-adapters",
+        "failure-salvage-to-finalization",
+        "W1-001"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "An aggregation exception or interrupt in this window leaves a complete member absent from the experiment manifest. The CLI also emits no per-bundle receipt because it waits for run_experiment to return, impairing evidence discovery and campaign resumption.",
+      "counterevidence": "The completed member bundle remains intact and can be recovered by directory scan; manifests committed for earlier repetitions remain valid, and aggregation is reconstructable from listed member bundles.",
+      "domain": "D3",
+      "evidence_refs": [
+        "joulewise/controller.py:1320-1329",
+        "joulewise/controller.py:1366-1387",
+        "joulewise/cli.py:249-273",
+        "tests/test_experiment.py:406-440",
+        "tests/test_experiment.py:443-473",
+        "bounded absence search: grepped aggregate_experiment and manifest-write ordering across the complete manifest; no aggregate exception/failure-injection test was found"
+      ],
+      "finding": "The experiment runner computes the aggregate after a member bundle completes but before committing that member to the incremental manifest, contrary to its every-completed-rep durability guarantee.",
+      "id": "W1-006",
+      "mission_tags": [
+        "M3"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "member-bundle-to-experiment-manifest",
+        "W2"
+      ],
+      "severity": "should-fix"
+    }
+  ],
+  "scan_id": "W1",
+  "scope_examined": [
+    "AGENTS.md",
+    "docs/reviews/2026-07-13-comprehensive-audit/report.md",
+    "joulewise/cli.py",
+    "joulewise/controller.py",
+    "joulewise/clock.py",
+    "joulewise/bundle.py",
+    "joulewise/bundle_read.py",
+    "joulewise/schemas.py",
+    "joulewise/validation.py",
+    "joulewise/provenance.py",
+    "joulewise/environment.py",
+    "joulewise/reduce.py",
+    "joulewise/interfaces.py",
+    "joulewise/adapters/__init__.py",
+    "joulewise/adapters/local_transport.py",
+    "joulewise/adapters/mock_runtime.py",
+    "joulewise/adapters/mock_telemetry.py",
+    "joulewise/adapters/mlx_runtime.py",
+    "joulewise/adapters/powermetrics.py",
+    "configs/examples/mac_mlx_local.json",
+    "configs/examples/mac_mlx_mock_telemetry.json",
+    "configs/examples/mac_mlx_qwen35_122b.json",
+    "configs/examples/mock_affine_smoke.json",
+    "configs/examples/mock_local.json",
+    "configs/examples/mock_suite_local.json",
+    "docs/contracts/run_bundle_layout.md",
+    "docs/contracts/measurement_methodology.md",
+    "tests/test_cli_run.py",
+    "tests/test_controller.py",
+    "tests/test_experiment.py",
+    "tests/test_corpus_strict_validation.py",
+    "tests/test_audit_bundle_validation.py"
+  ],
+  "uncertainties": [
+    "No live powermetrics, MLX, sensor, quiet-machine, NVIDIA/Orin, remote-node, or signal/process integration run was performed.",
+    "The unit suite was not executed because this delegated review had a read-only filesystem; manifest tests that create temporary bundles or inspect the out-of-scope retained corpus were read but not run.",
+    "No post-pin source changes or source outside the exact manifest were line-reviewed. Python probes necessarily loaded transitive imports, but no finding relies on their internal implementation.",
+    "Filesystem-crash and power-loss likelihood was not measured; the reported loss and salvage windows are deterministic conditional paths established by control-flow and in-memory probes."
+  ]
+}

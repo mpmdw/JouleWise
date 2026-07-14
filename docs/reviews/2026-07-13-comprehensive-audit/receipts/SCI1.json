@@ -1,0 +1,193 @@
+{
+  "checks_performed": [
+    "Read all 62 manifest blobs from BASE_HEAD e3fc14a01ca047e779fa7924fdf128b25762d063 and generated a line-count/SHA-256 inventory; result: 62/62 present and readable.",
+    "Ran a manifest-wide bounded search for units, energy, power, timestamps, clocks, elapsed time, cadence, integration, idle, tokens, denominators, phases, boundaries, alignment, missingness, exclusions, eligibility, nonfinite values, and frequency units; reviewed every match in the measurement/reduction domain.",
+    "Read the frozen audit charter and bridge envelope contract as procedural authority; followed scripts/make_figures.py:144-180 across the manifest boundary only to verify that the report path performs strict bundle gating before aggregation.",
+    "Enumerated retained runs and deeply sampled real powermetrics bundle runs/example-mac-mlx-qwen35-122b-512t__r1: 101 workload records, 300 idle records, measured window [1783425230.03357, 1783425241.3545501] or 11.320980072021484 s, output-token count 512, total-token count 528.",
+    "Ran strict validation and fresh reduction on the sampled bundle; result: 0 strict problems, gross_energy_j 303.5348361749604, idle_subtracted_energy_j 299.27523049207525, energy_output_token_j 0.5845219345548345, energy_token_j 0.5668091486592335.",
+    "Independently integrated each raw powermetrics interval over its overlap with the measured window using elapsed_ns support; result: 305.0542010720239 J from power\u00d7time and 305.0542424426875 J from proportionally clipped raw energy counters, versus reducer gross 303.5348361749604 J.",
+    "Cross-checked raw workload records individually: sum(power_w\u00d7elapsed_s)=306.39695773297353 J, sum(raw rail energy counters)=306.397 J, maximum per-record absolute discrepancy 5.8727289697912965e-06 J.",
+    "Recomputed the sampled idle mean: arithmetic 0.3762576787333333 W versus elapsed-time-weighted 0.3759779926588599 W; resulting full reduction difference was 1.52253121753904 J after combining integration and idle-mean effects.",
+    "Verified the sampled denominators arithmetically: 299.27523049207525/512=0.5845219345548345 J/output-token and 299.27523049207525/528=0.5668091486592335 J/total-token.",
+    "Executed an in-memory phase-marker behavior trace with decode starts at 1.0 and 3.0 s, an unmatched prefill end at 2.0 s, and one decode end at 4.0 s; BundleReader.phase_windows returned one decode window [1.0,4.0] and silently discarded the second start.",
+    "Grepped bundle_read.py, reduce.py, cli.py, the scoped tests, and the run-bundle contract for unmatched/unpaired phase validation; found no generic balance validator beyond phase_windows pairing, while _check_events validates shape, finite/nondecreasing timestamps, and finalization only.",
+    "Ran the closing scope audit: no repository writes were made; HEAD differed from BASE_HEAD only by the audit's post-pin artifacts."
+  ],
+  "exclusions": [],
+  "rows": [
+    {
+      "consequence": "Gross, phase, idle-subtracted, and per-token energy point estimates can be systematically biased. In the retained real bundle the reducer under-reports measured-window gross energy by 1.5193648970634968 J, or 0.4980639151088995%, and the combined idle-subtracted discrepancy is 1.52253121753904 J. The same unmodelled interior-transition error can alter small campaign contrasts and invalidate claim ordering; scaling the canonical reducer to more dynamic or split-node phases is unsafe without resolving the estimand.",
+      "counterevidence": "The immutable raw plists retain elapsed_ns and rail-energy counters, so affected bundles are recoverable without rerunning hardware. The sampled legacy bundle is fail-closed for present claim eligibility because clock, cadence, interpolation, and drift evidence are missing. Current-era reducers also compute edge-shift bounds, but those bounds concern window-edge alignment and do not explicitly cover accumulated interior interval-average-to-point interpolation error.",
+      "domain": "D4",
+      "evidence_refs": [
+        "docs/specs/c027/p2-038_production_uncertainty_evidence.md:51-56,212-234 defines each record as an interval average with endpoint timestamp and support [endpoint-elapsed_ns, endpoint].",
+        "joulewise/adapters/powermetrics.py:699-705,749-821 preserves elapsed_ns and raw rail energy while constructing endpoint timestamps.",
+        "joulewise/adapters/powermetrics.py:947-959 converts records to PowerSample objects containing only endpoint timestamp and power, dropping interval support and energy-counter fields.",
+        "joulewise/reduce.py:14-26,92-126,894-900 defines a piecewise-linear point curve and trapezoidal integration for gross and idle-subtracted energy.",
+        "Behavior trace on runs/example-mac-mlx-qwen35-122b-512t__r1: support-overlap power\u00d7time=305.0542010720239 J; support-overlap counter-scaled energy=305.0542424426875 J; reducer gross=303.5348361749604 J; delta=-1.5193648970634968 J (-0.4980639151088995%).",
+        "Raw-counter cross-check command result: 101 records; sum(power\u00d7elapsed)=306.39695773297353 J; sum rail-energy counters=306.397 J; maximum record discrepancy=5.8727289697912965e-06 J.",
+        "Strict validation plus fresh reduction result: 0 problems and exact reproduction of the stored 303.5348361749604 J point estimate."
+      ],
+      "finding": "The canonical reducer treats powermetrics interval-average observations as instantaneous endpoint samples and trapezoidally interpolates between them, although elapsed_ns and raw per-interval energy counters define rectangular averaging supports. This applies the physical response approximately one half-interval late at internal transitions and is a different estimand from the energy recorded by the sensor.",
+      "id": "SCI1-001",
+      "mission_tags": [
+        "SCI"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "powermetrics adapter\u2192power trace",
+        "power trace\u2192reducer",
+        "reducer\u2192analysis"
+      ],
+      "severity": "blocker"
+    },
+    {
+      "consequence": "Idle subtraction uses a baseline that is biased whenever record duration correlates with power. The uncertainty machinery is centered on the same arithmetic estimand, so it does not expose this bias. The sampled effect is small, but no bound limits it for other captures that still pass the allowed cadence-ratio threshold.",
+      "counterevidence": "The sampled capture had tight cadence and the difference was only 0.00027968607447342864 W, about 0.003166 J over its workload window. The idle-dependence gate fails closed when p95/p05 cadence exceeds 1.25, and the raw elapsed_ns values permit retrospective correction.",
+      "domain": "D4",
+      "evidence_refs": [
+        "joulewise/adapters/powermetrics.py:145-176 computes duration from sum(elapsed_ns) but power_w_mean and power_w_stddev from equally weighted totals.",
+        "joulewise/idle_dependence.py:156-210 reads both powers and elapsed intervals, then cross-checks metadata against the unweighted arithmetic mean.",
+        "docs/contracts/run_bundle_layout.md:396-427 explicitly freezes arithmetic samples/mean while using elapsed_ns only for cadence and total duration.",
+        "Behavior trace on runs/example-mac-mlx-qwen35-122b-512t__r1/raw/powermetrics_idle.plist: n=300; arithmetic mean=0.3762576787333333 W; elapsed-weighted mean=0.3759779926588599 W; delta=0.00027968607447342864 W."
+      ],
+      "finding": "Idle power is frozen as the unweighted arithmetic mean of interval-average powermetrics records even though record durations vary and are available as elapsed_ns. The idle dependence estimator deliberately reproduces that arithmetic mean rather than estimating the physical time-average power over the capture.",
+      "id": "SCI1-002",
+      "mission_tags": [
+        "SCI"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "idle capture\u2192baseline metadata",
+        "idle baseline\u2192subtraction",
+        "idle trace\u2192uncertainty"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Phase energy and phase-level eligibility can cover the wrong interval, and decode token filtering can admit events from an unintended span. The missingness is not recorded as a reason, so a malformed composite, repeated, or future split-node phase sequence can produce apparently valid phase evidence.",
+      "counterevidence": "The nominal MLX success path emits balanced prefill/decode markers and the controller tests assert that normal ordering. Gross request energy uses the separately validated measured_run sampling window, so this defect is localized to runtime phase energy, phase claims, and decode-token windowing unless malformed markers also affect higher-level consumers.",
+      "domain": "D4",
+      "evidence_refs": [
+        "docs/contracts/run_bundle_layout.md:159-171 requires output tokens to fall inside decode windows and describes phase windows as paired phase_start/phase_end records.",
+        "joulewise/bundle_read.py:379-402 silently continues on an unmatched end and returns without checking leftover starts.",
+        "joulewise/bundle_read.py:404-418 uses those windows to filter decode token timestamps.",
+        "joulewise/reduce.py:921-923,1069-1101 derives phase energy and identifiability from the returned windows.",
+        "joulewise/bundle_read.py:1585-1632 validates event shape, finite/nondecreasing timestamps, and final run_finalized only; it contains no phase-balance validation.",
+        "Executed behavior trace: decode starts at 1.0 and 3.0 s plus one decode end at 4.0 s returned {'decode': [Window(start_s=1.0, end_s=4.0)]}; the second start and unmatched prefill end produced no diagnostic.",
+        "Bounded absence search: grepped phase_start, phase_end, phase_windows, unmatched, unpaired, and missing-phase terms across bundle_read.py, reduce.py, cli.py and all five scoped test files; found nominal marker assertions but no generic balance validator or malformed-pair test."
+      ],
+      "finding": "Generic phase-marker missingness fails open: phase_windows pairs starts and ends FIFO by phase name, silently ignores unmatched ends and leftover starts, and strict event validation does not require balanced or non-overlapping phase pairs. A missing first end followed by another start can therefore create one oversized window rather than an explicit exclusion or failed run.",
+      "id": "SCI1-003",
+      "mission_tags": [
+        "SCI"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "runtime events\u2192bundle validation",
+        "event pairing\u2192phase reduction",
+        "phase windows\u2192token attribution"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "A consumer interpreting the schema literally introduces a factor-of-1,000,000 unit error. Internal idle-contamination decisions remain numerically consistent today, but exports, future backends, and cross-node comparisons can silently mix Hz and MHz.",
+      "counterevidence": "The run-bundle contract and adapter comments explicitly warn that Apple reports these values in MHz, and the active threshold is named IDLE_GPU_FREQ_MEAN_MHZ_THRESHOLD, so the current contamination gate compares like units. The rich artifact is derived and regenerable from raw evidence.",
+      "domain": "D4",
+      "evidence_refs": [
+        "docs/contracts/run_bundle_layout.md:129-142 states that Apple GPU freq_hz values are observed in MHz while cluster/core freq_hz values are in Hz.",
+        "joulewise/adapters/powermetrics.py:55-64 defines an 800.0 MHz threshold and endpoint timing semantics.",
+        "joulewise/adapters/powermetrics.py:891-943 reads gpu.freq_hz values as MHz, compares their mean with the MHz threshold, then returns the value as gpu_freq_hz_mean.",
+        "joulewise/adapters/powermetrics.py:989-1001 explicitly acknowledges the MHz/Hz discrepancy but preserves the native value under freq_hz.",
+        "joulewise/schemas.py:619-629,833-851 serializes the nullable field as gpu_freq_hz_mean without unit qualification or conversion."
+      ],
+      "finding": "Apple GPU frequency values known to be in MHz are serialized and exposed through fields named freq_hz and gpu_freq_hz_mean without conversion. The contamination threshold is correctly named and calibrated in MHz, but the persisted field contract advertises Hz.",
+      "id": "SCI1-004",
+      "mission_tags": [
+        "SCI"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "powermetrics native units\u2192rich telemetry",
+        "rich telemetry\u2192idle quality",
+        "idle quality\u2192serialized schema"
+      ],
+      "severity": "should-fix"
+    }
+  ],
+  "scan_id": "SCI1",
+  "scope_examined": [
+    "configs/analysis_registry/slice_2m_ap2.v1.json",
+    "configs/calibration/p2_046_load_transition/manifest.json",
+    "configs/examples/mac_mlx_local.json",
+    "configs/examples/mac_mlx_mock_telemetry.json",
+    "configs/examples/mac_mlx_qwen35_122b.json",
+    "configs/examples/mock_affine_smoke.json",
+    "configs/examples/mock_local.json",
+    "configs/examples/mock_suite_local.json",
+    "docs/contracts/analysis_plans.md",
+    "docs/contracts/claims_ladder.md",
+    "docs/contracts/load_transition_alignment.md",
+    "docs/contracts/measurement_methodology.md",
+    "docs/contracts/run_bundle_layout.md",
+    "docs/contracts/token_normalization.md",
+    "docs/specs/c027/analysis_engine_trio.md",
+    "docs/specs/c027/p2-038_production_uncertainty_evidence.md",
+    "docs/specs/c027/p2-039_floor_artifact.md",
+    "docs/specs/c027/p2-040_reducer_gate_correctness.md",
+    "docs/specs/c027/split-ap_ap-edit_amendments.md",
+    "docs/specs/rq_energy_variance_design.md",
+    "joulewise/adapters/__init__.py",
+    "joulewise/adapters/local_transport.py",
+    "joulewise/adapters/mlx_runtime.py",
+    "joulewise/adapters/mock_runtime.py",
+    "joulewise/adapters/mock_telemetry.py",
+    "joulewise/adapters/powermetrics.py",
+    "joulewise/aggregate.py",
+    "joulewise/analysis_engine/__init__.py",
+    "joulewise/analysis_engine/artifact.py",
+    "joulewise/analysis_engine/claims.py",
+    "joulewise/analysis_engine/distributions.py",
+    "joulewise/analysis_engine/estimators.py",
+    "joulewise/analysis_engine/inputs.py",
+    "joulewise/analysis_engine/multiplicity.py",
+    "joulewise/analysis_engine/ratio.py",
+    "joulewise/analysis_engine/sensitivity.py",
+    "joulewise/analysis_manifest.py",
+    "joulewise/bundle_read.py",
+    "joulewise/bundle.py",
+    "joulewise/cli.py",
+    "joulewise/clock.py",
+    "joulewise/controller.py",
+    "joulewise/detection_floor.py",
+    "joulewise/determinism_gate.py",
+    "joulewise/envelope_gate.py",
+    "joulewise/environment.py",
+    "joulewise/idle_dependence.py",
+    "joulewise/interfaces.py",
+    "joulewise/kv_size.py",
+    "joulewise/load_transition_alignment.py",
+    "joulewise/provenance.py",
+    "joulewise/reduce.py",
+    "joulewise/schemas.py",
+    "joulewise/uncertainty_evidence.py",
+    "joulewise/validation.py",
+    "scripts/characterize_load_transition.py",
+    "scripts/claims_lint.py",
+    "tests/test_audit_bundle_validation.py",
+    "tests/test_cli_run.py",
+    "tests/test_controller.py",
+    "tests/test_corpus_strict_validation.py",
+    "tests/test_experiment.py",
+    "runs/example-mac-mlx-qwen35-122b-512t__r1/**"
+  ],
+  "uncertainties": [
+    "No live hardware or wall-meter comparison was performed; sensor truth, quiet-machine behavior, and absolute powermetrics accuracy remain unverified.",
+    "The deeply traced retained bundle is an allowlisted legacy bundle without current-era clock bounds, interpolation bounds, drift evidence, tokenizer identity, or token-normalization provenance. Current-era empirical behavior was assessed from pinned code/contracts, not a retained current-era real capture.",
+    "Only one of the six retained real bundles was independently re-integrated; the remaining five were not numerically replayed.",
+    "The statistical estimators, multiplicity procedures, and inferential claim logic were not examined beyond their consumption of measurement/reduction outputs because those belong to SCI2.",
+    "No live NVIDIA, Orin, remote, or multi-node bundle exists in this scan evidence; future-backend effects were assessed only from interfaces and contracts.",
+    "The full unittest suite was not executed; scoped tests were read and targeted reducer, validator, raw-record, and phase-pairing behavior was executed directly.",
+    "Outside-manifest consumers were not generally audited; only the bounded scripts/make_figures.py strict-gate trace was followed."
+  ]
+}
