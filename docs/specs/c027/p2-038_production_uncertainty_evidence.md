@@ -68,6 +68,80 @@ Failure to obtain a valid clock or drift bound does not change an otherwise succ
 
 The P2-015-SMOKE shakedown is stricter: it fails unless all required evidence is bounded and the request gate is eligible.
 
+### 2.6 WO-005 frozen interval estimand and duration-weighted idle contract
+
+This section is the pre-implementation semantic freeze required by C2-024 and
+the T07/SF amendment. It supersedes the arithmetic-idle and endpoint-point
+integration rules for newly reduced summaries only. The six exact pre-D-033
+legacy identities and every recorded pre-0.5 reducer arm retain their frozen
+strict-validation behavior; no historical summary is silently recomputed.
+
+Reducer `0.5.0` treats every powermetrics record as an interval-average
+observation. For record `i`, let `d_i = elapsed_ns_i / 1e9`, endpoint `t_i`,
+summed CPU+GPU+ANE power `x_i`, and support
+`S_i = [t_i - d_i, t_i)`. The final endpoint may be regarded as closed; that
+measure-zero convention cannot change energy. `power_trace.csv` serializes
+both support edges on every powermetrics rail row. Point-sample backends retain
+their existing point/trapezoid semantics; a trace may not mix supported and
+unsupported rows.
+
+For any reducer window `W = [a,b]`, the powermetrics energy estimand is
+
+`E(W) = fsum(x_i * max(0, min(b,t_i) - max(a,t_i-d_i)))`.
+
+Thus a partial first or last interval contributes only its overlap duration.
+No whole-interval assignment, endpoint interpolation, extrapolation, or
+renormalization is permitted. Phase, item, block, level, suite, and gross
+request energy all call this same primitive. A supported observation counts as
+in-window when its overlap duration is positive. Time outside the union of
+recorded supports contributes no invented energy: it is neither extrapolated
+nor gap-filled. Existing clock/cadence evidence gates determine whether that
+bounded observed-support estimand is claim-eligible.
+
+Raw `rail_energy_mj` remains an independent consistency witness rather than a
+second selectable estimand. For each complete record, summed
+`power_w * d_i` and summed counter joules must agree within `1e-5 J`; retained
+corpus comparison receipts report both proportionally clipped totals, but the
+serialized power-times-overlap result above is the single authoritative
+reducer reference.
+
+The idle point estimand and its uncertainty use one duration-weighted system.
+Define normalized weights `a_i = d_i / D`, `D = fsum(d_i)`, weighted mean
+`mu = fsum(a_i*x_i)`, `q = fsum(a_i*a_i)`, Kish exposure count
+`n_K = 1/q`, centered values `e_i = x_i-mu`, and reliability-weighted sample
+variance
+
+`s_w^2 = fsum(a_i*e_i^2) / (1-q)`.
+
+For `H = 10 s` and `L = floor(H / median(d_i))`, the duration-weighted
+Bartlett/Newey-West terms are
+
+`v_iid = s_w^2 * q`
+
+`v_HAC = fsum(a_i^2*e_i^2) + 2*fsum((1-k/(L+1)) * fsum(a_i*a_(i-k)*e_i*e_(i-k), i=k..n-1), k=1..L)`
+
+`v_governed = max(v_iid, v_HAC)`
+
+`ESS = clamp(s_w^2 / v_governed, 1, n_K)`.
+
+For a constant trace all variance terms are zero and `ESS = n_K`. Equal
+durations reduce algebraically to the frozen v1 formulas. The method ID is
+`duration_weighted_newey_west_bartlett_10s_iid_floor_v2`. The existing 10 s
+bandwidth, median-duration lag conversion, three-bandwidth minimum,
+type-7 p95/p05 cadence ratio limit of 1.25, no-resampling/no-trimming rules,
+physical-backend policy, correlation scope, reason vocabulary, and
+`E_idle_mean_j2 = measured_duration_s^2 * v_governed` propagation remain
+unchanged.
+
+Powermetrics idle capture metadata records `mu` as `power_w_mean`,
+`sqrt(s_w^2)` as `power_w_stddev`, `D` as `duration_s`, and raw record count as
+`sample_count`. Raw/metadata cross-checking recomputes those exact four
+quantities from `raw/powermetrics_idle.plist`: count is exact and numeric fields
+use `rel_tol=1e-9`, `abs_tol=1e-12`. Any mismatch emits the existing
+`idle_metadata_mismatch`, withholds all governed variance and ESS values, and
+makes strict validation fail. Metadata never overrides raw durations, weights,
+variance, or ESS.
+
 ## 3. Unit 1 — Paired controller clock observations
 
 ### 3.1 File and function targets
@@ -508,9 +582,14 @@ Allowed reasons are local provenance vocabulary, not additions to D-057’s redu
 - `calibration_cell_missing`
 - `calibration_artifact_invalid`
 
-### 7.3 No config or summary schema expansion
+### 7.3 Original P2-038 schema boundary
 
 P2-038 adds no `BenchmarkConfig` field and does not alter config hashes.
+
+WO-005 later supersedes only the trace and reducer-version parts of this
+boundary as frozen in §2.6: powermetrics traces add interval support columns,
+and reducer 0.5.0 changes the governed idle method/object. It still adds no
+configuration field and does not alter config hashes.
 
 The existing summary fields are sufficient. `clock_anchor_bound_s` continues to appear inside each claim-eligibility entry through the reducer’s existing output. The new phase components remain metadata provenance.
 
