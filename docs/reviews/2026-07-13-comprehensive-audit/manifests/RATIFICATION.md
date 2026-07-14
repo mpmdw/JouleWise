@@ -11,3 +11,7 @@
 4. docs/research_question_bank.md + registry.md: D7 (+W5) RATIFIED — live
    governance registries.
 Invariant after edits: census 443 = domains 276 + excluded 167.
+
+Addendum (Batch 1 relaunch): SCI cells have no Batch-0 manifests by design;
+lead ratified SCI1 scope = W1 ∪ D4 (manifests/SCI1.txt) and SCI2 scope =
+the driver-assembled D4 ∪ W2-oracle-tests ∪ RPT-001 targets (in its prompt).
