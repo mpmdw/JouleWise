@@ -50,7 +50,7 @@ VERIFICATION_STATUSES = {"UNVERIFIED_BY_SESSION", "VERIFIED_AGAINST_PRIMARY"}
 
 REGEN_COMMAND = (
     "python3 scripts/build_capstone.py --profile rpt001 --full --offline "
-    "--runs-root /Users/edr/code/JouleWise/runs"
+    "--runs-root runs"
 )
 
 # This report-text scan is only a tripwire; claims_lint phase4 is the gate of record.
@@ -302,7 +302,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--profile", default="rpt001")
     ap.add_argument("--check", action="store_true",
-                    help="Compare regenerated outputs against committed/built files; exit 2 on drift.")
+                    help="Compare regenerated outputs against tracked sources; exit 2 on drift.")
     ap.add_argument("--full", action="store_true",
                     help="Regenerate analysis, lint claims, verify hashes, then assemble.")
     ap.add_argument("--offline", action="store_true",
@@ -324,10 +324,9 @@ def main() -> int:
         drift = []
         if not gen_path.is_file() or gen_path.read_text(encoding="utf-8") != results_page:
             drift.append(str(gen_path.relative_to(REPO_ROOT)))
-        out_path = REPO_ROOT / "build" / "capstone" / "rpt001" / "report.md"
-        assembled = assemble(profile)
-        if not out_path.is_file() or out_path.read_text(encoding="utf-8") != assembled:
-            drift.append("build/capstone/rpt001/report.md")
+        # Validate assembly from tracked source without treating the untracked
+        # build product as a reference. This keeps --check clean-clone safe.
+        assemble(profile)
         if drift:
             print(f"build_capstone: DRIFT in {drift[0]}", file=sys.stderr)
             return 2

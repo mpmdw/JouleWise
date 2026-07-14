@@ -13,6 +13,7 @@ import importlib.util
 import json
 import shutil
 import statistics
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -29,7 +30,7 @@ REPO = Path(__file__).resolve().parent.parent
 ANALYSIS = REPO / "analysis" / "rpt001-v2"
 SEALED_ANALYSIS = REPO / "analysis" / "rpt001-v1"
 LEGACY_LABEL = "legacy L1 (manual review; pre-2M)"
-RUNS = Path("/Users/edr/code/JouleWise/runs")
+RUNS = REPO / "runs"
 
 
 def load_script(name: str, filename: str):
@@ -75,6 +76,11 @@ class TestRpt001Artifacts(unittest.TestCase):
         self.assertEqual(make_figures.ARTIFACT_VERSION, "rpt001-v2")
         self.assertEqual(build_capstone.ANALYSIS, ANALYSIS)
         self.assertIn("figures/rpt001-v2/", build_capstone.FIGURE_REL)
+        self.assertEqual(
+            build_capstone.REGEN_COMMAND,
+            "python3 scripts/build_capstone.py --profile rpt001 --full --offline "
+            "--runs-root runs",
+        )
         self.assertEqual(
             claims_lint.DEFAULT_CLAIMS_INDEX_PATH,
             Path("analysis/rpt001-v2/claims_index.jsonl"),
@@ -378,6 +384,72 @@ class TestRpt001Artifacts(unittest.TestCase):
         self.assertNotIn("values remain explicitly tokenizer-unknown", page)
         for forbidden in ("more efficient", "less efficient", "scales with model size"):
             self.assertNotIn(forbidden, page.lower())
+
+    def test_source_only_check_passes_with_tracked_files_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clone = Path(tmp) / "clone"
+            tracked = subprocess.run(
+                [
+                    "git", "ls-files", "-z", "--",
+                    "scripts/build_capstone.py",
+                    "analysis/rpt001-v2",
+                    "figures/rpt001-v2",
+                    "docs/report_src",
+                ],
+                cwd=REPO,
+                check=True,
+                capture_output=True,
+            ).stdout.split(b"\0")
+            for encoded in tracked:
+                if not encoded:
+                    continue
+                relative = Path(encoded.decode("utf-8"))
+                target = clone / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(REPO / relative, target)
+
+            self.assertFalse((clone / "runs").exists())
+            self.assertFalse((clone / "build").exists())
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/build_capstone.py",
+                    "--profile", "rpt001",
+                    "--offline",
+                    "--check",
+                ],
+                cwd=clone,
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertIn("check OK (no drift)", completed.stdout)
+            self.assertFalse((clone / "runs").exists())
+            self.assertFalse((clone / "build").exists())
+
+            generated = clone / "docs/report_src/generated/rpt001_vertical_slice.md"
+            generated.write_text(
+                generated.read_text(encoding="utf-8") + "drift\n",
+                encoding="utf-8",
+            )
+            drifted = subprocess.run(
+                [
+                    sys.executable,
+                    "scripts/build_capstone.py",
+                    "--profile", "rpt001",
+                    "--offline",
+                    "--check",
+                ],
+                cwd=clone,
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(drifted.returncode, 2, drifted.stderr)
+            self.assertIn(
+                "DRIFT in docs/report_src/generated/rpt001_vertical_slice.md",
+                drifted.stderr,
+            )
 
 
 if __name__ == "__main__":

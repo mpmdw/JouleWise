@@ -14,7 +14,7 @@ Full regeneration (requires the local bundle corpus; ~110 MB, not in Git):
 
 ```sh
 python3 scripts/build_capstone.py --profile rpt001 --full --offline \
-  --runs-root /Users/edr/code/JouleWise/runs
+  --runs-root runs
 ```
 
 ## Publication privacy boundary (REPRO-002)

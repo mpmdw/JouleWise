@@ -24,21 +24,23 @@ claims-index row, the generated results page, and the assembled report:
 
 ```sh
 python3 scripts/build_capstone.py --profile rpt001 --full --offline \
-  --runs-root /Users/edr/code/JouleWise/runs
+  --runs-root runs
 ```
 
 Requires the six pinned legacy bundles under `runs/` (local-only, ~110 MB,
 gitignored). The assembled document lands at
-`build/capstone/rpt001/report.md` (untracked). `--check` compares
-regenerated output against the committed generated page and exits 2 on
-drift. If your bundle corpus lives elsewhere, pass that path to
-`--runs-root`; committed artifacts always store repo-relative paths.
+`build/capstone/rpt001/report.md` (untracked). Source-only `--check`
+regenerates from tracked analysis and report sources, compares the committed
+generated page, validates assembly in memory, and exits 2 on drift. It neither
+requires `runs/` nor uses the untracked assembled document as a reference. If
+your bundle corpus lives elsewhere, pass that path to `--runs-root`; committed
+artifacts always store repo-relative paths.
 
 To re-pin input hashes after an intentional corpus change (this is a
 versioning event — see the spec's rpt001-v2 rule):
 
 ```sh
-python3 scripts/make_figures.py --runs-root /Users/edr/code/JouleWise/runs \
+python3 scripts/make_figures.py --runs-root runs \
   --bootstrap-input-manifest
 ```
 

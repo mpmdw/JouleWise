@@ -1007,6 +1007,11 @@ python3 scripts/build_capstone.py \
   --check
 ```
 
+`--check` is source-only: it regenerates the committed report projection from
+tracked analysis and report sources, compares that tracked projection, and
+validates full-report assembly in memory. It does not require `runs/` and does
+not compare against the untracked `build/capstone/rpt001/report.md` product.
+
 Hosted-CI offline build:
 
 ```sh

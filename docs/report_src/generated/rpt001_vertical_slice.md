@@ -65,7 +65,7 @@ Claims row: `CLM-RPT001-LEGACY-L1-001` in `analysis/rpt001-v2/claims_index.jsonl
 ### Regeneration
 
 ```sh
-python3 scripts/build_capstone.py --profile rpt001 --full --offline --runs-root /Users/edr/code/JouleWise/runs
+python3 scripts/build_capstone.py --profile rpt001 --full --offline --runs-root runs
 ```
 
 Artifact hashes: `analysis/rpt001-v2/artifact_manifest.json`.
