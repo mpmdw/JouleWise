@@ -3,6 +3,36 @@
 Living cross-phase contract, drafted in Phase 1. Run bundles are the
 durable artifact for every benchmark execution.
 
+## Version And Realized-Output Compatibility
+
+The WO-003 realized-output enforcement is an additive interpretation of
+bundle schema `0.1`; it does not rewrite or mint a replacement version of any
+sealed bundle. For current single-prompt bundles, the existing
+`metadata.workload_provenance.output_policy.{requested_tokens,emitted_tokens,
+stop_condition}` fields are the realized-output record and must agree with
+`metadata.workload_observed.output_token_count`, decode token events,
+`outputs/tokens.jsonl`, and emitted token IDs when the fixed-budget runtime
+exposes them. `name: "fixed_budget_exact"` is evidence-bearing and is valid
+only when the requested count was emitted with
+`stop_condition: "requested_tokens_emitted"`; an MLX underrun is recorded in
+the same object as `name: "fixed_budget_incomplete"` with its realized stop.
+
+For sealed and current suite bundles, each existing
+`outputs/suite_items.jsonl` line together with its paired `item_start` and
+`item_end` markers is the realized-output evidence of record. Readers preserve
+the ordered per-item statuses, requested/emitted counts, token evidence, and
+stop reasons. The bundle-level `output_policy.stop_condition:
+"suite_completed"` is retained as compatibility metadata only and must never
+be substituted for those per-item realized stops. No synthetic suite stop is
+created and no sealed suite is rewritten.
+
+Frozen pre-D-033 single-run corpus identities remain structurally readable
+under their existing compatibility rule. Because they lack the designated
+output-policy record, that exception does not confer fixed-budget exactness,
+replay support, or token-ratio eligibility. Any consumer applying those gates
+must fail closed on absent or inconsistent realized evidence and record an
+eligibility revocation when a previously admitted sealed bundle is affected.
+
 ## Directory Shape
 
 ```text
@@ -164,6 +194,8 @@ used by reduction must fall inside a decode window.
 For single-prompt runs, `outputs/tokens.jsonl` rows may include additive
 `token_id` fields, and `metadata.workload_provenance.response.emitted_token_ids`
 records the emitted output token IDs in order when the runtime exposes them.
+For fixed-budget-exact single runs, the row, token-event, and emitted-token-ID
+counts are strict evidence and must equal the policy's `emitted_tokens`.
 
 Runtime phase windows are discovered generically from paired
 `phase_start`/`phase_end` records. MLX runs may emit non-overlapping
@@ -229,7 +261,9 @@ compares both `token_ids_sha256` and `realized_token_count`.
 `metadata.workload_provenance.output_policy` records the manifest
 `execution_policy.default_output_policy`, the sum of executed items'
 `planned_output_tokens`, total emitted tokens, and `stop_condition:
-"suite_completed"`.
+"suite_completed"`. This aggregate is not realized stop evidence: strict and
+analysis readers use the ordered per-item records and markers described above,
+cross-check their token counts, and preserve heterogeneous item outcomes.
 
 `summary_metrics.json` may include additive `suite_metrics`. It is optional
 for validation so historical bundles remain valid. When present it contains

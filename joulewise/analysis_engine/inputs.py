@@ -20,7 +20,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Mapping, Sequence
 
 from joulewise.analysis_manifest import validate_analysis_manifest
-from joulewise.bundle_read import BundleReader
+from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.detection_floor import (
     TRANSPORT_RULE_ID,
     transport_refusal_reasons,
@@ -1115,6 +1115,7 @@ def token_provenance_from_artifacts(
         {
             "name": policy.get("name"),
             "requested_tokens": policy.get("requested_tokens"),
+            "emitted_tokens": policy.get("emitted_tokens"),
             "sampler": dict(sampler) if isinstance(sampler, Mapping) else None,
         }
         if isinstance(policy, Mapping)
@@ -1133,7 +1134,82 @@ def token_provenance_from_artifacts(
 
 
 def token_provenance(evidence: BundleEvidence) -> dict[str, Any]:
-    return token_provenance_from_artifacts(evidence.summary, evidence.metadata)
+    result = token_provenance_from_artifacts(evidence.summary, evidence.metadata)
+    metadata = evidence.metadata
+    if not isinstance(metadata, Mapping) or not isinstance(metadata.get("suite"), Mapping):
+        return result
+
+    try:
+        reader = BundleReader(evidence.path)
+        records = reader.suite_item_records()
+        windows = {window.item_index: window for window in reader.item_windows()}
+    except BundleReadError:
+        records = None
+        windows = {}
+    if records is None:
+        failed_policy = result.get("output_policy")
+        if isinstance(failed_policy, dict):
+            failed_policy["emitted_tokens"] = None
+            failed_policy["realized_items"] = None
+        result.update(
+            stop_reason=None,
+        )
+        return result
+
+    outcomes: list[dict[str, Any]] = []
+    for record in records:
+        item_index = record.get("item_index")
+        window = windows.get(item_index) if isinstance(item_index, int) else None
+        start = window.start_metadata if window is not None else {}
+        end = window.end_metadata if window is not None else {}
+        tokens = record.get("tokens")
+        emitted_ids = record.get("emitted_token_ids")
+        agreement_fields = {
+            "item_id": (record.get("item_id"), window.item_id if window is not None else None),
+            "status": (record.get("status"), end.get("status")),
+            "emitted_tokens": (record.get("emitted_tokens"), end.get("emitted_tokens")),
+            "stop_reason": (record.get("stop_reason"), end.get("stop_reason")),
+        }
+        conflicts = tuple(
+            field
+            for field, (record_value, marker_value) in agreement_fields.items()
+            if record_value != marker_value
+        )
+        outcomes.append(
+            {
+                "item_index": item_index,
+                "status": end.get("status"),
+                "output_policy": start.get("output_policy"),
+                "requested_tokens": start.get("planned_output_tokens"),
+                "emitted_tokens": end.get("emitted_tokens"),
+                "stop_reason": end.get("stop_reason"),
+                "token_evidence_count": len(tokens) if isinstance(tokens, list) else None,
+                "emitted_token_ids_count": (
+                    len(emitted_ids) if isinstance(emitted_ids, list) else None
+                ),
+                "record_marker_agreement": not conflicts,
+                "record_marker_conflicts": conflicts,
+            }
+        )
+    emitted = [outcome["emitted_tokens"] for outcome in outcomes]
+    realized_total = (
+        sum(emitted)
+        if all(
+            isinstance(value, int) and not isinstance(value, bool) and value >= 0
+            for value in emitted
+        )
+        else None
+    )
+    # Preserve every per-item outcome in the legacy estimator's string stop
+    # field rather than substituting metadata.output_policy.suite_completed.
+    suite_policy = result.get("output_policy")
+    if isinstance(suite_policy, dict):
+        suite_policy["emitted_tokens"] = realized_total
+        suite_policy["realized_items"] = tuple(outcomes)
+    result["stop_reason"] = json.dumps(
+        outcomes, sort_keys=True, separators=(",", ":")
+    )
+    return result
 
 
 def governed_stochastic_variance(

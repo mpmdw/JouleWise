@@ -49,6 +49,8 @@ from joulewise.kv_size import (
     prompt_totals,
 )
 from joulewise.provenance import (
+    FIXED_BUDGET_EXACT,
+    FIXED_BUDGET_INCOMPLETE,
     PROMPT_TOKEN_IDS_HASH_DOMAIN,
     SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN,
     suite_prompt_plan_class,
@@ -358,7 +360,7 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     stored_idle_problems = _strict_idle_mean_uncertainty_problems(summary)
     problems.extend(stored_idle_problems)
     problems.extend(_strict_workload_provenance_problems(reader, summary))
-    problems.extend(_strict_emitted_token_ids_problems(reader))
+    problems.extend(_strict_realized_output_problems(reader))
     problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
     problems.extend(_strict_uncertainty_evidence_problems(reader))
     problems.extend(_strict_raw_to_trace_problems(reader))
@@ -735,6 +737,150 @@ def _strict_emitted_token_ids_problems(reader: BundleReader) -> list[str]:
             )
         )
     return problems
+
+
+def _strict_realized_output_problems(reader: BundleReader) -> list[str]:
+    """Validate the designated realized-output fields against raw evidence."""
+
+    metadata = reader.raw_metadata()
+    if _strict_legacy_bundle_metadata(metadata):
+        # Frozen pre-D-033 single-run bundles keep structural compatibility.
+        # They have no designated output-policy record and therefore gain no
+        # exact/replay/ratio eligibility from this exemption.
+        return []
+    if not isinstance(metadata, dict):
+        return ["strict: realized output evidence: metadata.json is missing or invalid"]
+    workload = metadata.get("workload_provenance")
+    observed = metadata.get("workload_observed")
+    policy = workload.get("output_policy") if isinstance(workload, dict) else None
+    if not isinstance(policy, dict) or not isinstance(observed, dict):
+        return ["strict: realized output evidence is missing"]
+
+    problems: list[str] = []
+    emitted = policy.get("emitted_tokens")
+    requested = policy.get("requested_tokens")
+    observed_emitted = observed.get("output_token_count")
+    stop = policy.get("stop_condition")
+    name = policy.get("name")
+    generator = workload.get("generator") if isinstance(workload, dict) else None
+    is_mlx_single = (
+        not isinstance(metadata.get("suite"), dict)
+        and isinstance(generator, dict)
+        and generator.get("name") == "mlx_lm.stream_generate"
+    )
+    if not _is_nonnegative_int(emitted):
+        problems.append(
+            "strict: metadata.workload_provenance.output_policy.emitted_tokens "
+            "is not a non-negative integer"
+        )
+    if not _is_positive_int(requested):
+        problems.append(
+            "strict: metadata.workload_provenance.output_policy.requested_tokens "
+            "is not a positive integer"
+        )
+    if not isinstance(stop, str) or not stop:
+        problems.append(
+            "strict: metadata.workload_provenance.output_policy.stop_condition "
+            "is not a non-empty string"
+        )
+    if isinstance(metadata.get("suite"), dict):
+        try:
+            records = reader.suite_item_records()
+        except BundleReadError as exc:
+            return problems + [f"strict: realized suite output evidence: {exc}"]
+        if records is None:
+            return problems + ["strict: realized suite output evidence is missing"]
+        # The suite aggregate stop is compatibility metadata only. Realized
+        # stop evidence remains on every suite item and is validated by the
+        # BundleReader structural path.
+        return problems + _strict_emitted_token_ids_problems(reader)
+
+    if observed_emitted != emitted:
+        problems.append(
+            "strict: metadata.workload_observed.output_token_count does not match "
+            "metadata.workload_provenance.output_policy.emitted_tokens"
+        )
+
+    raw_config = reader.raw_config()
+    workload_config = (
+        raw_config.get("workload_profile") if isinstance(raw_config, dict) else None
+    )
+    configured_requested = (
+        workload_config.get("output_tokens")
+        if isinstance(workload_config, dict)
+        else None
+    )
+    if (
+        is_mlx_single
+        and configured_requested is not None
+        and requested != configured_requested
+    ):
+        problems.append(
+            "strict: metadata.workload_provenance.output_policy.requested_tokens "
+            "does not match config.workload_profile.output_tokens"
+        )
+
+    if is_mlx_single and name in {FIXED_BUDGET_EXACT, FIXED_BUDGET_INCOMPLETE}:
+        if emitted != requested:
+            problems.append(
+                "strict: single fixed-budget run emitted_tokens does not equal "
+                "requested_tokens"
+            )
+        if name != FIXED_BUDGET_EXACT or stop != "requested_tokens_emitted":
+            problems.append(
+                "strict: single fixed-budget run lacks a realized exact stop"
+            )
+        token_rows, token_row_problems = _strict_jsonl_object_count(
+            reader.path / "outputs" / "tokens.jsonl",
+            "outputs/tokens.jsonl",
+        )
+        problems.extend(token_row_problems)
+        if _is_nonnegative_int(emitted) and token_rows != emitted:
+            problems.append(
+                f"strict: outputs/tokens.jsonl row count {token_rows} does not "
+                f"equal emitted_tokens {emitted}"
+            )
+        try:
+            event_count = len(reader.token_timestamps())
+        except BundleReadError as exc:
+            problems.append(f"strict: realized output token events: {exc}")
+        else:
+            if _is_nonnegative_int(emitted) and event_count != emitted:
+                problems.append(
+                    f"strict: decode token-event count {event_count} does not equal "
+                    f"emitted_tokens {emitted}"
+                )
+        response = workload.get("response") if isinstance(workload, dict) else None
+        if not isinstance(response, dict) or "emitted_token_ids" not in response:
+            problems.append(
+                "strict: metadata.workload_provenance.response.emitted_token_ids "
+                "is required for single fixed-budget output evidence"
+            )
+
+    return problems + _strict_emitted_token_ids_problems(reader)
+
+
+def _strict_jsonl_object_count(path: Path, label: str) -> tuple[int, list[str]]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return 0, [f"strict: {label} cannot be read: {exc}"]
+    count = 0
+    problems: list[str] = []
+    for line_index, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        count += 1
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError as exc:
+            problems.append(
+                f"strict: {label} line {line_index} is not valid JSON: {exc}"
+            )
+            continue
+        if not isinstance(value, dict):
+            problems.append(f"strict: {label} line {line_index} is not a JSON object")
+    return count, problems
 
 
 def _strict_emitted_token_ids_length_problems(

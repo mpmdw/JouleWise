@@ -38,6 +38,7 @@ from joulewise.suite import (
     SuiteManifest,
     suite_manifest_sha256,
 )
+from scripts import spike_mlx_prompt_cache
 
 
 def make_config(
@@ -374,6 +375,60 @@ class MlxRuntimeTests(unittest.TestCase):
             result.workload_provenance["response"]["emitted_token_ids"],
             [0, 1, 2],
         )
+
+    def test_single_fixed_budget_underrun_is_not_labelled_exact(self) -> None:
+        for pieces in (["A"], []):
+            with self.subTest(pieces=pieces):
+                adapter, _ = self.prepared_adapter(pieces)
+                result = adapter.run_workload(
+                    make_config(
+                        workload_profile={
+                            "prompt_text": "one two three four",
+                            "prompt_tokens": None,
+                            "output_tokens": 3,
+                        }
+                    )
+                )
+
+                policy = result.workload_provenance["output_policy"]
+                self.assertEqual(policy["name"], "fixed_budget_incomplete")
+                self.assertEqual(policy["requested_tokens"], 3)
+                self.assertEqual(policy["emitted_tokens"], len(pieces))
+                self.assertEqual(policy["stop_condition"], "stream_exhausted")
+                self.assertEqual(
+                    result.workload_provenance["response"]["emitted_token_ids"],
+                    list(range(len(pieces))),
+                )
+
+    def test_spike_report_rejects_equal_truncated_decodes(self) -> None:
+        for tokens in ([1, 2], []):
+            with self.subTest(tokens=tokens), tempfile.TemporaryDirectory() as tmp:
+                workdir = Path(tmp)
+                for name, payload in (
+                    ("mono_tokens.json", {"tokens": tokens}),
+                    ("resume_tokens.json", {"tokens": tokens}),
+                    ("mono_meta.json", {"mlx_lm_version": "test", "mlx_version": "test"}),
+                    ("prefill_meta.json", {"cache_bytes": 100, "offset": 4}),
+                    ("decode_meta.json", {"pre_trim_offset": 4, "post_trim_offset": 3}),
+                ):
+                    (workdir / name).write_text(json.dumps(payload))
+                with patch.object(
+                    spike_mlx_prompt_cache, "predict_cache_bytes", return_value=100
+                ):
+                    report = spike_mlx_prompt_cache.assemble_report(
+                        workdir,
+                        Path("/model"),
+                        prompt_len=4,
+                        decode_tokens_count=3,
+                        subprocess_timings={},
+                    )
+
+            self.assertEqual(report["monolithic_emitted_tokens"], len(tokens))
+            self.assertEqual(report["resumed_emitted_tokens"], len(tokens))
+            self.assertTrue(report["tokens_identical"])
+            self.assertTrue(
+                report["verdict"].startswith("replay_unsupported(decode_count_")
+            )
 
     def test_run_workload_event_stream_is_byte_identical_after_generate_refactor(self) -> None:
         adapter, _ = self.prepared_adapter(["A", "B", "C"])

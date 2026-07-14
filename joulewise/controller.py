@@ -316,7 +316,6 @@ class _Execution:
         self._outputs_written = False
         self._trace_written = False
         self._metadata_written = False
-        self._events_flushed = False
         self._events_flushed_count = 0
 
     # ------------------------------------------------------------------
@@ -1186,7 +1185,6 @@ class _Execution:
         for event in sorted(pending, key=lambda event: event.timestamp_s):
             self._writer.append_event(event)
         self._events_flushed_count = len(self._events)
-        self._events_flushed = True
 
     def _finish(self) -> None:
         """Flush buffered logs and events, then finalize (D-011, D-013)."""
@@ -1354,21 +1352,6 @@ def _merge_adapter_metadata(target: dict[str, Any], metadata: dict[str, Any]) ->
 
 # ---------------------------------------------------------------------------
 # Environment snapshot policy (INT-002)
-
-
-def _environment_for_run(
-    clock: Clock,
-    *,
-    provided: dict[str, Any] | None | object = _ENVIRONMENT_UNSET,
-) -> dict[str, Any] | None:
-    if provided is not _ENVIRONMENT_UNSET:
-        return dict(provided) if provided is not None else None
-    return _capture_environment(
-        clock,
-        capture_scope="run",
-        captured_for_rep=None,
-        settle_s=PRE_IDLE_SETTLE_S,
-    )
 
 
 def _environment_for_experiment(clock: Clock) -> dict[str, Any]:

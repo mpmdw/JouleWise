@@ -1075,6 +1075,10 @@ class HappyPathTests(ControllerTestCase):
         self.assertEqual(workload["output_policy"]["requested_tokens"], 8)
         self.assertEqual(workload["output_policy"]["emitted_tokens"], 8)
         self.assertEqual(
+            metadata["workload_observed"]["output_token_count"],
+            workload["output_policy"]["emitted_tokens"],
+        )
+        self.assertEqual(
             workload["output_policy"]["stop_condition"],
             "requested_tokens_emitted",
         )

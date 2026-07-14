@@ -6,11 +6,47 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from unittest import mock
 
+from joulewise.clock import FakeClock
 from joulewise.cli import main
-from joulewise.schemas import EnergyEvidence, FailureReason, RunStatus, SummaryMetrics
+from joulewise.controller import run_benchmark
+from joulewise.schemas import (
+    BenchmarkConfig,
+    EnergyEvidence,
+    FailureReason,
+    RunStatus,
+    SummaryMetrics,
+)
 
 
 class CliTests(unittest.TestCase):
+    def test_strict_cli_rejects_single_fixed_budget_realized_output_mismatch(self) -> None:
+        config_data = json.loads(Path("configs/examples/mock_local.json").read_text())
+        config_data["run_id"] = "strict-realized-output"
+        config = BenchmarkConfig.from_mapping(config_data)
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle, _ = run_benchmark(config, Path(tmp), FakeClock())
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                self.assertEqual(main(["validate-bundle", str(bundle), "--strict"]), 0)
+
+            metadata_path = bundle / "metadata.json"
+            metadata = json.loads(metadata_path.read_text())
+            metadata["workload_provenance"]["generator"]["name"] = (
+                "mlx_lm.stream_generate"
+            )
+            policy = metadata["workload_provenance"]["output_policy"]
+            policy["emitted_tokens"] -= 1
+            metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                exit_code = main(["validate-bundle", str(bundle), "--strict"])
+            self.assertEqual(exit_code, 2)
+            output = stdout.getvalue()
+            self.assertIn("output_token_count does not match", output)
+            self.assertIn("row count 8 does not equal emitted_tokens 7", output)
+            self.assertIn("decode token-event count 8 does not equal emitted_tokens 7", output)
+
     def test_validate_config_command(self) -> None:
         stdout = io.StringIO()
         with redirect_stdout(stdout):

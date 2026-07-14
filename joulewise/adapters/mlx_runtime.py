@@ -29,6 +29,7 @@ from joulewise.interfaces import (
 )
 from joulewise.provenance import (
     PROMPT_TOKEN_IDS_HASH_DOMAIN,
+    fixed_budget_outcome_name,
     folded_model_artifact_sha256,
     normalized_sha256_hex,
     output_policy,
@@ -245,7 +246,11 @@ class MlxRuntimeAdapter:
                     "emitted_token_ids": record.output_token_ids,
                 },
                 "output_policy": output_policy(
-                    "fixed_budget_exact",
+                    fixed_budget_outcome_name(
+                        requested_tokens=max_tokens,
+                        emitted_tokens=record.output_tokens,
+                        stop_condition=record.stop_condition,
+                    ),
                     requested_tokens=max_tokens,
                     emitted_tokens=record.output_tokens,
                     stop_condition=record.stop_condition,

@@ -271,10 +271,6 @@ class BundleReader:
     def raw_summary(self) -> dict[str, Any] | None:
         return self._tolerant_json("summary_metrics.json")
 
-    def suite_manifest_raw(self) -> dict[str, Any] | None:
-        """Tolerant parsed ``suite_manifest.json``; ``None`` when absent/damaged."""
-        return self._tolerant_json("suite_manifest.json")
-
     def is_complete(self) -> bool:
         """D-011: complete iff ``summary_metrics.json`` validates by status."""
         summary = self.raw_summary()
@@ -408,6 +404,20 @@ class BundleReader:
                         f"suite_manifest.json does not re-validate: {exc}"
                     ) from exc
         return self._cache["suite_manifest"]
+
+    def suite_item_records(self) -> list[dict[str, Any]] | None:
+        """Return suite item outcomes in realized execution order.
+
+        These existing per-item records are the realized-output evidence of
+        record for both current and sealed suite bundles.  The bundle-level
+        ``output_policy.stop_condition`` is intentionally not interpreted as
+        one synthetic realized stop.
+        """
+
+        records, problems = _suite_item_records(self._path)
+        if problems:
+            raise BundleReadError("; ".join(problems))
+        return records
 
     def suite_window(self) -> Window | None:
         """FIFO-pair the first ``suite_start``/``suite_end`` marker."""
@@ -946,6 +956,55 @@ def _suite_problems(
                 )
             records_by_index[item_index] = record
             record_item_indices.append(item_index)
+            emitted_tokens = record.get("emitted_tokens")
+            if (
+                isinstance(emitted_tokens, bool)
+                or not isinstance(emitted_tokens, int)
+                or emitted_tokens < 0
+            ):
+                problems.append(
+                    "outputs/suite_items.jsonl line "
+                    f"{line_index} emitted_tokens is not a non-negative integer: "
+                    f"{emitted_tokens!r}"
+                )
+            stop_reason = record.get("stop_reason")
+            if not _nonempty_string(stop_reason):
+                problems.append(
+                    "outputs/suite_items.jsonl line "
+                    f"{line_index} stop_reason is not a non-empty string: "
+                    f"{stop_reason!r}"
+                )
+            tokens = record.get("tokens")
+            if not isinstance(tokens, list):
+                problems.append(
+                    f"outputs/suite_items.jsonl line {line_index} tokens is not a list"
+                )
+            elif (
+                record.get("emitted_token_ids") is None
+                and isinstance(emitted_tokens, int)
+                and not isinstance(emitted_tokens, bool)
+            ):
+                if len(tokens) != emitted_tokens:
+                    problems.append(
+                        "outputs/suite_items.jsonl line "
+                        f"{line_index} tokens length {len(tokens)} does not equal "
+                        f"emitted_tokens {emitted_tokens}"
+                    )
+            emitted_token_ids = record.get("emitted_token_ids")
+            if emitted_token_ids is not None:
+                if not isinstance(emitted_token_ids, list):
+                    problems.append(
+                        "outputs/suite_items.jsonl line "
+                        f"{line_index} emitted_token_ids is not a list"
+                    )
+                elif isinstance(emitted_tokens, int) and not isinstance(
+                    emitted_tokens, bool
+                ) and len(emitted_token_ids) != emitted_tokens:
+                    problems.append(
+                        "outputs/suite_items.jsonl line "
+                        f"{line_index} emitted_token_ids length {len(emitted_token_ids)} "
+                        f"does not equal emitted_tokens {emitted_tokens}"
+                    )
             position = record.get("position")
             if position is not None:
                 if isinstance(position, bool) or not isinstance(position, int):
