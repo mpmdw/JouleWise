@@ -578,7 +578,7 @@ class _Execution:
             }
         for key in ("idle_drift", "idle_drift_guard"):
             if key in result:
-                self._uncertainty_evidence[key] = _jsonable(result[key])
+                self._uncertainty_evidence[key] = result[key]
         if "idle_drift_bound_w" in result:
             self._uncertainty_evidence["idle_drift_bound_w"] = result[
                 "idle_drift_bound_w"
@@ -774,14 +774,16 @@ class _Execution:
             return
         extra: dict[str, Any] = {}
         extra["config_warnings"] = [dict(item) for item in self._config.config_warnings]
-        extra["model"] = _jsonable(asdict(self._config.model))
-        extra["quantization"] = _jsonable(asdict(self._config.quantization))
+        extra["model"] = asdict(self._config.model)
+        extra["quantization"] = asdict(self._config.quantization)
         if self._device_metadata is not None:
-            extra["device"] = _jsonable(self._device_metadata)
+            # Preserve adapter values verbatim for the bundle writer's single
+            # path-aware quarantine pass (including exact cycle locations).
+            extra["device"] = self._device_metadata
         if self._connection_metadata is not None:
-            extra["connection"] = _jsonable(self._connection_metadata)
+            extra["connection"] = self._connection_metadata
         if self._environment is not None:
-            extra["environment"] = _jsonable(self._environment)
+            extra["environment"] = self._environment
         adapters: dict[str, Any] = {}
         if self._runtime is not None:
             adapters["runtime"] = {
@@ -793,28 +795,26 @@ class _Execution:
                     adapters["runtime"], self._runtime_result.metadata
                 )
             if self._runtime_cleanup_metadata is not None:
-                adapters["runtime"]["cleanup_metadata"] = _jsonable(
-                    self._runtime_cleanup_metadata
-                )
+                adapters["runtime"]["cleanup_metadata"] = self._runtime_cleanup_metadata
             if self._runtime_alignments:
-                adapters["runtime"]["clock_alignments"] = _jsonable(self._runtime_alignments)
+                adapters["runtime"]["clock_alignments"] = self._runtime_alignments
         if self._telemetry is not None:
             adapters["telemetry"] = {"name": self._telemetry.name}
             if self._telemetry_metadata:
                 _merge_adapter_metadata(adapters["telemetry"], self._telemetry_metadata)
             if self._telemetry_alignments:
-                adapters["telemetry"]["clock_alignments"] = _jsonable(self._telemetry_alignments)
+                adapters["telemetry"]["clock_alignments"] = self._telemetry_alignments
         extra["adapters"] = adapters
         if self._baseline is not None:
-            extra["idle_baseline"] = _jsonable(asdict(self._baseline))
+            extra["idle_baseline"] = asdict(self._baseline)
         if self._thermal_pre is not None:
-            extra["thermal_pre"] = _jsonable(asdict(self._thermal_pre))
+            extra["thermal_pre"] = asdict(self._thermal_pre)
         if self._thermal_post is not None:
-            extra["thermal_post"] = _jsonable(asdict(self._thermal_post))
+            extra["thermal_post"] = asdict(self._thermal_post)
         if self._uncertainty_evidence is not None:
             evidence = dict(self._uncertainty_evidence)
             idle_bound_w = evidence.pop("idle_drift_bound_w", None)
-            extra["uncertainty_evidence"] = _jsonable(evidence)
+            extra["uncertainty_evidence"] = evidence
             clock_anchor = evidence.get("clock_anchor")
             if isinstance(clock_anchor, dict) and clock_anchor.get("status") == "bounded":
                 extra["clock_anchor_bound_s"] = clock_anchor.get(
@@ -846,9 +846,7 @@ class _Execution:
                     token_count_source
                 )
             if self._runtime_result.workload_provenance is not None:
-                extra["workload_provenance"] = _jsonable(
-                    self._runtime_result.workload_provenance
-                )
+                extra["workload_provenance"] = self._runtime_result.workload_provenance
         if self._suite_manifest is not None:
             extra["suite"] = {
                 "suite_id": self._suite_manifest.suite_id,
@@ -873,7 +871,7 @@ class _Execution:
         if node_cleanup:
             controller_extra["node_cleanup"] = node_cleanup
         if controller_extra:
-            extra["extra"] = _jsonable(controller_extra)
+            extra["extra"] = controller_extra
         self._writer.write_metadata(extra)
         self._metadata_written = True
 
@@ -1228,7 +1226,9 @@ def _adapter_cleanup_report(adapter: Any) -> list[dict[str, Any]]:
 
 
 def _merge_adapter_metadata(target: dict[str, Any], metadata: dict[str, Any]) -> None:
-    for key, value in _jsonable(metadata).items():
+    # Do not recursively normalize here: RunBundleWriter owns the one
+    # deterministic quarantine pass and its path-addressed diagnostics.
+    for key, value in metadata.items():
         if key in target:
             collision_metadata = target.get("metadata")
             if not isinstance(collision_metadata, dict):

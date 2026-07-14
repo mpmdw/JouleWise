@@ -109,6 +109,9 @@ _METADATA_KEYS = frozenset(
         "workload_provenance",
         "suite",
         "extra",
+        # Private diagnostics can contain adapter-defined metadata paths, so
+        # the public transform accepts the field but redacts its whole subtree.
+        "serialization_quarantine",
     }
 )
 

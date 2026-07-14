@@ -148,9 +148,16 @@ class PoisonTelemetry:
         self._inner = inner
 
     def device_metadata(self, config: BenchmarkConfig, context=None) -> dict:
-        # An object() is not JSON-serializable; write_metadata must coerce it
-        # via default=str rather than abort the bundle (D-011).
-        return {"poison": object()}
+        cycle: dict[str, Any] = {}
+        cycle["self"] = cycle
+        # Every malformed category must reach the bundle writer's single
+        # quarantine pass without aborting failure-path finalization (D-011).
+        return {
+            "poison": object(),
+            "cycle": cycle,
+            "not_finite": float("inf"),
+            7: "non-string-key value",
+        }
 
     def measure_idle(self, config: BenchmarkConfig, context=None):
         return self._inner.measure_idle(config)
@@ -1059,7 +1066,7 @@ class PoisonMetadataTests(ControllerTestCase):
         )
 
     def test_run_returns_normally_with_complete_bundle(self) -> None:
-        # Must not raise (the json.dumps coercion preserves D-011).
+        # Must not raise: structured quarantine preserves D-011.
         bundle_path, summary = self.run_poison()
         self.assertEqual(summary.status, RunStatus.FAILED)
         self.assert_complete_bundle(bundle_path)
@@ -1070,9 +1077,21 @@ class PoisonMetadataTests(ControllerTestCase):
         bundle_path, _ = self.run_poison()
         events = self.read_events(bundle_path)
         self.assert_run_finalized_last(events)
-        # The poison value was coerced to its str() rather than aborting.
         metadata = json.loads((bundle_path / "metadata.json").read_text())
-        self.assertIn("poison", metadata["device"])
+        self.assertIsNone(metadata["device"]["poison"])
+        self.assertEqual(metadata["device"]["cycle"], {"self": None})
+        self.assertIsNone(metadata["device"]["not_finite"])
+        self.assertNotIn("7", metadata["device"])
+        diagnostics = metadata["serialization_quarantine"]
+        self.assertEqual(
+            [(item["path"], item["reason"]) for item in diagnostics],
+            [
+                ("/device", "non_string_key"),
+                ("/device/cycle/self", "cycle"),
+                ("/device/not_finite", "non_finite_number"),
+                ("/device/poison", "unsupported_type"),
+            ],
+        )
 
 
 class DeterministicRunIdTests(ControllerTestCase):

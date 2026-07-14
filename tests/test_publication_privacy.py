@@ -170,6 +170,13 @@ class PublicationPrivacyTests(unittest.TestCase):
                         }
                     ]
                 },
+                "serialization_quarantine": [
+                    {
+                        "path": "/device/API_TOKEN_PRIVATE_83",
+                        "reason": "unsupported_type",
+                        "value_type": "fixture.SecretValue",
+                    }
+                ],
             },
         )
         event = {
@@ -266,6 +273,14 @@ class PublicationPrivacyTests(unittest.TestCase):
         self.assertEqual(summary["inter_token_throughput_tokens_s"], 20.0)
         self.assertEqual(summary["idle_mean_uncertainty"], IDLE_MEAN_UNCERTAINTY)
         self.assertIsNone(summary["window_evidence_precheck"])
+        metadata = json.loads((destination / "metadata.json").read_text())
+        self.assertEqual(
+            metadata["serialization_quarantine"],
+            {
+                "redacted": True,
+                "classification": "metadata.serialization_quarantine",
+            },
+        )
 
     def test_unknown_fields_and_paths_fail_closed(self) -> None:
         mutations = {

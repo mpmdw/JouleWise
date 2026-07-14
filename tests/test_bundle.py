@@ -12,6 +12,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+import joulewise
 from joulewise.bundle import (
     BundleError,
     RunBundleWriter,
@@ -34,6 +35,21 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
 
 EVENT_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
+
+
+class StrReprTrap:
+    """Poison value whose textual fallback must never be consulted."""
+
+    str_calls = 0
+    repr_calls = 0
+
+    def __str__(self) -> str:
+        type(self).str_calls += 1
+        raise AssertionError("metadata quarantine called str()")
+
+    def __repr__(self) -> str:
+        type(self).repr_calls += 1
+        raise AssertionError("metadata quarantine called repr()")
 
 
 def load_example_config(**overrides) -> BenchmarkConfig:
@@ -278,6 +294,113 @@ class RunBundleWriterTests(unittest.TestCase):
             or re.fullmatch(r"[0-9a-f]{40}", metadata["git_commit"]),
             metadata["git_commit"],
         )
+
+    def test_valid_metadata_serialization_is_byte_unchanged(self) -> None:
+        writer = self.make_writer()
+        extra = {
+            "runtime_adapter": "mock",
+            "nested": {"enabled": True, "samples": [1, 2.5, None]},
+        }
+        with (
+            mock.patch("joulewise.bundle.platform.platform", return_value="test-platform"),
+            mock.patch("joulewise.bundle.platform.machine", return_value="test-machine"),
+            mock.patch(
+                "joulewise.bundle.platform.python_version", return_value="3.test"
+            ),
+            mock.patch("joulewise.bundle._git_commit", return_value="a" * 40),
+        ):
+            writer.write_metadata(extra)
+        expected = {
+            "platform": "test-platform",
+            "machine": "test-machine",
+            "python_version": "3.test",
+            "joulewise_version": joulewise.__version__,
+            "schema_version": self.config.schema_version,
+            "config_sha256": writer.config_sha256,
+            "run_id": writer.run_id,
+            "git_commit": "a" * 40,
+            "clock": self.clock.info(),
+            **extra,
+        }
+        self.assertEqual(
+            (writer.path / "metadata.json").read_text(),
+            json.dumps(expected, indent=2, sort_keys=True) + "\n",
+        )
+
+    def test_malformed_metadata_is_recursively_quarantined_deterministically(
+        self,
+    ) -> None:
+        StrReprTrap.str_calls = 0
+        StrReprTrap.repr_calls = 0
+
+        def poison_payload(reverse: bool) -> dict:
+            cycle: list[object] = []
+            cycle.append(cycle)
+            nested_items = [
+                ("valid", {"kept": "evidence"}),
+                ("nan", float("nan")),
+                ("positive_infinity", float("inf")),
+                ("negative_infinity", float("-inf")),
+                (7, "invalid-key value must not leak"),
+                ((1, 2), StrReprTrap()),
+            ]
+            root_items = [
+                ("z_poison", StrReprTrap()),
+                ("a/cycle~", cycle),
+                ("nested", dict(reversed(nested_items) if reverse else nested_items)),
+            ]
+            return dict(reversed(root_items) if reverse else root_items)
+
+        writer_a = self.make_writer()
+        writer_a.write_metadata(poison_payload(False))
+        other_tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(other_tmp.cleanup)
+        writer_b = RunBundleWriter.create(
+            Path(other_tmp.name) / "runs", self.config, FakeClock(self.clock.now())
+        )
+        writer_b.write_metadata(poison_payload(True))
+
+        bytes_a = (writer_a.path / "metadata.json").read_bytes()
+        bytes_b = (writer_b.path / "metadata.json").read_bytes()
+        self.assertEqual(bytes_a, bytes_b)
+        self.assertNotIn(b"invalid-key value must not leak", bytes_a)
+        self.assertEqual(StrReprTrap.str_calls, 0)
+        self.assertEqual(StrReprTrap.repr_calls, 0)
+
+        metadata = json.loads(bytes_a)
+        self.assertIsNone(metadata["z_poison"])
+        self.assertEqual(metadata["a/cycle~"], [None])
+        self.assertEqual(metadata["nested"]["valid"], {"kept": "evidence"})
+        self.assertIsNone(metadata["nested"]["nan"])
+        self.assertIsNone(metadata["nested"]["positive_infinity"])
+        self.assertIsNone(metadata["nested"]["negative_infinity"])
+        self.assertNotIn("7", metadata["nested"])
+        diagnostics = metadata["serialization_quarantine"]
+        self.assertEqual(
+            [(item["path"], item["reason"]) for item in diagnostics],
+            [
+                ("/a~1cycle~0/0", "cycle"),
+                ("/nested", "non_string_key"),
+                ("/nested", "non_string_key"),
+                ("/nested/nan", "non_finite_number"),
+                ("/nested/negative_infinity", "non_finite_number"),
+                ("/nested/positive_infinity", "non_finite_number"),
+                ("/z_poison", "unsupported_type"),
+            ],
+        )
+        non_string = [
+            item for item in diagnostics if item["reason"] == "non_string_key"
+        ]
+        self.assertEqual(
+            [(item["key_type"], item["count"]) for item in non_string],
+            [("builtins.int", 1), ("builtins.tuple", 1)],
+        )
+
+    def test_metadata_quarantine_field_is_writer_owned(self) -> None:
+        writer = self.make_writer()
+        with self.assertRaises(BundleError):
+            writer.write_metadata({"serialization_quarantine": []})
+        writer.write_metadata({})
 
     def test_metadata_extra_collision_raises(self) -> None:
         writer = self.make_writer()

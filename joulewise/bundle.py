@@ -27,11 +27,13 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 import os
 import platform
 import subprocess
 import tempfile
 import time
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -49,10 +51,144 @@ _RESERVED_TOP_LEVEL_ARTIFACTS = {
     "power_trace.csv",
     "summary_metrics.json",
 }
+_METADATA_QUARANTINE_KEY = "serialization_quarantine"
 
 
 class BundleError(Exception):
     """Raised when a bundle invariant (layout, ordering, immutability) breaks."""
+
+
+def _json_pointer_child(path: str, key: str) -> str:
+    """Append one string key to an RFC 6901 JSON pointer."""
+    escaped = key.replace("~", "~0").replace("/", "~1")
+    return f"{path}/{escaped}"
+
+
+def _stable_type_name(value: Any) -> str:
+    """Return type provenance without consulting ``value``'s str/repr hooks."""
+    value_type = type(value)
+    try:
+        module = type.__getattribute__(value_type, "__module__")
+        qualname = type.__getattribute__(value_type, "__qualname__")
+    except (AttributeError, TypeError):
+        return "unknown"
+    if not isinstance(module, str) or not isinstance(qualname, str):
+        return "unknown"
+    return f"{module}.{qualname}"
+
+
+def _quarantine_json_value(
+    value: Any,
+    path: str,
+    active_containers: set[int],
+    diagnostics: list[dict[str, Any]],
+) -> Any:
+    """Return deterministic JSON data, quarantining malformed metadata leaves.
+
+    Unsupported values and cycles become ``null`` at their original JSON
+    pointer. Non-string-keyed entries are omitted while valid siblings remain.
+    Every replacement or omission is described in the top-level
+    ``serialization_quarantine`` list; no value's ``str`` or ``repr`` is ever
+    captured in either the sanitized metadata or its diagnostics.
+    """
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return value
+        diagnostics.append(
+            {
+                "path": path,
+                "reason": "non_finite_number",
+                "value_type": _stable_type_name(value),
+            }
+        )
+        return None
+    if isinstance(value, Enum):
+        return _quarantine_json_value(
+            value.value, path, active_containers, diagnostics
+        )
+    if isinstance(value, (dict, list, tuple)):
+        container_id = id(value)
+        if container_id in active_containers:
+            diagnostics.append(
+                {
+                    "path": path,
+                    "reason": "cycle",
+                    "value_type": _stable_type_name(value),
+                }
+            )
+            return None
+        active_containers.add(container_id)
+        try:
+            if isinstance(value, dict):
+                result: dict[str, Any] = {}
+                valid_keys: list[str] = []
+                invalid_key_types: dict[str, int] = {}
+                for key in dict.keys(value):
+                    if isinstance(key, str):
+                        valid_keys.append(key)
+                    else:
+                        key_type = _stable_type_name(key)
+                        invalid_key_types[key_type] = (
+                            invalid_key_types.get(key_type, 0) + 1
+                        )
+                for key_type in sorted(invalid_key_types):
+                    diagnostics.append(
+                        {
+                            "count": invalid_key_types[key_type],
+                            "key_type": key_type,
+                            "path": path,
+                            "reason": "non_string_key",
+                        }
+                    )
+                for key in sorted(valid_keys):
+                    result[key] = _quarantine_json_value(
+                        dict.__getitem__(value, key),
+                        _json_pointer_child(path, key),
+                        active_containers,
+                        diagnostics,
+                    )
+                return result
+            result_list: list[Any] = []
+            for index, inner in enumerate(value):
+                result_list.append(
+                    _quarantine_json_value(
+                        inner,
+                        f"{path}/{index}",
+                        active_containers,
+                        diagnostics,
+                    )
+                )
+            return result_list
+        finally:
+            active_containers.remove(container_id)
+    diagnostics.append(
+        {
+            "path": path,
+            "reason": "unsupported_type",
+            "value_type": _stable_type_name(value),
+        }
+    )
+    return None
+
+
+def _quarantine_metadata(
+    value: dict[Any, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Sanitize one metadata object and return path-sorted diagnostics."""
+    diagnostics: list[dict[str, Any]] = []
+    sanitized = _quarantine_json_value(value, "", set(), diagnostics)
+    assert isinstance(sanitized, dict)
+    diagnostics.sort(
+        key=lambda item: (
+            item["path"],
+            item["reason"],
+            item.get("key_type", ""),
+            item.get("value_type", ""),
+        )
+    )
+    return sanitized, diagnostics
 
 
 def sanitize_id_component(s: str) -> str:
@@ -349,7 +485,11 @@ class RunBundleWriter:
         """Write ``metadata.json`` from base fields merged with ``extra``.
 
         A key collision between ``extra`` and the base fields is an error,
-        as is a second call.
+        as is a second call. Malformed values are recursively replaced with
+        ``null`` and described by RFC 6901 path in the additive top-level
+        ``serialization_quarantine`` list. Invalid mapping keys are omitted;
+        valid siblings are retained. The diagnostic list is absent when all
+        metadata is JSON-safe, preserving valid metadata bytes unchanged.
         """
         self._require_open("write metadata")
         if self._metadata_written:
@@ -365,18 +505,17 @@ class RunBundleWriter:
             "git_commit": _git_commit(),
             "clock": self._clock.info(),
         }
-        collisions = sorted(set(extra) & set(base))
+        collisions = sorted(set(extra) & (set(base) | {_METADATA_QUARANTINE_KEY}))
         if collisions:
             raise BundleError(
                 f"metadata extra keys collide with base fields: {', '.join(collisions)}"
             )
         merged = {**base, **extra}
-        # default=str: non-serializable adapter-supplied metadata is coerced to
-        # its str() rather than aborting the run, preserving the D-011 bundle-
-        # completion invariant (a poisoned device/connection dict must not break
-        # finalize on the failure path).
+        sanitized, diagnostics = _quarantine_metadata(merged)
+        if diagnostics:
+            sanitized[_METADATA_QUARANTINE_KEY] = diagnostics
         (self._path / "metadata.json").write_text(
-            json.dumps(merged, indent=2, sort_keys=True, default=str) + "\n"
+            json.dumps(sanitized, indent=2, sort_keys=True) + "\n"
         )
         self._metadata_written = True
 
