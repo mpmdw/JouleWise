@@ -14,9 +14,9 @@ Implements the bundle contract in ``docs/contracts/run_bundle_layout.md``:
 - D-011: ``summary_metrics.json`` is the completion marker, written last by
   ``finalize()`` after the ``run_finalized`` event; metadata must be written
   before a summary can be staged.
-- D-018: ``power_trace.csv`` carries one row per rail per sample with the
-  header ``timestamp_s,power_w,source,rail`` (row fan-out per rail is the
-  caller's responsibility).
+- D-018: ``power_trace.csv`` carries one row per rail per sample (row fan-out
+  per rail is the caller's responsibility). Point samples use the historical
+  four-column header; interval telemetry adds both averaging-support edges.
 
 All timestamps come from the injected :class:`joulewise.clock.Clock`
 (D-003/D-019); this module never reads the wall clock directly.
@@ -45,6 +45,11 @@ from joulewise.schemas import BenchmarkConfig, SummaryMetrics
 
 _ID_ALLOWED = set("abcdefghijklmnopqrstuvwxyz0123456789_-")
 _POWER_TRACE_HEADER = ["timestamp_s", "power_w", "source", "rail"]
+_POWER_TRACE_INTERVAL_HEADER = [
+    *_POWER_TRACE_HEADER,
+    "interval_start_s",
+    "interval_end_s",
+]
 _RESERVED_TOP_LEVEL_ARTIFACTS = {
     "config.json",
     "metadata.json",
@@ -657,18 +662,32 @@ class RunBundleWriter:
         self._require_open("write power trace")
         if self._power_trace_written:
             raise BundleError("power_trace.csv already written")
+        interval_rows = any(
+            sample.interval_start_s is not None or sample.interval_end_s is not None
+            for sample in samples
+        )
+        if interval_rows and any(
+            sample.interval_start_s is None or sample.interval_end_s is None
+            for sample in samples
+        ):
+            raise BundleError(
+                "power trace cannot mix interval-supported and point samples"
+            )
         with (self._path / "power_trace.csv").open("w", newline="") as handle:
             writer = csv.writer(handle, lineterminator="\n")
-            writer.writerow(_POWER_TRACE_HEADER)
+            writer.writerow(
+                _POWER_TRACE_INTERVAL_HEADER if interval_rows else _POWER_TRACE_HEADER
+            )
             for sample in samples:
-                writer.writerow(
-                    [
-                        sample.timestamp_s,
-                        sample.power_w,
-                        sample.source,
-                        sample.rail if sample.rail is not None else "",
-                    ]
-                )
+                row = [
+                    sample.timestamp_s,
+                    sample.power_w,
+                    sample.source,
+                    sample.rail if sample.rail is not None else "",
+                ]
+                if interval_rows:
+                    row.extend([sample.interval_start_s, sample.interval_end_s])
+                writer.writerow(row)
         self._power_trace_written = True
 
     def write_metadata(self, extra: dict) -> None:

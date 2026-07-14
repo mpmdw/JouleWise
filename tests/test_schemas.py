@@ -466,7 +466,7 @@ class SummaryMetricsTests(unittest.TestCase):
         self.assertEqual(suite_summary["properties"]["floor_cmp_j"], {"type": ["number", "null"]})
         payload = valid_succeeded_summary().to_dict()
         self.assertIsNone(payload["suite_metrics"])
-        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.4.2")
+        self.assertEqual(payload["summary_provenance"]["reducer_version"], "0.5.0")
 
     def test_inter_token_throughput_is_additive_nullable_metric(self) -> None:
         schema = SummaryMetrics.json_schema()
@@ -489,7 +489,7 @@ class SummaryMetricsTests(unittest.TestCase):
         )
         self.assertEqual(
             idle["properties"]["method"]["const"],
-            "newey_west_bartlett_10s_iid_floor_v1",
+            "duration_weighted_newey_west_bartlett_10s_iid_floor_v2",
         )
         self.assertEqual(idle["properties"]["bandwidth_s"]["const"], 10.0)
         self.assertEqual(

@@ -972,6 +972,21 @@ class SuiteReduceTests(ReduceTestCase):
             reduce_module.REDUCER_VERSION,
         )
 
+    def test_powermetrics_interval_partial_edges_use_overlap_not_trapezoids(self) -> None:
+        curve = [
+            reduce_module.TracePoint(1.0, 10.0, 0.0, 1.0),
+            reduce_module.TracePoint(2.0, 20.0, 1.0, 2.0),
+            reduce_module.TracePoint(3.0, 30.0, 2.0, 3.0),
+        ]
+
+        self.assertEqual(reduce_module._integrate(curve, 0.5, 2.25), 32.5)
+        self.assertEqual(
+            reduce_module._in_window_sample_count(
+                curve, reduce_module.Window(0.5, 2.25)
+            ),
+            3,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

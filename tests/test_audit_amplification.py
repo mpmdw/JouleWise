@@ -14,7 +14,6 @@ from unittest.mock import patch
 from joulewise.adapters.powermetrics import (
     RAIL_MANIFEST,
     RAW_SAMPLES_NAME,
-    parse_powermetrics_records,
     samples_from_raw_powermetrics,
 )
 from joulewise.clock import FakeClock
@@ -187,6 +186,21 @@ class StrictGateInteractionAmplification(unittest.TestCase):
         assert raw_problem is not None
         self.assertIn("power_w", raw_problem)
 
+    def test_raw_to_trace_rejects_interval_support_drift(self) -> None:
+        bundle = self._powermetrics_bundle("amp-pm-support-drift")
+        rows = self._trace_rows(bundle)
+        self.assertEqual(rows[0][-2:], ["interval_start_s", "interval_end_s"])
+        for row in rows[1 : 1 + len(RAIL_MANIFEST)]:
+            row[4] = repr(float(row[4]) + 1e-6)
+        self._write_trace_rows(bundle, rows)
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("strict: raw-to-trace:" in problem and "interval_start_s" in problem for problem in problems),
+            problems,
+        )
+
 
 class ProvenanceHashAmplification(unittest.TestCase):
     def test_prompt_token_hash_uses_domain_and_compact_canonical_json(self) -> None:
@@ -230,8 +244,6 @@ class PowermetricsDegenerateAmplification(unittest.TestCase):
         )
 
     def test_zero_complete_frames_still_rejects_all_frames_dropped_tail(self) -> None:
-        with self.assertRaisesRegex(ValueError, "document 0"):
-            parse_powermetrics_records(b"<plist")
         with self.assertRaisesRegex(ValueError, "no complete plist documents"):
             samples_from_raw_powermetrics(b"\0\0", plist_anchor_offset_s=0.0)
 

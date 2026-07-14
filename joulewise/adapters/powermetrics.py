@@ -62,7 +62,8 @@ TIMESTAMP_DERIVATION = (
     "envelope; record 0 is that interval endpoint and records i>0 advance by "
     "elapsed_ns for records 1..i. Whole-second plist dates are consistency-only. "
     "Exact allowlisted legacy bundles retain plist_anchor_offset_s plus the "
-    "legacy cumulative-elapsed reconstruction."
+    "legacy cumulative-elapsed reconstruction. Each emitted sample carries "
+    "its [endpoint-elapsed_ns, endpoint) averaging support."
 )
 
 
@@ -173,13 +174,21 @@ class PowermetricsTelemetryAdapter:
             )
         self._remember_records(records, timestamp_anchor_s=capture_start_s)
         totals = [record.combined_power_w for record in records]
-        duration_s = sum(record.elapsed_ns for record in records) / 1_000_000_000.0
+        intervals_s = [record.elapsed_ns / 1_000_000_000.0 for record in records]
+        duration_s = math.fsum(intervals_s)
+        if len(totals) > 1:
+            idle_mean_w, idle_variance_w2 = duration_weighted_mean_and_sample_variance(
+                totals, intervals_s
+            )
+        else:
+            idle_mean_w = totals[0] if totals else 0.0
+            idle_variance_w2 = 0.0
         idle_quality = idle_window_gpu_quality(rich_records)
         self._pre_idle_records = list(records)
         self._pre_idle_quality = dict(idle_quality)
         return IdleBaseline(
-            power_w_mean=statistics.mean(totals) if totals else 0.0,
-            power_w_stddev=statistics.stdev(totals) if len(totals) > 1 else 0.0,
+            power_w_mean=idle_mean_w,
+            power_w_stddev=math.sqrt(idle_variance_w2),
             duration_s=duration_s,
             sample_count=len(totals),
             telemetry_backend=TelemetryBackend.POWERMETRICS,
@@ -1075,6 +1084,8 @@ def idle_window_gpu_quality(records: list[dict[str, Any]]) -> dict[str, float | 
 def samples_from_records(records: list[PowermetricsRecord]) -> list[PowerSample]:
     samples: list[PowerSample] = []
     for record in records:
+        interval_end_s = record.timestamp_s
+        interval_start_s = interval_end_s - record.elapsed_ns / 1_000_000_000.0
         for rail in RAIL_MANIFEST:
             samples.append(
                 PowerSample(
@@ -1082,9 +1093,39 @@ def samples_from_records(records: list[PowermetricsRecord]) -> list[PowerSample]
                     power_w=record.rail_power_w[rail],
                     source="powermetrics",
                     rail=rail,
+                    interval_start_s=interval_start_s,
+                    interval_end_s=interval_end_s,
                 )
             )
     return samples
+
+
+def duration_weighted_mean_and_sample_variance(
+    values: list[float] | tuple[float, ...],
+    durations_s: list[float] | tuple[float, ...],
+) -> tuple[float, float]:
+    """Return the WO-005 duration-weighted mean and sample variance.
+
+    Durations are reliability weights. The variance denominator ``1-q``
+    makes equal-duration inputs reduce to the ordinary sample variance.
+    """
+    if len(values) != len(durations_s) or len(values) < 2:
+        raise ValueError("duration weighting requires equally sized inputs of length >= 2")
+    if any(not math.isfinite(value) for value in values):
+        raise ValueError("duration-weighted values must be finite")
+    if any(not math.isfinite(duration) or duration <= 0.0 for duration in durations_s):
+        raise ValueError("duration weights must be finite and > 0")
+    total_duration_s = math.fsum(durations_s)
+    weights = tuple(duration / total_duration_s for duration in durations_s)
+    mean = math.fsum(weight * value for weight, value in zip(weights, values, strict=True))
+    q = math.fsum(weight * weight for weight in weights)
+    if q >= 1.0:
+        raise ValueError("duration-weighted sample variance requires effective count > 1")
+    variance = math.fsum(
+        weight * (value - mean) * (value - mean)
+        for weight, value in zip(weights, values, strict=True)
+    ) / (1.0 - q)
+    return mean, variance
 
 
 def _powermetrics_documents(

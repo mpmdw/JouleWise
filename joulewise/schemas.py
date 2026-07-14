@@ -19,7 +19,7 @@ from joulewise.validation import finite_float
 CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
-SUMMARY_REDUCER_VERSION = "0.4.2"
+SUMMARY_REDUCER_VERSION = "0.5.0"
 
 _PROMPT_SOURCE_FIELDS = (
     "prompt_text",
@@ -1202,7 +1202,7 @@ class SummaryMetrics:
                         },
                         "method": {
                             "type": "string",
-                            "const": "newey_west_bartlett_10s_iid_floor_v1",
+                            "const": "duration_weighted_newey_west_bartlett_10s_iid_floor_v2",
                         },
                         "source_artifact": {
                             "type": "string",

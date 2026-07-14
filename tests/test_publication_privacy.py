@@ -390,6 +390,44 @@ class PublicationPrivacyTests(unittest.TestCase):
         self.assertIsNone(transformed["output_sha256"])
         self.assertFalse((destination / "logs" / "custody").exists())
 
+    def test_duration_weighted_interval_trace_is_named_and_retained_as_sample_evidence(self) -> None:
+        source = self.make_secret_bundle("interval-trace-evidence")
+        summary_path = source / "summary_metrics.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["idle_mean_uncertainty"]["method"] = (
+            "duration_weighted_newey_west_bartlett_10s_iid_floor_v2"
+        )
+        _write_json(summary_path, summary)
+        trace_path = source / "power_trace.csv"
+        trace_path.write_text(
+            "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+            "1.0,10.0,powermetrics,cpu_power,0.5,1.0\n",
+            encoding="utf-8",
+        )
+        source_trace = trace_path.read_bytes()
+        destination = self.tmp / "public-interval-trace"
+
+        audit = publication_privacy.audit_private_bundle(source)
+        trace_audit = next(item for item in audit.files if item.path == "power_trace.csv")
+        transformation = publication_privacy.transform_public_bundle(source, destination)
+        trace_transform = next(
+            item for item in transformation["files"] if item["path"] == "power_trace.csv"
+        )
+
+        self.assertEqual(trace_audit.classification, publication_privacy.CLASS_RETAIN)
+        self.assertEqual(trace_audit.operation, publication_privacy.OP_RETAIN)
+        self.assertEqual(trace_transform["classification"], publication_privacy.CLASS_RETAIN)
+        self.assertEqual(trace_transform["operation"], publication_privacy.OP_RETAIN)
+        self.assertIs(trace_transform["byte_identical"], True)
+        self.assertEqual((destination / "power_trace.csv").read_bytes(), source_trace)
+        public_summary = json.loads(
+            (destination / "summary_metrics.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            public_summary["idle_mean_uncertainty"]["method"],
+            "duration_weighted_newey_west_bartlett_10s_iid_floor_v2",
+        )
+
     def test_unknown_fields_and_paths_fail_closed(self) -> None:
         mutations = {
             "config field": lambda bundle: self._add_json_field(
@@ -403,10 +441,12 @@ class PublicationPrivacyTests(unittest.TestCase):
             ),
             "idle uncertainty field": self._add_idle_uncertainty_field,
             "idle uncertainty reason": self._add_idle_uncertainty_reason,
+            "idle uncertainty method": self._set_unreviewed_idle_uncertainty_method,
             "measurement quality field": self._add_quality_field,
             "source provenance value": self._poison_source_provenance,
             "event field": self._add_event_field,
             "power source value": self._set_unreviewed_power_source,
+            "power interval column": self._add_unreviewed_power_interval_column,
             "artifact path": lambda bundle: (bundle / "private-extra.txt").write_text(
                 "fixture-only", encoding="utf-8"
             ),
@@ -482,6 +522,13 @@ class PublicationPrivacyTests(unittest.TestCase):
         _write_json(path, value)
 
     @staticmethod
+    def _set_unreviewed_idle_uncertainty_method(bundle: Path) -> None:
+        path = bundle / "summary_metrics.json"
+        value = json.loads(path.read_text())
+        value["idle_mean_uncertainty"]["method"] = "unreviewed_weighting_method"
+        _write_json(path, value)
+
+    @staticmethod
     def _add_event_field(bundle: Path) -> None:
         path = bundle / "events.jsonl"
         value = json.loads(path.read_text())
@@ -493,6 +540,15 @@ class PublicationPrivacyTests(unittest.TestCase):
         path = bundle / "power_trace.csv"
         path.write_text(
             path.read_text(encoding="utf-8").replace(",mock,mock", ",private-host-28,mock"),
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def _add_unreviewed_power_interval_column(bundle: Path) -> None:
+        path = bundle / "power_trace.csv"
+        path.write_text(
+            "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s,weights\n"
+            "1.0,10.0,mock,mock,0.5,1.0,private\n",
             encoding="utf-8",
         )
 

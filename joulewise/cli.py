@@ -34,7 +34,11 @@ from joulewise.adapters.powermetrics import (
     samples_from_raw_powermetrics,
 )
 from joulewise.bundle import BundleError
-from joulewise.bundle_read import BundleReader, BundleReadError
+from joulewise.bundle_read import (
+    FROZEN_LEGACY_BUNDLE_IDENTITIES,
+    BundleReader,
+    BundleReadError,
+)
 from joulewise.clock import Clock, FakeClock, SystemClock
 from joulewise.controller import run_benchmark, run_experiment
 from joulewise.doctor import doctor_report, exit_code as doctor_exit_code
@@ -79,35 +83,7 @@ from joulewise.uncertainty_evidence import (
 _PROMPT_TOKEN_IDS_HASH_DOMAIN = PROMPT_TOKEN_IDS_HASH_DOMAIN
 _SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN = SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN
 
-# The pre-D-033 corpus; frozen forever, never extended.
-_STRICT_LEGACY_BUNDLE_IDENTITIES = frozenset(
-    {
-        (
-            "example-mac-mlx-local__r1",
-            "ee80585a2f6cee6aa7e12eb83c318fd88a934be02d5fa2fb2eb7509630640fd5",
-        ),
-        (
-            "example-mac-mlx-local__r2",
-            "08144a7be4a10d887babbd5fcd1a93f391c1db2d11c63d3131afad80b59cb373",
-        ),
-        (
-            "example-mac-mlx-local__r3",
-            "fe75fc3bafe0af7485fdf98b70ac3d07ccc1db502230bf1b180b94689ab54652",
-        ),
-        (
-            "example-mac-mlx-qwen35-122b-512t__r1",
-            "74761e420520e0d6d979be7d3d08aa6ff7e0f5f8ac8e48109d3dedc08d8d0b7a",
-        ),
-        (
-            "example-mac-mlx-qwen35-122b-512t__r2",
-            "8808632f0235b412d30563747283c397ad534edb711e4cec784712182cbe3b60",
-        ),
-        (
-            "example-mac-mlx-qwen35-122b-512t__r3",
-            "8be8dd955219a8631c8e37a1b3467f368f37624d07acebd2d52924137dff69f4",
-        ),
-    }
-)
+_STRICT_LEGACY_BUNDLE_IDENTITIES = FROZEN_LEGACY_BUNDLE_IDENTITIES
 
 
 def _load_config(path: Path) -> dict[str, Any]:
@@ -340,7 +316,18 @@ def _strict_problems(reader: BundleReader) -> list[str]:
         )
     else:
         in_window = sum(
-            1 for point in curve if window.start_s <= point.t <= window.end_s
+            1
+            for point in curve
+            if (
+                point.support_start_s is not None
+                and point.support_end_s is not None
+                and min(window.end_s, point.support_end_s)
+                > max(window.start_s, point.support_start_s)
+            )
+            or (
+                point.support_start_s is None
+                and window.start_s <= point.t <= window.end_s
+            )
         )
         if in_window < 2:
             problems.append(
@@ -366,7 +353,7 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     problems.extend(_strict_raw_to_trace_problems(reader))
     if not version_problems:
         fresh = reduce_bundle(reader.path).to_dict()
-        # The fresh 0.4.2 derivation is the raw/metadata authority.  Inspect it
+        # The fresh current derivation is the raw/metadata authority. Inspect it
         # before legacy additive-absence projection can hide the governed
         # object, while retaining the stored-summary check for unsupported
         # versions and tampered current-era summaries.  Exact diagnostics are
@@ -636,10 +623,13 @@ def _strict_reducer_version_dispatch(
     reducer_version = provenance.get("reducer_version")
     if reducer_version == SUMMARY_REDUCER_VERSION:
         return [], set(), False, None
-    if reducer_version == "0.4.1":
-        return [], ADDED_SINCE_0_4_1, False, "0.4.1"
     return [
-        "strict: unsupported reducer version; re-reduction required"
+        "strict: unsupported reducer version; re-reduction required",
+        "strict: unsupported reducer version "
+        f"{reducer_version!r} for current-era bundle; superseded versions "
+        "cannot claim the current inter_token_throughput_tokens_s reduction "
+        f"shape and explicit re-reduction with {SUMMARY_REDUCER_VERSION} is "
+        "required",
     ], set(), False, None
 
 
@@ -1211,6 +1201,7 @@ def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
                 raw_path.read_bytes(),
                 plist_anchor_offset_s=anchor_offset_s,
             )
+            require_interval_support = False
         else:
             evidence = metadata.get("uncertainty_evidence")
             clock_anchor = (
@@ -1228,9 +1219,12 @@ def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
                 raw_path.read_bytes(),
                 first_record_endpoint_s=point_s,
             )
+            require_interval_support = True
     except (OSError, ValueError) as exc:
         return [f"strict: raw-to-trace: cannot derive raw/{RAW_SAMPLES_NAME}: {exc}"]
-    return _compare_raw_derived_samples(reader, expected)
+    return _compare_raw_derived_samples(
+        reader, expected, require_interval_support=require_interval_support
+    )
 
 
 def _verify_mock_raw_to_trace_exemption(reader: BundleReader) -> list[str]:
@@ -1310,6 +1304,7 @@ def _compare_raw_derived_samples(
     expected: list[Any],
     *,
     backend: str | None = None,
+    require_interval_support: bool = False,
 ) -> list[str]:
     prefix = f"{backend} " if backend else ""
     try:
@@ -1360,6 +1355,32 @@ def _compare_raw_derived_samples(
                 f"{index} rail {rail!r} does not match raw-derived "
                 f"{expected_rail!r}"
             ]
+        if require_interval_support:
+            try:
+                interval_start_s = finite_float(
+                    row.get("interval_start_s"),
+                    f"power_trace.csv row {index} interval_start_s",
+                )
+                interval_end_s = finite_float(
+                    row.get("interval_end_s"),
+                    f"power_trace.csv row {index} interval_end_s",
+                )
+            except ValueError as exc:
+                return [f"strict: raw-to-trace: {exc}"]
+            if interval_start_s != sample.interval_start_s:
+                return [
+                    f"strict: raw-to-trace: {prefix}power_trace.csv row "
+                    f"{index} rail {rail!r} interval_start_s "
+                    f"{interval_start_s!r} does not match raw-derived "
+                    f"{sample.interval_start_s!r}"
+                ]
+            if interval_end_s != sample.interval_end_s:
+                return [
+                    f"strict: raw-to-trace: {prefix}power_trace.csv row "
+                    f"{index} rail {rail!r} interval_end_s "
+                    f"{interval_end_s!r} does not match raw-derived "
+                    f"{sample.interval_end_s!r}"
+                ]
     return []
 
 

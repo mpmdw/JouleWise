@@ -281,6 +281,23 @@ _WORKER_LOG_RE = re.compile(
 _WINDOWS_ABSOLUTE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 _POWER_SOURCES = frozenset({"mock", "powermetrics", "nvidia_smi"})
 _POWER_RAILS = frozenset({"", "mock", "cpu_power", "gpu_power", "ane_power", "gpu_board"})
+_IDLE_MEAN_UNCERTAINTY_METHODS = frozenset(
+    {
+        "newey_west_bartlett_10s_iid_floor_v1",
+        "duration_weighted_newey_west_bartlett_10s_iid_floor_v2",
+    }
+)
+_POWER_TRACE_POINT_COLUMNS = (
+    "timestamp_s",
+    "power_w",
+    "source",
+    "rail",
+)
+_POWER_TRACE_INTERVAL_COLUMNS = (
+    *_POWER_TRACE_POINT_COLUMNS,
+    "interval_start_s",
+    "interval_end_s",
+)
 
 
 class PrivacyAuditError(RuntimeError):
@@ -604,7 +621,7 @@ def _audit_idle_mean_uncertainty(value: Any) -> None:
         "not_estimable",
     }:
         raise PrivacyAuditError(f"{label}.status is unclassified")
-    if value["method"] != "newey_west_bartlett_10s_iid_floor_v1":
+    if value["method"] not in _IDLE_MEAN_UNCERTAINTY_METHODS:
         raise PrivacyAuditError(f"{label}.method is unclassified")
     if value["source_artifact"] != "raw/powermetrics_idle.plist":
         raise PrivacyAuditError(f"{label}.source_artifact is unclassified")
@@ -685,21 +702,32 @@ def _audit_power_trace(path: Path) -> None:
         header = next(reader)
     except StopIteration as exc:
         raise PrivacyAuditError("power_trace.csv is empty") from exc
-    expected = ["timestamp_s", "power_w", "source", "rail"]
-    if header != expected:
+    expected_headers = {
+        _POWER_TRACE_POINT_COLUMNS,
+        _POWER_TRACE_INTERVAL_COLUMNS,
+    }
+    header_tuple = tuple(header)
+    if header_tuple not in expected_headers:
         raise PrivacyAuditError(
-            f"unclassified power_trace.csv columns: expected {expected!r}, got {header!r}"
+            "unclassified power_trace.csv columns: expected exactly "
+            f"{list(_POWER_TRACE_POINT_COLUMNS)!r} or "
+            f"{list(_POWER_TRACE_INTERVAL_COLUMNS)!r}, got {header!r}"
         )
+    interval_trace = header_tuple == _POWER_TRACE_INTERVAL_COLUMNS
     for index, row in enumerate(reader, start=2):
-        if len(row) != len(expected):
+        if len(row) != len(header):
             raise PrivacyAuditError(f"power_trace.csv line {index} has {len(row)} columns")
         try:
-            float(row[0])
-            float(row[1])
+            timestamp_s = float(row[0])
+            power_w = float(row[1])
         except ValueError as exc:
             raise PrivacyAuditError(
                 f"power_trace.csv line {index} has a non-numeric timestamp or power value"
             ) from exc
+        if not math.isfinite(timestamp_s) or not math.isfinite(power_w):
+            raise PrivacyAuditError(
+                f"power_trace.csv line {index} has a non-finite timestamp or power value"
+            )
         if row[2] not in _POWER_SOURCES:
             raise PrivacyAuditError(
                 f"unclassified power_trace.csv source at line {index}: {row[2]!r}"
@@ -708,6 +736,26 @@ def _audit_power_trace(path: Path) -> None:
             raise PrivacyAuditError(
                 f"unclassified power_trace.csv rail at line {index}: {row[3]!r}"
             )
+        if interval_trace:
+            try:
+                interval_start_s = float(row[4])
+                interval_end_s = float(row[5])
+            except ValueError as exc:
+                raise PrivacyAuditError(
+                    f"power_trace.csv line {index} has a non-numeric interval support edge"
+                ) from exc
+            if not math.isfinite(interval_start_s) or not math.isfinite(interval_end_s):
+                raise PrivacyAuditError(
+                    f"power_trace.csv line {index} has a non-finite interval support edge"
+                )
+            if interval_start_s >= interval_end_s:
+                raise PrivacyAuditError(
+                    f"power_trace.csv line {index} interval support must have start < end"
+                )
+            if interval_end_s != timestamp_s:
+                raise PrivacyAuditError(
+                    f"power_trace.csv line {index} interval_end_s must equal timestamp_s"
+                )
 
 
 def audit_private_bundle(bundle: Path) -> PrivacyAudit:

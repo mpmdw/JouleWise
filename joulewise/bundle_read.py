@@ -77,6 +77,39 @@ __all__ = [
 
 #: Exact ``power_trace.csv`` header (D-018).
 POWER_TRACE_HEADER = "timestamp_s,power_w,source,rail"
+POWER_TRACE_INTERVAL_HEADER = (
+    "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s"
+)
+
+# The pre-D-033 corpus compatibility identity set; frozen forever.
+FROZEN_LEGACY_BUNDLE_IDENTITIES = frozenset(
+    {
+        (
+            "example-mac-mlx-local__r1",
+            "ee80585a2f6cee6aa7e12eb83c318fd88a934be02d5fa2fb2eb7509630640fd5",
+        ),
+        (
+            "example-mac-mlx-local__r2",
+            "08144a7be4a10d887babbd5fcd1a93f391c1db2d11c63d3131afad80b59cb373",
+        ),
+        (
+            "example-mac-mlx-local__r3",
+            "fe75fc3bafe0af7485fdf98b70ac3d07ccc1db502230bf1b180b94689ab54652",
+        ),
+        (
+            "example-mac-mlx-qwen35-122b-512t__r1",
+            "74761e420520e0d6d979be7d3d08aa6ff7e0f5f8ac8e48109d3dedc08d8d0b7a",
+        ),
+        (
+            "example-mac-mlx-qwen35-122b-512t__r2",
+            "8808632f0235b412d30563747283c397ad534edb711e4cec784712182cbe3b60",
+        ),
+        (
+            "example-mac-mlx-qwen35-122b-512t__r3",
+            "8be8dd955219a8631c8e37a1b3467f368f37624d07acebd2d52924137dff69f4",
+        ),
+    }
+)
 
 #: The five keys every ``events.jsonl`` record must carry, no more, no less.
 EVENT_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
@@ -91,10 +124,12 @@ class BundleReadError(Exception):
 
 @dataclass(frozen=True)
 class TracePoint:
-    """One point on the summed power curve: ``power_w`` at ``t``."""
+    """One point or interval-average observation on the summed power trace."""
 
     t: float
     power_w: float
+    support_start_s: float | None = None
+    support_end_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -132,6 +167,12 @@ class BundleReader:
     @property
     def path(self) -> Path:
         return self._path
+
+    def is_frozen_legacy_identity(self) -> bool:
+        metadata = self.raw_metadata()
+        return isinstance(metadata, dict) and (
+            metadata.get("run_id"), metadata.get("config_sha256")
+        ) in FROZEN_LEGACY_BUNDLE_IDENTITIES
 
     # ------------------------------------------------------------------
     # Strict accessors (structured failures, used by the reducer)
@@ -234,7 +275,13 @@ class BundleReader:
         if trace.problems:
             raise BundleReadError(trace.problems[0])
         self._cache["summed_curve"] = [
-            TracePoint(t=t, power_w=trace.totals[t]) for t in sorted(trace.totals)
+            TracePoint(
+                t=t,
+                power_w=trace.totals[t],
+                support_start_s=(trace.supports[t][0] if t in trace.supports else None),
+                support_end_s=(trace.supports[t][1] if t in trace.supports else None),
+            )
+            for t in sorted(trace.totals)
         ]
         return self._cache["summed_curve"]
 
@@ -621,6 +668,7 @@ class BundleReader:
 @dataclass(frozen=True)
 class _TraceValidation:
     totals: dict[float, float]
+    supports: dict[float, tuple[float, float]]
     problems: list[str]
 
 
@@ -1528,7 +1576,9 @@ def _check_summary(summary: Any) -> list[str]:
 def _validate_trace_rows(rows: list[dict[str, str]], manifest: list[str]) -> _TraceValidation:
     manifest_set = set(manifest)
     totals: dict[float, float] = {}
+    supports: dict[float, tuple[float, float]] = {}
     rails_at: dict[float, set[str]] = {}
+    support_modes_at: dict[float, set[bool]] = {}
     seen: set[tuple[float, str]] = set()
     problems: list[str] = []
     for index, row in enumerate(rows, start=2):
@@ -1544,6 +1594,33 @@ def _validate_trace_rows(rows: list[dict[str, str]], manifest: list[str]) -> _Tr
                 row.get("power_w"),
                 f"power_trace.csv row {index} power_w",
             )
+            interval_start_raw = row.get("interval_start_s")
+            interval_end_raw = row.get("interval_end_s")
+            if interval_start_raw is None and interval_end_raw is None:
+                support = None
+            elif interval_start_raw is None or interval_end_raw is None:
+                raise ValueError(
+                    f"power_trace.csv row {index} must carry both interval support edges"
+                )
+            else:
+                interval_start_s = finite_float(
+                    interval_start_raw,
+                    f"power_trace.csv row {index} interval_start_s",
+                )
+                interval_end_s = finite_float(
+                    interval_end_raw,
+                    f"power_trace.csv row {index} interval_end_s",
+                )
+                if interval_start_s >= interval_end_s:
+                    raise ValueError(
+                        f"power_trace.csv row {index} interval support must have "
+                        "start < end"
+                    )
+                if interval_end_s != timestamp_s:
+                    raise ValueError(
+                        f"power_trace.csv row {index} interval_end_s must equal timestamp_s"
+                    )
+                support = (interval_start_s, interval_end_s)
         except ValueError as exc:
             problems.append(str(exc))
             continue
@@ -1557,6 +1634,21 @@ def _validate_trace_rows(rows: list[dict[str, str]], manifest: list[str]) -> _Tr
         seen.add(key)
         totals[timestamp_s] = totals.get(timestamp_s, 0.0) + power_w
         rails_at.setdefault(timestamp_s, set()).add(rail)
+        support_modes_at.setdefault(timestamp_s, set()).add(support is not None)
+        if support is not None:
+            existing_support = supports.get(timestamp_s)
+            if existing_support is not None and existing_support != support:
+                problems.append(
+                    "power_trace.csv rail rows have different interval support at "
+                    f"timestamp {timestamp_s}"
+                )
+            else:
+                supports[timestamp_s] = support
+        elif timestamp_s in supports:
+            problems.append(
+                "power_trace.csv mixes interval-supported and point rail rows at "
+                f"timestamp {timestamp_s}"
+            )
     if len(manifest_set) > 1:
         misaligned = sorted(t for t, rails in rails_at.items() if rails != manifest_set)
         if misaligned:
@@ -1570,7 +1662,25 @@ def _validate_trace_rows(rows: list[dict[str, str]], manifest: list[str]) -> _Tr
                 f"share one timestamp ({len(misaligned)} misaligned "
                 "timestamp(s) total)"
             )
-    return _TraceValidation(totals=totals, problems=problems)
+    if supports and len(supports) != len(totals):
+        problems.append(
+            "power_trace.csv cannot mix interval-supported and point observations"
+        )
+    if any(len(modes) != 1 for modes in support_modes_at.values()):
+        problems.append(
+            "power_trace.csv cannot mix interval-supported and point rail rows"
+        )
+    if supports:
+        ordered = [supports[t] for t in sorted(supports)]
+        for previous, current in zip(ordered, ordered[1:]):
+            tolerance = 1e-6
+            if current[0] < previous[1] - tolerance:
+                problems.append(
+                    "power_trace.csv interval supports overlap: "
+                    f"{previous!r} then {current!r}"
+                )
+                break
+    return _TraceValidation(totals=totals, supports=supports, problems=problems)
 
 
 def _check_events(events_path: Path) -> list[str]:
@@ -1640,10 +1750,12 @@ def _check_power_trace(path: Path, summary: Any, metadata: Any) -> list[str]:
         return [f"power_trace.csv cannot be read: {exc}"]
     if header is None:
         return ["power_trace.csv is empty (no header line)"]
-    if ",".join(header) != POWER_TRACE_HEADER:
+    joined_header = ",".join(header)
+    if joined_header not in {POWER_TRACE_HEADER, POWER_TRACE_INTERVAL_HEADER}:
         return [
             "power_trace.csv header is "
-            f"{','.join(header)!r}, expected {POWER_TRACE_HEADER!r}"
+            f"{joined_header!r}, expected {POWER_TRACE_HEADER!r} or "
+            f"{POWER_TRACE_INTERVAL_HEADER!r}"
         ]
     problems: list[str] = []
     manifest: list[str] = []

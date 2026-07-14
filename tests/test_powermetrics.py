@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import plistlib
-import statistics
 import subprocess
 import tempfile
 import unittest
@@ -147,6 +147,21 @@ class PowermetricsParserTests(unittest.TestCase):
                 record.combined_power_w,
                 places=12,
             )
+            self.assertEqual(
+                {sample.interval_end_s for sample in rows}, {record.timestamp_s}
+            )
+            self.assertEqual(
+                {sample.interval_start_s for sample in rows},
+                {record.timestamp_s - record.elapsed_ns / 1_000_000_000.0},
+            )
+
+    def test_interval_power_matches_energy_counters_within_ten_microjoules(self) -> None:
+        for record in parse_powermetrics_records(FIXTURE.read_bytes()):
+            power_energy_j = (
+                record.combined_power_w * record.elapsed_ns / 1_000_000_000.0
+            )
+            counter_energy_j = sum(record.rail_energy_mj.values()) / 1000.0
+            self.assertLessEqual(abs(power_energy_j - counter_energy_j), 1e-5)
 
     def test_thermal_pressure_without_temperature(self) -> None:
         records = parse_powermetrics_records(FIXTURE.read_bytes())
@@ -397,6 +412,20 @@ class PowermetricsAdapterTests(unittest.TestCase):
             sum(float(document["processor"][rail]) for rail in RAIL_MANIFEST) / 1000.0
             for document in documents
         ]
+        intervals_s = [
+            int(document["elapsed_ns"]) / 1_000_000_000.0
+            for document in documents
+        ]
+        duration_s = math.fsum(intervals_s)
+        weights = [duration / duration_s for duration in intervals_s]
+        expected_mean = math.fsum(
+            weight * value for weight, value in zip(weights, expected_totals, strict=True)
+        )
+        q = math.fsum(weight * weight for weight in weights)
+        expected_variance = math.fsum(
+            weight * (value - expected_mean) ** 2
+            for weight, value in zip(weights, expected_totals, strict=True)
+        ) / (1.0 - q)
 
         def fake_run(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
@@ -411,16 +440,16 @@ class PowermetricsAdapterTests(unittest.TestCase):
             metadata["powermetrics"]["samplers_available"], SAMPLERS.split(",")
         )
         self.assertTrue(metadata["powermetrics"]["samplers_probe"]["ok"])
-        self.assertAlmostEqual(baseline.power_w_mean, statistics.mean(expected_totals), places=12)
+        self.assertAlmostEqual(baseline.power_w_mean, expected_mean, places=12)
         self.assertAlmostEqual(
             baseline.power_w_stddev,
-            statistics.stdev(expected_totals),
+            math.sqrt(expected_variance),
             places=12,
         )
         self.assertEqual(baseline.sample_count, len(documents))
         self.assertEqual(baseline.telemetry_backend, TelemetryBackend.POWERMETRICS)
-        self.assertAlmostEqual(baseline.power_w_mean, 0.466464226, places=12)
-        self.assertAlmostEqual(baseline.power_w_stddev, 0.5963032492730296, places=12)
+        self.assertAlmostEqual(baseline.power_w_mean, 0.46465690457640496, places=12)
+        self.assertAlmostEqual(baseline.power_w_stddev, 0.5949163238867929, places=12)
         self.assertAlmostEqual(baseline.duration_s, 5.091935956, places=12)
         self.assertAlmostEqual(baseline.gpu_idle_ratio_min, 0.846584, places=12)
         self.assertAlmostEqual(baseline.gpu_freq_hz_mean, 325.9148, places=12)
@@ -1095,6 +1124,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
             self.assertEqual(summary.status, RunStatus.SUCCEEDED)
             self.assertEqual((bundle_path / "raw" / RAW_SAMPLES_NAME).read_bytes(), truncated_stream)
             self.assertEqual(len((bundle_path / "power_trace.csv").read_text().splitlines()), 16)
+            self.assertEqual(
+                (bundle_path / "power_trace.csv").read_text().splitlines()[0],
+                "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s",
+            )
             metadata = json.loads((bundle_path / "metadata.json").read_text())
             diagnostics = metadata["device"]["parse_diagnostics"]
             measured = [

@@ -87,7 +87,7 @@ class _ReduceError(Exception):
 
 
 # ----------------------------------------------------------------------------
-# Interpolation + trapezoidal integration
+# Point interpolation plus interval-support integration
 
 
 def _interpolate(curve: list[TracePoint], t: float) -> float:
@@ -108,10 +108,19 @@ def _interpolate(curve: list[TracePoint], t: float) -> float:
 
 
 def _integrate(curve: list[TracePoint], start_s: float, end_s: float) -> float:
-    """Trapezoidal integral of the summed curve over ``[start_s, end_s]`` with
-    linear interpolation at both window edges (clamped past the sample span)."""
+    """Integrate a point curve or a WO-005 interval-average trace."""
     if end_s <= start_s:
         return 0.0
+    if curve and curve[0].support_start_s is not None:
+        return math.fsum(
+            point.power_w
+            * max(
+                0.0,
+                min(end_s, point.support_end_s or point.t)
+                - max(start_s, point.support_start_s),
+            )
+            for point in curve
+        )
     # Build the integration knots: the two window edges plus every interior
     # sample strictly inside the window, in time order.
     knots: list[float] = [start_s]
@@ -128,6 +137,15 @@ def _integrate(curve: list[TracePoint], start_s: float, end_s: float) -> float:
 
 
 def _in_window_sample_count(curve: list[TracePoint], window: Window) -> int:
+    if curve and curve[0].support_start_s is not None:
+        return sum(
+            1
+            for point in curve
+            if point.support_start_s is not None
+            and point.support_end_s is not None
+            and min(window.end_s, point.support_end_s)
+            > max(window.start_s, point.support_start_s)
+        )
     return sum(1 for point in curve if window.start_s <= point.t <= window.end_s)
 
 
@@ -276,10 +294,6 @@ def _telemetry_source(metadata: dict[str, Any]) -> str | None:
 
 def _config_output_tokens(config: BenchmarkConfig) -> int | None:
     return config.workload_profile.output_tokens
-
-
-def _config_prompt_tokens(config: BenchmarkConfig) -> int | None:
-    return config.workload_profile.prompt_tokens
 
 
 def _observed_total_tokens(metadata: dict[str, Any]) -> int | None:
@@ -436,6 +450,8 @@ def _interpolation_edge_bound_j(
     curve: list[TracePoint],
     window: Window,
 ) -> float | None:
+    if curve and curve[0].support_start_s is not None:
+        return 0.0
     if window.duration_s < 0.0 or len(curve) < 2:
         return None
     if window.duration_s == 0.0:
@@ -469,6 +485,8 @@ def _interpolation_joint_edge_bound_j(
     either gap is unavailable or the maximally inward combination inverts the
     window (equality is allowed and yields a zero-duration candidate).
     """
+    if curve and curve[0].support_start_s is not None:
+        return 0.0 if window.duration_s > 0.0 else None
     if window.duration_s <= 0.0 or len(curve) < 2:
         return None
     start_gap = _bracketing_gap_s(curve, window.start_s)
@@ -632,7 +650,6 @@ def _window_evidence_precheck_for_window(
     require_idle_baseline: bool = False,
     idle_baseline: IdleBaseline | None = None,
     bound_terms_j: dict[str, float | None] | None = None,
-    legacy_interpolation_edge: bool = False,
 ) -> dict[str, Any]:
     reasons: list[str] = []
     if window.duration_s <= 0.0:
@@ -670,15 +687,7 @@ def _window_evidence_precheck_for_window(
         joint_interpolation_bound_j = bound_terms_j.get(
             "E_interpolation_joint_edge_bound_j"
         )
-    # The deprecated schema-0.1 ``request`` alias retains its byte-identical
-    # pre-0.3 field shape and one-edge eligibility recipe. Only the new
-    # metric-specific gates consume the governed joint-edge bound.
-    governed_interpolation_bound_j = (
-        interpolation_bound_j
-        if legacy_interpolation_edge
-        else joint_interpolation_bound_j
-    )
-    if governed_interpolation_bound_j is None:
+    if joint_interpolation_bound_j is None:
         reasons.append("interpolation_bound_unrecorded")
 
     drift_bound_j = (
@@ -706,8 +715,7 @@ def _window_evidence_precheck_for_window(
         "clock_anchor_bound_s": clock_bound_s,
         "interpolation_edge_bound_j": interpolation_bound_j,
     }
-    if not legacy_interpolation_edge:
-        result["interpolation_joint_edge_bound_j"] = joint_interpolation_bound_j
+    result["interpolation_joint_edge_bound_j"] = joint_interpolation_bound_j
     return result
 
 
@@ -781,6 +789,15 @@ def _p95(values: list[float]) -> float | None:
 
 
 def _bracketing_gap_s(curve: list[TracePoint], t: float) -> float | None:
+    if curve and curve[0].support_start_s is not None:
+        durations = [
+            point.support_end_s - point.support_start_s
+            for point in curve
+            if point.support_start_s is not None
+            and point.support_end_s is not None
+            and point.support_start_s <= t <= point.support_end_s
+        ]
+        return max(durations) if durations else None
     if len(curve) < 2 or t < curve[0].t or t > curve[-1].t:
         return None
     for index, point in enumerate(curve):
@@ -889,7 +906,7 @@ def _reduce(
         raise _ReduceError(
             "fewer than 2 power samples inside the measured_run window "
             f"({_in_window_sample_count(curve, window)} found); "
-            "cannot integrate a trapezoid"
+            "cannot integrate the measured trace"
         )
 
     gross_energy_j = _integrate(curve, window.start_s, window.end_s)
@@ -1221,7 +1238,9 @@ def _window_energy(curve: list[TracePoint], window: Window) -> float | None:
 def _windows_energy(curve: list[TracePoint], windows: list[Window]) -> float | None:
     if not curve:
         return None
-    return sum(_integrate(curve, window.start_s, window.end_s) for window in windows)
+    return math.fsum(
+        _integrate(curve, window.start_s, window.end_s) for window in windows
+    )
 
 
 def _window_identifiability(curve: list[TracePoint], window: Window) -> str:

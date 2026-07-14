@@ -206,6 +206,10 @@ class PowerSample:
     power_w: float
     source: str
     rail: str | None = None
+    #: Averaging support for interval telemetry. Both fields are present or
+    #: absent together. Point-sample backends leave them unset.
+    interval_start_s: float | None = None
+    interval_end_s: float | None = None
 
 
 @dataclass(frozen=True)
