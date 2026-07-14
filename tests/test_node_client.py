@@ -7,9 +7,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from joulewise.adapters.node_client import (
     ClockMarker,
@@ -17,7 +19,7 @@ from joulewise.adapters.node_client import (
     compute_stage_bound,
     convert_node_timestamp,
 )
-from joulewise.interfaces import AdapterResult
+from joulewise.interfaces import AdapterResult, acknowledge_durable_custody
 from joulewise.schemas import FailureReason
 
 
@@ -165,6 +167,133 @@ class MissingStatusTransport(LoopbackTransport):
         return super().run(command, timeout_s=timeout_s)
 
 
+class RecoverableWorkerTransport(LoopbackTransport):
+    """Leaves real remote evidence once, then permits a later-session sweep."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.fail_worker_once = True
+        self.fail_orphan_collect_once = False
+
+    def run(self, command: list[str], *, timeout_s: float | None = None) -> AdapterResult:
+        if self.fail_worker_once and "--task" in command:
+            self.fail_worker_once = False
+            artifacts_dir = Path(command[command.index("--artifacts") + 1])
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+            (artifacts_dir / "worker.log").write_text(
+                "worker completed while transport disappeared\n",
+                encoding="utf-8",
+            )
+            (artifacts_dir / "status.json").write_text(
+                json.dumps(
+                    {
+                        "protocol_version": 1,
+                        "task_id": "task-orphaned",
+                        "status": "failed",
+                        "failure_reason": "unknown_error",
+                        "message": "orphaned result",
+                        "artifacts": {"worker_log": "worker.log"},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.TRANSPORT_UNAVAILABLE,
+                message="connection lost after worker wrote evidence",
+            )
+        return super().run(command, timeout_s=timeout_s)
+
+    def collect(
+        self, source: str, destination: str, *, timeout_s: float | None = None
+    ) -> AdapterResult:
+        if self.fail_orphan_collect_once and source.endswith("task-orphaned"):
+            self.fail_orphan_collect_once = False
+            destination_path = Path(destination)
+            destination_path.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(Path(source) / "worker.log", destination_path / "worker.log")
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.TRANSPORT_UNAVAILABLE,
+                message="connection lost during partial reclamation collect",
+            )
+        return super().collect(source, destination, timeout_s=timeout_s)
+
+
+class TwiceFailingRecollectionTransport(RecoverableWorkerTransport):
+    """First retry leaves evidence; second retry fails before copying bytes."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.recollection_attempts = 0
+
+    def collect(
+        self, source: str, destination: str, *, timeout_s: float | None = None
+    ) -> AdapterResult:
+        if source.endswith("task-orphaned") and self.recollection_attempts < 2:
+            self.recollection_attempts += 1
+            if self.recollection_attempts == 1:
+                destination_path = Path(destination)
+                destination_path.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(Path(source) / "worker.log", destination_path / "worker.log")
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.TRANSPORT_UNAVAILABLE,
+                message="connection lost during repeated partial recollection",
+            )
+        return LoopbackTransport.collect(self, source, destination, timeout_s=timeout_s)
+
+
+class PersistentlyFailingPartialCollectTransport(LoopbackTransport):
+    """Every collection attempt leaves a distinct evidence-bearing partial."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.collect_attempts = 0
+
+    def collect(
+        self, source: str, destination: str, *, timeout_s: float | None = None
+    ) -> AdapterResult:
+        self.collect_attempts += 1
+        destination_path = Path(destination)
+        destination_path.mkdir(parents=True, exist_ok=True)
+        destination_path.joinpath("worker.log").write_text(
+            "partial collection %d\n" % self.collect_attempts,
+            encoding="utf-8",
+        )
+        return AdapterResult(
+            ok=False,
+            failure_reason=FailureReason.TRANSPORT_UNAVAILABLE,
+            message="persistent partial collection failure",
+        )
+
+
+class ManifestAppendingSweepClient(NodeWorkerClient):
+    """Minimal sweep simulation used to force an interleaved manifest write."""
+
+    def __init__(
+        self,
+        *args,
+        token: str,
+        entered: threading.Event,
+        release: threading.Event,
+        **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
+        self.token = token
+        self.entered = entered
+        self.release = release
+
+    def _sweep_retained_artifacts_locked(self) -> None:
+        records = self._load_retention_records()
+        self.entered.set()
+        if not self.release.wait(timeout=5):
+            raise AssertionError("timed out waiting to complete sweep simulation")
+        records.append({"token": self.token})
+        self._write_retention_records(records)
+
+
 class NodeClientTests(unittest.TestCase):
     def make_client(
         self,
@@ -178,6 +307,7 @@ class NodeClientTests(unittest.TestCase):
             run_id="run-loopback-001",
             remote_work_root=remote_root,
             remote_python=sys.executable,
+            retention_root=Path(remote_root).parent / "retention",
         )
 
     def test_take_clock_marker_math_is_exact(self) -> None:
@@ -227,16 +357,29 @@ class NodeClientTests(unittest.TestCase):
             self.assertIsNotNone(result.offset_estimate_s)
             self.assertIsNotNone(result.offset_bound_s)
             self.assertIsNotNone(transport.clock_alignment)
-            self.assertIsNone(result.artifacts_path)
+            self.assertIsNotNone(result.artifacts_path)
+            assert result.artifacts_path is not None
+            self.assertTrue(result.artifacts_path.is_dir())
             self.assertIn("status.json", result.artifacts)
             self.assertIn("worker.log", result.artifacts)
             self.assertEqual(result.raw_status["artifacts"]["status_json"], "status.json")
             cleanup = client.cleanup_report()
             self.assertTrue(cleanup)
-            self.assertTrue(all(row["removed"] for row in cleanup), cleanup)
-            local_rows = [row for row in cleanup if row["scope"] == "local"]
-            self.assertEqual(len(local_rows), 1)
-            self.assertFalse(Path(local_rows[0]["path"]).exists())
+            self.assertTrue(all(not row["removed"] for row in cleanup), cleanup)
+            self.assertTrue(all(row["deferred_for_custody"] for row in cleanup))
+            self.assertTrue(client.retention_manifest_path.is_file())
+
+            assert result.custody_token is not None
+            acknowledgement = acknowledge_durable_custody(
+                result.artifacts_path.parents[1],
+                result.custody_token,
+                [result.artifacts_path],
+            )
+            released = client.acknowledge_custody(acknowledgement)
+
+            self.assertTrue(released)
+            self.assertTrue(all(row["removed"] for row in released), released)
+            self.assertTrue(result.artifacts_path.is_dir())
 
     def test_run_task_transport_failures_are_structured(self) -> None:
         cases = [
@@ -259,6 +402,314 @@ class NodeClientTests(unittest.TestCase):
                     self.assertEqual(result.status, "failed")
                     self.assertEqual(result.failure_reason, FailureReason.TRANSPORT_UNAVAILABLE)
                     self.assertIn("down", result.message)
+
+    def test_transport_unavailable_retention_is_reclaimed_next_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            remote_root = str(root / "remote")
+            retention_root = root / "retention"
+            transport = RecoverableWorkerTransport()
+            first = NodeWorkerClient(
+                transport,
+                SequencedClock([100.0, 100.2]),
+                remote_work_root=remote_root,
+                remote_python=sys.executable,
+                retention_root=retention_root,
+            )
+            orphaned_task = valid_telemetry_task("task-orphaned")
+
+            orphaned = first.run_task(orphaned_task, timeout_s=10)
+
+            self.assertEqual(
+                orphaned.failure_reason,
+                FailureReason.TRANSPORT_UNAVAILABLE,
+            )
+            assert orphaned.custody_token is not None
+            manifest = json.loads(first.retention_manifest_path.read_text())
+            self.assertEqual(
+                [record["token"] for record in manifest["records"]],
+                [orphaned.custody_token],
+            )
+            remote_orphan = root / "remote" / "run-loopback-001" / "artifacts" / "task-orphaned"
+            self.assertTrue(remote_orphan.is_dir())
+
+            transport.fail_orphan_collect_once = True
+            second = NodeWorkerClient(
+                transport,
+                SequencedClock([101.0, 101.2, 102.0, 102.2]),
+                remote_work_root=remote_root,
+                remote_python=sys.executable,
+                retention_root=retention_root,
+            )
+            current = second.run_task(
+                valid_telemetry_task("task-current"),
+                timeout_s=10,
+            )
+
+            self.assertTrue(remote_orphan.is_dir())
+            manifest = json.loads(second.retention_manifest_path.read_text())
+            orphan_record = next(
+                record
+                for record in manifest["records"]
+                if record["token"] == orphaned.custody_token
+            )
+            self.assertFalse(orphan_record["collection_complete"])
+
+            third = NodeWorkerClient(
+                transport,
+                SequencedClock([103.0, 103.2, 104.0, 104.2]),
+                remote_work_root=remote_root,
+                remote_python=sys.executable,
+                retention_root=retention_root,
+            )
+            latest = third.run_task(
+                valid_telemetry_task("task-latest"),
+                timeout_s=10,
+            )
+
+            self.assertFalse(remote_orphan.exists())
+            manifest = json.loads(third.retention_manifest_path.read_text())
+            self.assertNotIn(
+                orphaned.custody_token,
+                [record["token"] for record in manifest["records"]],
+            )
+            self.assertNotIn(
+                current.custody_token,
+                [record["token"] for record in manifest["records"]],
+            )
+            self.assertIn(
+                latest.custody_token,
+                [record["token"] for record in manifest["records"]],
+            )
+            acknowledgement = (
+                retention_root
+                / "standalone"
+                / orphaned.custody_token
+                / "logs"
+                / "custody"
+                / (orphaned.custody_token + ".json")
+            )
+            self.assertTrue(acknowledgement.is_file())
+            reclaimed = [
+                row
+                for row in third.cleanup_report()
+                if row.get("custody_token") == orphaned.custody_token
+                and row.get("after_durable_custody") is True
+            ]
+            self.assertTrue(reclaimed)
+            self.assertTrue(all(row["removed"] for row in reclaimed))
+
+    def test_interleaved_sweeps_cannot_lose_a_manifest_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            retention_root = Path(tmp) / "retention"
+            first_entered = threading.Event()
+            second_entered = threading.Event()
+            first_release = threading.Event()
+            second_release = threading.Event()
+            second_release.set()
+            clients = [
+                ManifestAppendingSweepClient(
+                    LoopbackTransport(),
+                    SequencedClock([]),
+                    remote_work_root=str(Path(tmp) / "remote"),
+                    retention_root=retention_root,
+                    token="first",
+                    entered=first_entered,
+                    release=first_release,
+                ),
+                ManifestAppendingSweepClient(
+                    LoopbackTransport(),
+                    SequencedClock([]),
+                    remote_work_root=str(Path(tmp) / "remote"),
+                    retention_root=retention_root,
+                    token="second",
+                    entered=second_entered,
+                    release=second_release,
+                ),
+            ]
+            threads = [
+                threading.Thread(target=client._sweep_retained_artifacts)
+                for client in clients
+            ]
+
+            threads[0].start()
+            self.assertTrue(first_entered.wait(timeout=5))
+            threads[1].start()
+            self.assertFalse(second_entered.wait(timeout=0.1))
+            first_release.set()
+            for thread in threads:
+                thread.join(timeout=5)
+                self.assertFalse(thread.is_alive())
+
+            records = json.loads(clients[0].retention_manifest_path.read_text())[
+                "records"
+            ]
+            self.assertEqual(
+                [record["token"] for record in records],
+                ["first", "second"],
+            )
+
+    def test_sweep_skips_when_retention_lock_acquisition_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            client = self.make_client(
+                LoopbackTransport(),
+                SequencedClock([]),
+                str(Path(tmp) / "remote"),
+            )
+            with (
+                patch(
+                    "joulewise.adapters.node_client.fcntl.flock",
+                    side_effect=OSError("injected lock failure"),
+                ),
+                patch.object(
+                    client,
+                    "_sweep_retained_artifacts_locked",
+                ) as unlocked_sweep,
+            ):
+                swept = client._sweep_retained_artifacts()
+
+            self.assertFalse(swept)
+            unlocked_sweep.assert_not_called()
+
+    def test_second_recollection_failure_preserves_first_partial_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            remote_root = str(root / "remote")
+            retention_root = root / "retention"
+            transport = TwiceFailingRecollectionTransport()
+            first = NodeWorkerClient(
+                transport,
+                SequencedClock([100.0, 100.2]),
+                remote_work_root=remote_root,
+                remote_python=sys.executable,
+                retention_root=retention_root,
+            )
+            orphaned = first.run_task(
+                valid_telemetry_task("task-orphaned"),
+                timeout_s=10,
+            )
+            assert orphaned.custody_token is not None
+
+            second = NodeWorkerClient(
+                transport,
+                SequencedClock([]),
+                remote_work_root=remote_root,
+                remote_python=sys.executable,
+                retention_root=retention_root,
+            )
+            second._sweep_retained_artifacts()
+            manifest = json.loads(second.retention_manifest_path.read_text())
+            record = next(
+                item
+                for item in manifest["records"]
+                if item["token"] == orphaned.custody_token
+            )
+            first_partial = Path(record["partial_custody_paths"][-1])
+            self.assertEqual(
+                first_partial.joinpath("worker.log").read_text(),
+                "worker completed while transport disappeared\n",
+            )
+
+            third = NodeWorkerClient(
+                transport,
+                SequencedClock([]),
+                remote_work_root=remote_root,
+                remote_python=sys.executable,
+                retention_root=retention_root,
+            )
+            third._sweep_retained_artifacts()
+
+            self.assertEqual(
+                first_partial.joinpath("worker.log").read_text(),
+                "worker completed while transport disappeared\n",
+            )
+            manifest = json.loads(third.retention_manifest_path.read_text())
+            record = next(
+                item
+                for item in manifest["records"]
+                if item["token"] == orphaned.custody_token
+            )
+            self.assertEqual(record["partial_custody_paths"], [str(first_partial)])
+            self.assertFalse(record["collection_complete"])
+
+            fourth = NodeWorkerClient(
+                transport,
+                SequencedClock([]),
+                remote_work_root=remote_root,
+                remote_python=sys.executable,
+                retention_root=retention_root,
+            )
+            fourth._sweep_retained_artifacts()
+
+            self.assertFalse(first_partial.exists())
+            manifest = json.loads(fourth.retention_manifest_path.read_text())
+            self.assertNotIn(
+                orphaned.custody_token,
+                [item["token"] for item in manifest["records"]],
+            )
+
+    def test_failed_recollections_keep_original_and_newest_two_partials(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            remote_root = str(root / "remote")
+            retention_root = root / "retention"
+            transport = PersistentlyFailingPartialCollectTransport()
+            first = NodeWorkerClient(
+                transport,
+                SequencedClock([100.0, 100.2, 101.0, 101.2]),
+                remote_work_root=remote_root,
+                remote_python=sys.executable,
+                retention_root=retention_root,
+            )
+            result = first.run_task(
+                valid_telemetry_task("task-persistent-partials"),
+                timeout_s=10,
+            )
+            assert result.custody_token is not None
+            records = json.loads(first.retention_manifest_path.read_text())["records"]
+            record = next(
+                item for item in records if item["token"] == result.custody_token
+            )
+            original_path = Path(record["custody_path"])
+            self.assertTrue(original_path.joinpath("worker.log").is_file())
+
+            for _ in range(5):
+                client = NodeWorkerClient(
+                    transport,
+                    SequencedClock([]),
+                    remote_work_root=remote_root,
+                    remote_python=sys.executable,
+                    retention_root=retention_root,
+                )
+                client._sweep_retained_artifacts()
+
+            manifest = json.loads(first.retention_manifest_path.read_text())
+            record = next(
+                item
+                for item in manifest["records"]
+                if item["token"] == result.custody_token
+            )
+            retained = [Path(value) for value in record["partial_custody_paths"]]
+            self.assertEqual(len(retained), 3)
+            self.assertEqual(retained[0], original_path)
+            self.assertEqual(
+                [path.joinpath("worker.log").read_text() for path in retained],
+                [
+                    "partial collection 1\n",
+                    "partial collection 5\n",
+                    "partial collection 6\n",
+                ],
+            )
+            self.assertEqual(
+                len(
+                    list(
+                        original_path.parent.glob(
+                            original_path.name + ".recollect-*"
+                        )
+                    )
+                ),
+                2,
+            )
 
     def test_run_task_missing_status_json_is_unknown_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

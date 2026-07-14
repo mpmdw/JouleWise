@@ -10,16 +10,25 @@ explicit clock markers.
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
 import posixpath
 import shutil
 import tempfile
+import uuid
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Iterator, Protocol
 
 from joulewise.clock import Clock
-from joulewise.interfaces import AdapterResult
+from joulewise.interfaces import (
+    AdapterResult,
+    DurableCustodyAcknowledgement,
+    RunContext,
+    acknowledge_durable_custody,
+)
 from joulewise.schemas import FailureReason
 
 PROTOCOL_VERSION = 1
@@ -30,6 +39,9 @@ STATUS_JSON = "status.json"
 CLOCK_METHOD = "node_worker_clock_echo"
 CLOCK_MARKER_TIMEOUT_S = 30.0
 FILE_TRANSFER_TIMEOUT_S = 60.0
+RETENTION_MANIFEST_VERSION = 1
+MAX_RETAINED_FAILED_PARTIALS = 2
+DEFAULT_RETENTION_ROOT = Path(tempfile.gettempdir()) / "joulewise-node-custody"
 
 
 class NodeTransport(Protocol):
@@ -71,6 +83,7 @@ class NodeTaskResult:
     offset_estimate_s: float | None = None
     offset_bound_s: float | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    custody_token: str | None = None
 
 
 def convert_node_timestamp(node_time_s: float, offset_estimate_s: float) -> float:
@@ -101,6 +114,7 @@ class NodeWorkerClient:
         run_id: str | None = None,
         remote_work_root: str = DEFAULT_REMOTE_WORK_ROOT,
         remote_python: str = DEFAULT_REMOTE_PYTHON,
+        retention_root: Path | None = None,
     ) -> None:
         self.transport = transport
         self.clock = clock
@@ -108,7 +122,13 @@ class NodeWorkerClient:
         self.remote_work_root = remote_work_root.rstrip("/") or "/"
         self.remote_python = remote_python
         self.remote_worker_path = posixpath.join(self.remote_work_root, WORKER_FILENAME)
+        self.retention_root = Path(retention_root or DEFAULT_RETENTION_ROOT)
+        self.retention_manifest_path = self.retention_root / "retention-manifest.json"
+        self.retention_lock_path = self.retention_manifest_path.with_name(
+            self.retention_manifest_path.name + ".lock"
+        )
         self._worker_shipped = False
+        self._retention_swept = False
         self._cleanup_report: list[dict[str, Any]] = []
 
     def cleanup_report(self) -> list[dict[str, Any]]:
@@ -148,7 +168,13 @@ class NodeWorkerClient:
             rtt_bound_s=(after - before) / 2.0,
         )
 
-    def run_task(self, task: dict[str, Any], *, timeout_s: float) -> NodeTaskResult:
+    def run_task(
+        self,
+        task: dict[str, Any],
+        *,
+        timeout_s: float,
+        context: RunContext | None = None,
+    ) -> NodeTaskResult:
         task_id = task.get("task_id")
         if not isinstance(task_id, str) or not task_id.strip():
             return self._task_failure(
@@ -165,6 +191,8 @@ class NodeWorkerClient:
         ship_result = self._ensure_worker_shipped()
         if not ship_result.ok:
             return self._task_failure_from_adapter(ship_result, "ship worker failed")
+        if not self._retention_swept:
+            self._retention_swept = self._sweep_retained_artifacts()
 
         paths = self._remote_paths_for_run(run_id)
         dirs_result = self._ensure_run_dirs(paths)
@@ -174,6 +202,18 @@ class NodeWorkerClient:
         prepared_task = self._prepare_task_payload(task, run_id=run_id, paths=paths, timeout_s=timeout_s)
         remote_task_path = posixpath.join(paths["tasks_dir"], "%s.json" % task_id)
         remote_artifacts_path = posixpath.join(paths["artifacts_dir"], task_id)
+        custody_token = uuid.uuid4().hex
+        retention = self._new_retention_record(
+            token=custody_token,
+            task_id=task_id,
+            run_id=run_id,
+            prepared_task=prepared_task,
+            paths=paths,
+            remote_task_path=remote_task_path,
+            remote_artifacts_path=remote_artifacts_path,
+            context=context,
+        )
+        self._register_retention(retention)
 
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as tmp:
             json.dump(prepared_task, tmp, indent=2, sort_keys=True)
@@ -198,6 +238,7 @@ class NodeWorkerClient:
                 paths=paths,
                 remote_task_path=remote_task_path,
                 remote_artifacts_path=remote_artifacts_path,
+                custody_token=custody_token,
             )
 
         pre = self.take_clock_marker()
@@ -209,8 +250,10 @@ class NodeWorkerClient:
                 paths=paths,
                 remote_task_path=remote_task_path,
                 remote_artifacts_path=remote_artifacts_path,
+                custody_token=custody_token,
             )
 
+        self._mark_worker_may_have_run(custody_token)
         run_result = self.transport.run(
             [
                 self.remote_python,
@@ -237,6 +280,7 @@ class NodeWorkerClient:
                 paths=paths,
                 remote_task_path=remote_task_path,
                 remote_artifacts_path=remote_artifacts_path,
+                custody_token=custody_token,
             )
 
         post = self.take_clock_marker()
@@ -252,6 +296,7 @@ class NodeWorkerClient:
                 paths=paths,
                 remote_task_path=remote_task_path,
                 remote_artifacts_path=remote_artifacts_path,
+                custody_token=custody_token,
             )
 
         alignment = self._alignment_record(pre, post)
@@ -260,57 +305,57 @@ class NodeWorkerClient:
         if callable(recorder):
             recorder(alignment)
 
-        local_parent = Path(tempfile.mkdtemp(prefix="joulewise-node-artifacts-"))
-        local_artifacts_path = local_parent / task_id
-        try:
-            collect_result = self.transport.collect(
-                remote_artifacts_path,
-                str(local_artifacts_path),
-                timeout_s=FILE_TRANSFER_TIMEOUT_S,
+        local_artifacts_path = Path(retention["custody_path"])
+        local_artifacts_path.parent.mkdir(parents=True, exist_ok=True)
+        collect_result = self.transport.collect(
+            remote_artifacts_path,
+            str(local_artifacts_path),
+            timeout_s=FILE_TRANSFER_TIMEOUT_S,
+        )
+        if not collect_result.ok:
+            result = self._task_failure_from_adapter(
+                collect_result,
+                "collect artifacts failed",
+                pre_marker=pre,
+                post_marker=post,
+                alignment=alignment,
             )
-            if not collect_result.ok:
-                result = self._task_failure_from_adapter(
-                    collect_result,
-                    "collect artifacts failed",
+        else:
+            self._mark_collection_complete(custody_token)
+            status_path = local_artifacts_path / STATUS_JSON
+            try:
+                raw_status = json.loads(status_path.read_text(encoding="utf-8"))
+                artifacts = self._read_flat_artifacts(local_artifacts_path)
+            except (OSError, json.JSONDecodeError) as exc:
+                result = self._task_failure(
+                    FailureReason.UNKNOWN_ERROR,
+                    "missing or malformed status.json: %s" % exc,
+                    artifacts_path=local_artifacts_path,
                     pre_marker=pre,
                     post_marker=post,
                     alignment=alignment,
                 )
             else:
-                status_path = local_artifacts_path / STATUS_JSON
-                try:
-                    raw_status = json.loads(status_path.read_text(encoding="utf-8"))
-                    artifacts = self._read_flat_artifacts(local_artifacts_path)
-                except (OSError, json.JSONDecodeError) as exc:
-                    result = self._task_failure(
-                        FailureReason.UNKNOWN_ERROR,
-                        "missing or malformed status.json: %s" % exc,
-                        pre_marker=pre,
-                        post_marker=post,
-                        alignment=alignment,
-                    )
-                else:
-                    status = str(raw_status.get("status", "failed"))
-                    failure_reason = self._failure_reason(raw_status.get("failure_reason"))
-                    message = str(raw_status.get("message", ""))
-                    result = NodeTaskResult(
-                        ok=status == "succeeded",
-                        status=status,
-                        failure_reason=failure_reason,
-                        message=message,
-                        artifacts=artifacts,
-                        raw_status=raw_status,
-                        pre_marker=pre,
-                        post_marker=post,
-                        offset_estimate_s=alignment["offset_estimate_s"],
-                        offset_bound_s=alignment["offset_bound_s"],
-                        metadata={
-                            "clock_alignment": alignment,
-                            "worker_returncode": run_result.metadata.get("returncode"),
-                        },
-                    )
-        finally:
-            self._record_local_cleanup(task_id, local_parent)
+                status = str(raw_status.get("status", "failed"))
+                failure_reason = self._failure_reason(raw_status.get("failure_reason"))
+                message = str(raw_status.get("message", ""))
+                result = NodeTaskResult(
+                    ok=status == "succeeded",
+                    status=status,
+                    failure_reason=failure_reason,
+                    message=message,
+                    artifacts_path=local_artifacts_path,
+                    artifacts=artifacts,
+                    raw_status=raw_status,
+                    pre_marker=pre,
+                    post_marker=post,
+                    offset_estimate_s=alignment["offset_estimate_s"],
+                    offset_bound_s=alignment["offset_bound_s"],
+                    metadata={
+                        "clock_alignment": alignment,
+                        "worker_returncode": run_result.metadata.get("returncode"),
+                    },
+                )
         return self._with_remote_cleanup(
             result,
             task_id=task_id,
@@ -318,6 +363,7 @@ class NodeWorkerClient:
             paths=paths,
             remote_task_path=remote_task_path,
             remote_artifacts_path=remote_artifacts_path,
+            custody_token=custody_token,
         )
 
     def _read_flat_artifacts(self, artifacts_path: Path) -> dict[str, bytes]:
@@ -326,22 +372,6 @@ class NodeWorkerClient:
             if path.is_file():
                 artifacts[path.name] = path.read_bytes()
         return artifacts
-
-    def _record_local_cleanup(self, task_id: str, path: Path) -> None:
-        error: str | None = None
-        try:
-            shutil.rmtree(path)
-        except OSError as exc:
-            error = "%s: %s" % (exc.__class__.__name__, exc)
-        self._cleanup_report.append(
-            {
-                "task_id": task_id,
-                "scope": "local",
-                "path": str(path),
-                "removed": error is None,
-                "error": error,
-            }
-        )
 
     def _with_remote_cleanup(
         self,
@@ -352,7 +382,9 @@ class NodeWorkerClient:
         paths: dict[str, str],
         remote_task_path: str,
         remote_artifacts_path: str,
+        custody_token: str,
     ) -> NodeTaskResult:
+        del remote_task_path, remote_artifacts_path
         worker_metadata = (
             result.raw_status.get("metadata")
             if isinstance(result.raw_status, dict)
@@ -362,48 +394,24 @@ class NodeWorkerClient:
             isinstance(worker_metadata, dict)
             and worker_metadata.get("process_survived") is True
         )
-        is_final_cleanup = (
+        if (
             prepared_task.get("task_type") == "runtime"
             and prepared_task.get("operation") == "cleanup"
             and not process_survived
-        )
-        targets = (
-            [paths["run_dir"]]
-            if is_final_cleanup
-            else [remote_task_path, remote_artifacts_path]
-        )
-        cleanup = self.transport.run(
-            ["rm", "-rf", "--", *targets],
-            timeout_s=FILE_TRANSFER_TIMEOUT_S,
-        )
-        error = None if cleanup.ok else (cleanup.message or "remote cleanup failed")
-        if is_final_cleanup and cleanup.ok:
-            run_prefix = paths["run_dir"].rstrip("/") + "/"
-            for previous in self._cleanup_report:
-                previous_path = previous.get("path")
-                if (
-                    previous.get("scope") == "remote"
-                    and previous.get("removed") is False
-                    and isinstance(previous_path, str)
-                    and (
-                        previous_path == paths["run_dir"]
-                        or previous_path.startswith(run_prefix)
-                    )
-                ):
-                    previous["eventually_removed"] = True
+        ):
+            self._update_retention_targets(custody_token, [paths["run_dir"]])
         rows = [
-            {
-                "task_id": task_id,
-                "scope": "remote",
-                "path": target,
-                "removed": cleanup.ok,
-                "error": error,
-            }
-            for target in targets
+            item
+            for item in self._cleanup_report
+            if item.get("custody_token") == custody_token
+            and item.get("deferred_for_custody") is True
         ]
-        self._cleanup_report.extend(rows)
         metadata = dict(result.metadata)
         metadata["node_cleanup"] = rows
+        metadata["custody"] = {
+            "token": custody_token,
+            "state": "retained_pending_durable_acknowledgement",
+        }
         return NodeTaskResult(
             ok=result.ok,
             status=result.status,
@@ -417,7 +425,478 @@ class NodeWorkerClient:
             offset_estimate_s=result.offset_estimate_s,
             offset_bound_s=result.offset_bound_s,
             metadata=metadata,
+            custody_token=custody_token,
         )
+
+    def acknowledge_custody(
+        self,
+        acknowledgement: DurableCustodyAcknowledgement,
+    ) -> list[dict[str, Any]]:
+        """Release retained remote artifacts only after durable token proof."""
+
+        with self._retention_manifest_lock():
+            records = self._load_retention_records()
+            record = next(
+                (item for item in records if item.get("token") == acknowledgement.token),
+                None,
+            )
+            if record is None:
+                return []
+            if not self._acknowledgement_is_valid(acknowledgement, record):
+                raise ValueError("custody acknowledgement does not match retained task")
+            record["acknowledgement_path"] = str(acknowledgement.acknowledgement_path)
+            record["acknowledged"] = True
+            self._write_retention_records(records)
+            return self._cleanup_retention_record(record, records)
+
+    def _new_retention_record(
+        self,
+        *,
+        token: str,
+        task_id: str,
+        run_id: str,
+        prepared_task: dict[str, Any],
+        paths: dict[str, str],
+        remote_task_path: str,
+        remote_artifacts_path: str,
+        context: RunContext | None,
+    ) -> dict[str, Any]:
+        if context is None:
+            bundle_path = self.retention_root / "standalone" / token
+            custody_path = bundle_path / "raw" / "node-custody"
+        else:
+            bundle_path = context.bundle_path
+            custody_path = context.raw_dir / ".node-custody" / token
+        return {
+            "token": token,
+            "scope": self._retention_scope(),
+            "task_id": task_id,
+            "run_id": run_id,
+            "task_type": prepared_task.get("task_type"),
+            "operation": prepared_task.get("operation"),
+            "run_dir": paths["run_dir"],
+            "remote_artifacts_path": remote_artifacts_path,
+            "remote_targets": [remote_task_path, remote_artifacts_path],
+            "bundle_path": str(bundle_path),
+            "custody_path": str(custody_path),
+            "worker_may_have_run": False,
+            "collection_complete": False,
+            "partial_custody_paths": [],
+            "acknowledged": False,
+            "acknowledgement_path": None,
+        }
+
+    def _register_retention(self, record: dict[str, Any]) -> None:
+        with self._retention_manifest_lock():
+            records = self._load_retention_records()
+            records.append(record)
+            self._write_retention_records(records)
+        self._cleanup_report.extend(
+            {
+                "task_id": record["task_id"],
+                "scope": "remote",
+                "path": target,
+                "removed": False,
+                "error": None,
+                "deferred_for_custody": True,
+                "custody_token": record["token"],
+            }
+            for target in record["remote_targets"]
+        )
+
+    def _update_retention_targets(self, token: str, targets: list[str]) -> None:
+        with self._retention_manifest_lock():
+            records = self._load_retention_records()
+            record = next((item for item in records if item.get("token") == token), None)
+            if record is None:
+                raise RuntimeError("retention record disappeared before custody acknowledgement")
+            record["remote_targets"] = list(targets)
+            self._write_retention_records(records)
+        known = {
+            item.get("path")
+            for item in self._cleanup_report
+            if item.get("custody_token") == token
+        }
+        for target in targets:
+            if target not in known:
+                self._cleanup_report.append(
+                    {
+                        "task_id": record["task_id"],
+                        "scope": "remote",
+                        "path": target,
+                        "removed": False,
+                        "error": None,
+                        "deferred_for_custody": True,
+                        "custody_token": token,
+                    }
+                )
+
+    def _mark_worker_may_have_run(self, token: str) -> None:
+        self._update_retention_field(token, "worker_may_have_run", True)
+
+    def _mark_collection_complete(self, token: str) -> None:
+        self._update_retention_field(token, "collection_complete", True)
+
+    def _update_retention_field(self, token: str, key: str, value: Any) -> None:
+        with self._retention_manifest_lock():
+            records = self._load_retention_records()
+            record = next((item for item in records if item.get("token") == token), None)
+            if record is None:
+                raise RuntimeError("retention record disappeared before state update")
+            record[key] = value
+            self._write_retention_records(records)
+
+    def _sweep_retained_artifacts(self) -> bool:
+        with self._retention_manifest_lock(skip_on_failure=True) as locked:
+            if not locked:
+                return False
+            self._sweep_retained_artifacts_locked()
+            return True
+
+    def _sweep_retained_artifacts_locked(self) -> None:
+        records = self._load_retention_records()
+        for record in list(records):
+            if record.get("scope") != self._retention_scope():
+                continue
+            if record.get("acknowledged"):
+                if not self._record_acknowledgement_is_valid(record):
+                    self._cleanup_report.append(
+                        {
+                            "task_id": record["task_id"],
+                            "scope": "remote",
+                            "path": str(record.get("acknowledgement_path") or ""),
+                            "removed": False,
+                            "error": "durable custody acknowledgement is missing or invalid",
+                            "custody_token": record["token"],
+                            "reclamation_sweep": True,
+                        }
+                    )
+                    continue
+            else:
+                custody_path = Path(str(record["custody_path"]))
+                if not record.get("worker_may_have_run"):
+                    custody_path.mkdir(parents=True, exist_ok=True)
+                    dispatch_record = custody_path / "dispatch-retention.json"
+                    dispatch_record.write_text(
+                        json.dumps(
+                            {
+                                "schema_version": 1,
+                                "custody_token": record["token"],
+                                "task_id": record["task_id"],
+                                "run_id": record["run_id"],
+                                "worker_may_have_run": False,
+                            },
+                            indent=2,
+                            sort_keys=True,
+                        )
+                        + "\n",
+                        encoding="utf-8",
+                    )
+                    record["collection_complete"] = True
+                    self._write_retention_records(records)
+                elif (
+                    not record.get("collection_complete")
+                    or not self._custody_path_has_evidence(custody_path)
+                ):
+                    partial_paths = record.setdefault("partial_custody_paths", [])
+                    if (
+                        self._custody_path_has_evidence(custody_path)
+                        and str(custody_path) not in partial_paths
+                    ):
+                        partial_paths.append(str(custody_path))
+                    recollection_path = custody_path.parent / (
+                        custody_path.name + ".recollect-" + uuid.uuid4().hex
+                    )
+                    recollection_path.parent.mkdir(parents=True, exist_ok=True)
+                    collected = self.transport.collect(
+                        str(record["remote_artifacts_path"]),
+                        str(recollection_path),
+                        timeout_s=FILE_TRANSFER_TIMEOUT_S,
+                    )
+                    if not collected.ok or not self._custody_path_has_evidence(
+                        recollection_path
+                    ):
+                        superseded_paths = self._retain_failed_recollection(
+                            record,
+                            original_path=custody_path,
+                            recollection_path=recollection_path,
+                        )
+                        self._write_retention_records(records)
+                        for superseded_path in superseded_paths:
+                            if superseded_path.is_dir():
+                                shutil.rmtree(superseded_path)
+                            else:
+                                superseded_path.unlink(missing_ok=True)
+                        self._cleanup_report.append(
+                            {
+                                "task_id": record["task_id"],
+                                "scope": "remote",
+                                "path": str(record["remote_artifacts_path"]),
+                                "removed": False,
+                                "error": collected.message or "retained artifacts unavailable",
+                                "custody_token": record["token"],
+                                "reclamation_sweep": True,
+                            }
+                        )
+                        continue
+                    record["custody_path"] = str(recollection_path)
+                    custody_path = recollection_path
+                    record["collection_complete"] = True
+                    self._write_retention_records(records)
+                acknowledgement = acknowledge_durable_custody(
+                    Path(str(record["bundle_path"])),
+                    str(record["token"]),
+                    [custody_path],
+                )
+                record["acknowledged"] = True
+                record["acknowledgement_path"] = str(
+                    acknowledgement.acknowledgement_path
+                )
+                for partial_path_value in record.get("partial_custody_paths", []):
+                    partial_path = Path(str(partial_path_value))
+                    if partial_path != custody_path and partial_path.exists():
+                        if partial_path.is_dir():
+                            shutil.rmtree(partial_path)
+                        else:
+                            partial_path.unlink()
+                record["partial_custody_paths"] = []
+                self._write_retention_records(records)
+            self._cleanup_retention_record(record, records)
+
+    @contextmanager
+    def _retention_manifest_lock(
+        self,
+        *,
+        skip_on_failure: bool = False,
+    ) -> Iterator[bool]:
+        """Serialize retention-manifest read/modify/write critical sections."""
+
+        handle = None
+        try:
+            self.retention_root.mkdir(parents=True, exist_ok=True)
+            handle = self.retention_lock_path.open("a+b")
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        except OSError:
+            if handle is not None:
+                handle.close()
+            if skip_on_failure:
+                yield False
+                return
+            raise
+        try:
+            yield True
+        finally:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            finally:
+                handle.close()
+
+    def _cleanup_retention_record(
+        self,
+        record: dict[str, Any],
+        records: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        targets = [str(target) for target in record.get("remote_targets", [])]
+        if not targets:
+            return []
+        run_dir = str(record.get("run_dir", ""))
+        if targets == [run_dir] and any(
+            other is not record
+            and other.get("scope") == record.get("scope")
+            and other.get("run_id") == record.get("run_id")
+            and not other.get("acknowledged")
+            for other in records
+        ):
+            return []
+        try:
+            cleanup = self.transport.run(
+                ["rm", "-rf", "--", *targets],
+                timeout_s=FILE_TRANSFER_TIMEOUT_S,
+            )
+        except BaseException as exc:
+            rows = self._cleanup_rows(record, targets, False, "%s: %s" % (type(exc).__name__, exc))
+            self._cleanup_report.extend(rows)
+            self._write_retention_records(records)
+            raise
+        error = None if cleanup.ok else (cleanup.message or "remote cleanup failed")
+        rows = self._cleanup_rows(record, targets, cleanup.ok, error)
+        self._cleanup_report.extend(rows)
+        if cleanup.ok:
+            self._mark_eventually_removed(targets)
+            records.remove(record)
+        self._write_retention_records(records)
+        return rows
+
+    def _cleanup_rows(
+        self,
+        record: dict[str, Any],
+        targets: list[str],
+        removed: bool,
+        error: str | None,
+    ) -> list[dict[str, Any]]:
+        return [
+            {
+                "task_id": record["task_id"],
+                "scope": "remote",
+                "path": target,
+                "removed": removed,
+                "error": error,
+                "custody_token": record["token"],
+                "after_durable_custody": True,
+            }
+            for target in targets
+        ]
+
+    def _mark_eventually_removed(self, targets: list[str]) -> None:
+        for previous in self._cleanup_report:
+            previous_path = previous.get("path")
+            if previous.get("removed") is not False or not isinstance(previous_path, str):
+                continue
+            for target in targets:
+                prefix = target.rstrip("/") + "/"
+                if previous_path == target or previous_path.startswith(prefix):
+                    previous["eventually_removed"] = True
+                    break
+
+    def _acknowledgement_is_valid(
+        self,
+        acknowledgement: DurableCustodyAcknowledgement,
+        record: dict[str, Any],
+    ) -> bool:
+        try:
+            payload = json.loads(
+                acknowledgement.acknowledgement_path.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            return False
+        bundle_path = Path(str(record["bundle_path"])).resolve()
+        expected_custody_path = Path(str(record["custody_path"])).resolve()
+        try:
+            acknowledgement.acknowledgement_path.resolve().relative_to(bundle_path)
+        except ValueError:
+            return False
+        return (
+            payload.get("custody_token") == record.get("token")
+            and acknowledgement.token == record.get("token")
+            and expected_custody_path in {
+                path.resolve() for path in acknowledgement.artifact_paths
+            }
+            and expected_custody_path.exists()
+        )
+
+    def _record_acknowledgement_is_valid(self, record: dict[str, Any]) -> bool:
+        path_value = record.get("acknowledgement_path")
+        if not isinstance(path_value, str) or not path_value:
+            return False
+        acknowledgement_path = Path(path_value)
+        try:
+            payload = json.loads(acknowledgement_path.read_text(encoding="utf-8"))
+            acknowledgement_path.resolve().relative_to(
+                Path(str(record["bundle_path"])).resolve()
+            )
+        except (OSError, ValueError, json.JSONDecodeError):
+            return False
+        return (
+            payload.get("custody_token") == record.get("token")
+            and Path(str(record["custody_path"])).exists()
+        )
+
+    @staticmethod
+    def _custody_path_has_evidence(path: Path) -> bool:
+        return path.is_dir() and any(candidate.is_file() for candidate in path.rglob("*"))
+
+    def _retain_failed_recollection(
+        self,
+        record: dict[str, Any],
+        *,
+        original_path: Path,
+        recollection_path: Path,
+    ) -> list[Path]:
+        """Retain only evidence-bearing failed copies, bounded per artifact."""
+
+        partial_paths = [
+            str(value)
+            for value in record.get("partial_custody_paths", [])
+            if self._custody_path_has_evidence(Path(str(value)))
+        ]
+        original_value = str(original_path)
+        if (
+            self._custody_path_has_evidence(original_path)
+            and original_value not in partial_paths
+        ):
+            partial_paths.insert(0, original_value)
+
+        if not self._custody_path_has_evidence(recollection_path):
+            if recollection_path.is_dir():
+                shutil.rmtree(recollection_path)
+            else:
+                recollection_path.unlink(missing_ok=True)
+            record["partial_custody_paths"] = partial_paths
+            return []
+
+        recollection_value = str(recollection_path)
+        partial_paths = [
+            value for value in partial_paths if value != recollection_value
+        ]
+        partial_paths.append(recollection_value)
+        failed_side_paths = [
+            value for value in partial_paths if value != original_value
+        ]
+        superseded = failed_side_paths[:-MAX_RETAINED_FAILED_PARTIALS]
+        record["partial_custody_paths"] = [
+            value for value in partial_paths if value not in superseded
+        ]
+        return [Path(value) for value in superseded]
+
+    def _retention_scope(self) -> dict[str, str]:
+        destination = getattr(self.transport, "destination", None)
+        return {
+            "transport": "%s.%s"
+            % (type(self.transport).__module__, type(self.transport).__qualname__),
+            "destination": destination if isinstance(destination, str) else "",
+            "remote_work_root": self.remote_work_root,
+        }
+
+    def _load_retention_records(self) -> list[dict[str, Any]]:
+        if not self.retention_manifest_path.exists():
+            return []
+        payload = json.loads(self.retention_manifest_path.read_text(encoding="utf-8"))
+        if payload.get("schema_version") != RETENTION_MANIFEST_VERSION:
+            raise ValueError("unsupported node custody retention manifest version")
+        records = payload.get("records")
+        if not isinstance(records, list) or not all(isinstance(item, dict) for item in records):
+            raise ValueError("node custody retention manifest records must be objects")
+        return records
+
+    def _write_retention_records(self, records: list[dict[str, Any]]) -> None:
+        self.retention_root.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": RETENTION_MANIFEST_VERSION,
+            "records": records,
+        }
+        handle = tempfile.NamedTemporaryFile(
+            "w",
+            encoding="utf-8",
+            prefix=".retention-",
+            suffix=".tmp",
+            dir=self.retention_root,
+            delete=False,
+        )
+        temporary_path = Path(handle.name)
+        try:
+            with handle:
+                json.dump(payload, handle, indent=2, sort_keys=True)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary_path, self.retention_manifest_path)
+            directory_fd = os.open(self.retention_root, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
     def _ensure_worker_shipped(self) -> AdapterResult:
         if self._worker_shipped:

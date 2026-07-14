@@ -117,11 +117,13 @@ class NvidiaSmiTelemetryAdapter:
         )
         self._preserve_worker_log(result, context, "measure_idle")
         if not result.ok:
+            self._acknowledge_result_custody(result, context)
             self._raise_task_failure(result, "nvidia-smi idle measurement failed")
 
         data = self._artifact_bytes(result, "nvidia_smi_idle_csv", RAW_IDLE_NAME)
         if context is not None:
             write_raw_artifact(context, RAW_IDLE_NAME, data)
+        self._acknowledge_result_custody(result, context)
         parse_diagnostics: dict[str, Any] = {}
         rows = parse_nvidia_smi_csv(
             data.decode("utf-8", errors="replace"),
@@ -158,6 +160,7 @@ class NvidiaSmiTelemetryAdapter:
             timeout_s=30.0,
         )
         self._preserve_worker_log(result, context, "start_sampling")
+        self._acknowledge_result_custody(result, context)
         metadata = self._result_metadata(result)
         self._last_metadata = metadata
         return AdapterResult(
@@ -178,11 +181,13 @@ class NvidiaSmiTelemetryAdapter:
         )
         self._preserve_worker_log(result, context, "stop_sampling")
         if not result.ok:
+            self._acknowledge_result_custody(result, context)
             self._raise_task_failure(result, "nvidia-smi stop sampling failed")
 
         data = self._artifact_bytes(result, "nvidia_smi_csv", RAW_SAMPLES_NAME)
         if context is not None:
             write_raw_artifact(context, RAW_SAMPLES_NAME, data)
+        self._acknowledge_result_custody(result, context)
         parse_diagnostics = {}
         rows = parse_nvidia_smi_csv(
             data.decode("utf-8", errors="replace"),
@@ -238,7 +243,7 @@ class NvidiaSmiTelemetryAdapter:
             "node_role": context.node_role if context is not None else None,
             "telemetry": telemetry,
         }
-        result = self._client.run_task(task, timeout_s=timeout_s)
+        result = self._client.run_task(task, timeout_s=timeout_s, context=context)
         self._record_clock_alignment(result)
         return result
 
@@ -320,6 +325,19 @@ class NvidiaSmiTelemetryAdapter:
             text,
             encoding="utf-8",
         )
+
+    def _acknowledge_result_custody(
+        self,
+        result: NodeTaskResult,
+        context: RunContext | None,
+    ) -> None:
+        if context is None or result.custody_token is None or result.artifacts_path is None:
+            return
+        acknowledgement = context.acknowledge_custody(
+            result.custody_token,
+            [result.artifacts_path],
+        )
+        self._client.acknowledge_custody(acknowledgement)
 
     def _raise_task_failure(self, result: NodeTaskResult, fallback: str) -> None:
         raise AdapterFailure(

@@ -32,6 +32,7 @@ CLASS_RETAIN = "retain_reviewed_measurement"
 CLASS_TRANSFORM = "transform_reviewed_structure"
 CLASS_OMIT_CONTENT = "omit_prompt_response_or_token_content"
 CLASS_OMIT_LOG = "omit_controller_or_worker_log"
+CLASS_OMIT_CUSTODY_LOG = "omit_machine_local_custody_operational_log"
 CLASS_OMIT_RAW = "omit_backend_native_or_rich_telemetry"
 
 OP_RETAIN = "retain_bytes"
@@ -328,6 +329,11 @@ def _path_policy(rel: str) -> tuple[str, str] | None:
         return CLASS_RETAIN, OP_RETAIN
     if rel == "suite_manifest.json" or rel in _OUTPUT_PATHS:
         return CLASS_OMIT_CONTENT, OP_OMIT
+    # Custody acknowledgements are operational recovery records.  Their
+    # artifact paths are meaningful only on the machine holding the private
+    # bundle, so name the class in the audited inventory and never publish it.
+    if rel.startswith("logs/custody/"):
+        return CLASS_OMIT_CUSTODY_LOG, OP_OMIT
     if rel in _LOG_PATHS or _WORKER_LOG_RE.fullmatch(rel):
         return CLASS_OMIT_LOG, OP_OMIT
     if rel in _RAW_PATHS or rel in _RICH_PATHS:

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import json
+import os
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Iterable, Protocol, runtime_checkable
 
 from joulewise.clock import Clock, ClockStamp
 from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline
@@ -14,12 +17,108 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class DurableCustodyAcknowledgement:
+    """On-disk proof that opaque-token evidence reached bundle custody.
+
+    The token is intentionally transport- and protocol-agnostic.  WO-010 can
+    therefore use its per-dispatch correlation token without changing this
+    acknowledgement seam.
+    """
+
+    token: str
+    acknowledgement_path: Path
+    artifact_paths: tuple[Path, ...]
+
+
+def acknowledge_durable_custody(
+    bundle_path: Path,
+    token: str,
+    artifact_paths: Iterable[Path],
+) -> DurableCustodyAcknowledgement:
+    """Atomically persist bundle-local custody proof for ``token``.
+
+    Merely holding artifact bytes or a temporary collection directory does
+    not satisfy this contract.  Every named artifact must already exist under
+    the bundle, and the acknowledgement itself is flushed and atomically
+    replaced before it is returned to a cleanup caller.
+    """
+
+    if not isinstance(token, str) or not token:
+        raise ValueError("custody token must be a non-empty string")
+    bundle = Path(bundle_path).resolve()
+    artifacts: list[Path] = []
+    for candidate in artifact_paths:
+        path = Path(candidate).resolve()
+        try:
+            path.relative_to(bundle)
+        except ValueError as exc:
+            raise ValueError("custody artifact must be inside the run bundle") from exc
+        if not path.exists():
+            raise FileNotFoundError(path)
+        if path.is_dir() and not any(candidate.is_file() for candidate in path.rglob("*")):
+            raise ValueError("custody artifact directory contains no evidence files")
+        artifacts.append(path)
+    if not artifacts:
+        raise ValueError("custody acknowledgement requires at least one artifact")
+
+    for artifact in artifacts:
+        candidates = (
+            [path for path in artifact.rglob("*") if path.is_file()]
+            if artifact.is_dir()
+            else [artifact]
+        )
+        for candidate in candidates:
+            file_descriptor = os.open(candidate, os.O_RDONLY)
+            try:
+                os.fsync(file_descriptor)
+            finally:
+                os.close(file_descriptor)
+
+    ack_dir = bundle / "logs" / "custody"
+    ack_dir.mkdir(parents=True, exist_ok=True)
+    safe_token = "".join(character for character in token if character.isalnum() or character in "-_")
+    if not safe_token or safe_token != token:
+        raise ValueError("custody token is not a safe acknowledgement filename")
+    ack_path = ack_dir / (safe_token + ".json")
+    payload = {
+        "schema_version": 1,
+        "custody_token": token,
+        "artifacts": sorted(str(path.relative_to(bundle)) for path in artifacts),
+    }
+    handle = tempfile.NamedTemporaryFile(
+        "w",
+        encoding="utf-8",
+        prefix=".custody-",
+        suffix=".tmp",
+        dir=ack_dir,
+        delete=False,
+    )
+    temporary_path = Path(handle.name)
+    try:
+        with handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_path, ack_path)
+        directory_fd = os.open(ack_dir, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    return DurableCustodyAcknowledgement(token, ack_path, tuple(artifacts))
+
+
+@dataclass(frozen=True)
 class RunContext:
     """Immutable per-run context passed to adapter lifecycle methods (D-024).
 
-    Context is data, not capability: adapters receive paths and identity, never
-    the bundle writer, so write-order and immutability invariants stay with the
-    controller and :class:`joulewise.bundle.RunBundleWriter`. ``raw_dir`` is
+    Context carries only narrowly bounded bundle capabilities: adapters never
+    receive the bundle writer, so its write-order invariants stay with the
+    controller and :class:`joulewise.bundle.RunBundleWriter`; they may persist
+    raw artifacts and an opaque durable-custody acknowledgement. ``raw_dir`` is
     where a real telemetry adapter preserves its native sampler output verbatim
     (D-002; e.g. the powermetrics plist). ``node_role`` is ``None`` for
     single-node runs and is reserved for Phase 3 split orchestration (D-008);
@@ -41,6 +140,15 @@ class RunContext:
     logs_dir: Path
     outputs_dir: Path
     node_role: str | None = None
+
+    def acknowledge_custody(
+        self,
+        token: str,
+        artifact_paths: Iterable[Path],
+    ) -> DurableCustodyAcknowledgement:
+        """Return durable bundle-local proof suitable for destructive cleanup."""
+
+        return acknowledge_durable_custody(self.bundle_path, token, artifact_paths)
 
 
 @dataclass(frozen=True)
@@ -220,6 +328,14 @@ class IdleDriftEvidenceProvider(Protocol):
         context: RunContext | None,
     ) -> dict[str, Any]:
         """Collect the post-run sentinel and return its derivation record."""
+
+
+@runtime_checkable
+class EvidenceCustodyProvider(Protocol):
+    """Optional adapter extension for retrying native evidence preservation."""
+
+    def salvage_custody(self, context: RunContext) -> list[dict[str, Any]]:
+        """Retry pending bundle writes without deleting unacknowledged source."""
 
 
 @runtime_checkable

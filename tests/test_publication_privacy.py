@@ -282,6 +282,57 @@ class PublicationPrivacyTests(unittest.TestCase):
             },
         )
 
+    def test_custody_acknowledgement_is_named_and_omitted_from_public_bundle(self) -> None:
+        source = self.make_secret_bundle("custody-acknowledgement")
+        acknowledgement_path = (
+            source / "logs" / "custody" / "powermetrics-native.json"
+        )
+        _write_json(
+            acknowledgement_path,
+            {
+                "schema_version": 1,
+                "custody_token": "powermetrics-native",
+                "artifacts": ["/Users/example/private/native-capture.plist"],
+            },
+        )
+        destination = self.tmp / "public-custody"
+
+        audit = publication_privacy.audit_private_bundle(source)
+        audited = next(
+            item
+            for item in audit.files
+            if item.path == "logs/custody/powermetrics-native.json"
+        )
+        self.assertEqual(
+            audited.classification,
+            publication_privacy.CLASS_OMIT_CUSTODY_LOG,
+        )
+        self.assertEqual(audited.operation, publication_privacy.OP_OMIT)
+        self.assertEqual(
+            audit.classification_counts[
+                publication_privacy.CLASS_OMIT_CUSTODY_LOG
+            ],
+            1,
+        )
+
+        transformation = publication_privacy.transform_public_bundle(
+            source,
+            destination,
+        )
+
+        transformed = next(
+            item
+            for item in transformation["files"]
+            if item["path"] == "logs/custody/powermetrics-native.json"
+        )
+        self.assertEqual(
+            transformed["classification"],
+            publication_privacy.CLASS_OMIT_CUSTODY_LOG,
+        )
+        self.assertEqual(transformed["operation"], publication_privacy.OP_OMIT)
+        self.assertIsNone(transformed["output_sha256"])
+        self.assertFalse((destination / "logs" / "custody").exists())
+
     def test_unknown_fields_and_paths_fail_closed(self) -> None:
         mutations = {
             "config field": lambda bundle: self._add_json_field(

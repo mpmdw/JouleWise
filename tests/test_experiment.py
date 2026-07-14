@@ -467,10 +467,14 @@ class KillAfterRepTwoTests(unittest.TestCase):
         # Both completed members are valid bundles.
         for member in manifest["members"]:
             self.assertEqual(validate_bundle(self.runs_root / member), [])
-        # Rep 3's bundle was created but never finalized (incomplete bundle).
+        # The interrupted member is finalized for evidence custody but is not
+        # registered as a completed experiment member; the original interrupt
+        # still propagates to the caller.
         r3 = self.runs_root / "exp-kill__r3"
-        if r3.exists():
-            self.assertFalse((r3 / "summary_metrics.json").exists())
+        self.assertTrue((r3 / "summary_metrics.json").is_file())
+        interrupted = json.loads((r3 / "summary_metrics.json").read_text())
+        self.assertEqual(interrupted["status"], "failed")
+        self.assertIn("KeyboardInterrupt", interrupted["failure_message"])
 
     def test_interrupt_before_aggregation_leaves_completed_member_registered(self) -> None:
         config = make_config("exp-aggregate-interrupt", repetitions=1)

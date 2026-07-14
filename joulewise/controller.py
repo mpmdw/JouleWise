@@ -75,6 +75,7 @@ from joulewise.interfaces import (
     AdapterFailure,
     AdapterResult,
     BoundedTelemetryAdapter,
+    EvidenceCustodyProvider,
     IdleDriftEvidenceProvider,
     PowerSample,
     RunContext,
@@ -309,6 +310,8 @@ class _Execution:
         self._uncertainty_evidence: dict[str, Any] | None = None
         self._sampling_started_stamp: ClockStamp | None = None
         self._sampling_active = False
+        self._sampling_start_in_progress = False
+        self._sampling_stop_claimed = False
         # Idempotence flags so the failure path writes only what is missing.
         self._outputs_written = False
         self._trace_written = False
@@ -321,27 +324,31 @@ class _Execution:
 
     def execute(self) -> tuple[Path, SummaryMetrics]:
         try:
-            summary = self._run_lifecycle()
-        except _StageFailure as failure:
-            summary = self._handle_failure(failure)
-        except AdapterFailure as failure:
-            summary = self._handle_failure(
-                _StageFailure(
-                    stage=self._current_stage,
-                    reason=failure.failure_reason,
-                    message=failure.message,
+            try:
+                summary = self._run_lifecycle()
+            except _StageFailure as failure:
+                summary = self._handle_failure(failure)
+            except AdapterFailure as failure:
+                summary = self._handle_failure(
+                    _StageFailure(
+                        stage=self._current_stage,
+                        reason=failure.failure_reason,
+                        message=failure.message,
+                    )
                 )
-            )
-        except Exception as exc:  # noqa: BLE001 - D-011: a controller bug must still finalize
-            summary = self._handle_failure(
-                _StageFailure(
-                    stage=self._current_stage,
-                    reason=FailureReason.UNKNOWN_ERROR,
-                    message=f"unexpected {type(exc).__name__}: {exc}",
-                    traceback_text=traceback.format_exc(),
+            except Exception as exc:  # noqa: BLE001 - D-011 finalizes controller bugs
+                summary = self._handle_failure(
+                    _StageFailure(
+                        stage=self._current_stage,
+                        reason=FailureReason.UNKNOWN_ERROR,
+                        message=f"unexpected {type(exc).__name__}: {exc}",
+                        traceback_text=traceback.format_exc(),
+                    )
                 )
-            )
-        self._finish()
+            self._finish()
+        except (KeyboardInterrupt, SystemExit) as interrupt:
+            self._finalize_interrupted_run(interrupt)
+            raise
         return self._writer.path, summary
 
     def _run_lifecycle(self) -> SummaryMetrics:
@@ -463,12 +470,23 @@ class _Execution:
         self._begin_stage("measured_run")
         assert self._runtime is not None and self._telemetry is not None
         self._thermal_pre = self._telemetry.thermal_state(self._config, self._context)
-        start_result = self._telemetry.start_sampling(self._config, self._context)
+        self._sampling_start_in_progress = True
+        try:
+            start_result = self._telemetry.start_sampling(self._config, self._context)
+        except BaseException:
+            # Finalization must treat the sampler as potentially live if start
+            # was interrupted after it created native capture state.
+            raise
+        else:
+            # Keep liveness continuous across the successful-start transition:
+            # an interrupt between these assignments still leaves at least one
+            # flag set, so finalization stops the sampler before custody salvage.
+            self._sampling_active = True
+            self._sampling_start_in_progress = False
         self._telemetry_metadata = dict(start_result.metadata)
         self._check(start_result, "measured_run", "telemetry start_sampling failed")
         self._capture_adapter_alignments()
         self._capture_adapter_metadata()
-        self._sampling_active = True
         # D-026: the measured window the reducer integrates is bounded by the
         # sampling_started/sampling_stopped marker events, not the stage
         # boundaries, so sampler spawn latency (sudo probe, process start,
@@ -509,17 +527,7 @@ class _Execution:
         # the stable flush-sort keeps it bracketing them.
         sampling_stopped_stamp = _clock_stamp(self._clock)
         self._capture_adapter_alignments()
-        if isinstance(self._telemetry, BoundedTelemetryAdapter):
-            stop_result = self._telemetry.stop_sampling_with_evidence(
-                self._config,
-                self._context,
-                sampling_started=sampling_started_stamp,
-                sampling_stopped=sampling_stopped_stamp,
-            )
-            self._samples = stop_result.samples
-            self._uncertainty_evidence = dict(stop_result.uncertainty_evidence)
-        else:
-            self._samples = self._telemetry.stop_sampling(self._config, self._context)
+        self._stop_sampling_once(sampling_stopped_stamp)
         self._capture_adapter_alignments()
         self._capture_adapter_metadata()
         self._sampling_active = False
@@ -599,6 +607,7 @@ class _Execution:
         # run is recorded in the controller log and the stage_completed event
         # metadata but does not change run status.
         self._begin_stage("cleanup")
+        self._salvage_adapter_custody()
         assert self._runtime is not None
         metadata: dict[str, Any] = {"cleanup_ok": True}
         try:
@@ -671,13 +680,17 @@ class _Execution:
         )
         if failure.traceback_text:
             self._log(self._controller_log, failure.traceback_text)
-        self._stop_sampling_best_effort()
-        self._cleanup_best_effort()
-        self._capture_failure_fallback_environment()
-        # Preserve whatever partial evidence exists (D-002).
-        self._write_outputs()
-        self._write_trace()
-        self._write_metadata()
+        # Every salvage action is independent: one broken writer or adapter
+        # cannot prevent later evidence and cleanup attempts.
+        self._attempt_salvage_step("stop_sampling", self._stop_sampling_best_effort)
+        self._attempt_salvage_step("adapter_custody", self._salvage_adapter_custody)
+        self._attempt_salvage_step("runtime_cleanup", self._cleanup_best_effort)
+        self._attempt_salvage_step(
+            "failure_environment", self._capture_failure_fallback_environment
+        )
+        self._attempt_salvage_step("outputs", self._write_outputs)
+        self._attempt_salvage_step("power_trace", self._write_trace)
+        self._attempt_salvage_step("metadata", self._write_metadata)
         summary = SummaryMetrics(
             status=STATUS_BY_REASON[failure.reason],
             failure_reason=failure.reason,
@@ -688,23 +701,111 @@ class _Execution:
         self._writer.write_summary(summary)
         return summary
 
+    def _attempt_salvage_step(self, name: str, action: Callable[[], Any]) -> None:
+        try:
+            action()
+        except Exception:  # noqa: BLE001 - later salvage steps must still run
+            self._log(
+                self._controller_log,
+                "independent salvage step %s raised:" % name,
+            )
+            self._log(self._controller_log, traceback.format_exc())
+
+    def _finalize_interrupted_run(
+        self,
+        interrupt: KeyboardInterrupt | SystemExit,
+    ) -> None:
+        """Salvage and finalize without ever replacing the original interrupt."""
+
+        self._buffer_event(
+            "failure",
+            self._current_stage,
+            "%s: %s" % (type(interrupt).__name__, interrupt),
+            {"failure_reason": FailureReason.UNKNOWN_ERROR.value},
+        )
+        self._log(
+            self._controller_log,
+            "interrupt in stage %s: %s: %s"
+            % (self._current_stage, type(interrupt).__name__, interrupt),
+        )
+        actions: list[tuple[str, Callable[[], Any]]] = [
+            ("stop_sampling", self._stop_sampling_best_effort),
+            ("adapter_custody", self._salvage_adapter_custody),
+            ("runtime_cleanup", self._cleanup_best_effort),
+            ("failure_environment", self._capture_failure_fallback_environment),
+            ("outputs", self._write_outputs),
+            ("power_trace", self._write_trace),
+            ("metadata", self._write_metadata),
+        ]
+        for name, action in actions:
+            try:
+                action()
+            except BaseException as cleanup_error:  # preserve the first interrupt
+                self._log(
+                    self._controller_log,
+                    "interrupt salvage step %s raised %s: %s"
+                    % (name, type(cleanup_error).__name__, cleanup_error),
+                )
+        summary = SummaryMetrics(
+            status=RunStatus.FAILED,
+            failure_reason=FailureReason.UNKNOWN_ERROR,
+            failure_message="%s: %s" % (type(interrupt).__name__, interrupt),
+            idle_baseline=self._baseline,
+            measurement_quality=self._minimal_quality(),
+        )
+        try:
+            self._writer.write_summary(summary)
+        except BaseException as cleanup_error:
+            self._log(
+                self._controller_log,
+                "interrupt summary staging raised %s: %s"
+                % (type(cleanup_error).__name__, cleanup_error),
+            )
+        try:
+            self._finish()
+        except BaseException:
+            # The caller's KeyboardInterrupt/SystemExit remains authoritative;
+            # retention manifests and native pending paths preserve retry data.
+            pass
+
     def _stop_sampling_best_effort(self) -> None:
-        if not self._sampling_active or self._telemetry is None:
+        if (
+            not self._sampling_active
+            and not self._sampling_start_in_progress
+        ) or self._telemetry is None or self._sampling_stop_claimed:
             return
-        self._sampling_active = False
         # D-026: even on the failure path the sampling window gets its closing
         # marker, stamped before the stop call, so post-hoc re-reduction sees
         # the same window semantics as a successful run.
         sampling_stopped_stamp = _clock_stamp(self._clock)
-        self._events.append(
-            RuntimeEvent(
-                timestamp_s=sampling_stopped_stamp.epoch_s,
-                event_type="sampling_stopped",
-                phase="measured_run",
-                message="telemetry sampling stopping (failure path)",
-                metadata={},
+        if self._sampling_active:
+            self._events.append(
+                RuntimeEvent(
+                    timestamp_s=sampling_stopped_stamp.epoch_s,
+                    event_type="sampling_stopped",
+                    phase="measured_run",
+                    message="telemetry sampling stopping (failure path)",
+                    metadata={},
+                )
             )
-        )
+        try:
+            self._stop_sampling_once(sampling_stopped_stamp)
+            self._capture_adapter_alignments()
+            self._sampling_active = False
+            self._sampling_start_in_progress = False
+        except Exception:  # noqa: BLE001 - evidence salvage must not mask the failure
+            self._log(
+                self._controller_log,
+                "best-effort stop_sampling raised after failure:",
+            )
+            self._log(self._controller_log, traceback.format_exc())
+
+    def _stop_sampling_once(self, sampling_stopped_stamp: ClockStamp) -> bool:
+        """Claim and execute the sampler stop at most once per lifecycle."""
+
+        if self._sampling_stop_claimed or self._telemetry is None:
+            return False
+        self._sampling_stop_claimed = True
         try:
             if (
                 isinstance(self._telemetry, BoundedTelemetryAdapter)
@@ -722,13 +823,23 @@ class _Execution:
                 self._samples = self._telemetry.stop_sampling(
                     self._config, self._context
                 )
-            self._capture_adapter_alignments()
-        except Exception:  # noqa: BLE001 - evidence salvage must not mask the failure
-            self._log(
-                self._controller_log,
-                "best-effort stop_sampling raised after failure:",
-            )
-            self._log(self._controller_log, traceback.format_exc())
+        except Exception:
+            # Ordinary failures remain retryable by the failure-salvage path.
+            self._sampling_stop_claimed = False
+            raise
+        return True
+
+    def _salvage_adapter_custody(self) -> None:
+        for adapter in (self._telemetry, self._runtime):
+            if not isinstance(adapter, EvidenceCustodyProvider):
+                continue
+            report = adapter.salvage_custody(self._context)
+            for item in report:
+                if item.get("acknowledged") is not True:
+                    self._log(
+                        self._controller_log,
+                        "adapter custody remains retained: %s" % item,
+                    )
 
     def _cleanup_best_effort(self) -> None:
         if self._runtime is None:

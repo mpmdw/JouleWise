@@ -4,8 +4,10 @@ import hashlib
 import json
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 from joulewise.adapters.node_client import NodeTaskResult
 from joulewise.adapters.vllm_runtime import (
@@ -16,6 +18,7 @@ from joulewise.adapters.vllm_runtime import (
     convert_vllm_tokens_jsonl,
 )
 from joulewise.clock import FakeClock
+from joulewise.bundle import BundleError
 from joulewise.interfaces import AdapterFailure, RunContext
 from joulewise.schemas import BenchmarkConfig, FailureReason
 
@@ -154,12 +157,19 @@ class FakeClient:
     def __init__(self, results: list[NodeTaskResult]):
         self.results = list(results)
         self.tasks: list[dict[str, Any]] = []
+        self.acknowledgements = []
 
-    def run_task(self, task: dict[str, Any], *, timeout_s: float) -> NodeTaskResult:
+    def run_task(
+        self, task: dict[str, Any], *, timeout_s: float, context=None
+    ) -> NodeTaskResult:
         self.tasks.append({"task": task, "timeout_s": timeout_s})
         if not self.results:
             raise AssertionError("fake client exhausted")
         return self.results.pop(0)
+
+    def acknowledge_custody(self, acknowledgement):
+        self.acknowledgements.append(acknowledgement)
+        return []
 
 
 class VllmRuntimeAdapterTests(unittest.TestCase):
@@ -275,6 +285,46 @@ class VllmRuntimeAdapterTests(unittest.TestCase):
             self.assertEqual(task["workload"]["sampling_params"]["top_p"], 1.0)
             self.assertEqual(task["workload"]["sampling_params"]["seed"], 0)
             self.assertEqual(task["workload"]["sampling_params"]["max_tokens"], 3)
+
+    def test_raw_write_failure_leaves_remote_custody_unacknowledged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = make_config()
+            context = make_context(config, root)
+            node_result = replace(
+                runtime_artifacts(root / "artifacts"),
+                custody_token="custody-vllm-write-failure",
+            )
+            client = FakeClient([node_result])
+            adapter = VllmRuntimeAdapter(FakeClock(), client)  # type: ignore[arg-type]
+
+            with patch(
+                "joulewise.adapters.vllm_runtime.write_raw_artifact",
+                side_effect=BundleError("injected raw write failure"),
+            ), self.assertRaisesRegex(BundleError, "injected raw write failure"):
+                adapter.run_workload(config, context)
+
+            self.assertEqual(client.acknowledgements, [])
+            self.assertTrue((root / "artifacts" / "events.jsonl").is_file())
+
+    def test_bundle_custody_ack_is_durable_before_release(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = make_config()
+            context = make_context(config, root)
+            node_result = replace(
+                runtime_artifacts(root / "artifacts"),
+                custody_token="custody-vllm-success",
+            )
+            client = FakeClient([node_result])
+            adapter = VllmRuntimeAdapter(FakeClock(), client)  # type: ignore[arg-type]
+
+            adapter.run_workload(config, context)
+
+            self.assertEqual(len(client.acknowledgements), 1)
+            acknowledgement = client.acknowledgements[0]
+            self.assertTrue(acknowledgement.acknowledgement_path.is_file())
+            self.assertTrue((context.raw_dir / RAW_EVENTS_NAME).is_file())
 
     def test_server_usage_count_wins_over_coalesced_stream_chunk_count(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

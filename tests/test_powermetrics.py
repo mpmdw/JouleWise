@@ -12,12 +12,14 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from joulewise.bundle import BundleError
+from joulewise.bundle import BundleError, write_raw_artifact as write_bundle_raw_artifact
 from joulewise.adapters import resolve_telemetry
 from joulewise.adapters.powermetrics import (
     RAIL_MANIFEST,
     RICH_IDLE_NAME,
     RICH_TELEMETRY_NAME,
+    RAW_IDLE_NAME,
+    RAW_IDLE_POST_NAME,
     RAW_SAMPLES_NAME,
     SAMPLERS,
     PowermetricsTelemetryAdapter,
@@ -731,6 +733,214 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 "BundleError: boom",
                 adapter.device_metadata(config)["rich_telemetry_error"],
             )
+
+    def test_raw_write_failure_retains_native_capture_until_salvage_ack(self) -> None:
+        fixture = FIXTURE.read_bytes()
+        config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
+        adapter = PowermetricsTelemetryAdapter(FakeClock(start=100.0))
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        class FakePopen:
+            def __init__(self, command, **kwargs):
+                Path(command[command.index("-o") + 1]).write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            context = RunContext(
+                config=config,
+                clock=FakeClock(start=100.0),
+                run_id="run-custody",
+                bundle_path=root,
+                raw_dir=root / "raw",
+                logs_dir=root / "logs",
+                outputs_dir=root / "outputs",
+            )
+            with (
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.run",
+                    side_effect=fake_run,
+                ),
+                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+            ):
+                self.assertTrue(adapter.start_sampling(config, context).ok)
+                with patch(
+                    "joulewise.adapters.powermetrics.write_raw_artifact",
+                    side_effect=BundleError("injected raw write failure"),
+                ), self.assertRaisesRegex(BundleError, "injected raw write failure"):
+                    adapter.stop_sampling(config, context)
+
+            retained = adapter._pending_captures[RAW_SAMPLES_NAME]
+            self.assertTrue(retained.is_file())
+            self.assertEqual(retained.read_bytes(), fixture)
+            self.assertFalse((context.raw_dir / RAW_SAMPLES_NAME).exists())
+
+            report = adapter.salvage_custody(context)
+
+            self.assertTrue(report[0]["acknowledged"])
+            self.assertEqual(
+                (context.raw_dir / RAW_SAMPLES_NAME).read_bytes(),
+                fixture,
+            )
+            self.assertFalse(retained.exists())
+
+    def test_ack_failure_after_raw_write_retains_native_capture_for_salvage(self) -> None:
+        fixture = FIXTURE.read_bytes()
+        config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
+        adapter = PowermetricsTelemetryAdapter(FakeClock(start=100.0))
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        class FakePopen:
+            def __init__(self, command, **kwargs):
+                Path(command[command.index("-o") + 1]).write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            context = RunContext(
+                config=config,
+                clock=FakeClock(start=100.0),
+                run_id="run-ack-interrupt",
+                bundle_path=root,
+                raw_dir=root / "raw",
+                logs_dir=root / "logs",
+                outputs_dir=root / "outputs",
+            )
+            with (
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.run",
+                    side_effect=fake_run,
+                ),
+                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+            ):
+                self.assertTrue(adapter.start_sampling(config, context).ok)
+                with patch.object(
+                    RunContext,
+                    "acknowledge_custody",
+                    side_effect=OSError("injected fsync acknowledgement failure"),
+                ), self.assertRaisesRegex(OSError, "fsync acknowledgement failure"):
+                    adapter.stop_sampling(config, context)
+
+            retained = adapter._pending_captures[RAW_SAMPLES_NAME]
+            destination = context.raw_dir / RAW_SAMPLES_NAME
+            self.assertTrue(retained.is_file())
+            self.assertEqual(destination.read_bytes(), fixture)
+            self.assertFalse((context.logs_dir / "custody").exists())
+
+            report = adapter.salvage_custody(context)
+
+            self.assertTrue(report[0]["acknowledged"])
+            self.assertFalse(retained.exists())
+            acknowledgement = (
+                context.logs_dir
+                / "custody"
+                / "powermetrics-powermetrics_plist.json"
+            )
+            self.assertTrue(acknowledgement.is_file())
+            self.assertEqual(
+                json.loads(acknowledgement.read_text())["custody_token"],
+                "powermetrics-powermetrics_plist",
+            )
+
+    def test_controller_salvages_each_native_capture_after_first_write_failure(self) -> None:
+        fixture = FIXTURE.read_bytes()
+        config = make_config(
+            workload_profile={"output_tokens": 300},
+            sampling={"power_hz": 2.0, "idle_seconds": 5.0},
+        )
+        def fake_run(command, **kwargs):
+            if "-o" not in command:
+                return completed(command)
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        class FakePopen:
+            def __init__(self, command, **kwargs):
+                self.path = Path(command[command.index("-o") + 1])
+                self.path.write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.path.write_bytes(fixture)
+                self.returncode = 0
+                return b"", b""
+
+        for artifact_name in (RAW_IDLE_NAME, RAW_SAMPLES_NAME, RAW_IDLE_POST_NAME):
+            with self.subTest(artifact_name=artifact_name), tempfile.TemporaryDirectory() as tmp:
+                failed_once = False
+
+                def flaky_write(context, name, data):
+                    nonlocal failed_once
+                    if name == artifact_name and not failed_once:
+                        failed_once = True
+                        raise BundleError("injected first custody write failure")
+                    return write_bundle_raw_artifact(context, name, data)
+
+                with (
+                    patch(
+                        "joulewise.adapters.powermetrics.subprocess.run",
+                        side_effect=fake_run,
+                    ),
+                    patch(
+                        "joulewise.adapters.powermetrics.subprocess.Popen",
+                        FakePopen,
+                    ),
+                    patch(
+                        "joulewise.adapters.powermetrics.write_raw_artifact",
+                        side_effect=flaky_write,
+                    ),
+                    patch(
+                        "joulewise.controller._capture_environment",
+                        return_value={"capture_scope": "test"},
+                    ),
+                    patch("joulewise.bundle.platform.platform", return_value="test"),
+                    patch("joulewise.bundle._git_commit", return_value=None),
+                ):
+                    bundle_path, _summary = run_benchmark(
+                        config,
+                        Path(tmp),
+                        FakeClock(start=10.0),
+                    )
+
+                self.assertTrue(failed_once)
+                self.assertEqual(
+                    (bundle_path / "raw" / artifact_name).read_bytes(),
+                    fixture,
+                )
 
     def test_stop_sampling_rich_write_oserror_does_not_break_samples(self) -> None:
         fixture = FIXTURE.read_bytes()

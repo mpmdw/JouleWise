@@ -138,6 +138,200 @@ class ExplodingRegistry:
         return adapters.resolve_transport(config)
 
 
+class InterruptingCleanupRuntime:
+    name = "interrupting-cleanup"
+
+    def __init__(self, primary: BaseException, cleanup_error: BaseException) -> None:
+        self.primary = primary
+        self.cleanup_error = cleanup_error
+        self.cleanup_calls = 0
+
+    def prepare(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        raise self.primary
+
+    def warmup(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        raise AssertionError("warmup must not run after interrupted prepare")
+
+    def run_workload(self, config: BenchmarkConfig, context=None) -> Any:
+        raise AssertionError("workload must not run after interrupted prepare")
+
+    def cleanup(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        self.cleanup_calls += 1
+        raise self.cleanup_error
+
+
+class InterruptingCleanupRegistry:
+    def __init__(self, runtime: InterruptingCleanupRuntime) -> None:
+        self.runtime = runtime
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return self.runtime, None
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_telemetry(config, clock)
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
+class InterruptDuringStartTelemetry:
+    """Sampler becomes live, then start is interrupted before confirmation."""
+
+    name = "interrupt-during-start"
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.live = False
+        self.stop_calls = 0
+
+    def start_sampling(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        result = self._inner.start_sampling(config, context)
+        if not result.ok:
+            return result
+        self.live = True
+        raise KeyboardInterrupt("injected after sampler start")
+
+    def stop_sampling(self, config: BenchmarkConfig, context=None):
+        self.stop_calls += 1
+        samples = self._inner.stop_sampling(config, context)
+        self.live = False
+        return samples
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+class InterruptDuringStartRegistry:
+    def __init__(self) -> None:
+        self.telemetry: InterruptDuringStartTelemetry | None = None
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            self.telemetry = InterruptDuringStartTelemetry(telemetry)
+            telemetry = self.telemetry
+        return telemetry, failure
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
+class InterruptAfterStartTransitionTelemetry:
+    """Interrupt alignment work after start returned with a live capture."""
+
+    name = "interrupt-after-start-transition"
+
+    def __init__(self, inner: Any, capture_path: Path) -> None:
+        self._inner = inner
+        self.capture_path = capture_path
+        self.live = False
+        self.stop_calls = 0
+        self.salvage_calls = 0
+        self._interrupt_alignment = False
+
+    def start_sampling(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        result = self._inner.start_sampling(config, context)
+        if result.ok:
+            self.capture_path.write_bytes(b"native capture survives\n")
+            self.live = True
+            self._interrupt_alignment = True
+        return result
+
+    def clock_alignments(self) -> list[dict[str, Any]]:
+        if self._interrupt_alignment:
+            self._interrupt_alignment = False
+            raise KeyboardInterrupt("injected during post-start alignment")
+        return []
+
+    def stop_sampling(self, config: BenchmarkConfig, context=None):
+        self.stop_calls += 1
+        samples = self._inner.stop_sampling(config, context)
+        self.live = False
+        return samples
+
+    def salvage_custody(self, context) -> list[dict[str, Any]]:
+        self.salvage_calls += 1
+        if self.live:
+            self.capture_path.unlink(missing_ok=True)
+        return []
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+class InterruptAfterStartTransitionRegistry:
+    def __init__(self, capture_path: Path) -> None:
+        self.capture_path = capture_path
+        self.telemetry: InterruptAfterStartTransitionTelemetry | None = None
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            self.telemetry = InterruptAfterStartTransitionTelemetry(
+                telemetry,
+                self.capture_path,
+            )
+            telemetry = self.telemetry
+        return telemetry, failure
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
+class InterruptAfterStopTelemetry:
+    """Interrupt post-stop alignment after recording one successful stop."""
+
+    name = "interrupt-after-stop"
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.stop_calls = 0
+        self.stop_records: list[int] = []
+        self._interrupt_alignment = False
+
+    def stop_sampling(self, config: BenchmarkConfig, context=None):
+        self.stop_calls += 1
+        if self.stop_calls > 1:
+            raise AssertionError("stop_sampling must not be called twice")
+        samples = self._inner.stop_sampling(config, context)
+        self.stop_records.append(len(samples))
+        self._interrupt_alignment = True
+        return samples
+
+    def clock_alignments(self) -> list[dict[str, Any]]:
+        if self._interrupt_alignment:
+            self._interrupt_alignment = False
+            raise KeyboardInterrupt("injected after successful stop")
+        return []
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+class InterruptAfterStopRegistry:
+    def __init__(self) -> None:
+        self.telemetry: InterruptAfterStopTelemetry | None = None
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            self.telemetry = InterruptAfterStopTelemetry(telemetry)
+            telemetry = self.telemetry
+        return telemetry, failure
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
 class PoisonTelemetry:
     """Wraps the real mock telemetry but returns non-JSON-serializable device
     metadata AND fails start_sampling (to drive the structured failure path)."""
@@ -1049,6 +1243,101 @@ class UnexpectedExceptionTests(ControllerTestCase):
         self.assertEqual(failures[0]["metadata"], {"failure_reason": "unknown_error"})
         self.assert_run_finalized_last(events)
         self.assert_timestamps_non_decreasing(events)
+
+
+class InterruptFinalizationTests(ControllerTestCase):
+    def test_interrupt_during_sampler_start_stops_potentially_live_sampler(self) -> None:
+        registry = InterruptDuringStartRegistry()
+        config = make_config("controller-interrupt-during-sampler-start")
+
+        with self.assertRaisesRegex(KeyboardInterrupt, "after sampler start"):
+            run_benchmark(
+                config,
+                self.runs_root,
+                self.clock,
+                registry=registry,
+            )
+
+        assert registry.telemetry is not None
+        self.assertEqual(registry.telemetry.stop_calls, 1)
+        self.assertFalse(registry.telemetry.live)
+        bundle_path = self.runs_root / config.run_id
+        self.assert_complete_bundle(bundle_path)
+        events = self.read_events(bundle_path)
+        self.assertNotIn("sampling_started", [event["event_type"] for event in events])
+
+    def test_interrupt_after_start_transition_stops_before_custody_salvage(self) -> None:
+        capture_path = self.runs_root / "native-transition-capture"
+        registry = InterruptAfterStartTransitionRegistry(capture_path)
+        config = make_config("controller-interrupt-after-start-transition")
+
+        with self.assertRaisesRegex(KeyboardInterrupt, "post-start alignment"):
+            run_benchmark(
+                config,
+                self.runs_root,
+                self.clock,
+                registry=registry,
+            )
+
+        assert registry.telemetry is not None
+        self.assertEqual(registry.telemetry.stop_calls, 1)
+        self.assertFalse(registry.telemetry.live)
+        self.assertEqual(registry.telemetry.salvage_calls, 1)
+        self.assertEqual(capture_path.read_bytes(), b"native capture survives\n")
+
+    def test_interrupt_after_successful_stop_does_not_double_stop(self) -> None:
+        registry = InterruptAfterStopRegistry()
+        config = make_config("controller-interrupt-after-successful-stop")
+
+        with self.assertRaisesRegex(KeyboardInterrupt, "after successful stop"):
+            run_benchmark(
+                config,
+                self.runs_root,
+                self.clock,
+                registry=registry,
+            )
+
+        assert registry.telemetry is not None
+        self.assertEqual(registry.telemetry.stop_calls, 1)
+        self.assertEqual(len(registry.telemetry.stop_records), 1)
+        self.assert_complete_bundle(self.runs_root / config.run_id)
+
+    def test_keyboardinterrupt_and_systemexit_survive_cleanup_failures(self) -> None:
+        cases = [
+            (
+                "keyboard",
+                KeyboardInterrupt("primary keyboard interrupt"),
+                SystemExit("cleanup system exit"),
+            ),
+            (
+                "system-exit",
+                SystemExit("primary system exit"),
+                KeyboardInterrupt("cleanup keyboard interrupt"),
+            ),
+        ]
+        for suffix, primary, cleanup_error in cases:
+            with self.subTest(primary=type(primary).__name__):
+                runtime = InterruptingCleanupRuntime(primary, cleanup_error)
+                registry = InterruptingCleanupRegistry(runtime)
+                config = make_config("controller-interrupt-" + suffix)
+
+                with self.assertRaises(type(primary)) as caught:
+                    run_benchmark(
+                        config,
+                        self.runs_root,
+                        self.clock,
+                        registry=registry,
+                    )
+
+                self.assertEqual(str(caught.exception), str(primary))
+                self.assertEqual(runtime.cleanup_calls, 1)
+                bundle_path = self.runs_root / config.run_id
+                self.assert_complete_bundle(bundle_path)
+                stored = self.assert_summary_round_trips(bundle_path)
+                self.assertIn(type(primary).__name__, stored["failure_message"])
+                controller_log = (bundle_path / "logs" / "controller.log").read_text()
+                self.assertIn(type(cleanup_error).__name__, controller_log)
+                self.assertIn(str(cleanup_error), controller_log)
 
 
 class PoisonMetadataTests(ControllerTestCase):

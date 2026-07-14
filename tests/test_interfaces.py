@@ -1,5 +1,6 @@
 import json
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from joulewise.interfaces import (
     SuiteRuntimeAdapter,
     TelemetryAdapter,
     TransportAdapter,
+    acknowledge_durable_custody,
 )
 from joulewise.schemas import BenchmarkConfig, TelemetryBackend
 
@@ -51,6 +53,36 @@ class InterfaceTests(unittest.TestCase):
         self.assertIsInstance(transport, TransportAdapter)
         result = transport.run_command(self.config, [sys.executable, "-c", "pass"])
         self.assertTrue(result.ok)
+
+    def test_custody_acknowledgement_is_atomic_bundle_local_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            artifact = bundle / "raw" / "native.bin"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_bytes(b"native evidence")
+
+            acknowledgement = acknowledge_durable_custody(
+                bundle,
+                "token-compatible-001",
+                [artifact],
+            )
+
+            payload = json.loads(acknowledgement.acknowledgement_path.read_text())
+            self.assertEqual(payload["custody_token"], "token-compatible-001")
+            self.assertEqual(payload["artifacts"], ["raw/native.bin"])
+            self.assertFalse(
+                list(acknowledgement.acknowledgement_path.parent.glob("*.tmp"))
+            )
+
+            outside = Path(tmp) / "outside.bin"
+            outside.write_bytes(b"not bundle custody")
+            with self.assertRaisesRegex(ValueError, "inside the run bundle"):
+                acknowledge_durable_custody(bundle, "token-002", [outside])
+
+            empty = bundle / "raw" / "empty-collection"
+            empty.mkdir()
+            with self.assertRaisesRegex(ValueError, "contains no evidence files"):
+                acknowledge_durable_custody(bundle, "token-003", [empty])
 
 
 if __name__ == "__main__":
