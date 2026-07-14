@@ -39,6 +39,31 @@ IDLE_MEAN_UNCERTAINTY = {
     "reason_codes": [],
 }
 
+SOURCE_PROVENANCE = {
+    "schema": "joulewise.source_provenance.v1",
+    "diff_identity": {
+        "algorithm": "sha256",
+        "version": "joulewise.git-diff.nul-v1",
+    },
+    "start": {
+        "git_commit": "1" * 40,
+        "tracked": "clean",
+        "staged": "clean",
+        "untracked": "clean",
+        "diff_sha256": "3" * 64,
+    },
+    "end": {
+        "git_commit": "1" * 40,
+        "tracked": "clean",
+        "staged": "clean",
+        "untracked": "clean",
+        "diff_sha256": "3" * 64,
+    },
+    "changed_during_run": False,
+    "claim_eligible": True,
+    "reason_codes": [],
+}
+
 
 def _write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -148,6 +173,7 @@ class PublicationPrivacyTests(unittest.TestCase):
                 "config_sha256": "0" * 64,
                 "run_id": "private-user-91__private-host-28",
                 "git_commit": "1" * 40,
+                "source_provenance": SOURCE_PROVENANCE,
                 "clock": {"kind": "synthetic"},
                 "config_warnings": [],
                 "model": {"source": "/Users/example/private/model"},
@@ -286,6 +312,8 @@ class PublicationPrivacyTests(unittest.TestCase):
         self.assertFalse((destination / "logs").exists())
         self.assertFalse((destination / "raw").exists())
         summary = json.loads((destination / "summary_metrics.json").read_text())
+        metadata = json.loads((destination / "metadata.json").read_text())
+        self.assertEqual(metadata["source_provenance"], SOURCE_PROVENANCE)
         quality = summary["measurement_quality"]
         self.assertEqual(
             quality["remote_cleanup_failed"],
@@ -310,6 +338,7 @@ class PublicationPrivacyTests(unittest.TestCase):
             "idle uncertainty field": self._add_idle_uncertainty_field,
             "idle uncertainty reason": self._add_idle_uncertainty_reason,
             "measurement quality field": self._add_quality_field,
+            "source provenance value": self._poison_source_provenance,
             "event field": self._add_event_field,
             "power source value": self._set_unreviewed_power_source,
             "artifact path": lambda bundle: (bundle / "private-extra.txt").write_text(
@@ -322,7 +351,7 @@ class PublicationPrivacyTests(unittest.TestCase):
                 mutate(bundle)
                 with self.assertRaisesRegex(
                     publication_privacy.PrivacyAuditError,
-                    "unclassified",
+                    "unclassified|source_provenance",
                 ):
                     publication_privacy.audit_private_bundle(bundle)
 
@@ -363,6 +392,13 @@ class PublicationPrivacyTests(unittest.TestCase):
         path = bundle / "summary_metrics.json"
         value = json.loads(path.read_text())
         value["measurement_quality"]["unreviewed_quality"] = 1
+        _write_json(path, value)
+
+    @staticmethod
+    def _poison_source_provenance(bundle: Path) -> None:
+        path = bundle / "metadata.json"
+        value = json.loads(path.read_text())
+        value["source_provenance"]["start"]["tracked"] = ["clean"]
         _write_json(path, value)
 
     @staticmethod

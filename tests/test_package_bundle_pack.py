@@ -28,6 +28,23 @@ MOCK_SUITE_MANIFEST = ROOT / "configs" / "suite_manifests" / "mock_suite_manifes
 POWERMETRICS_FIXTURE = ROOT / "tests" / "fixtures" / "powermetrics_sample.plist"
 
 
+def _source_state(
+    *,
+    commit: str = "1" * 40,
+    tracked: str = "clean",
+    staged: str = "clean",
+    untracked: str = "clean",
+    diff_sha256: str = "2" * 64,
+) -> dict[str, str]:
+    return {
+        "git_commit": commit,
+        "tracked": tracked,
+        "staged": staged,
+        "untracked": untracked,
+        "diff_sha256": diff_sha256,
+    }
+
+
 def _run_joulewise(argv: list[str]) -> tuple[int, str, str]:
     stdout = io.StringIO()
     stderr = io.StringIO()
@@ -74,19 +91,32 @@ class BundlePackTests(unittest.TestCase):
         path.write_text(json.dumps(data), encoding="utf-8")
         return path
 
-    def make_bundle(self, run_id: str) -> Path:
-        code, stdout, stderr = _run_joulewise(
-            ["run", str(self.write_config(run_id)), "--runs-dir", str(self.runs_dir)]
-        )
+    def make_bundle(
+        self,
+        run_id: str,
+        source_states: list[dict[str, str]] | None = None,
+    ) -> Path:
+        states = source_states or [_source_state(), _source_state()]
+        with patch(
+            "joulewise.bundle._capture_source_state",
+            side_effect=[dict(state) for state in states],
+        ):
+            code, stdout, stderr = _run_joulewise(
+                ["run", str(self.write_config(run_id)), "--runs-dir", str(self.runs_dir)]
+            )
         self.assertEqual(code, 0, stderr)
         line = stdout.strip()
         self.assertTrue(line.startswith("bundle: "), line)
         return Path(line[len("bundle: ") :].split(" ", 1)[0])
 
     def make_suite_bundle(self, run_id: str) -> Path:
-        code, stdout, stderr = _run_joulewise(
-            ["run", str(self.write_suite_config(run_id)), "--runs-dir", str(self.runs_dir)]
-        )
+        with patch(
+            "joulewise.bundle._capture_source_state",
+            side_effect=[_source_state(), _source_state()],
+        ):
+            code, stdout, stderr = _run_joulewise(
+                ["run", str(self.write_suite_config(run_id)), "--runs-dir", str(self.runs_dir)]
+            )
         self.assertEqual(code, 0, stderr)
         line = stdout.strip()
         self.assertTrue(line.startswith("bundle: "), line)
@@ -128,6 +158,10 @@ class BundlePackTests(unittest.TestCase):
         with (
             patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
             patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+            patch(
+                "joulewise.bundle._capture_source_state",
+                side_effect=[_source_state(), _source_state()],
+            ),
         ):
             bundle, summary = run_benchmark(
                 config,
@@ -249,6 +283,45 @@ class BundlePackTests(unittest.TestCase):
         with self.assertRaises(package_bundle_pack.BundlePackError):
             package_bundle_pack.package_bundles([source_bundle], pack_dir)
         self.assertFalse(pack_dir.exists())
+
+    def test_pack_gate_hard_excludes_dirty_unknown_and_changed_source_provenance(self) -> None:
+        unknown = _source_state(
+            commit="unknown",
+            tracked="unknown",
+            staged="unknown",
+            untracked="unknown",
+            diff_sha256="unknown",
+        )
+        cases = {
+            "dirty": [
+                _source_state(tracked="dirty"),
+                _source_state(tracked="dirty"),
+            ],
+            "unknown": [unknown, unknown],
+            "changed": [
+                _source_state(),
+                _source_state(diff_sha256="3" * 64),
+            ],
+        }
+        for label, states in cases.items():
+            with self.subTest(label=label):
+                source_bundle = self.make_bundle(f"pack-{label}", states)
+                metadata = json.loads(
+                    (source_bundle / "metadata.json").read_text(encoding="utf-8")
+                )
+                self.assertIs(
+                    metadata["source_provenance"]["claim_eligible"],
+                    False,
+                )
+                self.assertTrue((source_bundle / "summary_metrics.json").is_file())
+                with self.assertRaisesRegex(
+                    package_bundle_pack.BundlePackError,
+                    "source provenance is not claim-eligible",
+                ):
+                    package_bundle_pack.package_bundles(
+                        [source_bundle],
+                        self.tmp / f"{label}-pack",
+                    )
 
     def test_verify_pack_catches_tampered_packed_file(self) -> None:
         source_bundle = self.make_bundle("pack-tamper")

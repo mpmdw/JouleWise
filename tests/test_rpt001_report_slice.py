@@ -17,6 +17,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from joulewise.clock import FakeClock
 from joulewise.controller import run_benchmark
@@ -86,11 +87,22 @@ class TestRpt001Artifacts(unittest.TestCase):
                 (REPO / "configs/examples/mock_local.json").read_text(encoding="utf-8")
             )
             config_data["run_id"] = "cross-pipeline-identity"
-            bundle, summary = run_benchmark(
-                BenchmarkConfig.from_mapping(config_data),
-                runs_root,
-                FakeClock(start=1_783_394_100.0),
-            )
+            clean_source_state = {
+                "git_commit": "1" * 40,
+                "tracked": "clean",
+                "staged": "clean",
+                "untracked": "clean",
+                "diff_sha256": "2" * 64,
+            }
+            with mock.patch(
+                "joulewise.bundle._capture_source_state",
+                side_effect=[clean_source_state, clean_source_state],
+            ):
+                bundle, summary = run_benchmark(
+                    BenchmarkConfig.from_mapping(config_data),
+                    runs_root,
+                    FakeClock(start=1_783_394_100.0),
+                )
             self.assertEqual(summary.status, RunStatus.SUCCEEDED)
 
             experiments = runs_root / "experiments"

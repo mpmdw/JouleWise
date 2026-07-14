@@ -35,6 +35,47 @@ preflight observations, not substitutes for per-bundle provenance or live
 measurement gates. In particular, doctor never starts powermetrics and never
 certifies that a machine is quiet.
 
+### Per-bundle source provenance
+
+`RunBundleWriter.create` captures the harness source state before it creates
+bundle artifacts or returns control to any adapter. `write_metadata` captures
+the end state after adapter execution. `metadata.git_commit` remains the
+creation-time commit for compatibility; the governed record is
+`metadata.source_provenance` with schema `joulewise.source_provenance.v1`.
+
+Each `start` and `end` snapshot records `git_commit`, `tracked`, `staged`,
+`untracked`, and `diff_sha256`. The three state values are independently:
+
+- `clean`: the corresponding Git probe succeeded and found no change;
+- `dirty`: an unstaged tracked diff, staged diff, or non-ignored untracked path
+  was present, respectively; or
+- `unknown`: the corresponding probe or required file read failed. Failure is
+  never interpreted as clean.
+
+The privacy-safe diff identity descriptor is `sha256` /
+`joulewise.git-diff.nul-v1`. The producer captures the byte output of
+`git diff --no-ext-diff --no-textconv --binary`, the analogous `--cached`
+command, and `git ls-files --others --exclude-standard -z`. For each sorted
+untracked path it hashes, without serializing, the NUL-safe length-framed path,
+file kind, mode, size, and SHA-256 of regular-file bytes or symlink-target
+bytes. The final identity is SHA-256 over the version plus length-framed
+`tracked`, `staged`, and untracked-inventory byte identities. Bundles contain
+only the final digest and state labels: never a diff, path, untracked file
+content, or secret.
+
+`changed_during_run` is true when two fully known snapshots differ, false when
+they match, and null when either snapshot is not fully known. `claim_eligible`
+is true only when both commits and diff identities are known, all six component
+states are clean, and the snapshots match. `reason_codes` is the deterministic
+list of every start/end unknown or dirty component followed, when applicable,
+by `source_changed_during_run`. Bundle completion remains allowed in every
+state so raw evidence is not discarded.
+
+Dirty, unknown, changed, missing, or internally inconsistent provenance is a
+hard exclusion for claim-bearing use. The publication pack preflight enforces
+that boundary and refuses such bundles. Analysis-side admission propagation is
+separate from capture and field semantics and is owned by WO-004/T11.
+
 1. Validate config.
 2. Create run directory.
 3. Collect device metadata.

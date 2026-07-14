@@ -26,6 +26,7 @@ from joulewise.publication_privacy import (
     audit_private_bundle,
     classification_for_path,
     public_bundle_id,
+    source_provenance_problems,
     transform_public_bundle,
     tree_identity_descriptor,
     tree_sha256,
@@ -185,6 +186,16 @@ def _preflight_bundle(bundle: Path) -> dict[str, Any]:
     metadata = reader.raw_metadata()
     if not isinstance(metadata, dict):
         raise BundlePackError(f"metadata.json is not readable after strict validation: {bundle}")
+    provenance_problems = source_provenance_problems(
+        metadata.get("source_provenance"),
+        require_eligible=True,
+    )
+    if provenance_problems:
+        rendered = "; ".join(provenance_problems)
+        raise BundlePackError(
+            f"bundle source provenance is not claim-eligible and cannot be packed: "
+            f"{bundle}: {rendered}"
+        )
     summary_status = _summary_status(bundle)
     if summary_status != "succeeded":
         raise BundlePackError(
