@@ -1,0 +1,16 @@
+docs/contracts/adapter_contracts.md
+docs/contracts/node_worker_protocol.md
+docs/specs/c027/nv-gate-2_live_promotion.md
+joulewise/adapters/__init__.py
+joulewise/adapters/local_transport.py
+joulewise/adapters/mlx_runtime.py
+joulewise/adapters/mock_runtime.py
+joulewise/adapters/mock_telemetry.py
+joulewise/adapters/node_client.py
+joulewise/adapters/node_worker.py
+joulewise/adapters/nvidia_smi.py
+joulewise/adapters/powermetrics.py
+joulewise/adapters/ssh_transport.py
+joulewise/adapters/vllm_runtime.py
+joulewise/interfaces.py
+scripts/spike_mlx_prompt_cache.py

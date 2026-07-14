@@ -1,0 +1,14 @@
+joulewise/adapters/ssh_transport.py
+joulewise/adapters/node_client.py
+joulewise/adapters/node_worker.py
+joulewise/adapters/nvidia_smi.py
+joulewise/adapters/vllm_runtime.py
+docs/contracts/node_worker_protocol.md
+docs/contracts/adapter_contracts.md
+docs/specs/c027/nv-gate-2_live_promotion.md
+tests/test_node_client.py
+tests/test_node_worker.py
+tests/test_node_worker_subprocess.py
+tests/test_nvidia_node_integration.py
+tests/test_ssh_transport.py
+tests/test_2k_amplification.py
