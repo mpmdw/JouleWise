@@ -19,7 +19,6 @@ from joulewise.adapters import (
 from joulewise.adapters.mock_telemetry import (
     IDLE_POWER_W,
     MEASURED_POWER_W,
-    WARMUP_POWER_W,
 )
 from joulewise.clock import FakeClock, SystemClock
 from joulewise.interfaces import (
@@ -575,7 +574,6 @@ class MockTelemetryTests(unittest.TestCase):
 
     def test_power_constants(self) -> None:
         self.assertEqual(IDLE_POWER_W, 5.0)
-        self.assertEqual(WARMUP_POWER_W, 6.0)
         self.assertEqual(MEASURED_POWER_W, 7.5)
 
     def test_device_metadata_declares_rail_manifest(self) -> None:

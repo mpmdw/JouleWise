@@ -29,6 +29,7 @@ import json
 from typing import Any
 
 from joulewise import __version__
+from joulewise.adapters.suite_control import SuiteItemResult, execute_suite
 from joulewise.clock import Clock
 from joulewise.interfaces import AdapterResult, RunContext, RuntimeEvent, RuntimeResult
 from joulewise.provenance import (
@@ -42,20 +43,12 @@ from joulewise.provenance import (
 )
 from joulewise.schemas import BenchmarkConfig, FailureReason
 from joulewise.suite import (
-    BLOCK_END,
-    BLOCK_START,
     ITEM_END,
     ITEM_START,
-    LEVEL_END,
-    LEVEL_START,
-    SUITE_END,
     SUITE_PHASE,
-    SUITE_START,
     ItemStatus,
     SuiteItem,
     SuiteManifest,
-    realized_order,
-    suite_manifest_sha256,
 )
 
 #: model.name value that triggers the did_not_fit fault injection (see module
@@ -201,170 +194,34 @@ class MockRuntimeAdapter:
         order_seed: str,
         order_row: int | None = None,
     ) -> RuntimeResult:
-        manifest_sha256 = suite_manifest_sha256(manifest.to_dict())
-        suite_start_metadata: dict[str, Any] = {
-            "suite_id": manifest.suite_id,
-            "suite_profile": manifest.suite_profile,
-            "suite_revision": manifest.suite_revision,
-            "suite_manifest_sha256": manifest_sha256,
-            "item_count": len(manifest.items),
-            "order_policy": manifest.execution_policy.order_policy,
-            "order_seed": order_seed,
-        }
-        if order_row is not None:
-            suite_start_metadata["order_row"] = order_row
-        events: list[RuntimeEvent] = [
-            self._event(
-                SUITE_START,
-                SUITE_PHASE,
-                "mock suite started",
-                suite_start_metadata,
-            )
-        ]
-        output_lines: list[str] = []
-        status_counts: dict[str, int] = {}
-        total_prompt_tokens = 0
-        total_planned_output_tokens = 0
-        total_output_tokens = 0
-        prompt_hashes: list[str] = []
-        previous_item_id: str | None = None
-        current_block: str | None = None
-        current_level: str | None = None
-        block_indices: dict[str, int] = {}
-        level_indices: dict[tuple[str, str], int] = {}
-
-        for realized in realized_order(manifest, order_row=order_row):
-            item = realized.item
-            item_index = realized.item_index
-            position = realized.position
-            block_id = item.grouping.block_id
-            level_id = item.grouping.level_id
-            if block_id != current_block:
-                if current_level is not None:
-                    events.append(
-                        self._event(
-                            LEVEL_END,
-                            SUITE_PHASE,
-                            f"mock level {current_level} ended",
-                            {
-                                "level_id": current_level,
-                                "level_index": level_indices[(current_block, current_level)],
-                            },
-                        )
-                    )
-                    current_level = None
-                if current_block is not None:
-                    events.append(
-                        self._event(
-                            BLOCK_END,
-                            SUITE_PHASE,
-                            f"mock block {current_block} ended",
-                            {
-                                "block_id": current_block,
-                                "block_index": block_indices[current_block],
-                            },
-                        )
-                    )
-                block_indices.setdefault(block_id, len(block_indices))
-                events.append(
-                    self._event(
-                        BLOCK_START,
-                        SUITE_PHASE,
-                        f"mock block {block_id} started",
-                        {"block_id": block_id, "block_index": block_indices[block_id]},
-                    )
+        suite_identity = _suite_identity(manifest)
+        control = execute_suite(
+            manifest,
+            backend_name="mock",
+            order_seed=order_seed,
+            order_row=order_row,
+            event_factory=self._event,
+            run_item=lambda item, item_index, position, previous_item_id, events: (
+                self._run_suite_item(
+                    item,
+                    item_index,
+                    position,
+                    previous_item_id,
+                    events,
+                    suite_identity=suite_identity,
                 )
-                current_block = block_id
-            if level_id != current_level:
-                if current_level is not None:
-                    events.append(
-                        self._event(
-                            LEVEL_END,
-                            SUITE_PHASE,
-                            f"mock level {current_level} ended",
-                            {
-                                "level_id": current_level,
-                                "level_index": level_indices[(current_block, current_level)],
-                            },
-                        )
-                    )
-                level_key = (block_id, level_id)
-                level_indices.setdefault(level_key, len(level_indices))
-                events.append(
-                    self._event(
-                        LEVEL_START,
-                        SUITE_PHASE,
-                        f"mock level {level_id} started",
-                        {"level_id": level_id, "level_index": level_indices[level_key]},
-                    )
-                )
-                current_level = level_id
-
-            item_result = self._run_suite_item(
-                item,
-                item_index,
-                position,
-                previous_item_id,
-                events,
-                suite_identity=_suite_identity(manifest),
-            )
-            previous_item_id = item.item_id
-            output_lines.append(json.dumps(item_result["output"], sort_keys=True) + "\n")
-            status = item_result["status"]
-            status_counts[status] = status_counts.get(status, 0) + 1
-            total_prompt_tokens += item_result["prompt_tokens"]
-            total_planned_output_tokens += item_result["planned_output_tokens"]
-            total_output_tokens += item_result["emitted_tokens"]
-            prompt_hashes.append(item_result["prompt_hash"])
-
-        if current_level is not None:
-            events.append(
-                self._event(
-                    LEVEL_END,
-                    SUITE_PHASE,
-                    f"mock level {current_level} ended",
-                    {
-                        "level_id": current_level,
-                        "level_index": level_indices[(current_block, current_level)],
-                    },
-                )
-            )
-        if current_block is not None:
-            events.append(
-                self._event(
-                    BLOCK_END,
-                    SUITE_PHASE,
-                    f"mock block {current_block} ended",
-                    {"block_id": current_block, "block_index": block_indices[current_block]},
-                )
-            )
-        events.append(
-            self._event(
-                SUITE_END,
-                SUITE_PHASE,
-                "mock suite completed",
-                {
-                    "suite_id": manifest.suite_id,
-                    "items_executed": len(manifest.items),
-                    "status_counts": status_counts,
-                },
-            )
+            ),
         )
         return RuntimeResult(
-            events=events,
-            output_artifacts={"suite_items.jsonl": "".join(output_lines)},
-            token_count=total_prompt_tokens + total_output_tokens,
-            output_token_count=total_output_tokens,
+            events=control.events,
+            output_artifacts={"suite_items.jsonl": control.output_jsonl},
+            token_count=control.total_prompt_tokens + control.total_output_tokens,
+            output_token_count=control.total_output_tokens,
             workload_provenance={
-                "prompt": suite_prompt_rollup(prompt_hashes, total_prompt_tokens),
-                "suite": {
-                    "suite_id": manifest.suite_id,
-                    "manifest_sha256": manifest_sha256,
-                    "item_count": len(manifest.items),
-                    "order_policy": manifest.execution_policy.order_policy,
-                    "order_seed": order_seed,
-                    "order_row": order_row,
-                },
+                "prompt": suite_prompt_rollup(
+                    control.prompt_hashes, control.total_prompt_tokens
+                ),
+                "suite": control.suite_provenance,
                 "generator": {
                     "name": "mock_runtime",
                     "version": __version__,
@@ -383,8 +240,8 @@ class MockRuntimeAdapter:
                 },
                 "output_policy": output_policy(
                     manifest.execution_policy.default_output_policy,
-                    requested_tokens=total_planned_output_tokens,
-                    emitted_tokens=total_output_tokens,
+                    requested_tokens=control.total_planned_output_tokens,
+                    emitted_tokens=control.total_output_tokens,
                     stop_condition="suite_completed",
                 ),
             },
@@ -404,7 +261,7 @@ class MockRuntimeAdapter:
         events: list[RuntimeEvent],
         *,
         suite_identity: str,
-    ) -> dict[str, Any]:
+    ) -> SuiteItemResult:
         prompt_token_ids = _mock_suite_prompt_token_ids(item)
         prompt = prompt_provenance(prompt_token_ids, text=item.source.prompt_text)
         events.append(
@@ -580,14 +437,14 @@ class MockRuntimeAdapter:
             output["status_reason"] = status_reason
         if annotations:
             output["annotations"] = annotations
-        return {
-            "status": status,
-            "prompt_tokens": len(prompt_token_ids),
-            "planned_output_tokens": item.shape.planned_output_tokens,
-            "emitted_tokens": emitted_tokens,
-            "prompt_hash": prompt["token_ids_sha256"],
-            "output": output,
-        }
+        return SuiteItemResult(
+            status=status,
+            prompt_tokens=len(prompt_token_ids),
+            planned_output_tokens=item.shape.planned_output_tokens,
+            emitted_tokens=emitted_tokens,
+            prompt_hash=prompt["token_ids_sha256"],
+            output=output,
+        )
 
     def _event(
         self,

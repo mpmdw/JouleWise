@@ -2,7 +2,7 @@
 
 Power is piecewise-constant per lifecycle stage (idle 5.0 W, warmup 6.0 W,
 measured 7.5 W) so the reducer's trapezoidal integration has a closed-form
-expectation (D-019). ``WARMUP_POWER_W`` is declared for trace-extension use;
+expectation (D-019).
 sampling only covers the measured window. All timestamps come from the
 injected :class:`joulewise.clock.Clock`. Where real backends spawn a
 file-writing sampler subprocess (D-002), the mock simply synthesizes samples
@@ -41,7 +41,6 @@ TELEMETRY_DENIED_NOTE = "telemetry-denied"
 
 #: Piecewise-constant power levels per lifecycle stage (D-019).
 IDLE_POWER_W = 5.0
-WARMUP_POWER_W = 6.0
 MEASURED_POWER_W = 7.5
 
 #: The single mock rail; sums to the canonical power_w by itself (D-018).

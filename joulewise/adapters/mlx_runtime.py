@@ -19,6 +19,7 @@ from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any
 
+from joulewise.adapters.suite_control import SuiteItemResult, execute_suite
 from joulewise.clock import Clock
 from joulewise.interfaces import (
     AdapterFailure,
@@ -40,20 +41,12 @@ from joulewise.provenance import (
 )
 from joulewise.schemas import BenchmarkConfig, FailureReason
 from joulewise.suite import (
-    BLOCK_END,
-    BLOCK_START,
     ITEM_END,
     ITEM_START,
-    LEVEL_END,
-    LEVEL_START,
-    SUITE_END,
     SUITE_PHASE,
-    SUITE_START,
     ItemStatus,
     SuiteItem,
     SuiteManifest,
-    realized_order,
-    suite_manifest_sha256,
 )
 
 DEFAULT_OUTPUT_TOKENS = 8
@@ -86,7 +79,6 @@ class MlxRuntimeAdapter:
         self._model: Any | None = None
         self._tokenizer: Any | None = None
         self._model_config: dict[str, Any] | None = None
-        self._original_eos_token_ids: set[int] | None = None
         self._model_artifact_identity: dict[str, Any] | None = None
 
     def prepare(
@@ -149,7 +141,6 @@ class MlxRuntimeAdapter:
 
         self._mlx_lm = mlx_lm
         self._model, self._tokenizer, self._model_config = loaded
-        self._original_eos_token_ids = _tokenizer_eos_ids(self._tokenizer)
 
         self._model_artifact_identity = model_artifact_identity(source)
         metadata = {
@@ -270,181 +261,44 @@ class MlxRuntimeAdapter:
         if self._mlx_lm is None or self._model is None or self._tokenizer is None:
             raise RuntimeError("runtime backend 'mlx' run_suite called before prepare")
         self._sampler_for_generation()
-
-        manifest_sha256 = suite_manifest_sha256(manifest.to_dict())
-        suite_start_metadata: dict[str, Any] = {
-            "suite_id": manifest.suite_id,
-            "suite_profile": manifest.suite_profile,
-            "suite_revision": manifest.suite_revision,
-            "suite_manifest_sha256": manifest_sha256,
-            "item_count": len(manifest.items),
-            "order_policy": manifest.execution_policy.order_policy,
-            "order_seed": order_seed,
-        }
-        if order_row is not None:
-            suite_start_metadata["order_row"] = order_row
-        events: list[RuntimeEvent] = [
-            self._event(
-                SUITE_START,
-                SUITE_PHASE,
-                "mlx suite started",
-                suite_start_metadata,
-            )
-        ]
-        output_lines: list[str] = []
-        status_counts: dict[str, int] = {}
-        total_prompt_tokens = 0
-        total_planned_output_tokens = 0
-        total_output_tokens = 0
-        prompt_hashes: list[str] = []
-        suite_sampler_recorded = False
-        previous_item_id: str | None = None
-        current_block: str | None = None
-        current_level: str | None = None
-        block_indices: dict[str, int] = {}
-        level_indices: dict[tuple[str, str], int] = {}
+        suite_identity = _suite_identity(manifest)
+        control = execute_suite(
+            manifest,
+            backend_name="mlx",
+            order_seed=order_seed,
+            order_row=order_row,
+            event_factory=self._event,
+            run_item=lambda item, item_index, position, previous_item_id, events: (
+                self._run_suite_item(
+                    item,
+                    item_index,
+                    position,
+                    previous_item_id,
+                    events,
+                    suite_identity=suite_identity,
+                )
+            ),
+        )
         sampler_provenance = self._sampler_provenance_unavailable(
             "no suite item generation attempted"
         )
-
-        for realized in realized_order(manifest, order_row=order_row):
-            item = realized.item
-            item_index = realized.item_index
-            position = realized.position
-            block_id = item.grouping.block_id
-            level_id = item.grouping.level_id
-            if block_id != current_block:
-                if current_level is not None:
-                    events.append(
-                        self._event(
-                            LEVEL_END,
-                            SUITE_PHASE,
-                            f"mlx level {current_level} ended",
-                            {
-                                "level_id": current_level,
-                                "level_index": level_indices[(current_block, current_level)],
-                            },
-                        )
-                    )
-                    current_level = None
-                if current_block is not None:
-                    events.append(
-                        self._event(
-                            BLOCK_END,
-                            SUITE_PHASE,
-                            f"mlx block {current_block} ended",
-                            {
-                                "block_id": current_block,
-                                "block_index": block_indices[current_block],
-                            },
-                        )
-                    )
-                block_indices.setdefault(block_id, len(block_indices))
-                events.append(
-                    self._event(
-                        BLOCK_START,
-                        SUITE_PHASE,
-                        f"mlx block {block_id} started",
-                        {"block_id": block_id, "block_index": block_indices[block_id]},
-                    )
-                )
-                current_block = block_id
-            if level_id != current_level:
-                if current_level is not None:
-                    events.append(
-                        self._event(
-                            LEVEL_END,
-                            SUITE_PHASE,
-                            f"mlx level {current_level} ended",
-                            {
-                                "level_id": current_level,
-                                "level_index": level_indices[(current_block, current_level)],
-                            },
-                        )
-                    )
-                level_key = (block_id, level_id)
-                level_indices.setdefault(level_key, len(level_indices))
-                events.append(
-                    self._event(
-                        LEVEL_START,
-                        SUITE_PHASE,
-                        f"mlx level {level_id} started",
-                        {"level_id": level_id, "level_index": level_indices[level_key]},
-                    )
-                )
-                current_level = level_id
-
-            item_result = self._run_suite_item(
-                item,
-                item_index,
-                position,
-                previous_item_id,
-                events,
-                suite_identity=_suite_identity(manifest),
-            )
+        for item_result in control.item_results:
             # First real record wins: an item whose generation never started
             # returns the unavailable sentinel and must not mask an earlier
             # item's pinned sampler provenance (the sampler is constant).
-            if item_result["sampler_recorded"] and not suite_sampler_recorded:
-                sampler_provenance = item_result["sampler_provenance"]
-                suite_sampler_recorded = True
-            previous_item_id = item.item_id
-            output_lines.append(json.dumps(item_result["output"], sort_keys=True) + "\n")
-            status = item_result["status"]
-            status_counts[status] = status_counts.get(status, 0) + 1
-            total_prompt_tokens += item_result["prompt_tokens"]
-            total_planned_output_tokens += item_result["planned_output_tokens"]
-            total_output_tokens += item_result["emitted_tokens"]
-            prompt_hashes.append(item_result["prompt_hash"])
-
-        if current_level is not None:
-            events.append(
-                self._event(
-                    LEVEL_END,
-                    SUITE_PHASE,
-                    f"mlx level {current_level} ended",
-                    {
-                        "level_id": current_level,
-                        "level_index": level_indices[(current_block, current_level)],
-                    },
-                )
-            )
-        if current_block is not None:
-            events.append(
-                self._event(
-                    BLOCK_END,
-                    SUITE_PHASE,
-                    f"mlx block {current_block} ended",
-                    {"block_id": current_block, "block_index": block_indices[current_block]},
-                )
-            )
-        events.append(
-            self._event(
-                SUITE_END,
-                SUITE_PHASE,
-                "mlx suite completed",
-                {
-                    "suite_id": manifest.suite_id,
-                    "items_executed": len(manifest.items),
-                    "status_counts": status_counts,
-                },
-            )
-        )
+            if item_result.backend_metadata["sampler_recorded"]:
+                sampler_provenance = item_result.backend_metadata["sampler_provenance"]
+                break
         return RuntimeResult(
-            events=events,
-            output_artifacts={"suite_items.jsonl": "".join(output_lines)},
-            token_count=total_prompt_tokens + total_output_tokens,
-            output_token_count=total_output_tokens,
+            events=control.events,
+            output_artifacts={"suite_items.jsonl": control.output_jsonl},
+            token_count=control.total_prompt_tokens + control.total_output_tokens,
+            output_token_count=control.total_output_tokens,
             workload_provenance={
-                "prompt": suite_prompt_rollup(prompt_hashes, total_prompt_tokens),
-                "suite": {
-                    "suite_id": manifest.suite_id,
-                    "manifest_sha256": manifest_sha256,
-                    "item_count": len(manifest.items),
-                    "order_policy": manifest.execution_policy.order_policy,
-                    "order_seed": order_seed,
-                    "order_row": order_row,
-                },
+                "prompt": suite_prompt_rollup(
+                    control.prompt_hashes, control.total_prompt_tokens
+                ),
+                "suite": control.suite_provenance,
                 "generator": {
                     "name": "mlx_lm.stream_generate",
                     "version": _module_or_distribution_version(self._mlx_lm, "mlx-lm"),
@@ -458,8 +312,8 @@ class MlxRuntimeAdapter:
                 },
                 "output_policy": output_policy(
                     manifest.execution_policy.default_output_policy,
-                    requested_tokens=total_planned_output_tokens,
-                    emitted_tokens=total_output_tokens,
+                    requested_tokens=control.total_planned_output_tokens,
+                    emitted_tokens=control.total_output_tokens,
                     stop_condition="suite_completed",
                 ),
             },
@@ -474,7 +328,7 @@ class MlxRuntimeAdapter:
         events: list[RuntimeEvent],
         *,
         suite_identity: str,
-    ) -> dict[str, Any]:
+    ) -> SuiteItemResult:
         prompt_tokens_for_marker = item.shape.planned_prompt_tokens
         prompt_text: str | None = None
         prompt_token_ids: list[int] = []
@@ -633,16 +487,18 @@ class MlxRuntimeAdapter:
             output["status_reason"] = status_reason
         if annotations:
             output["annotations"] = annotations
-        return {
-            "status": status,
-            "prompt_tokens": prompt_tokens_for_marker,
-            "planned_output_tokens": item.shape.planned_output_tokens,
-            "emitted_tokens": emitted_tokens,
-            "prompt_hash": prompt_hash,
-            "sampler_provenance": sampler_provenance,
-            "sampler_recorded": sampler_recorded,
-            "output": output,
-        }
+        return SuiteItemResult(
+            status=status,
+            prompt_tokens=prompt_tokens_for_marker,
+            planned_output_tokens=item.shape.planned_output_tokens,
+            emitted_tokens=emitted_tokens,
+            prompt_hash=prompt_hash,
+            output=output,
+            backend_metadata={
+                "sampler_provenance": sampler_provenance,
+                "sampler_recorded": sampler_recorded,
+            },
+        )
 
     def _generate(
         self,
@@ -877,7 +733,6 @@ class MlxRuntimeAdapter:
         self._tokenizer = None
         self._model_config = None
         self._mlx_lm = None
-        self._original_eos_token_ids = None
         self._model_artifact_identity = None
         return AdapterResult(ok=True, metadata=metadata)
 
