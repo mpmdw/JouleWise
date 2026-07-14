@@ -8,8 +8,14 @@ import unittest
 import sys
 import tempfile
 from pathlib import Path
+from unittest import mock
 
+from joulewise.analysis_engine.inputs import _read_bundle
+from joulewise.bundle_read import BundleReader
+from joulewise.clock import FakeClock
 from joulewise.cli import _STRICT_LEGACY_BUNDLE_IDENTITIES, validate_bundle
+from joulewise.controller import run_benchmark
+from joulewise.schemas import BenchmarkConfig
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -43,6 +49,100 @@ class RetainedCorpusStrictValidationTests(unittest.TestCase):
             if problems:
                 failures[str(bundle.relative_to(REPO_ROOT))] = problems
         self.assertEqual(failures, {})
+
+    def test_dirty_unknown_and_changed_provenance_are_hard_excluded_at_admission(self) -> None:
+        clean = {
+            "git_commit": "1" * 40,
+            "tracked": "clean",
+            "staged": "clean",
+            "untracked": "clean",
+            "diff_sha256": "2" * 64,
+        }
+        cases = {
+            "dirty": {
+                "start": {**clean, "tracked": "dirty", "diff_sha256": "3" * 64},
+                "end": {**clean, "tracked": "dirty", "diff_sha256": "3" * 64},
+                "changed_during_run": False,
+                "reason_codes": ["start_tracked_dirty", "end_tracked_dirty"],
+            },
+            "unknown": {
+                "start": {
+                    "git_commit": "unknown",
+                    "tracked": "unknown",
+                    "staged": "unknown",
+                    "untracked": "unknown",
+                    "diff_sha256": "unknown",
+                },
+                "end": {
+                    "git_commit": "unknown",
+                    "tracked": "unknown",
+                    "staged": "unknown",
+                    "untracked": "unknown",
+                    "diff_sha256": "unknown",
+                },
+                "changed_during_run": None,
+                "reason_codes": [
+                    "start_git_commit_unknown",
+                    "start_tracked_unknown",
+                    "start_staged_unknown",
+                    "start_untracked_unknown",
+                    "start_diff_identity_unknown",
+                    "end_git_commit_unknown",
+                    "end_tracked_unknown",
+                    "end_staged_unknown",
+                    "end_untracked_unknown",
+                    "end_diff_identity_unknown",
+                ],
+            },
+            "changed": {
+                "start": clean,
+                "end": {**clean, "git_commit": "4" * 40, "diff_sha256": "5" * 64},
+                "changed_during_run": True,
+                "reason_codes": ["source_changed_during_run"],
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            for label, case in cases.items():
+                with self.subTest(label=label):
+                    config_data = json.loads(
+                        (REPO_ROOT / "configs/examples/mock_local.json").read_text()
+                    )
+                    config_data["run_id"] = f"source-{label}"
+                    config = BenchmarkConfig.from_mapping(config_data)
+                    with mock.patch(
+                        "joulewise.bundle._capture_source_state",
+                        return_value=dict(clean),
+                    ):
+                        bundle, _ = run_benchmark(config, runs, FakeClock())
+                    metadata_path = bundle / "metadata.json"
+                    metadata = json.loads(metadata_path.read_text())
+                    metadata["source_provenance"].update(
+                        {
+                            **case,
+                            "claim_eligible": False,
+                        }
+                    )
+                    metadata_path.write_text(
+                        json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    self.assertTrue(BundleReader(bundle).is_complete())
+                    evidence = _read_bundle(
+                        {"entry_id": label},
+                        bundle,
+                        runs,
+                        config_data,
+                        validate_bundle,
+                    )
+                    self.assertEqual(evidence.inclusion_status, "excluded")
+                    self.assertIn("bundle_strict_invalid", evidence.base_reason_codes)
+                    self.assertTrue(
+                        any(
+                            "claim-ineligible source provenance" in problem
+                            for problem in evidence.strict_problems
+                        )
+                    )
 
 
 class CorpusCompatibilityReceiptTests(unittest.TestCase):

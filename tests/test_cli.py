@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from joulewise.clock import FakeClock
-from joulewise.cli import main
+from joulewise.cli import main, validate_bundle
 from joulewise.controller import run_benchmark
 from joulewise.schemas import (
     BenchmarkConfig,
@@ -19,6 +19,26 @@ from joulewise.schemas import (
 
 
 class CliTests(unittest.TestCase):
+    def test_dirty_source_bundle_still_completes_and_remains_structurally_valid(self) -> None:
+        config_data = json.loads(Path("configs/examples/mock_local.json").read_text())
+        config_data["run_id"] = "dirty-source-completes"
+        config = BenchmarkConfig.from_mapping(config_data)
+        dirty = {
+            "git_commit": "1" * 40,
+            "tracked": "dirty",
+            "staged": "clean",
+            "untracked": "clean",
+            "diff_sha256": "2" * 64,
+        }
+        with tempfile.TemporaryDirectory() as tmp, mock.patch(
+            "joulewise.bundle._capture_source_state", return_value=dirty
+        ):
+            bundle, _ = run_benchmark(config, Path(tmp), FakeClock())
+            self.assertTrue((bundle / "summary_metrics.json").is_file())
+            self.assertEqual(validate_bundle(bundle, strict=False), [])
+            metadata = json.loads((bundle / "metadata.json").read_text())
+            self.assertIs(metadata["source_provenance"]["claim_eligible"], False)
+
     def test_strict_cli_rejects_single_fixed_budget_realized_output_mismatch(self) -> None:
         config_data = json.loads(Path("configs/examples/mock_local.json").read_text())
         config_data["run_id"] = "strict-realized-output"

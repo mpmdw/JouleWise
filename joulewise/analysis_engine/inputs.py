@@ -4,7 +4,7 @@ The module deliberately isolates every concurrently moving interface:
 
 * strict validation is injected from :func:`joulewise.cli.validate_bundle`;
 * reducer evidence is read through :func:`window_evidence_precheck`;
-* P2-039 exact floor rows are bound to declared bundle/config identities; and
+* P2-039 floor rows are bound to strict calibration bytes, metrics, and order;
 * campaign cooldown evidence is independently hash-verified per member.
 """
 
@@ -22,10 +22,14 @@ from typing import Any, Callable, Mapping, Sequence
 from joulewise.analysis_manifest import validate_analysis_manifest
 from joulewise.bundle_read import BundleReader, BundleReadError
 from joulewise.detection_floor import (
+    STACK_IDENTITY_DOMAIN,
     TRANSPORT_RULE_ID,
+    canonical_domain_sha256,
+    complete_bundle_sha256,
     transport_refusal_reasons,
     validate_floor_artifact,
 )
+from joulewise.publication_privacy import source_provenance_problems
 from joulewise.schemas import BenchmarkConfig, SchemaError
 
 from .claims import REDUCER_REASON_CODES, ordered_reason_codes
@@ -73,6 +77,49 @@ class FloorResolution:
     floor_cmp_j: float | None
     floor_gate_j: float | None
     reason_codes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class FloorEvidenceBinding:
+    """Claim-admission proof for calibration bytes, metrics, and order."""
+
+    bound_cell_ids: frozenset[str]
+    cell_scientific_identity_sha256: Mapping[str, str]
+    cell_stack_identity_sha256: Mapping[str, str]
+    bound_bundle_sha256s: frozenset[str]
+    problems_by_cell: Mapping[str, tuple[str, ...]]
+    global_problems: tuple[str, ...]
+
+
+_FLOOR_BINDING_REASON_CODES = frozenset(
+    {
+        "calibration_plan_bytes_hash_mismatch",
+        "calibration_plan_identity_mismatch",
+        "calibration_abba_block_mismatch",
+        "calibration_abba_label_mismatch",
+        "calibration_abba_member_order_mismatch",
+        "idle_drift_guard_provenance_mismatch",
+    }
+)
+
+
+def floor_binding_reason_codes(binding: FloorEvidenceBinding) -> tuple[str, ...]:
+    """Return stable public refusal codes from detailed binding diagnostics."""
+
+    problems = [
+        *binding.global_problems,
+        *(
+            problem
+            for cell_problems in binding.problems_by_cell.values()
+            for problem in cell_problems
+        ),
+    ]
+    result = []
+    for problem in problems:
+        code = problem.split(":", 1)[0]
+        if code in _FLOOR_BINDING_REASON_CODES and code not in result:
+            result.append(code)
+    return tuple(result)
 
 
 @dataclass
@@ -148,6 +195,16 @@ class LoadedAnalysisInputs:
     valid_replacements: tuple[Mapping[str, Any], ...]
     unregistered_matching: tuple[Mapping[str, Any], ...]
     top_up_entry_ids: frozenset[str]
+    floor_binding: FloorEvidenceBinding = field(
+        default_factory=lambda: FloorEvidenceBinding(
+            bound_cell_ids=frozenset(),
+            cell_scientific_identity_sha256={},
+            cell_stack_identity_sha256={},
+            bound_bundle_sha256s=frozenset(),
+            problems_by_cell={},
+            global_problems=("floor evidence binding was not loaded",),
+        )
+    )
 
 
 def _sha256_file(path: Path) -> str | None:
@@ -206,6 +263,582 @@ def load_floor_artifact(path: Path) -> tuple[Mapping[str, Any], str]:
     if errors:
         raise AnalysisInputError("invalid floor artifact: " + "; ".join(errors))
     return value, hashlib.sha256(raw).hexdigest()
+
+
+def floor_stack_identity(
+    raw_config: Mapping[str, Any] | None,
+    metadata: Mapping[str, Any] | None,
+) -> Mapping[str, Any] | None:
+    """Derive the P2-039/D-058 stack identity from realized bundle evidence."""
+
+    if not isinstance(raw_config, Mapping) or not isinstance(metadata, Mapping):
+        return None
+    typed = _typed_config(raw_config)
+    workload = metadata.get("workload_provenance")
+    adapters = metadata.get("adapters")
+    runtime = adapters.get("runtime") if isinstance(adapters, Mapping) else None
+    telemetry = adapters.get("telemetry") if isinstance(adapters, Mapping) else None
+    prepare = runtime.get("prepare_metadata") if isinstance(runtime, Mapping) else None
+    model = workload.get("model") if isinstance(workload, Mapping) else None
+    artifact = model.get("artifact_identity") if isinstance(model, Mapping) else None
+    tokenizer = workload.get("tokenizer") if isinstance(workload, Mapping) else None
+    sampler = workload.get("sampler") if isinstance(workload, Mapping) else None
+    output_policy = workload.get("output_policy") if isinstance(workload, Mapping) else None
+    hardware = typed.get("hardware_target") if isinstance(typed, Mapping) else None
+    device = metadata.get("device")
+    quantization = metadata.get("quantization")
+    if not all(
+        isinstance(value, Mapping)
+        for value in (
+            typed,
+            workload,
+            runtime,
+            telemetry,
+            prepare,
+            artifact,
+            tokenizer,
+            output_policy,
+            hardware,
+            device,
+            quantization,
+        )
+    ):
+        return None
+    artifact_sha = artifact.get("sha256")
+    telemetry_name = telemetry.get("name")
+    if (
+        not isinstance(artifact_sha, str)
+        or re.fullmatch(r"[0-9a-f]{64}", artifact_sha) is None
+        or not isinstance(telemetry_name, str)
+        or not telemetry_name
+    ):
+        return None
+    return {
+        "hardware_unit": {
+            "config_id": hardware.get("id"),
+            "device": device.get("device"),
+            "machine": metadata.get("machine"),
+        },
+        "os_version": str(metadata.get("platform") or "unknown"),
+        "runtime_version": {
+            "name": runtime.get("name"),
+            "adapter": prepare.get("adapter"),
+            "version": prepare.get("version"),
+        },
+        "kernel_library": str(prepare.get("kernel_library") or "unavailable"),
+        "model_artifact_sha256": artifact_sha,
+        "quantization": dict(quantization),
+        "tokenizer_identity": dict(tokenizer),
+        "sampler_output_policy": {
+            "sampler": dict(sampler) if isinstance(sampler, Mapping) else {"kind": "unavailable"},
+            "output_policy": {
+                key: output_policy.get(key)
+                for key in ("name", "requested_tokens", "stop_condition")
+            },
+        },
+        "batching_concurrency_policy": str(
+            prepare.get("batching_concurrency_policy") or "single-request sequential"
+        ),
+        "measurement_boundary_label": {
+            "boundary": device.get("boundary", "unavailable"),
+            "rails": device.get("rail_manifest"),
+        },
+        "telemetry_backend": telemetry_name,
+    }
+
+
+def _source_provenance_admission_problems(
+    metadata: Mapping[str, Any] | None,
+    summary: Mapping[str, Any] | None,
+) -> list[str]:
+    if not isinstance(metadata, Mapping):
+        return ["metadata.source_provenance is missing"]
+    provenance = metadata.get("source_provenance")
+    current_summary = isinstance(summary, Mapping) and isinstance(
+        summary.get("summary_provenance"), Mapping
+    )
+    if provenance is None and not current_summary:
+        # Frozen pre-provenance bundles remain mechanically readable only in
+        # their existing legacy-L1 lane.
+        return []
+    return [
+        f"metadata.source_provenance {problem}"
+        for problem in source_provenance_problems(provenance, require_eligible=True)
+    ]
+
+
+def _floor_metric_value(summary: Mapping[str, Any], metric_name: str) -> float | None:
+    if metric_name.startswith("phase_energy_j."):
+        phase = summary.get("phase_energy_j")
+        value = phase.get(metric_name.split(".", 1)[1]) if isinstance(phase, Mapping) else None
+    else:
+        value = summary.get(metric_name)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    converted = float(value)
+    return converted if math.isfinite(converted) else None
+
+
+def _consumer_stress_for_evidence(
+    evidence: Sequence[BundleEvidence], metric_name: str
+) -> Mapping[str, Any]:
+    powers: list[float] = []
+    durations: list[float] = []
+    p95_gaps: list[float] = []
+    bracketing_gaps: list[float] = []
+    cadence_ratios: list[float] = []
+    clock_bounds: list[float] = []
+    interpolation_bounds: list[float] = []
+    drift_bounds: list[float] = []
+
+    def finite(value: object) -> float | None:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        converted = float(value)
+        return converted if math.isfinite(converted) else None
+
+    for row in evidence:
+        summary = row.summary
+        if not isinstance(summary, Mapping):
+            continue
+        prechecks = summary.get("window_evidence_precheck")
+        windows: list[Mapping[str, Any]] = []
+        if isinstance(prechecks, Mapping) and metric_name == "gross_energy_j":
+            request = prechecks.get("gross_request")
+            if isinstance(request, Mapping):
+                windows.append(request)
+        elif isinstance(prechecks, Mapping) and metric_name == "energy_request_j":
+            request = prechecks.get("idle_subtracted_request")
+            if isinstance(request, Mapping):
+                windows.append(request)
+        elif isinstance(prechecks, Mapping) and metric_name.startswith("phase_energy_j."):
+            phase = prechecks.get("phase")
+            phase_row = phase.get(metric_name.split(".", 1)[1]) if isinstance(phase, Mapping) else None
+            raw_windows = phase_row.get("windows") if isinstance(phase_row, Mapping) else None
+            if isinstance(raw_windows, list):
+                windows.extend(window for window in raw_windows if isinstance(window, Mapping))
+        metric = _floor_metric_value(summary, metric_name)
+        row_duration = 0.0
+        for window in windows:
+            duration = finite(window.get("window_duration_s"))
+            if duration is not None and duration > 0:
+                durations.append(duration)
+                row_duration += duration
+            p95 = finite(window.get("observed_window_p95_sample_gap_s"))
+            if p95 is not None and p95 > 0:
+                p95_gaps.append(p95)
+            bracket = finite(window.get("observed_bracketing_max_sample_gap_s"))
+            if bracket is not None and bracket > 0:
+                bracketing_gaps.append(bracket)
+            cadence = finite(window.get("cadence_ratio"))
+            if cadence is not None and cadence >= 0:
+                cadence_ratios.append(cadence)
+            clock = finite(window.get("clock_anchor_bound_s"))
+            if clock is not None and clock >= 0:
+                clock_bounds.append(clock)
+            interpolation = finite(window.get("interpolation_joint_edge_bound_j"))
+            if interpolation is not None and interpolation >= 0:
+                interpolation_bounds.append(interpolation)
+        if metric is not None and row_duration > 0:
+            powers.append(metric / row_duration)
+        terms = summary.get("energy_bound_terms_j")
+        drift = terms.get("E_drift_bound_j") if isinstance(terms, Mapping) else None
+        converted_drift = finite(drift)
+        if converted_drift is not None and converted_drift >= 0:
+            drift_bounds.append(converted_drift)
+
+    required = lambda values, reducer: reducer(values) if values else None
+    idle_drift = (
+        {"applicability": "required", "maximum": required(drift_bounds, max)}
+        if metric_name == "energy_request_j"
+        else {"applicability": "not_applicable", "maximum": None}
+    )
+    return {
+        "mean_power_w_min": required(powers, min),
+        "mean_power_w_max": required(powers, max),
+        "window_duration_s_min": required(durations, min),
+        "window_duration_s_max": required(durations, max),
+        "p95_sample_gap_s_max": required(p95_gaps, max),
+        "bracketing_sample_gap_s_max": required(bracketing_gaps, max),
+        "cadence_ratio_min": required(cadence_ratios, min),
+        "bound_terms": {
+            "clock_anchor_bound_s": {
+                "applicability": "required",
+                "maximum": required(clock_bounds, max),
+            },
+            "interpolation_bound_j": {
+                "applicability": "required",
+                "maximum": required(interpolation_bounds, max),
+            },
+            "idle_drift_bound_j": idle_drift,
+        },
+    }
+
+
+def _ordered_floor_source_sequences(cell: Mapping[str, Any]) -> list[tuple[str, ...]]:
+    sequences: list[tuple[str, ...]] = []
+    absolute = cell.get("absolute")
+    observations = absolute.get("bundle_observations") if isinstance(absolute, Mapping) else None
+    if isinstance(observations, list):
+        sequences.append(
+            tuple(str(row.get("bundle_id", "")) for row in observations if isinstance(row, Mapping))
+        )
+    comparative = cell.get("comparative")
+    blocks = comparative.get("blocks") if isinstance(comparative, Mapping) else None
+    if isinstance(blocks, list):
+        for block in blocks:
+            members = block.get("members") if isinstance(block, Mapping) else None
+            if isinstance(members, list):
+                sequences.append(
+                    tuple(str(row.get("bundle_id", "")) for row in members if isinstance(row, Mapping))
+                )
+    return sequences
+
+
+_CALIBRATION_PLAN_TAG = "calibration-plan-sha256="
+_CALIBRATION_BLOCK_TAG = "calibration-abba-block-id="
+_CALIBRATION_LABEL_TAG = "calibration-abba-label="
+_CALIBRATION_SEQUENCE_TAG = "calibration-abba-sequence-index="
+_CALIBRATION_COLLECTION_TAG_PREFIXES = (
+    _CALIBRATION_PLAN_TAG,
+    _CALIBRATION_BLOCK_TAG,
+    _CALIBRATION_LABEL_TAG,
+    _CALIBRATION_SEQUENCE_TAG,
+)
+
+
+def _calibration_order_tags(raw_config: Mapping[str, Any] | None) -> Mapping[str, Any]:
+    metadata = raw_config.get("run_metadata") if isinstance(raw_config, Mapping) else None
+    tags = metadata.get("tags") if isinstance(metadata, Mapping) else None
+    if not isinstance(tags, list) or any(not isinstance(tag, str) for tag in tags):
+        return {}
+
+    def unique_value(prefix: str) -> str | None:
+        values = [tag[len(prefix) :] for tag in tags if tag.startswith(prefix)]
+        return values[0] if len(values) == 1 and values[0] else None
+
+    sequence_text = unique_value(_CALIBRATION_SEQUENCE_TAG)
+    try:
+        sequence_index = int(sequence_text) if sequence_text is not None else None
+    except ValueError:
+        sequence_index = None
+    return {
+        "plan_sha256": unique_value(_CALIBRATION_PLAN_TAG),
+        "block_id": unique_value(_CALIBRATION_BLOCK_TAG),
+        "label": unique_value(_CALIBRATION_LABEL_TAG),
+        "sequence_index": sequence_index,
+    }
+
+
+def _order_member_ids(value: object, *, campaign_log: bool) -> list[str] | None:
+    rows: object
+    if campaign_log:
+        rows = value
+    else:
+        rows = value.get("executed_order") if isinstance(value, Mapping) else None
+    if not isinstance(rows, list):
+        return None
+    result: list[str] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        bundle_ids = row.get("bundle_ids")
+        if isinstance(bundle_ids, list):
+            result.extend(item for item in bundle_ids if isinstance(item, str) and item)
+            continue
+        for key in ("bundle_id", "run_id"):
+            item = row.get(key)
+            if isinstance(item, str) and item:
+                result.append(item)
+                break
+    return result
+
+
+def _campaign_order_binding_problems(
+    artifact: Mapping[str, Any],
+    floor_path: Path,
+    runs_root: Path,
+) -> tuple[str, ...]:
+    provenance = artifact.get("provenance")
+    order_pin = provenance.get("order_manifest") if isinstance(provenance, Mapping) else None
+    campaign_pin = provenance.get("campaign_log") if isinstance(provenance, Mapping) else None
+    problems: list[str] = []
+    plan_pin = provenance.get("calibration_plan") if isinstance(provenance, Mapping) else None
+    if isinstance(plan_pin, Mapping):
+        plan_path = floor_path.parent / "calibration_plan.json"
+        try:
+            plan_raw = plan_path.read_bytes()
+        except OSError as exc:
+            problems.append(f"calibration_plan_bytes_unreadable: {exc}")
+        else:
+            if hashlib.sha256(plan_raw).hexdigest() != plan_pin.get("sha256"):
+                problems.append("calibration_plan_bytes_hash_mismatch")
+    else:
+        problems.append("calibration_plan_provenance_missing")
+    evidence: list[tuple[str, Path, Mapping[str, Any], bool]] = []
+    if isinstance(order_pin, Mapping):
+        evidence.append(("order_manifest", floor_path.parent / "order_manifest.json", order_pin, False))
+    else:
+        problems.append("order_manifest provenance is missing")
+    if isinstance(campaign_pin, Mapping):
+        evidence.append(("campaign_log", runs_root / "campaign_log.jsonl", campaign_pin, True))
+    else:
+        problems.append("campaign_log provenance is missing")
+
+    sequences = [
+        sequence
+        for cell in artifact.get("cells", [])
+        if isinstance(cell, Mapping)
+        for sequence in _ordered_floor_source_sequences(cell)
+        if sequence
+    ]
+    for label, path, pin, is_log in evidence:
+        try:
+            raw = path.read_bytes()
+        except OSError as exc:
+            problems.append(f"{label} cannot be read: {exc}")
+            continue
+        if hashlib.sha256(raw).hexdigest() != pin.get("sha256"):
+            problems.append(f"{label} sha256 does not match the floor artifact")
+            continue
+        try:
+            if is_log:
+                parsed: object = [
+                    json.loads(line) for line in raw.decode("utf-8").splitlines() if line.strip()
+                ]
+            else:
+                parsed = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            problems.append(f"{label} is not valid UTF-8 JSON evidence: {exc}")
+            continue
+        members = _order_member_ids(parsed, campaign_log=is_log)
+        if members is None:
+            problems.append(f"{label} does not contain an executed member order")
+            continue
+        positions: dict[str, list[int]] = {}
+        for index, bundle_id in enumerate(members):
+            positions.setdefault(bundle_id, []).append(index)
+        for sequence in sequences:
+            if any(len(positions.get(bundle_id, ())) != 1 for bundle_id in sequence):
+                problems.append(f"{label} does not bind every calibration bundle exactly once")
+                break
+            ordered = [positions[bundle_id][0] for bundle_id in sequence]
+            if ordered != sorted(ordered):
+                problems.append(f"{label} disagrees with frozen calibration member order")
+                break
+            if len(sequence) == 4 and ordered != list(range(ordered[0], ordered[0] + 4)):
+                problems.append(f"{label} does not preserve a contiguous A/B/B/A block")
+                break
+    return tuple(problems)
+
+
+def bind_floor_artifact_evidence(
+    artifact: Mapping[str, Any],
+    floor_path: Path,
+    runs_root: Path,
+    *,
+    strict_validator: StrictValidator,
+) -> FloorEvidenceBinding:
+    """Bind stored calibration values to strict bundle bytes and order logs."""
+
+    floor_path = Path(floor_path)
+    runs_root = Path(runs_root)
+    global_problems = list(_campaign_order_binding_problems(artifact, floor_path, runs_root))
+    bound_ids: set[str] = set()
+    identities: dict[str, str] = {}
+    stack_hashes: dict[str, str] = {}
+    bound_hashes: set[str] = set()
+    problems_by_cell: dict[str, tuple[str, ...]] = {}
+    cache: dict[
+        tuple[str, str],
+        tuple[
+            str,
+            str,
+            float | None,
+            str | None,
+            str | None,
+            Mapping[str, Any],
+            tuple[str, ...],
+        ],
+    ] = {}
+    plan = artifact.get("provenance", {}).get("calibration_plan")
+    plan_sha256 = plan.get("sha256") if isinstance(plan, Mapping) else None
+    cell_bound_hashes: dict[str, set[str]] = {}
+
+    for cell in artifact.get("cells", []):
+        if not isinstance(cell, Mapping) or not isinstance(cell.get("cell_id"), str):
+            continue
+        cell_id = str(cell["cell_id"])
+        key = cell.get("key")
+        metric_name = key.get("metric") if isinstance(key, Mapping) else None
+        cell_problems: list[str] = list(global_problems)
+        records: list[tuple[Mapping[str, Any], str | None]] = []
+        absolute = cell.get("absolute")
+        if isinstance(absolute, Mapping) and isinstance(absolute.get("bundle_observations"), list):
+            records.extend(
+                (row, None)
+                for row in absolute["bundle_observations"]
+                if isinstance(row, Mapping)
+            )
+        comparative = cell.get("comparative")
+        if isinstance(comparative, Mapping) and isinstance(comparative.get("blocks"), list):
+            for block in comparative["blocks"]:
+                members = block.get("members") if isinstance(block, Mapping) else None
+                if isinstance(members, list):
+                    records.extend(
+                        (row, str(block.get("block_id", "")))
+                        for row in members
+                        if isinstance(row, Mapping)
+                    )
+        observed_identity_hashes: set[str] = set()
+        observed_stack_hashes: set[str] = set()
+        cell_hashes: set[str] = set()
+        for record, expected_block_id in records:
+            bundle_id = record.get("bundle_id")
+            if (
+                not isinstance(bundle_id, str)
+                or not bundle_id
+                or "\\" in bundle_id
+                or PurePosixPath(bundle_id).name != bundle_id
+            ):
+                cell_problems.append("calibration bundle_id is not a safe basename")
+                continue
+            cache_key = (bundle_id, str(metric_name))
+            if cache_key not in cache:
+                path = runs_root / bundle_id
+                local_problems: list[str] = []
+                try:
+                    strict = tuple(strict_validator(path, True))
+                except Exception as exc:
+                    strict = (f"strict validation raised {type(exc).__name__}: {exc}",)
+                reader = BundleReader(path)
+                summary = reader.raw_summary()
+                metadata = reader.raw_metadata()
+                raw_config = reader.raw_config()
+                local_problems.extend(strict)
+                local_problems.extend(_source_provenance_admission_problems(metadata, summary))
+                if not isinstance(summary, Mapping) or summary.get("status") != "succeeded":
+                    local_problems.append("calibration bundle status is not succeeded")
+                try:
+                    bundle_hash = complete_bundle_sha256(path)
+                except ValueError as exc:
+                    bundle_hash = ""
+                    local_problems.append(str(exc))
+                config_hash = _sha256_file(path / "config.json") or ""
+                metric = _floor_metric_value(summary, str(metric_name)) if isinstance(summary, Mapping) and isinstance(metric_name, str) else None
+                scientific = scientific_config_identity(raw_config) if isinstance(raw_config, Mapping) else None
+                scientific_hash = (
+                    hashlib.sha256(
+                        json.dumps(scientific, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+                    ).hexdigest()
+                    if scientific is not None
+                    else None
+                )
+                stack = floor_stack_identity(raw_config, metadata)
+                stack_hash = canonical_domain_sha256(STACK_IDENTITY_DOMAIN, stack) if stack is not None else None
+                order_tags = _calibration_order_tags(raw_config)
+                cache[cache_key] = (
+                    bundle_hash,
+                    config_hash,
+                    metric,
+                    scientific_hash,
+                    stack_hash,
+                    order_tags,
+                    tuple(local_problems),
+                )
+            (
+                bundle_hash,
+                config_hash,
+                metric,
+                scientific_hash,
+                stack_hash,
+                order_tags,
+                local,
+            ) = cache[cache_key]
+            cell_problems.extend(local)
+            record_ok = not local
+            if order_tags.get("plan_sha256") != plan_sha256:
+                cell_problems.append(
+                    f"calibration_plan_identity_mismatch: {bundle_id}"
+                )
+                record_ok = False
+            if expected_block_id is not None:
+                if order_tags.get("block_id") != expected_block_id:
+                    cell_problems.append(
+                        f"calibration_abba_block_mismatch: {bundle_id}"
+                    )
+                    record_ok = False
+                if order_tags.get("label") != record.get("plan_label"):
+                    cell_problems.append(
+                        f"calibration_abba_label_mismatch: {bundle_id}"
+                    )
+                    record_ok = False
+                if order_tags.get("sequence_index") != record.get("plan_sequence_index"):
+                    cell_problems.append(
+                        f"calibration_abba_member_order_mismatch: {bundle_id}"
+                    )
+                    record_ok = False
+            if bundle_hash != record.get("bundle_sha256"):
+                cell_problems.append(f"{bundle_id}: complete bundle sha256 mismatch")
+                record_ok = False
+            if config_hash != record.get("config_sha256"):
+                cell_problems.append(f"{bundle_id}: config sha256 mismatch")
+                record_ok = False
+            stored_metric = record.get("metric_value_j")
+            if metric is None or isinstance(stored_metric, bool) or not isinstance(stored_metric, (int, float)) or not math.isclose(metric, float(stored_metric), rel_tol=1e-12, abs_tol=1e-12):
+                cell_problems.append(f"{bundle_id}: stored floor metric does not match strict summary")
+                record_ok = False
+            if scientific_hash is not None:
+                observed_identity_hashes.add(scientific_hash)
+            else:
+                cell_problems.append(f"{bundle_id}: scientific config identity is unavailable")
+            if stack_hash is not None:
+                observed_stack_hashes.add(stack_hash)
+            else:
+                cell_problems.append(f"{bundle_id}: stack identity is unavailable")
+            if record_ok:
+                bound_hashes.add(bundle_hash)
+                cell_hashes.add(bundle_hash)
+        expected_stack = (
+            cell.get("source_regime", {}).get("stack_identity_sha256")
+            if isinstance(cell.get("source_regime"), Mapping)
+            else None
+        )
+        if len(observed_identity_hashes) != 1:
+            cell_problems.append("calibration cell does not have one scientific config identity")
+        if observed_stack_hashes != {expected_stack}:
+            cell_problems.append("calibration bundle stack identity does not match the floor cell")
+        unique = tuple(dict.fromkeys(cell_problems))
+        problems_by_cell[cell_id] = unique
+        cell_bound_hashes[cell_id] = cell_hashes
+        if not unique:
+            bound_ids.add(cell_id)
+            identities[cell_id] = next(iter(observed_identity_hashes))
+            stack_hashes[cell_id] = next(iter(observed_stack_hashes))
+
+    guard = artifact.get("idle_drift_guard")
+    if isinstance(guard, Mapping) and guard.get("calibration_status") == "calibrated":
+        guard_hashes = guard.get("bundle_sha256")
+        guard_cell_id = guard.get("cell_id")
+        guard_cell_hashes = cell_bound_hashes.get(str(guard_cell_id), set())
+        if (
+            not isinstance(guard_hashes, list)
+            or guard_cell_id not in bound_ids
+            or any(value not in guard_cell_hashes for value in guard_hashes)
+        ):
+            global_problems.append(
+                "idle_drift_guard_provenance_mismatch"
+            )
+            bound_ids.clear()
+
+    return FloorEvidenceBinding(
+        bound_cell_ids=frozenset(bound_ids),
+        cell_scientific_identity_sha256=identities,
+        cell_stack_identity_sha256=stack_hashes,
+        bound_bundle_sha256s=frozenset(bound_hashes),
+        problems_by_cell=problems_by_cell,
+        global_problems=tuple(dict.fromkeys(global_problems)),
+    )
 
 
 def _verified_cooldown_raw_artifact(
@@ -644,6 +1277,7 @@ def scientific_config_identity(value: Mapping[str, Any]) -> Mapping[str, Any] | 
             for tag in metadata["tags"]
             if not tag.startswith("analysis-replacement-of=")
             and not tag.startswith("analysis-replacement-reason=")
+            and not tag.startswith(_CALIBRATION_COLLECTION_TAG_PREFIXES)
             and re.fullmatch(r"rep[0-9]+", tag) is None
         ]
         result["run_metadata"] = {"tags": metadata["tags"]}
@@ -711,6 +1345,9 @@ def _read_bundle(
     raw_config = reader.raw_config()
     summary = reader.raw_summary()
     metadata = reader.raw_metadata()
+    strict_problems = tuple(
+        (*strict_problems, *_source_provenance_admission_problems(metadata, summary))
+    )
     config_sha256 = _sha256_file(path / "config.json")
     expected_config_sha256 = (
         None if allow_replacement_tags else _expected_bundle_config_sha256(source_config)
@@ -937,6 +1574,12 @@ def load_analysis_inputs(
     manifest, manifest_sha = load_manifest(Path(analysis_manifest_path))
     floor_artifact, floor_sha = load_floor_artifact(Path(floor_artifact_path))
     runs_root = Path(runs_root)
+    floor_binding = bind_floor_artifact_evidence(
+        floor_artifact,
+        Path(floor_artifact_path),
+        runs_root,
+        strict_validator=strict_validator,
+    )
     cleanup_records = _campaign_claim_records(
         runs_root, str(manifest["manifest_id"])
     )
@@ -982,6 +1625,7 @@ def load_analysis_inputs(
         manifest_sha256=manifest_sha,
         floor_artifact=floor_artifact,
         floor_sha256=floor_sha,
+        floor_binding=floor_binding,
         registered=registered,
         effective=effective,
         extra_audits=tuple(extras),
@@ -1300,14 +1944,14 @@ def deterministic_bounds(
     return result, tuple(ordered_reason_codes(reasons))
 
 
-def _declared_exact_floor_resolution(
+def floor_request_for_evidence(
     artifact: Mapping[str, Any],
-    artifact_sha256: str,
+    binding: FloorEvidenceBinding,
     contrast: Mapping[str, Any],
     condition_family_id: str,
     evidence: Sequence[BundleEvidence],
-) -> FloorResolution | None:
-    """Bind an exact floor cell to declared consumer bundle/config identities."""
+) -> FloorRequest | None:
+    """Build the production typed request from independently bound evidence."""
 
     if not evidence:
         return None
@@ -1323,101 +1967,108 @@ def _declared_exact_floor_resolution(
     selector = contrast.get("floor_selector")
     if not isinstance(selector, Mapping):
         return None
-    consumer_pairs = {
-        (row.bundle_id, row.config_sha256)
-        for row in evidence
-        if isinstance(row.bundle_id, str) and isinstance(row.config_sha256, str)
-    }
-    if len(consumer_pairs) != len(evidence):
+    consumer_identities: set[str] = set()
+    for row in evidence:
+        identity = scientific_config_identity(row.raw_config) if isinstance(row.raw_config, Mapping) else None
+        if identity is None:
+            return None
+        consumer_identities.add(
+            hashlib.sha256(
+                json.dumps(identity, sort_keys=True, separators=(",", ":"), allow_nan=False).encode("utf-8")
+            ).hexdigest()
+        )
+    if len(consumer_identities) != 1:
         return None
+    consumer_identity = next(iter(consumer_identities))
+    consumer_stack_hashes: set[str] = set()
+    for row in evidence:
+        stack = floor_stack_identity(row.raw_config, row.metadata)
+        if stack is None:
+            return None
+        consumer_stack_hashes.add(canonical_domain_sha256(STACK_IDENTITY_DOMAIN, stack))
+    if len(consumer_stack_hashes) != 1:
+        return None
+    consumer_stack_hash = next(iter(consumer_stack_hashes))
     matches: list[Mapping[str, Any]] = []
+    same_condition_seen = False
     for cell in artifact.get("cells", []):
         if not isinstance(cell, Mapping):
             continue
         key = cell.get("key")
-        absolute = cell.get("absolute")
-        observations = (
-            absolute.get("bundle_observations")
-            if isinstance(absolute, Mapping)
-            else None
+        cell_id = cell.get("cell_id")
+        if not isinstance(key, Mapping) or not isinstance(cell_id, str):
+            continue
+        same_condition = (
+            key.get("backend") == backend
+            and key.get("metric") == selector.get("metric")
+            and key.get("window_class") == selector.get("window_class")
+            and key.get("condition_family_id") == condition_family_id
         )
+        same_condition_seen = same_condition_seen or same_condition
         if (
-            not isinstance(key, Mapping)
-            or key.get("backend") != backend
-            or key.get("metric") != selector.get("metric")
-            or key.get("window_class") != selector.get("window_class")
-            or key.get("condition_family_id") != condition_family_id
-            or not isinstance(observations, list)
+            not same_condition
+            or cell_id not in binding.bound_cell_ids
+            or binding.cell_scientific_identity_sha256.get(cell_id) != consumer_identity
+            or binding.cell_stack_identity_sha256.get(cell_id) != consumer_stack_hash
         ):
             continue
-        source_pairs = {
-            (row.get("bundle_id"), row.get("config_sha256"))
-            for row in observations
-            if isinstance(row, Mapping)
-        }
-        # LOO consumes a strict subset of the already-bound full cell.  A
-        # foreign bundle/config pair can never acquire the source identity.
-        if consumer_pairs and consumer_pairs.issubset(source_pairs):
-            matches.append(cell)
-    if not matches:
+        matches.append(cell)
+    if len(matches) == 1:
+        cell = matches[0]
+        return FloorRequest(
+            backend=backend,
+            metric=str(selector["metric"]),
+            window_class=str(selector["window_class"]),
+            condition_family_id=condition_family_id,
+            condition_family_sha256=str(cell["key"]["condition_family_sha256"]),
+            stack_identity_sha256=consumer_stack_hash,
+            # Exact-cell resolution does not transport and therefore does not
+            # use a stress envelope. LOO subsets reuse this request only after
+            # the complete parent cell has passed every external binding.
+            consumer_stress={},
+        )
+    if matches or same_condition_seen:
         return None
-    if len(matches) != 1:
-        return FloorResolution(
-            status="refused",
-            artifact_id=str(artifact.get("artifact_id", "")),
-            artifact_sha256=artifact_sha256,
-            source_cell_ids=(),
-            transport_group_id=None,
-            transport_rule_id=None,
-            floor_abs_j=None,
-            floor_cmp_j=None,
-            floor_gate_j=None,
-            reason_codes=("transport_group_incomplete",),
-        )
-    cell = matches[0]
-    eligibility = cell.get("eligibility")
-    reasons: list[str] = []
-    if artifact.get("calibration_scope") == "smoke" or not isinstance(
-        eligibility, Mapping
-    ) or eligibility.get("status") != "claim_ready":
-        reasons.append("cell_not_claim_ready")
-    if selector.get("metric") == "energy_request_j":
-        guard = artifact.get("idle_drift_guard")
-        if not isinstance(guard, Mapping) or guard.get("calibration_status") != "calibrated":
-            reasons.append("consumer_term_unknown")
-    floor_values = (cell.get("floor_abs_j"), cell.get("floor_cmp_j"), cell.get("floor_gate_j"))
-    if any(
-        isinstance(value, bool)
-        or not isinstance(value, (int, float))
-        or not math.isfinite(float(value))
-        or float(value) < 0.0
-        for value in floor_values
-    ):
-        reasons.append("cell_not_claim_ready")
-    if reasons:
-        return FloorResolution(
-            status="refused",
-            artifact_id=str(artifact.get("artifact_id", "")),
-            artifact_sha256=artifact_sha256,
-            source_cell_ids=(str(cell.get("cell_id", "")),),
-            transport_group_id=cell.get("transport_group_id"),
-            transport_rule_id=TRANSPORT_RULE_ID,
-            floor_abs_j=None,
-            floor_cmp_j=None,
-            floor_gate_j=None,
-            reason_codes=tuple(dict.fromkeys(reasons)),
-        )
-    return FloorResolution(
-        status="exact",
-        artifact_id=str(artifact.get("artifact_id", "")),
-        artifact_sha256=artifact_sha256,
-        source_cell_ids=(str(cell["cell_id"]),),
-        transport_group_id=cell.get("transport_group_id"),
-        transport_rule_id=TRANSPORT_RULE_ID,
-        floor_abs_j=float(floor_values[0]),
-        floor_cmp_j=float(floor_values[1]),
-        floor_gate_j=float(floor_values[2]),
-        reason_codes=(),
+
+    transport_matches: list[tuple[Mapping[str, Any], Mapping[str, Any]]] = []
+    for group in artifact.get("transport_groups", []):
+        if not isinstance(group, Mapping) or any(
+            group.get(key) != expected
+            for key, expected in (
+                ("backend", backend),
+                ("metric", selector.get("metric")),
+                ("window_class", selector.get("window_class")),
+                ("stack_identity_sha256", consumer_stack_hash),
+            )
+        ):
+            continue
+        source_ids = group.get("source_cell_ids")
+        if not isinstance(source_ids, list) or any(
+            cell_id not in binding.bound_cell_ids for cell_id in source_ids
+        ):
+            continue
+        allowed = group.get("allowed_consumer_condition_families")
+        if not isinstance(allowed, list):
+            continue
+        for family in allowed:
+            if (
+                isinstance(family, Mapping)
+                and family.get("condition_family_id") == condition_family_id
+            ):
+                transport_matches.append((group, family))
+    if len(transport_matches) != 1:
+        return None
+    _, family = transport_matches[0]
+    return FloorRequest(
+        backend=backend,
+        metric=str(selector["metric"]),
+        window_class=str(selector["window_class"]),
+        condition_family_id=condition_family_id,
+        condition_family_sha256=str(family["condition_family_sha256"]),
+        stack_identity_sha256=consumer_stack_hash,
+        consumer_stress=_consumer_stress_for_evidence(
+            evidence, str(selector["metric"])
+        ),
     )
 
 
@@ -1425,8 +2076,15 @@ def resolve_floor(
     artifact: Mapping[str, Any],
     artifact_sha256: str,
     request: FloorRequest,
+    *,
+    evidence_binding: FloorEvidenceBinding | None = None,
 ) -> FloorResolution:
-    """Resolve a fully typed P2-039 request without guessing its provenance."""
+    """Resolve a typed P2-039 request.
+
+    Production analysis always supplies ``evidence_binding``. Its optionality
+    preserves the pure transport-rule API for unit-level callers; it is not a
+    claim-admission route and is not exposed by the CLI.
+    """
 
     preflight_reasons: list[str] = []
     if artifact.get("calibration_scope") == "smoke":
@@ -1454,6 +2112,80 @@ def resolve_floor(
         for cell in artifact.get("cells", [])
         if isinstance(cell, Mapping) and isinstance(cell.get("cell_id"), str)
     }
+    effective_bound_ids = (
+        evidence_binding.bound_cell_ids
+        if evidence_binding is not None
+        else frozenset(cells)
+    )
+    exact = [
+        cell
+        for cell in cells.values()
+        if isinstance(cell.get("key"), Mapping)
+        and cell["key"].get("backend") == request.backend
+        and cell["key"].get("metric") == request.metric
+        and cell["key"].get("window_class") == request.window_class
+        and cell["key"].get("condition_family_id") == request.condition_family_id
+        and cell["key"].get("condition_family_sha256") == request.condition_family_sha256
+        and cell.get("source_regime", {}).get("stack_identity_sha256")
+        == request.stack_identity_sha256
+    ]
+    if len(exact) == 1:
+        cell = exact[0]
+        cell_id = str(cell["cell_id"])
+        eligibility = cell.get("eligibility")
+        reasons: list[str] = []
+        if cell_id not in effective_bound_ids:
+            reasons.append("artifact_schema_invalid")
+        if not isinstance(eligibility, Mapping) or eligibility.get("status") != "claim_ready":
+            reasons.append("cell_not_claim_ready")
+        values = (cell.get("floor_abs_j"), cell.get("floor_cmp_j"), cell.get("floor_gate_j"))
+        if any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            or float(value) < 0.0
+            for value in values
+        ):
+            reasons.append("cell_not_claim_ready")
+        if reasons:
+            return FloorResolution(
+                status="refused",
+                artifact_id=str(artifact.get("artifact_id", "")),
+                artifact_sha256=artifact_sha256,
+                source_cell_ids=(cell_id,),
+                transport_group_id=cell.get("transport_group_id"),
+                transport_rule_id=TRANSPORT_RULE_ID,
+                floor_abs_j=None,
+                floor_cmp_j=None,
+                floor_gate_j=None,
+                reason_codes=tuple(dict.fromkeys(reasons)),
+            )
+        return FloorResolution(
+            status="exact",
+            artifact_id=str(artifact.get("artifact_id", "")),
+            artifact_sha256=artifact_sha256,
+            source_cell_ids=(cell_id,),
+            transport_group_id=cell.get("transport_group_id"),
+            transport_rule_id=TRANSPORT_RULE_ID,
+            floor_abs_j=float(values[0]),
+            floor_cmp_j=float(values[1]),
+            floor_gate_j=float(values[2]),
+            reason_codes=(),
+        )
+    if len(exact) > 1:
+        return FloorResolution(
+            status="refused",
+            artifact_id=str(artifact.get("artifact_id", "")),
+            artifact_sha256=artifact_sha256,
+            source_cell_ids=(),
+            transport_group_id=None,
+            transport_rule_id=None,
+            floor_abs_j=None,
+            floor_cmp_j=None,
+            floor_gate_j=None,
+            reason_codes=("transport_group_incomplete",),
+        )
+
     matching: list[Mapping[str, Any]] = []
     for group in artifact.get("transport_groups", []):
         if not isinstance(group, Mapping):
@@ -1508,6 +2240,11 @@ def resolve_floor(
         expected_artifact_sha256=artifact_sha256,
         artifact_schema_valid=True,
     )
+    if any(
+        cell_id not in effective_bound_ids
+        for cell_id in group.get("source_cell_ids", ())
+    ):
+        refusals = tuple(dict.fromkeys((*refusals, "artifact_schema_invalid")))
     if refusals:
         return FloorResolution(
             status="refused",
@@ -1556,16 +2293,20 @@ def unavailable_floor_resolution(
 
 __all__ = [
     "AnalysisInputError",
+    "bind_floor_artifact_evidence",
     "BundleEvidence",
     "cleanup_claim_evidence_flags",
     "FloorRequest",
     "FloorResolution",
+    "FloorEvidenceBinding",
     "LoadedAnalysisInputs",
     "deterministic_bounds",
     "governed_stochastic_variance",
     "load_analysis_inputs",
     "load_floor_artifact",
     "load_manifest",
+    "floor_request_for_evidence",
+    "floor_stack_identity",
     "metric_value",
     "realized_scientific_identity",
     "resolve_floor",

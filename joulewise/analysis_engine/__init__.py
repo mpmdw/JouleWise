@@ -20,11 +20,13 @@ from .estimators import (
 from .inputs import (
     AnalysisInputError,
     BundleEvidence,
+    FloorEvidenceBinding,
     FloorRequest,
     FloorResolution,
     LoadedAnalysisInputs,
-    _declared_exact_floor_resolution,
     deterministic_bounds,
+    floor_binding_reason_codes,
+    floor_request_for_evidence,
     governed_stochastic_variance,
     load_analysis_inputs,
     metric_value,
@@ -277,31 +279,72 @@ def _resolve_contrast_floor(
     resolutions: list[FloorResolution] = []
     for condition_id in contrast["floor_selector"]["condition_family_ids"]:
         evidence = included.get(condition_id, ())
-        exact = _declared_exact_floor_resolution(
-            inputs.floor_artifact,
-            inputs.floor_sha256,
-            contrast,
-            condition_id,
-            evidence,
-        )
-        if exact is not None:
-            resolutions.append(exact)
-            continue
         request = (
             request_factory(contrast, condition_id, evidence, inputs.floor_artifact)
             if request_factory is not None
-            else None
+            else floor_request_for_evidence(
+                inputs.floor_artifact,
+                inputs.floor_binding,
+                contrast,
+                condition_id,
+                evidence,
+            )
         )
         if request is None or (
             request.metric != contrast["floor_selector"]["metric"]
             or request.window_class != contrast["floor_selector"]["window_class"]
             or request.condition_family_id != condition_id
         ):
-            resolutions.append(
-                unavailable_floor_resolution(inputs.floor_artifact, inputs.floor_sha256)
-            )
+            if request_factory is None and (
+                inputs.floor_binding.global_problems
+                or any(inputs.floor_binding.problems_by_cell.values())
+            ):
+                binding_reasons = floor_binding_reason_codes(inputs.floor_binding)
+                resolutions.append(
+                    FloorResolution(
+                        status="refused",
+                        artifact_id=str(inputs.floor_artifact.get("artifact_id", "")),
+                        artifact_sha256=inputs.floor_sha256,
+                        source_cell_ids=(),
+                        transport_group_id=None,
+                        transport_rule_id=None,
+                        floor_abs_j=None,
+                        floor_cmp_j=None,
+                        floor_gate_j=None,
+                        reason_codes=("artifact_schema_invalid", *binding_reasons),
+                    )
+                )
+            else:
+                resolutions.append(
+                    unavailable_floor_resolution(inputs.floor_artifact, inputs.floor_sha256)
+                )
         else:
-            resolutions.append(resolve_floor(inputs.floor_artifact, inputs.floor_sha256, request))
+            binding = inputs.floor_binding
+            if request_factory is not None:
+                # The underscored injection remains a test-only pure-resolver
+                # seam. Production CLI calls never supply it; they always use
+                # the byte/metric/order binding loaded above.
+                cell_ids = frozenset(
+                    str(cell["cell_id"])
+                    for cell in inputs.floor_artifact.get("cells", [])
+                    if isinstance(cell, Mapping) and isinstance(cell.get("cell_id"), str)
+                )
+                binding = FloorEvidenceBinding(
+                    bound_cell_ids=cell_ids,
+                    cell_scientific_identity_sha256={},
+                    cell_stack_identity_sha256={},
+                    bound_bundle_sha256s=frozenset(),
+                    problems_by_cell={},
+                    global_problems=(),
+                )
+            resolutions.append(
+                resolve_floor(
+                    inputs.floor_artifact,
+                    inputs.floor_sha256,
+                    request,
+                    evidence_binding=binding,
+                )
+            )
     return resolutions
 
 

@@ -11,22 +11,21 @@ Implements the accepted P2-039 operational spec
 - the pure conservative regime-transport refusal rule
   (``same_stack_componentwise_worst_case.v1``).
 
-Validator boundary (v1): this module validates schema, arithmetic
-re-derivation, identity-hash recomputation, and claim-readiness invariants. It
-does not yet bind source provenance to actual bundle bytes or the frozen
-campaign order log; that binding lands with the typed loader in the pre-P2-015
-integration unit, and until then floor artifacts are not claim-consumable.
-
-Pure calculation module: no I/O, no CLI integration and no ``reduce.py``
-hooks; those remain deferred to the typed-loader integration unit.
+The artifact's compact bundle pins use :func:`complete_bundle_sha256`.  The
+analysis input loader composes that primitive with strict validation, metric
+re-extraction, and campaign-order verification before a floor is consumable.
+The calculator still has no CLI or ``reduce.py`` hook.
 """
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
+import stat
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
 from joulewise.aggregate import student_t_critical_95
@@ -56,6 +55,7 @@ __all__ = [
     "validate_floor_artifact",
     "transport_refusal_reasons",
     "canonical_domain_sha256",
+    "complete_bundle_sha256",
 ]
 
 SCHEMA_VERSION = "joulewise.detection_floor_artifact.v1"
@@ -118,6 +118,8 @@ _IDLE_DRIFT_GUARD_KEYS = {
 }
 _IDLE_DRIFT_GUARD_METHOD = "p2_015_prediction_guard_v1"
 
+CALIBRATION_BUNDLE_HASH_DOMAIN = "joulewise.calibration_bundle.v1"
+
 # Closed v1 reason set (spec Unit 6.3).
 TRANSPORT_REASON_CODES = (
     "artifact_hash_mismatch",
@@ -148,6 +150,70 @@ def canonical_domain_sha256(domain: str, value: Mapping) -> str:
         allow_nan=False,
     ).encode("utf-8")
     return hashlib.sha256(domain.encode("utf-8") + b"\0" + canonical).hexdigest()
+
+
+def complete_bundle_sha256(path: Path) -> str:
+    """Hash every regular file in a completed calibration bundle.
+
+    Relative POSIX paths are sorted; each file contributes its byte SHA-256
+    and size. Symlinks and special files fail closed. Directory metadata and
+    absolute paths are excluded so relocating immutable bytes preserves their
+    identity.
+    """
+
+    root = Path(path)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError(f"calibration bundle is not a real directory: {root}")
+    records: list[dict[str, object]] = []
+    try:
+        candidates = sorted(
+            root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()
+        )
+    except OSError as exc:
+        raise ValueError(f"cannot enumerate calibration bundle {root}: {exc}") from exc
+    for candidate in candidates:
+        try:
+            file_stat = candidate.lstat()
+            mode = file_stat.st_mode
+        except OSError as exc:
+            raise ValueError(
+                f"cannot inspect calibration bundle member {candidate}: {exc}"
+            ) from exc
+        if stat.S_ISDIR(mode):
+            continue
+        relative = candidate.relative_to(root).as_posix()
+        if not stat.S_ISREG(mode):
+            raise ValueError(
+                f"calibration bundle member is not a regular file: {relative}"
+            )
+        digest = hashlib.sha256()
+        try:
+            with candidate.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        except OSError as exc:
+            raise ValueError(
+                f"cannot read calibration bundle member {relative}: {exc}"
+            ) from exc
+        records.append(
+            {
+                "path": relative,
+                "sha256": digest.hexdigest(),
+                "size_bytes": file_stat.st_size,
+            }
+        )
+    if not records:
+        raise ValueError(f"calibration bundle contains no regular files: {root}")
+    rendered = json.dumps(
+        records,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(
+        CALIBRATION_BUNDLE_HASH_DOMAIN.encode("utf-8") + b"\0" + rendered
+    ).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -447,6 +513,26 @@ def build_floor_artifact(
             "cell_id": None,
             "artifact_sha256": None,
         }
+    cell_records = [copy.deepcopy(dict(cell)) for cell in cells]
+    plan = provenance.get("calibration_plan") if isinstance(provenance, Mapping) else None
+    plan_sha256 = plan.get("sha256") if isinstance(plan, Mapping) else None
+    for cell in cell_records:
+        comparative = cell.get("comparative")
+        blocks = comparative.get("blocks") if isinstance(comparative, Mapping) else None
+        if not isinstance(blocks, list):
+            continue
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            block["calibration_plan_sha256"] = plan_sha256
+            labels = block.get("executed_labels")
+            members = block.get("members")
+            if not isinstance(labels, list) or not isinstance(members, list):
+                continue
+            for index, member in enumerate(members):
+                if isinstance(member, dict) and index < len(labels):
+                    member["plan_label"] = labels[index]
+                    member["plan_sequence_index"] = index + 1
     return {
         "schema_version": SCHEMA_VERSION,
         "artifact_id": artifact_id,
@@ -454,7 +540,7 @@ def build_floor_artifact(
         "method": build_method_block(),
         "provenance": dict(provenance),
         "idle_drift_guard": dict(idle_drift_guard),
-        "cells": [dict(cell) for cell in cells],
+        "cells": cell_records,
         "transport_groups": [dict(group) for group in transport_groups],
     }
 
@@ -522,8 +608,22 @@ _CMP_KEYS = {
     "blocks",
 }
 _OBS_KEYS = {"bundle_id", "bundle_sha256", "config_sha256", "metric_value_j"}
-_BLOCK_KEYS = {"block_id", "executed_labels", "members", "delta_j"}
-_MEMBER_KEYS = {"position", "bundle_id", "bundle_sha256", "config_sha256", "metric_value_j"}
+_BLOCK_KEYS = {
+    "block_id",
+    "calibration_plan_sha256",
+    "executed_labels",
+    "members",
+    "delta_j",
+}
+_MEMBER_KEYS = {
+    "position",
+    "plan_label",
+    "plan_sequence_index",
+    "bundle_id",
+    "bundle_sha256",
+    "config_sha256",
+    "metric_value_j",
+}
 _CELL_PROVENANCE_KEYS = {
     "absolute_calibration_cell_id",
     "comparative_calibration_cell_id",
@@ -806,7 +906,7 @@ def _validate_absolute(record, where, errors) -> None:
     _validate_estimate_math(record, where, expected_residuals, mean, 0.0, errors)
 
 
-def _validate_comparative(record, where, errors) -> None:
+def _validate_comparative(record, where, errors, calibration_plan_sha256=None) -> None:
     if not _check_keys(record, _CMP_KEYS, where, errors):
         return
     deltas = record["block_deltas_j"]
@@ -839,7 +939,17 @@ def _validate_comparative(record, where, errors) -> None:
         block_where = f"{where}.blocks[{i}]"
         if not _check_keys(block, _BLOCK_KEYS, block_where, errors):
             return
-        if block["executed_labels"] != ["A", "B", "B", "A"]:
+        if not _is_hex(block["calibration_plan_sha256"]):
+            errors.append(
+                f"{block_where}.calibration_plan_sha256: must be 64 lowercase hex chars"
+            )
+        elif block["calibration_plan_sha256"] != calibration_plan_sha256:
+            errors.append(
+                f"{block_where}.calibration_plan_sha256: does not match artifact provenance"
+            )
+        expected_labels = ["A", "B", "B", "A"]
+        executed_labels = block["executed_labels"]
+        if executed_labels != expected_labels:
             errors.append(f"{block_where}: executed_labels must be A/B/B/A")
         members = block["members"]
         if not isinstance(members, list) or len(members) != 4:
@@ -855,6 +965,22 @@ def _validate_comparative(record, where, errors) -> None:
             if not _is_number(member["metric_value_j"]):
                 errors.append(f"{member_where}: metric_value_j must be finite")
                 return
+            expected_label = (
+                executed_labels[j]
+                if isinstance(executed_labels, list) and j < len(executed_labels)
+                else None
+            )
+            if member["plan_label"] != expected_label:
+                errors.append(
+                    f"{member_where}.plan_label: does not match executed label sequence"
+                )
+            if (
+                isinstance(member["plan_sequence_index"], bool)
+                or member["plan_sequence_index"] != j + 1
+            ):
+                errors.append(
+                    f"{member_where}.plan_sequence_index: must match member order"
+                )
             by_position[member["position"]] = member["metric_value_j"]
             source_bundle_ids.append(member["bundle_id"])
         if [m["position"] for m in members] != ["A1", "B1", "B2", "A2"]:
@@ -881,7 +1007,7 @@ def _validate_comparative(record, where, errors) -> None:
     _validate_estimate_math(record, where, expected_deltas, mean, abs(mean), errors)
 
 
-def _validate_cell(cell, where, errors) -> None:
+def _validate_cell(cell, where, errors, calibration_plan_sha256=None) -> None:
     if not _check_keys(cell, _CELL_KEYS, where, errors):
         return
     if _check_keys(cell["key"], _KEY_KEYS, f"{where}.key", errors):
@@ -920,7 +1046,12 @@ def _validate_cell(cell, where, errors) -> None:
     if absolute is not None:
         _validate_absolute(cell["absolute"], f"{where}.absolute", errors)
     if comparative is not None:
-        _validate_comparative(cell["comparative"], f"{where}.comparative", errors)
+        _validate_comparative(
+            cell["comparative"],
+            f"{where}.comparative",
+            errors,
+            calibration_plan_sha256,
+        )
 
     expected_abs = absolute.get("guarded_floor_j") if isinstance(absolute, Mapping) else None
     expected_cmp = comparative.get("guarded_floor_j") if isinstance(comparative, Mapping) else None
@@ -1082,8 +1213,19 @@ def validate_floor_artifact(value: Mapping) -> list:
         errors.append("artifact: artifact_id must be a nonempty string")
     if value["method"] != build_method_block():
         errors.append("artifact: method block does not match the canonical v1 method")
+    calibration_plan_sha256 = None
     if not isinstance(value["provenance"], Mapping):
         errors.append("artifact: provenance must be an object")
+    else:
+        calibration_plan = value["provenance"].get("calibration_plan")
+        if not isinstance(calibration_plan, Mapping):
+            errors.append("artifact.provenance.calibration_plan: must be an object")
+        elif not _is_hex(calibration_plan.get("sha256")):
+            errors.append(
+                "artifact.provenance.calibration_plan.sha256: must be 64 lowercase hex chars"
+            )
+        else:
+            calibration_plan_sha256 = calibration_plan["sha256"]
     _validate_idle_drift_guard(value["idle_drift_guard"], "artifact.idle_drift_guard", errors)
 
     cells = value["cells"]
@@ -1096,7 +1238,7 @@ def validate_floor_artifact(value: Mapping) -> list:
     seen_keys = set()
     for i, cell in enumerate(cells):
         where = f"cells[{i}]"
-        _validate_cell(cell, where, errors)
+        _validate_cell(cell, where, errors, calibration_plan_sha256)
         if isinstance(cell, Mapping):
             cell_id = cell.get("cell_id")
             if cell_id in cells_by_id:
