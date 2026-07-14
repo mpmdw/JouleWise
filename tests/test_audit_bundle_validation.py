@@ -241,6 +241,70 @@ class BundleValidationBugPins(BundleAuditCase):
         with self.assertRaisesRegex(BundleReadError, "keys"):
             BundleReader(bundle).events()
 
+    def test_validate_bundle_rejects_unmatched_phase_marker(self) -> None:
+        bundle = self.make_complete_bundle("audit-unmatched-phase")
+        records = [
+            json.loads(line)
+            for line in (bundle / "events.jsonl").read_text().splitlines()
+        ]
+        records.insert(
+            -1,
+            {
+                "timestamp_s": 2.5,
+                "event_type": "phase_start",
+                "phase": "decode",
+                "message": "decode started",
+                "metadata": {},
+            },
+        )
+        (bundle / "events.jsonl").write_text(
+            "".join(json.dumps(record) + "\n" for record in records)
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("no paired phase_end" in problem for problem in problems),
+            problems,
+        )
+
+    def test_validate_bundle_rejects_same_source_phase_overlap(self) -> None:
+        bundle = self.make_complete_bundle("audit-overlapping-phase")
+        original = [
+            json.loads(line)
+            for line in (bundle / "events.jsonl").read_text().splitlines()
+        ]
+        phase_records = [
+            {
+                "timestamp_s": timestamp_s,
+                "event_type": event_type,
+                "phase": "decode",
+                "message": f"{event_type} decode",
+                "metadata": {"node_id": "node-a", "node_role": node_role},
+            }
+            for timestamp_s, event_type, node_role in (
+                (0.25, "phase_start", "prefill"),
+                (0.5, "phase_start", "decode"),
+                (1.25, "phase_end", "prefill"),
+                (1.5, "phase_end", "decode"),
+            )
+        ]
+        records = sorted(
+            original[:-1] + phase_records,
+            key=lambda record: record["timestamp_s"],
+        )
+        records.append(original[-1])
+        (bundle / "events.jsonl").write_text(
+            "".join(json.dumps(record) + "\n" for record in records)
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("same_source_phase_overlap" in problem for problem in problems),
+            problems,
+        )
+
     # Rank 24: experiment IDs like "..." sanitize to punctuation-only run IDs instead of failing.
     def test_punctuation_only_run_id_sanitizes_to_allowed_nonempty_value(self) -> None:
         writer = RunBundleWriter.create(self.runs_root, load_config("..."), self.clock)

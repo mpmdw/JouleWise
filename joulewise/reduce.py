@@ -909,6 +909,12 @@ def _reduce(
             "cannot integrate the measured trace"
         )
 
+    # WO-006: one validated pairing result gates both decode-token selection
+    # and phase attribution. Malformed phase markers fail the reduction before
+    # either claim-bearing derivation can consume a partial window set.
+    phase_windows = reader.phase_windows()
+    token_timestamps = reader.token_timestamps()
+
     gross_energy_j = _integrate(curve, window.start_s, window.end_s)
 
     idle_subtracted_energy_j: float | None = None
@@ -918,7 +924,6 @@ def _reduce(
         )
     energy_request_j = idle_subtracted_energy_j
 
-    token_timestamps = reader.token_timestamps()
     output_token_count, token_counts_source = _output_token_count(
         config,
         metadata,
@@ -936,7 +941,6 @@ def _reduce(
         token_timestamps, output_token_count
     )
 
-    phase_windows = reader.phase_windows()
     phase_energy_j = _phase_energy(phase_windows, curve)
     phase_identifiability = _phase_identifiability(phase_windows, curve)
     suite_metrics = _suite_metrics(reader, curve)

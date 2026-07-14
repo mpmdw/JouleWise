@@ -205,6 +205,29 @@ Runtime phase windows are discovered generically from paired
 `tokenize`, `generation_setup`, `prefill`, and `decode` phases; reducers and
 readers must not assume only prefill/decode exist.
 
+Phase pairing and validation are one fail-closed operation shared by strict
+bundle validation, phase-energy attribution, and decode-token filtering. A
+pairing key is the phase name plus its meter/source identity. Source identity
+includes each non-null `metadata.node_id` and `metadata.node_identity` value;
+values are compared as canonical JSON so structured node identities remain
+stable. `metadata.node_role` is a workload role, not a meter/source identity,
+and never separates windows. Markers with no node identity all belong to one
+default source. A start and end must have the same full key. Unmatched starts
+or ends and reversed bounds invalidate the bundle and reduction with an
+explicit phase-marker reason.
+
+Phase energy is integrated separately per valid window and contributions with
+the same phase name are summed. Windows attributed to distinct identified
+nodes may overlap because each node has its own meter/source, so 2 W over
+`[1,3]` on one node plus 2 W over `[2,4]` on another legitimately sums to 8 J.
+Windows attributed to the same meter/source must not overlap, even when their
+phase names differ: overlap is marker corruption and fails closed with the
+named reason `same_source_phase_overlap`; it is never silently unioned (the
+union in the same 2 W example would be 6 J). Boundary-touching intervals are
+allowed. If any decode windows exist, a decode token is eligible only when its
+timestamp falls in a decode window with the token's same source identity;
+legacy bundles with no decode windows retain the event-only fallback.
+
 ## Suite Bundle Additions (D-044/D-045/D-046/D-047.5)
 
 Suite bundles preserve the same five-key event shape. Suite markers use

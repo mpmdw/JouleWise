@@ -15,7 +15,12 @@ import unittest
 from pathlib import Path
 
 from joulewise.bundle import RunBundleWriter
-from joulewise.bundle_read import BundleReader, BundleReadError, _marker_pair_problems
+from joulewise.bundle_read import (
+    BundleReader,
+    BundleReadError,
+    Window,
+    _marker_pair_problems,
+)
 from joulewise.cli import (
     _strict_budgeted_suite_prompt_count_problems,
     _strict_emitted_token_ids_problems,
@@ -127,6 +132,8 @@ class ReaderTestCase(unittest.TestCase):
         event_type: str,
         phase: str,
         timestamp_s: float,
+        *,
+        metadata: dict | None = None,
     ) -> None:
         writer.append_event(
             RuntimeEvent(
@@ -134,6 +141,7 @@ class ReaderTestCase(unittest.TestCase):
                 event_type=event_type,
                 phase=phase,
                 message=f"{event_type} {phase}",
+                metadata=metadata or {},
             )
         )
 
@@ -230,6 +238,71 @@ class StrictAccessorTests(ReaderTestCase):
         reader = BundleReader(writer.path)
         self.assertEqual(reader.config().run_id, "valid")
         self.assertEqual(reader.rail_manifest(), ["mock"])
+
+
+class PhasePairingTests(ReaderTestCase):
+    def test_unmatched_phase_markers_are_rejected(self) -> None:
+        cases = (
+            ("phase_start", "no paired phase_end"),
+            ("phase_end", "no paired phase_start"),
+        )
+        for event_type, expected in cases:
+            with self.subTest(event_type=event_type):
+                writer = self.make_bundle(f"unmatched-{event_type}")
+                self.add_event(writer, event_type, "decode", 1.0)
+
+                with self.assertRaisesRegex(BundleReadError, expected):
+                    BundleReader(writer.path).phase_windows()
+
+    def test_reversed_phase_pair_is_rejected(self) -> None:
+        writer = self.make_bundle("reversed-phase")
+        self.add_event(writer, "phase_start", "decode", 2.0)
+        self.add_event(writer, "phase_end", "decode", 1.0)
+
+        with self.assertRaisesRegex(BundleReadError, "reversed"):
+            BundleReader(writer.path).phase_windows()
+
+    def test_same_source_overlapping_same_phase_windows_are_rejected(self) -> None:
+        writer = self.make_bundle("overlapping-same-source-phase")
+        first = {"node_id": "node-a", "node_role": "prefill"}
+        second = {"node_id": "node-a", "node_role": "decode"}
+        self.add_event(writer, "phase_start", "decode", 1.0, metadata=first)
+        self.add_event(writer, "phase_start", "decode", 2.0, metadata=second)
+        self.add_event(writer, "phase_end", "decode", 3.0, metadata=first)
+        self.add_event(writer, "phase_end", "decode", 4.0, metadata=second)
+
+        with self.assertRaisesRegex(BundleReadError, "same_source_phase_overlap"):
+            BundleReader(writer.path).phase_windows()
+
+    def test_parallel_sources_pair_and_filter_tokens_by_source(self) -> None:
+        writer = self.make_bundle("parallel-node-phase")
+        node_a = {"node_role": "decode", "node_identity": {"host": "node-a"}}
+        node_b = {"node_role": "decode", "node_identity": {"host": "node-b"}}
+        self.add_event(writer, "phase_start", "decode", 1.0, metadata=node_a)
+        self.add_event(writer, "phase_end", "decode", 3.0, metadata=node_a)
+        self.add_event(writer, "phase_start", "decode", 2.0, metadata=node_b)
+        self.add_event(writer, "phase_end", "decode", 4.0, metadata=node_b)
+        self.add_event(
+            writer,
+            "token",
+            "decode",
+            3.5,
+            metadata={**node_a, "index": 0},
+        )
+        self.add_event(
+            writer,
+            "token",
+            "decode",
+            3.5,
+            metadata={**node_b, "index": 1},
+        )
+
+        reader = BundleReader(writer.path)
+        self.assertEqual(
+            reader.phase_windows(),
+            {"decode": [Window(1.0, 3.0), Window(2.0, 4.0)]},
+        )
+        self.assertEqual(reader.token_timestamps(), [3.5])
 
 
 class CompletionStateTests(ReaderTestCase):

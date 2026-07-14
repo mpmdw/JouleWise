@@ -542,7 +542,7 @@ class StrictValidateTests(CliRunTestCase):
             problems,
         )
 
-    def test_reducer_0_4_1_tolerates_only_new_metric_absence(self) -> None:
+    def test_current_era_reducer_0_4_1_cannot_claim_new_reduction(self) -> None:
         bundle = self.make_bundle("strict-v041-new-metric-absent")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         summary["summary_provenance"]["reducer_version"] = "0.4.1"
@@ -551,9 +551,16 @@ class StrictValidateTests(CliRunTestCase):
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
 
-        self.assertEqual(validate_bundle(bundle, strict=True), [])
+        self.assertIn(
+            "strict: unsupported reducer version "
+            "'0.4.1' for current-era bundle; superseded versions "
+            "cannot claim the current inter_token_throughput_tokens_s "
+            "reduction shape and explicit re-reduction with 0.5.0 is "
+            "required",
+            validate_bundle(bundle, strict=True),
+        )
 
-    def test_reducer_0_4_1_stored_new_metric_remains_exact_claim(self) -> None:
+    def test_current_era_reducer_0_4_1_with_new_metric_is_still_rejected(self) -> None:
         bundle = self.make_bundle("strict-v041-new-metric-wrong")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         summary["summary_provenance"]["reducer_version"] = "0.4.1"
@@ -562,11 +569,13 @@ class StrictValidateTests(CliRunTestCase):
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
 
-        problems = validate_bundle(bundle, strict=True)
-
-        self.assertTrue(
-            any("inter_token_throughput_tokens_s" in problem for problem in problems),
-            problems,
+        self.assertIn(
+            "strict: unsupported reducer version "
+            "'0.4.1' for current-era bundle; superseded versions "
+            "cannot claim the current inter_token_throughput_tokens_s "
+            "reduction shape and explicit re-reduction with 0.5.0 is "
+            "required",
+            validate_bundle(bundle, strict=True),
         )
 
     def test_current_era_reducer_0_4_0_requires_re_reduction(self) -> None:

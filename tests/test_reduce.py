@@ -102,15 +102,28 @@ class BundleBuilder:
         self.add_event("stage_started", "measured_run", start_s)
         self.add_event("stage_completed", "measured_run", end_s)
 
-    def add_token(self, index: int, timestamp_s: float) -> None:
+    def add_token(
+        self,
+        index: int,
+        timestamp_s: float,
+        *,
+        metadata: dict | None = None,
+    ) -> None:
         self.add_event(
             "token", "decode", timestamp_s, message=f"token {index}",
-            metadata={"index": index},
+            metadata={"index": index, **(metadata or {})},
         )
 
-    def add_phase(self, phase: str, start_s: float, end_s: float) -> None:
-        self.add_event("phase_start", phase, start_s)
-        self.add_event("phase_end", phase, end_s)
+    def add_phase(
+        self,
+        phase: str,
+        start_s: float,
+        end_s: float,
+        *,
+        metadata: dict | None = None,
+    ) -> None:
+        self.add_event("phase_start", phase, start_s, metadata=metadata)
+        self.add_event("phase_end", phase, end_s, metadata=metadata)
 
     def write_trace(self, samples: list[PowerSample]) -> None:
         self._writer.write_power_trace(samples)
@@ -390,7 +403,7 @@ class PhaseAttributionTests(ReduceTestCase):
         builder = self.builder()
         builder.measured_window(0.0, 10.0)
         builder.add_phase("prefill", 0.0, 0.5)
-        builder.add_phase("decode", 0.0, 2.0)
+        builder.add_phase("decode", 0.5, 3.0)
         builder.write_trace(constant_samples(0.0, 10.0, hz=1.0, power_w=2.0))
         builder.write_metadata(rail_manifest=["mock"])
 
@@ -403,6 +416,81 @@ class PhaseAttributionTests(ReduceTestCase):
                 "decode": "identifiable",
             },
         )
+
+    def test_malformed_phase_markers_fail_before_attribution(self) -> None:
+        cases = {
+            "unmatched": (
+                [("phase_start", "decode", 1.0)],
+                "no paired phase_end",
+            ),
+            "overlap": (
+                [
+                    ("phase_start", "prefill", 1.0),
+                    ("phase_start", "decode", 2.0),
+                    ("phase_end", "prefill", 3.0),
+                    ("phase_end", "decode", 4.0),
+                ],
+                "same_source_phase_overlap",
+            ),
+        }
+        for label, (events, expected) in cases.items():
+            with self.subTest(label=label):
+                builder = self.builder(run_id=f"phase-{label}")
+                builder.measured_window(0.0, 10.0)
+                for event_type, phase, timestamp_s in events:
+                    builder.add_event(event_type, phase, timestamp_s)
+                builder.add_token(0, 2.5)
+                builder.write_trace(
+                    constant_samples(0.0, 10.0, hz=1.0, power_w=2.0)
+                )
+                builder.write_metadata(rail_manifest=["mock"])
+
+                summary = reduce_module.reduce_bundle(builder.path)
+
+                self.assertEqual(summary.status, RunStatus.FAILED)
+                self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+                self.assertIn(expected, summary.failure_message)
+                self.assertIsNone(summary.phase_energy_j)
+                self.assertIsNone(summary.energy_output_token_j)
+
+    def test_same_source_8j_vs_6j_overlap_fails_closed(self) -> None:
+        builder = self.builder(run_id="same-source-overlap")
+        builder.measured_window(0.0, 10.0)
+        first = {"node_role": "prefill", "node_id": "node-a"}
+        second = {"node_role": "decode", "node_id": "node-a"}
+        for event_type, timestamp_s, metadata in (
+            ("phase_start", 1.0, first),
+            ("phase_start", 2.0, second),
+            ("phase_end", 3.0, first),
+            ("phase_end", 4.0, second),
+        ):
+            builder.add_event(event_type, "decode", timestamp_s, metadata=metadata)
+        builder.write_trace(constant_samples(0.0, 10.0, hz=1.0, power_w=2.0))
+        builder.write_metadata(rail_manifest=["mock"])
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        self.assertEqual(summary.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertIn("same_source_phase_overlap", summary.failure_message)
+        self.assertIsNone(summary.phase_energy_j)
+
+    def test_distinct_source_8j_overlap_sums_legitimately(self) -> None:
+        builder = self.builder(run_id="distinct-source-overlap")
+        builder.measured_window(0.0, 10.0)
+        node_a = {"node_role": "decode", "node_id": "node-a"}
+        node_b = {"node_role": "decode", "node_id": "node-b"}
+        builder.add_event("phase_start", "decode", 1.0, metadata=node_a)
+        builder.add_event("phase_start", "decode", 2.0, metadata=node_b)
+        builder.add_event("phase_end", "decode", 3.0, metadata=node_a)
+        builder.add_event("phase_end", "decode", 4.0, metadata=node_b)
+        builder.write_trace(constant_samples(0.0, 10.0, hz=1.0, power_w=2.0))
+        builder.write_metadata(rail_manifest=["mock"])
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertEqual(summary.phase_energy_j, {"decode": 8.0})
 
 
 class DegenerateTests(ReduceTestCase):

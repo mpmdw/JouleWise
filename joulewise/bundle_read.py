@@ -152,6 +152,29 @@ class ItemWindow:
     end_metadata: dict[str, Any]
 
 
+_PhaseSourceIdentity = tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class _PairedPhaseInterval:
+    phase: str
+    source_identity: _PhaseSourceIdentity
+    window: Window
+
+
+@dataclass(frozen=True)
+class _PhasePairing:
+    windows_by_phase: dict[str, list[Window]]
+    windows_by_key: dict[tuple[str, _PhaseSourceIdentity], list[Window]]
+    problems: list[str]
+
+    def windows_for_event(self, phase: str, event: dict[str, Any]) -> list[Window]:
+        return self.windows_by_key.get(
+            (phase, _phase_source_identity(event)),
+            [],
+        )
+
+
 class BundleReader:
     """Read one bundle directory; parsing and policy live here (D-025).
 
@@ -393,29 +416,16 @@ class BundleReader:
         return True
 
     def phase_windows(self) -> dict[str, list[Window]]:
-        """Pair ``phase_start``/``phase_end`` events by phase name in order.
+        """Return validated ``phase_start``/``phase_end`` windows.
 
-        Multiple intervals with the same phase name are all returned (the
-        reducer sums their energies; the report shades each span).
+        Pairing is scoped by phase plus power-source identity. Every marker
+        must pair, intervals must not reverse, and intervals attributed to one
+        source must not overlap. Concurrent intervals on distinct identified
+        nodes, each representing its own meter, are valid. Multiple valid
+        intervals with the same phase name are integrated separately and
+        summed by the reducer.
         """
-        open_starts: dict[str, list[float]] = {}
-        windows: dict[str, list[Window]] = {}
-        for event in self.events():
-            event_type = event.get("event_type")
-            phase = event.get("phase")
-            if not isinstance(phase, str):
-                continue
-            if event_type == "phase_start":
-                open_starts.setdefault(phase, []).append(float(event["timestamp_s"]))
-            elif event_type == "phase_end":
-                starts = open_starts.get(phase)
-                if not starts:
-                    continue
-                start_s = starts.pop(0)
-                windows.setdefault(phase, []).append(
-                    Window(start_s=start_s, end_s=float(event["timestamp_s"]))
-                )
-        return windows
+        return self._validated_phase_pairing().windows_by_phase
 
     def token_timestamps(self) -> list[float]:
         """Output/decode token timestamps only.
@@ -426,11 +436,11 @@ class BundleReader:
         When decode phase windows are present, the timestamp must also land
         inside one of those windows.
         """
-        decode_windows = self.phase_windows().get("decode", [])
+        pairing = self._validated_phase_pairing()
         return [
             float(event["timestamp_s"])
             for event in self.events()
-            if _is_decode_token_event(event, decode_windows)
+            if _is_decode_token_event(event, pairing)
         ]
 
     def suite_manifest(self) -> SuiteManifest | None:
@@ -645,6 +655,16 @@ class BundleReader:
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise BundleReadError(f"{name} is not valid JSON: {exc}") from exc
 
+    def _validated_phase_pairing(self) -> _PhasePairing:
+        if "phase_pairing" not in self._cache:
+            pairing = _pair_phase_windows(self.events())
+            if pairing.problems:
+                raise BundleReadError(
+                    "invalid phase markers: " + "; ".join(pairing.problems)
+                )
+            self._cache["phase_pairing"] = pairing
+        return self._cache["phase_pairing"]
+
     def _tolerant_json(self, name: str) -> dict[str, Any] | None:
         key = f"tolerant:{name}"
         if key not in self._cache:
@@ -710,16 +730,149 @@ def _rail_manifest_from_metadata(metadata: dict[str, Any]) -> list[str]:
     return manifest
 
 
-def _is_decode_token_event(
-    event: dict[str, Any], decode_windows: list[Window]
-) -> bool:
+def _is_decode_token_event(event: dict[str, Any], pairing: _PhasePairing) -> bool:
     if event.get("event_type") != "token" or event.get("phase") != "decode":
         return False
-    if not decode_windows:
+    if not pairing.windows_by_phase.get("decode"):
         return True
+    decode_windows = pairing.windows_for_event("decode", event)
     timestamp_s = float(event["timestamp_s"])
     return any(
         window.start_s <= timestamp_s <= window.end_s for window in decode_windows
+    )
+
+
+_PHASE_SOURCE_METADATA_KEYS = ("node_id", "node_identity")
+
+
+def _phase_source_identity(event: dict[str, Any]) -> _PhaseSourceIdentity:
+    metadata = event.get("metadata")
+    if not isinstance(metadata, dict):
+        return ()
+    identity: list[tuple[str, str]] = []
+    for key in _PHASE_SOURCE_METADATA_KEYS:
+        value = metadata.get(key)
+        if value is None:
+            continue
+        identity.append(
+            (
+                key,
+                json.dumps(
+                    value,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
+        )
+    return tuple(identity)
+
+
+def _phase_source_label(identity: _PhaseSourceIdentity) -> str:
+    if not identity:
+        return "default power source"
+    return "power source " + ", ".join(
+        f"{key}={value}" for key, value in identity
+    )
+
+
+def _pair_phase_windows(events: list[dict[str, Any]]) -> _PhasePairing:
+    """Validate and pair runtime phase markers through one shared policy."""
+    open_starts: dict[
+        tuple[str, _PhaseSourceIdentity], list[tuple[float, int]]
+    ] = {}
+    intervals: list[_PairedPhaseInterval] = []
+    problems: list[str] = []
+
+    for index, event in enumerate(events, start=1):
+        event_type = event.get("event_type")
+        if event_type not in {"phase_start", "phase_end"}:
+            continue
+        phase = event.get("phase")
+        if not isinstance(phase, str) or not phase:
+            problems.append(
+                f"{event_type} marker at event {index} has a missing or non-string phase"
+            )
+            continue
+        if not isinstance(event.get("metadata"), dict):
+            problems.append(
+                f"{event_type} marker for phase {phase!r} at event {index} "
+                "has metadata that is not an object"
+            )
+            continue
+        source_identity = _phase_source_identity(event)
+        key = (phase, source_identity)
+        timestamp_s = float(event["timestamp_s"])
+        if event_type == "phase_start":
+            open_starts.setdefault(key, []).append((timestamp_s, index))
+            continue
+
+        starts = open_starts.get(key)
+        if not starts:
+            problems.append(
+                f"phase_end marker for phase {phase!r} on "
+                f"{_phase_source_label(source_identity)} has no paired phase_start"
+            )
+            continue
+        start_s, _start_index = starts.pop(0)
+        if timestamp_s < start_s:
+            problems.append(
+                f"phase markers are reversed for phase {phase!r} on "
+                f"{_phase_source_label(source_identity)}: "
+                f"start {start_s} > end {timestamp_s}"
+            )
+            continue
+        intervals.append(
+            _PairedPhaseInterval(
+                phase=phase,
+                source_identity=source_identity,
+                window=Window(start_s=start_s, end_s=timestamp_s),
+            )
+        )
+
+    for (phase, source_identity), starts in open_starts.items():
+        for _start_s, _start_index in starts:
+            problems.append(
+                f"phase_start marker for phase {phase!r} on "
+                f"{_phase_source_label(source_identity)} has no paired phase_end"
+            )
+
+    by_source: dict[_PhaseSourceIdentity, list[_PairedPhaseInterval]] = {}
+    for interval in intervals:
+        by_source.setdefault(interval.source_identity, []).append(interval)
+    for source_identity, source_intervals in by_source.items():
+        ordered = sorted(
+            source_intervals,
+            key=lambda interval: (
+                interval.window.start_s,
+                interval.window.end_s,
+                interval.phase,
+            ),
+        )
+        active: _PairedPhaseInterval | None = None
+        for interval in ordered:
+            if active is not None and interval.window.start_s < active.window.end_s:
+                problems.append(
+                    "same_source_phase_overlap: phase intervals overlap on "
+                    f"{_phase_source_label(source_identity)}: "
+                    f"{active.phase!r} [{active.window.start_s}, {active.window.end_s}] "
+                    f"overlaps {interval.phase!r} "
+                    f"[{interval.window.start_s}, {interval.window.end_s}]"
+                )
+            if active is None or interval.window.end_s > active.window.end_s:
+                active = interval
+
+    windows_by_phase: dict[str, list[Window]] = {}
+    windows_by_key: dict[tuple[str, _PhaseSourceIdentity], list[Window]] = {}
+    for interval in intervals:
+        windows_by_phase.setdefault(interval.phase, []).append(interval.window)
+        windows_by_key.setdefault(
+            (interval.phase, interval.source_identity), []
+        ).append(interval.window)
+    return _PhasePairing(
+        windows_by_phase=windows_by_phase,
+        windows_by_key=windows_by_key,
+        problems=problems,
     )
 
 
@@ -1730,6 +1883,7 @@ def _check_events(events_path: Path) -> list[str]:
             "events.jsonl last event is "
             f"{records[-1]['event_type']!r}, expected 'run_finalized'"
         )
+    problems.extend(_pair_phase_windows(records).problems)
     return problems
 
 
