@@ -12,32 +12,34 @@ Evidence class: **legacy L1 (manual review; pre-2M)**.
 
 ### Figure F1
 
-![Figure F1: per-request energy by exact stack — legacy L1 (manual review; pre-2M)](../../../figures/rpt001-v1/F1_legacy_l1_instrument_results.svg)
+![Figure F1: per-request energy by exact stack — legacy L1 (manual review; pre-2M)](../../../figures/rpt001-v2/F1_legacy_l1_instrument_results.svg)
 
 Figure F1: Per-request energy by exact stack, legacy L1 (manual review; pre-2M). Panel A shows
 idle-subtracted request energy (primary basis) alongside gross request energy
-(context basis); Panel B shows the idle-subtracted per-output-token companion
-in mJ per runtime-observed output token. Points are the three retained
-sequential repetitions; the marker is the arithmetic mean and the whisker is
-the observed min–max range, not a confidence interval. Descriptive
-stack-specific observations only; no cross-stack efficiency or scaling claim.
-Full stack identities: Table S1.
+(context basis). The per-output-token companion is omitted because these
+legacy bundles lack complete runtime stop-reason and output-policy provenance;
+equality between realized output count and the configured cap is not labeled
+as an observed stop reason. Points are the three retained sequential
+repetitions; the marker is the arithmetic mean and the whisker is the observed
+min–max range, not a confidence interval. Descriptive stack-specific
+observations only; no cross-stack efficiency or scaling claim. Full stack
+identities: Table S1.
 
 ### Table T1
 
 Table T1: per-stack instrument results — legacy L1 (manual review; pre-2M). Values are mean, sample SD, and observed min–max over n=3 sequential repetitions per exact stack. No cross-stack comparison is made.
 
-Output-token columns use runtime-observed counts; tokenizer identity is unknown (legacy bundle).
+The per-output-token companion is omitted because runtime stop-reason and output-policy provenance are unavailable; no stop reason is inferred from the cap.
 
-| stack_id | model_display_name | n | gross_j_request_mean | gross_j_request_sd | gross_j_request_min_max | idlesub_j_request_mean | idlesub_j_request_sd | idlesub_j_request_min_max | idlesub_mj_output_token_mean | idlesub_mj_output_token_sd | idlesub_mj_output_token_min_max | throughput_tokens_s_mean | ttft_ms_mean | token_denominator_scope | boundary | evidence_label | quality_waiver |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| LEGACY-M3MAX-QWEN25-1P5B-MLX | Qwen2.5-1.5B-Instruct-4bit | 3 | 47.2 | 0.7 | 46.6–48.0 | 44.4 | 3.3 | 40.7–46.3 | 86.8 | 6.4 | 79.4–90.5 | 257.4 | 94.1 | runtime-observed output tokens; tokenizer identity unknown (legacy bundle) | Apple SoC CPU + GPU + ANE package power | legacy L1 (manual review; pre-2M) | cooldown cap hit recorded before r2; point retained and reported (legacy manual-review carve-out) |
-| LEGACY-M3MAX-QWEN35-122B-A10B-MLX | Qwen3.5-122B-A10B-4bit | 3 | 304.0 | 0.9 | 303.5–305.1 | 298.7 | 0.6 | 298.1–299.3 | 583.4 | 1.2 | 582.2–584.5 | 46.2 | 271.7 | runtime-observed output tokens; tokenizer identity unknown (legacy bundle) | Apple SoC CPU + GPU + ANE package power | legacy L1 (manual review; pre-2M) | none |
+| stack_id | model_display_name | n | gross_j_request_mean | gross_j_request_sd | gross_j_request_min_max | idlesub_j_request_mean | idlesub_j_request_sd | idlesub_j_request_min_max | throughput_tokens_s_mean | ttft_ms_mean | token_companion_status | boundary | evidence_label | quality_waiver |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| LEGACY-M3MAX-QWEN25-1P5B-MLX | Qwen2.5-1.5B-Instruct-4bit | 3 | 47.2 | 0.7 | 46.6–48.0 | 44.4 | 3.3 | 40.7–46.3 | 257.4 | 94.1 | omitted: runtime stop reason and output policy unavailable | Apple SoC CPU + GPU + ANE package power | legacy L1 (manual review; pre-2M) | cooldown cap hit recorded before r2; point retained and reported (legacy manual-review carve-out) |
+| LEGACY-M3MAX-QWEN35-122B-A10B-MLX | Qwen3.5-122B-A10B-4bit | 3 | 304.0 | 0.9 | 303.5–305.1 | 298.7 | 0.6 | 298.1–299.3 | 46.2 | 271.7 | omitted: runtime stop reason and output policy unavailable | Apple SoC CPU + GPU + ANE package power | legacy L1 (manual review; pre-2M) | none |
 
 ### Quality waivers
 
 - **example-mac-mlx-local__r2** — cooldown cap hit was recorded; the point is retained and visibly reported under the legacy manual-review carve-out
-- **token-normalized companion metrics** — legacy bundles predate captured tokenizer identity, sampler/output policy, and stop-reason provenance; values remain explicitly tokenizer-unknown L1 descriptors and support no ranking
+- **token-normalized companion metrics** — legacy bundles predate complete runtime stop-reason and output-policy provenance; the companion is omitted from the v2 figure, table, and report
 
 ### Table S1
 
@@ -52,13 +54,13 @@ Table S1: full D-058 stack identity for both legacy stacks — legacy L1 (manual
 
 All observations on this page come from a single physical hardware unit; they
 characterize that exact unit and stack, not the hardware model line (D-052
-single-unit limitation). Output-token values use runtime-observed counts;
-tokenizer identity was not captured in these legacy bundles, so per-token
-values are tokenizer-scoped descriptors, not comparable work units (D-058).
+single-unit limitation). The per-output-token companion is omitted: realized
+token counts are retained for audit, but runtime stop reason and output policy
+are unavailable, and neither is inferred from the configured cap (D-058).
 
 ### Claims index
 
-Claims row: `CLM-RPT001-LEGACY-L1-001` in `analysis/rpt001-v1/claims_index.jsonl`.
+Claims row: `CLM-RPT001-LEGACY-L1-001` in `analysis/rpt001-v2/claims_index.jsonl`.
 
 ### Regeneration
 
@@ -66,4 +68,4 @@ Claims row: `CLM-RPT001-LEGACY-L1-001` in `analysis/rpt001-v1/claims_index.jsonl
 python3 scripts/build_capstone.py --profile rpt001 --full --offline --runs-root /Users/edr/code/JouleWise/runs
 ```
 
-Artifact hashes: `analysis/rpt001-v1/artifact_manifest.json`.
+Artifact hashes: `analysis/rpt001-v2/artifact_manifest.json`.

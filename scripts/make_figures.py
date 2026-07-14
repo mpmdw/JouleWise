@@ -5,20 +5,20 @@ Reads the six pinned strict-valid legacy bundles through the existing shared
 read layer (``joulewise.bundle_read.BundleReader`` +
 ``joulewise.aggregate.aggregate_experiment``) and emits:
 
-- ``analysis/rpt001-v1/dataset.csv``            (one row per bundle)
-- ``analysis/rpt001-v1/aggregates.json``        (aggregate_experiment output)
-- ``figures/rpt001-v1/F1_legacy_l1_instrument_results.svg``
-- ``analysis/rpt001-v1/tables/T1_legacy_l1_results.{csv,md}``
-- ``analysis/rpt001-v1/tables/S1_legacy_stack_identity.{csv,md}``
-- ``analysis/rpt001-v1/claims_index.jsonl``     (one canonical claims row)
-- ``analysis/rpt001-v1/artifact_manifest.json``
+- ``analysis/rpt001-v2/dataset.csv``            (one row per bundle)
+- ``analysis/rpt001-v2/aggregates.json``        (aggregate_experiment output)
+- ``figures/rpt001-v2/F1_legacy_l1_instrument_results.svg``
+- ``analysis/rpt001-v2/tables/T1_legacy_l1_results.{csv,md}``
+- ``analysis/rpt001-v2/tables/S1_legacy_stack_identity.{csv,md}``
+- ``analysis/rpt001-v2/claims_index.jsonl``     (sealed v1 claim row, byte-identical)
+- ``analysis/rpt001-v2/artifact_manifest.json``
 
 Deterministic: sorted keys, fixed precision, no timestamps, no absolute
 paths in outputs. Read-only over ``runs/``.
 
 Usage:
     python3 scripts/make_figures.py --runs-root /Users/edr/code/JouleWise/runs \
-        --input-manifest analysis/rpt001-v1/input_manifest.json
+        --input-manifest analysis/rpt001-v2/input_manifest.json
     python3 scripts/make_figures.py --runs-root /Users/edr/code/JouleWise/runs \
         --bootstrap-input-manifest
 """
@@ -44,7 +44,7 @@ from joulewise.bundle_read import BundleReader  # noqa: E402
 from joulewise.cli import validate_bundle  # noqa: E402
 
 SCHEMA_INPUT = "joulewise.report_analysis_input.v1"
-ARTIFACT_VERSION = "rpt001-v1"
+ARTIFACT_VERSION = "rpt001-v2"
 EVIDENCE_CLASS = "legacy_l1_manual_review_pre_2m"
 LEGACY_LABEL = "legacy L1 (manual review; pre-2M)"
 BOUNDARY_LABEL = "Apple SoC CPU + GPU + ANE package power"
@@ -145,6 +145,11 @@ def gate_inputs(runs_root: Path, input_manifest: dict) -> dict:
     """Spec §3.2 input gate. Returns {experiment_id: manifest_dict}."""
     if input_manifest.get("schema") != SCHEMA_INPUT:
         fail(f"unknown input manifest schema: {input_manifest.get('schema')!r}")
+    if input_manifest.get("artifact_version") != ARTIFACT_VERSION:
+        fail(
+            "input manifest artifact_version must be "
+            f"{ARTIFACT_VERSION!r}, got {input_manifest.get('artifact_version')!r}"
+        )
     exps = input_manifest.get("experiments", [])
     if len(exps) != 2:
         fail("input manifest must pin exactly two experiments")
@@ -194,13 +199,67 @@ def cooldown_cap_members(manifest: dict) -> set[str]:
     return flagged
 
 
+def realized_output_tokens(bundle_dir: Path, reader: BundleReader) -> tuple[int, str]:
+    """Count emitted output tokens from the immutable token artifact.
+
+    The configured output budget is deliberately not read here. The token
+    records are authoritative for the realized count; metadata and the
+    explicit decode-completion event are independent consistency checks when
+    present. Equality with a configured cap never supplies a stop reason.
+    """
+    token_path = bundle_dir / "outputs" / "tokens.jsonl"
+    try:
+        lines = token_path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        fail(f"realized token artifact unavailable for {bundle_dir.name}: {exc}")
+    records = []
+    for line_no, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            fail(f"invalid outputs/tokens.jsonl line {line_no} for {bundle_dir.name}: {exc}")
+        if not isinstance(record, dict) or record.get("index") != len(records):
+            fail(
+                f"non-contiguous outputs/tokens.jsonl index at line {line_no} "
+                f"for {bundle_dir.name}"
+            )
+        records.append(record)
+    if not records:
+        fail(f"realized token artifact is empty for {bundle_dir.name}")
+
+    count = len(records)
+    metadata = reader.raw_metadata() or {}
+    observed = (metadata.get("workload_observed") or {}).get("output_token_count")
+    if observed is not None and observed != count:
+        fail(
+            f"realized token count mismatch for {bundle_dir.name}: "
+            f"outputs/tokens.jsonl={count}, metadata={observed!r}"
+        )
+    decode_counts = [
+        event.get("metadata", {}).get("emitted_tokens")
+        for event in reader.events()
+        if event.get("event_type") == "phase_end"
+        and event.get("phase") == "decode"
+        and event.get("metadata", {}).get("emitted_tokens") is not None
+    ]
+    if decode_counts and (len(decode_counts) != 1 or decode_counts[0] != count):
+        fail(
+            f"realized token count mismatch for {bundle_dir.name}: "
+            f"outputs/tokens.jsonl={count}, decode events={decode_counts!r}"
+        )
+    return count, "outputs/tokens.jsonl"
+
+
 def extract_rows(runs_root: Path, manifests: dict, tree: dict) -> list[dict]:
     rows = []
     for exp_id in sorted(manifests):
         manifest = manifests[exp_id]
         cap_members = cooldown_cap_members(manifest)
         for member in manifest["members"]:
-            reader = BundleReader(runs_root / member)
+            bundle_dir = runs_root / member
+            reader = BundleReader(bundle_dir)
             config = reader.raw_config() or {}
             metadata = reader.raw_metadata() or {}
             summary = reader.raw_summary() or {}
@@ -211,6 +270,7 @@ def extract_rows(runs_root: Path, manifests: dict, tree: dict) -> list[dict]:
             device = metadata.get("device", {}) or {}
             prompt = workload.get("prompt_text")
             rep = member.rsplit("__r", 1)[-1]
+            output_tokens, output_tokens_source = realized_output_tokens(bundle_dir, reader)
             rows.append({
                 "run_id": member,
                 "experiment_id": exp_id,
@@ -230,13 +290,15 @@ def extract_rows(runs_root: Path, manifests: dict, tree: dict) -> list[dict]:
                 "quantization_group_size": quant.get("group_size") if quant.get("group_size") is not None else UNKNOWN,
                 "workload_name": workload.get("name", UNKNOWN),
                 "prompt_text_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest() if isinstance(prompt, str) else UNKNOWN,
-                "runtime_output_tokens": workload.get("output_tokens", UNKNOWN),
-                "token_count_source": quality.get("token_count_source", UNKNOWN),
+                "runtime_output_tokens": output_tokens,
+                "token_count_source": output_tokens_source,
                 "runtime_stop_reason": UNKNOWN,
                 "output_policy": UNKNOWN,
                 "gross_energy_j": num(summary.get("gross_energy_j")),
                 "energy_request_j": num(summary.get("energy_request_j")),
-                "energy_output_token_j": num(summary.get("energy_output_token_j")),
+                # Legacy bundles lack complete stop-reason/output-policy
+                # provenance, so v2 omits rather than overstates this companion.
+                "energy_output_token_j": "",
                 "ttft_s": num(summary.get("ttft_s")),
                 "throughput_tokens_s": num(summary.get("throughput_tokens_s")),
                 "cooldown_cap_hit": "true" if member in cap_members else "false",
@@ -274,8 +336,8 @@ def per_stack_metrics(rows: list[dict]) -> dict:
     for stack_id in sorted(STACK_IDS.values()):
         stack_rows = [r for r in rows if r["stack_id"] == stack_id]
         metrics = {}
-        for metric in ("gross_energy_j", "energy_request_j", "energy_output_token_j",
-                       "ttft_s", "throughput_tokens_s"):
+        for metric in ("gross_energy_j", "energy_request_j", "ttft_s",
+                       "throughput_tokens_s"):
             pts = [float(r[metric]) for r in stack_rows]
             metrics[metric] = {**stats3(pts), "points": pts}
         out[stack_id] = {
@@ -297,16 +359,13 @@ def _fmt(v: float) -> str:
 
 
 def render_figure(stacks: dict) -> str:
-    """Two-panel deterministic SVG per spec §4.2/§4.3 (stdlib, no matplotlib)."""
+    """Request-energy-only deterministic SVG (stdlib, no matplotlib)."""
     W, H = 940, 560
-    # Panel A (request energy) >= 60% of plot width.
-    ax0, ax1, ay0, ay1 = 70.0, 590.0, 70.0, 400.0
-    bx0, bx1 = 660.0, 910.0
+    ax0, ax1, ay0, ay1 = 70.0, 910.0, 70.0, 400.0
     stack_ids = sorted(stacks)
     offsets = [-8.0, 0.0, 8.0]
 
     a_max = max(s["metrics"]["gross_energy_j"]["max"] for s in stacks.values()) * 1.1
-    b_max = max(s["metrics"]["energy_output_token_j"]["max"] for s in stacks.values()) * 1000.0 * 1.1
 
     e = []
     e.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
@@ -330,8 +389,7 @@ def render_figure(stacks: dict) -> str:
         e.append(f'<text x="{_fmt(x0 - 44)}" y="{_fmt((ay0 + ay1) / 2)}" text-anchor="middle" '
                  f'transform="rotate(-90 {_fmt(x0 - 44)} {_fmt((ay0 + ay1) / 2)})">{unit}</text>')
 
-    axis(ax0, ax1, "Panel A: request energy (primary)", a_max, "J per request")
-    axis(bx0, bx1, "Panel B: per-token companion", b_max, "mJ per runtime-observed output token")
+    axis(ax0, ax1, "Request energy (primary)", a_max, "J per request")
 
     def series(cx, values, mean, vmin, vmax_v, axis_max, filled):
         ymin = _ymap(vmin, axis_max, ay0, ay1)
@@ -344,38 +402,29 @@ def render_figure(stacks: dict) -> str:
             fill = "#1f6f8b" if filled else "white"
             e.append(f'<circle cx="{_fmt(cx + off)}" cy="{_fmt(y)}" r="4" fill="{fill}" stroke="#1f6f8b" stroke-width="1.5"/>')
 
-    for panel, (x0, x1, axis_max) in {"A": (ax0, ax1, a_max), "B": (bx0, bx1, b_max)}.items():
-        span = x1 - x0
-        for i, stack_id in enumerate(stack_ids):
-            m = stacks[stack_id]["metrics"]
-            xc = x0 + span * (i + 0.5) / len(stack_ids)
-            label_y = ay1 + 16
-            # Panel B is narrow; use the unambiguous suffix (full IDs in Panel A, footer, S1).
-            label = stack_id if panel == "A" else stack_id.replace("LEGACY-M3MAX-", "")
-            e.append(f'<text x="{_fmt(xc)}" y="{_fmt(label_y)}" text-anchor="middle" font-size="11">{label}</text>')
-            e.append(f'<text x="{_fmt(xc)}" y="{_fmt(label_y + 14)}" text-anchor="middle" font-size="10" fill="#444">n=3</text>')
-            if panel == "A":
-                s_idle = m["energy_request_j"]
-                s_gross = m["gross_energy_j"]
-                series(xc - 25, s_idle["points"], s_idle["mean"], s_idle["min"], s_idle["max"], axis_max, True)
-                series(xc + 25, s_gross["points"], s_gross["mean"], s_gross["min"], s_gross["max"], axis_max, False)
-            else:
-                s_tok = m["energy_output_token_j"]
-                pts = [v * 1000.0 for v in s_tok["points"]]
-                series(xc, pts, s_tok["mean"] * 1000.0, s_tok["min"] * 1000.0, s_tok["max"] * 1000.0, axis_max, True)
+    span = ax1 - ax0
+    for i, stack_id in enumerate(stack_ids):
+        m = stacks[stack_id]["metrics"]
+        xc = ax0 + span * (i + 0.5) / len(stack_ids)
+        label_y = ay1 + 16
+        e.append(f'<text x="{_fmt(xc)}" y="{_fmt(label_y)}" text-anchor="middle" font-size="11">{stack_id}</text>')
+        e.append(f'<text x="{_fmt(xc)}" y="{_fmt(label_y + 14)}" text-anchor="middle" font-size="10" fill="#444">n=3</text>')
+        s_idle = m["energy_request_j"]
+        s_gross = m["gross_energy_j"]
+        series(xc - 25, s_idle["points"], s_idle["mean"], s_idle["min"], s_idle["max"], a_max, True)
+        series(xc + 25, s_gross["points"], s_gross["mean"], s_gross["min"], s_gross["max"], a_max, False)
 
     # Legend (Panel A bases named).
     e.append(f'<circle cx="{_fmt(ax0 + 10)}" cy="450" r="4" fill="#1f6f8b" stroke="#1f6f8b"/>')
     e.append(f'<text x="{_fmt(ax0 + 20)}" y="454">idle-subtracted energy_request_j (primary basis)</text>')
     e.append(f'<circle cx="{_fmt(ax0 + 330)}" cy="450" r="4" fill="white" stroke="#1f6f8b"/>')
     e.append(f'<text x="{_fmt(ax0 + 340)}" y="454">gross gross_energy_j (context basis)</text>')
-    e.append(f'<text x="{_fmt(bx0)}" y="454" font-size="11" fill="#444">idle-subtracted basis; mJ/runtime-observed output token</text>')
 
     # Mandatory footers (D-058 / spec §4.3).
     e.append(f'<text x="{_fmt(ax0)}" y="490" font-size="11">{LEGACY_LABEL} · n=3 per exact stack · Apple SoC CPU+GPU+ANE package-power boundary ·</text>')
     e.append(f'<text x="{_fmt(ax0)}" y="506" font-size="11">descriptive stack-specific observations; no cross-stack efficiency or scaling claim · full identities: Table S1</text>')
-    e.append(f'<text x="{_fmt(ax0)}" y="530" font-size="11" fill="#444">Output-token values use runtime-observed counts. Tokenizer identity was not captured in these</text>')
-    e.append(f'<text x="{_fmt(ax0)}" y="544" font-size="11" fill="#444">legacy bundles; values are tokenizer-scoped descriptors, not comparable work units.</text>')
+    e.append(f'<text x="{_fmt(ax0)}" y="530" font-size="11" fill="#444">Per-output-token companion omitted: legacy bundles lack complete runtime stop-reason and</text>')
+    e.append(f'<text x="{_fmt(ax0)}" y="544" font-size="11" fill="#444">output-policy provenance; no stop reason is inferred from equality with the configured cap.</text>')
     e.append("</svg>")
     return "\n".join(e) + "\n"
 
@@ -386,9 +435,8 @@ T1_COLUMNS = [
     "stack_id", "model_display_name", "n",
     "gross_j_request_mean", "gross_j_request_sd", "gross_j_request_min_max",
     "idlesub_j_request_mean", "idlesub_j_request_sd", "idlesub_j_request_min_max",
-    "idlesub_mj_output_token_mean", "idlesub_mj_output_token_sd", "idlesub_mj_output_token_min_max",
     "throughput_tokens_s_mean", "ttft_ms_mean",
-    "token_denominator_scope", "boundary", "evidence_label", "quality_waiver",
+    "token_companion_status", "boundary", "evidence_label", "quality_waiver",
 ]
 
 
@@ -396,7 +444,7 @@ def t1_rows(stacks: dict, waivers: dict) -> list[dict]:
     rows = []
     for stack_id in sorted(stacks):
         m = stacks[stack_id]["metrics"]
-        g, i, t = m["gross_energy_j"], m["energy_request_j"], m["energy_output_token_j"]
+        g, i = m["gross_energy_j"], m["energy_request_j"]
         rows.append({
             "stack_id": stack_id,
             "model_display_name": stacks[stack_id]["model_name"],
@@ -407,12 +455,9 @@ def t1_rows(stacks: dict, waivers: dict) -> list[dict]:
             "idlesub_j_request_mean": f"{i['mean']:.1f}",
             "idlesub_j_request_sd": f"{i['sd']:.1f}",
             "idlesub_j_request_min_max": f"{i['min']:.1f}–{i['max']:.1f}",
-            "idlesub_mj_output_token_mean": f"{t['mean'] * 1000:.1f}",
-            "idlesub_mj_output_token_sd": f"{t['sd'] * 1000:.1f}",
-            "idlesub_mj_output_token_min_max": f"{t['min'] * 1000:.1f}–{t['max'] * 1000:.1f}",
             "throughput_tokens_s_mean": f"{m['throughput_tokens_s']['mean']:.1f}",
             "ttft_ms_mean": f"{m['ttft_s']['mean'] * 1000:.1f}",
-            "token_denominator_scope": "runtime-observed output tokens; tokenizer identity unknown (legacy bundle)",
+            "token_companion_status": "omitted: runtime stop reason and output policy unavailable",
             "boundary": BOUNDARY_LABEL,
             "evidence_label": LEGACY_LABEL,
             "quality_waiver": waivers.get(stack_id, "none"),
@@ -540,7 +585,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--runs-root", default="runs", type=Path)
     ap.add_argument("--input-manifest",
-                    default=Path("analysis/rpt001-v1/input_manifest.json"), type=Path)
+                    default=Path("analysis/rpt001-v2/input_manifest.json"), type=Path)
     ap.add_argument("--bootstrap-input-manifest", action="store_true",
                     help="DANGEROUS bootstrap: re-baseline evidence hashes in the pinned input manifest.")
     ap.add_argument("--offline", action="store_true",
@@ -614,7 +659,8 @@ def main() -> int:
         f"Table T1: per-stack instrument results — {LEGACY_LABEL}. Values are mean, "
         "sample SD, and observed min–max over n=3 sequential repetitions per exact stack. "
         "No cross-stack comparison is made.\n\n"
-        "Output-token columns use runtime-observed counts; tokenizer identity is unknown (legacy bundle).\n\n"
+        "The per-output-token companion is omitted because runtime stop-reason and "
+        "output-policy provenance are unavailable; no stop reason is inferred from the cap.\n\n"
         + markdown_table(T1_COLUMNS, t1), encoding="utf-8", newline="\n")
 
     s1 = s1_rows(stacks)

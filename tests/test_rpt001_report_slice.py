@@ -1,6 +1,6 @@
 """Offline smoke tests for the RPT-001 report vertical slice.
 
-These run against the committed rpt001-v1 artifacts and report source; they
+These run against the committed rpt001-v2 artifacts and report source; they
 do NOT reread the real bundle corpus (which is gitignored). Real-bundle
 ingestion is the lead-run local gate (spec §0.4/§9.4).
 """
@@ -8,6 +8,7 @@ ingestion is the lead-run local gate (spec §0.4/§9.4).
 from __future__ import annotations
 
 import csv
+import hashlib
 import importlib.util
 import json
 import shutil
@@ -18,7 +19,8 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-ANALYSIS = REPO / "analysis" / "rpt001-v1"
+ANALYSIS = REPO / "analysis" / "rpt001-v2"
+SEALED_ANALYSIS = REPO / "analysis" / "rpt001-v1"
 LEGACY_LABEL = "legacy L1 (manual review; pre-2M)"
 RUNS = Path("/Users/edr/code/JouleWise/runs")
 
@@ -34,6 +36,7 @@ def load_script(name: str, filename: str):
 
 make_figures = load_script("rpt001_make_figures", "make_figures.py")
 build_capstone = load_script("rpt001_build_capstone", "build_capstone.py")
+claims_lint = load_script("rpt001_claims_lint", "claims_lint.py")
 
 
 class TestRpt001Artifacts(unittest.TestCase):
@@ -42,7 +45,69 @@ class TestRpt001Artifacts(unittest.TestCase):
         self.assertEqual(make_figures.STACK_IDS["example-mac-mlx-local"], expected)
         self.assertIn(expected, (ANALYSIS / "claims_index.jsonl").read_text())
         self.assertNotIn("LEGACY-M3MAX-QWEN25-15B-MLX", REPO.joinpath(
-            "figures/rpt001-v1/F1_legacy_l1_instrument_results.svg").read_text())
+            "figures/rpt001-v2/F1_legacy_l1_instrument_results.svg").read_text())
+
+    def test_v1_publication_is_byte_unchanged(self):
+        expected = {
+            "analysis/rpt001-v1/aggregates.json": "fe849005553f0671c1e5d8b213497e0a4139918323ae16635acd98fa278b6f6f",
+            "analysis/rpt001-v1/artifact_manifest.json": "69a5344eb55796fd9e6bd5a02965f6e8e2c8ae3ba3fcca1c615968a3b1a77e8b",
+            "analysis/rpt001-v1/claims_index.jsonl": "c8d8a841e6036a715e20c443b8982e0035de5e4b258675a3e86346b274da3df2",
+            "analysis/rpt001-v1/dataset.csv": "0a2fdf9912b4a364ea7c87211b5c7599eebf20197a1d48b43629019644ea660f",
+            "analysis/rpt001-v1/input_manifest.json": "cf016eed5434a228e50c8b95591ff10408a6d90b025bb1ea0a857f1bd01b9805",
+            "analysis/rpt001-v1/tables/S1_legacy_stack_identity.csv": "975f66fe94a0017e380eccb23146838232f74aa35579aa46e4d8c67e78a6516a",
+            "analysis/rpt001-v1/tables/S1_legacy_stack_identity.md": "5e8433e19817e46b145a580916b27cdf0260c400467d444c3aeb6cf730827571",
+            "analysis/rpt001-v1/tables/T1_legacy_l1_results.csv": "6e0096a80a4c6f8d8ada22f9add2bf58d826359a3be3d250e34ef319304dea10",
+            "analysis/rpt001-v1/tables/T1_legacy_l1_results.md": "c28a99db36e60cb6ea37560c3da140ce40be566e124e5dbc5761dafd1abd542e",
+            "figures/rpt001-v1/F1_legacy_l1_instrument_results.svg": "33e5918dc74470433f1b868f2ba9e68b102c581820ea19fa83a9a02186af3b41",
+        }
+        for relative, digest in expected.items():
+            with self.subTest(relative=relative):
+                self.assertEqual(hashlib.sha256((REPO / relative).read_bytes()).hexdigest(), digest)
+
+    def test_defaults_and_artifact_version_are_v2(self):
+        self.assertEqual(make_figures.ARTIFACT_VERSION, "rpt001-v2")
+        self.assertEqual(build_capstone.ANALYSIS, ANALYSIS)
+        self.assertIn("figures/rpt001-v2/", build_capstone.FIGURE_REL)
+        self.assertEqual(
+            claims_lint.DEFAULT_CLAIMS_INDEX_PATH,
+            Path("analysis/rpt001-v2/claims_index.jsonl"),
+        )
+
+    def test_realized_tokens_come_from_artifact_without_stop_inference(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            member = "example-mac-mlx-local__r1"
+            bundle = root / member
+            (bundle / "outputs").mkdir(parents=True)
+            (bundle / "config.json").write_text(json.dumps({
+                "model": {}, "quantization": {}, "hardware_target": {},
+                "workload_profile": {"output_tokens": 2, "prompt_text": "p"},
+            }))
+            (bundle / "metadata.json").write_text(json.dumps({
+                "workload_observed": {"output_token_count": 2}, "device": {},
+            }))
+            (bundle / "summary_metrics.json").write_text(json.dumps({
+                "gross_energy_j": 3, "energy_request_j": 2,
+                "energy_output_token_j": 1, "ttft_s": 0.1,
+                "throughput_tokens_s": 20, "measurement_quality": {},
+            }))
+            (bundle / "outputs" / "tokens.jsonl").write_text(
+                '{"index": 0}\n{"index": 1}\n', encoding="utf-8"
+            )
+            (bundle / "events.jsonl").write_text(json.dumps({
+                "timestamp_s": 1.0, "event_type": "phase_end", "phase": "decode",
+                "message": "done", "metadata": {"emitted_tokens": 2},
+            }) + "\n")
+            rows = make_figures.extract_rows(
+                root,
+                {"example-mac-mlx-local": {"members": [member], "cooldown": []}},
+                {member: "tree"},
+            )
+        self.assertEqual(rows[0]["runtime_output_tokens"], 2)
+        self.assertEqual(rows[0]["token_count_source"], "outputs/tokens.jsonl")
+        self.assertEqual(rows[0]["runtime_stop_reason"], "unknown")
+        self.assertEqual(rows[0]["output_policy"], "unknown")
+        self.assertEqual(rows[0]["energy_output_token_j"], "")
 
     def test_fixture_scale_double_generation_is_byte_identical(self):
         with open(ANALYSIS / "dataset.csv", newline="", encoding="utf-8") as fh:
@@ -122,6 +187,11 @@ class TestRpt001Artifacts(unittest.TestCase):
         for row in rows:
             self.assertEqual(row["evidence_class"], "legacy_l1_manual_review_pre_2m")
             self.assertFalse(row["bundle_path"].startswith("/"))
+            self.assertEqual(row["runtime_output_tokens"], "512")
+            self.assertEqual(row["token_count_source"], "outputs/tokens.jsonl")
+            self.assertEqual(row["runtime_stop_reason"], "unknown")
+            self.assertEqual(row["output_policy"], "unknown")
+            self.assertEqual(row["energy_output_token_j"], "")
 
     def test_claims_row_shape(self):
         lines = (ANALYSIS / "claims_index.jsonl").read_text(encoding="utf-8").splitlines()
@@ -135,15 +205,22 @@ class TestRpt001Artifacts(unittest.TestCase):
         self.assertEqual(row["verdict_ref"]["status"], "not_applicable_l1")
         self.assertIn("44.42591347410544", row["claim_text"])
         self.assertIn("298.68731644234157", row["claim_text"])
+        self.assertEqual(
+            (ANALYSIS / "claims_index.jsonl").read_bytes(),
+            (SEALED_ANALYSIS / "claims_index.jsonl").read_bytes(),
+        )
 
     def test_figure_labels_and_honesty(self):
-        svg = (REPO / "figures" / "rpt001-v1" /
+        svg = (REPO / "figures" / "rpt001-v2" /
                "F1_legacy_l1_instrument_results.svg").read_text(encoding="utf-8")
         self.assertIn(LEGACY_LABEL, svg)
         self.assertIn("min–max range (not a confidence interval)", svg)
         self.assertIn("idle-subtracted energy_request_j", svg)
         self.assertIn("gross gross_energy_j", svg)
-        self.assertIn("runtime-observed output token", svg)
+        self.assertIn("Per-output-token companion omitted", svg)
+        self.assertIn("no stop reason is inferred", svg)
+        self.assertNotIn("runtime-observed output token", svg)
+        self.assertNotIn("Panel B", svg)
         self.assertNotIn("95%", svg)
         self.assertNotIn("CI", svg.replace("CPU", ""))
 
@@ -152,9 +229,17 @@ class TestRpt001Artifacts(unittest.TestCase):
         s1 = (ANALYSIS / "tables" / "S1_legacy_stack_identity.md").read_text(encoding="utf-8")
         self.assertIn(LEGACY_LABEL, t1)
         self.assertIn("cooldown cap hit", t1)
+        self.assertIn("per-output-token companion is omitted", t1)
+        self.assertNotIn("idlesub_mj_output_token_mean", t1)
         self.assertIn("unknown (legacy bundle)", s1)
         for field in ("tokenizer_identity", "measurement_boundary", "telemetry_backend"):
             self.assertIn(field, s1)
+
+    def test_v2_artifact_manifest_references_only_v2_outputs(self):
+        manifest = json.loads((ANALYSIS / "artifact_manifest.json").read_text())
+        self.assertEqual(manifest["artifact_version"], "rpt001-v2")
+        self.assertTrue(manifest["outputs"])
+        self.assertTrue(all("rpt001-v2" in path for path in manifest["outputs"]))
 
     def test_report_profile_and_chapters(self):
         src = REPO / "docs" / "report_src"
@@ -175,8 +260,12 @@ class TestRpt001Artifacts(unittest.TestCase):
         self.assertTrue(page.startswith("<!-- GENERATED by scripts/build_capstone.py"))
         for needed in (LEGACY_LABEL, "CLM-RPT001-LEGACY-L1-001",
                        "scripts/build_capstone.py", "--full", "artifact_manifest.json",
-                       "Table S1", "Table T1"):
+                       "Table S1", "Table T1", "per-output-token companion is omitted",
+                       "not labeled", "as an observed stop reason", "rpt001-v2"):
             self.assertIn(needed, page)
+        self.assertNotIn("Panel B", page)
+        self.assertNotIn("mJ per runtime-observed output token", page)
+        self.assertNotIn("values remain explicitly tokenizer-unknown", page)
         for forbidden in ("more efficient", "less efficient", "scales with model size"):
             self.assertNotIn(forbidden, page.lower())
 

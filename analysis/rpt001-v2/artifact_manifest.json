@@ -1,0 +1,31 @@
+{
+  "artifact_version": "rpt001-v2",
+  "build_mode": "real-bundles",
+  "bundle_tree_sha256": {
+    "example-mac-mlx-local__r1": "ec05d3d2c2bd262cb3488c887e4a561ef6c70d6271058f3fb0c0e823e38699cc",
+    "example-mac-mlx-local__r2": "1ffe1ec76e3022bac5bd651b261a044d0865a1d5877c165aa45f96018ff0e1ca",
+    "example-mac-mlx-local__r3": "36d3b109ac3a2e88b27434361ccb5b85c84d653b4cb7fabf25b3e222506f57ef",
+    "example-mac-mlx-qwen35-122b-512t__r1": "9be1c5df4bb566fbe057735bac5377d6826828f0061f11fee2b48cd74f982ff4",
+    "example-mac-mlx-qwen35-122b-512t__r2": "f9f5896c8edf8b8dc1fd56dee977f5a5b7b4d5a04cc76b1405c865d817f9e279",
+    "example-mac-mlx-qwen35-122b-512t__r3": "b029e14b53a085f74653857a62194ed50a47d63e4bc49d15238ec77ff94cc2b5"
+  },
+  "experiment_manifest_sha256": {
+    "example-mac-mlx-local": "6a055cdec365bbe0441f6e33fd2fbebdb131bc4fe86779b7724d3b611e4daec9",
+    "example-mac-mlx-qwen35-122b-512t": "dae8e7435ba27489d13dd1890fa77098450319c9cf228d4ccc3c18903ccce962"
+  },
+  "generator_sha256": {
+    "scripts/make_figures.py": "348db02f509b714d90c2c9ed19cee6e99821df093626a5d36031f5d62e718fe1"
+  },
+  "input_manifest_sha256": "2b42c2d4ed2eb9c854ad60266e8a6b236e9cc7287e1cec8d6b3b782fa36e50a1",
+  "outputs": {
+    "analysis/rpt001-v2/aggregates.json": "785706e95014607080b95b9605ac87c0ac32773e13d6413020dd7fd501b4c4a8",
+    "analysis/rpt001-v2/claims_index.jsonl": "c8d8a841e6036a715e20c443b8982e0035de5e4b258675a3e86346b274da3df2",
+    "analysis/rpt001-v2/dataset.csv": "386ecc3139c5f92b32f6110019edebd56833c3c2fc607b41b31129afe664db1b",
+    "analysis/rpt001-v2/tables/S1_legacy_stack_identity.csv": "975f66fe94a0017e380eccb23146838232f74aa35579aa46e4d8c67e78a6516a",
+    "analysis/rpt001-v2/tables/S1_legacy_stack_identity.md": "5e8433e19817e46b145a580916b27cdf0260c400467d444c3aeb6cf730827571",
+    "analysis/rpt001-v2/tables/T1_legacy_l1_results.csv": "d10caded407d6aaa1203cf868e556bd919acab17bcd5973bd7ca7f5dab145a3f",
+    "analysis/rpt001-v2/tables/T1_legacy_l1_results.md": "560902dcc57334f64fa4b6b7c5e2d5bb30014af1faa6a5437d07e05c8ca4d99d",
+    "figures/rpt001-v2/F1_legacy_l1_instrument_results.svg": "198a81893a5c03e70d161342bc090d0357f21c0c7416add3d6c9877bcafd9037"
+  },
+  "schema": "joulewise.report_artifact_manifest.v1"
+}
