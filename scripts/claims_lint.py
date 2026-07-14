@@ -218,6 +218,8 @@ OBVIOUS_DIRECTIONAL_PROSE_RE = re.compile(
     r"better|worse|superior|inferior)\b",
     re.IGNORECASE,
 )
+D062_TOP_UP_RE = re.compile(r"\btop[- ]?up(?:ped|ping|s)?\b", re.IGNORECASE)
+D062_DEMOTION_RE = re.compile(r"\b(?:demot\w*|exploratory)\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -599,6 +601,28 @@ def lint_ap_document(
                     floor_row.line_no if floor_row else table.start_line,
                     "AP_BAD_FLOOR_GATE",
                     f"{label} Floor gate must be `{FLOOR_PENDING_TOKEN}` or a concrete floor row reference",
+                )
+            )
+
+        sizing_row = fields.get("MDE/n sizing + predeclared top-up rule")
+        sizing_value = (
+            sizing_row.cells[1].strip()
+            if sizing_row and len(sizing_row.cells) > 1
+            else ""
+        )
+        if D062_TOP_UP_RE.search(sizing_value) and not (
+            "D-062" in sizing_value
+            and "frozen" in sizing_value.lower()
+            and D062_DEMOTION_RE.search(sizing_value)
+        ):
+            findings.append(
+                Finding(
+                    "error",
+                    mode,
+                    str(path),
+                    sizing_row.line_no if sizing_row else table.start_line,
+                    "AP_UNQUALIFIED_OUTCOME_DEPENDENT_TOP_UP",
+                    f"{label} top-up language must cite D-062, frozen n, and permanent exploratory demotion",
                 )
             )
 

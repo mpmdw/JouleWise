@@ -266,9 +266,10 @@ Stop-reason censoring:
   rule: if cap hits exceed 5% at the chosen cap, P90 is suspect; if cap hits
   exceed 10%, P90/P10 and energy-at-risk cannot carry L2 natural-EOS wording.
   Increasing `N` at the same cap narrows sampling error but does not recover the
-  censored upper tail. The remedy is to raise/redeclare the cap under the
-  predeclared cap policy and rerun or augment compatibly, or to downgrade the
-  claim to capped-policy/censored wording.
+  censored upper tail. The confirmatory remedy is to report capped-policy/
+  censored wording at the frozen design. A later campaign may freeze a higher
+  cap prospectively; augmenting after seeing cap hits permanently demotes that
+  result to exploratory under D-062.
 
 N sizing:
 
@@ -309,7 +310,7 @@ candidate.
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only. Missing sampler seed, missing emitted-token IDs, unverified sampler pin, replay-token mismatch, or missing stop reason excludes a bundle from claim-bearing analysis. Quality-flag waivers must be named; cap-hit bundles are retained as censored observations and reported separately. |
 | Order/blocking/covariates | Phase A sampled runs and Phase B replay blocks interleaved where practical; replay order balanced/randomized across selected path lengths; session/block, manifest order, cooldown cap hit, thermal state, and stop reason recorded. Length is the primary explanatory covariate; content-sentinel status is a required threat-control covariate when making length-luck language. |
 | Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for the same backend, metric, and request-window class; replay residual and replay contrasts must clear the relevant floor or be reported `not resolvable`/`unresolved` under the standing three-way rule. |
-| MDE/n sizing + predeclared top-up rule | Minimal credible: Phase A `N = 80` sampled bundles plus Phase B `9 randomly selected paths x k = 6` replays for claim-bearing decomposition; the nine-landmark quantile replay is diagnostic/approximate unless separately randomized and weighted. Top up Phase A to `N = 100` only if P90/P10 CI is too wide for the planned figure. If cap hits exceed 5%, do not treat larger `N` as a cure; raise/redeclare the cap under the predeclared cap policy and rerun/augment compatibly, or downgrade to capped-policy/censored wording. Top up replay to `k = 10` for any selected path whose replay CI or floor status controls the headline. |
+| MDE/n sizing + predeclared top-up rule | Minimal credible: Phase A `N = 80` sampled bundles plus Phase B `9 randomly selected paths x k = 6` replays for claim-bearing decomposition; the nine-landmark quantile replay is diagnostic/approximate unless separately randomized and weighted. Under D-062, Phase-A `N` (80 or the stronger 100) and replay `k` (6 or 10) are selected from independent Window-A variance/MDE evidence and frozen in the registry before this pack's outcomes. A wide P90/P10 interval, headline-controlling replay interval/floor status, or excessive cap-hit fraction at frozen n is reported `not resolvable` or with capped-policy/censored wording. Any outcome-dependent top-up or compatible augmentation permanently demotes the affected contrast to exploratory; technically invalid bundles alone may be replaced under the predeclared replacement rule. |
 | Denominator provenance requirement | Runtime-observed emitted-token counts, emitted output token IDs, stop reason, output policy label, sampler config, and sampler seed per bundle. Config fallback cannot support token-normalized companion claims. |
 | Holdout cells (L3 only) | not applicable; ceiling is L2 within boundary. |
 | Claim ceiling + exact forbidden upgrade | Ceiling L2 within the named boundary and frozen sampler. Forbidden upgrades: no intelligence-per-joule; no correctness-causal claim; no model-family or architecture-wide variance law; no cross-boundary comparison without calibration. |
@@ -364,6 +365,9 @@ Stronger one-cell version:
 - Runtime: 2.67 to 6.67 hours without buffer; 2.93 to 7.33 hours with buffer.
 - Claim use: cleaner P90/P10 reporting, weighted stratified decomposition, and
   length/content residual diagnostics.
+- Selection rule: this is a separately frozen prospective design, not a
+  post-outcome extension of the `N = 80`, `k = 6` version. D-062 permanently
+  demotes any such extension after observing the smaller design.
 
 Fuller version:
 

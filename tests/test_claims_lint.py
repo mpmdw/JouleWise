@@ -72,7 +72,10 @@ def ap_document(
         "Inclusion/exclusion + quality-flag waiver rules": "Strict-valid bundles only.",
         "Order/blocking/covariates": "Manifest order and block.",
         "Floor gate": "pending-P2-015: request-window floor.",
-        "MDE/n sizing + predeclared top-up rule": "n=5; top-up near floor.",
+        "MDE/n sizing + predeclared top-up rule": (
+            "n is frozen before outcomes under D-062; any outcome-dependent "
+            "top-up permanently demotes the contrast to exploratory."
+        ),
         "Denominator provenance requirement": "Runtime-observed tokens.",
         "Holdout cells (L3 only)": "not applicable.",
         "Claim ceiling + exact forbidden upgrade": "Ceiling L2; no universal claim.",
@@ -207,6 +210,26 @@ class ClaimsLintFixtureTests(unittest.TestCase):
             findings, labels = claims_lint.lint_ap_document(path, "ap")
             self.assertEqual(findings, [])
             self.assertEqual(labels, ["AP-1"])
+
+    def test_unqualified_outcome_dependent_top_up_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write(
+                Path(tmp) / "ap.md",
+                ap_document(
+                    {
+                        "MDE/n sizing + predeclared top-up rule": (
+                            "n=5; top-up near-floor cells after inspecting the CI."
+                        )
+                    }
+                ),
+            )
+
+            findings, _ = claims_lint.lint_ap_document(path, "ap")
+
+            self.assertIn(
+                "AP_UNQUALIFIED_OUTCOME_DEPENDENT_TOP_UP",
+                {finding.code for finding in findings},
+            )
 
     def test_each_required_ap_field_missing_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

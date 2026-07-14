@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 import sys
@@ -57,9 +58,14 @@ def expected_json_filenames(model_tag: str) -> set[str]:
     return expected_filenames(model_tag) | MANIFEST_SIDECARS
 
 
-def run_generator(base: Path, model_tag: str, out_dir: Path) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        [
+def run_generator(
+    base: Path,
+    model_tag: str,
+    out_dir: Path,
+    *,
+    registry_path: Path | None = None,
+) -> subprocess.CompletedProcess[str]:
+    command = [
             sys.executable,
             str(SCRIPT),
             "--base",
@@ -68,13 +74,28 @@ def run_generator(base: Path, model_tag: str, out_dir: Path) -> subprocess.Compl
             model_tag,
             "--out-dir",
             str(out_dir),
-        ],
+        ]
+    if registry_path is not None:
+        command.extend(["--analysis-registry", str(registry_path)])
+    return subprocess.run(
+        command,
         cwd=ROOT,
         text=True,
         capture_output=True,
         check=False,
         timeout=COMMAND_TIMEOUT_S,
     )
+
+
+def registry_with_n(path: Path, planned_n_blocks: int) -> Path:
+    registry = json.loads(
+        (ROOT / "configs" / "analysis_registry" / "slice_2m_ap2.v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    registry["sampling_plan"]["planned_n_blocks"] = planned_n_blocks
+    path.write_text(json.dumps(registry, indent=2) + "\n", encoding="utf-8")
+    return path
 
 
 def generated_payloads(out_dir: Path) -> dict[str, dict]:
@@ -90,6 +111,70 @@ def order_manifest(out_dir: Path) -> dict:
 
 
 class GenerateMatrixTests(unittest.TestCase):
+    def test_freeze_time_n_binding_round_trips_authorized_n10_registry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            registry_path = registry_with_n(tmp_path / "registry-n10.json", 10)
+            out_dir = tmp_path / "out"
+
+            result = run_generator(
+                *BASE_CONFIGS[0],
+                out_dir,
+                registry_path=registry_path,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = json.loads((out_dir / ANALYSIS_MANIFEST).read_text(encoding="utf-8"))
+            self.assertEqual(manifest["design"]["sampling_plan"]["planned_n_blocks"], 10)
+            self.assertEqual(len(manifest["contrasts"][0]["block_ids"]), 10)
+            self.assertEqual(order_manifest(out_dir)["planned_n_blocks"], 10)
+            self.assertEqual(
+                manifest["source"]["registry_template"]["sha256"],
+                hashlib.sha256(registry_path.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(len(generated_payloads(out_dir)), 60)
+
+    def test_post_freeze_n_mutation_is_detected_before_output_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            registry_n5 = registry_with_n(tmp_path / "registry-n5.json", 5)
+            registry_n10 = registry_with_n(tmp_path / "registry-n10.json", 10)
+            out_dir = tmp_path / "out"
+            base, tag = BASE_CONFIGS[0]
+            first = run_generator(base, tag, out_dir, registry_path=registry_n5)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            before = {path.name: path.read_bytes() for path in out_dir.glob("*.json")}
+
+            mutated = run_generator(base, tag, out_dir, registry_path=registry_n10)
+
+            self.assertEqual(mutated.returncode, 1)
+            self.assertIn("post-freeze n mutation detected", mutated.stderr)
+            self.assertEqual(
+                {path.name: path.read_bytes() for path in out_dir.glob("*.json")},
+                before,
+            )
+
+    def test_mixed_n_inconsistent_block_authority_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            registry_n5 = registry_with_n(tmp_path / "registry-n5.json", 5)
+            registry_n10 = registry_with_n(tmp_path / "registry-n10.json", 10)
+            out_dir = tmp_path / "out"
+            first = run_generator(*BASE_CONFIGS[0], out_dir, registry_path=registry_n5)
+            self.assertEqual(first.returncode, 0, first.stderr)
+            (out_dir / ANALYSIS_MANIFEST).unlink()
+            (out_dir / ORDER_MANIFEST).unlink()
+            before = {path.name: path.read_bytes() for path in out_dir.glob("*.json")}
+
+            mixed = run_generator(*BASE_CONFIGS[1], out_dir, registry_path=registry_n10)
+
+            self.assertEqual(mixed.returncode, 1)
+            self.assertIn("mixed-n composition or incomplete block authority", mixed.stderr)
+            self.assertEqual(
+                {path.name: path.read_bytes() for path in out_dir.glob("*.json")},
+                before,
+            )
+
     def test_determinism_byte_identical(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -432,9 +517,8 @@ class GenerateMatrixTests(unittest.TestCase):
             new = run_generator(base, new_tag, out_dir)
 
             self.assertEqual(new.returncode, 1)
-            self.assertIn("missing drift sentinel config", new.stderr)
+            self.assertIn("mixed-n composition or incomplete block authority", new.stderr)
             self.assertIn(f"model_tag={old_tag}, rep=1", new.stderr)
-            self.assertIn("start, end", new.stderr)
             self.assertNotIn(f"model_tag={new_tag}, rep=1", new.stderr)
 
     def test_invalid_model_tag_rejected(self) -> None:
