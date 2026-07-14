@@ -172,7 +172,12 @@ timestamps; join rich rows to power-trace rows by document order
 recorded in device metadata. The rich records preserve powermetrics
 frequency values verbatim: Apple GPU `freq_hz` values observed in the
 fixture are reported in MHz, while cluster/core `freq_hz` values are
-reported in Hz.
+reported in Hz. Derived idle baselines expose the Apple GPU mean as
+`gpu_freq_mhz_mean`, whose declared unit is MHz. They also retain
+`gpu_freq_hz_mean` as a deprecated legacy alias: despite its name, its
+historical and current values are the same MHz-valued number, never Hz. The
+alias is not converted or repurposed, so pre-repair summaries (new field
+absent) remain distinguishable from current summaries (new field present).
 
 ## Event Log Minimum Fields
 
@@ -439,8 +444,12 @@ and its derived summary are out of scope. Publication integrity is supplied by
 the bundle-pack hash chain (P2-027/REPRO-001), outside a single local
 `validate-bundle` invocation.
 
-Reducer `0.5.0` summaries use exact strict comparison. All pre-0.5 current-era
-summaries are unsupported and require explicit re-reduction because active
+Reducer `0.5.0` summaries use exact strict comparison except for the absence of
+`idle_baseline.gpu_freq_mhz_mean`, which was added during the already-live
+0.5.0 era. Its absence is tolerated only for compatibility with stored
+pre-repair 0.5.0 summaries; when present, its value is compared exactly. All
+pre-0.5 current-era summaries are unsupported and require explicit
+re-reduction because active
 energy and idle point/variance/ESS estimands changed together. There is no
 absence projection across that semantic boundary. The previously frozen
 `0.4.2`, `0.4.1`, `0.4.0`, and `0.3.x` meanings are not rewritten.
@@ -458,6 +467,8 @@ listed in reducer-version order):
 
 | Field | Location | Contract |
 |---|---|---|
+| `gpu_freq_mhz_mean` | `summary_metrics.json.idle_baseline` | Additive Apple GPU frequency mean with declared unit MHz. Powermetrics derives it from the verbatim rich GPU `freq_hz` number, which Apple reports in MHz. Other backends emit null unless they supply the same declared unit. |
+| `gpu_freq_hz_mean` | `summary_metrics.json.idle_baseline` | Deprecated legacy alias retained without semantic conversion. Historical and current values are actually MHz and equal `gpu_freq_mhz_mean` when both are present; the false-Hz name must not be interpreted as Hz or multiplied by one million. |
 | `inter_token_throughput_tokens_s` | `summary_metrics.json` top level and aggregate metric entries | Governed steady-state decode/inter-token throughput: `(N - 1) / (t_last - t_first)`, where N is the runtime-observed output-token count and the timestamps are the first and last observed decode-token events. It is null when N is below two, fewer than two decode timestamps exist, or their span is zero. The frozen legacy `throughput_tokens_s` remains `N / (t_last - t_first)`: it counts N tokens across N−1 inter-token intervals, is retained for compatibility, and must not be relabeled as steady-state throughput. |
 | `energy_uncertainty_status` | `summary_metrics.json` top level | One of `not_estimable`, `estimated`, or `bounded`. Single-bundle reducer output is `not_estimable` unless every relevant uncertainty term has an external calibrated bound; point estimates and quality fields are still emitted. |
 | `idle_mean_uncertainty` | `summary_metrics.json` top level | Governed powermetrics-v2 duration-weighted idle-mean derivation. `method` is `duration_weighted_newey_west_bartlett_10s_iid_floor_v2`, `correlation_scope` is `independent_run`, `source_artifact` is `raw/powermetrics_idle.plist`, and `source_sha256` binds the derivation to immutable bytes. The object records raw count, median interval, type-7 p95/p05 cadence ratio, 10 s bandwidth, lag count, duration-weighted sample/IID/HAC/governed variances, Kish-bounded ESS, status, and frozen reason codes. Numeric results and ESS are null when `status=not_estimable`. Mock output is non-claim-bearing. Non-powermetrics physical backends report `backend_policy_not_frozen`. |

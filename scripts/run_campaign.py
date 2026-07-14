@@ -1763,6 +1763,11 @@ def _idle_baseline_from_summary(summary: dict[str, Any] | None):
     try:
         from joulewise.schemas import IdleBaseline, TelemetryBackend
 
+        gpu_freq_mhz_mean = (
+            raw.get("gpu_freq_mhz_mean")
+            if "gpu_freq_mhz_mean" in raw
+            else raw.get("gpu_freq_hz_mean")
+        )
         return IdleBaseline(
             power_w_mean=float(raw["power_w_mean"]),
             power_w_stddev=float(raw["power_w_stddev"]),
@@ -1771,6 +1776,7 @@ def _idle_baseline_from_summary(summary: dict[str, Any] | None):
             telemetry_backend=TelemetryBackend(raw["telemetry_backend"]),
             gpu_idle_ratio_mean=raw.get("gpu_idle_ratio_mean"),
             gpu_idle_ratio_min=raw.get("gpu_idle_ratio_min"),
+            gpu_freq_mhz_mean=gpu_freq_mhz_mean,
             gpu_freq_hz_mean=raw.get("gpu_freq_hz_mean"),
             idle_window_suspect=raw.get("idle_window_suspect"),
         )

@@ -27,6 +27,7 @@ from joulewise.adapters.powermetrics import (
     idle_window_gpu_quality,
     parse_powermetrics_records,
     rich_telemetry_jsonl,
+    rich_telemetry_jsonl_from_records,
     samples_from_records,
     sudoers_line,
 )
@@ -207,6 +208,7 @@ class PowermetricsParserTests(unittest.TestCase):
         clean = idle_window_gpu_quality(decode_rich_telemetry(FIXTURE.read_bytes()))
         self.assertAlmostEqual(clean["gpu_idle_ratio_mean"], 0.9611138, places=12)
         self.assertAlmostEqual(clean["gpu_idle_ratio_min"], 0.846584, places=12)
+        self.assertAlmostEqual(clean["gpu_freq_mhz_mean"], 325.9148, places=12)
         self.assertAlmostEqual(clean["gpu_freq_hz_mean"], 325.9148, places=12)
         self.assertIs(clean["idle_window_suspect"], False)
 
@@ -227,6 +229,17 @@ class PowermetricsParserTests(unittest.TestCase):
         )
         self.assertIs(single_blip["idle_window_suspect"], False)
 
+    def test_idle_quality_keeps_rich_records_byte_identical(self) -> None:
+        records = decode_rich_telemetry(FIXTURE.read_bytes())
+        before = rich_telemetry_jsonl_from_records(records)
+
+        idle_window_gpu_quality(records)
+
+        self.assertEqual(rich_telemetry_jsonl_from_records(records), before)
+        first = json.loads(before.splitlines()[0])
+        self.assertEqual(first["gpu"]["freq_hz"], 338.0)
+        self.assertNotIn("gpu_freq_mhz_mean", first["gpu"])
+
     def test_idle_window_gpu_quality_absent_gpu_is_unknown(self) -> None:
         documents = fixture_documents()
         for document in documents:
@@ -234,6 +247,7 @@ class PowermetricsParserTests(unittest.TestCase):
         quality = idle_window_gpu_quality(decode_rich_telemetry(documents_to_stream(documents)))
         self.assertIsNone(quality["gpu_idle_ratio_mean"])
         self.assertIsNone(quality["gpu_idle_ratio_min"])
+        self.assertIsNone(quality["gpu_freq_mhz_mean"])
         self.assertIsNone(quality["gpu_freq_hz_mean"])
         self.assertIsNone(quality["idle_window_suspect"])
 
@@ -285,6 +299,7 @@ class PowermetricsParserTests(unittest.TestCase):
         quality = idle_window_gpu_quality([])
         self.assertIsNone(quality["gpu_idle_ratio_mean"])
         self.assertIsNone(quality["gpu_idle_ratio_min"])
+        self.assertIsNone(quality["gpu_freq_mhz_mean"])
         self.assertIsNone(quality["gpu_freq_hz_mean"])
         self.assertIsNone(quality["idle_window_suspect"])
 
@@ -452,7 +467,9 @@ class PowermetricsAdapterTests(unittest.TestCase):
         self.assertAlmostEqual(baseline.power_w_stddev, 0.5949163238867929, places=12)
         self.assertAlmostEqual(baseline.duration_s, 5.091935956, places=12)
         self.assertAlmostEqual(baseline.gpu_idle_ratio_min, 0.846584, places=12)
+        self.assertAlmostEqual(baseline.gpu_freq_mhz_mean, 325.9148, places=12)
         self.assertAlmostEqual(baseline.gpu_freq_hz_mean, 325.9148, places=12)
+        self.assertEqual(baseline.gpu_freq_mhz_mean, baseline.gpu_freq_hz_mean)
         self.assertIs(baseline.idle_window_suspect, False)
 
     def test_measure_idle_preserves_raw_and_rich_idle_artifacts_with_context(self) -> None:

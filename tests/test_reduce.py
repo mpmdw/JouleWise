@@ -317,6 +317,7 @@ class GappedTraceTests(ReduceTestCase):
             **DEFAULT_IDLE,
             "gpu_idle_ratio_mean": 0.4,
             "gpu_idle_ratio_min": 0.0,
+            "gpu_freq_mhz_mean": 1363.0,
             "gpu_freq_hz_mean": 1363.0,
             "idle_window_suspect": True,
         }
@@ -325,7 +326,21 @@ class GappedTraceTests(ReduceTestCase):
         builder.write_metadata(rail_manifest=["mock"], idle=idle)
         summary = reduce_module.reduce_bundle(builder.path)
         self.assertIs(summary.idle_baseline.idle_window_suspect, True)
+        self.assertEqual(summary.idle_baseline.gpu_freq_mhz_mean, 1363.0)
+        self.assertEqual(summary.idle_baseline.gpu_freq_hz_mean, 1363.0)
         self.assertIs(summary.measurement_quality.idle_window_suspect, True)
+
+    def test_legacy_false_hz_metadata_populates_additive_mhz_field(self) -> None:
+        builder = self.builder()
+        idle = {**DEFAULT_IDLE, "gpu_freq_hz_mean": 325.9148}
+        builder.measured_window(0.0, 2.0)
+        builder.write_trace(constant_samples(0.0, 2.0, hz=1.0, power_w=7.5))
+        builder.write_metadata(rail_manifest=["mock"], idle=idle)
+
+        serialized = reduce_module.reduce_bundle(builder.path).to_dict()["idle_baseline"]
+
+        self.assertEqual(serialized["gpu_freq_mhz_mean"], 325.9148)
+        self.assertEqual(serialized["gpu_freq_hz_mean"], 325.9148)
 
     def test_old_idle_baseline_metadata_lacks_idle_window_suspect(self) -> None:
         builder = self.builder()

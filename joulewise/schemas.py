@@ -730,6 +730,11 @@ class IdleBaseline:
     telemetry_backend: TelemetryBackend
     gpu_idle_ratio_mean: float | None = None
     gpu_idle_ratio_min: float | None = None
+    #: Mean Apple GPU frequency in MHz. Powermetrics' source field is named
+    #: ``freq_hz`` but carries MHz values; the rich record remains verbatim.
+    gpu_freq_mhz_mean: float | None = None
+    #: Deprecated legacy alias. Historical values are MHz despite the name;
+    #: retain this field unchanged so pre-repair artifacts stay identifiable.
     gpu_freq_hz_mean: float | None = None
     idle_window_suspect: bool | None = None
 
@@ -1171,7 +1176,20 @@ class SummaryMetrics:
                         "telemetry_backend": _string_enum_schema(TelemetryBackend),
                         "gpu_idle_ratio_mean": nullable_number,
                         "gpu_idle_ratio_min": nullable_number,
-                        "gpu_freq_hz_mean": nullable_number,
+                        "gpu_freq_mhz_mean": {
+                            "type": ["number", "null"],
+                            "description": "Mean Apple GPU frequency in megahertz (MHz).",
+                            "x-unit": "MHz",
+                        },
+                        "gpu_freq_hz_mean": {
+                            "type": ["number", "null"],
+                            "deprecated": True,
+                            "description": (
+                                "Deprecated legacy alias; historical values are "
+                                "megahertz (MHz), not hertz."
+                            ),
+                            "x-unit": "MHz",
+                        },
                         "idle_window_suspect": nullable_bool,
                     },
                 },

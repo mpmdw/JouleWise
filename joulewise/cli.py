@@ -394,6 +394,11 @@ _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
     "measurement_quality.idle_window_suspect",
 }
 
+# WO-007 landed additively within the already-live reducer-0.5.0 era. Stored
+# pre-repair 0.5.0 summaries remain distinguishable by this field's absence;
+# when present, normal recursive strict comparison still checks its value.
+ADDED_DURING_0_5_0 = frozenset({"idle_baseline.gpu_freq_mhz_mean"})
+
 ADDED_SINCE_0_3_0 = frozenset(
     {
         "measurement_quality.remote_cleanup_failed",
@@ -407,6 +412,7 @@ _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE = (
     _STRICT_ADDITIVE_ABSENT_TOLERANCE
     | ADDED_SINCE_0_3_0
     | ADDED_SINCE_0_4_1
+    | ADDED_DURING_0_5_0
     | {
         "idle_mean_uncertainty",
         "measurement_quality.token_counts_source",
@@ -622,7 +628,7 @@ def _strict_reducer_version_dispatch(
         ], set(), False, None
     reducer_version = provenance.get("reducer_version")
     if reducer_version == SUMMARY_REDUCER_VERSION:
-        return [], set(), False, None
+        return [], set(ADDED_DURING_0_5_0), False, None
     return [
         "strict: unsupported reducer version; re-reduction required",
         "strict: unsupported reducer version "

@@ -14,12 +14,14 @@ from joulewise.schemas import (
     BenchmarkConfig,
     EnergyEvidence,
     FailureReason,
+    IdleBaseline,
     RunStatus,
     SchemaError,
     SUMMARY_REDUCER_ID,
     SUMMARY_REDUCER_VERSION,
     SUMMARY_SCHEMA_VERSION,
     SummaryMetrics,
+    TelemetryBackend,
     summary_validation_problems,
 )
 
@@ -533,12 +535,35 @@ class SummaryMetricsTests(unittest.TestCase):
         quality_props = quality_schema["properties"]
         self.assertEqual(idle_props["gpu_idle_ratio_mean"], {"type": ["number", "null"]})
         self.assertEqual(idle_props["gpu_idle_ratio_min"], {"type": ["number", "null"]})
-        self.assertEqual(idle_props["gpu_freq_hz_mean"], {"type": ["number", "null"]})
+        self.assertEqual(idle_props["gpu_freq_mhz_mean"]["x-unit"], "MHz")
+        self.assertIn("megahertz", idle_props["gpu_freq_mhz_mean"]["description"])
+        self.assertEqual(idle_props["gpu_freq_hz_mean"]["x-unit"], "MHz")
+        self.assertIs(idle_props["gpu_freq_hz_mean"]["deprecated"], True)
+        self.assertIn("legacy alias", idle_props["gpu_freq_hz_mean"]["description"])
         self.assertEqual(idle_props["idle_window_suspect"], {"type": ["boolean", "null"]})
         self.assertEqual(quality_schema["required"], ["requested_sampling_hz"])
         self.assertEqual(quality_props["idle_window_suspect"], {"type": ["boolean", "null"]})
         self.assertEqual(quality_props["token_counts_source"], {"type": ["string", "null"]})
         self.assertEqual(quality_props["phase_identifiability"], {"type": ["object", "null"]})
+
+    def test_idle_gpu_frequency_alias_serializes_additively_cross_backend(self) -> None:
+        for backend in TelemetryBackend:
+            value = 325.9148 if backend == TelemetryBackend.POWERMETRICS else None
+            with self.subTest(backend=backend.value):
+                idle = IdleBaseline(
+                    power_w_mean=1.0,
+                    power_w_stddev=0.0,
+                    duration_s=5.0,
+                    sample_count=5,
+                    telemetry_backend=backend,
+                    gpu_freq_mhz_mean=value,
+                    gpu_freq_hz_mean=value,
+                )
+                payload = valid_succeeded_summary(idle_baseline=idle).to_dict()
+                self.assertIn("gpu_freq_mhz_mean", payload["idle_baseline"])
+                self.assertIn("gpu_freq_hz_mean", payload["idle_baseline"])
+                self.assertEqual(payload["idle_baseline"]["gpu_freq_mhz_mean"], value)
+                self.assertEqual(payload["idle_baseline"]["gpu_freq_hz_mean"], value)
 
     def test_summary_metrics_emit_summary_provenance(self) -> None:
         payload = valid_succeeded_summary().to_dict()

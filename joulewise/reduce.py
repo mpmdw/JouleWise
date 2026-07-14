@@ -157,6 +157,14 @@ def _idle_baseline(metadata: dict[str, Any]) -> IdleBaseline | None:
     raw = metadata.get("idle_baseline")
     if not isinstance(raw, dict):
         return None
+    # Pre-WO-007 metadata has only the false-Hz legacy alias. Its Apple GPU
+    # values were always MHz, so use it to populate the additive correct-unit
+    # field without reinterpreting or removing the legacy serialized value.
+    gpu_freq_mhz_raw = (
+        raw.get("gpu_freq_mhz_mean")
+        if "gpu_freq_mhz_mean" in raw
+        else raw.get("gpu_freq_hz_mean")
+    )
     return IdleBaseline(
         power_w_mean=_idle_baseline_float(raw, "power_w_mean"),
         power_w_stddev=_idle_baseline_float(raw, "power_w_stddev"),
@@ -165,6 +173,7 @@ def _idle_baseline(metadata: dict[str, Any]) -> IdleBaseline | None:
         telemetry_backend=_idle_baseline_telemetry_backend(raw),
         gpu_idle_ratio_mean=_optional_float(raw.get("gpu_idle_ratio_mean")),
         gpu_idle_ratio_min=_optional_float(raw.get("gpu_idle_ratio_min")),
+        gpu_freq_mhz_mean=_optional_float(gpu_freq_mhz_raw),
         gpu_freq_hz_mean=_optional_float(raw.get("gpu_freq_hz_mean")),
         idle_window_suspect=_optional_bool(raw.get("idle_window_suspect")),
     )

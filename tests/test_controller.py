@@ -441,6 +441,7 @@ class SuspectIdleTelemetry:
             baseline,
             gpu_idle_ratio_mean=0.4,
             gpu_idle_ratio_min=0.0,
+            gpu_freq_mhz_mean=338.0,
             gpu_freq_hz_mean=338.0,
             idle_window_suspect=True,
         )

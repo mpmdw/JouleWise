@@ -194,6 +194,7 @@ class PowermetricsTelemetryAdapter:
             telemetry_backend=TelemetryBackend.POWERMETRICS,
             gpu_idle_ratio_mean=idle_quality["gpu_idle_ratio_mean"],
             gpu_idle_ratio_min=idle_quality["gpu_idle_ratio_min"],
+            gpu_freq_mhz_mean=idle_quality["gpu_freq_mhz_mean"],
             gpu_freq_hz_mean=idle_quality["gpu_freq_hz_mean"],
             idle_window_suspect=idle_quality["idle_window_suspect"],
         )
@@ -1051,6 +1052,7 @@ def idle_window_gpu_quality(records: list[dict[str, Any]]) -> dict[str, float | 
         return {
             "gpu_idle_ratio_mean": None,
             "gpu_idle_ratio_min": None,
+            "gpu_freq_mhz_mean": None,
             "gpu_freq_hz_mean": None,
             "idle_window_suspect": None,
         }
@@ -1076,6 +1078,9 @@ def idle_window_gpu_quality(records: list[dict[str, Any]]) -> dict[str, float | 
     return {
         "gpu_idle_ratio_mean": idle_mean,
         "gpu_idle_ratio_min": idle_min,
+        "gpu_freq_mhz_mean": freq_mean,
+        # Deprecated legacy alias: preserve the historical MHz-valued number
+        # under its old false-Hz name so stored eras remain distinguishable.
         "gpu_freq_hz_mean": freq_mean,
         "idle_window_suspect": suspect,
     }

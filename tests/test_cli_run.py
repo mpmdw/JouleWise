@@ -821,6 +821,7 @@ class StrictValidateTests(CliRunTestCase):
         bundle = self.make_bundle("strict-legacy-null-additive")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         del summary["summary_provenance"]
+        del summary["idle_baseline"]["gpu_freq_mhz_mean"]
         del summary["idle_baseline"]["gpu_freq_hz_mean"]
         del summary["idle_baseline"]["gpu_idle_ratio_mean"]
         del summary["idle_baseline"]["gpu_idle_ratio_min"]
@@ -1053,6 +1054,27 @@ class StrictValidateTests(CliRunTestCase):
         problems = validate_bundle(bundle, strict=True)
         self.assertEqual(len(problems), 1)
         self.assertIn("idle_baseline.gpu_freq_hz_mean", problems[0])
+
+    def test_stored_mhz_value_drift_still_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-stored-mhz-drift")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["idle_baseline"]["gpu_freq_mhz_mean"] = 123.0
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        problems = validate_bundle(bundle, strict=True)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("idle_baseline.gpu_freq_mhz_mean", problems[0])
+
+    def test_pre_repair_0_5_summary_missing_mhz_field_passes_strict(self) -> None:
+        bundle = self.make_bundle("strict-pre-repair-0-5")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["idle_baseline"]["gpu_freq_mhz_mean"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
 
     def test_non_null_fresh_value_missing_from_stored_fails_strict(self) -> None:
         bundle = self.make_bundle("strict-missing-non-null")
