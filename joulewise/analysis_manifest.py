@@ -143,15 +143,20 @@ FLOOR_SELECTOR_KEYS = {
 REGISTRY_KEYS = {
     "schema_version",
     "registry_id",
+    "freeze_status",
     "plan_id",
     "family_id",
     "claim_role",
+    "sampling_plan",
     "multiplicity",
     "metrics",
     "condition_pairs",
 }
 REGISTRY_MULTIPLICITY_KEYS = {"method", "alpha", "q"}
 REGISTRY_PAIR_KEYS = {"condition_a", "condition_b"}
+REGISTRY_SAMPLING_KEYS = {"design", "planned_n_blocks", "freeze_basis"}
+AUTHORIZED_PLANNED_N_BLOCKS = {5, 10}
+REGISTRY_FREEZE_BASIS = "window_a_variance_mde_before_campaign_execution"
 
 
 class AnalysisManifestError(ValueError):
@@ -489,12 +494,29 @@ def validate_analysis_registry(
         errors.append(f"registry.schema_version: expected {REGISTRY_SCHEMA_VERSION!r}")
     if value["registry_id"] != "slice_2m_ap2_v1":
         errors.append("registry.registry_id: expected 'slice_2m_ap2_v1'")
+    if value["freeze_status"] != "frozen":
+        errors.append("registry.freeze_status: expected 'frozen'")
     if value["plan_id"] != "AP-2":
         errors.append("registry.plan_id: expected 'AP-2'")
     if value["family_id"] != "FAM-2M-SHAPE-CONTRASTS":
         errors.append("registry.family_id: expected 'FAM-2M-SHAPE-CONTRASTS'")
     if value["claim_role"] != "primary":
         errors.append("registry.claim_role: expected 'primary'")
+    sampling = value["sampling_plan"]
+    if _exact_keys(sampling, REGISTRY_SAMPLING_KEYS, "registry.sampling_plan", errors):
+        planned_n = sampling["planned_n_blocks"]
+        if sampling["design"] != "fixed_n":
+            errors.append("registry.sampling_plan.design: expected 'fixed_n'")
+        if (
+            isinstance(planned_n, bool)
+            or not isinstance(planned_n, int)
+            or planned_n not in AUTHORIZED_PLANNED_N_BLOCKS
+        ):
+            errors.append("registry.sampling_plan.planned_n_blocks: expected frozen n of 5 or 10")
+        if sampling["freeze_basis"] != REGISTRY_FREEZE_BASIS:
+            errors.append(
+                "registry.sampling_plan.freeze_basis: expected Window-A variance/MDE freeze before campaign execution"
+            )
     multiplicity = value["multiplicity"]
     if _exact_keys(multiplicity, REGISTRY_MULTIPLICITY_KEYS, "registry.multiplicity", errors):
         if multiplicity != {"method": "holm", "alpha": 0.05, "q": None}:
@@ -746,7 +768,7 @@ def build_slice_2m_analysis_manifest(
         raise AnalysisManifestError("order manifest schema_version is not joulewise.order_manifest.v1")
     entries = _build_entries(config_dir, order)
     model_tags = sorted({entry["model_tag"] for entry in entries})
-    planned_n_blocks = 5
+    planned_n_blocks = registry.value["sampling_plan"]["planned_n_blocks"]
     families, contrasts = _build_families_and_contrasts(
         model_tags, registry.value, planned_n_blocks
     )
@@ -762,7 +784,7 @@ def build_slice_2m_analysis_manifest(
             "sampling_plan": {
                 "design": "fixed_n",
                 "planned_n_blocks": planned_n_blocks,
-                "freeze_basis": "generator_design_before_bundle_execution",
+                "freeze_basis": registry.value["sampling_plan"]["freeze_basis"],
                 "allowed_replacement_reasons": [
                     "bundle_incomplete",
                     "run_failed",
@@ -980,9 +1002,15 @@ def validate_analysis_manifest(
         sampling = design["sampling_plan"]
         if _exact_keys(sampling, SAMPLING_KEYS, "manifest.design.sampling_plan", errors):
             planned_n = sampling["planned_n_blocks"]
-            if sampling["design"] != "fixed_n" or planned_n != 5:
-                errors.append("manifest.design.sampling_plan: Slice-2M requires fixed_n=5")
-            if sampling["freeze_basis"] != "generator_design_before_bundle_execution":
+            if sampling["design"] != "fixed_n":
+                errors.append("manifest.design.sampling_plan.design: must be 'fixed_n'")
+            if (
+                isinstance(planned_n, bool)
+                or not isinstance(planned_n, int)
+                or planned_n not in AUTHORIZED_PLANNED_N_BLOCKS
+            ):
+                errors.append("manifest.design.sampling_plan.planned_n_blocks: expected frozen n of 5 or 10")
+            if sampling["freeze_basis"] != REGISTRY_FREEZE_BASIS:
                 errors.append("manifest.design.sampling_plan.freeze_basis: invalid value")
             if sampling["allowed_replacement_reasons"] != [
                 "bundle_incomplete",
@@ -1008,6 +1036,10 @@ def validate_analysis_manifest(
         registry, ap_row = load_analysis_registry(registry_path, ap_path)
     except AnalysisManifestError as exc:
         errors.append(str(exc))
+    if registry is not None and planned_n != registry.value["sampling_plan"]["planned_n_blocks"]:
+        errors.append(
+            "manifest.design.sampling_plan.planned_n_blocks: post-freeze n mutation differs from frozen registry"
+        )
     source = value["source"]
     order: Mapping[str, Any] | None = None
     order_rows: list[Mapping[str, Any]] = []
@@ -1031,6 +1063,10 @@ def validate_analysis_manifest(
                     order = _parse_json_object(order_raw, str(order_path))
                     if order_source["sha256"] != sha256_bytes(order_raw):
                         errors.append("manifest.source.order_manifest.sha256: source hash mismatch")
+                    if order.get("planned_n_blocks") != planned_n:
+                        errors.append(
+                            "order_manifest.planned_n_blocks: inconsistent frozen block authority"
+                        )
                     rows = order.get("executed_order")
                     if isinstance(rows, list) and all(isinstance(row, Mapping) for row in rows):
                         order_rows = list(rows)
@@ -1085,6 +1121,28 @@ def validate_analysis_manifest(
             _validate_config_link(entry, order_row, manifest_dir, f"entries[{index}]", errors)
     if order_rows and len(entries) != len(order_rows):
         errors.append("manifest.entries: count differs from order_manifest.executed_order")
+    if (
+        isinstance(planned_n, int)
+        and not isinstance(planned_n, bool)
+        and planned_n in AUTHORIZED_PLANNED_N_BLOCKS
+    ):
+        expected_rep_indexes = set(range(1, planned_n + 1))
+        rep_indexes_by_model: dict[str, set[int]] = {}
+        for entry in entries:
+            if not isinstance(entry, Mapping):
+                continue
+            model_tag = entry.get("model_tag")
+            rep_index = entry.get("planned_rep_index")
+            if (
+                isinstance(model_tag, str)
+                and isinstance(rep_index, int)
+                and not isinstance(rep_index, bool)
+            ):
+                rep_indexes_by_model.setdefault(model_tag, set()).add(rep_index)
+        if any(rep_indexes != expected_rep_indexes for rep_indexes in rep_indexes_by_model.values()):
+            errors.append(
+                "manifest.entries: mixed n=5/n=10 or inconsistent frozen block authority"
+            )
     if manifest_dir is not None:
         json_names = {path.name for path in manifest_dir.glob("*.json")}
         expected_names = set(configs) | {ORDER_MANIFEST_NAME, ANALYSIS_MANIFEST_NAME}
@@ -1289,7 +1347,11 @@ def validate_analysis_manifest(
         model_tag = contrast["cell_a_id"].removeprefix("cell-2m-").removesuffix(
             "-" + contrast["condition_a_id"].removeprefix("cond-2m-")
         )
-        expected_blocks = [f"block-2m-{model_tag}-r{rep:02d}" for rep in range(1, 6)]
+        expected_blocks = (
+            [f"block-2m-{model_tag}-r{rep:02d}" for rep in range(1, planned_n + 1)]
+            if isinstance(planned_n, int) and not isinstance(planned_n, bool)
+            else []
+        )
         if contrast["block_ids"] != expected_blocks:
             errors.append(f"{where}.block_ids: invalid semantic block linkage")
         if named_strata_block_ids is not None and set(block_ids) != named_strata_block_ids:
@@ -1350,7 +1412,12 @@ def validate_analysis_manifest(
         errors.append("manifest.families: a contrast_id appears in more than one family")
     if set(referenced_contrast_ids) != set(contrast_ids):
         errors.append("manifest.families: contrast enumeration is incomplete or has extras")
-    if registry is not None and planned_n == 5:
+    if (
+        registry is not None
+        and isinstance(planned_n, int)
+        and not isinstance(planned_n, bool)
+        and planned_n in AUTHORIZED_PLANNED_N_BLOCKS
+    ):
         model_tags = sorted(
             {entry.get("model_tag") for entry in entries if isinstance(entry.get("model_tag"), str)}
         )

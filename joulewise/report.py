@@ -19,6 +19,13 @@ browser entirely from on-disk bundle artifacts:
   hide it, so such directories are listed in the index with that status and get
   no detail page.
 
+This is a bounded diagnostic browser, not a claim or publication surface.
+Strict-validation results are displayed without filtering discovery: damaged,
+strict-invalid, and incomplete directories remain visible. Token-normalized
+metrics are always accompanied by request energy and the available boundary,
+tokenizer, and denominator provenance (with explicit unknowns for absent
+evidence).
+
 The generator is pure over the on-disk artifacts and writes only under
 ``output_dir``. Its content is deterministic apart from the chart PNGs (whose
 bytes matplotlib does not guarantee to be reproducible).
@@ -35,6 +42,7 @@ trace), the run page notes the omission instead of inventing a fallback.
 from __future__ import annotations
 
 import html
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -88,6 +96,8 @@ class _Bundle:
     metadata: dict[str, Any]
     summary: dict[str, Any]
     reader: BundleReader
+    strict_validation: str
+    strict_problems: tuple[str, ...]
 
     @property
     def status(self) -> str:
@@ -114,6 +124,33 @@ class _Bundle:
         return _as_float(self.summary.get("energy_token_j"))
 
     @property
+    def energy_request_j(self) -> float | None:
+        return _as_float(self.summary.get("energy_request_j"))
+
+    @property
+    def boundary(self) -> str:
+        device = self.metadata.get("device")
+        if isinstance(device, dict):
+            boundary = device.get("boundary")
+            if isinstance(boundary, str) and boundary.strip():
+                return boundary
+        return "unknown"
+
+    @property
+    def tokenizer(self) -> dict[str, Any]:
+        workload = self.metadata.get("workload_provenance")
+        if isinstance(workload, dict):
+            tokenizer = workload.get("tokenizer")
+            if isinstance(tokenizer, dict):
+                return tokenizer
+        return {}
+
+    @property
+    def measurement_quality(self) -> dict[str, Any]:
+        quality = self.summary.get("measurement_quality")
+        return quality if isinstance(quality, dict) else {}
+
+    @property
     def ttft_s(self) -> float | None:
         return _as_float(self.summary.get("ttft_s"))
 
@@ -138,6 +175,23 @@ def _as_float(value: Any) -> float | None:
     return float(value)
 
 
+def _strict_validation(path: Path) -> tuple[str, tuple[str, ...]]:
+    """Run the canonical strict validator without making it an admission gate.
+
+    The import is intentionally local: :mod:`joulewise.cli` imports this module
+    for the report verb, while the CLI owns the shared strict validator. At
+    report-generation time both modules are initialized, so this reuses that
+    policy without a module-import cycle or a second implementation.
+    """
+    try:
+        from joulewise.cli import validate_bundle
+
+        problems = tuple(validate_bundle(path, strict=True))
+    except Exception as exc:  # diagnostics must not hide a damaged directory
+        return "error", (f"strict validator raised {type(exc).__name__}: {exc}",)
+    return ("fail", problems) if problems else ("pass", ())
+
+
 def _discover_bundles(runs_dir: Path) -> list[_Bundle]:
     """Return the run bundles under ``runs_dir`` sorted by run id (D-011).
 
@@ -151,6 +205,7 @@ def _discover_bundles(runs_dir: Path) -> list[_Bundle]:
         if not child.is_dir() or child.name == "experiments":
             continue
         reader = BundleReader(child)
+        strict_validation, strict_problems = _strict_validation(child)
         bundles.append(
             _Bundle(
                 run_id=child.name,
@@ -160,6 +215,8 @@ def _discover_bundles(runs_dir: Path) -> list[_Bundle]:
                 metadata=reader.raw_metadata() or {},
                 summary=reader.raw_summary() or {},
                 reader=reader,
+                strict_validation=strict_validation,
+                strict_problems=strict_problems,
             )
         )
     return bundles
@@ -252,9 +309,14 @@ a { color: #1d6fb8; }
 .status-failed { color: #b00020; font-weight: 600; }
 .status-unsupported { color: #b06a00; font-weight: 600; }
 .status-incomplete { color: #777; font-weight: 600; font-style: italic; }
+.validation-pass { color: #2a7d2a; font-weight: 600; }
+.validation-fail, .validation-error { color: #b00020; font-weight: 600; }
 .failure-box { border: 2px solid #b00020; background: #fff0f1; border-radius: 6px;
                padding: 1rem 1.25rem; margin: 1rem 0; }
 .failure-box h2 { color: #b00020; margin-top: 0; }
+.diagnostic-box { border: 2px solid #1d6fb8; background: #eef7ff; border-radius: 6px;
+                  padding: 1rem 1.25rem; margin: 1rem 0; }
+.diagnostic-box p { margin: 0; }
 .note { color: #666; font-style: italic; }
 img.chart { max-width: 100%; border: 1px solid #ddd; }
 """.strip()
@@ -272,6 +334,99 @@ def _format_number(value: float | None, digits: int = 6) -> str:
     if value is None:
         return "-"
     return f"{value:.{digits}g}"
+
+
+def _known(value: Any) -> str:
+    if value is None or isinstance(value, (dict, list)):
+        return "unknown"
+    if isinstance(value, str) and not value.strip():
+        return "unknown"
+    return str(value)
+
+
+def _strict_validation_label(bundle: _Bundle) -> str:
+    if bundle.strict_validation == "pass":
+        return "pass"
+    count = len(bundle.strict_problems)
+    suffix = "problem" if count == 1 else "problems"
+    return f"{bundle.strict_validation} ({count} {suffix})"
+
+
+def _tokenizer_provenance(bundle: _Bundle) -> list[tuple[str, str]]:
+    return [
+        ("tokenizer identifier", _known(bundle.tokenizer.get("identifier"))),
+        ("tokenizer revision", _known(bundle.tokenizer.get("revision"))),
+        ("tokenizer class", _known(bundle.tokenizer.get("class"))),
+        ("tokenizer vocabulary size", _known(bundle.tokenizer.get("vocab_size"))),
+    ]
+
+
+def _suite_prompt_provenance(bundle: _Bundle) -> tuple[str, str]:
+    """Return recorded suite prompt-source and BOS values, or unknowns.
+
+    These fields live in the immutable per-item output rather than metadata.
+    The report reads them tolerantly because malformed provenance must be
+    diagnosed by strict validation, not make the browser drop the run.
+    """
+    path = bundle.path / "outputs" / "suite_items.jsonl"
+    if not path.is_file():
+        return "unknown", "unknown"
+    prompt_sources: set[str] = set()
+    bos_values: set[str] = set()
+    try:
+        lines = path.read_text().splitlines()
+    except (OSError, UnicodeDecodeError):
+        return "unknown", "unknown"
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            return "unknown", "unknown"
+        if not isinstance(record, dict):
+            return "unknown", "unknown"
+        prompt_source = record.get("prompt_source")
+        if isinstance(prompt_source, str) and prompt_source:
+            prompt_sources.add(prompt_source)
+        bos_present = record.get("bos_present")
+        if isinstance(bos_present, bool):
+            bos_values.add(str(bos_present).lower())
+    return (
+        ", ".join(sorted(prompt_sources)) or "unknown",
+        ", ".join(sorted(bos_values)) or "unknown",
+    )
+
+
+def _denominator_provenance(bundle: _Bundle) -> list[tuple[str, str]]:
+    prompt_source, bos_present = _suite_prompt_provenance(bundle)
+    return [
+        (
+            "total-token denominator source",
+            _known(bundle.measurement_quality.get("token_count_source")),
+        ),
+        (
+            "output-token denominator source",
+            _known(bundle.measurement_quality.get("token_counts_source")),
+        ),
+        ("prompt source", prompt_source),
+        ("BOS present", bos_present),
+    ]
+
+
+def _provenance_lines(pairs: list[tuple[str, str]]) -> str:
+    return "<br>".join(
+        f"<strong>{_esc(label)}:</strong> {_esc(value)}" for label, value in pairs
+    )
+
+
+def _diagnostic_notice() -> str:
+    return (
+        '<div class="diagnostic-box"><p><strong>Diagnostic browser only.</strong> '
+        "It lists on-disk runs, including invalid and incomplete bundles. "
+        "Strict validation here checks artifact consistency only; no displayed "
+        "state is a publication or result-claim decision.</p></div>"
+    )
 
 
 def _page(title: str, body: str) -> str:
@@ -300,7 +455,13 @@ def _render_index(bundles: list[_Bundle]) -> str:
             f"<td>{_esc(bundle.target)}</td>"
             f"<td>{_esc(bundle.model)}</td>"
             f'<td class="{_status_class(bundle.status)}">{_esc(bundle.status)}</td>'
+            f'<td class="validation-{_esc(bundle.strict_validation)}">'
+            f"{_esc(_strict_validation_label(bundle))}</td>"
+            f"<td>{_format_number(bundle.energy_request_j)}</td>"
             f"<td>{_format_number(bundle.energy_token_j)}</td>"
+            f"<td>{_esc(bundle.boundary)}</td>"
+            f"<td>{_provenance_lines(_tokenizer_provenance(bundle))}</td>"
+            f"<td>{_provenance_lines(_denominator_provenance(bundle))}</td>"
             f"<td>{_format_number(bundle.ttft_s)}</td>"
             f"<td>{link}</td>"
             "</tr>"
@@ -308,13 +469,18 @@ def _render_index(bundles: list[_Bundle]) -> str:
     table = (
         "<table>\n<thead><tr>"
         "<th>run id</th><th>target</th><th>model</th><th>status</th>"
-        "<th>energy/token (J)</th><th>TTFT (s)</th><th>detail</th>"
+        "<th>strict validation</th><th>request energy (J)</th>"
+        "<th>tokenizer-scoped energy/token (J)</th><th>measurement boundary</th>"
+        "<th>tokenizer provenance</th><th>denominator provenance</th>"
+        "<th>TTFT (s)</th><th>detail</th>"
         "</tr></thead>\n<tbody>\n"
         + "\n".join(rows)
         + "\n</tbody>\n</table>"
     )
     body = (
         "<h1>JouleWise run report</h1>\n"
+        + _diagnostic_notice()
+        + "\n"
         f"<p>{len(bundles)} run director"
         f"{'y' if len(bundles) == 1 else 'ies'} discovered.</p>\n"
         + table
@@ -352,10 +518,19 @@ def _key_value_table(pairs: list[tuple[str, str]]) -> str:
 
 def _render_run_page(bundle: _Bundle, chart_rel: str | None) -> str:
     parts: list[str] = [f"<h1>Run <code>{_esc(bundle.run_id)}</code></h1>"]
+    parts.append(_diagnostic_notice())
     parts.append(
         f'<p>status: <span class="{_status_class(bundle.status)}">'
         f"{_esc(bundle.status)}</span></p>"
     )
+    parts.append(
+        f'<p>strict validation: <span class="validation-{_esc(bundle.strict_validation)}">'
+        f"{_esc(_strict_validation_label(bundle))}</span></p>"
+    )
+    if bundle.strict_problems:
+        parts.append("<details><summary>Strict-validation diagnostics</summary><ul>")
+        parts.extend(f"<li>{_esc(problem)}</li>" for problem in bundle.strict_problems)
+        parts.append("</ul></details>")
     parts.append('<p><a href="../index.html">&larr; back to index</a></p>')
 
     if bundle.is_failure:
@@ -385,8 +560,14 @@ def _render_run_page(bundle: _Bundle, chart_rel: str | None) -> str:
     parts.append("<h2>Metadata</h2>")
     parts.append(_key_value_table(_flatten(bundle.metadata)))
 
-    parts.append("<h2>Summary metrics</h2>")
-    parts.append(_key_value_table(_flatten(bundle.summary)))
+    parts.append("<h2>Summary metrics and provenance</h2>")
+    metric_context = [
+        ("diagnostic.request_energy_j", _format_number(bundle.energy_request_j)),
+        ("diagnostic.measurement_boundary", bundle.boundary),
+        *_tokenizer_provenance(bundle),
+        *_denominator_provenance(bundle),
+    ]
+    parts.append(_key_value_table(metric_context + _flatten(bundle.summary)))
 
     return _page(f"Run {bundle.run_id}", "\n".join(parts))
 

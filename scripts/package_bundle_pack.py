@@ -26,7 +26,9 @@ from joulewise.publication_privacy import (
     audit_private_bundle,
     classification_for_path,
     public_bundle_id,
+    source_provenance_problems,
     transform_public_bundle,
+    tree_identity_descriptor,
     tree_sha256,
     verify_public_bundle,
 )
@@ -184,6 +186,16 @@ def _preflight_bundle(bundle: Path) -> dict[str, Any]:
     metadata = reader.raw_metadata()
     if not isinstance(metadata, dict):
         raise BundlePackError(f"metadata.json is not readable after strict validation: {bundle}")
+    provenance_problems = source_provenance_problems(
+        metadata.get("source_provenance"),
+        require_eligible=True,
+    )
+    if provenance_problems:
+        rendered = "; ".join(provenance_problems)
+        raise BundlePackError(
+            f"bundle source provenance is not claim-eligible and cannot be packed: "
+            f"{bundle}: {rendered}"
+        )
     summary_status = _summary_status(bundle)
     if summary_status != "succeeded":
         raise BundlePackError(
@@ -277,6 +289,7 @@ def build_manifest(
         "project_tree_state": provenance["project_tree_state"],
         "privacy_policy_schema": POLICY_SCHEMA,
         "transformation_schema": TRANSFORMATION_SCHEMA,
+        "bundle_tree_identity": tree_identity_descriptor(),
         "transformation_manifest": TRANSFORMATION_MANIFEST_NAME,
         "transformation_manifest_sha256": transformation_manifest_sha256,
         "byte_identical_to_private_sources": False,
@@ -362,6 +375,7 @@ def package_bundles(bundle_dirs: list[Path], output_dir: Path) -> dict[str, Any]
         transformation_manifest = {
             "schema": TRANSFORMATION_SCHEMA,
             "privacy_policy_schema": POLICY_SCHEMA,
+            "bundle_tree_identity": tree_identity_descriptor(),
             "byte_identical_to_private_sources": False,
             "bundle_count": len(transformation_entries),
             "bundles": transformation_entries,
@@ -438,6 +452,8 @@ def _transformation_bundle_map(
         )
     if value.get("privacy_policy_schema") != POLICY_SCHEMA:
         problems.append("transformation privacy policy schema does not match the packer")
+    if value.get("bundle_tree_identity") != tree_identity_descriptor():
+        problems.append("transformation bundle-tree identity does not match the packer")
     if value.get("byte_identical_to_private_sources") is not False:
         problems.append("transformation manifest must assert non-byte-identity")
     bundles = value.get("bundles")
@@ -472,6 +488,8 @@ def _verify_transformation_entry(
         problems.append(f"{bundle_id}: transformation entry schema is invalid")
     if transformation.get("privacy_policy_schema") != POLICY_SCHEMA:
         problems.append(f"{bundle_id}: transformation privacy policy is invalid")
+    if transformation.get("bundle_tree_identity") != tree_identity_descriptor():
+        problems.append(f"{bundle_id}: transformation bundle-tree identity is invalid")
     if transformation.get("byte_identical_to_private_source") is not False:
         problems.append(f"{bundle_id}: transformation must assert source non-byte-identity")
     if transformation.get("source_bundle_sha256") != pack_entry.get("source_bundle_sha256"):
@@ -598,6 +616,8 @@ def verify_pack(pack_dir: Path) -> list[str]:
         problems.append("manifest privacy_policy_schema does not match the packer")
     if manifest.get("transformation_schema") != TRANSFORMATION_SCHEMA:
         problems.append("manifest transformation_schema does not match the packer")
+    if manifest.get("bundle_tree_identity") != tree_identity_descriptor():
+        problems.append("manifest bundle_tree_identity does not match the packer")
     if manifest.get("transformation_manifest") != TRANSFORMATION_MANIFEST_NAME:
         problems.append("manifest transformation_manifest filename is invalid")
     if manifest.get("byte_identical_to_private_sources") is not False:

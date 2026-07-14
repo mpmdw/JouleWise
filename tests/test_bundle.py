@@ -7,12 +7,14 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
 import joulewise
+import joulewise.bundle as bundle_module
 from joulewise.bundle import (
     BundleError,
     RunBundleWriter,
@@ -52,6 +54,21 @@ class StrReprTrap:
     def __repr__(self) -> str:
         type(self).repr_calls += 1
         raise AssertionError("metadata quarantine called repr()")
+def source_state(
+    *,
+    commit: str = "1" * 40,
+    tracked: str = "clean",
+    staged: str = "clean",
+    untracked: str = "clean",
+    diff_sha256: str = "2" * 64,
+) -> dict[str, str]:
+    return {
+        "git_commit": commit,
+        "tracked": tracked,
+        "staged": staged,
+        "untracked": untracked,
+        "diff_sha256": diff_sha256,
+    }
 
 
 def load_example_config(**overrides) -> BenchmarkConfig:
@@ -162,6 +179,33 @@ class RunBundleWriterTests(unittest.TestCase):
     def make_writer(self, **config_overrides) -> RunBundleWriter:
         config = load_example_config(**config_overrides) if config_overrides else self.config
         return RunBundleWriter.create(self.runs_root, config, self.clock)
+
+    def make_source_checkout(self) -> tuple[Path, Path, Path]:
+        root = Path(self._tmp.name) / "source-checkout"
+        source_path = root / "joulewise" / "bundle.py"
+        outside_path = root / "scripts" / "outside.py"
+        source_path.parent.mkdir(parents=True)
+        outside_path.parent.mkdir(parents=True)
+        source_path.write_text("# source marker\n")
+        outside_path.write_text("# outside marker\n")
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "bundle-test@example.invalid"],
+            cwd=root,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Bundle Test"],
+            cwd=root,
+            check=True,
+        )
+        subprocess.run(["git", "add", "."], cwd=root, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "fixture"],
+            cwd=root,
+            check=True,
+        )
+        return root, source_path, outside_path
 
     def event(self, event_type: str = "stage_started", phase: str = "validate") -> RuntimeEvent:
         return RuntimeEvent(
@@ -309,6 +353,147 @@ class RunBundleWriterTests(unittest.TestCase):
             or re.fullmatch(r"[0-9a-f]{40}", metadata["git_commit"]),
             metadata["git_commit"],
         )
+        self.assertEqual(
+            metadata["source_provenance"]["start"]["git_commit"],
+            metadata["git_commit"],
+        )
+
+    def test_source_provenance_is_captured_at_creation_and_compared_at_metadata(self) -> None:
+        start = source_state()
+        probe_outputs = [
+            str(self._tmp.name).encode() + b"\n",
+            b"1" * 40 + b"\n",
+            b"",
+            b"",
+            b"",
+            str(self._tmp.name).encode() + b"\n",
+            b"1" * 40 + b"\n",
+            b"",
+            b"",
+            b"new-source.py\0",
+        ]
+
+        def fake_git(*args, **kwargs):
+            return mock.Mock(
+                returncode=0,
+                communicate=mock.Mock(return_value=(probe_outputs.pop(0), b"")),
+            )
+
+        with mock.patch("joulewise.bundle._GIT_POPEN", side_effect=fake_git) as capture:
+            writer = self.make_writer(run_id="source-change")
+            self.assertEqual(capture.call_count, 5)
+            writer.append_event(self.event(phase="adapter-executed"))
+            (Path(self._tmp.name) / "new-source.py").write_text("changed\n")
+            writer.write_metadata({})
+
+        source_dir = Path(bundle_module.__file__).resolve().parent
+        expected_cwds = [source_dir, *([Path(self._tmp.name)] * 4)] * 2
+        self.assertEqual(
+            [call.kwargs["cwd"] for call in capture.call_args_list],
+            expected_cwds,
+        )
+
+        provenance = json.loads(
+            (writer.path / "metadata.json").read_text()
+        )["source_provenance"]
+        self.assertEqual(capture.call_count, 10)
+        self.assertEqual(provenance["start"]["git_commit"], start["git_commit"])
+        self.assertEqual(provenance["start"]["tracked"], "clean")
+        self.assertEqual(provenance["end"]["untracked"], "dirty")
+        self.assertNotEqual(
+            provenance["start"]["diff_sha256"],
+            provenance["end"]["diff_sha256"],
+        )
+        self.assertIs(provenance["changed_during_run"], True)
+        self.assertIs(provenance["claim_eligible"], False)
+        self.assertEqual(
+            provenance["reason_codes"],
+            ["end_untracked_dirty", "source_changed_during_run"],
+        )
+
+    def test_writer_creation_captures_tracked_change_outside_package_tree(self) -> None:
+        root, source_path, outside_path = self.make_source_checkout()
+        outside_path.write_text("# changed outside package\n")
+
+        with mock.patch.object(bundle_module, "__file__", str(source_path)):
+            writer = self.make_writer(run_id="outside-package-dirty")
+            writer.write_metadata({})
+
+        provenance = json.loads(
+            (writer.path / "metadata.json").read_text()
+        )["source_provenance"]
+        self.assertEqual(provenance["start"]["tracked"], "dirty")
+        self.assertEqual(provenance["end"]["tracked"], "dirty")
+        self.assertEqual(
+            provenance["reason_codes"],
+            ["start_tracked_dirty", "end_tracked_dirty"],
+        )
+        self.assertEqual(root, source_path.parent.parent)
+
+    def test_writer_creation_resolves_root_untracked_path_from_checkout_root(self) -> None:
+        root, source_path, _ = self.make_source_checkout()
+        (root / "root-note.txt").write_text("root-relative content\n")
+
+        with (
+            mock.patch.object(bundle_module, "__file__", str(source_path)),
+            mock.patch(
+                "joulewise.bundle._untracked_identity",
+                wraps=bundle_module._untracked_identity,
+            ) as untracked_identity,
+        ):
+            writer = self.make_writer(run_id="root-untracked")
+            writer.write_metadata({})
+
+        provenance = json.loads(
+            (writer.path / "metadata.json").read_text()
+        )["source_provenance"]
+        self.assertEqual(provenance["start"]["untracked"], "dirty")
+        self.assertEqual(provenance["end"]["untracked"], "dirty")
+        self.assertEqual(untracked_identity.call_count, 2)
+        for call in untracked_identity.call_args_list:
+            self.assertEqual(call.args, (root.resolve(), b"root-note.txt\0"))
+
+    def test_dirty_and_unknown_source_provenance_do_not_block_bundle_completion(self) -> None:
+        for label in ("dirty", "unknown"):
+            if label == "dirty":
+                probe_outputs = [
+                    value
+                    for _ in range(2)
+                    for value in (
+                        str(REPO_ROOT).encode() + b"\n",
+                        b"1" * 40 + b"\n",
+                        b"tracked diff bytes",
+                        b"staged diff bytes",
+                        b"",
+                    )
+                ]
+
+                def fake_git(*args, **kwargs):
+                    return mock.Mock(
+                        returncode=0,
+                        communicate=mock.Mock(return_value=(probe_outputs.pop(0), b"")),
+                    )
+            else:
+                def fake_git(*args, **kwargs):
+                    return mock.Mock(
+                        returncode=1,
+                        communicate=mock.Mock(return_value=(b"", b"")),
+                    )
+
+            with self.subTest(label=label), mock.patch(
+                "joulewise.bundle._GIT_POPEN",
+                side_effect=fake_git,
+            ):
+                writer = self.make_writer(run_id=f"source-{label}")
+                writer.write_metadata({})
+                writer.write_summary(make_summary())
+                finalized = writer.finalize()
+                metadata = json.loads((finalized / "metadata.json").read_text())
+                self.assertIs(
+                    metadata["source_provenance"]["claim_eligible"],
+                    False,
+                )
+                self.assertTrue((finalized / "summary_metrics.json").is_file())
 
     def test_valid_metadata_serialization_is_byte_unchanged(self) -> None:
         writer = self.make_writer()
@@ -322,7 +507,7 @@ class RunBundleWriterTests(unittest.TestCase):
             mock.patch(
                 "joulewise.bundle.platform.python_version", return_value="3.test"
             ),
-            mock.patch("joulewise.bundle._git_commit", return_value="a" * 40),
+            mock.patch("joulewise.bundle._capture_source_state", return_value={"git_commit": "a" * 40, "tracked": "clean", "staged": "clean", "untracked": "clean", "diff_sha256": "0" * 64}),
         ):
             writer.write_metadata(extra)
         expected = {

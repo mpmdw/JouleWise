@@ -1,0 +1,8 @@
+Table T1: per-stack instrument results — legacy L1 (manual review; pre-2M). Values are mean, sample SD, and observed min–max over n=3 sequential repetitions per exact stack. No cross-stack comparison is made.
+
+The per-output-token companion is omitted because runtime stop-reason and output-policy provenance are unavailable; no stop reason is inferred from the cap.
+
+| stack_id | model_display_name | n | gross_j_request_mean | gross_j_request_sd | gross_j_request_min_max | idlesub_j_request_mean | idlesub_j_request_sd | idlesub_j_request_min_max | throughput_tokens_s_mean | ttft_ms_mean | token_companion_status | boundary | evidence_label | quality_waiver |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| LEGACY-M3MAX-QWEN25-1P5B-MLX | Qwen2.5-1.5B-Instruct-4bit | 3 | 47.2 | 0.7 | 46.6–48.0 | 44.4 | 3.3 | 40.7–46.3 | 257.4 | 94.1 | omitted: runtime stop reason and output policy unavailable | Apple SoC CPU + GPU + ANE package power | legacy L1 (manual review; pre-2M) | cooldown cap hit recorded before r2; point retained and reported (legacy manual-review carve-out) |
+| LEGACY-M3MAX-QWEN35-122B-A10B-MLX | Qwen3.5-122B-A10B-4bit | 3 | 304.0 | 0.9 | 303.5–305.1 | 298.7 | 0.6 | 298.1–299.3 | 46.2 | 271.7 | omitted: runtime stop reason and output policy unavailable | Apple SoC CPU + GPU + ANE package power | legacy L1 (manual review; pre-2M) | none |

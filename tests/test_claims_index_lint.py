@@ -10,6 +10,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from joulewise.analysis_engine.artifact import validate_claim_verdicts
+
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "claims_lint.py"
@@ -317,18 +319,82 @@ def lint_fixture(root: Path) -> list:
     )
 
 
+def run_all_cli_fixture(root: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--mode",
+            "all",
+            "--root",
+            str(root),
+            "--analysis-plans",
+            str(ROOT / claims_lint.DEFAULT_AP_PATH),
+            "--registry",
+            str(ROOT / claims_lint.DEFAULT_REGISTRY_PATH),
+            "--campaign-packs",
+            str(ROOT / claims_lint.DEFAULT_PACK_DIR),
+            "--claims-ladder",
+            str(ROOT / claims_lint.DEFAULT_CLAIMS_LADDER_PATH),
+            "--analysis-registry",
+            str(ROOT / claims_lint.DEFAULT_ANALYSIS_REGISTRY_PATH),
+            "--claims-index",
+            "claims_index.jsonl",
+            "--claim-verdict-dir",
+            "analysis",
+            "--claims-projection",
+            "claims_index.md",
+            "--json",
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+
 def error_codes(findings: list) -> set[str]:
     return {finding.code for finding in findings if finding.severity == "error"}
 
 
 class ClaimIndexLintTests(unittest.TestCase):
-    def test_claim_index_mode_is_explicit_even_alongside_all(self) -> None:
-        self.assertNotIn("claim-index", claims_lint.selected_modes(None))
-        self.assertNotIn("claim-index", claims_lint.selected_modes(["all"]))
-        self.assertIn(
-            "claim-index",
-            claims_lint.selected_modes(["all", "claim-index"]),
+    def test_default_and_all_include_unified_claim_index_gate(self) -> None:
+        self.assertIn("claim-index", claims_lint.selected_modes(None))
+        self.assertIn("claim-index", claims_lint.selected_modes(["all"]))
+
+    def test_version_dispatch_authority_cases_fail_closed(self) -> None:
+        legacy = json.loads(
+            (ROOT / "analysis/rpt001-v1/claims_index.jsonl").read_text(
+                encoding="utf-8"
+            )
         )
+        current = base_row()
+        unknown = {
+            "schema": "joulewise.claims_index.v1",
+            "claim_id": "CLM-UNKNOWN-001",
+            "claim_text": "This row has no authority-bearing dialect fields.",
+        }
+        hybrid = copy.deepcopy(current)
+        hybrid["claim_level"] = "L2"
+        self.assertEqual(claims_lint._claim_row_dialect(legacy), "exact-legacy")
+        self.assertEqual(claims_lint._claim_row_dialect(current), "engine-linked")
+        self.assertEqual(claims_lint._claim_row_dialect(unknown), "unknown")
+        self.assertEqual(claims_lint._claim_row_dialect(hybrid), "hybrid")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for label, row, expected in (
+                ("unknown", unknown, "CLAIM_INDEX_UNKNOWN_DIALECT"),
+                ("hybrid", hybrid, "CLAIM_INDEX_AMBIGUOUS_DIALECT"),
+            ):
+                with self.subTest(label=label):
+                    (root / "claims.jsonl").write_text(
+                        json.dumps(row) + "\n", encoding="utf-8"
+                    )
+                    findings = claims_lint.lint_claim_index(
+                        root, Path("claims.jsonl"), Path("analysis")
+                    )
+                    self.assertIn(expected, error_codes(findings))
 
     def test_current_pre_p2037_legacy_row_is_exactly_grandfathered(self) -> None:
         canonical_row = json.loads(
@@ -387,6 +453,28 @@ class ClaimIndexLintTests(unittest.TestCase):
             ["CLAIM_INDEX_PRE_P2037_LEGACY_SKIPPED"],
         )
 
+    def test_default_and_all_cli_reach_unified_version_dispatch(self) -> None:
+        for mode_args in ([], ["--mode", "all"]):
+            with self.subTest(mode_args=mode_args):
+                result = subprocess.run(
+                    [sys.executable, str(SCRIPT), *mode_args, "--json"],
+                    cwd=ROOT,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                payload = json.loads(result.stdout)
+                self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+                self.assertEqual(payload["errors"], 0, payload)
+                self.assertEqual(
+                    sum(
+                        finding["code"] == "CLAIM_INDEX_PRE_P2037_LEGACY_SKIPPED"
+                        for finding in payload["findings"]
+                    ),
+                    1,
+                    payload,
+                )
+
     def test_exact_grandfathered_row_may_appear_only_once(self) -> None:
         canonical_row = json.loads(
             (ROOT / "analysis/rpt001-v1/claims_index.jsonl").read_text(encoding="utf-8")
@@ -432,6 +520,34 @@ class ClaimIndexLintTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
             self.assertEqual(payload["errors"], 0, payload)
 
+    def test_wording_gate_allows_supported_l2_direction_but_keeps_l1_conservative(self) -> None:
+        claim_text = (
+            "Within the named boundary, condition A uses less energy than condition B."
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            row = base_row()
+            row["claim_text"] = claim_text
+            write_fixture(root, base_artifact(), row)
+            self.assertNotIn(
+                "CLAIM_INDEX_FORBIDDEN_CLAIM_UPGRADE",
+                error_codes(lint_fixture(root)),
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            row = base_row()
+            row.update(
+                claim_text=claim_text,
+                ladder_level="L1",
+                caveat="Instrument-level wording only.",
+            )
+            write_fixture(root, base_artifact(), row)
+            self.assertIn(
+                "CLAIM_INDEX_FORBIDDEN_CLAIM_UPGRADE",
+                error_codes(lint_fixture(root)),
+            )
+
     def test_changed_verdict_bytes_require_updated_index_hash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -469,6 +585,51 @@ class ClaimIndexLintTests(unittest.TestCase):
                 "CLAIM_INDEX_VERDICT_SCHEMA_INVALID",
                 error_codes(lint_fixture(root)),
             )
+
+    def test_all_mode_dispatch_rejects_engine_and_b15_mutation_union(self) -> None:
+        mutants: list[tuple[str, dict, str]] = []
+
+        engine_semantic = base_artifact()
+        engine_semantic["engine"]["algorithm_version"] = "future"
+        engine_semantic["claim_verdicts_id"] = canonical_verdict_id(engine_semantic)
+        mutants.append(("engine semantic", engine_semantic, "unsupported implementation"))
+
+        original = base_artifact()
+        reordered = {key: original[key] for key in reversed(tuple(original))}
+        reordered["claim_verdicts_id"] = canonical_verdict_id(reordered)
+        mutants.append(("B15 ordering", reordered, "pinned B13 order"))
+
+        absolute_path = base_artifact()
+        absolute_path["bundle_audit"][0]["relative_path"] = "/tmp/run"
+        absolute_path["claim_verdicts_id"] = canonical_verdict_id(absolute_path)
+        mutants.append(("B15 path", absolute_path, "absolute path is forbidden"))
+
+        two_look = base_artifact()
+        two_look["sampling_audit"]["design"] = "two_look_alpha_spending"
+        two_look["claim_verdicts_id"] = canonical_verdict_id(two_look)
+        mutants.append(("production admission", two_look, "deliberately permits only fixed_n"))
+
+        for source, mutant, expected in mutants:
+            with self.subTest(source=source), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                write_fixture(root, mutant, base_row())
+                result = run_all_cli_fixture(root)
+                payload = json.loads(result.stdout)
+                self.assertEqual(result.returncode, 2, result.stderr + result.stdout)
+                self.assertTrue(
+                    any(
+                        finding["code"] == "CLAIM_INDEX_VERDICT_SCHEMA_INVALID"
+                        and expected in finding["message"]
+                        for finding in payload["findings"]
+                    ),
+                    payload,
+                )
+
+                if source == "B15 ordering":
+                    # Historic divergence pinned: the engine validator accepted
+                    # reordered keys while the duplicated B15 validator rejected
+                    # them. The --mode all row dispatch must retain that rejection.
+                    self.assertEqual(validate_claim_verdicts(mutant), [])
 
     def test_artifact_canonical_id_and_schema_are_validated(self) -> None:
         cases = (

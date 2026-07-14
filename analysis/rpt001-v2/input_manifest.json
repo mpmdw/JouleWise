@@ -1,0 +1,46 @@
+{
+  "analysis_manifest_ref": null,
+  "artifact_version": "rpt001-v2",
+  "bundle_tree_identity": {
+    "algorithm": "sha256",
+    "version": "joulewise.bundle-tree.nul-v1"
+  },
+  "bundle_tree_sha256": {
+    "example-mac-mlx-local__r1": "9376dbc16848e03d3bd54e4fac5598b34e1391d376ef11db527ac1fe25f08773",
+    "example-mac-mlx-local__r2": "8a99d7a851c55e53631df6f910d17ee097cbf8bd19f33d44bcef911a6502e82f",
+    "example-mac-mlx-local__r3": "5ec71ed301ba9c0a48b137b5bdce00b8893c62d4f1397f55aac3c1943ccc9180",
+    "example-mac-mlx-qwen35-122b-512t__r1": "9f162f058bfceb949f34e0c24042c83e8d7f353f97d87b4cf6e0e6dff0912398",
+    "example-mac-mlx-qwen35-122b-512t__r2": "2888c9d205df62e1136a376997ea8a6947683e4311eedaee20e3135bd559e213",
+    "example-mac-mlx-qwen35-122b-512t__r3": "c72cdc34ef3ce9ccfb0a015bed5ace8e4efa7d18f457ac5cd8a0c894acc21268"
+  },
+  "claim_verdict_ref": {
+    "path": null,
+    "schema": "joulewise.claim_verdict.v1",
+    "sha256": null
+  },
+  "evidence_class": "legacy_l1_manual_review_pre_2m",
+  "experiments": [
+    {
+      "experiment_id": "example-mac-mlx-local",
+      "manifest_path": "runs/experiments/example-mac-mlx-local.json",
+      "manifest_sha256": "6a055cdec365bbe0441f6e33fd2fbebdb131bc4fe86779b7724d3b611e4daec9",
+      "members": [
+        "example-mac-mlx-local__r1",
+        "example-mac-mlx-local__r2",
+        "example-mac-mlx-local__r3"
+      ]
+    },
+    {
+      "experiment_id": "example-mac-mlx-qwen35-122b-512t",
+      "manifest_path": "runs/experiments/example-mac-mlx-qwen35-122b-512t.json",
+      "manifest_sha256": "dae8e7435ba27489d13dd1890fa77098450319c9cf228d4ccc3c18903ccce962",
+      "members": [
+        "example-mac-mlx-qwen35-122b-512t__r1",
+        "example-mac-mlx-qwen35-122b-512t__r2",
+        "example-mac-mlx-qwen35-122b-512t__r3"
+      ]
+    }
+  ],
+  "runs_root": "runs",
+  "schema": "joulewise.report_analysis_input.v1"
+}

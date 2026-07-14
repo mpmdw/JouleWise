@@ -26,7 +26,7 @@ from joulewise.analysis_manifest import (  # noqa: E402
 from joulewise.analysis_engine.artifact import (  # noqa: E402
     calculate_claim_verdicts_id,
     render_claim_verdicts,
-    validate_claim_verdicts,
+    validate_claim_verdicts_for_claim_index,
 )
 
 
@@ -39,7 +39,7 @@ DEFAULT_REGISTRY_PATH = Path("docs/research_question_registry.md")
 DEFAULT_PACK_DIR = Path("docs/campaign_packs")
 DEFAULT_CLAIMS_LADDER_PATH = Path("docs/contracts/claims_ladder.md")
 DEFAULT_ANALYSIS_REGISTRY_PATH = REGISTRY_RELATIVE_PATH
-DEFAULT_CLAIMS_INDEX_PATH = Path("analysis/rpt001-v1/claims_index.jsonl")
+DEFAULT_CLAIMS_INDEX_PATH = Path("analysis/rpt001-v2/claims_index.jsonl")
 DEFAULT_CLAIMS_PROJECTION_PATH = Path("docs/phase_4/claims_index.md")
 DEFAULT_CLAIM_VERDICT_DIR = Path("analysis")
 
@@ -67,14 +67,6 @@ RUNTIME_OBSERVED_RE = re.compile(r"\bruntime-observed\b", re.IGNORECASE)
 # Every other .md file must expose recognizable pack structure and lint it.
 PACK_METADATA_FILES = frozenset({"README.md"})
 
-PHASE4_REQUIRED_FIELDS = {
-    "schema", "claim_id", "claim_text", "claim_level", "claim_role",
-    "status", "evidence_class", "legacy_label", "figure_ids", "table_ids",
-    "analysis_function", "dataset_filter", "bundle_ids", "manifest_ids",
-    "stack_ids", "boundary_labels", "metrics", "strict_validation",
-    "quality_waivers", "floor_ref", "analysis_manifest_ref", "verdict_ref",
-    "claim_ceiling_reason_codes", "artifact_manifest",
-}
 PHASE4_STATUSES = {"supported", "weak", "refuted", "out-of-data"}
 PHASE4_LEVELS = {"L0", "L1", "L2", "L3", "L4"}
 PHASE4_FORBIDDEN = re.compile(
@@ -103,92 +95,20 @@ CLAIM_INDEX_REQUIRED_FIELDS = {
     "bundle_manifest_ids",
     "caveat",
 }
-CLAIM_VERDICT_TOP_KEY_ORDER = (
-    "schema_version",
-    "claim_verdicts_id",
-    "engine",
-    "inputs",
-    "bundle_audit",
-    "sampling_audit",
-    "families",
-    "contrasts",
-)
-CLAIM_VERDICT_TOP_KEYS = set(CLAIM_VERDICT_TOP_KEY_ORDER)
-CLAIM_VERDICT_ENGINE_KEY_ORDER = (
-    "implementation",
-    "algorithm_version",
-    "difference_orientation",
-    "policy_identity",
-)
-CLAIM_VERDICT_ENGINE_KEYS = set(CLAIM_VERDICT_ENGINE_KEY_ORDER)
-CLAIM_VERDICT_POLICY_KEYS = {
-    "floor_resolution",
-    "stochastic_variance",
-    "campaign_cooldown",
+LEGACY_CLAIM_ROW_AUTHORITY_FIELDS = {
+    "claim_level",
+    "verdict_ref",
+    "analysis_manifest_ref",
+    "figure_ids",
+    "table_ids",
 }
-CLAIM_VERDICT_INPUT_KEY_ORDER = (
-    "analysis_manifest",
-    "floor_artifact",
-    "runs_root_label",
-    "evidence_class",
-    "limitations",
-)
-CLAIM_VERDICT_INPUT_KEYS = set(CLAIM_VERDICT_INPUT_KEY_ORDER)
-CLAIM_VERDICT_INPUT_LINK_KEYS = {"manifest_id", "file_sha256"}
-CLAIM_VERDICT_FLOOR_LINK_KEYS = {"artifact_id", "file_sha256"}
-CLAIM_VERDICT_SAMPLING_KEY_ORDER = (
-    "design",
-    "planned_n_blocks",
-    "registered_blocks",
-    "valid_replacements",
-    "unregistered_matching_bundles",
-    "top_up_detected",
-    "demoted_contrast_ids",
-)
-CLAIM_VERDICT_SAMPLING_KEYS = set(CLAIM_VERDICT_SAMPLING_KEY_ORDER)
-CLAIM_VERDICT_FAMILY_KEY_ORDER = (
-    "family_instance_id",
-    "plan_id",
-    "claim_role",
-    "method",
-    "alpha",
-    "q",
-    "m",
-    "contrast_ids",
-    "finite_test_count",
-    "raw_ordering",
-    "adjusted_p_values",
-    "missing_test_ids",
-    "structural_status",
-)
-CLAIM_VERDICT_CONTRAST_KEY_ORDER = (
+ENGINE_LINKED_ROW_AUTHORITY_FIELDS = {
+    "ladder_level",
+    "AP_id",
     "contrast_id",
-    "plan_id",
-    "family_instance_id",
-    "claim_role",
-    "metric",
-    "conditions",
-    "hypothesized_direction",
-    "equivalence",
-    "mde",
-    "bundle_blocks",
-    "sampling",
-    "estimator",
-    "deterministic_bounds",
-    "floor",
-    "multiplicity",
-    "randomization_check",
-    "loo",
-    "sensitivity_status",
-    "claim_evaluation",
-)
-CLAIM_VERDICT_EVALUATION_KEY_ORDER = (
-    "outcome",
-    "direction",
-    "reason_codes",
-    "claim_ready_for_l2_l3",
-    "claim_level_ceiling",
-)
+    "verdict_artifact",
+    "engine_outcome",
+}
 # B15 names the aggregate linkage column but does not pin its JSON encoding.
 # Keep this single narrow shape synchronized with analysis_engine.artifact.
 CLAIM_INDEX_LINK_KEYS = {
@@ -204,7 +124,6 @@ ENGINE_OUTCOMES = {
     "equivalent",
 }
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-CLAIM_VERDICTS_ID_RE = re.compile(r"^cv-[0-9a-f]{64}$")
 CLAIM_INDEX_AP_RE = re.compile(r"^AP-\d+$")
 PRE_P2037_LEGACY_CLAIM_ID = "CLM-RPT001-LEGACY-L1-001"
 PRE_P2037_LEGACY_LABEL = "legacy L1 (manual review; pre-2M)"
@@ -218,6 +137,8 @@ OBVIOUS_DIRECTIONAL_PROSE_RE = re.compile(
     r"better|worse|superior|inferior)\b",
     re.IGNORECASE,
 )
+D062_TOP_UP_RE = re.compile(r"\btop[- ]?up(?:ped|ping|s)?\b", re.IGNORECASE)
+D062_DEMOTION_RE = re.compile(r"\b(?:demot\w*|exploratory)\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -602,6 +523,28 @@ def lint_ap_document(
                 )
             )
 
+        sizing_row = fields.get("MDE/n sizing + predeclared top-up rule")
+        sizing_value = (
+            sizing_row.cells[1].strip()
+            if sizing_row and len(sizing_row.cells) > 1
+            else ""
+        )
+        if D062_TOP_UP_RE.search(sizing_value) and not (
+            "D-062" in sizing_value
+            and "frozen" in sizing_value.lower()
+            and D062_DEMOTION_RE.search(sizing_value)
+        ):
+            findings.append(
+                Finding(
+                    "error",
+                    mode,
+                    str(path),
+                    sizing_row.line_no if sizing_row else table.start_line,
+                    "AP_UNQUALIFIED_OUTCOME_DEPENDENT_TOP_UP",
+                    f"{label} top-up language must cite D-062, frozen n, and permanent exploratory demotion",
+                )
+            )
+
     return findings, labels
 
 
@@ -830,16 +773,37 @@ def forbidden_terms_from_claims_ladder(path: Path) -> set[str]:
 
 
 def reader_facing_surfaces(root: Path) -> list[Path]:
-    paths: list[Path] = []
+    paths: set[Path] = set()
     for relative in ("README.md", "PROJECT_STATUS.md"):
         path = root / relative
-        if path.exists():
-            paths.append(path)
-    for directory in ("docs/contracts", "docs/run_reports"):
+        if path.is_file():
+            paths.add(path)
+    for relative in ("docs/phase_4/claims_index.md",):
+        path = root / relative
+        if path.is_file():
+            paths.add(path)
+    for directory in (
+        "docs/report_src",
+        "slides",
+        "docs/slides",
+        "captions",
+        "docs/captions",
+        "tables",
+        "docs/tables",
+    ):
         base = root / directory
         if base.exists():
-            paths.extend(sorted(base.glob("*.md")))
-    return paths
+            for suffix in ("*.md", "*.tex", "*.typ"):
+                paths.update(path for path in base.rglob(suffix) if path.is_file())
+    for base in (root / "analysis", root / "figures"):
+        if base.exists():
+            paths.update(
+                path
+                for path in base.rglob("*.md")
+                if path.is_file()
+                and any(part in {"tables", "captions"} for part in path.parts)
+            )
+    return sorted(paths)
 
 
 def lint_forbidden_language(root: Path, claims_ladder_path: Path) -> list[Finding]:
@@ -900,98 +864,41 @@ def render_phase4_projection(rows: Sequence[dict]) -> str:
     lines = [
         "<!-- GENERATED by scripts/claims_lint.py --mode phase4; DO NOT EDIT. -->",
         "# Claims index", "",
-        "Canonical source: `analysis/rpt001-v1/claims_index.jsonl`.", "",
+        "Canonical source: `analysis/rpt001-v2/claims_index.jsonl`.", "",
     ]
     for row in rows:
+        engine_linked = "ladder_level" in row
+        level = row["ladder_level"] if engine_linked else row["claim_level"]
+        status = row["editorial_status"] if engine_linked else row["status"]
+        evidence = "engine-linked" if engine_linked else row["evidence_class"]
+        figures = row["figures"] if engine_linked else row["figure_ids"]
+        tables = [] if engine_linked else row["table_ids"]
         lines.extend([
             f"## {row['claim_id']}", "",
-            f"- Level/status: `{row['claim_level']}` / `{row['status']}`",
-            f"- Evidence: `{row['evidence_class']}`",
-            f"- Figures: {', '.join(f'`{v}`' for v in row['figure_ids'])}",
-            f"- Tables: {', '.join(f'`{v}`' for v in row['table_ids'])}",
+            f"- Level/status: `{level}` / `{status}`",
+            f"- Evidence: `{evidence}`",
+            f"- Figures: {', '.join(f'`{v}`' for v in figures)}",
+            f"- Tables: {', '.join(f'`{v}`' for v in tables)}",
             "", row["claim_text"], "",
         ])
     return "\n".join(lines).rstrip() + "\n"
 
 
-def lint_phase4(root: Path, index_path: Path, projection_path: Path,
-                write_projection: bool = False) -> list[Finding]:
-    findings: list[Finding] = []
-    path = root / index_path
-    rows: list[dict] = []
-    seen: set[str] = set()
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
-        raise ClaimsLintError(f"cannot read {path}: {exc}") from exc
-    for line_no, line in enumerate(lines, 1):
-        try:
-            row = json.loads(line)
-        except json.JSONDecodeError as exc:
-            findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                    "MALFORMED_JSONL", str(exc)))
-            continue
-        if not isinstance(row, dict):
-            findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                    "ROW_NOT_OBJECT", "claims-index row must be an object"))
-            continue
-        missing = sorted(PHASE4_REQUIRED_FIELDS - row.keys())
-        if missing:
-            findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                    "MISSING_FIELDS", f"missing required fields: {', '.join(missing)}"))
-            continue
-        rows.append(row)
-        cid = row.get("claim_id")
-        if not isinstance(cid, str) or not cid or cid in seen:
-            findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                    "INVALID_CLAIM_ID", "claim_id must be non-empty and unique"))
-        seen.add(cid) if isinstance(cid, str) else None
-        if row.get("schema") != "joulewise.claims_index.v1":
-            findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                    "UNKNOWN_SCHEMA", "schema must be joulewise.claims_index.v1"))
-        if row.get("claim_level") not in PHASE4_LEVELS or row.get("status") not in PHASE4_STATUSES:
-            findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                    "INVALID_LEVEL_OR_STATUS", "invalid claim_level or status"))
-        if row.get("evidence_class") == "legacy_l1_manual_review_pre_2m":
-            if row.get("claim_level") != "L1" or row.get("legacy_label") != "legacy L1 (manual review; pre-2M)":
-                findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                        "LEGACY_L1_CEILING", "legacy evidence requires exact label and L1 ceiling"))
-        metrics = row.get("metrics")
-        if not isinstance(metrics, list) or not metrics:
-            findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                    "INVALID_METRICS", "metrics must be a non-empty list"))
-        else:
-            names = {m.get("metric") for m in metrics if isinstance(m, dict)}
-            if "energy_output_token_j" in names and "energy_request_j" not in names:
-                findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                        "TOKEN_WITHOUT_REQUEST", "per-token metric requires co-displayed request energy"))
-            for metric in metrics:
-                if not isinstance(metric, dict) or not metric.get("denominator_provenance"):
-                    findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                            "MISSING_DENOMINATOR", "every metric requires denominator_provenance"))
-                if isinstance(metric, dict) and "token" in str(metric.get("metric", "")) and not metric.get("tokenizer_identity"):
-                    findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                            "MISSING_TOKENIZER", "per-token metric requires tokenizer_identity"))
-        if PHASE4_FORBIDDEN.search(str(row.get("claim_text", ""))):
-            findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                    "FORBIDDEN_CLAIM_UPGRADE", "claim_text contains forbidden comparison/ranking language"))
-        if row.get("claim_level") in {"L2", "L3", "L4"} and (not row.get("analysis_manifest_ref") or not row.get("verdict_ref")):
-            findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                    "MISSING_L2_GATE", "L2+ requires analysis-manifest and verdict references"))
-        for key in ("stack_ids", "boundary_labels", "figure_ids", "table_ids", "bundle_ids", "manifest_ids"):
-            if not isinstance(row.get(key), list) or not row[key] or any(not str(v).strip() for v in row[key]):
-                findings.append(Finding("error", "phase4", str(index_path), line_no,
-                                        "MISSING_REFERENCE", f"{key} must contain non-empty values"))
-    if rows and not any(f.severity == "error" for f in findings):
-        projection = render_phase4_projection(rows)
-        target = root / projection_path
-        if write_projection:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(projection, encoding="utf-8", newline="\n")
-        elif not target.is_file() or target.read_text(encoding="utf-8") != projection:
-            findings.append(Finding("error", "phase4", str(projection_path), 1,
-                                    "PROJECTION_DRIFT", "generated Markdown projection differs from canonical JSONL"))
-    return findings
+def lint_phase4(
+    root: Path,
+    index_path: Path,
+    projection_path: Path,
+    write_projection: bool = False,
+) -> list[Finding]:
+    """Compatibility name for the unified version-aware claims-index lint."""
+
+    return lint_claim_index(
+        root,
+        index_path,
+        DEFAULT_CLAIM_VERDICT_DIR,
+        projection_path,
+        write_projection,
+    )
 
 
 def _json_object_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
@@ -1032,17 +939,6 @@ def _exact_mapping_keys(
     return not missing and not extra
 
 
-def _mapping_key_order(
-    value: Any,
-    expected: tuple[str, ...],
-    where: str,
-    errors: list[str],
-) -> None:
-    if isinstance(value, Mapping) and set(value) == set(expected):
-        if tuple(value) != expected:
-            errors.append(f"{where}: keys are not in the pinned B13 order")
-
-
 def _is_string_list(value: Any, *, nonempty: bool = False) -> bool:
     return (
         isinstance(value, list)
@@ -1055,290 +951,16 @@ def _path_label_is_absolute(value: str) -> bool:
     return Path(value).is_absolute() or re.match(r"^[A-Za-z]:[\\/]", value) is not None
 
 
-def _absolute_artifact_paths(value: Any, key: str = "") -> list[str]:
-    found: list[str] = []
-    if isinstance(value, Mapping):
-        for child_key, child in value.items():
-            found.extend(_absolute_artifact_paths(child, str(child_key)))
-    elif isinstance(value, list):
-        for child in value:
-            found.extend(_absolute_artifact_paths(child, key))
-    elif isinstance(value, str) and "path" in key.lower() and _path_label_is_absolute(value):
-        found.append(value)
-    return found
+def _legacy_claim_wording_error(claim_level: Any, claim_text: Any) -> str | None:
+    """Keep legacy L0/L1 prose conservative without rejecting valid L2 direction."""
 
-
-def validate_claim_verdict_artifact(value: Any) -> list[str]:
-    """Validate the B13 artifact surface consumed by claims-index lint.
-
-    Statistical row internals remain owned by the analysis engine.  This
-    validator pins the exact B13 envelope and every field that B15 links.
-    """
-
-    errors: list[str] = []
-    if not _exact_mapping_keys(value, CLAIM_VERDICT_TOP_KEYS, "artifact", errors):
-        if not isinstance(value, Mapping):
-            return errors
-    _mapping_key_order(value, CLAIM_VERDICT_TOP_KEY_ORDER, "artifact", errors)
-
-    if value.get("schema_version") != "joulewise.claim_verdicts.v1":
-        errors.append("artifact.schema_version: must be joulewise.claim_verdicts.v1")
-    artifact_id = value.get("claim_verdicts_id")
-    if not isinstance(artifact_id, str) or not CLAIM_VERDICTS_ID_RE.fullmatch(artifact_id):
-        errors.append("artifact.claim_verdicts_id: must be cv- followed by 64 lowercase hex digits")
-
-    engine = value.get("engine")
-    if _exact_mapping_keys(engine, CLAIM_VERDICT_ENGINE_KEYS, "artifact.engine", errors):
-        _mapping_key_order(
-            engine,
-            CLAIM_VERDICT_ENGINE_KEY_ORDER,
-            "artifact.engine",
-            errors,
-        )
-        if engine.get("implementation") != "joulewise.analysis_engine":
-            errors.append("artifact.engine.implementation: invalid value")
-        if engine.get("algorithm_version") != "1":
-            errors.append("artifact.engine.algorithm_version: must be `1`")
-        if engine.get("difference_orientation") != "condition_b_minus_condition_a":
-            errors.append("artifact.engine.difference_orientation: invalid value")
-        policy = engine.get("policy_identity")
-        if _exact_mapping_keys(
-            policy,
-            CLAIM_VERDICT_POLICY_KEYS,
-            "artifact.engine.policy_identity",
-            errors,
-        ):
-            for key in CLAIM_VERDICT_POLICY_KEYS:
-                if not isinstance(policy.get(key), str) or not policy[key]:
-                    errors.append(
-                        f"artifact.engine.policy_identity.{key}: must be nonempty"
-                    )
-
-    inputs = value.get("inputs")
-    if _exact_mapping_keys(inputs, CLAIM_VERDICT_INPUT_KEYS, "artifact.inputs", errors):
-        _mapping_key_order(
-            inputs,
-            CLAIM_VERDICT_INPUT_KEY_ORDER,
-            "artifact.inputs",
-            errors,
-        )
-        manifest = inputs.get("analysis_manifest")
-        if _exact_mapping_keys(
-            manifest,
-            CLAIM_VERDICT_INPUT_LINK_KEYS,
-            "artifact.inputs.analysis_manifest",
-            errors,
-        ):
-            if not isinstance(manifest.get("manifest_id"), str) or not manifest["manifest_id"]:
-                errors.append("artifact.inputs.analysis_manifest.manifest_id: must be nonempty")
-            if not isinstance(manifest.get("file_sha256"), str) or not SHA256_RE.fullmatch(
-                manifest["file_sha256"]
-            ):
-                errors.append("artifact.inputs.analysis_manifest.file_sha256: invalid SHA-256")
-        floor = inputs.get("floor_artifact")
-        if _exact_mapping_keys(
-            floor,
-            CLAIM_VERDICT_FLOOR_LINK_KEYS,
-            "artifact.inputs.floor_artifact",
-            errors,
-        ):
-            if not isinstance(floor.get("artifact_id"), str) or not floor["artifact_id"]:
-                errors.append("artifact.inputs.floor_artifact.artifact_id: must be nonempty")
-            if not isinstance(floor.get("file_sha256"), str) or not SHA256_RE.fullmatch(
-                floor["file_sha256"]
-            ):
-                errors.append("artifact.inputs.floor_artifact.file_sha256: invalid SHA-256")
-        runs_root_label = inputs.get("runs_root_label")
-        if (
-            not isinstance(runs_root_label, str)
-            or not runs_root_label
-            or _path_label_is_absolute(runs_root_label)
-        ):
-            errors.append("artifact.inputs.runs_root_label: must be a nonempty relative label")
-        if inputs.get("evidence_class") not in {"current", "legacy_l1"}:
-            errors.append("artifact.inputs.evidence_class: invalid value")
-        if not _is_string_list(inputs.get("limitations")):
-            errors.append("artifact.inputs.limitations: must be an array of nonempty strings")
-
-    for key in ("bundle_audit", "families", "contrasts"):
-        rows = value.get(key)
-        if not isinstance(rows, list):
-            errors.append(f"artifact.{key}: must be an array")
-        elif any(not isinstance(row, Mapping) for row in rows):
-            errors.append(f"artifact.{key}: every item must be an object")
-
-    sampling_audit = value.get("sampling_audit")
-    if _exact_mapping_keys(
-        sampling_audit,
-        CLAIM_VERDICT_SAMPLING_KEYS,
-        "artifact.sampling_audit",
-        errors,
+    if (
+        claim_level in {"L0", "L1"}
+        and isinstance(claim_text, str)
+        and PHASE4_FORBIDDEN.search(claim_text)
     ):
-        _mapping_key_order(
-            sampling_audit,
-            CLAIM_VERDICT_SAMPLING_KEY_ORDER,
-            "artifact.sampling_audit",
-            errors,
-        )
-        if sampling_audit.get("design") != "fixed_n":
-            errors.append("artifact.sampling_audit.design: must be fixed_n")
-        planned = sampling_audit.get("planned_n_blocks")
-        if isinstance(planned, bool) or not isinstance(planned, int) or planned < 1:
-            errors.append("artifact.sampling_audit.planned_n_blocks: must be a positive integer")
-        for key in (
-            "registered_blocks",
-            "valid_replacements",
-            "unregistered_matching_bundles",
-            "demoted_contrast_ids",
-        ):
-            if not isinstance(sampling_audit.get(key), list):
-                errors.append(f"artifact.sampling_audit.{key}: must be an array")
-        if not isinstance(sampling_audit.get("top_up_detected"), bool):
-            errors.append("artifact.sampling_audit.top_up_detected: must be boolean")
-
-    contrast_ids: set[str] = set()
-    contrasts = value.get("contrasts")
-    families = value.get("families")
-    if isinstance(families, list):
-        for index, family in enumerate(families):
-            _mapping_key_order(
-                family,
-                CLAIM_VERDICT_FAMILY_KEY_ORDER,
-                f"artifact.families[{index}]",
-                errors,
-            )
-    if isinstance(contrasts, list):
-        for index, contrast in enumerate(contrasts):
-            if not isinstance(contrast, Mapping):
-                continue
-            where = f"artifact.contrasts[{index}]"
-            _mapping_key_order(
-                contrast,
-                CLAIM_VERDICT_CONTRAST_KEY_ORDER,
-                where,
-                errors,
-            )
-            required = {
-                "contrast_id",
-                "plan_id",
-                "claim_role",
-                "hypothesized_direction",
-                "bundle_blocks",
-                "sampling",
-                "sensitivity_status",
-                "claim_evaluation",
-            }
-            missing = sorted(required - set(contrast))
-            if missing:
-                errors.append(f"{where}: missing B15 linkage key(s): {', '.join(missing)}")
-                continue
-            contrast_id = contrast.get("contrast_id")
-            if not isinstance(contrast_id, str) or not contrast_id:
-                errors.append(f"{where}.contrast_id: must be a nonempty string")
-            elif contrast_id in contrast_ids:
-                errors.append(f"{where}.contrast_id: duplicate `{contrast_id}`")
-            else:
-                contrast_ids.add(contrast_id)
-            if not isinstance(contrast.get("plan_id"), str) or not CLAIM_INDEX_AP_RE.fullmatch(
-                contrast["plan_id"]
-            ):
-                errors.append(f"{where}.plan_id: must be an AP id")
-            if contrast.get("claim_role") not in CLAIM_ROLES:
-                errors.append(f"{where}.claim_role: invalid value")
-            hypothesis = contrast.get("hypothesized_direction")
-            if hypothesis is not None and not isinstance(hypothesis, str):
-                errors.append(f"{where}.hypothesized_direction: must be a string or null")
-            if not isinstance(contrast.get("sensitivity_status"), str) or not contrast[
-                "sensitivity_status"
-            ]:
-                errors.append(f"{where}.sensitivity_status: must be a nonempty string")
-
-            bundle_blocks = contrast.get("bundle_blocks")
-            if not isinstance(bundle_blocks, Mapping):
-                errors.append(f"{where}.bundle_blocks: must be an object")
-            elif not _is_string_list(bundle_blocks.get("included_bundle_ids")):
-                errors.append(
-                    f"{where}.bundle_blocks.included_bundle_ids: must be an array of nonempty strings"
-                )
-            elif len(set(bundle_blocks["included_bundle_ids"])) != len(
-                bundle_blocks["included_bundle_ids"]
-            ):
-                errors.append(f"{where}.bundle_blocks.included_bundle_ids: duplicate ID")
-
-            sampling = contrast.get("sampling")
-            if not isinstance(sampling, Mapping):
-                errors.append(f"{where}.sampling: must be an object")
-            elif not isinstance(sampling.get("confirmatory_status"), str) or not sampling[
-                "confirmatory_status"
-            ]:
-                errors.append(f"{where}.sampling.confirmatory_status: must be nonempty")
-
-            evaluation = contrast.get("claim_evaluation")
-            if not isinstance(evaluation, Mapping):
-                errors.append(f"{where}.claim_evaluation: must be an object")
-                continue
-            _mapping_key_order(
-                evaluation,
-                CLAIM_VERDICT_EVALUATION_KEY_ORDER,
-                f"{where}.claim_evaluation",
-                errors,
-            )
-            evaluation_required = {
-                "outcome",
-                "direction",
-                "reason_codes",
-                "claim_ready_for_l2_l3",
-                "claim_level_ceiling",
-            }
-            evaluation_missing = sorted(evaluation_required - set(evaluation))
-            if evaluation_missing:
-                errors.append(
-                    f"{where}.claim_evaluation: missing key(s): {', '.join(evaluation_missing)}"
-                )
-                continue
-            outcome = evaluation.get("outcome")
-            if outcome not in ENGINE_OUTCOMES:
-                errors.append(f"{where}.claim_evaluation.outcome: invalid value")
-            direction = evaluation.get("direction")
-            if direction not in {None, "positive", "negative"}:
-                errors.append(f"{where}.claim_evaluation.direction: invalid value")
-            if outcome == "direction_supported" and direction not in {"positive", "negative"}:
-                errors.append(
-                    f"{where}.claim_evaluation.direction: direction_supported requires a direction"
-                )
-            reasons = evaluation.get("reason_codes")
-            if not _is_string_list(reasons):
-                errors.append(f"{where}.claim_evaluation.reason_codes: invalid array")
-            elif len(set(reasons)) != len(reasons):
-                errors.append(f"{where}.claim_evaluation.reason_codes: duplicate reason")
-            if not isinstance(evaluation.get("claim_ready_for_l2_l3"), bool):
-                errors.append(f"{where}.claim_evaluation.claim_ready_for_l2_l3: must be boolean")
-            if evaluation.get("claim_level_ceiling") not in PHASE4_LEVELS:
-                errors.append(f"{where}.claim_evaluation.claim_level_ceiling: invalid level")
-
-    absolute_paths = _absolute_artifact_paths(value)
-    if absolute_paths:
-        errors.append(f"artifact: absolute path is forbidden: {absolute_paths[0]}")
-
-    if isinstance(inputs, Mapping) and inputs.get("evidence_class") == "legacy_l1":
-        if inputs.get("limitations") != ["legacy_l1_mechanics_only"]:
-            errors.append(
-                "artifact.inputs.limitations: legacy_l1 requires exactly legacy_l1_mechanics_only"
-            )
-        if isinstance(contrasts, list):
-            for index, contrast in enumerate(contrasts):
-                if not isinstance(contrast, Mapping):
-                    continue
-                evaluation = contrast.get("claim_evaluation")
-                if not isinstance(evaluation, Mapping):
-                    continue
-                if evaluation.get("claim_ready_for_l2_l3") is not False:
-                    errors.append(
-                        f"artifact.contrasts[{index}]: legacy_l1 cannot be claim-ready for L2/L3"
-                    )
-                if evaluation.get("claim_level_ceiling") != "L1":
-                    errors.append(f"artifact.contrasts[{index}]: legacy_l1 ceiling must be L1")
-    return errors
+        return "claim_text contains comparison/ranking language above its legacy level"
+    return None
 
 
 def _one_sentence(value: str) -> bool:
@@ -1419,8 +1041,26 @@ def _is_grandfathered_pre_p2037_legacy_row(row: Mapping[str, Any]) -> bool:
     )
 
 
-def lint_claim_index(root: Path, index_path: Path, claim_verdict_dir: Path) -> list[Finding]:
-    """Lint canonical Phase-4 JSONL rows against B13 verdict artifacts."""
+def _claim_row_dialect(row: Mapping[str, Any]) -> str:
+    legacy = bool(set(row) & LEGACY_CLAIM_ROW_AUTHORITY_FIELDS)
+    engine_linked = bool(set(row) & ENGINE_LINKED_ROW_AUTHORITY_FIELDS)
+    if legacy and engine_linked:
+        return "hybrid"
+    if engine_linked:
+        return "engine-linked"
+    if legacy and _is_grandfathered_pre_p2037_legacy_row(row):
+        return "exact-legacy"
+    return "unknown"
+
+
+def lint_claim_index(
+    root: Path,
+    index_path: Path,
+    claim_verdict_dir: Path,
+    projection_path: Path | None = None,
+    write_projection: bool = False,
+) -> list[Finding]:
+    """Version-aware lint for every supported canonical claims-index row."""
 
     findings: list[Finding] = []
     path = index_path if index_path.is_absolute() else root / index_path
@@ -1432,6 +1072,7 @@ def lint_claim_index(root: Path, index_path: Path, claim_verdict_dir: Path) -> l
     seen_claim_ids: set[str] = set()
     grandfathered_pre_p2037_count = 0
     level_rank = {f"L{number}": number for number in range(5)}
+    projection_rows: list[dict[str, Any]] = []
     for line_no, line in enumerate(lines, start=1):
         try:
             row = _parse_strict_json(line)
@@ -1449,7 +1090,26 @@ def lint_claim_index(root: Path, index_path: Path, claim_verdict_dir: Path) -> l
                 "claims-index row must be an object",
             )
             continue
-        if _is_grandfathered_pre_p2037_legacy_row(row):
+        dialect = _claim_row_dialect(row)
+        if dialect == "hybrid":
+            _claim_index_finding(
+                findings,
+                index_path,
+                line_no,
+                "CLAIM_INDEX_AMBIGUOUS_DIALECT",
+                "row mixes legacy and engine-linked authority fields",
+            )
+            continue
+        if dialect == "unknown":
+            _claim_index_finding(
+                findings,
+                index_path,
+                line_no,
+                "CLAIM_INDEX_UNKNOWN_DIALECT",
+                "row is neither the exact legacy grandfather nor an engine-linked row",
+            )
+            continue
+        if dialect == "exact-legacy":
             grandfathered_pre_p2037_count += 1
             if grandfathered_pre_p2037_count > 1:
                 _claim_index_finding(
@@ -1468,6 +1128,7 @@ def lint_claim_index(root: Path, index_path: Path, claim_verdict_dir: Path) -> l
                 "pre-P2-037 manual-review L1 row has no governed verdict artifact",
                 severity="warning",
             )
+            projection_rows.append(dict(row))
             continue
         missing = sorted(CLAIM_INDEX_REQUIRED_FIELDS - set(row))
         if missing:
@@ -1479,6 +1140,7 @@ def lint_claim_index(root: Path, index_path: Path, claim_verdict_dir: Path) -> l
                 f"missing required fields: {', '.join(missing)}",
             )
             continue
+        projection_rows.append(dict(row))
 
         claim_id = row.get("claim_id")
         if not isinstance(claim_id, str) or not claim_id or claim_id in seen_claim_ids:
@@ -1512,6 +1174,15 @@ def lint_claim_index(root: Path, index_path: Path, claim_verdict_dir: Path) -> l
         if ladder_level not in PHASE4_LEVELS:
             _claim_index_finding(
                 findings, index_path, line_no, "CLAIM_INDEX_INVALID_LEVEL", "invalid ladder_level"
+            )
+        wording_error = _legacy_claim_wording_error(ladder_level, claim_text)
+        if wording_error is not None:
+            _claim_index_finding(
+                findings,
+                index_path,
+                line_no,
+                "CLAIM_INDEX_FORBIDDEN_CLAIM_UPGRADE",
+                wording_error,
             )
         if not isinstance(row.get("AP_id"), str) or not CLAIM_INDEX_AP_RE.fullmatch(row["AP_id"]):
             _claim_index_finding(
@@ -1664,14 +1335,7 @@ def lint_claim_index(root: Path, index_path: Path, claim_verdict_dir: Path) -> l
                 "CLAIM_INDEX_VERDICT_RENDER_INVALID",
                 "verdict artifact must use the pinned B13 two-space JSON rendering",
             )
-        artifact_errors = list(
-            dict.fromkeys(
-                [
-                    *validate_claim_verdicts(artifact),
-                    *validate_claim_verdict_artifact(artifact),
-                ]
-            )
-        )
+        artifact_errors = validate_claim_verdicts_for_claim_index(artifact)
         for error in artifact_errors:
             _claim_index_finding(
                 findings,
@@ -1942,17 +1606,39 @@ def lint_claim_index(root: Path, index_path: Path, claim_verdict_dir: Path) -> l
                     "CLAIM_INDEX_LEGACY_CAVEAT_INVALID",
                     "legacy_l1 caveat must be exactly legacy_l1_mechanics_only",
                 )
+    if projection_path is not None and not any(
+        finding.severity == "error" for finding in findings
+    ):
+        projection = render_phase4_projection(projection_rows)
+        target = projection_path if projection_path.is_absolute() else root / projection_path
+        if write_projection:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(projection, encoding="utf-8", newline="\n")
+        elif not target.is_file() or target.read_text(encoding="utf-8") != projection:
+            _claim_index_finding(
+                findings,
+                projection_path,
+                1,
+                "PROJECTION_DRIFT",
+                "generated Markdown projection differs from canonical JSONL",
+            )
     return findings
 
 
 def selected_modes(values: Sequence[str] | None) -> set[str]:
-    established = {"ap", "registry", "analysis-registry", "pack", "forbidden", "phase4"}
+    established = {
+        "ap",
+        "registry",
+        "analysis-registry",
+        "pack",
+        "forbidden",
+        "phase4",
+        "claim-index",
+    }
     if not values:
         return established
     modes = set(values)
     if "all" in modes:
-        if "claim-index" in modes:
-            established.add("claim-index")
         return established
     return modes
 
@@ -1979,8 +1665,8 @@ def build_parser() -> ClaimsArgumentParser:
             "claim-index",
         ),
         help=(
-            "mode to run; may be repeated (claim-index is explicit so the existing "
-            "pre-P2-037 index remains compatible)"
+            "mode to run; may be repeated (phase4 and claim-index are compatibility "
+            "names for one version-aware validator)"
         ),
     )
     parser.add_argument("--analysis-plans", type=Path, default=DEFAULT_AP_PATH)
@@ -2058,12 +1744,15 @@ def run(args: argparse.Namespace) -> tuple[int, list[Finding]]:
         findings.extend(lint_packs(campaign_packs, required_fields or []))
     if "forbidden" in modes:
         findings.extend(lint_forbidden_language(root, claims_ladder_path))
-    if "phase4" in modes:
-        findings.extend(lint_phase4(root, args.claims_index, args.claims_projection,
-                                    args.write_projection))
-    if "claim-index" in modes:
+    if modes & {"phase4", "claim-index"}:
         findings.extend(
-            lint_claim_index(root, args.claims_index, args.claim_verdict_dir)
+            lint_claim_index(
+                root,
+                args.claims_index,
+                args.claim_verdict_dir,
+                args.claims_projection if "phase4" in modes else None,
+                args.write_projection,
+            )
         )
 
     error_count = sum(1 for finding in findings if finding.severity == "error")

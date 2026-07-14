@@ -341,7 +341,52 @@ class AnalysisManifestTests(unittest.TestCase):
 
             errors = validate_analysis_manifest(mutated, manifest_dir=out_dir)
 
-            self.assertTrue(any("requires fixed_n=5" in error for error in errors), errors)
+            self.assertTrue(any("expected frozen n of 5 or 10" in error for error in errors), errors)
+
+    def test_post_freeze_n_mutation_detected_by_validator(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            manifest = self._generated_manifest(out_dir)
+            manifest["design"]["sampling_plan"]["planned_n_blocks"] = 10
+            reidentify(manifest)
+
+            errors = validate_analysis_manifest(manifest, manifest_dir=out_dir)
+
+            self.assertTrue(
+                any("post-freeze n mutation differs from frozen registry" in error for error in errors),
+                errors,
+            )
+
+    def test_mixed_n_composition_rejected_for_inconsistent_block_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            out_dir = Path(tmp) / "out"
+            for base, tag in BASE_CONFIGS:
+                result = run_generator(base, tag, out_dir)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            manifest = load_manifest(out_dir)
+            expanded_tag = BASE_CONFIGS[1][1]
+            extra_entries = []
+            for entry in manifest["entries"]:
+                if entry["model_tag"] != expanded_tag:
+                    continue
+                copy_entry = copy.deepcopy(entry)
+                old_rep = copy_entry["planned_rep_index"]
+                new_rep = old_rep + 5
+                copy_entry["planned_rep_index"] = new_rep
+                old_tag = f"r{old_rep:02d}"
+                new_tag = f"r{new_rep:02d}"
+                for key in ("entry_id", "block_id", "sentinel_link_id"):
+                    copy_entry[key] = copy_entry[key].replace(old_tag, new_tag)
+                extra_entries.append(copy_entry)
+            manifest["entries"].extend(extra_entries)
+            reidentify(manifest)
+
+            errors = validate_analysis_manifest(manifest)
+
+            self.assertIn(
+                "manifest.entries: mixed n=5/n=10 or inconsistent frozen block authority",
+                errors,
+            )
 
     def test_real_validator_rejects_duplicate_contrast_block_id(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
