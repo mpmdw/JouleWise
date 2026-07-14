@@ -1,0 +1,650 @@
+{
+  "consolidated": [
+    {
+      "author_conflict": false,
+      "cid": "C1-001",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D1-001"
+      ],
+      "overlaps_wsci": [
+        "W1-002",
+        "W1-004"
+      ],
+      "priority_note": "normal-claim-evidence-integrity",
+      "root_cause": "Config and succeeded-summary semantics are reimplemented in exported JSON Schema, SummaryMetrics validation, and BundleReader instead of deriving from one semantic validator, so the weaker surfaces have drifted.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Validation authority is split across weaker exported and writer-side schemas",
+      "work_order_sketch": {
+        "action": "Establish one semantic config/summary validation authority and make exported schemas and writer/CLI paths rejection-equivalent, including finite succeeded metrics and conditional config constraints.",
+        "bounded_scope": "joulewise/schemas.py, bundle_read summary checks, schema-print paths, and focused schema/strict-validation tests.",
+        "effort": "session",
+        "non_goals": "No schema-v0.2 redesign, no weakening of BundleReader, and no unrelated bundle-layout migration."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-002",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D1-002"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-evidence-integrity",
+      "root_cause": "Failure-path resilience uses json.dumps(default=str) without recording coercion, conflating captured adapter evidence with fallback representations.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Metadata serialization silently converts invalid evidence to strings",
+      "work_order_sketch": {
+        "action": "Replace silent stringification with deterministic quarantining or structured coercion diagnostics while preserving bundle finalization on adapter failure.",
+        "bounded_scope": "RunBundleWriter metadata serialization, controller metadata handoff, and poison-value regression tests.",
+        "effort": "bench",
+        "non_goals": "Do not make failure-path metadata errors abort independent salvage or bundle finalization."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-003",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D1-003"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-reproducibility",
+      "root_cause": "Per-bundle provenance records only HEAD, so clean and locally modified harness executions share an indistinguishable source identity.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Bundle provenance omits working-tree dirtiness",
+      "work_order_sketch": {
+        "action": "Capture a deterministic tracked/untracked dirty-state marker, or fail closed for claim-bearing runs, alongside git_commit in bundle provenance.",
+        "bounded_scope": "Bundle provenance capture, bundle contract documentation, and clean/dirty focused tests.",
+        "effort": "bench",
+        "non_goals": "Do not embed diffs or private file contents and do not substitute publication-time cleanliness for run-time provenance."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-004",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D2-001"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-platform-right-sizing",
+      "root_cause": "TransportAdapter was generalized for execution and copy, but the canonical controller retained only its metadata use while remote execution evolved around a separate SshTransport and NodeWorkerClient.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "The generic transport execution API is disconnected from production transport",
+      "work_order_sketch": {
+        "action": "Narrow the generic boundary to the production-used connection role or route remote execution through one owned transport path, deleting only proven-dead command/copy surface.",
+        "bounded_scope": "TransportAdapter, LocalTransport/SshTransport registrations, controller resolution, and direct transport tests.",
+        "effort": "session",
+        "non_goals": "Do not prebuild split transfer abstractions or remove connection metadata needed by bundles."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-005",
+      "claim_affecting": true,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D2-002"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-core-runtime",
+      "root_cause": "Backend-specific generation and shared suite traversal/framing/status policy were implemented together in each adapter, duplicating contract-critical control logic and the mock oracle.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Mock and MLX runtimes duplicate suite-control semantics",
+      "work_order_sketch": {
+        "action": "Extract only backend-neutral suite traversal, framing, status aggregation, provenance, and prompt-closure invariants while retaining independent backend generation and an independent oracle path.",
+        "bounded_scope": "mock_runtime.py, mlx_runtime.py, a narrowly owned shared suite-control helper, and cross-runtime parity tests.",
+        "effort": "session",
+        "non_goals": "Do not unify generation implementations, change suite ordering, or reduce marker/status coverage."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-006",
+      "claim_affecting": true,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D2-003"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-evidence-custody",
+      "root_cause": "Runtime, telemetry, and worker layers each grew local copies of worker-log capture, result metadata, clock alignment, run-id selection, and shutdown/termination policy without one invariant-owning lifecycle seam.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Remote lifecycle and evidence-salvage logic is multiply implemented",
+      "work_order_sketch": {
+        "action": "Factor invariant-level remote lifecycle helpers or tables while preserving operation-specific artifacts, timeouts, failure semantics, and worker self-containment.",
+        "bounded_scope": "vLLM runtime, NVIDIA telemetry, node worker lifecycle helpers, and focused cleanup/evidence-preservation tests.",
+        "effort": "session",
+        "non_goals": "Do not erase runtime-versus-telemetry differences or weaken log, clock, and process cleanup safeguards."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-007",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D2-004"
+      ],
+      "overlaps_wsci": [
+        "W3-006"
+      ],
+      "priority_note": "normal-data-loss-boundary",
+      "root_cause": "The node protocol validates run_id and task_id only for non-emptiness even though the client uses them in path joins and destructive rm -rf cleanup.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Remote identifiers are unsafe path components at the cleanup boundary",
+      "work_order_sketch": {
+        "action": "Define and enforce safe single-component identifier syntax on both client and worker before path construction, with absolute/traversal refusal tests.",
+        "bounded_scope": "node protocol contract, NodeWorkerClient, worker request validation, and path-safety regressions.",
+        "effort": "bench",
+        "non_goals": "Do not rely solely on the canonical controller's upstream sanitization and do not broaden cleanup roots."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-008",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D2-005"
+      ],
+      "overlaps_wsci": [
+        "W1-003"
+      ],
+      "priority_note": "normal-roadmap-verdict",
+      "root_cause": "The spike equates output equality with replay success without asserting that both paths emitted the requested token count.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Prompt-cache feasibility accepts truncated equal decodes",
+      "work_order_sketch": {
+        "action": "Require requested-length completion, or an explicitly valid terminal condition, for both monolithic and replay decodes before replay_supported can be emitted.",
+        "bounded_scope": "spike_mlx_prompt_cache verdict logic and empty/short/full decode tests.",
+        "effort": "bench",
+        "non_goals": "Do not reinterpret retained live evidence without rerunning the owning verdict path."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-009",
+      "claim_affecting": true,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D3-001",
+        "D4-003"
+      ],
+      "overlaps_wsci": [
+        "SCI2-003"
+      ],
+      "priority_note": "normal-confirmatory-validity",
+      "root_cause": "The no-outcome-dependent-growth rule lacks a single authoring-time enforcement seam: campaign packs repeat stale top-up rules while claims_lint omits the required D-062 pointer/demotion check and even treats unqualified top-up text as good.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "D-062 sampling policy is copied across plans but not enforced at authoring time",
+      "work_order_sketch": {
+        "action": "Make the canonical D-062 rule authoritative by reference, migrate stale pack/RQ rows to frozen-n plus permanent exploratory demotion, and add lint errors with good/bad fixtures.",
+        "bounded_scope": "analysis_plans D-062 wording, affected campaign-pack sampling rows, RQ variance candidate text, claims_lint AP/pack checks, and focused lint tests.",
+        "effort": "session",
+        "non_goals": "Do not weaken downstream executed-top-up demotion or alter already frozen valid designs without adjudication."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-010",
+      "claim_affecting": true,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D3-002"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-provenance-semantics",
+      "root_cause": "Descriptive or reserved fields were modeled as runtime policy despite having no consumer, and constant-only item fields were repeated into hashed manifests.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Suite manifests expose unenforced operational policy knobs",
+      "work_order_sketch": {
+        "action": "Adjudicate each unconsumed field as enforced, explicitly descriptive/reserved, or removable; then align schema, generators, manifests, and tests without disturbing real order/output policy.",
+        "bounded_scope": "suite schema execution policy, manifest generators and current manifests, runtime consumer checks, and compatibility tests.",
+        "effort": "session",
+        "non_goals": "Do not silently reinterpret existing hashed values or remove fields needed by a named queued consumer."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-011",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D3-003"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-campaign-maintainability",
+      "root_cause": "The campaign runner accumulated CLI, locking, subprocess, backup, provenance, cooldown, waiver, shakedown, and claim-readiness policies without internal responsibility boundaries.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Campaign orchestration concentrates unrelated critical responsibilities",
+      "work_order_sketch": {
+        "action": "Split the runner along tested policy seams, beginning with pure validation/provenance and execution-lifecycle components while preserving the command and behavior contract.",
+        "bounded_scope": "scripts/run_campaign.py plus narrowly extracted modules and the existing focused campaign test portfolio.",
+        "effort": "session",
+        "non_goals": "No campaign behavior redesign, concurrency expansion, or removal of locks, waivers, backups, cooldown, or claim-readiness gates."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-012",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D3-004"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-roadmap-right-sizing",
+      "root_cause": "Detailed operator procedures were authored before the corresponding commands and queue ownership existed, leaving speculative surfaces that can be mistaken for executable plans.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Future split and KV runbooks outpace owned executable work",
+      "work_order_sketch": {
+        "action": "Either assign bounded queue owners/dependencies for the missing command paths or collapse the packs to clearly deferred design requirements until those owners exist.",
+        "bounded_scope": "split-suite and KV campaign-pack command sections, their queue/plan pointers, and adjacent unowned suite-next drafts.",
+        "effort": "session",
+        "non_goals": "Do not implement split/KV machinery, start live split work, or delete settled scientific requirements."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-013",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D4-002"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-uncertainty-contract",
+      "root_cause": "Implementation and tests evolved a tri-state contamination reason without updating the contract's closed local provenance vocabulary.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "The P2-038 reason vocabulary omits an emitted fail-closed reason",
+      "work_order_sketch": {
+        "action": "Add contamination_evidence_unknown to the owning vocabulary and verify documentation, emitter, strict re-derivation, and tests agree.",
+        "bounded_scope": "P2-038 contract reason list and focused uncertainty-evidence tests.",
+        "effort": "bench",
+        "non_goals": "Do not remove or weaken the fail-closed tri-state behavior."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-014",
+      "claim_affecting": true,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D4-004"
+      ],
+      "overlaps_wsci": [
+        "W5-004"
+      ],
+      "priority_note": "normal-claim-gate",
+      "root_cause": "claims_lint reimplements broad analysis-engine verdict validation instead of layering only claims-index/editorial constraints on the owning validator, causing sampling-lattice drift.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Claim-verdict shape is validated by divergent overlapping validators",
+      "work_order_sketch": {
+        "action": "Delegate verdict semantics to analysis_engine.artifact and retain only claims-index linkage, ordering, path, and editorial checks in claims_lint.",
+        "bounded_scope": "claim-verdict validation call chain, local validator removal/narrowing, fixed_n/two-look fixtures, and claims-index tests.",
+        "effort": "session",
+        "non_goals": "Do not remove B15 index/path/editorial safeguards or enable currently prohibited alpha-spending production inputs without a separate ruling."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-015",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D5-001"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-artifact-identity",
+      "root_cause": "The report pipeline reimplemented canonical tree folding with a different delimiter instead of calling the publication identity primitive.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Report and publication artifacts use incompatible bundle-tree identities",
+      "work_order_sketch": {
+        "action": "Share one NUL-delimited bundle-tree identity implementation and add a cross-pipeline equality fixture.",
+        "bounded_scope": "make_figures/report hashing, publication privacy identity helper, package construction, and focused digest tests.",
+        "effort": "bench",
+        "non_goals": "Do not silently rewrite retained artifact identifiers; version or migrate any persisted identity explicitly."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-016",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D5-002"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-publication-efficiency",
+      "root_cause": "A private-tree file inventory and git wrapper survived a packaging refactor even though package construction consumes neither, adding an extra corpus-sized pass beside real privacy audits.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Publication preflight computes dead private inventory",
+      "work_order_sketch": {
+        "action": "Remove only the unconsumed private inventory computation/return field and dead git wrapper, with tests proving source immutability and pre/post privacy audits remain intact.",
+        "bounded_scope": "package_bundle_pack preflight and its focused publication/privacy tests.",
+        "effort": "bench",
+        "non_goals": "Do not remove transformed-tree inventory, integrity folds, classification counts, or repeated privacy audits."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-017",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D5-003"
+      ],
+      "overlaps_wsci": [
+        "W4-003"
+      ],
+      "priority_note": "normal-clean-clone-reproducibility",
+      "root_cause": "Authored and generated regeneration instructions captured one workstation path even though the CLI already supports repository-relative defaults.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Canonical report regeneration embeds a machine-local runs path",
+      "work_order_sketch": {
+        "action": "Use a repository-relative/default runs root in authored instructions and generated REGEN_COMMAND, then assert generated output contains no workstation path.",
+        "bounded_scope": "report-source regeneration docs, build_capstone command emission, generated slice regeneration, and portability tests.",
+        "effort": "bench",
+        "non_goals": "Do not claim the untracked corpus is available on a clean clone or discharge W4's missing-corpus finding."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-018",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D5-004",
+        "D5-005"
+      ],
+      "overlaps_wsci": [
+        "W4X-001"
+      ],
+      "priority_note": "deprioritized-demo-surface",
+      "root_cause": "The advisor site has no bounded product-surface budget: build-time publication mirrors a broad document library and the live endpoint fetches/serializes queue, risk, ask, quiet-window, and document state that the browser does not render, all under a repeatedly reached artifact cap.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "The Lakebed presentation surface carries more content and live data than it consumes",
+      "work_order_sketch": {
+        "action": "Define the minimum advisor cockpit, remove or lazy-link unconsumed mirrored pages and live fields, and measure packed-byte/request reductions while preserving the consumed status/results views.",
+        "bounded_scope": "build_site page inventory, capsule page packing, live-status server payload/fetches, browser consumers, and site-focused tests.",
+        "effort": "session",
+        "non_goals": "Do not remove source provenance, consumed live freshness, or treat this as resolving W4X-001's normal-priority clean-clone RED-suite defect."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-019",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D5-006"
+      ],
+      "overlaps_wsci": [
+        "W4-004"
+      ],
+      "priority_note": "deprioritized-demo-surface",
+      "root_cause": "Site generation uses an unversioned network renderer, a custom offline renderer, and a test placeholder mode without a pinned equivalence or declared artifact identity policy.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Site Markdown output depends on divergent unpinned renderer modes",
+      "work_order_sketch": {
+        "action": "Choose and pin a canonical renderer, make fallback behavior explicit and test equivalence or fail loudly, and separate test-only placeholder rendering from publishable output.",
+        "bounded_scope": "build_site Markdown renderer selection, dependency pinning, capsule build instructions, and renderer-mode tests.",
+        "effort": "session",
+        "non_goals": "Do not remove offline resilience without an accepted replacement or claim to solve Lakebed credentials/deployment reproducibility."
+      }
+    },
+    {
+      "author_conflict": false,
+      "cid": "C1-020",
+      "claim_affecting": true,
+      "destructive_simplification": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D6-003"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-regression-gate",
+      "root_cause": "Tests pin implementation helpers without carrying the malicious HTML and clock-selection cases through generate_report and CLI run, so refactors can leave the tests green after the public safeguard disconnects.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Audit regressions test private helpers instead of guarded public behavior",
+      "work_order_sketch": {
+        "action": "Move the consequential cases to public report-generation and CLI-run assertions, retaining helper tests only where they add nonduplicative localization.",
+        "bounded_scope": "test_audit_report, test_audit_cli_examples, and the nearest public report/CLI fixtures.",
+        "effort": "bench",
+        "non_goals": "Do not delete broad integration coverage or expand into unrelated test deduplication."
+      }
+    },
+    {
+      "author_conflict": true,
+      "cid": "C1-021",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D7-001",
+        "D7-002",
+        "D7-003"
+      ],
+      "overlaps_wsci": [
+        "W5-001"
+      ],
+      "priority_note": "normal-work-authority",
+      "root_cause": "DOC-008 was marked complete before D-063's one-home migration finished: the kernel cannot encode the active audit gate, generated READY lanes conflict with hand-authored authority, old restart/history surfaces remain, and the retired planning-reflection protocol is still mandatory.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "The state-kernel migration is incomplete, leaving contradictory work authorities",
+      "work_order_sketch": {
+        "action": "Reopen and either complete or explicitly narrow DOC-008: represent global gates in the authoritative model, make generated projections semantically consistent, retire/fold the standalone reflection protocol, and remove duplicated current-state homes only after parity checks.",
+        "bounded_scope": "state kernel/schema/generator, generated RUN_STATE/TASK_QUEUE regions, DOC-008 completion record, planning-reflection retirement, and directly duplicated current-state projections.",
+        "effort": "session",
+        "non_goals": "Do not delete decision/council/run-report history, weaken stop cards or machine lanes, or hand-edit generated regions."
+      }
+    },
+    {
+      "author_conflict": true,
+      "cid": "C1-022",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D7-004"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-bridge-safety",
+      "root_cause": "Bridge entry points restate the full contract and effort/routing policy instead of limiting local text to invocation plus enforcement-boundary guardrails, despite one-home decisions.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "Bridge wire policy is normatively repeated across entry surfaces",
+      "work_order_sketch": {
+        "action": "Reduce each entry surface to invocation and locally necessary hard guardrails, link the canonical contract/effort home, and add drift checks for the minimal duplicated invariants.",
+        "bounded_scope": "AGENTS/CLAUDE bridge sections, tracked Claude agent/command/skill, reverse-consult skill, canonical protocol pointers, and focused bridge-doc checks.",
+        "effort": "session",
+        "non_goals": "Do not remove one-hop, sandbox, WRITE_SCOPE, envelope, or other enforcement-boundary safeguards."
+      }
+    },
+    {
+      "author_conflict": true,
+      "cid": "C1-023",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D7-005"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-capstone-delivery",
+      "root_cause": "Governance optimizes catch rate and rigor without an explicit time/token/calendar budget or a trigger to freeze process innovation and scale review intensity to risk.",
+      "severity": "should-fix",
+      "tier_suggestion": 3,
+      "title": "The review and bridge stack has no capstone-facing cost ceiling",
+      "work_order_sketch": {
+        "action": "Adopt a capstone-facing process budget and risk matrix that preserves strong gates for evidence, claims, concurrency, and live hardware while capping low-risk review layers and process changes.",
+        "bounded_scope": "orchestration policy, queue/state representation of review budgets/revisit triggers, and one retrospective calibration against recorded C-028 cost/catches.",
+        "effort": "session",
+        "non_goals": "Do not weaken lead final verification, write-scope enforcement, quiet-machine control, or claim/evidence integrity gates."
+      }
+    },
+    {
+      "author_conflict": true,
+      "cid": "C1-024",
+      "claim_affecting": false,
+      "destructive_simplification": false,
+      "keep_defender_needed": false,
+      "member_ids": [
+        "D7-006"
+      ],
+      "overlaps_wsci": [
+        "W4X-002",
+        "W5-007"
+      ],
+      "priority_note": "normal-clean-clone-communication",
+      "root_cause": "Current facts are copied across README, PROJECT_STATUS, and orchestration prose without a freshness owner or generated check, so merged PR, suite-count, decision, and model-name updates diverge.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "Reader-facing status and orchestration descriptions are stale",
+      "work_order_sketch": {
+        "action": "Refresh pinned-head facts, replace volatile duplicates with authoritative pointers where useful, and add a bounded freshness check for the remaining reader-facing constants.",
+        "bounded_scope": "README, PROJECT_STATUS, orchestration model description, decision-index/current-suite references, and focused doc consistency checks.",
+        "effort": "bench",
+        "non_goals": "Do not rewrite historical dated statements or conflate scientific claim freshness with repository-status facts."
+      }
+    },
+    {
+      "author_conflict": true,
+      "cid": "C1-025",
+      "claim_affecting": false,
+      "destructive_simplification": true,
+      "keep_defender_needed": true,
+      "member_ids": [
+        "D7-007"
+      ],
+      "overlaps_wsci": [],
+      "priority_note": "normal-tooling-right-sizing",
+      "root_cause": "A one-off visibility tool that parses unstable private rollout/process formats remained after codex-run status and bridge records became the supported observation path.",
+      "severity": "should-fix",
+      "tier_suggestion": 2,
+      "title": "codex-watch is an orphaned observer outside the supported protocol",
+      "work_order_sketch": {
+        "action": "Verify no current operator recovery flow depends on codex-watch, preserve any unique recovery recipe in supported launcher documentation, then delete the orphan and obsolete self-references.",
+        "bounded_scope": "scripts/codex-watch and the minimal supported-launcher documentation needed to retain unique recovery value.",
+        "effort": "bench",
+        "non_goals": "Do not remove codex-run status files, bridge logs/thread records, or supported session observability."
+      }
+    }
+  ],
+  "dropped": [],
+  "nit_riders": {
+    "D1": [
+      {
+        "eligible_ride_on": null,
+        "member_id": "D1-004",
+        "rider": "Delete the three proven-dead lifecycle/API remnants only if an accepted work order already edits each cited owner; otherwise drop."
+      },
+      {
+        "eligible_ride_on": "C1-001",
+        "member_id": "D1-005",
+        "rider": "Unify the tolerant JSONL readers only if C1-001 already edits both CLI validation paths and preserves multi-problem diagnostics."
+      },
+      {
+        "eligible_ride_on": null,
+        "member_id": "D1-006",
+        "rider": "Remove the stale unconsumed pyproject phase/status block only when an accepted metadata/current-state cleanup already touches pyproject; otherwise drop."
+      },
+      {
+        "eligible_ride_on": null,
+        "member_id": "D1-007",
+        "rider": "Correct backup bundle counting without narrowing rsync coverage only if an accepted backup-evidence work order touches the script; otherwise drop."
+      }
+    ],
+    "D2": [
+      {
+        "eligible_ride_on": "C1-006",
+        "member_id": "D2-006",
+        "rider": "Remove obsolete NodeWorkerClient run_id/artifacts_path compatibility only if C1-006 edits the same remote result/lifecycle surface."
+      },
+      {
+        "eligible_ride_on": null,
+        "member_id": "D2-007",
+        "rider": "Prune or explicitly reserve unproducible vLLM worker options only if an accepted remote-protocol work order already adjudicates those fields; otherwise drop."
+      },
+      {
+        "eligible_ride_on": "C1-005",
+        "member_id": "D2-008",
+        "rider": "Delete the two unused adapter members only if C1-005 already edits the respective mock/MLX adapters."
+      }
+    ],
+    "D3": [
+      {
+        "eligible_ride_on": "C1-012",
+        "member_id": "D3-005",
+        "rider": "Refresh the suite-next index and prune the three unreferenced drafts only if C1-012's accepted roadmap-right-sizing scope includes that packet."
+      }
+    ],
+    "D4": [
+      {
+        "eligible_ride_on": null,
+        "member_id": "D4-001",
+        "rider": "Remove the test-only legacy interpolation branch and dead prompt helper only if an accepted reducer-maintenance order edits those exact helpers and confirms frozen-version dispatch is untouched; otherwise drop."
+      }
+    ],
+    "D6": [
+      {
+        "eligible_ride_on": null,
+        "member_id": "D6-001",
+        "rider": "Remove only the standalone/subsumed succeeded-summary assertion if an accepted BundleReader test order already edits those cases; otherwise drop."
+      },
+      {
+        "eligible_ride_on": null,
+        "member_id": "D6-002",
+        "rider": "Consolidate only the duplicated direct-parser powermetrics assertions if an accepted parser-test order already edits both files; otherwise drop."
+      }
+    ]
+  },
+  "packet_id": "C1",
+  "unaccounted_member_check": "every input row id appears exactly once across consolidated/dropped/nit_riders: PASS"
+}
