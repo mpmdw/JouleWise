@@ -1,10 +1,11 @@
 {
  "generated_by": "register-integrity fable agent, 2026-07-13",
- "lease_rule": "streams have strictly disjoint union write scopes (mechanically verified); orders within a stream run in suggested_order; bench/fable conflicts with stream scopes are serialized by the lead as noted per item",
+ "lease_rule": "streams have strictly disjoint union write scopes over the PARALLEL phase (mechanically verified); precursor orders (currently WO-023) land and merge before any stream body work opens, so their scopes are exempt from the parallel invariant and listed in precursor_scope_exempt; orders within a stream run in suggested_order; bench/fable conflicts with stream scopes are serialized by the lead as noted per item",
  "streams": [
   {
    "stream_id": "S1",
    "work_order_ids": [
+    "WO-023",
     "WO-001",
     "WO-002",
     "WO-003",
@@ -64,11 +65,13 @@
     "tests/test_experiment.py",
     "tests/test_gensuite.py",
     "tests/test_idle_dependence.py",
+    "tests/test_interfaces.py",
     "tests/test_mlx_runtime.py",
     "tests/test_mock_adapters.py",
     "tests/test_node_client.py",
     "tests/test_node_worker.py",
     "tests/test_node_worker_subprocess.py",
+    "tests/test_nvidia_smi.py",
     "tests/test_powermetrics.py",
     "tests/test_reduce.py",
     "tests/test_run_campaign.py",
@@ -78,9 +81,11 @@
     "tests/test_suite.py",
     "tests/test_suite_control_parity.py",
     "tests/test_uncertainty_p2029.py",
+    "tests/test_vllm_runtime.py",
     "tests/test_workloads.py"
    ],
    "suggested_order": [
+    "WO-023",
     "WO-001",
     "WO-002",
     "WO-003",
@@ -92,21 +97,31 @@
     "WO-009",
     "WO-010",
     "WO-011"
-   ]
+   ],
+   "precursor_scope_exempt": [
+    "joulewise/bundle.py",
+    "tests/test_bundle.py",
+    "joulewise/publication_privacy.py (conditional)",
+    "tests/test_publication_privacy.py (conditional)"
+   ],
+   "precursor_note": "WO-023 (C2-028, SF re-route from bench) is a serialized DO-FIRST precursor: it lands and merges before S1 body orders and before S2 opens (bundle.py/test_bundle.py + conditional publication-privacy files overlap S2 WO-015/WO-016). controller.py/test_controller.py are ordinary S1 scope. WO-005's CONDITIONAL joulewise/bundle.py (interval-trace serialization) is NOT in the union: if triggered, lead serializes WO-005 vs S2 WO-016."
   },
   {
    "stream_id": "S2",
    "work_order_ids": [
+    "WO-032",
     "WO-012",
     "WO-013",
     "WO-014",
     "WO-015",
     "WO-016",
-    "WO-017"
+    "WO-017",
+    "WO-029"
    ],
    "union_write_scope": [
     "TASK_QUEUE.md",
     "analysis/rpt001-v1/",
+    "analysis/rpt001-v2/",
     "configs/analysis_registry/",
     "docs/campaign_packs/c5_2_3_kv_economics.md",
     "docs/campaign_packs/c5_2_7_device_perf_w_rankings.md",
@@ -121,16 +136,20 @@
     "docs/contracts/claims_ladder.md",
     "docs/contracts/evidence_handoff.md",
     "docs/contracts/measurement_methodology.md",
+    "docs/phase_2/suite_implementation_research.md",
     "docs/report_src/README.md",
     "docs/report_src/appendices/A_reproducibility.md",
     "docs/report_src/generated/rpt001_vertical_slice.md",
     "docs/specs/c027/rpt-001_report_vertical_slice.md",
     "docs/specs/rq_energy_variance_design.md",
     "figures/rpt001-v1/",
+    "figures/rpt001-v2/",
     "joulewise/analysis_engine/artifact.py",
     "joulewise/analysis_manifest.py",
     "joulewise/bundle.py",
     "joulewise/publication_privacy.py",
+    "joulewise/report.py",
+    "joulewise/validation.py",
     "scripts/build_capstone.py",
     "scripts/claims_lint.py",
     "scripts/generate_matrix.py",
@@ -140,17 +159,22 @@
     "tests/test_bundle.py",
     "tests/test_claims_index_lint.py",
     "tests/test_claims_lint.py",
+    "tests/test_corpus_strict_validation.py",
+    "tests/test_envelope_gate.py",
     "tests/test_generate_matrix.py",
     "tests/test_package_bundle_pack.py",
     "tests/test_publication_privacy.py",
+    "tests/test_report.py",
     "tests/test_rpt001_report_slice.py"
    ],
    "suggested_order": [
+    "WO-032",
     "WO-012",
     "WO-013",
     "WO-014",
     "WO-015",
     "WO-016",
+    "WO-029",
     "WO-017"
    ]
   },
@@ -180,18 +204,23 @@
   {
    "stream_id": "S4",
    "work_order_ids": [
-    "WO-019"
+    "WO-019",
+    "WO-031"
    ],
    "union_write_scope": [
     ".github/workflows/ci.yml",
+    "PROJECT_STATUS.md",
     "README.md",
+    "docs/orchestration.md",
     "docs/phase_5/phase_5_exit_checklist.md",
     "docs/publication_release_checklist.md",
     "env/bundle_pack_selection.md",
-    "scripts/release_check.py"
+    "scripts/release_check.py",
+    "tests/test_docs_freshness.py"
    ],
    "suggested_order": [
-    "WO-019"
+    "WO-019",
+    "WO-031"
    ]
   },
   {
@@ -221,22 +250,19 @@
    "cids": [
     "C2-021 (merged C1-021)"
    ],
-   "note": "State-kernel authority completion. ROUTE SYNTHESIS flagged: C1-021 fable-fix vs C2-021 sol-fix; fable-lead with Sol sub-delegation of mechanical parts, lead to confirm. Serialize around WO-012 (TASK_QUEUE.md), WO-019 (ci.yml), bench WO-030/031."
+   "note": "State-kernel authority completion. ROUTE SYNTHESIS flagged: C1-021 fable-fix vs C2-021 sol-fix; fable-lead with Sol sub-delegation of mechanical parts, lead to confirm. Serialize around WO-012 (TASK_QUEUE.md), WO-019 (ci.yml), bench WO-030/031. SF-E 2026-07-13: AWAITING ED RULING — complete-or-narrow authority choice (A: generic global-gate semantics + fidelity fixtures + then-current live gate + DOC-010 post-G6 dependency; B: explicit narrowing removing generated authority claims, manual authority retained). No implementation planning until ruled.",
+   "state": "awaiting-ed-ruling"
   },
   {
    "work_order_id": "WO-022",
    "cids": [
     "C2-036 (merged C1-023)"
    ],
-   "note": "Numeric review budget bands + spend tripwire; Ed-facing ratification; R-018 stale-citation fix."
+   "note": "Numeric review budget bands + spend tripwire; Ed-facing ratification; R-018 stale-citation fix. SF-E 2026-07-13: AWAITING ED RULING — ratification proposal content prepared (accounting source, denominator, arc/window boundaries, cached-token treatment, deliverable-progress measure, exceptions, owner, trigger consequence; executable checker if mechanical — gen_state --check cannot verify this policy); caps not presupposed. R-018 stale-citation fix is SF-designated independent and may be peeled to the bench.",
+   "state": "awaiting-ed-ruling"
   }
  ],
  "bench_checklist": [
-  {
-   "work_order_id": "WO-023",
-   "cid": "C2-028",
-   "fix": "bundle.py write_metadata: replace default=str with structured coercion diagnostics/quarantine; keep D-011 failure-path finalization. DO FIRST (controller.py precedes S1; bundle.py precedes S2)."
-  },
   {
    "work_order_id": "WO-024",
    "cid": "C2-033",
@@ -255,17 +281,12 @@
   {
    "work_order_id": "WO-027",
    "cid": "C1-025",
-   "fix": "Preserve codex-watch recovery recipe in supported docs, then delete scripts/codex-watch + self-references."
+   "fix": "Preserve codex-watch recovery recipe in supported docs; ED CONFIRMATION required that no operator flow uses it + demonstrated replacement for session discovery/live visibility (SF amendment); then delete scripts/codex-watch + operational references (audit/history records retain the name). FLAG: may exceed bench size — kept at bench per lead dictation."
   },
   {
    "work_order_id": "WO-028",
    "cid": "C2-004",
-   "fix": "controller.py:1381-1387: write incremental manifest member BEFORE aggregate; add interrupt-window test. Land before S1. (Rider D1-007 DROPPED \u2014 no order touches backup_runs.sh.)"
-  },
-  {
-   "work_order_id": "WO-029",
-   "cid": "C2-008",
-   "fix": "report.py: explicit diagnostic label + request-energy/tokenizer/boundary/provenance co-display on token metrics."
+   "fix": "controller.py:1381-1387: write incremental manifest member BEFORE aggregate; add interrupt-window test. Land before S1. (Rider D1-007 DROPPED — no order touches backup_runs.sh.)"
   },
   {
    "work_order_id": "WO-030",
@@ -273,35 +294,29 @@
    "fix": "Install docs -> pip install -e '.[analysis]'; bound matplotlib; lock policy; rider D1-006 deletes stale [tool.joulewise] block."
   },
   {
-   "work_order_id": "WO-031",
-   "cid": "C2-023",
-   "fix": "Refresh stale README/PROJECT_STATUS/orchestration facts (1,387 tests; PRs #59/#65 merged; gpt-5.6-sol); repair D-064/D-065 index; add bounded freshness check. Do LAST (after WO-021)."
-  },
-  {
-   "work_order_id": "WO-032",
-   "cid": "C2-027",
-   "fix": "AP-5 row: rationale pointer to design-pinned thresholds (suite_implementation_research.md + D-047) + bounded sensitivity note. Land before S2 (analysis_plans.md shared with WO-012)."
-  },
-  {
    "work_order_id": "(fold-in WO-003)",
    "cid": "C1-008",
-   "fix": "Spike verdict_for: require emitted==requested per stream-log C-8.2 designed fix \u2014 executes inside WO-003 (S1 lease)."
+   "fix": "Spike verdict_for: require emitted==requested per stream-log C-8.2 designed fix — executes inside WO-003 (S1 lease)."
   },
   {
    "work_order_id": "(fold-in WO-017)",
    "cid": "C1-017",
-   "fix": "build_capstone REGEN_COMMAND: repo-relative runs root, no workstation path \u2014 executes inside WO-017 (S2 lease)."
+   "fix": "build_capstone REGEN_COMMAND: repo-relative runs root, no workstation path — executes inside WO-017 (S2 lease)."
   },
   {
    "work_order_id": "(fold-in WO-016)",
    "cid": "C1-003",
-   "fix": "Additive dirty-state marker in bundle provenance \u2014 canonicalized into sol WO-016 (privacy-allowlist scope exceeded bench)."
+   "fix": "Additive dirty-state marker in bundle provenance — canonicalized into sol WO-016 (privacy-allowlist scope exceeded bench)."
   }
  ],
  "global_notes": [
-  "docs/decision_log.md stripped from all delegated sol scopes (it would have fused S1+S2); decision entries are lead-applied at landing.",
-  "Blockers lead each stream: S1 opens WO-001..WO-005 (five blockers), S2 opens WO-012; WO-017 (blocker) closes S2 by dependency and needs an Ed privacy/handoff ruling.",
-  "Bench items WO-023/WO-025/WO-028 must land BEFORE S1, WO-024/WO-032 before S2; WO-031 last.",
-  "Deferred-roadmap orders WO-033..WO-039 are queue-promotion material, not in any wave."
+  "docs/decision_log.md stripped from all delegated sol scopes (it would have fused S1+S2); decision entries are lead-applied at landing — now also covers WO-031's D-064/D-065 index repair (WO-031 re-routed into S4).",
+  "Blockers lead each stream: S1 opens WO-023 (SF precursor) then WO-001..WO-005 (five blockers); S2 opens WO-032 then WO-012; WO-017 (blocker) closes S2 by dependency and needs an Ed privacy/handoff ruling.",
+  "Bench items WO-025/WO-028 must land BEFORE S1; WO-024 before S2; WO-026/WO-027/WO-030 sequenced at the bench (WO-027 blocked on Ed confirmation per SF).",
+  "SF re-routes 2026-07-13: WO-023 (C2-028) bench->S1 DO-FIRST precursor (also precedes S2 via bundle.py); WO-032 (C2-027) bench->S2 first; WO-029 (C2-008) bench->S2 before WO-017; WO-031 (C2-023) bench->S4 last.",
+  "SF fold-in 2026-07-13: all 30 sol-final amendments ACCEPTED and baked into work orders; 7 proceed verdicts carry risk_note. WO-021 (C2-021) and WO-022 (C2-036) are awaiting-ed-ruling — no implementation planning.",
+  "WO-019 dependencies hardened per SF (C2-017): WO-017 and WO-018 are now HARD dependencies — S4 starts only after S2/S3 close.",
+  "Cross-stream seam (SF, C2-029): the analysis claim-admission hook for dirty-source exclusion lives in joulewise/analysis_engine/inputs.py (S1 WO-004 scope); WO-016 lands capture + validation.py enforcement; the inputs.py hook folds into WO-004 or is lead-applied at landing.",
+  "Deferred-roadmap orders WO-033..WO-039 are queue-promotion material, not in any wave (SF amendments to WO-034/WO-037/WO-038/WO-039 and risk_note on WO-033 baked for promotion time)."
  ]
 }
