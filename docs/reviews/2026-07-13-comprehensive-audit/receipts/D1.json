@@ -1,0 +1,216 @@
+{
+  "checks_performed": [
+    "Read every manifest file from e3fc14a01ca047e779fa7924fdf128b25762d063 with git show and numbered-line chunks.",
+    "Read the frozen audit charter and the AGENT_PLAN.md roadmap phase index; inspected the bridge-report/v1 return contract.",
+    "Ran git diff --name-only BASE_HEAD over the complete manifest; result was empty, confirming worktree copies match the pinned object.",
+    "Ran bounded pinned-tree git grep searches for schema fields, helpers, CLI/schema consumers, provenance fields, rail policy, backend registrations, tests, decisions, and council/run-report references.",
+    "Ran KEEP-PRIOR history checks with git log -S, git show, and git blame for deletion/simplification candidates.",
+    "Validated all seven example configs with python3 -m joulewise validate-config; all returned valid config.",
+    "Ran python3 -m json.tool over all seven example configs, bash -n scripts/backup_runs.sh, and both schema-print commands; all completed successfully.",
+    "Ran PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_clock tests.test_schemas; 25 tests ran, OK, with one optional-jsonschema test skipped.",
+    "Executed an in-memory SummaryMetrics behavior trace: to_dict accepted NaN, json.dumps emitted NaN, while bundle_read._check_summary rejected the same mapping as non-finite.",
+    "Attempted an external jsonschema acceptance trace; jsonschema was not installed, so only the static constraint comparison was available.",
+    "Final git status was clean on main...origin/main; no files changed."
+  ],
+  "exclusions": [],
+  "rows": [
+    {
+      "consequence": "External consumers using print-config-schema or print-output-schema can accept objects that JouleWise immediately rejects, and an injected reducer can stage a SummaryMetrics object that the finalized bundle validator later declares invalid. Maintaining three semantic representations increases drift risk in the canonical reproducible flow.",
+      "counterevidence": "Canonical internal config loading still calls BenchmarkConfig.validate, BundleReader rejects malformed succeeded summaries, and tests/test_schemas.py:257-365 pins emitted-config round trips and hashes. The optional full jsonschema test is skipped when jsonschema is absent, and those tests prove emitted-shape compatibility rather than rejection-equivalence.",
+      "domain": "D1",
+      "evidence_refs": [
+        "joulewise/schemas.py:331-356",
+        "joulewise/schemas.py:479-482",
+        "joulewise/schemas.py:502-616",
+        "joulewise/schemas.py:770-831",
+        "joulewise/bundle_read.py:1491-1534",
+        "joulewise/cli.py:131-146",
+        "docs/contracts/run_bundle_layout.md:288-305",
+        "docs/decision_log.md:1438-1449 (bounded cross-boundary contract history)",
+        "Behavior trace: SummaryMetrics(status=succeeded, energy_request_j=NaN, gross_energy_j=1).to_dict() serialized NaN; _check_summary returned 'energy_request_j is not a finite number'.",
+        "Focused tests: tests.test_clock + tests.test_schemas => 25 OK, 1 skipped; external jsonschema probe unavailable because ModuleNotFoundError."
+      ],
+      "finding": "The hand-written exported JSON Schemas and writer-side SummaryMetrics.validate form parallel, weaker validation surfaces than the runtime config and bundle-reader policies. The config schema omits prompt-source exclusivity, suite-ref/hash pairing, and the SSH-host conditional; the summary schema requires only status and permits nullable success metrics, while BundleReader requires the full succeeded key set and finite request/gross energy.",
+      "id": "D1-001",
+      "mission_tags": [
+        "M1",
+        "M2"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W1",
+        "W4"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Type and value provenance can be lost, object strings may be nondeterministic or contain process-specific representations, and downstream validation cannot distinguish captured evidence from a fallback rendering.",
+      "counterevidence": "The coercion deliberately protects D-011 bundle completion on failure paths; tests/test_controller.py:141-153 injects object() metadata specifically to pin this behavior. That safeguard argues for a structured coercion diagnostic or quarantined value, not simply removing failure-path resilience.",
+      "domain": "D1",
+      "evidence_refs": [
+        "joulewise/bundle.py:348-380",
+        "joulewise/controller.py:221-229",
+        "tests/test_controller.py:141-153 (bounded cross-boundary KEEP-PRIOR test)",
+        "git grep 'default=str|non.serializable|metadata.*coerc' across pinned joulewise/tests/decision/council/run_reports found the writer, the intentional poison test, and the originating 2026-06-12 run report."
+      ],
+      "finding": "RunBundleWriter.write_metadata silently stringifies every non-JSON-serializable value through json.dumps(default=str), converting malformed adapter evidence into apparently valid metadata without recording which fields were coerced.",
+      "id": "D1-002",
+      "mission_tags": [
+        "M1"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W1"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "Runtime behavior that produced raw evidence may not be reconstructible from metadata.git_commit, weakening campaign-scale reproducibility and making clean and locally modified harness executions indistinguishable.",
+      "counterevidence": "Repository operating procedure asks agents to inspect git status, and the later publication-pack specification refuses dirty-tree publication. Those are useful outer gates, but the bounded search found no per-bundle dirty marker or run-time clean-tree gate; a pack hash preserves bundle bytes without recovering which uncommitted source produced them.",
+      "domain": "D1",
+      "evidence_refs": [
+        "joulewise/bundle.py:221-237",
+        "joulewise/bundle.py:357-366",
+        "docs/contracts/measurement_methodology.md:8-19",
+        "Bounded absence search: grepped git_dirty, dirty-tree, working-tree dirty, git_commit, and git status across pinned joulewise, tests, scripts, and contracts; bundle.py records only HEAD, while dirty handling appears only in outer publication/process tooling.",
+        "tests/test_bundle.py:277-279 (bounded cross-boundary test accepts only unknown or a 40-hex commit; no dirty state)."
+      ],
+      "finding": "Per-bundle harness provenance records git rev-parse HEAD but does not record whether tracked or untracked source was dirty, so a run made from modified code is labeled with the same commit as a clean run.",
+      "id": "D1-003",
+      "mission_tags": [
+        "M1"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W1",
+        "W4"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "consequence": "They add dead lifecycle branches or apparent API surface and invite future callers to select obsolete or redundant paths.",
+      "counterevidence": "git history shows _environment_for_run formerly protected environment capture; commit 740c32c deliberately moved capture to prepare-end/failure-fallback methods and removed its call. _events_flushed_count remains necessary for incremental flushing, so only the unused boolean is deletable. suite_manifest_raw arrived with suite support, but typed suite_manifest and direct structural validation now own actual uses.",
+      "domain": "D1",
+      "evidence_refs": [
+        "joulewise/controller.py:316-317",
+        "joulewise/controller.py:1063-1080",
+        "joulewise/controller.py:1248-1260",
+        "joulewise/bundle_read.py:301-303",
+        "Bounded absence search: git grep '_environment_for_run' across the pinned tree returned only its definition.",
+        "Bounded absence search: git grep 'suite_manifest_raw' across the pinned tree returned only its definition.",
+        "Bounded absence search: git grep '_events_flushed' returned initialization and assignment for the boolean but no read; _events_flushed_count had active reads/writes.",
+        "KEEP-PRIOR history: git log -S and git show 740c32c confirmed the environment helper became dead during the prepare-end capture refactor; git blame attributes suite_manifest_raw to 82ed4f2."
+      ],
+      "finding": "Three implementation remnants have no pinned-tree consumers: controller._environment_for_run, the _Execution._events_flushed boolean, and BundleReader.suite_manifest_raw.",
+      "id": "D1-004",
+      "mission_tags": [
+        "M2"
+      ],
+      "proposed_disposition": "delete",
+      "seams": [],
+      "severity": "nit"
+    },
+    {
+      "consequence": "The strict-validation stack has duplicate parsing policy that can drift subtly; blank-line handling already differs even though both callers require tolerant collection.",
+      "counterevidence": "The path-based copy was introduced by commit 668a151 for P2-038 event-evidence reconstruction, and its non-throwing behavior protects multi-problem strict diagnostics. Consolidation should preserve tolerant semantics rather than redirecting blindly to BundleReader.events, which intentionally raises on malformed lines.",
+      "domain": "D1",
+      "evidence_refs": [
+        "joulewise/cli.py:796-814",
+        "joulewise/cli.py:898-917",
+        "joulewise/cli.py:1027-1040",
+        "git grep '_strict_suite_item_records' across the pinned tree found two consumers of the reader-bound helper, one consumer of the path helper, and the two definitions.",
+        "KEEP-PRIOR history: git show 668a151 confirms the second parser was introduced with the uncertainty-evidence verifier."
+      ],
+      "finding": "cli.py contains two near-copy tolerant JSONL readers: _strict_suite_item_records and _strict_suite_item_records_from_path. Both read a file, split lines, ignore JSON errors/non-object rows, and return numbered mappings.",
+      "id": "D1-005",
+      "mission_tags": [
+        "M2"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "W1"
+      ],
+      "severity": "nit"
+    },
+    {
+      "consequence": "The package manifest carries stale project-state metadata that no tool reads and that contradicts the later Phase 2 state, creating another misleading status surface.",
+      "counterevidence": "git history shows the block was introduced by commit 6f4b1cb with the original mock vertical slice, so it accurately records that historical moment. Current project status is intentionally owned elsewhere, and the bounded search found no parser, test, or packaging consumer for tool.joulewise.",
+      "domain": "D1",
+      "evidence_refs": [
+        "pyproject.toml:22-24",
+        "Bounded absence search: git grep '[tool.joulewise]|tool.joulewise|phase-2-mock-vertical-slice' across the pinned tree found only pyproject.toml plus historical prose references, with no consumer.",
+        "KEEP-PRIOR history: git log -S'phase-2-mock-vertical-slice' attributes the block to 6f4b1cb."
+      ],
+      "finding": "pyproject.toml retains an unconsumed tool.joulewise phase/status block whose status is the obsolete 'phase-2-mock-vertical-slice' milestone.",
+      "id": "D1-006",
+      "mission_tags": [
+        "M2"
+      ],
+      "proposed_disposition": "delete",
+      "seams": [],
+      "severity": "nit"
+    },
+    {
+      "consequence": "After campaign execution, backup.log overstates bundle_count by counting administrative directories, reducing the log's value as backup evidence.",
+      "counterevidence": "The rsync operation copies the entire runs tree, so this is a count-integrity defect rather than data loss; experiments is explicitly excluded because it was the first administrative directory. Updating the count predicate must not narrow what rsync preserves.",
+      "domain": "D1",
+      "evidence_refs": [
+        "scripts/backup_runs.sh:25-35",
+        "scripts/backup_runs.sh:58-74",
+        "docs/contracts/run_bundle_layout.md:429-448",
+        "docs/contracts/run_bundle_layout.md:450-470",
+        "bash -n scripts/backup_runs.sh completed successfully; finding is semantic, not syntax-related."
+      ],
+      "finding": "backup_runs.sh counts every top-level directory under runs except experiments as a bundle, although the bundle contract also places campaign_manifests at the same level.",
+      "id": "D1-007",
+      "mission_tags": [
+        "M2"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W4"
+      ],
+      "severity": "nit"
+    }
+  ],
+  "scan_id": "D1",
+  "scope_examined": [
+    ".github/workflows/ci.yml",
+    ".gitignore",
+    "configs/examples/mac_mlx_local.json",
+    "configs/examples/mac_mlx_mock_telemetry.json",
+    "configs/examples/mac_mlx_qwen35_122b.json",
+    "configs/examples/mock_affine_smoke.json",
+    "configs/examples/mock_local.json",
+    "configs/examples/mock_suite_local.json",
+    "configs/examples/nvidia_vllm_ssh.json",
+    "docs/contracts/doctor_preflight.md",
+    "docs/contracts/measurement_methodology.md",
+    "docs/contracts/run_bundle_layout.md",
+    "env/README.md",
+    "env/analysis-lock.txt",
+    "env/bundle_pack_selection.md",
+    "env/mac-measurement-lock.txt",
+    "joulewise/__init__.py",
+    "joulewise/__main__.py",
+    "joulewise/bundle.py",
+    "joulewise/bundle_read.py",
+    "joulewise/cli.py",
+    "joulewise/clock.py",
+    "joulewise/controller.py",
+    "joulewise/doctor.py",
+    "joulewise/environment.py",
+    "joulewise/provenance.py",
+    "joulewise/schemas.py",
+    "joulewise/validation.py",
+    "pyproject.toml",
+    "scripts/backup_runs.sh"
+  ],
+  "uncertainties": [
+    "No live hardware, quiet-machine measurement, telemetry truth, remote NVIDIA/Orin execution, or untracked runs corpus was examined.",
+    "The full 1387-test suite and executed clean-clone reproduction were not run; this was a read-only domain scan with focused checks.",
+    "Cross-boundary examination was limited to bounded consumer searches, targeted test/decision/history excerpts, and roadmap verification.",
+    "Post-pin commits were not audited.",
+    "External JSON Schema behavior was not executed because the optional jsonschema package is absent."
+  ]
+}

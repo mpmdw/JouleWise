@@ -1,0 +1,172 @@
+{
+  "scan_id": "D6",
+  "scope_examined": [
+    "tests/fixtures/fake_powermetrics_process.py",
+    "tests/fixtures/p2046/README.md",
+    "tests/fixtures/p2046/malformed_observations.json",
+    "tests/fixtures/p2046/missing_transition_observations.json",
+    "tests/fixtures/p2046/valid_observations.json",
+    "tests/fixtures/powermetrics_sample.plist",
+    "tests/test_2k_amplification.py",
+    "tests/test_aggregate.py",
+    "tests/test_analysis_claims.py",
+    "tests/test_analysis_engine.py",
+    "tests/test_analysis_integration.py",
+    "tests/test_analysis_manifest.py",
+    "tests/test_analysis_multiplicity.py",
+    "tests/test_analysis_ratio_integration.py",
+    "tests/test_audit_amplification.py",
+    "tests/test_audit_bundle_validation.py",
+    "tests/test_audit_cli_examples.py",
+    "tests/test_audit_clock.py",
+    "tests/test_audit_powermetrics_parser.py",
+    "tests/test_audit_reduce_degenerate.py",
+    "tests/test_audit_report.py",
+    "tests/test_audit_schema_edges.py",
+    "tests/test_bridge.py",
+    "tests/test_build_site_parsers.py",
+    "tests/test_bundle.py",
+    "tests/test_bundle_read.py",
+    "tests/test_claims_index_lint.py",
+    "tests/test_claims_lint.py",
+    "tests/test_claude_bridge_mcp.py",
+    "tests/test_cli.py",
+    "tests/test_cli_run.py",
+    "tests/test_clock.py",
+    "tests/test_controller.py",
+    "tests/test_corpus_strict_validation.py",
+    "tests/test_detection_floor.py",
+    "tests/test_determinism_gate.py",
+    "tests/test_doctor.py",
+    "tests/test_env_locks.py",
+    "tests/test_envelope_gate.py",
+    "tests/test_environment.py",
+    "tests/test_experiment.py",
+    "tests/test_gen_state.py",
+    "tests/test_generate_matrix.py",
+    "tests/test_gensuite.py",
+    "tests/test_idle_dependence.py",
+    "tests/test_interfaces.py",
+    "tests/test_kv_size.py",
+    "tests/test_load_transition_alignment.py",
+    "tests/test_mlx_runtime.py",
+    "tests/test_mock_adapters.py",
+    "tests/test_node_client.py",
+    "tests/test_node_worker.py",
+    "tests/test_node_worker_subprocess.py",
+    "tests/test_nvidia_node_integration.py",
+    "tests/test_nvidia_smi.py",
+    "tests/test_p2038_production_path.py",
+    "tests/test_pack_capsule.py",
+    "tests/test_package_bundle_pack.py",
+    "tests/test_powermetrics.py",
+    "tests/test_publication_privacy.py",
+    "tests/test_reduce.py",
+    "tests/test_report.py",
+    "tests/test_rpt001_report_slice.py",
+    "tests/test_rpt002_related_work.py",
+    "tests/test_run_campaign.py",
+    "tests/test_schemas.py",
+    "tests/test_ssh_transport.py",
+    "tests/test_suite.py",
+    "tests/test_uncertainty_evidence.py",
+    "tests/test_uncertainty_p2029.py",
+    "tests/test_vllm_runtime.py",
+    "tests/test_workloads.py"
+  ],
+  "exclusions": [],
+  "checks_performed": [
+    "Verified BASE_HEAD exists; current HEAD is post-pin 86c672a8c2ededf7aab1b145d91a87c76233f9df and the workspace remained clean.",
+    "Read the frozen charter sections 2-4 from the current audit-artifact tree; read the pinned bridge return-envelope contract solely to verify output shape.",
+    "Loaded every one of the 72 manifest files from BASE_HEAD. Parsed all Python files with ast, parsed every JSON fixture, and inspected the complete raw byte structure and SHA-256 of the plist fixture.",
+    "AST inventory found 1387 tests, zero exactly duplicated test bodies, 14 assertion-free wrappers, and zero mock-only tests. Line traces showed the assertion-free wrappers either call assertion-bearing helpers or encode must-not-raise validation contracts.",
+    "Grepped the pinned manifest for mock interaction assertions: only tests/test_powermetrics.py:1174 and tests/test_run_campaign.py:1626 matched, and both tests also assert observable results.",
+    "Grepped the pinned manifest for legacy, compatibility, retired, skip, and expected-failure markers. Legacy bundle cases still have retained-corpus and strict-validation consumers; no obsolete compatibility row was supported.",
+    "Traced powermetrics_sample.plist consumers across the pinned tree. The 269059-byte fixture contains five NUL-framed captured plist documents and is consumed by parser, CLI, package, amplification, and process-level production-path tests, so fixture inflation was not established.",
+    "Compared BASE_HEAD..HEAD under tests/ and joulewise/: no changes, allowing focused current-tree execution to represent the pin.",
+    "Ran PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_audit_clock tests.test_audit_powermetrics_parser tests.test_audit_report: 10 tests ran, OK.",
+    "Performed final git status self-audit: no repository changes."
+  ],
+  "uncertainties": [
+    "Did not run the complete 1387-test suite or mutation testing; this read-only cell used static consumer-deletion traces plus ten focused pure tests.",
+    "Did not measure per-test runtime, so the findings establish maintenance duplication/vacuity rather than quantified wall-clock cost.",
+    "Did not inspect untracked runs/, live hardware behavior, external integrations, or files outside the manifest except bounded authority/consumer traces.",
+    "The private-helper vacuity finding is based on a bounded deletion thought experiment and call-site/absence search, not an applied mutation."
+  ],
+  "rows": [
+    {
+      "id": "D6-001",
+      "mission_tags": [
+        "M2"
+      ],
+      "domain": "D6",
+      "seams": [
+        "BundleReader.is_complete",
+        "validate_bundle"
+      ],
+      "finding": "The status-only succeeded-summary invariant is asserted redundantly four times: once in the primary BundleReader completion tests and three times in the audit bundle file, including a standalone audit test wholly subsumed by adjacent combined and table-driven tests.",
+      "consequence": "One completion rule has four maintenance sites and three audit cases construct full temporary bundles; contract changes can require synchronized edits without adding an independent oracle.",
+      "counterevidence": "The combined audit test also checks validate_bundle, and the table-driven test checks consistency across other summary shapes; those broader portions have distinct value. The excess is the repeated is_complete assertion and especially the standalone audit test.",
+      "severity": "nit",
+      "proposed_disposition": "simplify",
+      "evidence_refs": [
+        "tests/test_bundle_read.py:240",
+        "tests/test_audit_bundle_validation.py:84",
+        "tests/test_audit_bundle_validation.py:92",
+        "tests/test_audit_bundle_validation.py:98",
+        "Command result: bounded grep for status-only succeeded summaries found these four test sites and no additional manifest sites."
+      ]
+    },
+    {
+      "id": "D6-002",
+      "mission_tags": [
+        "M2"
+      ],
+      "domain": "D6",
+      "seams": [
+        "powermetrics raw parser",
+        "raw-to-sample conversion"
+      ],
+      "finding": "Two audit files repeat the same zero-complete-frame powermetrics cases with identical byte inputs and error expectations: parse_powermetrics_records(b\"<plist\") must name document 0, and an all-empty NUL stream must report no complete plist documents.",
+      "consequence": "The same degenerate parser contract is maintained in two bug-pin files; editing parser diagnostics or framing policy requires duplicate updates without a second oracle.",
+      "counterevidence": "The amplification file's neighboring valid-frame test exercises higher-level sample conversion, and its second assertion calls samples_from_raw_powermetrics rather than the parser directly. The focused parser test should remain; only the duplicated direct-parser portion or overlapping method needs consolidation.",
+      "severity": "nit",
+      "proposed_disposition": "simplify",
+      "evidence_refs": [
+        "tests/test_audit_powermetrics_parser.py:44",
+        "tests/test_audit_amplification.py:232",
+        "Command result: bounded grep for zero-complete/no-complete plist cases found only these two methods.",
+        "Focused execution: tests.test_audit_powermetrics_parser passed all 4 tests."
+      ]
+    },
+    {
+      "id": "D6-003",
+      "mission_tags": [
+        "M2",
+        "M1"
+      ],
+      "domain": "D6",
+      "seams": [
+        "private helper to public report path",
+        "private helper to CLI run path"
+      ],
+      "finding": "Audit regression tests assert private helpers directly instead of the public behavior they purport to guard. test_audit_report calls _key_value_table, _flatten, and _format_number; test_audit_cli_examples calls _select_clock. If generate_report or CLI run stopped using those helpers while the helpers remained, these tests would stay green.",
+      "consequence": "The tests are brittle to the report/CLI refactors expected around publication and platform splitting, yet can be vacuous for the actual user-facing path. The HTML-escaping test is especially consequential because it would not detect removal of escaping from generated report pages.",
+      "counterevidence": "The helpers are currently called by the public implementations, the unit tests are fast and localize failures, and broader report/CLI integration tests exist. However, the manifest contains no public report-generation test carrying the malicious HTML values and no public CLI-run assertion that observes clock selection.",
+      "severity": "should-fix",
+      "proposed_disposition": "fix",
+      "evidence_refs": [
+        "tests/test_audit_report.py:10",
+        "tests/test_audit_report.py:25",
+        "tests/test_audit_report.py:30",
+        "tests/test_audit_cli_examples.py:12",
+        "tests/test_audit_cli_examples.py:28",
+        "Boundary trace: joulewise/report.py:353-391 currently composes the tested private helpers into run pages.",
+        "Boundary trace: joulewise/cli.py:222 and joulewise/cli.py:264 define and consume _select_clock.",
+        "Bounded absence search: grepped malicious HTML/non-finite report inputs across test_report.py, test_publication_privacy.py, test_build_site_parsers.py, and test_pack_capsule.py; no generate_report consumer test uses those inputs.",
+        "Bounded absence search: grepped _select_clock/SystemClock/FakeClock across test_cli.py, test_cli_run.py, and test_audit_cli_examples.py; only the direct private-helper test asserts non-mock clock selection.",
+        "Focused execution: tests.test_audit_report passed all 3 tests."
+      ]
+    }
+  ]
+}

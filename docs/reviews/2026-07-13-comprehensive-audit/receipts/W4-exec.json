@@ -1,0 +1,136 @@
+{
+  "scan_id": "W4-exec",
+  "charter": "docs/reviews/2026-07-13-comprehensive-audit/report.md §2 W4 (executed clean-clone reproduction)",
+  "pinned_head": "e3fc14a01ca047e779fa7924fdf128b25762d063",
+  "executed": "2026-07-13",
+  "environment": "macOS 26.5.2 arm64 (Apple M3 Max), system Python 3.13.1, fresh venv (pip 24.3.1), clone at /Users/edr/.claude/jobs/0d668968/tmp/w4-clone/JouleWise (removed after execution); real repo state, runs/, and network services untouched except PyPI package installs",
+  "doc_sources_used": [
+    "README.md (Verify, Run The Harness, Config And Schema Verbs, report install note line 104)",
+    "docs/contracts/doctor_preflight.md (doctor invocation + exit contract)",
+    "site_capsule/README.md (canonical site build: python3 scripts/build_site.py; deploy step NOT executed)",
+    "env/README.md (lock-what-IS context; locks not regenerated)",
+    "pyproject.toml (requires-python >=3.11, stdlib-only core, extras analysis/mac)"
+  ],
+  "steps": [
+    {"step": "clone + checkout pinned HEAD", "command": "git clone /Users/edr/code/JouleWise <tmp>/JouleWise && git checkout e3fc14a01ca047e779fa7924fdf128b25762d063", "result": "pass", "notes": "HEAD is now at e3fc14a"},
+    {"step": "environment setup (fresh venv)", "command": "python3 -m venv <tmp>/venv", "result": "pass", "notes": "Python 3.13.1 satisfies requires-python >=3.11. README documents NO install step for the mock path — and none is needed: core is stdlib-only and `python3 -m joulewise` works from the repo root uninstalled. Verified end-user quickstart is an explicitly declared Phase 5 deliverable (README Status)."},
+    {"step": "canonical test suite", "command": "python -m unittest discover -s tests", "result": "fail", "notes": "Ran 1387 tests in ~141s: FAILED (failures=1, skipped=13). The 13 skips are all cleanly labeled env gates (3x runs/ corpus absent in clean clone, 9x matplotlib [analysis] extra absent, 1x jsonschema absent). The 1 failure is test_pack_capsule.PackCapsuleTests.test_measured_postcondition_catches_large_unestimated_server_payload — see row W4X-001."},
+    {"step": "mock run (documented)", "command": "python -m joulewise run configs/examples/mock_local.json --runs-dir runs", "result": "pass", "notes": "bundle: runs/example-mock-local status=succeeded; exit 0; clone-local runs/ only"},
+    {"step": "bundle validation (documented)", "command": "python -m joulewise validate-bundle runs/example-mock-local", "result": "pass", "notes": "valid bundle; exit 0"},
+    {"step": "post-hoc reduce (documented)", "command": "python -m joulewise reduce runs/example-mock-local", "result": "pass", "notes": "status=succeeded; exit 0"},
+    {"step": "config/schema verbs (documented)", "command": "python -m joulewise validate-config configs/examples/mock_local.json; print-config-schema; print-output-schema", "result": "pass", "notes": "all exit 0; validate-config reports target=mock_target runtime=mock telemetry=mock"},
+    {"step": "report install, literal documented command", "command": "pip install 'joulewise[analysis]'", "result": "fail", "notes": "ERROR: No matching distribution found for joulewise[analysis] — README line 104's command hits PyPI and cannot succeed on a clean clone (joulewise is not published). See row W4X-003."},
+    {"step": "report install, local-editable interpretation", "command": "pip install -e '.[analysis]'", "result": "pass", "notes": "matplotlib installed from PyPI (network boundary); this working form is not what README documents"},
+    {"step": "report verb (documented)", "command": "python -m joulewise report runs --output report", "result": "pass", "notes": "report: report/index.html runs=1; exit 0"},
+    {"step": "doctor preflight (per docs/contracts/doctor_preflight.md)", "command": "python -m joulewise doctor configs/examples/mock_local.json", "result": "pass", "notes": "mode=inspection verdict=WARN, exit 0 — exactly per contract (warn exits 0); 8 checks in the documented order; WARNs are honest env facts (mock model identity, backup not configured, quiet-machine non-certification)"},
+    {"step": "site build (per site_capsule/README.md canonical flow, deploy excluded)", "command": "python scripts/build_site.py", "result": "pass", "notes": "built docs/site in the clone; exit 0. Requires Node/npx + marked (satisfied from local npx cache here) — an undocumented prerequisite outside build_site.py's own docstring. Regenerated output differs from the committed snapshot on 4 pages — see row W4X-004."},
+    {"step": "site regen vs committed snapshot", "command": "git diff --stat docs/site", "result": "pass", "notes": "4 files differ (library, record, run_state, status): committed snapshot baked from commit a89195e (one commit behind pinned HEAD); regen stamps e3fc14a and picks up the final RUN_STATE edit. Explainable regen-lag; the capsule's live freshness layer is designed for exactly this drift."},
+    {"step": "cleanup", "command": "rm -rf /Users/edr/.claude/jobs/0d668968/tmp/w4-clone", "result": "pass", "notes": "temp clone and venv removed"}
+  ],
+  "boundaries": [
+    "Network to PyPI: allowed and used twice (documented literal 'pip install joulewise[analysis]' — failed, no such distribution; local 'pip install -e .[analysis]' — succeeded, matplotlib pulled).",
+    "Node.js/npx with cached 'marked': required by scripts/build_site.py; satisfied from this machine's npx cache. A truly network-isolated fresh machine would need the documented --no-marked fallback (documented only in the script docstring, not in site_capsule/README.md's canonical flow).",
+    "Cached Lakebed executable (npx cache, lakebed 0.0.29): test_pack_capsule's SITE-01 measured gate discovers and runs it; the test skips cleanly when absent, but when present the ambient platform validator's rules apply — this is what failed (W4X-001). Machines without the cache get a labeled skip, so suite verdict is environment-dependent.",
+    "Optional deps absent by design (mlx, mlx-lm, transformers, jsonschema, matplotlib pre-install): 13 labeled skips; graceful degradation per D-009 held everywhere.",
+    "runs/ corpus is untracked: 3 acceptance-gate tests skip with explicit 'clean checkout without bundles' labels — correct clean-clone behavior.",
+    "doctor probed sudo powermetrics policy read-only and found it configured on this host; a fresh machine would report differently (host-dependent, not doc-vs-reality).",
+    "No quiet-machine, hardware, deploy, or credentialed step executed; lakebed deploy step of site_capsule/README.md intentionally excluded per charter."
+  ],
+  "rows": [
+    {
+      "row_type": "finding",
+      "id": "W4X-001",
+      "state": "open",
+      "mission_tags": ["M3"],
+      "domain": "D5",
+      "seams": ["W4"],
+      "dedupe_of": null,
+      "finding": "Clean-clone canonical test suite is RED at the pinned HEAD: test_pack_capsule.PackCapsuleTests.test_measured_postcondition_catches_large_unestimated_server_payload fails because the cached Lakebed CLI (npx cache, lakebed 0.0.29) now hard-rejects site_capsule/server/index.ts at anonymous build with 'where() is a legacy full-scan database API. Declare an index and use withIndex().' and 'all() is a legacy database API.' (index.ts lines 373 and 563: ctx.db.freshness.where(...).all() / ctx.db.liveDocs.where(...).all()), so the raised CapsulePackError carries the build-failure message instead of the expected 'over the 1 MiB cap' size message.",
+      "consequence": "A fresh user running the README Verify command on any machine with a cached lakebed executable gets FAILED, undermining the front-door trust anchor; more sharply, the Lakebed platform validator drift means the documented site publication path (scripts/pack_capsule.py measured gate and plausibly 'npx lakebed deploy') is at risk of failing on the next redeploy until server/index.ts migrates off the legacy where()/all() APIs.",
+      "counterevidence": "The test is doing its job — it skips cleanly when no lakebed is cached and it surfaced genuine external platform drift, not a vacuous assertion; RUN_STATE.md records a successful Ed deploy with lakebed 0.0.29 on 2026-07-13T23:49Z, so the authenticated deploy target may still accept what 'build --target anonymous' now rejects (unverified — no deploy was attempted per charter).",
+      "severity": "should-fix",
+      "proposed_disposition": "fix",
+      "evidence_refs": [
+        "command: python -m unittest discover -s tests (clean clone at e3fc14a, fresh venv) -> Ran 1387 tests, FAILED (failures=1, skipped=13)",
+        "failure text: scripts.pack_capsule.CapsulePackError: measured Lakebed artifact build failed via ~/.npm/_npx/3eb8d3eaaf4ef1b4/node_modules/lakebed/bin/lakebed.js (exit 1): Anonymous build failed: server/index.ts where()/all() legacy database API errors",
+        "site_capsule/server/index.ts:373",
+        "site_capsule/server/index.ts:563",
+        "tests/test_pack_capsule.py:496 (test body; skip guard at 498-504)",
+        "scripts/pack_capsule.py:627 (measure_lakebed_artifact runs 'lakebed build --target anonymous')"
+      ],
+      "verification": {"method": "executed reproduction, failure reproduced on a second full-suite run in the same clone", "outcome": "confirmed twice", "reviewer_family": "fable", "residual_uncertainty": "whether authenticated 'lakebed deploy' applies the same legacy-API rejection as 'build --target anonymous' (not tested; deploy excluded by charter), and whether the npx cache's validator rules postdate Ed's 2026-07-13 deploy"},
+      "adjudication": null,
+      "work_order_id": null
+    },
+    {
+      "row_type": "finding",
+      "id": "W4X-002",
+      "state": "open",
+      "mission_tags": ["M3"],
+      "domain": "D7",
+      "seams": ["W4"],
+      "dedupe_of": null,
+      "finding": "README.md presents stale concrete suite counts as current: 'current main: 1,220 tests OK, 10 skipped' (line 75) and 'canonical result on current main is 1,220 tests OK' (line 86), while the actual suite at the pinned HEAD runs 1,387 tests (RUN_STATE.md Current Verification: 'Ran 1387 tests, OK (skipped=10)'); a clean clone additionally observes 13 env-gated skips, not 10.",
+      "consequence": "A fresh user's first verification result contradicts the front-door document's stated numbers, costing trust exactly at the reproduce-the-claim moment; the README does name RUN_STATE.md as count authority, but still asserts specific stale figures as 'current'.",
+      "counterevidence": "README line 76-77 explicitly delegates count authority to RUN_STATE.md Current Verification, and the skip-count delta (10 vs 13) is an environment artifact (main checkout has runs/ corpus and extras installed), not a doc error per se.",
+      "severity": "nit",
+      "proposed_disposition": "fix",
+      "evidence_refs": [
+        "README.md:75",
+        "README.md:86",
+        "RUN_STATE.md:241 (Current Verification: Ran 1387 tests, OK (skipped=10))",
+        "command: python -m unittest discover -s tests (clean clone) -> Ran 1387 tests ... skipped=13"
+      ],
+      "verification": {"method": "executed count vs documented count", "outcome": "confirmed", "reviewer_family": "fable", "residual_uncertainty": "none"},
+      "adjudication": null,
+      "work_order_id": null
+    },
+    {
+      "row_type": "finding",
+      "id": "W4X-003",
+      "state": "open",
+      "mission_tags": ["M3"],
+      "domain": "D7",
+      "seams": ["W4"],
+      "dedupe_of": null,
+      "finding": "The README's only install command cannot succeed on a clean clone: line 104 documents \"pip install 'joulewise[analysis]'\" for the report verb, but joulewise has no PyPI distribution — the literal command fails with 'ERROR: No matching distribution found for joulewise[analysis]'. The working form is a local editable install, pip install -e '.[analysis]'. docs/agent_playbook.md:361 uses the same unqualified shape (\"pip install 'joulewise[mac]'\") for the Mac extra.",
+      "consequence": "The one documented step of the fresh-user path that requires an install is a command that fails verbatim; users must guess the -e . form. Every other documented step works uninstalled (stdlib-only core), so this is the sole broken command in the front-door flow.",
+      "counterevidence": "README's Status section declares 'the verified end-user quickstart remains a Phase 5 deliverable', so install-path polish is a known open item; readers familiar with Python packaging will infer the local-install form.",
+      "severity": "should-fix",
+      "proposed_disposition": "fix",
+      "evidence_refs": [
+        "README.md:104",
+        "docs/agent_playbook.md:361",
+        "command: pip install 'joulewise[analysis]' (fresh venv) -> ERROR: No matching distribution found for joulewise[analysis]",
+        "command: pip install -e '.[analysis]' && python -m joulewise report runs --output report -> report/index.html runs=1, exit 0"
+      ],
+      "verification": {"method": "executed both the literal documented command (failed) and the local-install interpretation (succeeded)", "outcome": "confirmed", "reviewer_family": "fable", "residual_uncertainty": "none"},
+      "adjudication": null,
+      "work_order_id": null
+    },
+    {
+      "row_type": "finding",
+      "id": "W4X-004",
+      "state": "open",
+      "mission_tags": ["M3"],
+      "domain": "D5",
+      "seams": ["W4"],
+      "dedupe_of": null,
+      "finding": "At the pinned HEAD the committed docs/site snapshot is one commit stale relative to its own sources: regenerating with the documented 'python3 scripts/build_site.py' changes 4 pages (library.html, record.html, run_state.html, status.html) — provenance chips move from 'commit a89195e' to 'commit e3fc14a' and run_state.html content changes (committed page still says the Lakebed upload is 'the ONE outstanding action'; sources say it was completed and lead-verified).",
+      "consequence": "The tracked site mirror and the deployed capsule can assert superseded state (an outstanding action that is already done) for the window between a source-doc commit and the next site-regen commit; anyone treating docs/site as current at an arbitrary HEAD reads stale status.",
+      "counterevidence": "This lag is designed-for: site regen is an explicit follow-up commit by convention (e.g. 37a7c5e 'Site regen at ef53497'), pages carry per-source commit provenance chips, and the live capsule has a GitHub freshness layer that banners exactly this drift; generated mirrors are declared non-authoritative.",
+      "severity": "nit",
+      "proposed_disposition": "keep",
+      "evidence_refs": [
+        "command: python scripts/build_site.py && git diff --stat docs/site (clean clone at e3fc14a) -> 4 files changed",
+        "git diff docs/site/run_state.html: provenance chip a89195e -> e3fc14a; 'the ONE outstanding action is the Lakebed upload' -> 'DEPLOYED live by Ed ... No outstanding actions'",
+        "site_capsule/README.md (freshness layer design)"
+      ],
+      "verification": {"method": "executed regeneration diffed against committed snapshot", "outcome": "confirmed", "reviewer_family": "fable", "residual_uncertainty": "none"},
+      "adjudication": null,
+      "work_order_id": null
+    }
+  ],
+  "verdict": "reproducible-with-boundaries",
+  "verdict_notes": "Every documented harness step (mock run, validate-bundle, reduce, config/schema verbs, report after a working install, doctor, site build) executed successfully from a clean clone at the pinned HEAD with a fresh venv and no repo-external state. Two doc-vs-reality breaks: the canonical test suite is RED (1 failure — external Lakebed validator drift against site_capsule/server/index.ts legacy DB APIs, W4X-001) and the README's literal report-install command cannot succeed (W4X-003). Optional-dep degradation (D-009) held everywhere it was exercised."
+}

@@ -1,0 +1,275 @@
+{
+  "checks_performed": [
+    "Read the frozen charter \u00a72-\u00a74 from the post-pin audit artifact, then inspected every manifest-listed file from BASE_HEAD e3fc14a01ca047e779fa7924fdf128b25762d063; long historical logs were inspected through their full indexes/heading structure plus targeted D7 decisions, councils, and cited ranges.",
+    "Ran git status --short --branch: clean main worktree.",
+    "Ran git diff --exit-code BASE_HEAD -- <entire D7 manifest>: exit 0, establishing that current-worktree copies used by read-only checks are byte-identical to the pinned audit objects.",
+    "Ran python3 scripts/gen_state.py --check: exit 0.",
+    "Parsed scripts/bridge, scripts/gen_state.py, and scripts/codex-watch with Python ast.parse; result OK.",
+    "Ran node --check on scripts/check-codex-mcp.mjs and scripts/claude-bridge-mcp.mjs; both exited 0.",
+    "Ran bash -n on scripts/codex-bridge and scripts/codex-run; both exited 0.",
+    "Parsed docs/process/state_kernel.json, docs/process/state_kernel.schema.json, and .mcp.json as JSON; result OK.",
+    "Ran python3 scripts/bridge --help: exit 0.",
+    "Ran pinned-tree git grep, git log -S, and per-path git log searches for planning-reflection, playbook, orchestration, state-kernel, research-registry, codex-run, codex-bridge, and codex-watch consumption and maintenance evidence.",
+    "Counted 23,171 lines across the exact D7 manifest.",
+    "Performed mechanism-by-mechanism capstone value/cost triage: phase plans/checklists, capstone scope, risk/milestones, decision authority, claims/RQ registry, and machine-state safeguards retain direct deliverable value; generated live state needs semantic repair; duplicated intake/reflection surfaces need consolidation; bridge concurrency/scope safeguards have demonstrated value but require a cost/revisit gate; codex-watch lacks a current consumer."
+  ],
+  "exclusions": [],
+  "rows": [
+    {
+      "author_conflict": true,
+      "consequence": "An agent following the generated source-of-truth block can bypass the owner-declared audit gate. The contradiction is especially costly before campaign scale-up, although quiet-machine and lead-only rules limit immediate damage. The state kernel's capstone value is deterministic work selection; its current update burden is being paid without obtaining semantic single-source truth.",
+      "counterevidence": "gen_state --check passes, the kernel is explicitly labeled NOT_AUTHORITATIVE_DERIVED_VIEW, the hand-authored audit-gate prose is correct, and quiet-Mac execution remains lead-controlled. No evidence showed that an incorrect task was actually executed from the stale projection.",
+      "domain": "D7",
+      "evidence_refs": [
+        "RUN_STATE.md:13-15",
+        "RUN_STATE.md:70-91",
+        "RUN_STATE.md:141-156",
+        "TASK_QUEUE.md:94-100",
+        "TASK_QUEUE.md:249-289",
+        "docs/process/state_kernel.json:1156-1199",
+        "command: python3 scripts/gen_state.py --check; result exit 0 despite the semantic contradiction"
+      ],
+      "finding": "The generated live-state mechanism is byte-consistent but semantically stale: RUN_STATE's generated restart block advertises P2-038, P2-004, and P1-008 as READY while the same file and TASK_QUEUE declare the comprehensive audit the exclusive next gate before feature or campaign work.",
+      "id": "D7-001",
+      "mission_tags": [
+        "M2",
+        "M1"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W5"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "author_conflict": true,
+      "consequence": "The repository pays for both the old prose process and the new kernel without achieving the promised one-home architecture. Agents repeatedly read and maintain overlapping state, increasing token/session cost and preserving the same semantic-drift class DOC-008 was intended to remove.",
+      "counterevidence": "The kernel, schema, generator, marker regions, and CI-style byte-drift check are real and working; preserving decision/council/run-report history is explicitly required. The proper repair is to finish or explicitly narrow the accepted migration, not discard the kernel or evidentiary histories.",
+      "domain": "D7",
+      "evidence_refs": [
+        "docs/specs/c027/doc-008_state_kernel.md:13-23",
+        "docs/specs/c027/doc-008_state_kernel.md:640-669",
+        "docs/specs/c027/doc-008_state_kernel.md:717-727",
+        "TASK_QUEUE.md:145",
+        "RUN_STATE.md:19-64",
+        "RUN_STATE.md:93-239",
+        "PROJECT_STATUS.md:1-696",
+        "docs/planning_reflection_protocol.md:1-77",
+        "docs/specs/c027/doc-008_orchestration_inserts.md:1-11",
+        "docs/decision_log.md:3151-3179"
+      ],
+      "finding": "DOC-008 is recorded complete although several explicit completion conditions remain unimplemented: RUN_STATE retains multiple restart/history/verification surfaces, PROJECT_STATUS remains a 696-line history-heavy document, planning_reflection_protocol remains operative, intake rules remain duplicated, and the staged orchestration inserts remain unapplied.",
+      "id": "D7-002",
+      "mission_tags": [
+        "M2",
+        "M1"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W5"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "author_conflict": true,
+      "consequence": "It adds an eight-question start ritual, end reflection, and repeated mandatory reads without recent credited consumption, duplicating M0, queue acceptance fields, phase plans, and run-report handoff rules. Its original capstone value\u2014forcing explicit goal, evidence, fallback, and non-goals\u2014now has lower-cost homes.",
+      "counterevidence": "Tracked reports show the protocol was used during early planning and explicitly followed on 2026-07-05; its evidence and fallback questions are useful safeguards. D-063 preserves those invariants by moving them into executable task records rather than deleting the concepts.",
+      "domain": "D7",
+      "evidence_refs": [
+        "docs/planning_reflection_protocol.md:18-49",
+        "docs/planning_reflection_protocol.md:51-77",
+        "docs/decision_log.md:3162-3170",
+        "AGENT_PLAN.md:10-18",
+        "RUN_STATE.md:21-33",
+        "README.md:132-143",
+        "bounded consumption search: git grep exact path across docs/run_reports found early June references and one explicit 2026-07-05 use, but no later run-report consumption",
+        "git history: docs/planning_reflection_protocol.md has no content commit after 2026-06-09"
+      ],
+      "finding": "The standalone planning-reflection protocol remains a mandatory intake surface after accepted D-063 explicitly ordered its retirement and folding of useful fields into the kernel/queue.",
+      "id": "D7-003",
+      "mission_tags": [
+        "M2",
+        "M1"
+      ],
+      "proposed_disposition": "delete",
+      "seams": [
+        "W5"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "author_conflict": true,
+      "consequence": "Every bridge change requires synchronized edits across several always-read surfaces, consumes prompt tokens on each delegated session, and creates drift exposure in model, effort, routing, envelope, thread, and session-close rules. Clean-clone discoverability has value, but full procedural restatement is not needed at every entry point.",
+      "counterevidence": "D-065 explicitly exempts enforcement-boundary guardrails from deduplication. One-hop prohibitions, sandbox restrictions, and WRITE_SCOPE precedence should remain locally explicit; configuration and minimal invocation examples also provide clean-clone value.",
+      "domain": "D7",
+      "evidence_refs": [
+        "docs/contracts/bridge_protocol.md:666-702",
+        "docs/decision_log.md:3325-3363",
+        ".claude/agents/codex.md:13-42",
+        ".claude/commands/codex.md:9-27",
+        ".claude/skills/codex/SKILL.md:26-77",
+        "CLAUDE.md:32-57",
+        "AGENTS.md:70-108",
+        ".agents/skills/claude-consult/SKILL.md:13-47"
+      ],
+      "finding": "Bridge wire and launch policy is normatively repeated across AGENTS, CLAUDE, the Claude agent, command, skill, and reverse-consult skill despite bridge_protocol \u00a710 and D-065 declaring one contract home and one effort-policy home.",
+      "id": "D7-004",
+      "mission_tags": [
+        "M2",
+        "M1"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "W5"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "author_conflict": true,
+      "consequence": "The process can consume the calendar and attention intended for the undergraduate deliverables\u2014real corpus, figures, report, and evaluator requirements. The bridge alone adds 2,262 implementation lines plus a 702-line contract, before adapters and tests. The appropriate challenge is not wholesale deletion but an explicit freeze/revisit and risk-proportionate reduction of low-risk review layers and process innovation.",
+      "counterevidence": "The expensive layers produced material value: the integration tree caught 38 cross-stream failures; scope enforcement preserved two out-of-scope diffs; final/delta reviews found newly reachable blockers; the bridge directly addresses a recorded cross-thread collision. Measurement-, evidence-, concurrency-, and claim-bearing work therefore still warrants strong integration, final-head, and lead-live gates.",
+      "domain": "D7",
+      "evidence_refs": [
+        "docs/risk_register.md:335-350",
+        "docs/council_log.md:1586-1601",
+        "docs/council_log.md:1603-1625",
+        "docs/council_log.md:1498-1502",
+        "docs/orchestration.md:44-106",
+        "docs/decision_log.md:3197-3208",
+        "docs/decision_log.md:3305-3309",
+        "command result: scripts/bridge has 2,262 lines; docs/contracts/bridge_protocol.md has 702 lines",
+        "command result: exact D7 manifest totals 23,171 lines"
+      ],
+      "finding": "The review/orchestration and bridge stack lacks a capstone-facing cost ceiling despite the repository's own R-018 evidence: one C-028 arc used 59 Sol sessions, about 330.6M tokens, roughly 17.5 session-hours, and an estimated $1,050 combined model cost, while campaign evidence remained gated.",
+      "id": "D7-005",
+      "mission_tags": [
+        "M1",
+        "M2"
+      ],
+      "proposed_disposition": "simplify",
+      "seams": [
+        "W5"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "author_conflict": true,
+      "consequence": "Advisor, contributor, and agent entry points report obsolete repository and orchestration state. This weakens clean-clone reproducibility and makes the promised freshness/one-home discipline unreliable. These surfaces have direct capstone communication value, so the right disposition is compact repair rather than deletion.",
+      "counterevidence": "README points to RUN_STATE as test-count authority, PROJECT_STATUS is explicitly derived, and the old values are historically accurate at their dated updates. RUN_STATE contains the correct pinned-head state.",
+      "domain": "D7",
+      "evidence_refs": [
+        "RUN_STATE.md:3-17",
+        "RUN_STATE.md:241-252",
+        "README.md:16-24",
+        "README.md:75-90",
+        "PROJECT_STATUS.md:8-16",
+        "PROJECT_STATUS.md:32-48",
+        "PROJECT_STATUS.md:585-590",
+        "docs/orchestration.md:9",
+        "docs/orchestration.md:27-33"
+      ],
+      "finding": "Current reader-facing and process-description documents are stale at the pinned head: README and PROJECT_STATUS still describe PR #59 as open and the suite as 1,220 tests, while RUN_STATE records PR #65 merged and 1,387 tests; PROJECT_STATUS and orchestration still identify the volume model as gpt-5.5.",
+      "id": "D7-006",
+      "mission_tags": [
+        "M2",
+        "M1"
+      ],
+      "proposed_disposition": "fix",
+      "seams": [
+        "W4",
+        "W5"
+      ],
+      "severity": "should-fix"
+    },
+    {
+      "author_conflict": true,
+      "consequence": "The tool adds an untested parser for unstable private rollout JSONL and process-list formats without current capstone or canonical orchestration value. Removing it reduces maintenance surface while leaving codex-run status files, codex-bridge logs, bridge thread records, and the Codex app as supported observation paths.",
+      "counterevidence": "Git history records a 2026-07-07 mid-session safety checkpoint mentioning codex-watch, and the tool can expose otherwise-hidden live CLI sessions. It once protected operator visibility; deletion should preserve any still-needed recovery recipe in the supported launcher documentation.",
+      "domain": "D7",
+      "evidence_refs": [
+        "scripts/codex-watch:1-16",
+        "scripts/codex-watch:30-115",
+        "scripts/codex-watch:127-233",
+        "scripts/codex-run:4-11",
+        "bounded absence search: git grep -F scripts/codex-watch at BASE_HEAD found only scripts/codex-watch self-references",
+        "bounded absence search: git grep -F scripts/codex-watch at BASE_HEAD -- docs/run_reports returned no matches",
+        "git log -- scripts/codex-watch: only content commit 38ee666 on 2026-07-07; git log -S also found a contemporaneous safety-checkpoint mention"
+      ],
+      "finding": "scripts/codex-watch is an orphaned 233-line observer: pinned-tree reference search finds only self-references, no tracked run report cites it by path, and the stable codex-run protocol explicitly says it needs no watcher or polling.",
+      "id": "D7-007",
+      "mission_tags": [
+        "M2",
+        "M1"
+      ],
+      "proposed_disposition": "delete",
+      "seams": [],
+      "severity": "should-fix"
+    }
+  ],
+  "scan_id": "D7",
+  "scope_examined": [
+    ".agents/skills/claude-consult/SKILL.md",
+    ".claude/agents/codex.md",
+    ".claude/commands/codex.md",
+    ".claude/skills/codex/SKILL.md",
+    ".codex/config.toml",
+    ".mcp.json",
+    "AGENT_PLAN.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/agent_playbook.md",
+    "docs/contracts/bridge_protocol.md",
+    "docs/contracts/capstone_scope.md",
+    "docs/council_log.md",
+    "docs/decision_log.md",
+    "docs/milestones.md",
+    "docs/orchestration.md",
+    "docs/phase_1/2k_live_verification_checklist.md",
+    "docs/phase_1/phase_1_exit_checklist.md",
+    "docs/phase_1/phase_1_plan.md",
+    "docs/phase_2/detection_floor.md",
+    "docs/phase_2/hardware_slice_implementation_guide.md",
+    "docs/phase_2/phase_2_exit_checklist.md",
+    "docs/phase_2/phase_2_plan.md",
+    "docs/phase_2/suite_implementation_research.md",
+    "docs/phase_3/kv_feasibility.md",
+    "docs/phase_3/phase_3_exit_checklist.md",
+    "docs/phase_3/phase_3_plan.md",
+    "docs/phase_4/claims_index.md",
+    "docs/phase_4/phase_4_exit_checklist.md",
+    "docs/phase_4/phase_4_plan.md",
+    "docs/phase_4/related_work_draft.md",
+    "docs/phase_5/phase_5_exit_checklist.md",
+    "docs/phase_5/phase_5_plan.md",
+    "docs/planning_reflection_protocol.md",
+    "docs/process/state_kernel.json",
+    "docs/process/state_kernel.schema.json",
+    "docs/research_question_bank.md",
+    "docs/research_question_registry.md",
+    "docs/reviews/2026-07-10-hardening-adjudication.md",
+    "docs/risk_register.md",
+    "docs/specs/c027/ADJUDICATION.md",
+    "docs/specs/c027/doc-008_orchestration_inserts.md",
+    "docs/specs/c027/doc-008_state_kernel.md",
+    "docs/specs/c027/doc-009_repro-001_authority_and_repro.md",
+    "docs/specs/c027/met-001_retro-001_governance_audit.md",
+    "docs/specs/README.md",
+    "PROJECT_STATUS.md",
+    "README.md",
+    "RUN_STATE.md",
+    "scripts/bridge",
+    "scripts/check-codex-mcp.mjs",
+    "scripts/claude-bridge-mcp.mjs",
+    "scripts/codex-bridge",
+    "scripts/codex-run",
+    "scripts/codex-watch",
+    "scripts/gen_state.py",
+    "TASK_QUEUE.md"
+  ],
+  "uncertainties": [
+    "The charter-excluded untracked process half (~/.claude skills, ~/.local/bin/codex-run-v3, personal wrappers, local bridge logs and receipts) was not examined, so this receipt cannot certify the complete orchestration stack.",
+    "No live MCP invocation, lease mutation, external service, hardware operation, quiet-machine measurement, or full unit-test suite was run.",
+    "Session consumption was inferred from tracked citations and Git history; absence of a tracked citation cannot prove a human or untracked skill never read a file.",
+    "No post-BASE_HEAD repository object was audited except the frozen audit charter required as authority."
+  ]
+}
