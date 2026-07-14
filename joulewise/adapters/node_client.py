@@ -364,6 +364,9 @@ class NodeWorkerClient:
             remote_task_path=remote_task_path,
             remote_artifacts_path=remote_artifacts_path,
             custody_token=custody_token,
+            standalone_bundle_path=(
+                Path(str(retention["bundle_path"])) if context is None else None
+            ),
         )
 
     def _read_flat_artifacts(self, artifacts_path: Path) -> dict[str, bytes]:
@@ -383,6 +386,7 @@ class NodeWorkerClient:
         remote_task_path: str,
         remote_artifacts_path: str,
         custody_token: str,
+        standalone_bundle_path: Path | None = None,
     ) -> NodeTaskResult:
         del remote_task_path, remote_artifacts_path
         worker_metadata = (
@@ -400,17 +404,33 @@ class NodeWorkerClient:
             and not process_survived
         ):
             self._update_retention_targets(custody_token, [paths["run_dir"]])
+        custody_state = "retained_pending_durable_acknowledgement"
+        if (
+            result.ok
+            and standalone_bundle_path is not None
+            and result.artifacts_path is not None
+        ):
+            acknowledgement = acknowledge_durable_custody(
+                standalone_bundle_path,
+                custody_token,
+                [result.artifacts_path],
+            )
+            released = self.acknowledge_custody(acknowledgement)
+            custody_state = (
+                "released_after_durable_acknowledgement"
+                if released and all(row["removed"] for row in released)
+                else "acknowledged_pending_remote_reclamation"
+            )
         rows = [
             item
             for item in self._cleanup_report
             if item.get("custody_token") == custody_token
-            and item.get("deferred_for_custody") is True
         ]
         metadata = dict(result.metadata)
         metadata["node_cleanup"] = rows
         metadata["custody"] = {
             "token": custody_token,
-            "state": "retained_pending_durable_acknowledgement",
+            "state": custody_state,
         }
         return NodeTaskResult(
             ok=result.ok,
@@ -755,6 +775,7 @@ class NodeWorkerClient:
             for target in targets:
                 prefix = target.rstrip("/") + "/"
                 if previous_path == target or previous_path.startswith(prefix):
+                    previous["removed"] = True
                     previous["eventually_removed"] = True
                     break
 

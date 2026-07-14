@@ -167,6 +167,44 @@ class MissingStatusTransport(LoopbackTransport):
         return super().run(command, timeout_s=timeout_s)
 
 
+class SuccessfulWorkerTransport(LoopbackTransport):
+    def run(
+        self,
+        command: list[str],
+        *,
+        timeout_s: float | None = None,
+    ) -> AdapterResult:
+        if "--task" in command:
+            task_path = Path(command[command.index("--task") + 1])
+            artifacts_dir = Path(command[command.index("--artifacts") + 1])
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
+            task = json.loads(task_path.read_text(encoding="utf-8"))
+            (artifacts_dir / "worker.log").write_text("succeeded\n", encoding="utf-8")
+            (artifacts_dir / "status.json").write_text(
+                json.dumps(
+                    {
+                        "protocol_version": 1,
+                        "task_id": task["task_id"],
+                        "task_type": task["task_type"],
+                        "operation": task["operation"],
+                        "node_role": task["node_role"],
+                        "status": "succeeded",
+                        "failure_reason": None,
+                        "message": "",
+                        "artifacts": {
+                            "status_json": "status.json",
+                            "worker_log": "worker.log",
+                        },
+                        "metadata": {},
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            return AdapterResult(ok=True, metadata={"returncode": 0, "stdout": ""})
+        return super().run(command, timeout_s=timeout_s)
+
+
 class RecoverableWorkerTransport(LoopbackTransport):
     """Leaves real remote evidence once, then permits a later-session sweep."""
 
@@ -380,6 +418,54 @@ class NodeClientTests(unittest.TestCase):
             self.assertTrue(released)
             self.assertTrue(all(row["removed"] for row in released), released)
             self.assertTrue(result.artifacts_path.is_dir())
+
+    def test_successful_standalone_collection_deletes_cleanup_run_inline(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            client = self.make_client(
+                SuccessfulWorkerTransport(),
+                SequencedClock(
+                    [100.0, 100.2, 101.0, 101.2, 102.0, 102.2, 103.0, 103.2]
+                ),
+                str(root / "remote"),
+            )
+
+            first = client.run_task(valid_telemetry_task(), timeout_s=10)
+            result = client.run_task(
+                {
+                    "protocol_version": 1,
+                    "task_id": "task-runtime-cleanup",
+                    "run_id": "run-loopback-001",
+                    "task_type": "runtime",
+                    "operation": "cleanup",
+                    "node_role": None,
+                    "runtime": {},
+                },
+                timeout_s=10,
+            )
+
+            self.assertTrue(first.ok, first)
+            self.assertTrue(result.ok, result)
+            self.assertEqual(
+                result.metadata["custody"]["state"],
+                "released_after_durable_acknowledgement",
+            )
+            self.assertFalse((root / "remote" / "run-loopback-001").exists())
+            self.assertTrue(client.cleanup_report())
+            self.assertTrue(
+                all(row["removed"] for row in client.cleanup_report()),
+                client.cleanup_report(),
+            )
+            manifest = json.loads(client.retention_manifest_path.read_text())
+            self.assertEqual(manifest["records"], [])
+            assert result.custody_token is not None
+            acknowledgement = (
+                result.artifacts_path.parents[1]
+                / "logs"
+                / "custody"
+                / (result.custody_token + ".json")
+            )
+            self.assertTrue(acknowledgement.is_file())
 
     def test_run_task_transport_failures_are_structured(self) -> None:
         cases = [
