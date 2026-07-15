@@ -48,7 +48,7 @@ Two directives executed in sequence per `docs/axi-handoff.md` (Ed,
 | WO-027 codex-watch disposition | impl/audit-wo027 `3e0e928` | lead bench + checker | FAIL (2 confirmed: live-discovery gap, session_meta fallback; 1 refuted: checker-sandbox env) → fix round | bridge tests 62 OK pre+post |
 | WO-021 state-kernel v3 (R1 choice A) | impl/audit-wo021 `c7ee7ca` | xhigh impl, 3 rounds + 8a cross-check + xhigh checker + xhigh delta | BLOCKER (phase-C deleted 4 unmigrated records) → migration + exact 30-ID parity test → delta major REFUTED (one-head-per-lane by design) + accepted residue (projection pinning test) | fidelity 38 OK + gen_state --check + canonical 1400 OK; SCOPE_OK close pre-commit |
 | WO-022 spend guardrails (R2) | main `3e9f76b` | lead bench (verbatim paste) | register verification script PASS | exact-substring + receipt assertions |
-| WO-031 docs freshness | impl/audit-integration | high impl | (fill at close) | (fill at close) |
+| WO-031 docs freshness | impl/audit-integration `0de4cea` | high impl + fix round | FAIL 3 majors (mutation probes: uncovered current regions, deploy-only phrasing escape, stale Window-A fact) → all probes rejected post-fix | freshness 5 OK replay; owner-deferred phrasing verified; SCOPE_OK close pre-commit |
 | int-budget-fix | impl/audit-integration `e491656` | high impl | lead-gated (bounded) | budget suite replay OK; SCOPE_OK |
 
 Integration-layer unique catch: capsule budget breach (963,360 >
@@ -112,12 +112,27 @@ subagent work: one verification subagent per landed work order plus one
 synthesis pass; no implementation authority (read-only sandbox pinned
 at `978e4c6`).
 
-## Remaining at draft time
+## Close-out record (all complete, 2026-07-15)
 
-Integration review (fresh Sol xhigh) over the final tree; Sol ULTRA
-comparison audit; adoption commit with PA-2's 17 supersession lines;
-report §7/§8 synthesis + completeness critic + bounded closure loop;
-deferred-roadmap queue promotion; council row (C-034 expected);
-RUN_STATE refresh; DRIFT.md refresh (NO deploy, D-068); PR(s) + merge
-gates (Ed names merges); then the AXI arc (Sol xhigh consult on the
-handoff → S-0 → S-A → S-B/C/D/E rows).
+Everything queued at draft time DONE on `impl/audit-integration`
+(final head `f8f0f92`, canonical suite 1532 OK): integration review
+(2 unique catches: capsule budget union breach → fixed `e491656`;
+D-068 vacuous-green surfaces → fixed `f682af9`); ULTRA comparison
+audit (12 faithful / 22 deviations / 6 deferred-confirmed; 2 blockers
+fixed in `913a2a6` after an xhigh checker caught F2/F4 residue; full
+triage report §8.5, response preserved in receipts/); D-043
+supersession closure (`978e4c6`: 17 surface lines + 6 lead
+decision-log amendments); report §7/§8/§9 synthesis; Fable
+completeness critic (3 gaps, all closed in `f8f0f92`); queue promotion
+(AUD-WO-033..039 + AUD-FOLLOWUPS gated kernel tasks; 46-ID oracle);
+WO-022 receipt refreshed as the T09 audit-close anchor — ARC HARD
+crossing (251M tokens / 28 Sol sessions) recorded honestly;
+DRIFT.md created (no deploy); RUN_STATE header updated; C-034 council
+row on main.
+
+Open at session close: (1) Ed's adoption merge of the
+`impl/audit-integration` PR — the audit gate stays ACTIVE until then;
+gate removal from the kernel is a one-line follow-up at/after merge.
+(2) Ed's explicit codex-watch NON-USE confirmation (ULTRA F18; asked
+in-session). (3) The AXI arc (tasks: Sol xhigh handoff consult → S-0 →
+S-A → S-B/C/D/E queue rows) launches after clearance.
