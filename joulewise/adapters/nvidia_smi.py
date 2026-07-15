@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from joulewise.adapters.node_client import (
+    PROTOCOL_VERSION,
     NodeTaskResult,
     NodeWorkerClient,
     convert_node_timestamp,
@@ -90,6 +91,7 @@ class NvidiaSmiTelemetryAdapter:
             "device": config.hardware_target.id,
             "telemetry": self.name,
             "telemetry_backend": TelemetryBackend.NVIDIA_SMI.value,
+            "node_worker_protocol_version": PROTOCOL_VERSION,
             "rail_manifest": list(RAIL_MANIFEST),
             "boundary": BOUNDARY,
             "power_units": "watts from nvidia-smi power.draw",
@@ -350,6 +352,10 @@ class NvidiaSmiTelemetryAdapter:
         metadata = dict(result.metadata)
         if result.raw_status and isinstance(result.raw_status.get("metadata"), dict):
             metadata["worker_metadata"] = result.raw_status["metadata"]
+        if result.raw_status is not None:
+            metadata["node_worker_protocol_version"] = result.raw_status.get(
+                "protocol_version"
+            )
         metadata["worker_status"] = result.status
         if result.offset_estimate_s is not None:
             metadata["offset_estimate_s"] = result.offset_estimate_s

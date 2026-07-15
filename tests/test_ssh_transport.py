@@ -95,6 +95,7 @@ class SshTransportTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.failure_reason, FailureReason.TRANSPORT_UNAVAILABLE)
         self.assertEqual(result.metadata["returncode"], 255)
+        self.assertEqual(result.metadata["execution_state"], "ambiguous")
 
     def test_run_command_oserror_is_transport_unavailable(self) -> None:
         runner = CapturingRunner(exc=OSError("missing ssh"))
@@ -119,7 +120,23 @@ class SshTransportTests(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.failure_reason, FailureReason.UNKNOWN_ERROR)
         self.assertEqual(result.metadata["returncode"], 3)
+        self.assertEqual(result.metadata["execution_state"], "completed")
         self.assertIn("remote failed", result.message or "")
+
+    def test_non_255_connection_refused_phrase_is_remote_execution_failure(self) -> None:
+        runner = CapturingRunner(
+            RunnerCompleted(
+                returncode=3,
+                stderr=b"application backend connection refused\n",
+            )
+        )
+
+        result = self.make_transport(runner).run_command(config(), ["worker"])
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.failure_reason, FailureReason.UNKNOWN_ERROR)
+        self.assertEqual(result.metadata["returncode"], 3)
+        self.assertEqual(result.metadata["execution_state"], "completed")
 
     def test_collect_artifact_failure_is_transport_unavailable(self) -> None:
         runner = CapturingRunner(RunnerCompleted(returncode=1, stderr=b"scp failed\n"))

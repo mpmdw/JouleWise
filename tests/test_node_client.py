@@ -22,6 +22,8 @@ from joulewise.adapters.node_client import (
 from joulewise.interfaces import AdapterResult, acknowledge_durable_custody
 from joulewise.schemas import FailureReason
 
+REMOVE_STATUS_FIELD = object()
+
 
 class SequencedClock:
     def __init__(self, values: list[float]):
@@ -131,6 +133,7 @@ class FailTransport(LoopbackTransport):
                 ok=False,
                 failure_reason=FailureReason.TRANSPORT_UNAVAILABLE,
                 message="ssh down during worker run",
+                metadata={"execution_state": "not_started"},
             )
         return super().run(command, timeout_s=timeout_s)
 
@@ -168,6 +171,10 @@ class MissingStatusTransport(LoopbackTransport):
 
 
 class SuccessfulWorkerTransport(LoopbackTransport):
+    def __init__(self) -> None:
+        super().__init__()
+        self.correlation_tokens: list[str] = []
+
     def run(
         self,
         command: list[str],
@@ -179,12 +186,15 @@ class SuccessfulWorkerTransport(LoopbackTransport):
             artifacts_dir = Path(command[command.index("--artifacts") + 1])
             artifacts_dir.mkdir(parents=True, exist_ok=True)
             task = json.loads(task_path.read_text(encoding="utf-8"))
+            self.correlation_tokens.append(task["correlation_token"])
             (artifacts_dir / "worker.log").write_text("succeeded\n", encoding="utf-8")
             (artifacts_dir / "status.json").write_text(
                 json.dumps(
                     {
                         "protocol_version": 1,
+                        "correlation_token": task["correlation_token"],
                         "task_id": task["task_id"],
+                        "run_id": task["run_id"],
                         "task_type": task["task_type"],
                         "operation": task["operation"],
                         "node_role": task["node_role"],
@@ -205,17 +215,56 @@ class SuccessfulWorkerTransport(LoopbackTransport):
         return super().run(command, timeout_s=timeout_s)
 
 
+class MutatingStatusTransport(SuccessfulWorkerTransport):
+    def __init__(self, field: str, value: Any) -> None:
+        super().__init__()
+        self.field = field
+        self.value = value
+
+    def run(self, command: list[str], *, timeout_s: float | None = None) -> AdapterResult:
+        result = super().run(command, timeout_s=timeout_s)
+        if "--task" in command:
+            artifacts_dir = Path(command[command.index("--artifacts") + 1])
+            status_path = artifacts_dir / "status.json"
+            payload = json.loads(status_path.read_text(encoding="utf-8"))
+            if self.value is REMOVE_STATUS_FIELD:
+                payload.pop(self.field, None)
+            else:
+                payload[self.field] = self.value
+            status_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+        return result
+
+
+class NonzeroPhraseWorkerTransport(SuccessfulWorkerTransport):
+    def run(self, command: list[str], *, timeout_s: float | None = None) -> AdapterResult:
+        result = super().run(command, timeout_s=timeout_s)
+        if "--task" in command:
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.UNKNOWN_ERROR,
+                message="application reported connection refused",
+                metadata={
+                    "returncode": 3,
+                    "stderr_tail": "application reported connection refused",
+                    "execution_state": "completed",
+                },
+            )
+        return result
+
+
 class RecoverableWorkerTransport(LoopbackTransport):
     """Leaves real remote evidence once, then permits a later-session sweep."""
 
     def __init__(self) -> None:
         super().__init__()
         self.fail_worker_once = True
-        self.fail_orphan_collect_once = False
+        self.fail_orphan_collect_once = True
 
     def run(self, command: list[str], *, timeout_s: float | None = None) -> AdapterResult:
         if self.fail_worker_once and "--task" in command:
             self.fail_worker_once = False
+            task_path = Path(command[command.index("--task") + 1])
+            task = json.loads(task_path.read_text(encoding="utf-8"))
             artifacts_dir = Path(command[command.index("--artifacts") + 1])
             artifacts_dir.mkdir(parents=True, exist_ok=True)
             (artifacts_dir / "worker.log").write_text(
@@ -226,7 +275,12 @@ class RecoverableWorkerTransport(LoopbackTransport):
                 json.dumps(
                     {
                         "protocol_version": 1,
-                        "task_id": "task-orphaned",
+                        "correlation_token": task["correlation_token"],
+                        "task_id": task["task_id"],
+                        "run_id": task["run_id"],
+                        "task_type": task["task_type"],
+                        "operation": task["operation"],
+                        "node_role": task["node_role"],
                         "status": "failed",
                         "failure_reason": "unknown_error",
                         "message": "orphaned result",
@@ -240,6 +294,7 @@ class RecoverableWorkerTransport(LoopbackTransport):
                 ok=False,
                 failure_reason=FailureReason.TRANSPORT_UNAVAILABLE,
                 message="connection lost after worker wrote evidence",
+                metadata={"returncode": 255, "execution_state": "ambiguous"},
             )
         return super().run(command, timeout_s=timeout_s)
 
@@ -269,6 +324,13 @@ class TwiceFailingRecollectionTransport(RecoverableWorkerTransport):
     def collect(
         self, source: str, destination: str, *, timeout_s: float | None = None
     ) -> AdapterResult:
+        if self.fail_orphan_collect_once and source.endswith("task-orphaned"):
+            self.fail_orphan_collect_once = False
+            return AdapterResult(
+                ok=False,
+                failure_reason=FailureReason.TRANSPORT_UNAVAILABLE,
+                message="connection lost during initial recovery collect",
+            )
         if source.endswith("task-orphaned") and self.recollection_attempts < 2:
             self.recollection_attempts += 1
             if self.recollection_attempts == 1:
@@ -497,7 +559,7 @@ class NodeClientTests(unittest.TestCase):
             transport = RecoverableWorkerTransport()
             first = NodeWorkerClient(
                 transport,
-                SequencedClock([100.0, 100.2]),
+                SequencedClock([100.0, 100.2, 101.0, 101.2]),
                 remote_work_root=remote_root,
                 remote_python=sys.executable,
                 retention_root=retention_root,
@@ -665,7 +727,7 @@ class NodeClientTests(unittest.TestCase):
             transport = TwiceFailingRecollectionTransport()
             first = NodeWorkerClient(
                 transport,
-                SequencedClock([100.0, 100.2]),
+                SequencedClock([100.0, 100.2, 101.0, 101.2]),
                 remote_work_root=remote_root,
                 remote_python=sys.executable,
                 retention_root=retention_root,
@@ -811,6 +873,117 @@ class NodeClientTests(unittest.TestCase):
             self.assertEqual(result.status, "failed")
             self.assertEqual(result.failure_reason, FailureReason.UNKNOWN_ERROR)
             self.assertIn("status.json", result.message)
+
+    def test_unsafe_run_and_task_ids_are_rejected_before_shipping(self) -> None:
+        unsafe_values = ["/absolute", "../traversal", ".", "nested/component"]
+        for field in ("run_id", "task_id"):
+            for value in unsafe_values:
+                with self.subTest(field=field, value=value):
+                    with tempfile.TemporaryDirectory() as tmp:
+                        transport = LoopbackTransport()
+                        client = self.make_client(
+                            transport,
+                            SequencedClock([]),
+                            str(Path(tmp) / "remote"),
+                        )
+                        task = valid_telemetry_task()
+                        task[field] = value
+
+                        result = client.run_task(task, timeout_s=10)
+
+                        self.assertFalse(result.ok)
+                        self.assertIn("safe single path component", result.message)
+                        self.assertEqual(transport.put_destinations, [])
+                        self.assertFalse((Path(tmp) / "remote").exists())
+
+    def test_matching_stale_response_with_wrong_correlation_token_is_retained(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            client = self.make_client(
+                MutatingStatusTransport(
+                    "correlation_token", "f" * 32
+                ),
+                SequencedClock([100.0, 100.2, 101.0, 101.2]),
+                str(root / "remote"),
+            )
+
+            result = client.run_task(valid_telemetry_task(), timeout_s=10)
+
+            self.assertFalse(result.ok)
+            self.assertIn("correlation_token", result.message)
+            self.assertFalse(result.metadata["response_identity_validated"])
+            self.assertTrue(Path(result.metadata["retained_evidence_path"]).is_dir())
+            self.assertTrue((root / "remote" / "run-loopback-001").is_dir())
+            self.assertTrue(client.cleanup_report())
+            self.assertTrue(all(not row["removed"] for row in client.cleanup_report()))
+
+    def test_other_response_identity_collisions_are_rejected(self) -> None:
+        cases = [
+            ("protocol_version", 2, "future-version"),
+            ("protocol_version", True, "boolean-version"),
+            ("run_id", "run-collided", "run-id"),
+            ("task_id", "task-collided", "task-id"),
+            ("task_type", "runtime", "task-type"),
+            ("operation", "cleanup", "operation"),
+            ("node_role", "decode", "node-role"),
+            ("node_role", REMOVE_STATUS_FIELD, "missing-null-node-role"),
+        ]
+        for field, value, name in cases:
+            with self.subTest(field=field, name=name):
+                with tempfile.TemporaryDirectory() as tmp:
+                    client = self.make_client(
+                        MutatingStatusTransport(field, value),
+                        SequencedClock([100.0, 100.2, 101.0, 101.2]),
+                        str(Path(tmp) / "remote"),
+                    )
+
+                    result = client.run_task(valid_telemetry_task(), timeout_s=10)
+
+                    self.assertFalse(result.ok)
+                    self.assertIn(field, result.message)
+                    self.assertTrue(all(not row["removed"] for row in client.cleanup_report()))
+
+    def test_nonzero_connection_refused_worker_exit_still_recovers_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            transport = NonzeroPhraseWorkerTransport()
+            client = self.make_client(
+                transport,
+                SequencedClock([100.0, 100.2, 101.0, 101.2]),
+                str(Path(tmp) / "remote"),
+            )
+
+            result = client.run_task(valid_telemetry_task(), timeout_s=10)
+
+            self.assertTrue(result.ok, result)
+            self.assertEqual(result.metadata["worker_returncode"], 3)
+            self.assertEqual(result.metadata["worker_execution_state"], "completed")
+            self.assertTrue(transport.collect_sources)
+            self.assertEqual(result.metadata["node_worker_protocol_version"], 1)
+
+    def test_repeated_task_identity_gets_a_unique_correlation_token_per_dispatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            transport = SuccessfulWorkerTransport()
+            client = self.make_client(
+                transport,
+                SequencedClock(
+                    [100.0, 100.2, 101.0, 101.2, 102.0, 102.2, 103.0, 103.2]
+                ),
+                str(Path(tmp) / "remote"),
+            )
+            task = valid_telemetry_task()
+
+            first = client.run_task(task, timeout_s=10)
+            second = client.run_task(task, timeout_s=10)
+
+            self.assertTrue(first.ok, first)
+            self.assertTrue(second.ok, second)
+            self.assertEqual(len(transport.correlation_tokens), 2)
+            self.assertNotEqual(
+                transport.correlation_tokens[0], transport.correlation_tokens[1]
+            )
+            self.assertTrue(
+                all(len(token) == 32 for token in transport.correlation_tokens)
+            )
 
     def test_run_task_uses_each_task_run_id_for_remote_dirs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

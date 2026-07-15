@@ -75,21 +75,8 @@ def _decode_stdout(payload: bytes | str | None) -> str:
 
 
 def _looks_like_ssh_transport_failure(returncode: int, stderr_tail: str) -> bool:
-    if returncode == 255:
-        return True
-    lowered = stderr_tail.lower()
-    needles = (
-        "permission denied",
-        "could not resolve hostname",
-        "connection timed out",
-        "connection refused",
-        "no route to host",
-        "host key verification failed",
-        "connection closed",
-        "connection reset",
-        "operation timed out",
-    )
-    return any(needle in lowered for needle in needles)
+    del stderr_tail
+    return returncode == 255
 
 
 class SshTransport:
@@ -171,14 +158,17 @@ class SshTransport:
                 ok=False,
                 failure_reason=FailureReason.TRANSPORT_UNAVAILABLE,
                 message="ssh command timed out after %.3fs: %s" % (timeout, exc),
-                metadata={"ssh_error_class": "timeout"},
+                metadata={"ssh_error_class": "timeout", "execution_state": "ambiguous"},
             )
         except OSError as exc:
             return AdapterResult(
                 ok=False,
                 failure_reason=FailureReason.TRANSPORT_UNAVAILABLE,
                 message="ssh command could not run: %s" % exc,
-                metadata={"ssh_error_class": exc.__class__.__name__},
+                metadata={
+                    "ssh_error_class": exc.__class__.__name__,
+                    "execution_state": "not_started",
+                },
             )
 
         stdout = _decode_stdout(completed.stdout)
@@ -187,6 +177,9 @@ class SshTransport:
             "returncode": completed.returncode,
             "stdout": stdout,
             "stderr_tail": stderr_tail,
+            "execution_state": (
+                "ambiguous" if completed.returncode == 255 else "completed"
+            ),
         }
         if completed.returncode == 0:
             return AdapterResult(ok=True, metadata=metadata)

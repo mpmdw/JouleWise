@@ -331,6 +331,10 @@ class VllmRuntimeAdapter:
         metadata = dict(result.metadata)
         if result.raw_status and isinstance(result.raw_status.get("metadata"), dict):
             metadata["worker_metadata"] = result.raw_status["metadata"]
+        if result.raw_status is not None:
+            metadata["node_worker_protocol_version"] = result.raw_status.get(
+                "protocol_version"
+            )
         metadata["worker_status"] = result.status
         if result.offset_estimate_s is not None:
             metadata["offset_estimate_s"] = result.offset_estimate_s

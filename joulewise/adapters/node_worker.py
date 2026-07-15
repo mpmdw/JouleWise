@@ -14,6 +14,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -25,6 +26,8 @@ import urllib.request
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 PROTOCOL_VERSION = 1
+SAFE_IDENTIFIER_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
+CORRELATION_TOKEN_PATTERN = re.compile(r"[0-9a-f]{32}\Z")
 
 STATUS_SUCCEEDED = "succeeded"
 STATUS_FAILED = "failed"
@@ -1655,16 +1658,20 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="JouleWise node worker")
     parser.add_argument("--task", help="path to task JSON")
     parser.add_argument("--artifacts", help="directory for worker artifacts")
+    parser.add_argument("--work-root", help="remote work root containing task artifacts")
     parser.add_argument("--clock-echo", action="store_true", help="print node clock marker JSON")
     args = parser.parse_args(argv)
 
     if args.clock_echo:
         return clock_echo()
 
-    if not args.task or not args.artifacts:
-        print("--task and --artifacts are required unless --clock-echo is used", file=sys.stderr)
+    if not args.task or not args.artifacts or not args.work_root:
+        print(
+            "--task, --artifacts, and --work-root are required unless --clock-echo is used",
+            file=sys.stderr,
+        )
         return 2
-    return run_task(args.task, args.artifacts)
+    return run_task(args.task, args.artifacts, args.work_root)
 
 
 def clock_echo() -> int:
@@ -1677,7 +1684,13 @@ def clock_echo() -> int:
     return 0
 
 
-def run_task(task_path: str, artifacts_dir: str) -> int:
+def run_task(task_path: str, artifacts_dir: str, remote_work_root: str) -> int:
+    try:
+        validate_contained_path(remote_work_root, task_path, "task path")
+        validate_contained_path(remote_work_root, artifacts_dir, "artifacts path")
+    except WorkerValidationError as exc:
+        print("unsafe worker path: %s" % exc, file=sys.stderr)
+        return 2
     try:
         os.makedirs(artifacts_dir, exist_ok=True)
     except OSError as exc:
@@ -1706,6 +1719,11 @@ def run_task(task_path: str, artifacts_dir: str) -> int:
         task = load_task(task_path)
         apply_task_identity_to_metadata(task, metadata)
         validate_task(task)
+        validate_contained_path(
+            remote_work_root,
+            task["paths"]["state_dir"],
+            "paths.state_dir",
+        )
         os.makedirs(task["paths"]["state_dir"], exist_ok=True)
         log("task validated")
 
@@ -1787,6 +1805,21 @@ def validate_task(task: Dict[str, Any]) -> None:
         if not isinstance(task[key], str) or not task[key].strip():
             raise WorkerValidationError("%s must be a non-empty string" % key)
 
+    for key in ("task_id", "run_id"):
+        if SAFE_IDENTIFIER_PATTERN.fullmatch(task[key]) is None:
+            raise WorkerValidationError(
+                "%s must be a safe single path component" % key
+            )
+
+    correlation_token = task.get("correlation_token")
+    if (
+        not isinstance(correlation_token, str)
+        or CORRELATION_TOKEN_PATTERN.fullmatch(correlation_token) is None
+    ):
+        raise WorkerValidationError(
+            "correlation_token is required and must be 32 lowercase hex characters"
+        )
+
     if "node_role" not in task:
         raise WorkerValidationError("node_role is required and may be null")
     if task["node_role"] is not None and not isinstance(task["node_role"], str):
@@ -1835,7 +1868,11 @@ def build_status_payload(
 ) -> Dict[str, Any]:
     return {
         "protocol_version": PROTOCOL_VERSION,
+        "correlation_token": (
+            task.get("correlation_token") if isinstance(task, dict) else None
+        ),
         "task_id": task.get("task_id") if isinstance(task, dict) else None,
+        "run_id": task.get("run_id") if isinstance(task, dict) else None,
         "task_type": task.get("task_type") if isinstance(task, dict) else None,
         "operation": task.get("operation") if isinstance(task, dict) else None,
         "node_role": task.get("node_role") if isinstance(task, dict) else None,
@@ -1876,6 +1913,24 @@ def write_log_line(artifacts_dir: str, line: str) -> None:
 
 def apply_task_identity_to_metadata(task: Dict[str, Any], metadata: Dict[str, Any]) -> None:
     metadata["worker_build"] = "u4-vllm-runtime"
+
+
+def validate_contained_path(remote_work_root: str, path: str, label: str) -> str:
+    """Return a real path proven to be a non-root descendant of the work root."""
+
+    if not isinstance(remote_work_root, str) or not os.path.isabs(remote_work_root):
+        raise WorkerValidationError("remote work root must be an absolute path")
+    if not isinstance(path, str) or not path:
+        raise WorkerValidationError("%s must be a non-empty path" % label)
+    root = os.path.realpath(remote_work_root)
+    candidate = os.path.realpath(path)
+    try:
+        common = os.path.commonpath([root, candidate])
+    except ValueError as exc:
+        raise WorkerValidationError("%s is not under remote work root" % label) from exc
+    if candidate == root or common != root:
+        raise WorkerValidationError("%s is not a contained non-root path" % label)
+    return candidate
 
 
 if __name__ == "__main__":

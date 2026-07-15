@@ -1,8 +1,17 @@
 # Node Worker Protocol (cross-cutting contract)
 
-Status: wire format v1 pinned 2026-07-07 during Slice 2K - PROVISIONAL
-pending first live hardware validation. Do not implement remote execution
-against any other model.
+Status: wire format v1 pinned 2026-07-07 during Slice 2K and amended
+2026-07-14 by WO-010 - PROVISIONAL pending first live hardware validation.
+Do not implement remote execution against any other model.
+
+WO-010 revises provisional v1 rather than introducing v2. No v1 task or
+response has yet been promoted by the P1-006 live gate, so preserving a weaker
+pre-validation shape would create a migration surface without a validated
+consumer. The amended v1 requires safe identifiers, a correlation token, and
+full response-identity validation. `PROTOCOL_VERSION = 1` remains the accepted
+version in the client and worker, and adapters persist that accepted response
+version as `node_worker_protocol_version` in adapter metadata. This decision
+does not remove the PROVISIONAL label or claim live NVIDIA/Orin validation.
 
 ## The idea
 
@@ -51,8 +60,9 @@ embedded in the task because they are stale by remote dispatch time.
 | Field | Required | Type | Notes |
 | --- | --- | --- | --- |
 | `protocol_version` | yes | integer | Must be `1`. Strings such as `"1"` are invalid. |
-| `task_id` | yes | string | Identifies this worker invocation in collected artifacts. |
-| `run_id` | yes | string | Identifies the parent run. |
+| `correlation_token` | yes | string | Unique per dispatch: exactly 32 lowercase hexadecimal characters. The client generates it and uses the same opaque value as the WO-001 custody token; callers cannot supply or reuse it. |
+| `task_id` | yes | string | Safe single-component identifier for this worker invocation. |
+| `run_id` | yes | string | Safe single-component identifier for the parent run. |
 | `task_type` | yes | string | Open enum: `runtime`, `telemetry`, `transfer-send`, `transfer-receive`. |
 | `operation` | yes | string | Scoped by task type. Runtime: `prepare`, `warmup`, `run_workload`, `cleanup`. Telemetry: `measure_idle`, `start_sampling`, `stop_sampling`. |
 | `node_role` | yes | string or null | Phase 3 role such as `prefill`/`decode`; null for single-node Slice 2K tasks. |
@@ -62,11 +72,20 @@ embedded in the task because they are stale by remote dispatch time.
 | `workload` | task-specific | object | Used for runtime `run_workload`; contains prompt/output token targets and deterministic `sampling_params`. |
 | `telemetry` | task-specific | object | Used for telemetry operations; contains backend, interval, query fields, and rail manifest. |
 
+`run_id` and `task_id` must match
+`[A-Za-z0-9][A-Za-z0-9._-]*`. The client and worker reject rather than
+sanitize absolute paths, separators, traversal, empty values, and dot
+components. The controller derives every remote path with component-aware
+POSIX joins and proves it is a non-root descendant using `commonpath`; the
+worker independently uses real-path `commonpath` checks before reading the
+task or creating artifacts/state. Lexical prefix checks are not authorization.
+
 Runtime example for a realistic RTX 3050 target:
 
 ```json
 {
   "protocol_version": 1,
+  "correlation_token": "0123456789abcdef0123456789abcdef",
   "task_id": "task-runtime-prepare-3050-001",
   "run_id": "run-3050-smoke-001",
   "task_type": "runtime",
@@ -100,6 +119,7 @@ Telemetry example for the same target:
 ```json
 {
   "protocol_version": 1,
+  "correlation_token": "fedcba9876543210fedcba9876543210",
   "task_id": "task-telemetry-start-3050-001",
   "run_id": "run-3050-smoke-001",
   "task_type": "telemetry",
@@ -145,7 +165,9 @@ merged into the run's runtime result.
 | Field | Type | Notes |
 | --- | --- | --- |
 | `protocol_version` | integer | `1`. |
+| `correlation_token` | string or null | Exact echo of the task token when the task JSON was parsed; null only when identity is unavailable. |
 | `task_id` | string or null | Null when unknown because parsing failed before identity was available. |
+| `run_id` | string or null | Exact echo of the parent run when known. |
 | `task_type` | string or null | Null when unknown. |
 | `operation` | string or null | Null when unknown. |
 | `node_role` | string or null | Mirrors the task value when known. |
@@ -162,6 +184,15 @@ merged into the run's runtime result.
 Worker exit code is secondary crash evidence: `0` iff `status == "succeeded"`,
 `1` otherwise, and `2` only when the worker cannot even create or write the
 artifacts path.
+
+Before reading `status`, `failure_reason`, artifact names, or worker metadata,
+the client validates `protocol_version`, `correlation_token`, `run_id`,
+`task_id`, `task_type`, `operation`, and `node_role` against the dispatched
+task. A mismatch is an ambiguous/stale response: it is not exposed as worker
+status, is not eligible for durable-custody acknowledgement, and neither its
+remote artifacts nor its run directory may be deleted. Reclamation repeats
+collection and the same identity validation; only a token-compatible valid
+response can cross the WO-001 custody-before-cleanup boundary.
 
 For vLLM `runtime.run_workload`, the worker calls the same server's
 `POST /tokenize` endpoint before streaming `POST /v1/completions`. On
@@ -194,6 +225,13 @@ worker and transport code report the following D-012 strings:
 | Runner crash, malformed or missing `status.json`, malformed task JSON, invalid protocol version, missing required field | `failed` | `unknown_error` |
 | A worker-started process (vLLM server or nvidia-smi sampler) remains alive after its stop/cleanup operation | `failed` | `cleanup_failed` |
 | Task type or operation not known to this worker build | `unsupported` | `unsupported_workload` |
+
+SSH command classification is return-code and execution-state first. Exit 255,
+runner timeouts, and launch errors are transport failures; a non-255 completed
+SSH command is a remote execution result even when stderr contains phrases such
+as `connection refused`. When execution is ambiguous and the worker may have
+run, the client still attempts post-marker and `status.json` collection. If
+status cannot be collected and identity-validated, remote evidence is retained.
 
 SSH authentication details stay in message/metadata, for example
 `ssh_error_class`; they are not recast as `permission_denied`. That reason is
@@ -267,13 +305,16 @@ Each task's `run_id` derives isolated per-run directories:
 There is no `pending-run-id` fallback. The bundle-created run id carried in
 task JSON is authoritative.
 
-After artifact collection and status parsing, the client removes its local
-collection staging directory and the remote task JSON/artifacts directory. A
-final successful runtime cleanup removes the run-scoped directory. Every
-attempt is accumulated under `metadata.extra.node_cleanup`; surviving files or
-directories populate measurement quality `remote_cleanup_failed` but do not
-demote a successful run. Process survival is distinct and uses the
-`cleanup_failed` failure above.
+Collected evidence remains in local custody and remote task/artifact paths stay
+retained until the owning adapter has durably written the evidence into its
+bundle and issued the matching on-disk custody acknowledgement. A later
+retention-manifest sweep may reclaim ambiguous-session evidence only after it
+collects and identity-validates the token-compatible response. A final
+successful runtime cleanup can replace the task/artifact targets with the
+run-scoped directory, but the same non-root containment proof is repeated
+immediately before every `rm -rf`; the work root itself is never an authorized
+target. Every attempt is accumulated under `metadata.extra.node_cleanup`.
+Process survival is distinct and uses the `cleanup_failed` failure above.
 
 ## nvidia-smi Timestamp And CSV Rules
 
@@ -307,7 +348,10 @@ structurally without producing a CSV and removes the pidfile.
 Normal task execution:
 
 ```sh
-python3 node_worker.py --task /path/to/task.json --artifacts /path/to/artifacts
+python3 node_worker.py \
+  --task /work/root/run/tasks/task.json \
+  --artifacts /work/root/run/artifacts/task \
+  --work-root /work/root
 ```
 
 Clock marker execution:

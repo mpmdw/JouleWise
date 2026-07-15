@@ -32,6 +32,7 @@ node_worker = import_node_worker()
 def valid_task(**overrides: Any) -> dict[str, Any]:
     task: dict[str, Any] = {
         "protocol_version": 1,
+        "correlation_token": "0123456789abcdef0123456789abcdef",
         "task_id": "task-telemetry-idle-001",
         "run_id": "run-3050-smoke-001",
         "task_type": "telemetry",
@@ -52,6 +53,7 @@ def valid_task(**overrides: Any) -> dict[str, Any]:
 def valid_runtime_task(**overrides: Any) -> dict[str, Any]:
     task: dict[str, Any] = {
         "protocol_version": 1,
+        "correlation_token": "0123456789abcdef0123456789abcdef",
         "task_id": "task-runtime-prepare-001",
         "run_id": "run-3050-smoke-001",
         "task_type": "runtime",
@@ -80,6 +82,7 @@ def valid_runtime_task(**overrides: Any) -> dict[str, Any]:
 def valid_workload_task(**overrides: Any) -> dict[str, Any]:
     task: dict[str, Any] = {
         "protocol_version": 1,
+        "correlation_token": "0123456789abcdef0123456789abcdef",
         "task_id": "task-runtime-run-001",
         "run_id": "run-3050-smoke-001",
         "task_type": "runtime",
@@ -112,13 +115,20 @@ class NodeWorkerTests(unittest.TestCase):
         return json.loads((artifacts_dir / "status.json").read_text(encoding="utf-8"))
 
     def run_subprocess(self, *args: str) -> subprocess.CompletedProcess[str]:
+        task_path = Path(args[args.index("--task") + 1]) if "--task" in args else None
+        worker_args = list(args)
+        if task_path is not None and "--work-root" not in worker_args:
+            worker_args.extend(["--work-root", str(task_path.parent)])
         return subprocess.run(
-            [sys.executable, str(WORKER_PATH), *args],
+            [sys.executable, str(WORKER_PATH), *worker_args],
             check=False,
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+
+    def run_worker(self, work_root: Path, args: list[str]) -> int:
+        return node_worker.main([*args, "--work-root", str(work_root)])
 
     def test_import_node_worker_directly(self) -> None:
         self.assertEqual(node_worker.PROTOCOL_VERSION, 1)
@@ -130,7 +140,9 @@ class NodeWorkerTests(unittest.TestCase):
             artifacts_dir = tmpdir / "artifacts"
             task_path = self.write_task(tmpdir, valid_task(operation="bogus_operation"))
 
-            code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+            code = self.run_worker(
+                tmpdir, ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+            )
 
             self.assertEqual(code, 1)
             status = self.read_status(artifacts_dir)
@@ -197,13 +209,57 @@ class NodeWorkerTests(unittest.TestCase):
             del task["task_id"]
             task_path = self.write_task(tmpdir, task)
 
-            code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+            code = self.run_worker(
+                tmpdir, ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+            )
 
             self.assertEqual(code, 1)
             status = self.read_status(artifacts_dir)
             self.assertEqual(status["status"], "failed")
             self.assertEqual(status["failure_reason"], "unknown_error")
             self.assertIn("task_id", status["message"])
+
+    def test_absolute_traversal_and_dot_identifiers_are_rejected(self) -> None:
+        unsafe_values = ["/absolute", "../traversal", ".", "nested/component"]
+        for field in ("run_id", "task_id"):
+            for value in unsafe_values:
+                with self.subTest(field=field, value=value):
+                    with tempfile.TemporaryDirectory() as tmp:
+                        tmpdir = Path(tmp)
+                        artifacts_dir = tmpdir / "artifacts"
+                        task = valid_task(**{field: value})
+                        task_path = self.write_task(tmpdir, task)
+
+                        code = self.run_worker(
+                            tmpdir,
+                            ["--task", str(task_path), "--artifacts", str(artifacts_dir)],
+                        )
+
+                        self.assertEqual(code, 1)
+                        status = self.read_status(artifacts_dir)
+                        self.assertEqual(status["status"], "failed")
+                        self.assertIn("safe single path component", status["message"])
+                        self.assertFalse((tmpdir / "state").exists())
+
+    def test_cli_paths_must_be_non_root_descendants_of_work_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            task_path = self.write_task(tmpdir, valid_task())
+            outside = tmpdir.parent / (tmpdir.name + "-outside")
+
+            code = node_worker.main(
+                [
+                    "--task",
+                    str(task_path),
+                    "--artifacts",
+                    str(outside),
+                    "--work-root",
+                    str(tmpdir),
+                ]
+            )
+
+            self.assertEqual(code, 2)
+            self.assertFalse(outside.exists())
 
     def test_wrong_protocol_version_names_version(self) -> None:
         cases = [
@@ -223,7 +279,8 @@ class NodeWorkerTests(unittest.TestCase):
                         task.update(patch)
                     task_path = self.write_task(tmpdir, task)
 
-                    code = node_worker.main(
+                    code = self.run_worker(
+                        tmpdir,
                         ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
                     )
 
@@ -239,7 +296,9 @@ class NodeWorkerTests(unittest.TestCase):
             artifacts_dir = tmpdir / "artifacts"
             task_path = self.write_task(tmpdir, valid_task(task_type="bogus"))
 
-            code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+            code = self.run_worker(
+                tmpdir, ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+            )
 
             self.assertEqual(code, 1)
             status = self.read_status(artifacts_dir)
@@ -253,7 +312,9 @@ class NodeWorkerTests(unittest.TestCase):
             artifacts_dir = tmpdir / "artifacts"
             task_path = self.write_task(tmpdir, valid_task())
 
-            code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+            code = self.run_worker(
+                tmpdir, ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+            )
 
             self.assertEqual(code, 1)
             leftovers = [path.name for path in artifacts_dir.iterdir() if ".status.json.tmp." in path.name]
@@ -297,7 +358,8 @@ class NodeWorkerTests(unittest.TestCase):
                     valid_task(operation="start_sampling", task_id="task-start"),
                 )
 
-                start_code = node_worker.main(
+                start_code = self.run_worker(
+                    tmpdir,
                     ["--task", str(start_task), "--artifacts", str(start_artifacts)]
                 )
 
@@ -327,7 +389,8 @@ class NodeWorkerTests(unittest.TestCase):
                     valid_task(operation="stop_sampling", task_id="task-stop"),
                 )
 
-                stop_code = node_worker.main(
+                stop_code = self.run_worker(
+                    tmpdir,
                     ["--task", str(stop_task), "--artifacts", str(stop_artifacts)]
                 )
 
@@ -354,7 +417,9 @@ class NodeWorkerTests(unittest.TestCase):
                 task["telemetry"]["interval_ms"] = 50
                 task_path = self.write_task(tmpdir, task)
 
-                code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+                code = self.run_worker(
+                    tmpdir, ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+                )
 
                 self.assertEqual(code, 0)
                 status = self.read_status(artifacts_dir)
@@ -389,7 +454,8 @@ class NodeWorkerTests(unittest.TestCase):
                 task["telemetry"]["interval_ms"] = 50
                 task_path = self.write_task(tmpdir, task)
 
-                code = node_worker.main(
+                code = self.run_worker(
+                    tmpdir,
                     ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
                 )
 
@@ -418,7 +484,9 @@ class NodeWorkerTests(unittest.TestCase):
                     valid_task(operation="start_sampling", task_id="task-start-missing"),
                 )
 
-                code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+                code = self.run_worker(
+                    tmpdir, ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+                )
 
                 self.assertEqual(code, 1)
                 status = self.read_status(artifacts_dir)
@@ -475,7 +543,8 @@ class NodeWorkerTests(unittest.TestCase):
                     valid_runtime_task(task_id="task-prepare", runtime=runtime),
                 )
 
-                prepare_code = node_worker.main(
+                prepare_code = self.run_worker(
+                    tmpdir,
                     ["--task", str(prepare_task), "--artifacts", str(prepare_artifacts)]
                 )
 
@@ -499,7 +568,8 @@ class NodeWorkerTests(unittest.TestCase):
                         runtime=runtime,
                     ),
                 )
-                warmup_code = node_worker.main(
+                warmup_code = self.run_worker(
+                    tmpdir,
                     ["--task", str(warmup_task), "--artifacts", str(warmup_artifacts)]
                 )
                 self.assertEqual(warmup_code, 0)
@@ -511,7 +581,8 @@ class NodeWorkerTests(unittest.TestCase):
                     tmpdir,
                     valid_workload_task(task_id="task-run"),
                 )
-                run_code = node_worker.main(
+                run_code = self.run_worker(
+                    tmpdir,
                     ["--task", str(run_task), "--artifacts", str(run_artifacts)]
                 )
                 self.assertEqual(run_code, 0)
@@ -565,7 +636,8 @@ class NodeWorkerTests(unittest.TestCase):
                         runtime=runtime,
                     ),
                 )
-                cleanup_code = node_worker.main(
+                cleanup_code = self.run_worker(
+                    tmpdir,
                     ["--task", str(cleanup_task), "--artifacts", str(cleanup_artifacts)]
                 )
                 self.assertEqual(cleanup_code, 0)
@@ -582,7 +654,8 @@ class NodeWorkerTests(unittest.TestCase):
                         runtime=runtime,
                     ),
                 )
-                cleanup_again_code = node_worker.main(
+                cleanup_again_code = self.run_worker(
+                    tmpdir,
                     ["--task", str(cleanup_again_task), "--artifacts", str(cleanup_again_artifacts)]
                 )
                 self.assertEqual(cleanup_again_code, 0)
@@ -647,7 +720,8 @@ class NodeWorkerTests(unittest.TestCase):
                     tmpdir,
                     valid_workload_task(task_id="task-run-include-usage-rejected"),
                 )
-                code = node_worker.main(
+                code = self.run_worker(
+                    tmpdir,
                     ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
                 )
             finally:
@@ -705,7 +779,8 @@ class NodeWorkerTests(unittest.TestCase):
                     tmpdir,
                     valid_workload_task(task_id="task-run-usage-omitted"),
                 )
-                code = node_worker.main(
+                code = self.run_worker(
+                    tmpdir,
                     ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
                 )
             finally:
@@ -742,7 +817,9 @@ class NodeWorkerTests(unittest.TestCase):
                     valid_runtime_task(task_id="task-vllm-missing", runtime=runtime),
                 )
 
-                code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+                code = self.run_worker(
+                    tmpdir, ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+                )
 
                 self.assertEqual(code, 1)
                 status = self.read_status(artifacts_dir)
@@ -770,7 +847,9 @@ class NodeWorkerTests(unittest.TestCase):
                     valid_runtime_task(task_id="task-vllm-oom", runtime=runtime),
                 )
 
-                code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+                code = self.run_worker(
+                    tmpdir, ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+                )
 
                 self.assertEqual(code, 1)
                 status = self.read_status(artifacts_dir)
@@ -803,7 +882,9 @@ class NodeWorkerTests(unittest.TestCase):
                     valid_runtime_task(task_id="task-vllm-import-error", runtime=runtime),
                 )
 
-                code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+                code = self.run_worker(
+                    tmpdir, ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+                )
 
                 self.assertEqual(code, 1)
                 status = self.read_status(artifacts_dir)
@@ -840,7 +921,9 @@ class NodeWorkerTests(unittest.TestCase):
                 task["timeout_s"] = 123.0
                 task_path = self.write_task(tmpdir, task)
 
-                code = node_worker.main(["--task", str(task_path), "--artifacts", str(artifacts_dir)])
+                code = self.run_worker(
+                    tmpdir, ["--task", str(task_path), "--artifacts", str(artifacts_dir)]
+                )
 
                 self.assertEqual(code, 1)
                 self.assertEqual(captured["timeout_s"], 123.0)

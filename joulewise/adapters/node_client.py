@@ -14,6 +14,7 @@ import fcntl
 import json
 import os
 import posixpath
+import re
 import shutil
 import tempfile
 import uuid
@@ -32,6 +33,7 @@ from joulewise.interfaces import (
 from joulewise.schemas import FailureReason
 
 PROTOCOL_VERSION = 1
+SAFE_IDENTIFIER_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\Z")
 DEFAULT_REMOTE_WORK_ROOT = "/tmp/joulewise"
 DEFAULT_REMOTE_PYTHON = "python3"
 WORKER_FILENAME = "node_worker.py"
@@ -119,9 +121,11 @@ class NodeWorkerClient:
         self.transport = transport
         self.clock = clock
         self.run_id = run_id
-        self.remote_work_root = remote_work_root.rstrip("/") or "/"
+        if not isinstance(remote_work_root, str) or not posixpath.isabs(remote_work_root):
+            raise ValueError("remote_work_root must be an absolute POSIX path")
+        self.remote_work_root = posixpath.normpath(remote_work_root)
         self.remote_python = remote_python
-        self.remote_worker_path = posixpath.join(self.remote_work_root, WORKER_FILENAME)
+        self.remote_worker_path = self._contained_remote_path(WORKER_FILENAME)
         self.retention_root = Path(retention_root or DEFAULT_RETENTION_ROOT)
         self.retention_manifest_path = self.retention_root / "retention-manifest.json"
         self.retention_lock_path = self.retention_manifest_path.with_name(
@@ -175,17 +179,12 @@ class NodeWorkerClient:
         timeout_s: float,
         context: RunContext | None = None,
     ) -> NodeTaskResult:
-        task_id = task.get("task_id")
-        if not isinstance(task_id, str) or not task_id.strip():
+        try:
+            task_id, run_id = self._validate_dispatch_task(task)
+        except ValueError as exc:
             return self._task_failure(
                 FailureReason.UNKNOWN_ERROR,
-                "task_id is required before dispatch",
-            )
-        run_id = task.get("run_id")
-        if not isinstance(run_id, str) or not run_id.strip():
-            return self._task_failure(
-                FailureReason.UNKNOWN_ERROR,
-                "run_id is required before dispatch",
+                str(exc),
             )
 
         ship_result = self._ensure_worker_shipped()
@@ -199,10 +198,24 @@ class NodeWorkerClient:
         if not dirs_result.ok:
             return self._task_failure_from_adapter(dirs_result, "create remote run dirs failed")
 
-        prepared_task = self._prepare_task_payload(task, run_id=run_id, paths=paths, timeout_s=timeout_s)
-        remote_task_path = posixpath.join(paths["tasks_dir"], "%s.json" % task_id)
-        remote_artifacts_path = posixpath.join(paths["artifacts_dir"], task_id)
         custody_token = uuid.uuid4().hex
+        prepared_task = self._prepare_task_payload(
+            task,
+            run_id=run_id,
+            paths=paths,
+            timeout_s=timeout_s,
+            correlation_token=custody_token,
+        )
+        remote_task_path = self._contained_remote_path(
+            run_id,
+            "tasks",
+            "%s.json" % task_id,
+        )
+        remote_artifacts_path = self._contained_remote_path(
+            run_id,
+            "artifacts",
+            task_id,
+        )
         retention = self._new_retention_record(
             token=custody_token,
             task_id=task_id,
@@ -253,7 +266,6 @@ class NodeWorkerClient:
                 custody_token=custody_token,
             )
 
-        self._mark_worker_may_have_run(custody_token)
         run_result = self.transport.run(
             [
                 self.remote_python,
@@ -262,17 +274,22 @@ class NodeWorkerClient:
                 remote_task_path,
                 "--artifacts",
                 remote_artifacts_path,
+                "--work-root",
+                self.remote_work_root,
             ],
             timeout_s=timeout_s,
         )
-        if (
-            not run_result.ok
-            and run_result.failure_reason == FailureReason.TRANSPORT_UNAVAILABLE
-        ):
+        execution_state = str(
+            run_result.metadata.get(
+                "execution_state",
+                "completed" if run_result.failure_reason != FailureReason.TRANSPORT_UNAVAILABLE else "ambiguous",
+            )
+        )
+        if execution_state == "not_started":
             return self._with_remote_cleanup(
                 self._task_failure_from_adapter(
                     run_result,
-                    "worker command transport failed",
+                    "worker command did not start",
                     pre_marker=pre,
                 ),
                 task_id=task_id,
@@ -283,27 +300,31 @@ class NodeWorkerClient:
                 custody_token=custody_token,
             )
 
+        self._mark_worker_may_have_run(custody_token)
         post = self.take_clock_marker()
-        if isinstance(post, AdapterResult):
-            return self._with_remote_cleanup(
-                self._task_failure_from_adapter(
-                    post,
-                    "post-task clock marker failed",
-                    pre_marker=pre,
-                ),
-                task_id=task_id,
-                prepared_task=prepared_task,
-                paths=paths,
-                remote_task_path=remote_task_path,
-                remote_artifacts_path=remote_artifacts_path,
-                custody_token=custody_token,
-            )
+        post_marker = post if isinstance(post, ClockMarker) else None
+        alignment = None
+        if post_marker is not None:
+            alignment = self._alignment_record(pre, post_marker)
+            alignment["stage"] = self._stage_name(prepared_task)
+            recorder = getattr(self.transport, "record_clock_alignment", None)
+            if callable(recorder):
+                recorder(alignment)
 
-        alignment = self._alignment_record(pre, post)
-        alignment["stage"] = self._stage_name(prepared_task)
-        recorder = getattr(self.transport, "record_clock_alignment", None)
-        if callable(recorder):
-            recorder(alignment)
+        result_metadata: dict[str, Any] = {
+            "worker_returncode": run_result.metadata.get("returncode"),
+            "worker_execution_state": execution_state,
+            "worker_command_ok": run_result.ok,
+        }
+        if not run_result.ok:
+            result_metadata["worker_command_failure_reason"] = (
+                run_result.failure_reason.value if run_result.failure_reason else None
+            )
+            result_metadata["worker_command_message"] = run_result.message
+        if isinstance(post, AdapterResult):
+            result_metadata["post_marker_failure"] = post.message or "post-task clock marker failed"
+        if alignment is not None:
+            result_metadata["clock_alignment"] = alignment
 
         local_artifacts_path = Path(retention["custody_path"])
         local_artifacts_path.parent.mkdir(parents=True, exist_ok=True)
@@ -317,45 +338,74 @@ class NodeWorkerClient:
                 collect_result,
                 "collect artifacts failed",
                 pre_marker=pre,
-                post_marker=post,
+                post_marker=post_marker,
                 alignment=alignment,
             )
+            result = self._replace_result_metadata(result, result_metadata)
         else:
-            self._mark_collection_complete(custody_token)
             status_path = local_artifacts_path / STATUS_JSON
             try:
                 raw_status = json.loads(status_path.read_text(encoding="utf-8"))
-                artifacts = self._read_flat_artifacts(local_artifacts_path)
             except (OSError, json.JSONDecodeError) as exc:
                 result = self._task_failure(
                     FailureReason.UNKNOWN_ERROR,
                     "missing or malformed status.json: %s" % exc,
-                    artifacts_path=local_artifacts_path,
                     pre_marker=pre,
-                    post_marker=post,
+                    post_marker=post_marker,
                     alignment=alignment,
-                )
-            else:
-                status = str(raw_status.get("status", "failed"))
-                failure_reason = self._failure_reason(raw_status.get("failure_reason"))
-                message = str(raw_status.get("message", ""))
-                result = NodeTaskResult(
-                    ok=status == "succeeded",
-                    status=status,
-                    failure_reason=failure_reason,
-                    message=message,
-                    artifacts_path=local_artifacts_path,
-                    artifacts=artifacts,
-                    raw_status=raw_status,
-                    pre_marker=pre,
-                    post_marker=post,
-                    offset_estimate_s=alignment["offset_estimate_s"],
-                    offset_bound_s=alignment["offset_bound_s"],
                     metadata={
-                        "clock_alignment": alignment,
-                        "worker_returncode": run_result.metadata.get("returncode"),
+                        **result_metadata,
+                        "retained_evidence_path": str(local_artifacts_path),
                     },
                 )
+            else:
+                try:
+                    self._validate_response_identity(raw_status, prepared_task)
+                except ValueError as exc:
+                    result = self._task_failure(
+                        FailureReason.UNKNOWN_ERROR,
+                        "node worker response identity mismatch: %s" % exc,
+                        pre_marker=pre,
+                        post_marker=post_marker,
+                        alignment=alignment,
+                        metadata={
+                            **result_metadata,
+                            "retained_evidence_path": str(local_artifacts_path),
+                            "response_identity_validated": False,
+                        },
+                    )
+                else:
+                    artifacts = self._read_flat_artifacts(local_artifacts_path)
+                    self._mark_response_validated(custody_token)
+                    status = str(raw_status.get("status", "failed"))
+                    failure_reason = self._failure_reason(raw_status.get("failure_reason"))
+                    message = str(raw_status.get("message", ""))
+                    if isinstance(post, AdapterResult):
+                        status = "failed"
+                        failure_reason = FailureReason.TRANSPORT_UNAVAILABLE
+                        message = post.message or "post-task clock marker failed"
+                    result = NodeTaskResult(
+                        ok=status == "succeeded",
+                        status=status,
+                        failure_reason=failure_reason,
+                        message=message,
+                        artifacts_path=local_artifacts_path,
+                        artifacts=artifacts,
+                        raw_status=raw_status,
+                        pre_marker=pre,
+                        post_marker=post_marker,
+                        offset_estimate_s=(
+                            alignment["offset_estimate_s"] if alignment is not None else None
+                        ),
+                        offset_bound_s=(
+                            alignment["offset_bound_s"] if alignment is not None else None
+                        ),
+                        metadata={
+                            **result_metadata,
+                            "node_worker_protocol_version": PROTOCOL_VERSION,
+                            "response_identity_validated": True,
+                        },
+                    )
         return self._with_remote_cleanup(
             result,
             task_id=task_id,
@@ -489,11 +539,14 @@ class NodeWorkerClient:
             custody_path = context.raw_dir / ".node-custody" / token
         return {
             "token": token,
+            "correlation_token": prepared_task.get("correlation_token"),
+            "protocol_version": prepared_task.get("protocol_version"),
             "scope": self._retention_scope(),
             "task_id": task_id,
             "run_id": run_id,
             "task_type": prepared_task.get("task_type"),
             "operation": prepared_task.get("operation"),
+            "node_role": prepared_task.get("node_role"),
             "run_dir": paths["run_dir"],
             "remote_artifacts_path": remote_artifacts_path,
             "remote_targets": [remote_task_path, remote_artifacts_path],
@@ -501,6 +554,7 @@ class NodeWorkerClient:
             "custody_path": str(custody_path),
             "worker_may_have_run": False,
             "collection_complete": False,
+            "response_identity_validated": False,
             "partial_custody_paths": [],
             "acknowledged": False,
             "acknowledgement_path": None,
@@ -556,6 +610,16 @@ class NodeWorkerClient:
 
     def _mark_collection_complete(self, token: str) -> None:
         self._update_retention_field(token, "collection_complete", True)
+
+    def _mark_response_validated(self, token: str) -> None:
+        with self._retention_manifest_lock():
+            records = self._load_retention_records()
+            record = next((item for item in records if item.get("token") == token), None)
+            if record is None:
+                raise RuntimeError("retention record disappeared before response validation")
+            record["collection_complete"] = True
+            record["response_identity_validated"] = True
+            self._write_retention_records(records)
 
     def _update_retention_field(self, token: str, key: str, value: Any) -> None:
         with self._retention_manifest_lock():
@@ -616,6 +680,7 @@ class NodeWorkerClient:
                     self._write_retention_records(records)
                 elif (
                     not record.get("collection_complete")
+                    or not record.get("response_identity_validated")
                     or not self._custody_path_has_evidence(custody_path)
                 ):
                     partial_paths = record.setdefault("partial_custody_paths", [])
@@ -628,6 +693,7 @@ class NodeWorkerClient:
                         custody_path.name + ".recollect-" + uuid.uuid4().hex
                     )
                     recollection_path.parent.mkdir(parents=True, exist_ok=True)
+                    self._validate_retention_record_paths(record)
                     collected = self.transport.collect(
                         str(record["remote_artifacts_path"]),
                         str(recollection_path),
@@ -659,9 +725,39 @@ class NodeWorkerClient:
                             }
                         )
                         continue
+                    try:
+                        raw_status = json.loads(
+                            (recollection_path / STATUS_JSON).read_text(encoding="utf-8")
+                        )
+                        self._validate_response_identity(raw_status, record)
+                    except (OSError, json.JSONDecodeError, ValueError) as exc:
+                        superseded_paths = self._retain_failed_recollection(
+                            record,
+                            original_path=custody_path,
+                            recollection_path=recollection_path,
+                        )
+                        self._write_retention_records(records)
+                        for superseded_path in superseded_paths:
+                            if superseded_path.is_dir():
+                                shutil.rmtree(superseded_path)
+                            else:
+                                superseded_path.unlink(missing_ok=True)
+                        self._cleanup_report.append(
+                            {
+                                "task_id": record["task_id"],
+                                "scope": "remote",
+                                "path": str(record["remote_artifacts_path"]),
+                                "removed": False,
+                                "error": "retained response identity invalid: %s" % exc,
+                                "custody_token": record["token"],
+                                "reclamation_sweep": True,
+                            }
+                        )
+                        continue
                     record["custody_path"] = str(recollection_path)
                     custody_path = recollection_path
                     record["collection_complete"] = True
+                    record["response_identity_validated"] = True
                     self._write_retention_records(records)
                 acknowledgement = acknowledge_durable_custody(
                     Path(str(record["bundle_path"])),
@@ -716,6 +812,7 @@ class NodeWorkerClient:
         record: dict[str, Any],
         records: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
+        self._validate_retention_record_paths(record)
         targets = [str(target) for target in record.get("remote_targets", [])]
         if not targets:
             return []
@@ -773,8 +870,11 @@ class NodeWorkerClient:
             if previous.get("removed") is not False or not isinstance(previous_path, str):
                 continue
             for target in targets:
-                prefix = target.rstrip("/") + "/"
-                if previous_path == target or previous_path.startswith(prefix):
+                try:
+                    within_target = posixpath.commonpath([target, previous_path]) == target
+                except ValueError:
+                    within_target = False
+                if within_target:
                     previous["removed"] = True
                     previous["eventually_removed"] = True
                     break
@@ -797,7 +897,12 @@ class NodeWorkerClient:
         except ValueError:
             return False
         return (
-            payload.get("custody_token") == record.get("token")
+            (
+                not record.get("worker_may_have_run")
+                or record.get("response_identity_validated") is True
+            )
+            and record.get("correlation_token") == record.get("token")
+            and payload.get("custody_token") == record.get("token")
             and acknowledgement.token == record.get("token")
             and expected_custody_path in {
                 path.resolve() for path in acknowledgement.artifact_paths
@@ -818,7 +923,12 @@ class NodeWorkerClient:
         except (OSError, ValueError, json.JSONDecodeError):
             return False
         return (
-            payload.get("custody_token") == record.get("token")
+            (
+                not record.get("worker_may_have_run")
+                or record.get("response_identity_validated") is True
+            )
+            and record.get("correlation_token") == record.get("token")
+            and payload.get("custody_token") == record.get("token")
             and Path(str(record["custody_path"])).exists()
         )
 
@@ -961,12 +1071,12 @@ class NodeWorkerClient:
         return AdapterResult(ok=True)
 
     def _remote_paths_for_run(self, run_id: str) -> dict[str, str]:
-        run_dir = posixpath.join(self.remote_work_root, run_id)
+        run_dir = self._contained_remote_path(run_id)
         return {
             "run_dir": run_dir,
-            "tasks_dir": posixpath.join(run_dir, "tasks"),
-            "artifacts_dir": posixpath.join(run_dir, "artifacts"),
-            "state_dir": posixpath.join(run_dir, "state"),
+            "tasks_dir": self._contained_remote_path(run_id, "tasks"),
+            "artifacts_dir": self._contained_remote_path(run_id, "artifacts"),
+            "state_dir": self._contained_remote_path(run_id, "state"),
         }
 
     def _prepare_task_payload(
@@ -976,15 +1086,98 @@ class NodeWorkerClient:
         run_id: str,
         paths: dict[str, str],
         timeout_s: float,
+        correlation_token: str,
     ) -> dict[str, Any]:
         payload = dict(task)
-        payload.setdefault("protocol_version", PROTOCOL_VERSION)
+        payload["protocol_version"] = PROTOCOL_VERSION
+        payload["correlation_token"] = correlation_token
         payload["run_id"] = run_id
         payload["timeout_s"] = float(timeout_s)
         task_paths = dict(payload.get("paths") or {})
         task_paths["state_dir"] = paths["state_dir"]
         payload["paths"] = task_paths
         return payload
+
+    def _contained_remote_path(self, *components: str) -> str:
+        candidate = posixpath.normpath(
+            posixpath.join(self.remote_work_root, *components)
+        )
+        try:
+            common = posixpath.commonpath([self.remote_work_root, candidate])
+        except ValueError as exc:
+            raise ValueError("remote path is not under remote_work_root") from exc
+        if candidate == self.remote_work_root or common != self.remote_work_root:
+            raise ValueError("remote path is not a contained non-root path")
+        return candidate
+
+    def _validate_dispatch_task(self, task: dict[str, Any]) -> tuple[str, str]:
+        version = task.get("protocol_version", PROTOCOL_VERSION)
+        if isinstance(version, bool) or not isinstance(version, int) or version != PROTOCOL_VERSION:
+            raise ValueError("protocol_version must be integer %d before dispatch" % PROTOCOL_VERSION)
+        for key in ("task_id", "run_id"):
+            value = task.get(key)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError("%s is required before dispatch" % key)
+            if SAFE_IDENTIFIER_PATTERN.fullmatch(value) is None:
+                raise ValueError("%s must be a safe single path component" % key)
+        for key in ("task_type", "operation"):
+            value = task.get(key)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError("%s is required before dispatch" % key)
+        if "node_role" not in task:
+            raise ValueError("node_role is required before dispatch")
+        if task["node_role"] is not None and not isinstance(task["node_role"], str):
+            raise ValueError("node_role must be null or a string before dispatch")
+        return str(task["task_id"]), str(task["run_id"])
+
+    def _validate_response_identity(
+        self,
+        raw_status: Any,
+        expected: dict[str, Any],
+    ) -> None:
+        if not isinstance(raw_status, dict):
+            raise ValueError("status.json must contain an object")
+        expected_identity = {
+            "protocol_version": PROTOCOL_VERSION,
+            "correlation_token": expected.get("correlation_token", expected.get("token")),
+            "run_id": expected.get("run_id"),
+            "task_id": expected.get("task_id"),
+            "task_type": expected.get("task_type"),
+            "operation": expected.get("operation"),
+            "node_role": expected.get("node_role"),
+        }
+        response_version = raw_status.get("protocol_version")
+        if isinstance(response_version, bool) or not isinstance(response_version, int):
+            raise ValueError(
+                "protocol_version expected integer %d, got %r"
+                % (PROTOCOL_VERSION, response_version)
+            )
+        for key, value in expected_identity.items():
+            if key not in raw_status or raw_status[key] != value:
+                raise ValueError(
+                    "%s expected %r, got %r" % (key, value, raw_status.get(key))
+                )
+
+    def _validate_retention_record_paths(self, record: dict[str, Any]) -> None:
+        task_id, run_id = self._validate_dispatch_task(record)
+        expected_paths = self._remote_paths_for_run(run_id)
+        expected_task = self._contained_remote_path(
+            run_id,
+            "tasks",
+            "%s.json" % task_id,
+        )
+        expected_artifacts = self._contained_remote_path(
+            run_id,
+            "artifacts",
+            task_id,
+        )
+        if record.get("run_dir") != expected_paths["run_dir"]:
+            raise ValueError("retained run_dir does not match safe dispatch path")
+        if record.get("remote_artifacts_path") != expected_artifacts:
+            raise ValueError("retained artifacts path does not match safe dispatch path")
+        targets = [str(value) for value in record.get("remote_targets", [])]
+        if targets not in ([expected_task, expected_artifacts], [expected_paths["run_dir"]]):
+            raise ValueError("retained cleanup targets do not match safe dispatch paths")
 
     def _parse_clock_echo(self, stdout: Any) -> dict[str, Any]:
         if not isinstance(stdout, str):
@@ -1066,6 +1259,29 @@ class NodeWorkerClient:
             offset_estimate_s=alignment.get("offset_estimate_s") if alignment else None,
             offset_bound_s=alignment.get("offset_bound_s") if alignment else None,
             metadata=payload_metadata,
+        )
+
+    def _replace_result_metadata(
+        self,
+        result: NodeTaskResult,
+        extra: dict[str, Any],
+    ) -> NodeTaskResult:
+        metadata = dict(result.metadata)
+        metadata.update(extra)
+        return NodeTaskResult(
+            ok=result.ok,
+            status=result.status,
+            failure_reason=result.failure_reason,
+            message=result.message,
+            artifacts_path=result.artifacts_path,
+            artifacts=dict(result.artifacts),
+            raw_status=result.raw_status,
+            pre_marker=result.pre_marker,
+            post_marker=result.post_marker,
+            offset_estimate_s=result.offset_estimate_s,
+            offset_bound_s=result.offset_bound_s,
+            metadata=metadata,
+            custody_token=result.custody_token,
         )
 
     def _failure_reason(self, value: Any) -> FailureReason | None:
