@@ -98,6 +98,20 @@ Snapshot at WO-022 landing: 10 Sol sessions ≈ 45.7M total tokens
 accounting_unknown (no local accounting in this harness). Final
 refresh owed at close-out.
 
+## ULTRA pre-run statement (WO-022 §4 requirement; recorded before launch)
+
+Intended ultra session #1 of ≤2 this arc: the checkpoint-queued Sol
+ULTRA comparison audit. Why xhigh is insufficient: the audit must
+independently verify all ~34 landed work-order landings against their
+full register rows (acceptance evidence, non-goals, riders, court
+amendments) plus the five stream-close sweeps and the two integration
+fixes — per-order verification over a 44-commit tree exceeds one
+sequential xhigh context, and the comparisons are independent (no
+shared state), which is precisely the subagent-parallel shape. Bounded
+subagent work: one verification subagent per landed work order plus one
+synthesis pass; no implementation authority (read-only sandbox pinned
+at `978e4c6`).
+
 ## Remaining at draft time
 
 Integration review (fresh Sol xhigh) over the final tree; Sol ULTRA
