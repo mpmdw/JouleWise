@@ -30,6 +30,8 @@ EXPECTED_IDS = {
     # audit close-out promotions (2026-07-15): deferred fix-wave orders
     "AUD-WO-033", "AUD-WO-034", "AUD-WO-035", "AUD-WO-036",
     "AUD-WO-037", "AUD-WO-038", "AUD-WO-039", "AUD-FOLLOWUPS",
+    # AXI extension agenda (D-070 + binding xhigh sequencing amendments)
+    "AXI-S0", "AXI-SA", "AXI-SB", "AXI-SC", "AXI-SD", "AXI-SE",
     # [QUIET-MAC]
     "P2-015-SMOKE", "P2-015", "P2-006", "P2-010", "P2-019", "P2-020",
     "P2-012", "P2-038", "P2-046B", "P2-047B",
@@ -162,9 +164,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_46(self):
+    def test_exact_live_id_set_52(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 46)
+        self.assertEqual(len(self.tasks), 52)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -191,6 +193,35 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertEqual(self.kernel["active_global_gates"], [])
         selected = gen_state.selectable_task_ids(self.kernel)
         self.assertTrue({"P1-008", "P2-038"} <= selected)
+
+    def test_axi_work_program_sequence_authority_and_window_fences(self):
+        axi_ids = ("AXI-S0", "AXI-SA", "AXI-SB", "AXI-SC", "AXI-SD", "AXI-SE")
+        self.assertEqual(
+            {tid: self.tasks[tid]["rank"] for tid in axi_ids},
+            {"AXI-S0": 2, "AXI-SA": 3, "AXI-SB": 4,
+             "AXI-SC": 5, "AXI-SD": 6, "AXI-SE": 7},
+        )
+        expected_authority_paths = {
+            "docs/axi-handoff.md",
+            "docs/decision_log.md",
+            "docs/process_traces/2026-07-15-axi-xhigh-consult/response.md",
+        }
+        for tid in axi_ids:
+            task = self.tasks[tid]
+            self.assertEqual(task["lane"], "agent")
+            pointer_paths = {task["authority"]["path"]}
+            pointer_paths.update(fence["authority"]["path"] for fence in task["fences"])
+            self.assertEqual(pointer_paths, expected_authority_paths)
+            self.assertTrue(any("Window A retains every quiet-Mac measurement slot"
+                                in fence["rule"] for fence in task["fences"]))
+
+        self.assertEqual(self.tasks["AXI-S0"]["status"], "queued")
+        self.assertEqual(self.tasks["AXI-SD"]["status"], "queued")
+        self.assertEqual(self._hard_start_targets("AXI-SA"), {"AXI-S0"})
+        self.assertEqual(self._hard_start_targets("AXI-SB"), {"AXI-SA"})
+        self.assertEqual(self._hard_start_targets("AXI-SC"), {"AXI-SA"})
+        self.assertEqual(self._hard_start_targets("AXI-SE"), {"P2-015"})
+        self.assertIn("provisional_until_live", self.tasks["AXI-SC"]["flags"])
 
     def _hard_start_targets(self, tid):
         return {

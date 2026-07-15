@@ -396,6 +396,379 @@
       "status_note": "Partial page trim landed 2026-07-15 by redirecting the duplicative capsule task-queue mirror while preserving its routes; remaining payload work is open. D-043 supersession closure falls due at landing through the dated D-051 amendment identified by PA-2.",
       "stop_card": null
     },
+    "AXI-S0": {
+      "acceptance": {
+        "evidence": [
+          "PROJECT_STATUS.md, README.md, and site sources carry the consult's gross-energy basis-plus-boundary paragraph and label every reported number by basis and measurement boundary",
+          "Reader-facing sources consistently distinguish harness as instrument from benchmark as the frozen workload suite, run rules, and strict validator, and frame batching plus the five architectural axes as Q4 stress tests",
+          "C-023-IDLE-STATIONARITY records that D-067 closes headline-basis selection while retaining idle-model sensitivity, token_normalization.md remains assigned to AXI-SA, and docs/site/DRIFT.md is refreshed without site regeneration or deployment"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/AXI-S0/acceptance",
+          "label": "AXI-S0 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Advisor-facing sources align with D-067 and the consult's basis-and-boundary wording, use the harness/benchmark terminology split, frame the AXI batching agenda under Q4, preserve the idle-sensitivity row, and finish with a drift refresh."
+      },
+      "authority": {
+        "anchor": "4-work-program-post-audit-clearance-streams",
+        "label": "AXI handoff work program S-0",
+        "path": "docs/axi-handoff.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Binding AXI xhigh consult",
+            "path": "docs/process_traces/2026-07-15-axi-xhigh-consult/response.md"
+          },
+          "rule": "Apply the consult's basis-plus-boundary paragraph without calling rail-gross energy full-system or wall energy"
+        },
+        {
+          "authority": {
+            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
+            "label": "D-070 AXI scope and ordering",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Keep all five axes framed as stress tests of Q4 and preserve the L2 ceiling"
+        },
+        {
+          "authority": {
+            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
+            "label": "D-070 Window A ownership",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Window A retains every quiet-Mac measurement slot; AXI-S0 is agent-lane documentation work and consumes no quiet-Mac campaign time"
+        }
+      ],
+      "flags": [],
+      "goal": "Align PROJECT_STATUS.md, README.md, and site sources with the consult's idle-energy basis-plus-boundary wording, the harness-versus-benchmark terminology split, and the batching and five-axis Q4 agenda; add the C-023-IDLE-STATIONARITY framing note, leave D-067 token-normalization contract alignment to AXI-SA, and end with docs/site/DRIFT.md refresh.",
+      "id": "AXI-S0",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 2,
+      "status": "queued",
+      "status_note": "D-067 alignment in docs/contracts/token_normalization.md belongs to AXI-SA, not this docs-only row.",
+      "stop_card": null
+    },
+    "AXI-SA": {
+      "acceptance": {
+        "evidence": [
+          "A new bundle event-semantics version freezes one emission per request per scheduler tick; tokens_proposed as submitted candidate positions; tokens_accepted as unchanged committed proposals; emitted_count as accepted plus target-origin tokens; acceptance_rate as aggregate accepted over aggregate proposed with specified null rules; speculation.mode identity; and legacy token events and reducer-0.4.2 dispatch unchanged",
+          "A sibling analysis-manifest version leaves AP-2 v1 byte-identical and freezes the minimal AP-SPEC gross numerator, committed-output and accepted-draft denominators, null rules, pairing, floor selector, and cross-bundle C-023 identity-gate states before any spec bundle",
+          "Schema, reducer, reader, validator, and strict validation cover request-local ordinals, a terminal outcome for every admitted request, request-indexed output identities and counts and stop reasons, configured and realized batch sizes, unioned group phase windows, and burst-safe metrics before a mock spec adapter is added last; the mock produces strict-valid bundles and supports zero live claims"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/AXI-SA/acceptance",
+          "label": "AXI-SA acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Versioned burst and request semantics, counter and speculation identity contracts, sibling manifest semantics, and the minimal AP-SPEC denominator and output-identity gate land before the final mock bundle, without changing legacy identities or making live claims."
+      },
+      "authority": {
+        "anchor": "4-work-program-post-audit-clearance-streams",
+        "label": "AXI handoff work program S-A",
+        "path": "docs/axi-handoff.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "advisor-facing AXI-S0 alignment lands before the contract-bearing S-A stream starts",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "AXI-S0"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Binding AXI xhigh consult",
+            "path": "docs/process_traces/2026-07-15-axi-xhigh-consult/response.md"
+          },
+          "rule": "Implement a sibling versioned manifest and event contract before the mock adapter; keep AP-2 v1 byte-identical and existing token and inter-token metric identities unchanged"
+        },
+        {
+          "authority": {
+            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
+            "label": "D-070 request-scoped batch contract",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Keep request identity in event metadata, pair lifecycle by request, avoid per-request attribution of overlapping energy without a model, and preserve continuous-ready schema semantics"
+        },
+        {
+          "authority": {
+            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
+            "label": "D-070 Window A ownership",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Window A retains every quiet-Mac measurement slot; AXI-SA is agent-lane contract and fixture work, and no mock evidence may be presented as live validation"
+        }
+      ],
+      "flags": [],
+      "goal": "Freeze and implement the burst-decode metric-semantics contract: versioned request-scoped emission events, proposal and acceptance counters, speculation.mode and draft or native-MTP identity, request lifecycle and outputs, burst-safe reducer metrics, and legacy compatibility; put a sibling manifest plus minimal AP-SPEC denominator and C-023 identity gate in front, align D-067 token normalization, then add the mock spec adapter last with zero live claims.",
+      "id": "AXI-SA",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 3,
+      "status": "blocked",
+      "stop_card": null
+    },
+    "AXI-SB": {
+      "acceptance": {
+        "evidence": [
+          "The pinned mlx-lm spike records a STRUCTURED verdict: supported only for true B greater than 1 execution with per-request output IDs and counts, stop reasons, timestamps, and request-scoped event hooks",
+          "Any missing execution support or observability yields unsupported_for_joulewise with a reason such as event_observability, while memory-fit range is recorded separately from runtime-support semantics",
+          "The Mac C5-2.2 batching registry leg is minted only after full JouleWise support; otherwise the dated negative finding leaves the leg absent"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/AXI-SB/acceptance",
+          "label": "AXI-SB acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The mlx-lm static-batch spike returns a structured JouleWise-support verdict that requires genuine B greater than 1 execution and complete per-request observability, and mints the Mac registry leg only on full support."
+      },
+      "authority": {
+        "anchor": "4-work-program-post-audit-clearance-streams",
+        "label": "AXI handoff work program S-B",
+        "path": "docs/axi-handoff.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "AXI-SA request and event semantics land before the static-batch support verdict",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "AXI-SA"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Binding AXI xhigh consult",
+            "path": "docs/process_traces/2026-07-15-axi-xhigh-consult/response.md"
+          },
+          "rule": "Do not classify a Python loop over singleton calls or batch execution without request observability as supported; emit unsupported_for_joulewise with a structured reason"
+        },
+        {
+          "authority": {
+            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
+            "label": "D-070 static-batch scope",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Keep continuous batching deferred and do not infer coalescing, scheduler-optimum, or offered-load claims from the static-batch spike"
+        },
+        {
+          "authority": {
+            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
+            "label": "D-070 Window A ownership",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Window A retains every quiet-Mac measurement slot; AXI-SB is an agent-lane feasibility spike and performs no energy campaign or claim-bearing measurement"
+        }
+      ],
+      "flags": [],
+      "goal": "Time-box the pinned mlx-lm static-batch feasibility spike and record a STRUCTURED verdict: supported requires true B greater than 1 execution plus request-scoped output IDs and counts, stop reasons, timestamps, and event hooks; otherwise record unsupported_for_joulewise with reason, keep memory fit separate, and mint the Mac C5-2.2 leg only on full support.",
+      "id": "AXI-SB",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 4,
+      "status": "blocked",
+      "stop_card": null
+    },
+    "AXI-SC": {
+      "acceptance": {
+        "evidence": [
+          "The mlx-lm live runtime spike records generation support separately from claim-instrumentable support, including whether proposal and acceptance counters and request-scoped evidence are available",
+          "The vLLM speculative-decode leg is fixture-first and explicitly PROVISIONAL until live NVIDIA contact, with no fixture-derived live claim",
+          "Native-MTP and external draft-model findings remain separate contrast families, and the native-MTP candidate survey feeds D-016 rather than silently selecting runtime scope"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/AXI-SC/acceptance",
+          "label": "AXI-SC acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The Mac and vLLM speculative-decode spikes distinguish runtime generation from claim instrumentation, keep NVIDIA evidence PROVISIONAL, separate MTP from draft-model contrasts, and feed candidate evidence to D-016."
+      },
+      "authority": {
+        "anchor": "4-work-program-post-audit-clearance-streams",
+        "label": "AXI handoff work program S-C",
+        "path": "docs/axi-handoff.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "AXI-SA burst and request semantics land before speculative runtime spikes consume them",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "AXI-SA"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Binding AXI xhigh consult",
+            "path": "docs/process_traces/2026-07-15-axi-xhigh-consult/response.md"
+          },
+          "rule": "Distinguish runtime generation support from claim-instrumentable support and never pool native-MTP with external draft-model arms"
+        },
+        {
+          "authority": {
+            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
+            "label": "D-070 fixture-first claim posture",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Keep the vLLM leg PROVISIONAL until live NVIDIA contact and make no live claim from fixture-first evidence"
+        },
+        {
+          "authority": {
+            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
+            "label": "D-070 Window A ownership",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Window A retains every quiet-Mac measurement slot; AXI-SC is agent-lane runtime feasibility work and performs no energy campaign or claim-bearing measurement"
+        }
+      ],
+      "flags": [
+        "provisional_until_live"
+      ],
+      "goal": "Run speculative-decode runtime spikes against AXI-SA: a live mlx-lm capability leg and a vLLM fixture-first PROVISIONAL leg, recording runtime-generation support separately from claim-instrumentable counter and event support; keep native MTP and external drafts separate, and route the MTP candidate survey into D-016.",
+      "id": "AXI-SC",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 5,
+      "status": "blocked",
+      "stop_card": null
+    },
+    "AXI-SD": {
+      "acceptance": {
+        "evidence": [
+          "A pre-data dense/MoE scorecard fixes family and tokenizer, runtime and quantization recipe, output policy, active-parameter calculation including shared experts and router top-k, artifact revisions and hashes, quality band, memory headroom, and fallback hierarchy",
+          "The scorecard surfaces to Ed whether D-016's cross-target 8 GB fit can be met or a separate Mac-only AXI pair or explicit D-016 amendment is needed; total-parameter fallback is labeled as a different estimand",
+          "A mirrored and hashed 2-to-3-level quantization ladder predeclares the C-023-QUALITY-EQUIV-QUANT identity and quality-equivalence gate before energy results"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/AXI-SD/acceptance",
+          "label": "AXI-SD acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "A pre-registered matched dense/MoE selection scorecard and quantization ladder are artifact-complete before energy data, with active-parameter semantics explicit and the D-016 8 GB-fit choice surfaced to Ed."
+      },
+      "authority": {
+        "anchor": "4-work-program-post-audit-clearance-streams",
+        "label": "AXI handoff work program S-D",
+        "path": "docs/axi-handoff.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Binding AXI xhigh consult",
+            "path": "docs/process_traces/2026-07-15-axi-xhigh-consult/response.md"
+          },
+          "rule": "Do not silently substitute total-parameter matching for active-parameter matching; label the fallback as a different estimand and present the D-016 or separate-pair choice to Ed"
+        },
+        {
+          "authority": {
+            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
+            "label": "D-070 D-016 ownership",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Prepare the pair proposal and scorecard but do not finalize D-016 or the Mac-only alternative without Ed"
+        },
+        {
+          "authority": {
+            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
+            "label": "D-070 Window A ownership",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Window A retains every quiet-Mac measurement slot; AXI-SD is independent agent-lane desk and artifact work and consumes no quiet-Mac campaign time"
+        }
+      ],
+      "flags": [],
+      "goal": "Prepare the matched dense/MoE pair proposal with the consult's pre-registered scorecard, including auditable active-parameter calculation and the D-016 cross-target 8 GB-fit question for Ed, plus a mirrored and hashed 2-to-3-level quantization ladder governed by C-023-QUALITY-EQUIV-QUANT.",
+      "id": "AXI-SD",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 6,
+      "status": "queued",
+      "stop_card": null
+    },
+    "AXI-SE": {
+      "acceptance": {
+        "evidence": [
+          "AP-BATCH freezes five counterbalanced all-B blocks over a fixed balanced equal-shape request roster, an all-B affine primary with predeclared lack-of-fit, an estimated-intercept interpretation, structured B=16 memory failure, latency bounds, and n=5 as provisional under D-062",
+          "AP-SPEC completion preserves S-A's gross request and committed-output primary denominators, accepted-draft diagnostic, exact-token identity gate, separate MTP and draft families, floor mapping, pairing, multiplicity, and divergence dispositions",
+          "AP-QUANT, AP-REASON-VARIANCE, AP-MOE-BATCH, and the AP-5 MoE 2M rider close the all-axis ownership gap, with routing-mechanism claims allowed only when auditable expert evidence exists and every plan finalized only against P2-015 floors"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/AXI-SE/acceptance",
+          "label": "AXI-SE acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The complete AXI analysis-plan family closes AP ownership for batching, speculation, quantization, reasoning variance, MoE-by-batch, and the AP-5 MoE rider with prospective floor, identity, multiplicity, model-fit, and structured-memory-outcome rules."
+      },
+      "authority": {
+        "anchor": "4-work-program-post-audit-clearance-streams",
+        "label": "AXI handoff work program S-E",
+        "path": "docs/axi-handoff.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "P2-015 publishes Window-A floors before AXI analysis plans are finalized",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-015"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Binding AXI xhigh consult",
+            "path": "docs/process_traces/2026-07-15-axi-xhigh-consult/response.md"
+          },
+          "rule": "Do not promise a confirmatory breakpoint or fixed n=5 before floors; freeze all-B affine lack-of-fit, final n, floor transport, multiplicity, and forbidden upgrades prospectively"
+        },
+        {
+          "authority": {
+            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
+            "label": "D-070 all-axis claim posture",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Keep every plan at or below L2 and preserve static-batch scope, exact claim boundaries, and structured unsupported or not-resolvable outcomes"
+        },
+        {
+          "authority": {
+            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
+            "label": "D-070 Window A ownership",
+            "path": "docs/decision_log.md"
+          },
+          "rule": "Window A retains every quiet-Mac measurement slot; AXI-SE is agent-lane analysis-plan finalization after P2-015 and authorizes no measurement campaign by itself"
+        }
+      ],
+      "flags": [],
+      "goal": "Finalize the AXI analysis plans after P2-015: AP-BATCH with counterbalanced all-B blocks, affine primary and lack-of-fit rule, structured B=16 memory outcome, and provisional n=5 under D-062; complete AP-SPEC and add AP-QUANT, AP-REASON-VARIANCE, AP-MOE-BATCH, plus the AP-5 dense/MoE 2M rider with the consult's floor and ownership closures.",
+      "id": "AXI-SE",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 7,
+      "status": "blocked",
+      "stop_card": null
+    },
     "CI-003": {
       "acceptance": {
         "evidence": [

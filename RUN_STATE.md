@@ -89,7 +89,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- READY — A9 `SPLIT-AP`: Freeze the split pre-registration: one primary estimand and service-state assumption covering gross versus idle-subtracted charged states per NEG-7, both monolithic references predeclared with joint adjusted contrast intervals and split wins only if both are beaten per RIG-5, and missing composite and transfer floor cells named as prerequisites.
+- READY — A2 `AXI-S0`: Align PROJECT_STATUS.md, README.md, and site sources with the consult's idle-energy basis-plus-boundary wording, the harness-versus-benchmark terminology split, and the batching and five-axis Q4 agenda; add the C-023-IDLE-STATIONARITY framing note, leave D-067 token-normalization contract alignment to AXI-SA, and end with docs/site/DRIFT.md refresh.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

@@ -22,6 +22,7 @@
   ],
   "expected_selectable_task_ids": [],
   "must_suppress_task_ids": [
+    "AXI-S0",
     "P1-008",
     "P2-038",
     "P2-004"
