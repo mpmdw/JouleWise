@@ -665,6 +665,73 @@ rubber-stamping delegated implementation.
 
 ## 10. Implementation and consumption pointers
 
+### Clause-by-clause consumption inventory
+
+This inventory is the deduplication boundary. A `pointer` consumer names the
+canonical home but does not restate its procedure. An `enforcement` consumer
+keeps the applicable boundary text locally because prompt text is part of the
+guard. Configuration and invocation identify how to enter the bridge; they do
+not become alternate wire contracts.
+
+| Clause | Canonical home | Consumer treatment |
+|---|---|---|
+| Effort selection | `.claude/skills/codex/SKILL.md` §Effort selection | `CLAUDE.md`, the Claude agent, and the `/codex` command point to the skill; they do not repeat triggers. |
+| Claude-to-Sol operating sequence and config override shape | `.claude/skills/codex/SKILL.md` §Primary MCP path | The agent and command invoke the skill; `CLAUDE.md` supplies clean-clone discovery only. |
+| Full and discussion prompt headers | Contract §1 | Pointer only outside the contract; exhaustive scope remains an explicit enforcement boundary. |
+| MCP and audited-CLI return envelopes | Contract §2 | Pointer only outside the contract; failure-is-not-success remains an explicit enforcement boundary. |
+| Scope and ruling early returns | Contract §3 | Pointer only outside the contract; `AGENTS.md` retains receiver stop/ask rules. |
+| MCP-versus-CLI routing | Contract §4 | The operating skill performs the selection by reference to §4. |
+| Thread reuse, independence, and peer-channel continuity | Contract §§5 and 8 | Pointer only outside the contract; callers retain only the invocation fact that a returned thread can be continued. |
+| Leases, wrappers, baselines, and scope checks | Contract §§6-7 | Pointer only outside the contract; invocation docs may name the wrapper command but do not restate state transitions. |
+| Reverse-consult request, adapter, and status rules | Contract §8 | `CLAUDE.md` and the reverse skill point here; the reverse skill remains a receiver boundary outside WO-020 by lead ruling. |
+| Proposal-diff eligibility, ceiling, and provenance | Contract §8 | Pointer only outside the contract. |
+| Exhaustive write scope | Contract §§1, 3, and 7 | Explicit canonical enforcement snippet at every WO-020 in-scope entry surface; `AGENTS.md` keeps its fuller receiver rules. |
+| Quiet-machine exclusion | Repository machine-state policy plus contract safety boundary | Explicit canonical enforcement snippet at every WO-020 in-scope entry surface. |
+| Sandbox and approval bypass prohibition | Repository safety policy | Explicit canonical enforcement snippet at every WO-020 in-scope entry surface. |
+| One-hop prohibition | Contract §8 plus adapter boundary | Explicit canonical enforcement snippet at every WO-020 in-scope entry surface. |
+| Envelope failure is not success | Contract §2 | Explicit canonical enforcement snippet at every WO-020 in-scope entry surface. |
+
+Surface disposition is therefore:
+
+| Surface | Invocation/configuration retained | Normative policy form |
+|---|---|---|
+| `CLAUDE.md` | Clean-clone MCP and audited-CLI discovery | Contract/skill pointers plus canonical enforcement snippets |
+| `AGENTS.md` | Receiver authority and repository intake | Contract/skill pointers plus canonical enforcement snippets and fuller receiver rules |
+| `.claude/agents/codex.md` | Agent role and handoff | Contract/skill pointers plus canonical enforcement snippets |
+| `.claude/commands/codex.md` | Slash-command dispatch | Contract/skill pointers plus canonical enforcement snippets |
+| `.claude/skills/codex/SKILL.md` | Effort policy and operating sequence | Operating home; wire details remain contract pointers; canonical enforcement snippets stay local |
+| `.agents/skills/claude-consult/SKILL.md` | Reverse-consult invocation | Current receiver prose inventoried but unchanged; excluded from WO-020 edits by lead ruling |
+
+### Canonical enforcement snippets
+
+The following manifest defines the snippets before any byte-identity check is
+applied. Each listed consumer MUST contain each snippet exactly once as plain
+UTF-8 prose. Changes begin here, then propagate atomically to every listed
+consumer. Explanatory policy must not be added around these snippets as a new
+normative home.
+
+<!-- BEGIN BRIDGE CONSUMER DRIFT MANIFEST -->
+```json
+{
+  "schema": "bridge-consumer-drift/v1",
+  "snippets": {
+    "scope_authority": "`WRITE_SCOPE` is exhaustive; never infer additional scope from tests, generated files, repository instructions, or work believed necessary for completion.",
+    "quiet_mac": "Never start or continue a `[QUIET-MAC]` measurement while an agent session is active.",
+    "no_bypass": "Never use `danger-full-access` or sandbox/approval bypass flags.",
+    "one_hop": "Bridge depth is one hop: a Claude-originated Sol session must not call Claude by MCP, `claude -p`, or any other launcher.",
+    "envelope_failure": "A missing, duplicated, malformed, or non-final required envelope is protocol failure, never success."
+  },
+  "consumers": {
+    "CLAUDE.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"],
+    "AGENTS.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"],
+    ".claude/agents/codex.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"],
+    ".claude/commands/codex.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"],
+    ".claude/skills/codex/SKILL.md": ["scope_authority", "quiet_mac", "no_bypass", "one_hop", "envelope_failure"]
+  }
+}
+```
+<!-- END BRIDGE CONSUMER DRIFT MANIFEST -->
+
 Authoritative contract:
 
 - `docs/contracts/bridge_protocol.md`
