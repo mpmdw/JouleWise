@@ -406,6 +406,10 @@ Create:
 analysis/rpt001-v2/input_manifest.json
 ```
 
+Superseded (2026-07-15, WO-015; D-043): input-manifest identity is the
+unified NUL-canonical bundle-tree identity; the v1 legacy tab-joined
+algorithm is named and validated for sealed v1 artifacts only.
+
 Minimum shape:
 
 ```json

@@ -27,6 +27,9 @@ EXPECTED_IDS = {
     "P2-047A", "P2-048", "P2-050", "SITE-02", "SPLIT-AP", "TOOL-01",
     "CI-003", "DOC-010",
     "DOC-008", "DOC-008-INTAKE", "DOC-008-REFLECTION", "DOC-008-STATUS",
+    # audit close-out promotions (2026-07-15): deferred fix-wave orders
+    "AUD-WO-033", "AUD-WO-034", "AUD-WO-035", "AUD-WO-036",
+    "AUD-WO-037", "AUD-WO-038", "AUD-WO-039", "AUD-FOLLOWUPS",
     # [QUIET-MAC]
     "P2-015-SMOKE", "P2-015", "P2-006", "P2-010", "P2-019", "P2-020",
     "P2-012", "P2-038", "P2-046B", "P2-047B",
@@ -154,9 +157,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_38(self):
+    def test_exact_live_id_set_46(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 38)
+        self.assertEqual(len(self.tasks), 46)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)

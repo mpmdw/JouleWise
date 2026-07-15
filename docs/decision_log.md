@@ -2777,6 +2777,15 @@ Revisit when: GitHub raw-content fetch becomes unreliable enough to need
 an authenticated token or when a formal advisor portal with user-specific
 state is required.
 
+Amended (2026-07-15, integration budget fix; recorded as a PARTIAL
+pre-implementation of deferred AUD-WO-039): the packed capsule omits the
+generated task-queue payload — its routes alias to the Roadmap page —
+to hold the 1-MiB Lakebed artifact under the conservative budget after
+the audit fix wave's doc growth. The tracked TASK_QUEUE.md (whose live
+queue is now the WO-021 generated region) remains the authoritative
+long-form source; the full retained-route/page inventory and any
+compatibility endpoint decision remain with AUD-WO-039 at its landing.
+
 ## D-052: Capstone scope contract — frozen umbrella headline and contribution ladder
 
 - Date: 2026-07-09
@@ -3239,6 +3248,16 @@ current_policy.md first (the lead's draft position — REVERSED in
 council: it leaves the demonstrated drift mode active); full big-bang
 migration (rejected: risks the drift it cures).
 
+
+Amended (2026-07-15, WO-021/R1 choice A; D-043): the Stage-1 kernel's
+NOT_AUTHORITATIVE_DERIVED_VIEW posture is superseded — schema v3 makes
+the kernel AUTHORITATIVE_WORK_SELECTION_STATE (work selection ONLY;
+phase completion stays with exit checklists, policy with this log,
+scientific truth with evidence artifacts), adds active_global_gates
+with conjunctive select semantics beneath stop-card precedence, and
+demotes competing hand-authored work-selection surfaces to one
+generated region per file.
+
 ---
 
 ## D-064: Delegated-invocation compliance surface — tracked JSONL event stream, report envelope, enforced write scope
@@ -3442,6 +3461,14 @@ session may have run since — it resolves to the GLOBAL most-recent
 session (a same-machine WO-011 fix round briefly attached to its own
 checker's thread before being killed after one read-only call,
 rollout-audited to zero writes; resume by explicit session id instead).
+Extension (2026-07-15, same session): Ed approved two further lease
+abandonments on the same fact pattern — the supersession session
+(lead decision-log bench edits during the active lease) and the
+ultra-fix session (three receipt files excluded by the session-open
+directory-normalization gap, 4th occurrence, TOOL-01; reversal path:
+revert 913a2a6). Both recorded with approvals and reasons in
+`.codex-bridge/workspace-lease-events.jsonl`; the harness classifier
+correctly refused every lead self-approval attempt first.
 
 Evidence: PR #65 (final head `8b96bd4`, CI green, suite 1387 OK);
 review arc and per-layer catches in
