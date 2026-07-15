@@ -181,6 +181,8 @@ on the boundary — ruling: the per-task local temp dir is cleaned by
 move), and its failure reporting rides this unit's mechanism since the
 client is remote-path-only code.
 
+Superseded (2026-07-15, WO-001; D-043): remote task/artifact cleanup now waits for durable bundle custody and a matching on-disk acknowledgement, with ambiguous-session reclamation governed by the persistent retention manifest; see `docs/contracts/node_worker_protocol.md` §Remote Path Layout.
+
 **What gets recorded.**
 
 - `NodeWorkerClient` gains a `cleanup_report` accumulated across tasks:

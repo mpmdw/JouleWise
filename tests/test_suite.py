@@ -8,17 +8,22 @@ from pathlib import Path
 
 from joulewise.schemas import SchemaError
 from joulewise.suite import (
+    CACHE_POLICY_VERIFICATION_DECLARED_NOT_VERIFIED,
     ITEM_END,
     ITEM_START,
+    LEGACY_SUITE_SCHEMA_VERSION,
     MARKER_DEFAULTS,
     OUTPUT_DEFAULTS,
     REDUCER_ASSIGNABLE,
     RUNTIME_ASSIGNABLE,
+    SUITE_SCHEMA_VERSION,
+    SUITE_POLICY_SEMANTICS,
     SUITE_START,
     ItemStatus,
     SuiteManifest,
     canonical_effective_manifest,
     load_suite_manifest,
+    migrate_suite_manifest,
     order_seed,
     policy_row_count,
     realized_order,
@@ -32,6 +37,12 @@ SUITE_CONFIG_PATH = ROOT / "configs" / "examples" / "mock_suite_local.json"
 PINNED_MOCK_SUITE_MANIFEST_SHA256 = (
     "16c2d67f8c5e84b369938ee8d633dec01c594f5f7fcbf22fcaa2301d986e1267"
 )
+RETAINED_SUITE_MANIFEST_SHA256 = {
+    "affine_smoke_v1.json": "24fb008b7c38484b6a7cb36a4fef1fce4c47a669e3db23131bce06088340f7a9",
+    "jw_mixed_v1_qwen25_15b.json": "855be4e5b40c70bd017d83c9c576b07e6912e9200ea5bbd90985f9a376a6c5f1",
+    "jw_sentinel_v1_qwen25_15b.json": "0316283dde8afd5fc0dea66b56037a1aea34b42d415aec57af4831a119af8471",
+    "mock_suite_manifest.json": PINNED_MOCK_SUITE_MANIFEST_SHA256,
+}
 
 
 def manifest_data() -> dict:
@@ -95,7 +106,12 @@ class SuiteManifestTests(unittest.TestCase):
     def test_canonical_sha_uses_effective_sorted_json(self) -> None:
         data = manifest_data()
         effective = canonical_effective_manifest(data)
-        expected_bytes = (json.dumps(effective, indent=2, sort_keys=True) + "\n").encode()
+        legacy_hash_projection = SuiteManifest.from_mapping(effective).to_dict(
+            schema_version=LEGACY_SUITE_SCHEMA_VERSION
+        )
+        expected_bytes = (
+            json.dumps(legacy_hash_projection, indent=2, sort_keys=True) + "\n"
+        ).encode()
         self.assertEqual(
             suite_manifest_sha256(data),
             hashlib.sha256(expected_bytes).hexdigest(),
@@ -200,9 +216,9 @@ class SuiteManifestTests(unittest.TestCase):
         with self.assertRaisesRegex(SchemaError, "level_id is not contiguous within block"):
             SuiteManifest.from_mapping(data)
 
-    def test_schema_version_output_policy_and_status_policy_are_pinned(self) -> None:
+    def test_schema_version_output_policy_and_removed_status_policy_are_pinned(self) -> None:
         data = manifest_data()
-        data["schema_version"] = "suite_manifest.v2"
+        data["schema_version"] = "suite_manifest.v3"
         with self.assertRaisesRegex(SchemaError, "expected|got|schema_version"):
             SuiteManifest.from_mapping(data)
 
@@ -212,9 +228,111 @@ class SuiteManifestTests(unittest.TestCase):
             SuiteManifest.from_mapping(data)
 
         data = manifest_data()
+        data = migrate_suite_manifest(data)
         data["items"][0]["status_policy"] = "strict_json"
-        with self.assertRaisesRegex(SchemaError, "items\\[\\]\\.status_policy"):
+        with self.assertRaisesRegex(
+            SchemaError, "items\\[\\]\\.status_policy was removed"
+        ):
             SuiteManifest.from_mapping(data)
+
+        legacy = SuiteManifest.from_mapping(manifest_data()).to_dict(
+            schema_version=LEGACY_SUITE_SCHEMA_VERSION
+        )
+        legacy["items"][0]["status_policy"] = "strict_json"
+        with self.assertRaisesRegex(
+            SchemaError, "items\\[\\]\\.status_policy.*permits only 'none'"
+        ):
+            SuiteManifest.from_mapping(legacy)
+
+    def test_v1_reader_migrates_without_rewriting_legacy_hash(self) -> None:
+        legacy = canonical_effective_manifest(manifest_data())
+        current = migrate_suite_manifest(legacy)
+
+        migrated = migrate_suite_manifest(legacy)
+
+        self.assertEqual(migrated, canonical_effective_manifest(current))
+        self.assertEqual(migrated["schema_version"], SUITE_SCHEMA_VERSION)
+        self.assertNotIn("status_policy", migrated["items"][0])
+        self.assertNotEqual(
+            suite_manifest_sha256(legacy), suite_manifest_sha256(migrated)
+        )
+
+    def test_all_retained_v1_manifests_migrate_with_pinned_hashes(self) -> None:
+        manifest_root = ROOT / "configs" / "suite_manifests"
+        for filename, expected_hash in RETAINED_SUITE_MANIFEST_SHA256.items():
+            with self.subTest(filename=filename):
+                legacy = json.loads((manifest_root / filename).read_text())
+                self.assertEqual(legacy["schema_version"], LEGACY_SUITE_SCHEMA_VERSION)
+                self.assertTrue(
+                    all(item.get("status_policy") == "none" for item in legacy["items"])
+                )
+                migrated = migrate_suite_manifest(legacy)
+                self.assertEqual(migrated["schema_version"], SUITE_SCHEMA_VERSION)
+                self.assertTrue(
+                    all("status_policy" not in item for item in migrated["items"])
+                )
+                self.assertTrue(
+                    all(
+                        item["output_policy"] in {"fixed_budget_exact", "natural_eos"}
+                        for item in migrated["items"]
+                    )
+                )
+                self.assertEqual(
+                    migrated["execution_policy"]["cache_policy_verification"],
+                    CACHE_POLICY_VERIFICATION_DECLARED_NOT_VERIFIED,
+                )
+                self.assertEqual(suite_manifest_sha256(legacy), expected_hash)
+                self.assertNotEqual(suite_manifest_sha256(migrated), expected_hash)
+
+    def test_r4_policy_semantics_are_explicit_and_reserved_values_are_pinned(self) -> None:
+        data = migrate_suite_manifest(manifest_data())
+        policy = data["execution_policy"]
+        self.assertEqual(
+            SUITE_POLICY_SEMANTICS,
+            {
+                "execution_policy.order_policy": "enforced",
+                "execution_policy.within_bundle_repeats": "reserved_compat",
+                "execution_policy.cooldown_policy": "descriptive_provenance",
+                "execution_policy.cache_policy": (
+                    "descriptive_provenance_declared_not_verified"
+                ),
+                "execution_policy.warmup_policy": "reserved_compat",
+                "execution_policy.default_output_policy": "descriptive_provenance",
+                "items[].output_policy": "enforced",
+                "items[].status_policy": "removed",
+            },
+        )
+        self.assertIn("order_policy", policy)
+        self.assertNotIn("cache_policy", policy)
+        self.assertEqual(
+            policy["cache_policy_verification"],
+            CACHE_POLICY_VERIFICATION_DECLARED_NOT_VERIFIED,
+        )
+        self.assertEqual(policy["within_bundle_repeats"], 1)
+        self.assertEqual(policy["warmup_policy"], "adapter_default")
+        self.assertIn("cooldown_policy", policy)
+        self.assertIn("default_output_policy", policy)
+        parsed = SuiteManifest.from_mapping(data)
+        self.assertFalse(hasattr(parsed.execution_policy, "cache_policy"))
+        self.assertEqual(
+            parsed.execution_policy.declared_cache_policy,
+            policy["declared_cache_policy"],
+        )
+
+        missing_marker = copy.deepcopy(data)
+        del missing_marker["execution_policy"]["cache_policy_verification"]
+        with self.assertRaisesRegex(SchemaError, "cache_policy_verification"):
+            SuiteManifest.from_mapping(missing_marker)
+
+        repeats = copy.deepcopy(data)
+        repeats["execution_policy"]["within_bundle_repeats"] = 2
+        with self.assertRaisesRegex(SchemaError, "reserved compatibility.*must be 1"):
+            SuiteManifest.from_mapping(repeats)
+
+        warmup = copy.deepcopy(data)
+        warmup["execution_policy"]["warmup_policy"] = "custom"
+        with self.assertRaisesRegex(SchemaError, "warmup_policy"):
+            SuiteManifest.from_mapping(warmup)
 
     def test_status_assignable_subsets_are_pinned(self) -> None:
         self.assertEqual(ItemStatus.SUCCEEDED.value, "succeeded")

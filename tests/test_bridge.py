@@ -13,6 +13,7 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
+import re
 import select
 import subprocess
 import sys
@@ -1450,6 +1451,204 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(self.bridge("thread-list", "--open")[1]["threads"], [])
         all_threads = self.bridge("thread-list")[1]["threads"]
         self.assertEqual(all_threads[0]["state"], "lost_before_return")
+
+
+class BridgeDocumentationDriftTests(unittest.TestCase):
+    """Keep consumer guardrails identical without recreating the wire contract."""
+
+    CONTRACT = REPO_ROOT / "docs" / "contracts" / "bridge_protocol.md"
+    MANIFEST_PATTERN = re.compile(
+        r"<!-- BEGIN BRIDGE CONSUMER DRIFT MANIFEST -->\s*"
+        r"```json\s*(\{.*?\})\s*```\s*"
+        r"<!-- END BRIDGE CONSUMER DRIFT MANIFEST -->",
+        re.DOTALL,
+    )
+    EXPECTED_SURFACES = {
+        "CLAUDE.md",
+        "AGENTS.md",
+        ".claude/agents/codex.md",
+        ".claude/commands/codex.md",
+        ".claude/skills/codex/SKILL.md",
+        ".agents/skills/claude-consult/SKILL.md",
+    }
+    WIRE_DETAIL_GROUPS = {
+        "prompt header fields": (
+            {
+                "TASK_SHAPE",
+                "GENRE",
+                "ROLE",
+                "OBJECTIVE",
+                "AUTHORITY",
+                "WRITE_SCOPE",
+                "BASE_HEAD",
+                "BASELINE_MANIFEST",
+                "BASELINE_DIGEST",
+                "ACCEPTANCE",
+                "VERIFICATION",
+                "EARLY_RETURN",
+                "OUTPUT_PROTOCOL",
+            },
+            4,
+        ),
+        "return envelope fields": (
+            {"status", "summary", "pathspec", "verification", "flags"},
+            4,
+        ),
+        "return status enum": (
+            {
+                "DONE",
+                "PARTIAL",
+                "DISCUSSION",
+                "NEEDS_SCOPE",
+                "NEEDS_RULING",
+                "BLOCKED",
+                "FAILED",
+            },
+            3,
+        ),
+    }
+    CEREMONY_SIGNALS = {
+        "session-open": re.compile(r"\bsession[- ]open\b", re.IGNORECASE),
+        "session-close": re.compile(r"\bsession[- ]close\b", re.IGNORECASE),
+        "lease": re.compile(r"\bleases?\b", re.IGNORECASE),
+        "baseline": re.compile(r"\bbaseline(?:[_ -]manifest)?\b", re.IGNORECASE),
+        "scope-check": re.compile(r"\bscope[- ]check(?:ing)?\b", re.IGNORECASE),
+        "receipt": re.compile(r"\breceipt(?:s|[- ]anchor(?:ed|ing)?)?\b", re.IGNORECASE),
+        "header-fragment": re.compile(r"\bheader[_ -]fragment\b", re.IGNORECASE),
+        "thread-record": re.compile(r"\bthread[- ]record\b", re.IGNORECASE),
+    }
+
+    @classmethod
+    def contract_text(cls) -> str:
+        return cls.CONTRACT.read_text(encoding="utf-8")
+
+    @classmethod
+    def drift_manifest(cls) -> dict:
+        match = cls.MANIFEST_PATTERN.search(cls.contract_text())
+        if match is None:
+            raise AssertionError("bridge consumer drift manifest is missing")
+        return json.loads(match.group(1))
+
+    @classmethod
+    def noncanonical_wire_details(
+        cls,
+        text: str,
+        canonical_snippets: dict[str, str],
+    ) -> list[str]:
+        for snippet in canonical_snippets.values():
+            text = text.replace(snippet, "")
+
+        violations = []
+        paragraphs = re.split(r"\n\s*\n", text)
+        line_number = 1
+        for paragraph in paragraphs:
+            normalized_words = set(re.findall(r"\b[A-Za-z][A-Za-z0-9_]*\b", paragraph))
+            for detail_class, (wire_terms, minimum) in cls.WIRE_DETAIL_GROUPS.items():
+                present = sorted(wire_terms & normalized_words)
+                if len(present) >= minimum:
+                    violations.append(
+                        f"line {line_number}: {detail_class} restatement "
+                        f"({', '.join(present)})"
+                    )
+
+            ceremony = sorted(
+                name
+                for name, pattern in cls.CEREMONY_SIGNALS.items()
+                if pattern.search(paragraph)
+            )
+            stateful_ceremony = {"lease", "baseline", "scope-check", "receipt", "thread-record"}
+            if len(ceremony) >= 3 and stateful_ceremony.intersection(ceremony):
+                violations.append(
+                    f"line {line_number}: lease/session ceremony restatement "
+                    f"({', '.join(ceremony)})"
+                )
+            line_number += paragraph.count("\n") + 2
+        return violations
+
+    def test_contract_defines_complete_consumer_inventory(self) -> None:
+        contract = self.contract_text()
+        manifest = self.drift_manifest()
+        self.assertEqual(manifest["schema"], "bridge-consumer-drift/v1")
+        self.assertEqual(
+            set(manifest["consumers"]),
+            self.EXPECTED_SURFACES - {".agents/skills/claude-consult/SKILL.md"},
+        )
+        for surface in self.EXPECTED_SURFACES:
+            self.assertIn(f"`{surface}`", contract)
+        self.assertIn(
+            "excluded from WO-020 edits by lead ruling",
+            contract,
+        )
+
+    def test_canonical_enforcement_snippets_are_byte_identical(self) -> None:
+        manifest = self.drift_manifest()
+        snippets = manifest["snippets"]
+        self.assertEqual(
+            set(snippets),
+            {
+                "scope_authority",
+                "quiet_mac",
+                "no_bypass",
+                "one_hop",
+                "envelope_failure",
+            },
+        )
+        for relative_path, snippet_ids in manifest["consumers"].items():
+            raw = (REPO_ROOT / relative_path).read_bytes()
+            for snippet_id in snippet_ids:
+                expected = snippets[snippet_id].encode("utf-8")
+                self.assertEqual(
+                    raw.count(expected),
+                    1,
+                    f"{relative_path}: canonical snippet {snippet_id!r} drifted",
+                )
+
+    def test_consumers_point_to_canonical_homes(self) -> None:
+        manifest = self.drift_manifest()
+        for relative_path in manifest["consumers"]:
+            text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+            self.assertIn("docs/contracts/bridge_protocol.md", text)
+        for relative_path in (
+            "CLAUDE.md",
+            "AGENTS.md",
+            ".claude/agents/codex.md",
+            ".claude/commands/codex.md",
+        ):
+            text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+            self.assertIn(".claude/skills/codex/SKILL.md", text)
+
+    def test_noncanonical_consumers_do_not_restate_known_wire_details(self) -> None:
+        manifest = self.drift_manifest()
+        for relative_path in manifest["consumers"]:
+            text = (REPO_ROOT / relative_path).read_text(encoding="utf-8")
+            self.assertEqual(
+                self.noncanonical_wire_details(text, manifest["snippets"]),
+                [],
+                f"{relative_path}: normative wire details belong in the contract",
+            )
+
+    def test_structural_guard_rejects_reworded_envelope_copy(self) -> None:
+        manifest = self.drift_manifest()
+        claude_text = (REPO_ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        reworded_copy = """
+Delegated responses use a five-part record:
+
+- `status` identifies the disposition.
+- `summary` gives the concise result.
+- `pathspec` names touched repository paths.
+- `verification` records completed checks.
+- `flags` carries machine-readable annotations.
+"""
+        # This avoids every old blacklist phrase; adding it to CLAUDE.md must
+        # still fail because duplicating the envelope's field shape is the defect.
+        violations = self.noncanonical_wire_details(
+            claude_text + reworded_copy,
+            manifest["snippets"],
+        )
+        self.assertTrue(
+            any("return envelope fields" in violation for violation in violations),
+            violations,
+        )
 
 
 if __name__ == "__main__":

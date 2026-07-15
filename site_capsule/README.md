@@ -21,23 +21,52 @@ drift banner if so.
 - `client/index.tsx` is a tiny Preact shell that redirects `/` → `/index`
   (Lakebed reserves `/` and `/index.html` for the client shell).
 
-## Deploy / update (the canonical flow)
+## ED-MANUAL-ONLY deploy / update runbook
+
+Per D-068, this is Ed's manual runbook. Only Ed may run the commands in this
+section: agents never regenerate or deploy the site. Agent sessions instead
+refresh `docs/site/DRIFT.md` when front-facing state changes so Ed can decide
+when to use this runbook.
 
 ```sh
-# from the repo root — regenerate the site first if docs changed:
+# from the repo root — install the exact locked renderer, then regenerate:
+npm ci
 python3 scripts/build_site.py
-python3 scripts/pack_capsule.py          # fonts OFF by default (see note)
-cd site_capsule && npx lakebed deploy    # updates the existing deployId
+npm --prefix site_capsule ci
+python3 scripts/pack_capsule.py                    # fonts OFF by default (see note)
+npm --prefix site_capsule exec -- lakebed deploy  # updates the existing deployId
 ```
 
-The pack step prefers a cached or installed Lakebed executable to build and
-measure the real validator artifact, then fails before deploy if it exceeds 90%
-of the 1 MiB cap. If no executable is available, it falls back to the
-conservative estimator and labels that mode `estimator-only advisory`.
+The root lockfile pins Marked 18.0.6 and the capsule lockfile pins Lakebed
+0.0.29 (including all transitive packages). The pack step uses only that local
+Lakebed executable to build and measure the real validator artifact, then fails
+before deploy if it exceeds 90% of the 1 MiB cap. If the pinned executable is
+not installed, it uses the deterministic conservative estimator and labels
+that mode `estimator-only advisory`; ambient PATH and `npx` caches do not alter
+the canonical result. For a controlled preinstalled package, the explicit
+`JOULEWISE_MARKED_BIN` and `JOULEWISE_LAKEBED_BIN` overrides are accepted only
+when their adjacent package metadata reports the exact pinned version.
 
 `lakebed.json` pins the `deployId`, so `deploy` updates the same URL. The
 deploy is **claimed/owned** (needed for outbound `fetch` to GitHub); an
 anonymous deploy would disable freshness.
+
+## Artifact identity policy
+
+`docs/site/build_manifest.json` records whether long-form pages used pinned
+Marked, the built-in offline fallback, or the hermetic `--no-marked`
+placeholder, together with the exact Marked version and offline renderer
+revision. The capsule's generated build information carries that renderer
+identity plus the exact Lakebed version.
+
+Site and capsule bytes are not claimed identical from commit alone. The
+capsule deliberately embeds `branch` and `builtAt`; exact-byte reproduction
+therefore also requires identical generated site inputs and renderer mode,
+the committed lockfiles, `JOULEWISE_BUILD_BRANCH`, and `SOURCE_DATE_EPOCH`.
+Without those explicit inputs, branch and wall-clock metadata are expected to
+change the bytes. Offline builds remain supported: absent Marked selects the
+recorded built-in fallback, while `--no-marked` remains a separate hermetic
+parser/template test path.
 
 ## Fonts note (why the default is fonts-off)
 
@@ -69,9 +98,9 @@ it returns the newest cached markdown-derived payload when available, marks
 those source rows stale, and sets `unavailableRefresh: true`; otherwise, the
 baked page remains the source of visible truth.
 
-## Production smoke / inspection
+## ED-MANUAL-ONLY production smoke / inspection
 
-After deploying, verify the public endpoints:
+After Ed deploys, Ed verifies the public endpoints:
 
 ```sh
 curl -s -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' \

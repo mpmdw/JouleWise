@@ -53,6 +53,8 @@ report.
 | `docs/contracts/adapter_contracts.md` | adapter behavior contracts |
 | `docs/contracts/node_worker_protocol.md` | remote-execution protocol (transport-independent; pinned during 2K, reused by 2L + Phase 3) |
 
+Superseded (2026-07-15, WO-021; D-043): `docs/process/state_kernel.json` is the sole editable authority for live work selection, while generated `TASK_QUEUE.md` and `RUN_STATE.md` regions are projections; see `docs/specs/c027/doc-008_state_kernel.md` §§3.1, 3.6, and 4.
+
 ## Canonical Architecture
 
 ```text
@@ -224,6 +226,7 @@ Acceptance criteria:
 - A new user can run one local benchmark from the README.
 - A new developer can add a backend from the adapter guide.
 - Final figures regenerate from published data.
+  Superseded (2026-07-15, WO-017; D-043): full figure re-derivation is controlled/internal by default, and any externally re-reducible evidence handoff is owner-opt-in behind an affirmative privacy ruling; see `docs/specs/c027/rpt-001_report_vertical_slice.md` §0.4 and `docs/contracts/publication_privacy.md` §Publication boundary.
 
 ## Current Verification Command
 

@@ -3,6 +3,36 @@
 Living cross-phase contract, drafted in Phase 1. Run bundles are the
 durable artifact for every benchmark execution.
 
+## Version And Realized-Output Compatibility
+
+The WO-003 realized-output enforcement is an additive interpretation of
+bundle schema `0.1`; it does not rewrite or mint a replacement version of any
+sealed bundle. For current single-prompt bundles, the existing
+`metadata.workload_provenance.output_policy.{requested_tokens,emitted_tokens,
+stop_condition}` fields are the realized-output record and must agree with
+`metadata.workload_observed.output_token_count`, decode token events,
+`outputs/tokens.jsonl`, and emitted token IDs when the fixed-budget runtime
+exposes them. `name: "fixed_budget_exact"` is evidence-bearing and is valid
+only when the requested count was emitted with
+`stop_condition: "requested_tokens_emitted"`; an MLX underrun is recorded in
+the same object as `name: "fixed_budget_incomplete"` with its realized stop.
+
+For sealed and current suite bundles, each existing
+`outputs/suite_items.jsonl` line together with its paired `item_start` and
+`item_end` markers is the realized-output evidence of record. Readers preserve
+the ordered per-item statuses, requested/emitted counts, token evidence, and
+stop reasons. The bundle-level `output_policy.stop_condition:
+"suite_completed"` is retained as compatibility metadata only and must never
+be substituted for those per-item realized stops. No synthetic suite stop is
+created and no sealed suite is rewritten.
+
+Frozen pre-D-033 single-run corpus identities remain structurally readable
+under their existing compatibility rule. Because they lack the designated
+output-policy record, that exception does not confer fixed-budget exactness,
+replay support, or token-ratio eligibility. Any consumer applying those gates
+must fail closed on absent or inconsistent realized evidence and record an
+eligibility revocation when a previously admitted sealed bundle is affected.
+
 ## Directory Shape
 
 ```text
@@ -40,9 +70,39 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
 - `config.json`: normalized benchmark config (sorted keys; hash in
   metadata).
 - `suite_manifest.json`: for suite runs, the canonical effective suite
-  manifest with pinned defaults materialized. The SHA-256 is computed over
-  sorted-key, 2-space JSON plus trailing newline, matching D-001's config
-  hash convention and D-044's suite hash chain.
+  manifest with pinned defaults materialized. New bundles persist
+  `suite_manifest.v2`; its SHA-256 is computed over the v2 sorted-key,
+  2-space JSON plus trailing newline, matching D-001's config hash convention
+  and D-044's suite hash chain. A v1 source pin in `config.json` authenticates
+  the historical source before migration and remains byte-stable for campaign
+  registration; `metadata.suite.manifest_sha256`, suite marker metadata, and
+  the embedded artifact bind the v2 bytes. Historical bundles retain their v1
+  bytes and v1 hashes. `BundleReader` verifies the deterministic v1-pin/v2-
+  artifact migration, accepts historical v1 bytes, and reports
+  `execution_policy.cache_policy_verification` in `synthesized_fields` when it
+  supplies that compatibility marker.
+
+  The v2 policy portion has this shape (unrelated fields omitted):
+
+  ```json
+  {
+    "schema_version": "suite_manifest.v2",
+    "execution_policy": {
+      "order_policy": "manifest_order",
+      "within_bundle_repeats": 1,
+      "cooldown_policy": "bundle_only",
+      "declared_cache_policy": "cold_between_bundles",
+      "cache_policy_verification": "declared_not_verified",
+      "warmup_policy": "adapter_default",
+      "default_output_policy": "fixed_budget_exact"
+    },
+    "items": [
+      {
+        "output_policy": "fixed_budget_exact"
+      }
+    ]
+  }
+  ```
 - `metadata.json`: a JSON object containing device, runtime, telemetry,
   model, environment, clock, `config_sha256`, rail-manifest metadata, and
   optional workload provenance. Valid JSON with any non-object top-level
@@ -103,7 +163,10 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
 - `events.jsonl`: timestamped lifecycle, phase, token, transfer, and failure
   events.
 - `power_trace.csv`: raw power samples in watts, one row per rail per
-  sample (`timestamp_s,power_w,source,rail`; decision D-018).
+  observation. Point backends retain
+  `timestamp_s,power_w,source,rail`; interval-average backends use
+  `timestamp_s,power_w,source,rail,interval_start_s,interval_end_s`
+  (D-018 plus WO-005).
 - `summary_metrics.json`: reducer output derived from raw artifacts. This
   file is written last and is the bundle completion marker (decision
   D-011): a directory without a schema-valid `summary_metrics.json` is an
@@ -139,7 +202,12 @@ timestamps; join rich rows to power-trace rows by document order
 recorded in device metadata. The rich records preserve powermetrics
 frequency values verbatim: Apple GPU `freq_hz` values observed in the
 fixture are reported in MHz, while cluster/core `freq_hz` values are
-reported in Hz.
+reported in Hz. Derived idle baselines expose the Apple GPU mean as
+`gpu_freq_mhz_mean`, whose declared unit is MHz. They also retain
+`gpu_freq_hz_mean` as a deprecated legacy alias: despite its name, its
+historical and current values are the same MHz-valued number, never Hz. The
+alias is not converted or repurposed, so pre-repair summaries (new field
+absent) remain distinguishable from current summaries (new field present).
 
 ## Event Log Minimum Fields
 
@@ -164,11 +232,36 @@ used by reduction must fall inside a decode window.
 For single-prompt runs, `outputs/tokens.jsonl` rows may include additive
 `token_id` fields, and `metadata.workload_provenance.response.emitted_token_ids`
 records the emitted output token IDs in order when the runtime exposes them.
+For fixed-budget-exact single runs, the row, token-event, and emitted-token-ID
+counts are strict evidence and must equal the policy's `emitted_tokens`.
 
 Runtime phase windows are discovered generically from paired
 `phase_start`/`phase_end` records. MLX runs may emit non-overlapping
 `tokenize`, `generation_setup`, `prefill`, and `decode` phases; reducers and
 readers must not assume only prefill/decode exist.
+
+Phase pairing and validation are one fail-closed operation shared by strict
+bundle validation, phase-energy attribution, and decode-token filtering. A
+pairing key is the phase name plus its phase-stream identity. Stream identity
+uses each non-null `metadata.node_id` and `metadata.node_identity` value. When
+neither is present, a non-null `metadata.node_role` is the stream identity, so
+role-only split markers remain distinct. Values are compared as canonical JSON
+so structured node identities remain stable. Markers with no node role or
+identity all belong to one default stream. A start and end must have the same
+full key. Unmatched starts or ends and reversed bounds invalidate the bundle
+and reduction with an explicit phase-marker reason.
+
+Phase energy is integrated separately per valid window and contributions with
+the same phase name are summed. Windows attributed to distinct identified
+nodes may overlap because each node has its own meter/source, so 2 W over
+`[1,3]` on one node plus 2 W over `[2,4]` on another legitimately sums to 8 J.
+Windows attributed to the same phase stream must not overlap, even when their
+phase names differ: overlap is marker corruption and fails closed with the
+named reason `same_source_phase_overlap`; it is never silently unioned (the
+union in the same 2 W example would be 6 J). Boundary-touching intervals are
+allowed. If any decode windows exist, a decode token is eligible only when its
+timestamp falls in a decode window with the token's same source identity;
+legacy bundles with no decode windows retain the event-only fallback.
 
 ## Suite Bundle Additions (D-044/D-045/D-046/D-047.5)
 
@@ -229,7 +322,9 @@ compares both `token_ids_sha256` and `realized_token_count`.
 `metadata.workload_provenance.output_policy` records the manifest
 `execution_policy.default_output_policy`, the sum of executed items'
 `planned_output_tokens`, total emitted tokens, and `stop_condition:
-"suite_completed"`.
+"suite_completed"`. This aggregate is not realized stop evidence: strict and
+analysis readers use the ordered per-item records and markers described above,
+cross-check their token counts, and preserve heterogeneous item outcomes.
 
 `summary_metrics.json` may include additive `suite_metrics`. It is optional
 for validation so historical bundles remain valid. When present it contains
@@ -247,6 +342,16 @@ Each power sample should include:
 - `power_w`
 - `source`
 - `rail` or component name, when available.
+
+Powermetrics rows additionally require both `interval_start_s` and
+`interval_end_s`. The end equals `timestamp_s`; the start equals
+`timestamp_s - elapsed_ns/1e9`. Every rail row at one timestamp carries the
+same support. Supported and point observations cannot be mixed in one trace.
+The reducer clips the rectangular interval-average observation to the positive
+overlap with every requested window. It never assigns a whole record to a
+partial edge, interpolates endpoints, extrapolates beyond support, or fills a
+positive-length gap. Existing clock/cadence evidence gates determine whether
+the resulting observed-support estimand is claim-eligible.
 
 For manifest rails, a `(timestamp_s, rail)` pair may appear at most once in
 `power_trace.csv`; duplicates are invalid in default validation and in strict
@@ -295,11 +400,19 @@ reader policy:
   `energy_output_token_j`, `gross_energy_j`, `idle_subtracted_energy_j`,
   `ttft_s`, `decode_latency_s`, `throughput_tokens_s`, `idle_baseline`,
   `uncertainty`, `measurement_quality`, `phase_energy_j`, `failure_reason`,
-  and `failure_message`. `energy_request_j` and `gross_energy_j` must be
-  finite numbers. Token-derived fields (`energy_token_j`,
-  `energy_output_token_j`) and idle-subtracted energy
-  (`idle_subtracted_energy_j`) may be `null`; when non-null, nullable numeric
-  fields must be finite. `failure_reason` must be `null`.
+  and `failure_message`. `gross_energy_j` must be finite. A finite
+  `energy_request_j` retains the historical request-energy admission state. A
+  successful new reduction with no idle baseline records the distinct
+  machine-readable state
+  `window_evidence_precheck.idle_subtracted_request.energy_evidence = absent`.
+  That state requires `energy_request_j`,
+  `idle_subtracted_energy_j`, both token-derived energy fields, and
+  `idle_baseline` to be `null`. The latter run remains `succeeded`, while every
+  request-energy claim gate fails closed because no finite request-energy value
+  or eligible idle-subtracted precheck exists. Historical v0.1 summaries
+  retain their prior finite-`energy_request_j` meaning and retained bundles
+  are not reclassified. Other nullable
+  numeric fields must be finite when non-null. `failure_reason` must be `null`.
 - `failed` and `unsupported`: must include `status` and a valid
   `failure_reason`. Other metric keys remain optional/nullable so partial
   evidence failure bundles stay complete.
@@ -339,6 +452,12 @@ analysis-engine claim.
 
 A status-only `{"status": "succeeded"}` summary is neither a complete bundle
 nor default-validation-valid.
+JSON `null` is likewise not a summary object and is neither complete nor
+default-validation-valid. Completion, writer validation, exported summary
+schema semantics, default validation, and reduce-CLI success admission share
+the same status-specific predicate. Failed and unsupported salvage summaries
+remain valid with only their status and a valid `failure_reason`; additive
+optional fields remain permitted.
 
 New summaries may additionally include top-level `summary_provenance` with
 `summary_schema_version`, `reducer_id`, `reducer_version`, and
@@ -355,15 +474,19 @@ and its derived summary are out of scope. Publication integrity is supplied by
 the bundle-pack hash chain (P2-027/REPRO-001), outside a single local
 `validate-bundle` invocation.
 
-Reducer `0.4.2` summaries use exact strict comparison. Current-era reducer
-`0.4.1` summaries may omit only `inter_token_throughput_tokens_s`; if the
-field is stored, its value remains an exact claim. Current-era summaries
-recording reducer `0.4.0` are unsupported and require explicit re-reduction;
-the governed idle-variance meaning changed, so there is no absence projection
-for `0.4.0`. Current-era `0.3.0` and `0.3.1` summaries remain unsupported.
+Reducer `0.5.0` summaries use exact strict comparison except for the absence of
+`idle_baseline.gpu_freq_mhz_mean`, which was added during the already-live
+0.5.0 era. Its absence is tolerated only for compatibility with stored
+pre-repair 0.5.0 summaries; when present, its value is compared exactly. All
+current-era summaries declaring reducer `0.4.1` or `0.4.2` are strictly
+re-derived through their frozen v1 unweighted idle estimator arm; they are
+never compared with relabelled v2 numbers. Their era-specific additive field
+absences remain tolerated, while present claims compare exactly. Reducer
+`0.4.0`, `0.3.x`, recorded `0.2.x`, and unknown reducer versions are
+unsupported and require explicit re-reduction. The frozen meanings are not
+rewritten.
 The six frozen legacy identities keep their provenance-less additive-absence
-tolerance unchanged; recorded `0.2.x` and unknown reducer versions are also
-unsupported and require explicit re-reduction.
+tolerance unchanged.
 A succeeded summary requires a measured window with duration strictly greater
 than zero. A reducer encountering a nonpositive measured window emits an
 honest `failed` summary without derived energy, phase, or suite metrics;
@@ -375,11 +498,13 @@ listed in reducer-version order):
 
 | Field | Location | Contract |
 |---|---|---|
+| `gpu_freq_mhz_mean` | `summary_metrics.json.idle_baseline` | Additive Apple GPU frequency mean with declared unit MHz. Powermetrics derives it from the verbatim rich GPU `freq_hz` number, which Apple reports in MHz. Other backends emit null unless they supply the same declared unit. |
+| `gpu_freq_hz_mean` | `summary_metrics.json.idle_baseline` | Deprecated legacy alias retained without semantic conversion. Historical and current values are actually MHz and equal `gpu_freq_mhz_mean` when both are present; the false-Hz name must not be interpreted as Hz or multiplied by one million. |
 | `inter_token_throughput_tokens_s` | `summary_metrics.json` top level and aggregate metric entries | Governed steady-state decode/inter-token throughput: `(N - 1) / (t_last - t_first)`, where N is the runtime-observed output-token count and the timestamps are the first and last observed decode-token events. It is null when N is below two, fewer than two decode timestamps exist, or their span is zero. The frozen legacy `throughput_tokens_s` remains `N / (t_last - t_first)`: it counts N tokens across N−1 inter-token intervals, is retained for compatibility, and must not be relabeled as steady-state throughput. |
 | `energy_uncertainty_status` | `summary_metrics.json` top level | One of `not_estimable`, `estimated`, or `bounded`. Single-bundle reducer output is `not_estimable` unless every relevant uncertainty term has an external calibrated bound; point estimates and quality fields are still emitted. |
-| `idle_mean_uncertainty` | `summary_metrics.json` top level | Governed powermetrics-v1 idle-mean derivation. `method` is `newey_west_bartlett_10s_iid_floor_v1`, `correlation_scope` is `independent_run`, `source_artifact` is `raw/powermetrics_idle.plist`, and `source_sha256` binds the derivation to immutable bytes. The object records raw count, median interval, type-7 p95/p05 cadence ratio, 10 s bandwidth, lag count, sample/IID/HAC/governed variances, clamped ESS, status, and frozen reason codes. Numeric results and ESS are null when `status=not_estimable`. Mock output is non-claim-bearing. Non-powermetrics physical backends report `backend_policy_not_frozen`. |
+| `idle_mean_uncertainty` | `summary_metrics.json` top level | Governed powermetrics-v2 duration-weighted idle-mean derivation. `method` is `duration_weighted_newey_west_bartlett_10s_iid_floor_v2`, `correlation_scope` is `independent_run`, `source_artifact` is `raw/powermetrics_idle.plist`, and `source_sha256` binds the derivation to immutable bytes. The object records raw count, median interval, type-7 p95/p05 cadence ratio, 10 s bandwidth, lag count, duration-weighted sample/IID/HAC/governed variances, Kish-bounded ESS, status, and frozen reason codes. Numeric results and ESS are null when `status=not_estimable`. Mock output is non-claim-bearing. Non-powermetrics physical backends report `backend_policy_not_frozen`. |
 | `energy_variance_terms_j2` | `summary_metrics.json` top level and aggregate metric entries | Object of named stochastic variance terms in J^2. The reducer emits `E_gross_repetition_j2: null` for single bundles and, only when `idle_mean_uncertainty.status == estimated`, `E_idle_mean_j2 = measured_duration_s^2 * governed_variance_of_mean_w2`. It is null rather than falling back to metadata or raw adjacent count when the governed estimate is unavailable. Aggregates continue consuming each member's corrected scalar and add repeated-gross and total idle-subtracted variance terms. |
-| `energy_bound_terms_j` | `summary_metrics.json` top level and aggregate metric entries | Object of named deterministic bounds in J. Drift is recorded as `E_drift_bound_j` from documented `metadata.idle_drift_bound_w` evidence, or `metadata.extra.idle_drift_bound_w` for runner `extra_metadata` parity, and remains a bound, never a variance term, unless a future analysis explicitly names a distributional model. Missing drift evidence is represented as `null`. `E_interpolation_edge_bound_j` retains the diagnostic maximum change from shifting one edge at a time by +/- half its local observed gap. Reducer 0.3.0 introduced the governed `E_interpolation_joint_edge_bound_j`, the maximum absolute change over all four Cartesian combinations of independently shifting both edges by +/- half their respective local gaps. Window prechecks expose the same governed value as `interpolation_joint_edge_bound_j`. |
+| `energy_bound_terms_j` | `summary_metrics.json` top level and aggregate metric entries | Object of named deterministic bounds in J. Drift is recorded as `E_drift_bound_j` from documented `metadata.idle_drift_bound_w` evidence, or `metadata.extra.idle_drift_bound_w` for runner `extra_metadata` parity, and remains a bound, never a variance term, unless a future analysis explicitly names a distributional model. Missing drift evidence is represented as `null`. For point traces, `E_interpolation_edge_bound_j` retains the diagnostic maximum change from shifting one edge at a time by +/- half its local observed gap, and `E_interpolation_joint_edge_bound_j` is the maximum over simultaneous shifts. For interval-supported powermetrics traces both interpolation terms are exactly `0.0`: overlap clipping is the point estimand, while clock/marker uncertainty remains separately bounded. Window prechecks expose the same governed value as `interpolation_joint_edge_bound_j`. |
 | `window_evidence_precheck` | `summary_metrics.json` top level | Machine-readable evidence prechecks by metric-specific window class. `gross_request` governs `gross_energy_j` and does not require an idle baseline or drift bound. `idle_subtracted_request` governs `idle_subtracted_energy_j` and requires both. Reducer 0.4.0 writes no generic `request` alias. Each request entry records `metric_name`, `window_class`, `eligible`, stable `reasons`, window duration, sample count, local-gap observations, cadence ratio, clock/anchor bound, and joint interpolation bound. `phase`/`item`/`block`/`level` remain gross-only prechecks; rollups contain `window_count` and nested `windows[]` entries. The frozen legacy allowlist may internally map an old `claim_eligibility` field for strict comparison only; that mapping never authorizes positive claim readiness. |
 
 Stable P2-029 `window_evidence_precheck.reasons` values include
@@ -393,32 +518,42 @@ Reducer 0.3.0 adds `nonpositive_window_duration` and
 the cadence denominator would be computed from only a partial basis, such as
 an in-window p95 with a missing bracketing edge gap.
 
-### Idle-mean dependence contract (P2-044)
+### Idle-mean dependence contract (P2-044 + WO-005)
 
-For powermetrics-v1 idle totals `x_0..x_(n-1)`, use the same CPU+GPU+ANE
-arithmetic rail sum and arithmetic mean as `metadata.idle_baseline`. With
-`H = 10 s`, `L = floor(H / median(delta_t))`, sample variance `s^2`, and
-autocovariance `gamma_k = fsum((x_t-xbar)(x_(t-k)-xbar), t=k..n-1) / n`:
+For powermetrics idle totals `x_i` and positive record durations `d_i`, define
+`D=fsum(d_i)`, normalized weights `a_i=d_i/D`,
+`mu=fsum(a_i*x_i)`, `q=fsum(a_i^2)`, Kish exposure count `n_K=1/q`, centered
+`e_i=x_i-mu`, and reliability-weighted sample variance
+`s_w^2=fsum(a_i*e_i^2)/(1-q)`. With `H=10 s` and
+`L=floor(H/median(d_i))`:
 
-`v_iid = s^2 / n`
+`v_iid = s_w^2 * q`
 
-`v_HAC = (gamma_0 + 2 * fsum((1-k/(L+1))*gamma_k, k=1..L)) / n`
+`v_HAC = fsum(a_i^2*e_i^2) + 2*fsum((1-k/(L+1))*fsum(a_i*a_(i-k)*e_i*e_(i-k), i=k..n-1), k=1..L)`
 
 `v_governed = max(v_iid, v_HAC)`
 
-`ESS = clamp(s^2 / v_governed, 1, n)`
+`ESS = clamp(s_w^2 / v_governed, 1, n_K)`
 
-A constant trace has all variance terms zero and ESS `n`. ESS is audit-only;
-it is not a Student-t sample size or degrees of freedom. Estimation requires
-at least two arithmetic samples and `n >= 3*(L+1)`. Cadence requires a type-7
-linear `p95(interval)/p05(interval) <= 1.25`. Irregular cadence fails closed;
-v1 never resamples, trims, detrends, repairs stationarity, selects bandwidth
-adaptively, or shops estimators. `math.fsum` is used for governed sums.
+A constant trace has all variance terms zero and ESS `n_K`; equal durations
+reduce to the frozen v1 arithmetic formulas. ESS is audit-only, not a
+Student-t sample size or degrees of freedom. Estimation still requires at
+least two records and `n >= 3*(L+1)`. Cadence still requires type-7 linear
+`p95(d_i)/p05(d_i) <= 1.25`. The method never resamples, trims, detrends,
+repairs stationarity, selects bandwidth adaptively, or shops estimators.
 
-Raw sample count, arithmetic mean, sample standard deviation, and duration
-(`fsum(elapsed_ns / 1e9)`) are cross-checked against
-`metadata.idle_baseline`. Count must match exactly; floats use
-`rel_tol=1e-9`, `abs_tol=1e-12`. Any mismatch emits
+Strict re-reduction of summaries declaring reducer `0.4.1` or `0.4.2` selects
+the frozen v1 arm: arithmetic mean and sample variance, unweighted Bartlett
+autocovariances, `v_iid=s^2/n`, `v_governed=max(v_iid,v_HAC)`, and the v1 ESS.
+Its metadata cross-check is likewise arithmetic. Reducer `0.5.0` and later
+select the duration-weighted v2 formulas above. Unequal record durations may
+therefore yield two different valid numeric summaries for the same immutable
+raw trace, each admitted only under its declared reducer arm.
+
+For the v2 arm, raw sample count, duration-weighted mean, duration-weighted
+sample standard deviation, and total duration are cross-checked against
+`metadata.idle_baseline`. Count must match exactly; floats use `rel_tol=1e-9`,
+`abs_tol=1e-12`. Any mismatch emits
 `idle_metadata_mismatch`, withholds governed variance, and fails strict
 validation. The complete frozen reason vocabulary is:
 `raw_idle_trace_unavailable`, `raw_idle_trace_invalid`,

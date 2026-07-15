@@ -1,0 +1,29 @@
+{
+  "active_global_gates": [
+    {
+      "id": "gate-2026-07-13-comprehensive-audit",
+      "summary": "Comprehensive whole-project audit declared by Ed 2026-07-13: no feature work, queue pulls, or campaign prep until the audit fix wave completes and findings are adjudicated. Decision-log/process recording and the audit's own work orders remain permitted (they are not kernel tasks).",
+      "authority": [
+        "RUN_STATE.md restart block item 2 (Ed, 2026-07-13)",
+        "TASK_QUEUE.md Current Queue preamble",
+        "docs/reviews/2026-07-13-comprehensive-audit/CHECKPOINT.md"
+      ],
+      "clearance": "docs/reviews/2026-07-13-comprehensive-audit/ close-out: fix wave complete, report synthesis + adjudication recorded, RUN_STATE refreshed (audit close-out session removes this gate from the kernel).",
+      "scope": {
+        "operation": "select",
+        "lanes": [
+          "agent",
+          "quiet_mac",
+          "ed_external"
+        ]
+      },
+      "allowed_task_ids": []
+    }
+  ],
+  "expected_selectable_task_ids": [],
+  "must_suppress_task_ids": [
+    "P1-008",
+    "P2-038",
+    "P2-004"
+  ]
+}

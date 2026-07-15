@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import tempfile
 import unittest
 from dataclasses import asdict
 from pathlib import Path
@@ -58,6 +59,7 @@ def provenance(
         "output_policy": {
             "name": policy,
             "requested_tokens": 100,
+            "emitted_tokens": tokens,
             "sampler": {"kind": "greedy", "temperature": 0.0},
         },
         "tokenizer_identity": {"name": tokenizer, "revision": "sha256:test"},
@@ -288,8 +290,191 @@ class RatioManifestPolicyTests(unittest.TestCase):
 
         first = token_provenance(bundle(100, "requested_tokens_emitted"))
         second = token_provenance(bundle(80, "backend_stop"))
-        self.assertEqual(first["output_policy"], second["output_policy"])
+        self.assertEqual(
+            {
+                key: first["output_policy"][key]
+                for key in ("name", "requested_tokens", "sampler")
+            },
+            {
+                key: second["output_policy"][key]
+                for key in ("name", "requested_tokens", "sampler")
+            },
+        )
+        self.assertNotEqual(
+            first["output_policy"]["emitted_tokens"],
+            second["output_policy"]["emitted_tokens"],
+        )
         self.assertNotEqual(first["stop_reason"], second["stop_reason"])
+
+    def test_truncated_or_unsubstantiated_fixed_budget_output_is_ratio_ineligible(self) -> None:
+        cases = {
+            "truncated": provenance(tokens=80),
+            "empty": provenance(tokens=0),
+            "missing emitted evidence": {
+                **provenance(),
+            },
+            "count disagreement": {
+                **provenance(),
+            },
+        }
+        for label, bad in cases.items():
+            with self.subTest(label=label):
+                bad["output_policy"] = dict(bad["output_policy"])
+                bad["output_policy"]["name"] = "fixed_budget_exact"
+                bad["output_policy"]["requested_tokens"] = 100
+                if label == "missing emitted evidence":
+                    bad["output_policy"].pop("emitted_tokens")
+                elif label == "count disagreement":
+                    bad["output_policy"]["emitted_tokens"] = 99
+                value, reasons = ratio_observation_from_evidence(
+                    block_id="block-1",
+                    energy_a_j=1.0,
+                    energy_b_j=2.0,
+                    provenance_a=bad,
+                    provenance_b=provenance(),
+                )
+                self.assertIsNone(value)
+                self.assertTrue(
+                    {"runtime_token_denominator_required", "output_policy_required"}
+                    & set(reasons)
+                )
+
+    def test_sealed_suite_uses_per_item_realized_outcomes_for_ratio_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sealed-suite"
+            (path / "outputs").mkdir(parents=True)
+            events = []
+            records = []
+            for item_index, stop_reason in enumerate(
+                ("requested_tokens_emitted", "requested_tokens_emitted")
+            ):
+                events.extend(
+                    [
+                        {
+                            "timestamp_s": float(item_index * 10),
+                            "event_type": "item_start",
+                            "phase": "suite",
+                            "message": "start",
+                            "metadata": {
+                                "item_id": f"item-{item_index}",
+                                "item_index": item_index,
+                                "output_policy": "fixed_budget_exact",
+                                "planned_output_tokens": 2,
+                            },
+                        },
+                        {
+                            "timestamp_s": float(item_index * 10 + 1),
+                            "event_type": "item_end",
+                            "phase": "suite",
+                            "message": "end",
+                            "metadata": {
+                                "item_id": f"item-{item_index}",
+                                "item_index": item_index,
+                                "status": "succeeded",
+                                "emitted_tokens": 2,
+                                "stop_reason": stop_reason,
+                            },
+                        },
+                    ]
+                )
+                records.append(
+                    {
+                        "item_id": f"item-{item_index}",
+                        "item_index": item_index,
+                        "status": "succeeded",
+                        "emitted_tokens": 2,
+                        "stop_reason": stop_reason,
+                        "tokens": [{"index": 0}, {"index": 1}],
+                        "emitted_token_ids": [10, 11],
+                    }
+                )
+            (path / "events.jsonl").write_text(
+                "".join(json.dumps(event) + "\n" for event in events)
+            )
+            (path / "outputs" / "suite_items.jsonl").write_text(
+                "".join(json.dumps(record) + "\n" for record in records)
+            )
+            evidence = BundleEvidence(
+                entry={},
+                bundle_id="sealed-suite",
+                relative_path="sealed-suite",
+                path=path,
+                summary={"measurement_quality": {"token_counts_source": "runtime_observed"}},
+                metadata={
+                    "suite": {"suite_id": "sealed"},
+                    "workload_observed": {"output_token_count": 4},
+                    "workload_provenance": {
+                        "output_policy": {
+                            "name": "fixed_budget_exact",
+                            "requested_tokens": 4,
+                            "emitted_tokens": 4,
+                            "stop_condition": "suite_completed",
+                        },
+                        "sampler": {"kind": "greedy"},
+                        "tokenizer": {"name": "tok-a"},
+                    },
+                },
+                raw_config={},
+                strict_problems=(),
+                base_reason_codes=(),
+                config_sha256=None,
+                summary_sha256=None,
+                replacement_classification="registered",
+                inclusion_status="included",
+            )
+            realized = token_provenance(evidence)
+            self.assertNotEqual(realized["stop_reason"], "suite_completed")
+            self.assertEqual(len(realized["output_policy"]["realized_items"]), 2)
+            value, reasons = ratio_observation_from_evidence(
+                block_id="block-1",
+                energy_a_j=1.0,
+                energy_b_j=2.0,
+                provenance_a=realized,
+                provenance_b=realized,
+            )
+            self.assertIsNotNone(value)
+            self.assertEqual(reasons, ())
+
+            # Adversarial checker shape: the durable item record says the
+            # generation failed/truncated while the marker lane looks clean.
+            # Marker precedence would incorrectly leave this ratio-eligible.
+            records[1]["status"] = "failed"
+            records[1]["stop_reason"] = "truncated"
+            (path / "outputs" / "suite_items.jsonl").write_text(
+                "".join(json.dumps(record) + "\n" for record in records)
+            )
+            conflicting = token_provenance(evidence)
+            self.assertFalse(
+                conflicting["output_policy"]["realized_items"][1][
+                    "record_marker_agreement"
+                ]
+            )
+            value, reasons = ratio_observation_from_evidence(
+                block_id="block-conflicting-record",
+                energy_a_j=1.0,
+                energy_b_j=2.0,
+                provenance_a=conflicting,
+                provenance_b=realized,
+            )
+            self.assertIsNone(value)
+            self.assertIn("output_policy_required", reasons)
+
+            records[1]["status"] = "succeeded"
+            records[1]["stop_reason"] = "requested_tokens_emitted"
+            records[1]["tokens"] = []
+            (path / "outputs" / "suite_items.jsonl").write_text(
+                "".join(json.dumps(record) + "\n" for record in records)
+            )
+            inconsistent = token_provenance(evidence)
+            value, reasons = ratio_observation_from_evidence(
+                block_id="block-2",
+                energy_a_j=1.0,
+                energy_b_j=2.0,
+                provenance_a=inconsistent,
+                provenance_b=realized,
+            )
+            self.assertIsNone(value)
+            self.assertIn("runtime_token_denominator_required", reasons)
 
     def test_both_forms_round_trip_through_claim_artifact(self) -> None:
         values = (

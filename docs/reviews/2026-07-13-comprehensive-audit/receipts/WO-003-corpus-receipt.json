@@ -1,0 +1,217 @@
+{
+  "bundle_count": 6,
+  "bundles": [
+    {
+      "bundle_id": "example-mac-mlx-local__r1",
+      "gates": {
+        "exact": {
+          "eligible": false,
+          "revocation_reasons": [
+            "output_policy_required"
+          ]
+        },
+        "ratio": {
+          "eligible": false,
+          "revocation_reasons": [
+            "output_policy_required",
+            "runtime_token_denominator_required",
+            "stop_reason_required",
+            "tokenizer_identity_mismatch"
+          ]
+        },
+        "replay": {
+          "eligible": false,
+          "revocation_reasons": [
+            "emitted_token_ids_missing_or_inconsistent",
+            "output_policy_required"
+          ]
+        },
+        "strict_readable": {
+          "eligible": true,
+          "revocation_reasons": []
+        }
+      },
+      "relative_path": "example-mac-mlx-local__r1"
+    },
+    {
+      "bundle_id": "example-mac-mlx-local__r2",
+      "gates": {
+        "exact": {
+          "eligible": false,
+          "revocation_reasons": [
+            "output_policy_required"
+          ]
+        },
+        "ratio": {
+          "eligible": false,
+          "revocation_reasons": [
+            "output_policy_required",
+            "runtime_token_denominator_required",
+            "stop_reason_required",
+            "tokenizer_identity_mismatch"
+          ]
+        },
+        "replay": {
+          "eligible": false,
+          "revocation_reasons": [
+            "emitted_token_ids_missing_or_inconsistent",
+            "output_policy_required"
+          ]
+        },
+        "strict_readable": {
+          "eligible": true,
+          "revocation_reasons": []
+        }
+      },
+      "relative_path": "example-mac-mlx-local__r2"
+    },
+    {
+      "bundle_id": "example-mac-mlx-local__r3",
+      "gates": {
+        "exact": {
+          "eligible": false,
+          "revocation_reasons": [
+            "output_policy_required"
+          ]
+        },
+        "ratio": {
+          "eligible": false,
+          "revocation_reasons": [
+            "output_policy_required",
+            "runtime_token_denominator_required",
+            "stop_reason_required",
+            "tokenizer_identity_mismatch"
+          ]
+        },
+        "replay": {
+          "eligible": false,
+          "revocation_reasons": [
+            "emitted_token_ids_missing_or_inconsistent",
+            "output_policy_required"
+          ]
+        },
+        "strict_readable": {
+          "eligible": true,
+          "revocation_reasons": []
+        }
+      },
+      "relative_path": "example-mac-mlx-local__r3"
+    },
+    {
+      "bundle_id": "example-mac-mlx-qwen35-122b-512t__r1",
+      "gates": {
+        "exact": {
+          "eligible": false,
+          "revocation_reasons": [
+            "output_policy_required"
+          ]
+        },
+        "ratio": {
+          "eligible": false,
+          "revocation_reasons": [
+            "output_policy_required",
+            "runtime_token_denominator_required",
+            "stop_reason_required",
+            "tokenizer_identity_mismatch"
+          ]
+        },
+        "replay": {
+          "eligible": false,
+          "revocation_reasons": [
+            "emitted_token_ids_missing_or_inconsistent",
+            "output_policy_required"
+          ]
+        },
+        "strict_readable": {
+          "eligible": true,
+          "revocation_reasons": []
+        }
+      },
+      "relative_path": "example-mac-mlx-qwen35-122b-512t__r1"
+    },
+    {
+      "bundle_id": "example-mac-mlx-qwen35-122b-512t__r2",
+      "gates": {
+        "exact": {
+          "eligible": false,
+          "revocation_reasons": [
+            "output_policy_required"
+          ]
+        },
+        "ratio": {
+          "eligible": false,
+          "revocation_reasons": [
+            "output_policy_required",
+            "runtime_token_denominator_required",
+            "stop_reason_required",
+            "tokenizer_identity_mismatch"
+          ]
+        },
+        "replay": {
+          "eligible": false,
+          "revocation_reasons": [
+            "emitted_token_ids_missing_or_inconsistent",
+            "output_policy_required"
+          ]
+        },
+        "strict_readable": {
+          "eligible": true,
+          "revocation_reasons": []
+        }
+      },
+      "relative_path": "example-mac-mlx-qwen35-122b-512t__r2"
+    },
+    {
+      "bundle_id": "example-mac-mlx-qwen35-122b-512t__r3",
+      "gates": {
+        "exact": {
+          "eligible": false,
+          "revocation_reasons": [
+            "output_policy_required"
+          ]
+        },
+        "ratio": {
+          "eligible": false,
+          "revocation_reasons": [
+            "output_policy_required",
+            "runtime_token_denominator_required",
+            "stop_reason_required",
+            "tokenizer_identity_mismatch"
+          ]
+        },
+        "replay": {
+          "eligible": false,
+          "revocation_reasons": [
+            "emitted_token_ids_missing_or_inconsistent",
+            "output_policy_required"
+          ]
+        },
+        "strict_readable": {
+          "eligible": true,
+          "revocation_reasons": []
+        }
+      },
+      "relative_path": "example-mac-mlx-qwen35-122b-512t__r3"
+    }
+  ],
+  "corpus_root": "runs",
+  "schema_version": "joulewise.corpus_compat_receipt.v1",
+  "summary": {
+    "exact": {
+      "eligible": 0,
+      "revoked": 6
+    },
+    "ratio": {
+      "eligible": 0,
+      "revoked": 6
+    },
+    "replay": {
+      "eligible": 0,
+      "revoked": 6
+    },
+    "strict_readable": {
+      "eligible": 6,
+      "revoked": 0
+    }
+  }
+}

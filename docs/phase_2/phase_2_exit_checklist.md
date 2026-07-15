@@ -31,6 +31,8 @@ Companion plan: `docs/phase_2/phase_2_plan.md`.
 | CI green | required | **complete (latest: PR #11, 2026-07-08)** | workflow passing on main including mock end-to-end | PR #11 CI green on both matrix legs (2026-07-08), including the mock end-to-end workflow |
 | Applicability table | required | in progress | every attempted target × model combo classified supported / pending / unsupported with reason | this file (table below) |
 
+Superseded (2026-07-15, WO-005; D-043): the P2-040-era reducer semantics are replaced for new reductions by reducer 0.5.0 duration-weighted idle statistics and interval-support energy integration; see `docs/contracts/run_bundle_layout.md` §Power Trace Minimum Fields and §Idle-mean dependence contract.
+
 Status summary (as of 2026-07-07; the matrix rows above are the per-item
 authority per D-023 — this paragraph is a dated narrative, not a second
 status source): the Mac vertical slice is COMPLETE — 2G, 2H, and 2I all

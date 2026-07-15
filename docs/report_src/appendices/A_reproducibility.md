@@ -1,21 +1,41 @@
 # Appendix A: Reproducibility
 
-Every number in the results chapter derives from the six pinned legacy
-bundles under `runs/` via committed, versioned artifacts:
+Every number in the results chapter derives from six pinned legacy bundles via
+committed, versioned artifacts:
 
-- Input pinning: `analysis/rpt001-v1/input_manifest.json` (experiment
+- Input pinning: `analysis/rpt001-v2/input_manifest.json` (experiment
   manifest hashes + per-bundle tree digests).
-- Sealed dataset: `analysis/rpt001-v1/dataset.csv` (one row per bundle).
-- Aggregates: `analysis/rpt001-v1/aggregates.json` (verbatim
+- Sealed dataset: `analysis/rpt001-v2/dataset.csv` (one row per bundle).
+- Aggregates: `analysis/rpt001-v2/aggregates.json` (verbatim
   `aggregate_experiment()` output, Student-t fields preserved for audit).
-- Output hashes: `analysis/rpt001-v1/artifact_manifest.json`.
+- Output hashes: `analysis/rpt001-v2/artifact_manifest.json`.
 
-Full regeneration (requires the local bundle corpus; ~110 MB, not in Git):
+## Source-only assembly and check
+
+Source-only assembly and `--check` are reproducible from a pristine clone:
+
+```sh
+python3 scripts/build_capstone.py --profile rpt001 --offline --check
+```
+
+This command uses tracked report and analysis sources, compares the committed
+generated projection, and validates the full report assembly in memory. It
+does not require the private bundles or an existing untracked build product.
+
+## Controlled/internal full evidence re-derivation
+
+Full evidence re-derivation is controlled/internal. It requires controlled
+access to the internal six-bundle corpus (~110 MB, not in Git):
 
 ```sh
 python3 scripts/build_capstone.py --profile rpt001 --full --offline \
-  --runs-root /Users/edr/code/JouleWise/runs
+  --runs-root runs
 ```
+
+The corpus is not supplied by a pristine clone, and the transformed public
+projection described below is not a strict-valid, independently re-reducible
+substitute. Accordingly, the full command is not claimed as external full
+reproducibility.
 
 ## Publication privacy boundary (REPRO-002)
 
@@ -45,3 +65,7 @@ replacement for the private bundle and must not be claimed as byte-identical
 or independently re-reducible raw evidence. The private corpus remains the
 authority for full strict re-reduction. REPRO-001 release and external acts
 remain separately gated and lead/user controlled.
+
+A re-reducible evidence-handoff pack is only a possible future owner opt-in,
+pending an affirmative privacy ruling. No such handoff is currently specified
+or supplied.

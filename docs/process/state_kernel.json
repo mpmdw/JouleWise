@@ -1,13 +1,421 @@
 {
+  "active_global_gates": [
+    {
+      "allowed_task_ids": [],
+      "authority": [
+        "RUN_STATE.md restart block item 2 (Ed, 2026-07-13)",
+        "TASK_QUEUE.md Current Queue preamble",
+        "docs/reviews/2026-07-13-comprehensive-audit/CHECKPOINT.md"
+      ],
+      "clearance": "docs/reviews/2026-07-13-comprehensive-audit/ close-out: fix wave complete, report synthesis + adjudication recorded, RUN_STATE refreshed (audit close-out session removes this gate from the kernel).",
+      "id": "gate-2026-07-13-comprehensive-audit",
+      "scope": {
+        "lanes": [
+          "agent",
+          "quiet_mac",
+          "ed_external"
+        ],
+        "operation": "select"
+      },
+      "summary": "Comprehensive whole-project audit declared by Ed 2026-07-13: no feature work, queue pulls, or campaign prep until the audit fix wave completes and findings are adjudicated. Decision-log/process recording and the audit's own work orders remain permitted (they are not kernel tasks)."
+    }
+  ],
   "active_stop_card": null,
-  "authority": "NOT_AUTHORITATIVE_DERIVED_VIEW",
+  "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
     "label": "Bridge v1.1 merged (PR #65): co-work lane + session wrappers; steady state for audit gate",
     "path": "docs/run_reports/2026-07-13-bridge-v11.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
-  "schema_version": 2,
+  "schema_version": 3,
   "tasks": {
+    "AUD-FOLLOWUPS": {
+      "acceptance": {
+        "evidence": [
+          "WO-012's owned D-062 lint queue-row obligation is implemented and covered",
+          "WO-014 has a realized-token discriminating test",
+          "WO-017 has a default no-handoff regression assertion",
+          "WO-020 has a recorded standalone bridge-checker decision",
+          "WO-040 has authored-instruction absolute-path coverage plus a genuine pristine-clone test"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/AUD-FOLLOWUPS/acceptance",
+          "label": "AUD-FOLLOWUPS acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "The ULTRA comparison audit's five accepted small follow-ups close with discriminating tests or an explicit recorded decision, without creating a ceremony-dispositions task."
+      },
+      "authority": {
+        "label": "Comprehensive-audit close-out and accepted-residue list",
+        "path": "docs/reviews/2026-07-13-comprehensive-audit/report.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Comprehensive-audit report disposition ledger",
+            "path": "docs/reviews/2026-07-13-comprehensive-audit/report.md"
+          },
+          "rule": "Do not create AUD-CEREMONY-DISPOSITIONS; ceremony dispositions remain report-owned"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the ULTRA comparison audit's accepted small residue in one bounded agent task: WO-012's owned D-062 lint queue row, WO-014 realized-token discrimination, WO-017 default no-handoff regression, WO-020 standalone bridge-checker decision, and WO-040 authored-instruction absolute-path plus genuine pristine-clone coverage.",
+      "id": "AUD-FOLLOWUPS",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 35,
+      "status": "queued",
+      "status_note": "Accepted small residue only; audit ceremony dispositions remain in the report.",
+      "stop_card": null
+    },
+    "AUD-WO-033": {
+      "acceptance": {
+        "evidence": [
+          "Pure validation and provenance seams are extracted before execution lifecycle seams",
+          "The full campaign behavior-parity portfolio is green before and after the split",
+          "Locks, waivers, backups, cooldown, and claim-readiness behavior remain unchanged"
+        ],
+        "pointer": {
+          "label": "Comprehensive-audit register WO-033",
+          "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+        },
+        "summary": "The post-2M campaign-runner refactor is behavior-preserving across the full campaign test portfolio and retains every collection and claim-readiness safeguard."
+      },
+      "authority": {
+        "label": "Comprehensive-audit register WO-033",
+        "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "the 2M corpus exists before this roadmap-conditioned refactor lands",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "P2-006"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Comprehensive-audit register WO-033 non-goals and risk note",
+            "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+          },
+          "rule": "Keep this post-2M and behavior-preserving; do not redesign campaigns or weaken locks, waivers, backups, cooldown, or claim-readiness gates"
+        }
+      ],
+      "flags": [
+        "blocked_post_2m"
+      ],
+      "goal": "After 2M, split scripts/run_campaign.py along tested policy seams, pure validation and provenance first and execution lifecycle second, only when campaign-scale or split or multi-node work first forces edits to that path.",
+      "id": "AUD-WO-033",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 36,
+      "status": "queued",
+      "stop_card": null
+    },
+    "AUD-WO-034": {
+      "acceptance": {
+        "evidence": [
+          "Every PLANNED command has a bounded owner row or explicit deferred-design marker",
+          "Pack-command ownership lint passes positive and negative fixtures",
+          "Settled split pre-registration requirements and offline-before-live fences remain intact"
+        ],
+        "pointer": {
+          "label": "Comprehensive-audit register WO-034",
+          "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+        },
+        "summary": "When Phase-3 split work is scheduled, every PLANNED pack command gains an owner or explicit deferred marker without pack collapse or premature implementation."
+      },
+      "authority": {
+        "label": "Comprehensive-audit register WO-034",
+        "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "Phase-3 split work is scheduled",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "PHASE-3-SPLIT-SCHEDULED"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Comprehensive-audit register WO-034 non-goals",
+            "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+          },
+          "rule": "Do not prune draft designs, collapse campaign packs, or implement split or KV work in this ownership pass"
+        }
+      ],
+      "flags": [],
+      "goal": "At Phase-3 split scheduling, assign bounded owners and dependencies for transfer-bench, split replay, composite validate and reduce, KV-economics reduction, and matrix-generator extension before any PLANNED command becomes executable.",
+      "id": "AUD-WO-034",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 37,
+      "status": "queued",
+      "stop_card": null
+    },
+    "AUD-WO-035": {
+      "acceptance": {
+        "evidence": [
+          "A versioned discriminated payload path exists for transfer tasks",
+          "A realistic unsupported transfer request fails with a typed versioned error",
+          "Telemetry blocks are not overloaded with transfer semantics"
+        ],
+        "pointer": {
+          "label": "Comprehensive-audit register WO-035",
+          "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+        },
+        "summary": "The 2K-live and remote roadmap has a versioned transfer-task payload seam with typed rejection before split-transfer implementation."
+      },
+      "authority": {
+        "label": "Comprehensive-audit register WO-035",
+        "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "2K-live or remote split-transfer work is scheduled",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "2K-LIVE-REMOTE-TRANSFER-SCHEDULED"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Comprehensive-audit register WO-035 non-goals",
+            "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+          },
+          "rule": "Define and reject the future transfer shape only; do not implement split execution or transfer benchmarking"
+        }
+      ],
+      "flags": [],
+      "goal": "Before the first 2K-live or remote split-transfer task, define a versioned discriminated node-worker payload and test realistic typed rejection without overloading telemetry blocks.",
+      "id": "AUD-WO-035",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 38,
+      "status": "queued",
+      "status_note": "D-043 supersession closure falls due at landing: add the dated protocol-version supersession line identified by PA-2.",
+      "stop_card": null
+    },
+    "AUD-WO-036": {
+      "acceptance": {
+        "evidence": [
+          "Duplicate prepare and start delivery is idempotent",
+          "Node and GPU ownership is leased before launch",
+          "Concurrency coverage exercises the ownership and duplicate-delivery contract"
+        ],
+        "pointer": {
+          "label": "Comprehensive-audit register WO-036",
+          "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+        },
+        "summary": "Retries or concurrent 2K-live and remote campaigns cannot double-own a node or GPU and duplicate delivery is idempotent."
+      },
+      "authority": {
+        "label": "Comprehensive-audit register WO-036",
+        "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "2K-live or remote retries or concurrent campaigns are introduced",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "2K-LIVE-REMOTE-CONCURRENCY-SCHEDULED"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Comprehensive-audit register WO-036 non-goals",
+            "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+          },
+          "rule": "Do not run concurrent hardware campaigns or make live-correctness claims in this agent task"
+        }
+      ],
+      "flags": [],
+      "goal": "When 2K-live or remote retries or concurrency are introduced, add a pre-launch node and GPU ownership lease plus idempotent duplicate prepare and start behavior.",
+      "id": "AUD-WO-036",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 39,
+      "status": "queued",
+      "stop_card": null
+    },
+    "AUD-WO-037": {
+      "acceptance": {
+        "evidence": [
+          "Fixture, unknown, unpromoted-live, and promoted-live classifications are tested",
+          "Unknown and unpromoted NVIDIA bundles are refused at claim admission",
+          "Promotion receipt is commit and protocol bound and cannot be forged through config or metadata"
+        ],
+        "pointer": {
+          "label": "Comprehensive-audit register WO-037",
+          "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+        },
+        "summary": "Before 2K live promotion, non-self-asserted implementation authority and transport-derived execution classification fail closed at claim admission."
+      },
+      "authority": {
+        "label": "Comprehensive-audit register WO-037",
+        "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "the P2-005 and NV-GATE-2 code-now path is scheduled before live promotion",
+          "scope": "live_promotion",
+          "state": "pending",
+          "strength": "hard",
+          "target": "2K-LIVE-PROMOTION-SCHEDULED"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Comprehensive-audit register WO-037 non-goals",
+            "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+          },
+          "rule": "Land this before, never after, the first claim-bearing NVIDIA live promotion; do not execute NV-GATE-2 or de-provisionalize hardware results here"
+        }
+      ],
+      "flags": [
+        "provisional_until_live"
+      ],
+      "goal": "Fold non-self-asserted promotion authority into the 2K-live P2-005 and NV-GATE-2 code-now path before live promotion: bind an implementation receipt to commit and protocol pins and derive per-bundle execution class from the transport path.",
+      "id": "AUD-WO-037",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 40,
+      "status": "queued",
+      "status_note": "D-043 supersession closure falls due at landing: add the dated D-057 governed-reason amendment identified by PA-2.",
+      "stop_card": null
+    },
+    "AUD-WO-038": {
+      "acceptance": {
+        "evidence": [
+          "Lifecycle parity covers node-worker, subprocess, SSH, interface, and controller failure paths",
+          "Every deleted surface has a bounded absence or deprecation-compatibility trace",
+          "node_worker remains self-contained with backend-specific timeout, identity, log, clock, and cleanup safeguards"
+        ],
+        "pointer": {
+          "label": "Comprehensive-audit register WO-038",
+          "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+        },
+        "summary": "At the 2K-live or remote multi-node decision, one owned execution boundary replaces only proven duplication while node-worker safeguards and public compatibility remain intact."
+      },
+      "authority": {
+        "label": "Comprehensive-audit register WO-038",
+        "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "the 2K-live or remote multi-node roadmap decision is made",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "2K-LIVE-REMOTE-MULTINODE-DECIDED"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Comprehensive-audit register WO-038 risk boundaries",
+            "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+          },
+          "rule": "Re-baseline against WO-001 and WO-010, keep node_worker self-contained, and do not delete public transport methods on repository absence alone"
+        }
+      ],
+      "flags": [],
+      "goal": "At the 2K-live or remote multi-node roadmap decision, choose one owned remote execution boundary, consolidate duplicated lifecycle evidence helpers, and remove only proven-unconsumed transport surface with compatibility disposition.",
+      "id": "AUD-WO-038",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 41,
+      "status": "queued",
+      "status_note": "D-043 supersession closure falls due at landing: back-annotate the public adapter and transport contract as required by PA-2.",
+      "stop_card": null
+    },
+    "AUD-WO-039": {
+      "acceptance": {
+        "evidence": [
+          "Packed-byte and request reduction is measured",
+          "Route and link checks pass and every removed page has a retention decision",
+          "Consumed views, deep links, source access, and provenance stamps remain intact"
+        ],
+        "pointer": {
+          "label": "Comprehensive-audit register WO-039",
+          "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+        },
+        "summary": "The remaining site payload and right-sizing work removes only proven-unused live fields and any page removal follows an explicit value-versus-bytes retention review."
+      },
+      "authority": {
+        "label": "Comprehensive-audit register WO-039",
+        "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "an explicit site-capacity or right-sizing decision is made",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "SITE-CAPACITY-RIGHTSIZING-DECIDED"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "SITE-02 lands before remaining site right-sizing",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "SITE-02"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Comprehensive-audit register WO-039 preservation boundary",
+            "path": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl"
+          },
+          "rule": "Trim only live payload fields proven unused; preserve advisor-facing pages, navigation, source access, stable deep links, and provenance unless a per-page retention review says otherwise"
+        }
+      ],
+      "flags": [],
+      "goal": "At the next explicit site-capacity or right-sizing decision after SITE-02, remove only proven-unused live payload fields and make any further page trim through a recorded retained-route and value-versus-bytes review.",
+      "id": "AUD-WO-039",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 42,
+      "status": "partial",
+      "status_note": "Partial page trim landed 2026-07-15 by redirecting the duplicative capsule task-queue mirror while preserving its routes; remaining payload work is open. D-043 supersession closure falls due at landing through the dated D-051 amendment identified by PA-2.",
+      "stop_card": null
+    },
     "CI-003": {
       "acceptance": {
         "evidence": [
@@ -48,6 +456,183 @@
       "status": "shelved",
       "stop_card": null
     },
+    "DOC-008": {
+      "acceptance": {
+        "evidence": [
+          "All nine DOC-008 required outcomes rechecked",
+          "Focused and canonical suites pass",
+          "Final-head review confirms one work-selection authority"
+        ],
+        "pointer": {
+          "label": "DOC-008 required outcomes",
+          "path": "docs/specs/c027/doc-008_state_kernel.md"
+        },
+        "summary": "Every original DOC-008 completion condition lands before the reopened task returns to complete."
+      },
+      "authority": {
+        "label": "DOC-008 state-kernel specification",
+        "path": "docs/specs/c027/doc-008_state_kernel.md"
+      },
+      "dependencies": [
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "intake and procedure reconciliation lands",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "DOC-008-INTAKE"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "planning-reflection protocol retirement lands",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "DOC-008-REFLECTION"
+        },
+        {
+          "evidence": null,
+          "kind": "task",
+          "required": "lead-authored PROJECT_STATUS compaction lands",
+          "scope": "close",
+          "state": "pending",
+          "strength": "hard",
+          "target": "DOC-008-STATUS"
+        }
+      ],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "DOC-008 required outcomes",
+            "path": "docs/specs/c027/doc-008_state_kernel.md"
+          },
+          "rule": "Do not redeclare DOC-008 complete until every original required outcome lands"
+        }
+      ],
+      "flags": [],
+      "goal": "Close the reopened DOC-008 migration only after residual conditions 4, 6, 8, and 9 land and every original completion condition is rechecked.",
+      "id": "DOC-008",
+      "lane": "agent",
+      "priority": "p4_polish",
+      "rank": 32,
+      "status": "partial",
+      "status_note": "Reopened by WO-021; phase C repairs work-selection authority while three residual task records remain live.",
+      "stop_card": null
+    },
+    "DOC-008-INTAKE": {
+      "acceptance": {
+        "evidence": [
+          "M0 is the sole short intake owner",
+          "Inbound procedure references no longer conflict",
+          "Generated regions remain the only work-selection views"
+        ],
+        "pointer": {
+          "label": "DOC-008 intake reconciliation",
+          "path": "docs/specs/c027/doc-008_state_kernel.md"
+        },
+        "summary": "Reconcile the remaining intake and procedure surfaces without creating another live-state mirror."
+      },
+      "authority": {
+        "label": "DOC-008 intake and procedure reconciliation",
+        "path": "docs/specs/c027/doc-008_state_kernel.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "DOC-008 intake reconciliation fence",
+            "path": "docs/specs/c027/doc-008_state_kernel.md"
+          },
+          "rule": "Do not add hand-maintained ranked next-work or phase-completion mirrors"
+        }
+      ],
+      "flags": [],
+      "goal": "Reconcile agent_playbook, AGENT_PLAN, README, orchestration, and remaining intake text with the generated kernel route in DOC-008 conditions 4 and 9.",
+      "id": "DOC-008-INTAKE",
+      "lane": "agent",
+      "priority": "p4_polish",
+      "rank": 31,
+      "status": "queued",
+      "stop_card": null
+    },
+    "DOC-008-REFLECTION": {
+      "acceptance": {
+        "evidence": [
+          "planning_reflection_protocol.md is the exact redirect stub",
+          "Useful fields remain owned by the kernel or run reports",
+          "Inbound references use the consolidated intake route"
+        ],
+        "pointer": {
+          "label": "DOC-008 reflection-protocol retirement",
+          "path": "docs/specs/c027/doc-008_state_kernel.md"
+        },
+        "summary": "Retire the reflection protocol as an independent intake surface while preserving its compatibility path."
+      },
+      "authority": {
+        "label": "DOC-008 reflection-protocol retirement",
+        "path": "docs/specs/c027/doc-008_state_kernel.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "DOC-008 reflection-protocol fence",
+            "path": "docs/specs/c027/doc-008_state_kernel.md"
+          },
+          "rule": "Keep the compatibility path and do not create another intake checklist"
+        }
+      ],
+      "flags": [],
+      "goal": "Replace planning_reflection_protocol.md with the DOC-008 redirect stub and reconcile its inbound references under condition 6.",
+      "id": "DOC-008-REFLECTION",
+      "lane": "agent",
+      "priority": "p4_polish",
+      "rank": 29,
+      "status": "queued",
+      "stop_card": null
+    },
+    "DOC-008-STATUS": {
+      "acceptance": {
+        "evidence": [
+          "Lead-authored PROJECT_STATUS has at most seven current sections",
+          "Removed dated updates are preserved verbatim in the history archive",
+          "Advisor-visible quantitative claims retain evidence pointers"
+        ],
+        "pointer": {
+          "label": "DOC-008 PROJECT_STATUS compaction",
+          "path": "docs/specs/c027/doc-008_state_kernel.md"
+        },
+        "summary": "Lead compacts PROJECT_STATUS and preserves removed dated updates in the specified history archive."
+      },
+      "authority": {
+        "label": "DOC-008 PROJECT_STATUS compaction",
+        "path": "docs/specs/c027/doc-008_state_kernel.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "DOC-008 PROJECT_STATUS authorship fence",
+            "path": "docs/specs/c027/doc-008_state_kernel.md"
+          },
+          "rule": "Lead authors final advisor-facing claims and no generator writes PROJECT_STATUS"
+        }
+      ],
+      "flags": [],
+      "goal": "Perform the lead-authored PROJECT_STATUS compaction and verbatim history archival required by DOC-008 condition 8.",
+      "id": "DOC-008-STATUS",
+      "lane": "agent",
+      "priority": "p4_polish",
+      "rank": 30,
+      "status": "queued",
+      "stop_card": null
+    },
     "DOC-010": {
       "acceptance": {
         "evidence": [
@@ -75,6 +660,15 @@
           "state": "pending",
           "strength": "hard",
           "target": "DOC-008-proven-in-use"
+        },
+        {
+          "evidence": null,
+          "kind": "event",
+          "required": "G6 reference milestone is complete",
+          "scope": "start",
+          "state": "pending",
+          "strength": "hard",
+          "target": "G6"
         }
       ],
       "fallback": null,
@@ -1413,6 +2007,45 @@
       "status_note": "Conditional on P1-003 selecting an available meter path.",
       "stop_card": null
     },
+    "P2-050": {
+      "acceptance": {
+        "evidence": [
+          "Frozen-legacy claim_eligibility mapper receives its own adjudication",
+          "Semantic cooldown-row verification receives its own adjudication",
+          "Once-per-manifest first-run exemption receives its own adjudication",
+          "Scoped top-up detection and cooldown trace v2 receive their own adjudications"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/P2-050/acceptance",
+          "label": "P2-050 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Each C-028 dissent-record candidate receives its own adjudication before any implementation."
+      },
+      "authority": {
+        "label": "C-028 dissent-record queue candidates",
+        "path": "docs/run_reports/2026-07-11-c028-continuation.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "C-028 dissent-record queue candidates",
+            "path": "docs/run_reports/2026-07-11-c028-continuation.md"
+          },
+          "rule": "Do not implement any candidate before its own recorded adjudication"
+        }
+      ],
+      "flags": [],
+      "goal": "Adjudicate the C-028 dissent-record candidates separately: frozen-legacy claim_eligibility mapper, semantic cooldown-row verification, once-per-manifest first-run exemption, scoped top-up detection, and cooldown trace v2.",
+      "id": "P2-050",
+      "lane": "agent",
+      "priority": "p3_hardening_candidates",
+      "rank": 33,
+      "status": "queued",
+      "stop_card": null
+    },
     "P3-000": {
       "acceptance": {
         "evidence": [
@@ -1489,7 +2122,133 @@
       "rank": 21,
       "status": "blocked",
       "stop_card": null
+    },
+    "SITE-02": {
+      "acceptance": {
+        "evidence": [
+          "Executable discovery and loud measured/advisory mode selection have regressions",
+          "Node decode regression executes the emitted TypeScript",
+          "Measured mode is provably selected on a clean clone with Lakebed available"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/SITE-02/acceptance",
+          "label": "SITE-02 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "Both SITE-01 D1/D2 follow-ups close with regressions, including clean-clone proof that Lakebed selects measured mode."
+      },
+      "authority": {
+        "label": "SITE-01 delta-audit D1/D2 deferrals and PR #63 dispositions",
+        "path": "docs/run_reports/2026-07-13-restart-merge-deploy.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "SITE-01 delta-audit D1/D2 deferrals and PR #63 dispositions",
+            "path": "docs/run_reports/2026-07-13-restart-merge-deploy.md"
+          },
+          "rule": "Do not silently enter advisory estimator mode when a Lakebed executable is available"
+        },
+        {
+          "authority": {
+            "label": "SITE-01 delta-audit D1/D2 deferrals and PR #63 dispositions",
+            "path": "docs/run_reports/2026-07-13-restart-merge-deploy.md"
+          },
+          "rule": "Execute emitted TypeScript in the node decode regression instead of a rewritten JavaScript mirror"
+        }
+      ],
+      "flags": [],
+      "goal": "Close SITE-01 follow-ups D1/D2: prevent pack_capsule executable discovery from silently entering advisory estimator mode off this machine through explicit environment and OS-path discovery plus a loud mode print, and make the node decode test execute the emitted TypeScript with tsx or ts-node when available instead of a rewritten JavaScript mirror.",
+      "id": "SITE-02",
+      "lane": "agent",
+      "priority": "p4_polish",
+      "rank": 20,
+      "status": "queued",
+      "stop_card": null
+    },
+    "SPLIT-AP": {
+      "acceptance": {
+        "evidence": [
+          "One primary estimand and its service-state assumption are frozen",
+          "Both monolithic references are predeclared with joint adjusted contrast intervals and split wins only if both are beaten",
+          "Missing composite and transfer floor cells are named as execution prerequisites"
+        ],
+        "pointer": {
+          "label": "SPLIT-AP pre-registration amendments",
+          "path": "docs/specs/c027/split-ap_ap-edit_amendments.md"
+        },
+        "summary": "The split pack and analysis plan are amended before split data, with the non-primary basis retained only as a named sensitivity analysis."
+      },
+      "authority": {
+        "label": "C-027 NEG-7 and RIG-5",
+        "path": "docs/reviews/2026-07-09-c027-whole-project-review.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "SPLIT-AP execution prerequisites",
+            "path": "docs/specs/c027/split-ap_ap-edit_amendments.md"
+          },
+          "rule": "Do not execute the split campaign before this freeze and its named composite and transfer floor prerequisites land"
+        }
+      ],
+      "flags": [],
+      "goal": "Freeze the split pre-registration: one primary estimand and service-state assumption covering gross versus idle-subtracted charged states per NEG-7, both monolithic references predeclared with joint adjusted contrast intervals and split wins only if both are beaten per RIG-5, and missing composite and transfer floor cells named as prerequisites.",
+      "id": "SPLIT-AP",
+      "lane": "agent",
+      "priority": "p2_next_slice",
+      "rank": 9,
+      "status": "queued",
+      "stop_card": null
+    },
+    "TOOL-01": {
+      "acceptance": {
+        "evidence": [
+          "Resume after NEEDS_SCOPE continues the requested work",
+          "Preventive permission profiles and NEEDS_RULING recognition are covered",
+          "Omitted effort defaults to xhigh instead of config passthrough",
+          "Upstream stream death fails instead of exiting OK with a thin out-file",
+          "Resume requires an explicit session ID and cannot cross-attach through a global --last pointer",
+          "Session-open accepts a per-path match specifier without post-hoc child expansion"
+        ],
+        "pointer": {
+          "json_pointer": "/tasks/TOOL-01/acceptance",
+          "label": "TOOL-01 acceptance",
+          "path": "docs/process/state_kernel.json"
+        },
+        "summary": "All seven codex-run-v3 defects close in lead personal tooling with targeted regressions and updated adapter operations lessons."
+      },
+      "authority": {
+        "label": "Bridge v1.1 wrapper and session operations record",
+        "path": "docs/run_reports/2026-07-13-bridge-v11.md"
+      },
+      "dependencies": [],
+      "fallback": null,
+      "fences": [
+        {
+          "authority": {
+            "label": "Bridge v1.1 wrapper and session operations record",
+            "path": "docs/run_reports/2026-07-13-bridge-v11.md"
+          },
+          "rule": "Keep implementation in lead personal tooling; this repository owns only the work record"
+        }
+      ],
+      "flags": [
+        "lead_only"
+      ],
+      "goal": "Fix codex-run-v3 defects: resume-after-NEEDS_SCOPE no-op; preventive permission profiles; NEEDS_RULING recognition; effort-default passthrough; stream-death OK exits with thin out-files; resume --last cross-thread attachment through the global latest session; and session-open paths lacking per-path match specifiers.",
+      "id": "TOOL-01",
+      "lane": "agent",
+      "priority": "p3_tooling",
+      "rank": 34,
+      "status": "queued",
+      "status_note": "lead personal tooling, non-repo",
+      "stop_card": null
     }
   },
-  "updated": "2026-07-13"
+  "updated": "2026-07-15"
 }

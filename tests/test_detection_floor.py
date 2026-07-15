@@ -7,7 +7,9 @@ worked example.
 
 import json
 import math
+import tempfile
 import unittest
+from pathlib import Path
 
 from joulewise.detection_floor import (
     CONDITION_FAMILY_DOMAIN,
@@ -27,6 +29,7 @@ from joulewise.detection_floor import (
     canonical_domain_sha256,
     compose_transport_group,
     comparative_false_effect_floor,
+    complete_bundle_sha256,
     small_sample_guard_factor,
     transport_refusal_reasons,
     validate_floor_artifact,
@@ -36,6 +39,31 @@ TOL = 1e-12
 HEX_A = "a" * 64
 HEX_B = "b" * 64
 HEX_C = "c" * 64
+
+
+class TestCompleteBundleHash(unittest.TestCase):
+    def test_hash_binds_all_regular_file_bytes_and_is_relocation_stable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = root / "first"
+            second = root / "second"
+            for bundle in (first, second):
+                (bundle / "raw").mkdir(parents=True)
+                (bundle / "metadata.json").write_text('{"value":1}\n', encoding="utf-8")
+                (bundle / "raw" / "samples.bin").write_bytes(b"abc\x00def")
+            original = complete_bundle_sha256(first)
+            self.assertEqual(original, complete_bundle_sha256(second))
+            (second / "raw" / "samples.bin").write_bytes(b"abc\x00changed")
+            self.assertNotEqual(original, complete_bundle_sha256(second))
+
+    def test_symlink_member_fails_closed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "bundle"
+            bundle.mkdir()
+            (bundle / "payload").write_text("evidence\n", encoding="utf-8")
+            (bundle / "alias").symlink_to("payload")
+            with self.assertRaisesRegex(ValueError, "not a regular file"):
+                complete_bundle_sha256(bundle)
 
 
 def condition_family(condition_id):
@@ -375,6 +403,29 @@ class TestArtifactEmitValidate(unittest.TestCase):
         self.assertEqual(validate_floor_artifact(artifact), [])
         round_tripped = json.loads(json.dumps(artifact, sort_keys=True))
         self.assertEqual(validate_floor_artifact(round_tripped), [])
+
+    def test_artifact_records_plan_hash_and_per_member_abba_sequence(self):
+        artifact = make_artifact()
+        block = artifact["cells"][0]["comparative"]["blocks"][0]
+        self.assertEqual(block["calibration_plan_sha256"], HEX_A)
+        self.assertEqual(
+            [member["plan_label"] for member in block["members"]],
+            ["A", "B", "B", "A"],
+        )
+        self.assertEqual(
+            [member["plan_sequence_index"] for member in block["members"]],
+            [1, 2, 3, 4],
+        )
+
+    def test_mutable_plan_sequence_fields_are_structurally_rejected(self):
+        artifact = make_artifact()
+        block = artifact["cells"][0]["comparative"]["blocks"][0]
+        block["calibration_plan_sha256"] = HEX_B
+        block["members"][0]["plan_label"] = "B"
+        block["members"][1]["plan_sequence_index"] = 3
+        self.assert_invalid(artifact, "does not match artifact provenance")
+        self.assert_invalid(artifact, "does not match executed label sequence")
+        self.assert_invalid(artifact, "must match member order")
 
     def test_cell_floor_fields_match_fixtures(self):
         cell = make_cell()

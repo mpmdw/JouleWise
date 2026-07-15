@@ -40,15 +40,23 @@ def powermetrics_stream(powers_w: list[float], intervals_s: list[float]) -> byte
 
 
 def baseline(powers_w: list[float], intervals_s: list[float]) -> IdleBaseline:
-    mean_w = math.fsum(powers_w) / len(powers_w)
+    duration_s = math.fsum(intervals_s)
+    weights = [interval_s / duration_s for interval_s in intervals_s]
+    mean_w = math.fsum(
+        weight * power_w for weight, power_w in zip(weights, powers_w, strict=True)
+    )
+    q = math.fsum(weight * weight for weight in weights)
     stddev_w = math.sqrt(
-        math.fsum((value - mean_w) ** 2 for value in powers_w)
-        / (len(powers_w) - 1)
+        math.fsum(
+            weight * (power_w - mean_w) ** 2
+            for weight, power_w in zip(weights, powers_w, strict=True)
+        )
+        / (1.0 - q)
     )
     return IdleBaseline(
         power_w_mean=mean_w,
         power_w_stddev=stddev_w,
-        duration_s=math.fsum(intervals_s),
+        duration_s=duration_s,
         sample_count=len(powers_w),
         telemetry_backend=TelemetryBackend.POWERMETRICS,
     )
@@ -116,6 +124,18 @@ class HandComputableFixtureTests(unittest.TestCase):
         self.assertEqual(estimate.governed_variance_of_mean_w2, 0.0)
         self.assertEqual(estimate.effective_sample_size, 4.0)
 
+    def test_unequal_durations_weight_mean_variance_hac_and_ess_together(self) -> None:
+        estimate = estimate_newey_west_bartlett(
+            [0.0, 2.0, 2.0], 0, [1.0, 1.0, 2.0]
+        )
+
+        self.assertAlmostEqual(estimate.sample_variance_w2, 6 / 5)
+        self.assertAlmostEqual(estimate.iid_variance_of_mean_w2, 9 / 20)
+        self.assertAlmostEqual(estimate.hac_variance_of_mean_w2, 7 / 32)
+        self.assertAlmostEqual(estimate.governed_variance_of_mean_w2, 9 / 20)
+        self.assertAlmostEqual(estimate.duration_weighted_sample_count, 8 / 3)
+        self.assertAlmostEqual(estimate.effective_sample_size, 8 / 3)
+
     def test_eligibility_fixture_below_three_bandwidths_is_not_estimable(self) -> None:
         powers_w = [5.0] * 20
         intervals_s = [1.0] * 20
@@ -171,6 +191,33 @@ class GovernedEvidenceTests(unittest.TestCase):
                 powermetrics_stream(powers_w, intervals_s)
             )
             result = derive_idle_mean_uncertainty(BundleReader(bundle), mismatched)
+
+        self.assertEqual(result["status"], "not_estimable")
+        self.assertEqual(result["reason_codes"], ["idle_metadata_mismatch"])
+
+    def test_unweighted_metadata_for_unequal_durations_fails_closed(self) -> None:
+        powers_w = [4.0, 6.0] * 17
+        intervals_s = [1.0, 1.2] * 17
+        weighted = baseline(powers_w, intervals_s)
+        arithmetic_mean = math.fsum(powers_w) / len(powers_w)
+        arithmetic_stddev = math.sqrt(
+            math.fsum((value - arithmetic_mean) ** 2 for value in powers_w)
+            / (len(powers_w) - 1)
+        )
+        stale = IdleBaseline(
+            power_w_mean=arithmetic_mean,
+            power_w_stddev=arithmetic_stddev,
+            duration_s=weighted.duration_s,
+            sample_count=weighted.sample_count,
+            telemetry_backend=weighted.telemetry_backend,
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            (bundle / "raw").mkdir()
+            (bundle / "raw" / "powermetrics_idle.plist").write_bytes(
+                powermetrics_stream(powers_w, intervals_s)
+            )
+            result = derive_idle_mean_uncertainty(BundleReader(bundle), stale)
 
         self.assertEqual(result["status"], "not_estimable")
         self.assertEqual(result["reason_codes"], ["idle_metadata_mismatch"])

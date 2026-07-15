@@ -346,15 +346,26 @@ Text.
                 "status.html", "task_queue.html",
             }
             self.assertEqual({path.name for path in site.glob("*.html")}, expected_names)
+            self.assertEqual(
+                pack_capsule.CAPSULE_PAGE_REDIRECTS,
+                {"task_queue.html": "roadmap.html"},
+            )
+            capsule_names = expected_names - {"task_queue.html"}
             expected_canonical = {
                 pack_capsule.canonical_path(pack_capsule.page_aliases(site / name))
-                for name in expected_names
+                for name in capsule_names
             } | {"/project_critique_review.html"}
             self.assertEqual(set(packed_site["routes"]), expected_canonical)
             for path, route in packed_site["routes"].items():
                 self.assertIn(path, decoded_shards[route["shard"]])
-            for name in expected_names:
+            for name in capsule_names:
                 aliases = pack_capsule.page_aliases(site / name)
+                aliases.extend(
+                    alias
+                    for source_name, target_name in pack_capsule.CAPSULE_PAGE_REDIRECTS.items()
+                    if target_name == name
+                    for alias in pack_capsule.page_aliases(site / source_name)
+                )
                 canonical = pack_capsule.canonical_path(aliases)
                 expected_aliases = [
                     alias
@@ -407,13 +418,25 @@ Text.
                     readme_html,
                 )
             self.assertIn("postcondition mode: estimator-only advisory", pack_stdout.getvalue())
+            estimated_artifact = pack_capsule.estimate_lakebed_artifact_size(total)
             self.assertLessEqual(
-                pack_capsule.estimate_lakebed_artifact_size(total),
+                estimated_artifact,
                 pack_capsule.LAKEBED_TARGET_ARTIFACT_BYTES,
+            )
+            self.assertLessEqual(
+                estimated_artifact,
+                920_000,
+                "production capsule must retain integration headroom for routine doc growth",
             )
             self.assertTrue((content / "pages.ts").is_file())
             self.assertTrue((content / "buildinfo.ts").is_file())
             self.assertFalse((content / "styles.ts").exists())
+            manifest = json.loads((site / "build_manifest.json").read_text(encoding="utf-8"))
+            expected_mode = "offline-fallback" if force_offline_renderer else "marked"
+            self.assertEqual(manifest["renderer"]["mode"], expected_mode)
+            self.assertEqual(
+                manifest["renderer"]["markedVersion"], build_site.MARKED_VERSION
+            )
 
     def test_production_build_output_packs_below_conservative_lakebed_budget(self):
         self._assert_production_build_output_packs_below_lakebed_budget(
@@ -422,8 +445,20 @@ Text.
 
     def test_connected_marked_build_output_packs_below_lakebed_budget(self):
         try:
+            executable = build_site.discover_marked_executable()
+        except build_site.SiteBuildError as exc:
+            self.fail(str(exc))
+        if executable is None:
+            message = (
+                "WO-018 MARKED INTEGRATION GATE SKIP: pinned local Marked "
+                "18.0.6 unavailable; run npm ci or set JOULEWISE_MARKED_BIN "
+                "to an exact 18.0.6 package binary"
+            )
+            print(message, file=sys.stderr)
+            self.skipTest(message)
+        try:
             probe = subprocess.run(
-                ["npx", "--yes", "marked", "--gfm"],
+                [str(executable), "--gfm"],
                 input="# Probe\n",
                 capture_output=True,
                 text=True,
@@ -437,14 +472,14 @@ Text.
             else:
                 detail = str(exc)
             message = (
-                "SITE-01 MARKED RENDERER GATE SKIP: npx marked unavailable "
+                "WO-018 MARKED INTEGRATION GATE SKIP: pinned Marked unavailable "
                 f"({detail})"
             )
             print(message, file=sys.stderr)
             self.skipTest(message)
         if "<h1>Probe</h1>" not in probe.stdout:
             message = (
-                "SITE-01 MARKED RENDERER GATE SKIP: npx marked unavailable "
+                "WO-018 MARKED INTEGRATION GATE SKIP: pinned Marked unavailable "
                 "(probe did not return expected GFM HTML)"
             )
             print(message, file=sys.stderr)

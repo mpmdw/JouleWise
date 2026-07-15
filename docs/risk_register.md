@@ -344,7 +344,10 @@ Conventions:
   corpus bundles, no report source, same-disk backup.
 - Trigger: an agent-heavy work block that produces neither a new real
   evidence bundle nor a report/figure increment.
-- Mitigation: proposed D-060 depth-before-breadth stop line (awaiting
-  Ed); RPT-001 vertical slice; the C-027 correctness rows ranked ahead
-  of all breadth work.
-- Owner: lead (queue discipline), Ed (D-060 ratification).
+- Mitigation: D-060 depth-before-breadth stop line (RATIFIED by Ed
+  2026-07-10) extended by the WO-022/R2 spend guardrails
+  (`docs/orchestration.md` §Spend guardrails, 2026-07-15); RPT-001
+  vertical slice; the C-027 correctness rows ranked ahead of all
+  breadth work.
+- Owner: lead (queue discipline + guardrail checkpoints), Ed (HARD
+  bands and structure).

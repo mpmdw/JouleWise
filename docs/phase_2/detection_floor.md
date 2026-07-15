@@ -378,6 +378,7 @@ are inspected:
 - Cadence regularity threshold of 1.25.
 - Rail definition: the same CPU+GPU+ANE arithmetic total used by the idle baseline.
 - Arithmetic, not time-weighted, mean so the uncertainty matches the current point estimand.
+  Superseded (2026-07-15, WO-005; D-043): powermetrics idle point and uncertainty estimands are duration-weighted under reducer 0.5.0; see `docs/contracts/run_bundle_layout.md` §Idle-mean dependence contract.
 - No trimming, detrending, stationarity “repair,” or adaptive bandwidth.
 - Raw/metadata cross-check tolerance and failure behavior.
 - Physical-backend applicability.

@@ -7,11 +7,14 @@ import hashlib
 import json
 import os
 import re
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
+import joulewise
+import joulewise.bundle as bundle_module
 from joulewise.bundle import (
     BundleError,
     RunBundleWriter,
@@ -25,8 +28,10 @@ from joulewise.clock import FakeClock
 from joulewise.interfaces import PowerSample, RunContext, RuntimeEvent
 from joulewise.schemas import (
     BenchmarkConfig,
+    EnergyEvidence,
     FailureReason,
     RunStatus,
+    SchemaError,
     SummaryMetrics,
 )
 
@@ -34,6 +39,44 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
 
 EVENT_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
+
+_CLEAN_SOURCE_STATE = {
+    "git_commit": "a" * 40,
+    "tracked": "clean",
+    "staged": "clean",
+    "untracked": "clean",
+    "diff_sha256": "0" * 64,
+}
+
+
+class StrReprTrap:
+    """Poison value whose textual fallback must never be consulted."""
+
+    str_calls = 0
+    repr_calls = 0
+
+    def __str__(self) -> str:
+        type(self).str_calls += 1
+        raise AssertionError("metadata quarantine called str()")
+
+    def __repr__(self) -> str:
+        type(self).repr_calls += 1
+        raise AssertionError("metadata quarantine called repr()")
+def source_state(
+    *,
+    commit: str = "1" * 40,
+    tracked: str = "clean",
+    staged: str = "clean",
+    untracked: str = "clean",
+    diff_sha256: str = "2" * 64,
+) -> dict[str, str]:
+    return {
+        "git_commit": commit,
+        "tracked": tracked,
+        "staged": staged,
+        "untracked": untracked,
+        "diff_sha256": diff_sha256,
+    }
 
 
 def load_example_config(**overrides) -> BenchmarkConfig:
@@ -46,10 +89,16 @@ def load_example_config(**overrides) -> BenchmarkConfig:
 def make_summary() -> SummaryMetrics:
     return SummaryMetrics(
         status=RunStatus.SUCCEEDED,
-        energy_request_j=1.25,
-        energy_token_j=0.03125,
+        gross_energy_j=1.25,
         ttft_s=0.05,
         throughput_tokens_s=80.0,
+        window_evidence_precheck={
+            "idle_subtracted_request": {
+                "energy_evidence": EnergyEvidence.ABSENT.value,
+                "eligible": False,
+                "reasons": ["idle_baseline_unrecorded"],
+            }
+        },
     )
 
 
@@ -139,6 +188,33 @@ class RunBundleWriterTests(unittest.TestCase):
         config = load_example_config(**config_overrides) if config_overrides else self.config
         return RunBundleWriter.create(self.runs_root, config, self.clock)
 
+    def make_source_checkout(self) -> tuple[Path, Path, Path]:
+        root = Path(self._tmp.name) / "source-checkout"
+        source_path = root / "joulewise" / "bundle.py"
+        outside_path = root / "scripts" / "outside.py"
+        source_path.parent.mkdir(parents=True)
+        outside_path.parent.mkdir(parents=True)
+        source_path.write_text("# source marker\n")
+        outside_path.write_text("# outside marker\n")
+        subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+        subprocess.run(
+            ["git", "config", "user.email", "bundle-test@example.invalid"],
+            cwd=root,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "config", "user.name", "Bundle Test"],
+            cwd=root,
+            check=True,
+        )
+        subprocess.run(["git", "add", "."], cwd=root, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "fixture"],
+            cwd=root,
+            check=True,
+        )
+        return root, source_path, outside_path
+
     def event(self, event_type: str = "stage_started", phase: str = "validate") -> RuntimeEvent:
         return RuntimeEvent(
             timestamp_s=self.clock.now(),
@@ -212,7 +288,14 @@ class RunBundleWriterTests(unittest.TestCase):
 
         summary = json.loads((writer.path / "summary_metrics.json").read_text())
         self.assertEqual(summary["status"], "succeeded")
-        self.assertEqual(summary["energy_request_j"], 1.25)
+        self.assertEqual(summary["gross_energy_j"], 1.25)
+        self.assertIsNone(summary["energy_request_j"])
+        self.assertEqual(
+            summary["window_evidence_precheck"]["idle_subtracted_request"][
+                "energy_evidence"
+            ],
+            "absent",
+        )
 
     def test_events_jsonl_lines_parse_with_exact_key_set(self) -> None:
         writer = self.make_writer()
@@ -278,6 +361,266 @@ class RunBundleWriterTests(unittest.TestCase):
             or re.fullmatch(r"[0-9a-f]{40}", metadata["git_commit"]),
             metadata["git_commit"],
         )
+        self.assertEqual(
+            metadata["source_provenance"]["start"]["git_commit"],
+            metadata["git_commit"],
+        )
+
+    def test_source_provenance_is_captured_at_creation_and_compared_at_metadata(self) -> None:
+        start = source_state()
+        probe_outputs = [
+            str(self._tmp.name).encode() + b"\n",
+            b"1" * 40 + b"\n",
+            b"",
+            b"",
+            b"",
+            str(self._tmp.name).encode() + b"\n",
+            b"1" * 40 + b"\n",
+            b"",
+            b"",
+            b"new-source.py\0",
+        ]
+
+        def fake_git(*args, **kwargs):
+            return mock.Mock(
+                returncode=0,
+                communicate=mock.Mock(return_value=(probe_outputs.pop(0), b"")),
+            )
+
+        with mock.patch("joulewise.bundle._GIT_POPEN", side_effect=fake_git) as capture:
+            writer = self.make_writer(run_id="source-change")
+            self.assertEqual(capture.call_count, 5)
+            writer.append_event(self.event(phase="adapter-executed"))
+            (Path(self._tmp.name) / "new-source.py").write_text("changed\n")
+            writer.write_metadata({})
+
+        source_dir = Path(bundle_module.__file__).resolve().parent
+        expected_cwds = [source_dir, *([Path(self._tmp.name)] * 4)] * 2
+        self.assertEqual(
+            [call.kwargs["cwd"] for call in capture.call_args_list],
+            expected_cwds,
+        )
+
+        provenance = json.loads(
+            (writer.path / "metadata.json").read_text()
+        )["source_provenance"]
+        self.assertEqual(capture.call_count, 10)
+        self.assertEqual(provenance["start"]["git_commit"], start["git_commit"])
+        self.assertEqual(provenance["start"]["tracked"], "clean")
+        self.assertEqual(provenance["end"]["untracked"], "dirty")
+        self.assertNotEqual(
+            provenance["start"]["diff_sha256"],
+            provenance["end"]["diff_sha256"],
+        )
+        self.assertIs(provenance["changed_during_run"], True)
+        self.assertIs(provenance["claim_eligible"], False)
+        self.assertEqual(
+            provenance["reason_codes"],
+            ["end_untracked_dirty", "source_changed_during_run"],
+        )
+
+    def test_writer_creation_captures_tracked_change_outside_package_tree(self) -> None:
+        root, source_path, outside_path = self.make_source_checkout()
+        outside_path.write_text("# changed outside package\n")
+
+        with mock.patch.object(bundle_module, "__file__", str(source_path)):
+            writer = self.make_writer(run_id="outside-package-dirty")
+            writer.write_metadata({})
+
+        provenance = json.loads(
+            (writer.path / "metadata.json").read_text()
+        )["source_provenance"]
+        self.assertEqual(provenance["start"]["tracked"], "dirty")
+        self.assertEqual(provenance["end"]["tracked"], "dirty")
+        self.assertEqual(
+            provenance["reason_codes"],
+            ["start_tracked_dirty", "end_tracked_dirty"],
+        )
+        self.assertEqual(root, source_path.parent.parent)
+
+    def test_writer_creation_resolves_root_untracked_path_from_checkout_root(self) -> None:
+        root, source_path, _ = self.make_source_checkout()
+        (root / "root-note.txt").write_text("root-relative content\n")
+
+        with (
+            mock.patch.object(bundle_module, "__file__", str(source_path)),
+            mock.patch(
+                "joulewise.bundle._untracked_identity",
+                wraps=bundle_module._untracked_identity,
+            ) as untracked_identity,
+        ):
+            writer = self.make_writer(run_id="root-untracked")
+            writer.write_metadata({})
+
+        provenance = json.loads(
+            (writer.path / "metadata.json").read_text()
+        )["source_provenance"]
+        self.assertEqual(provenance["start"]["untracked"], "dirty")
+        self.assertEqual(provenance["end"]["untracked"], "dirty")
+        self.assertEqual(untracked_identity.call_count, 2)
+        for call in untracked_identity.call_args_list:
+            self.assertEqual(call.args, (root.resolve(), b"root-note.txt\0"))
+
+    def test_dirty_and_unknown_source_provenance_do_not_block_bundle_completion(self) -> None:
+        for label in ("dirty", "unknown"):
+            if label == "dirty":
+                probe_outputs = [
+                    value
+                    for _ in range(2)
+                    for value in (
+                        str(REPO_ROOT).encode() + b"\n",
+                        b"1" * 40 + b"\n",
+                        b"tracked diff bytes",
+                        b"staged diff bytes",
+                        b"",
+                    )
+                ]
+
+                def fake_git(*args, **kwargs):
+                    return mock.Mock(
+                        returncode=0,
+                        communicate=mock.Mock(return_value=(probe_outputs.pop(0), b"")),
+                    )
+            else:
+                def fake_git(*args, **kwargs):
+                    return mock.Mock(
+                        returncode=1,
+                        communicate=mock.Mock(return_value=(b"", b"")),
+                    )
+
+            with self.subTest(label=label), mock.patch(
+                "joulewise.bundle._GIT_POPEN",
+                side_effect=fake_git,
+            ):
+                writer = self.make_writer(run_id=f"source-{label}")
+                writer.write_metadata({})
+                writer.write_summary(make_summary())
+                finalized = writer.finalize()
+                metadata = json.loads((finalized / "metadata.json").read_text())
+                self.assertIs(
+                    metadata["source_provenance"]["claim_eligible"],
+                    False,
+                )
+                self.assertTrue((finalized / "summary_metrics.json").is_file())
+
+    def test_valid_metadata_serialization_is_byte_unchanged(self) -> None:
+        extra = {
+            "runtime_adapter": "mock",
+            "nested": {"enabled": True, "samples": [1, 2.5, None]},
+        }
+        with (
+            mock.patch("joulewise.bundle.platform.platform", return_value="test-platform"),
+            mock.patch("joulewise.bundle.platform.machine", return_value="test-machine"),
+            mock.patch(
+                "joulewise.bundle.platform.python_version", return_value="3.test"
+            ),
+            mock.patch("joulewise.bundle._capture_source_state", return_value=dict(_CLEAN_SOURCE_STATE)),
+        ):
+            writer = self.make_writer()
+            writer.write_metadata(extra)
+        expected = {
+            "platform": "test-platform",
+            "machine": "test-machine",
+            "python_version": "3.test",
+            "joulewise_version": joulewise.__version__,
+            "schema_version": self.config.schema_version,
+            "config_sha256": writer.config_sha256,
+            "run_id": writer.run_id,
+            "git_commit": "a" * 40,
+            "clock": self.clock.info(),
+            "source_provenance": {
+                "schema": bundle_module.SOURCE_PROVENANCE_SCHEMA,
+                "diff_identity": {
+                    "algorithm": bundle_module.SOURCE_DIFF_IDENTITY_ALGORITHM,
+                    "version": bundle_module.SOURCE_DIFF_IDENTITY_VERSION,
+                },
+                "start": _CLEAN_SOURCE_STATE,
+                "end": _CLEAN_SOURCE_STATE,
+                "changed_during_run": False,
+                "claim_eligible": True,
+                "reason_codes": [],
+            },
+            **extra,
+        }
+        self.assertEqual(
+            (writer.path / "metadata.json").read_text(),
+            json.dumps(expected, indent=2, sort_keys=True) + "\n",
+        )
+
+    def test_malformed_metadata_is_recursively_quarantined_deterministically(
+        self,
+    ) -> None:
+        StrReprTrap.str_calls = 0
+        StrReprTrap.repr_calls = 0
+
+        def poison_payload(reverse: bool) -> dict:
+            cycle: list[object] = []
+            cycle.append(cycle)
+            nested_items = [
+                ("valid", {"kept": "evidence"}),
+                ("nan", float("nan")),
+                ("positive_infinity", float("inf")),
+                ("negative_infinity", float("-inf")),
+                (7, "invalid-key value must not leak"),
+                ((1, 2), StrReprTrap()),
+            ]
+            root_items = [
+                ("z_poison", StrReprTrap()),
+                ("a/cycle~", cycle),
+                ("nested", dict(reversed(nested_items) if reverse else nested_items)),
+            ]
+            return dict(reversed(root_items) if reverse else root_items)
+
+        writer_a = self.make_writer()
+        writer_a.write_metadata(poison_payload(False))
+        other_tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(other_tmp.cleanup)
+        writer_b = RunBundleWriter.create(
+            Path(other_tmp.name) / "runs", self.config, FakeClock(self.clock.now())
+        )
+        writer_b.write_metadata(poison_payload(True))
+
+        bytes_a = (writer_a.path / "metadata.json").read_bytes()
+        bytes_b = (writer_b.path / "metadata.json").read_bytes()
+        self.assertEqual(bytes_a, bytes_b)
+        self.assertNotIn(b"invalid-key value must not leak", bytes_a)
+        self.assertEqual(StrReprTrap.str_calls, 0)
+        self.assertEqual(StrReprTrap.repr_calls, 0)
+
+        metadata = json.loads(bytes_a)
+        self.assertIsNone(metadata["z_poison"])
+        self.assertEqual(metadata["a/cycle~"], [None])
+        self.assertEqual(metadata["nested"]["valid"], {"kept": "evidence"})
+        self.assertIsNone(metadata["nested"]["nan"])
+        self.assertIsNone(metadata["nested"]["positive_infinity"])
+        self.assertIsNone(metadata["nested"]["negative_infinity"])
+        self.assertNotIn("7", metadata["nested"])
+        diagnostics = metadata["serialization_quarantine"]
+        self.assertEqual(
+            [(item["path"], item["reason"]) for item in diagnostics],
+            [
+                ("/a~1cycle~0/0", "cycle"),
+                ("/nested", "non_string_key"),
+                ("/nested", "non_string_key"),
+                ("/nested/nan", "non_finite_number"),
+                ("/nested/negative_infinity", "non_finite_number"),
+                ("/nested/positive_infinity", "non_finite_number"),
+                ("/z_poison", "unsupported_type"),
+            ],
+        )
+        non_string = [
+            item for item in diagnostics if item["reason"] == "non_string_key"
+        ]
+        self.assertEqual(
+            [(item["key_type"], item["count"]) for item in non_string],
+            [("builtins.int", 1), ("builtins.tuple", 1)],
+        )
+
+    def test_metadata_quarantine_field_is_writer_owned(self) -> None:
+        writer = self.make_writer()
+        with self.assertRaises(BundleError):
+            writer.write_metadata({"serialization_quarantine": []})
+        writer.write_metadata({})
 
     def test_metadata_extra_collision_raises(self) -> None:
         writer = self.make_writer()
@@ -332,6 +675,20 @@ class RunBundleWriterTests(unittest.TestCase):
         summary = json.loads((writer.path / "summary_metrics.json").read_text())
         self.assertEqual(summary["status"], "failed")
         self.assertEqual(summary["failure_reason"], "permission_denied")
+
+    def test_failed_summary_with_non_numeric_energy_is_rejected(self) -> None:
+        writer = self.make_writer()
+        writer.write_metadata({})
+        summary = SummaryMetrics(
+            status=RunStatus.FAILED,
+            failure_reason=FailureReason.UNKNOWN_ERROR,
+            gross_energy_j="bad",  # type: ignore[arg-type]
+        )
+
+        with self.assertRaisesRegex(
+            SchemaError, "energy field gross_energy_j.*finite number"
+        ):
+            writer.write_summary(summary)
 
     def test_finalize_without_staged_summary_raises(self) -> None:
         writer = self.make_writer()

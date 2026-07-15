@@ -14,9 +14,9 @@ Implements the bundle contract in ``docs/contracts/run_bundle_layout.md``:
 - D-011: ``summary_metrics.json`` is the completion marker, written last by
   ``finalize()`` after the ``run_finalized`` event; metadata must be written
   before a summary can be staged.
-- D-018: ``power_trace.csv`` carries one row per rail per sample with the
-  header ``timestamp_s,power_w,source,rail`` (row fan-out per rail is the
-  caller's responsibility).
+- D-018: ``power_trace.csv`` carries one row per rail per sample (row fan-out
+  per rail is the caller's responsibility). Point samples use the historical
+  four-column header; interval telemetry adds both averaging-support edges.
 
 All timestamps come from the injected :class:`joulewise.clock.Clock`
 (D-003/D-019); this module never reads the wall clock directly.
@@ -27,11 +27,14 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import math
 import os
 import platform
+import stat
 import subprocess
 import tempfile
 import time
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -42,6 +45,11 @@ from joulewise.schemas import BenchmarkConfig, SummaryMetrics
 
 _ID_ALLOWED = set("abcdefghijklmnopqrstuvwxyz0123456789_-")
 _POWER_TRACE_HEADER = ["timestamp_s", "power_w", "source", "rail"]
+_POWER_TRACE_INTERVAL_HEADER = [
+    *_POWER_TRACE_HEADER,
+    "interval_start_s",
+    "interval_end_s",
+]
 _RESERVED_TOP_LEVEL_ARTIFACTS = {
     "config.json",
     "metadata.json",
@@ -49,10 +57,152 @@ _RESERVED_TOP_LEVEL_ARTIFACTS = {
     "power_trace.csv",
     "summary_metrics.json",
 }
+_METADATA_QUARANTINE_KEY = "serialization_quarantine"
+
+SOURCE_PROVENANCE_SCHEMA = "joulewise.source_provenance.v1"
+SOURCE_DIFF_IDENTITY_ALGORITHM = "sha256"
+SOURCE_DIFF_IDENTITY_VERSION = "joulewise.git-diff.nul-v1"
+SOURCE_STATE_CLEAN = "clean"
+SOURCE_STATE_DIRTY = "dirty"
+SOURCE_STATE_UNKNOWN = "unknown"
+_GIT_POPEN = subprocess.Popen
 
 
 class BundleError(Exception):
     """Raised when a bundle invariant (layout, ordering, immutability) breaks."""
+
+
+def _json_pointer_child(path: str, key: str) -> str:
+    """Append one string key to an RFC 6901 JSON pointer."""
+    escaped = key.replace("~", "~0").replace("/", "~1")
+    return f"{path}/{escaped}"
+
+
+def _stable_type_name(value: Any) -> str:
+    """Return type provenance without consulting ``value``'s str/repr hooks."""
+    value_type = type(value)
+    try:
+        module = type.__getattribute__(value_type, "__module__")
+        qualname = type.__getattribute__(value_type, "__qualname__")
+    except (AttributeError, TypeError):
+        return "unknown"
+    if not isinstance(module, str) or not isinstance(qualname, str):
+        return "unknown"
+    return f"{module}.{qualname}"
+
+
+def _quarantine_json_value(
+    value: Any,
+    path: str,
+    active_containers: set[int],
+    diagnostics: list[dict[str, Any]],
+) -> Any:
+    """Return deterministic JSON data, quarantining malformed metadata leaves.
+
+    Unsupported values and cycles become ``null`` at their original JSON
+    pointer. Non-string-keyed entries are omitted while valid siblings remain.
+    Every replacement or omission is described in the top-level
+    ``serialization_quarantine`` list; no value's ``str`` or ``repr`` is ever
+    captured in either the sanitized metadata or its diagnostics.
+    """
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return value
+        diagnostics.append(
+            {
+                "path": path,
+                "reason": "non_finite_number",
+                "value_type": _stable_type_name(value),
+            }
+        )
+        return None
+    if isinstance(value, Enum):
+        return _quarantine_json_value(
+            value.value, path, active_containers, diagnostics
+        )
+    if isinstance(value, (dict, list, tuple)):
+        container_id = id(value)
+        if container_id in active_containers:
+            diagnostics.append(
+                {
+                    "path": path,
+                    "reason": "cycle",
+                    "value_type": _stable_type_name(value),
+                }
+            )
+            return None
+        active_containers.add(container_id)
+        try:
+            if isinstance(value, dict):
+                result: dict[str, Any] = {}
+                valid_keys: list[str] = []
+                invalid_key_types: dict[str, int] = {}
+                for key in dict.keys(value):
+                    if isinstance(key, str):
+                        valid_keys.append(key)
+                    else:
+                        key_type = _stable_type_name(key)
+                        invalid_key_types[key_type] = (
+                            invalid_key_types.get(key_type, 0) + 1
+                        )
+                for key_type in sorted(invalid_key_types):
+                    diagnostics.append(
+                        {
+                            "count": invalid_key_types[key_type],
+                            "key_type": key_type,
+                            "path": path,
+                            "reason": "non_string_key",
+                        }
+                    )
+                for key in sorted(valid_keys):
+                    result[key] = _quarantine_json_value(
+                        dict.__getitem__(value, key),
+                        _json_pointer_child(path, key),
+                        active_containers,
+                        diagnostics,
+                    )
+                return result
+            result_list: list[Any] = []
+            for index, inner in enumerate(value):
+                result_list.append(
+                    _quarantine_json_value(
+                        inner,
+                        f"{path}/{index}",
+                        active_containers,
+                        diagnostics,
+                    )
+                )
+            return result_list
+        finally:
+            active_containers.remove(container_id)
+    diagnostics.append(
+        {
+            "path": path,
+            "reason": "unsupported_type",
+            "value_type": _stable_type_name(value),
+        }
+    )
+    return None
+
+
+def _quarantine_metadata(
+    value: dict[Any, Any],
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Sanitize one metadata object and return path-sorted diagnostics."""
+    diagnostics: list[dict[str, Any]] = []
+    sanitized = _quarantine_json_value(value, "", set(), diagnostics)
+    assert isinstance(sanitized, dict)
+    diagnostics.sort(
+        key=lambda item: (
+            item["path"],
+            item["reason"],
+            item.get("key_type", ""),
+            item.get("value_type", ""),
+        )
+    )
+    return sanitized, diagnostics
 
 
 def sanitize_id_component(s: str) -> str:
@@ -218,23 +368,200 @@ def write_derived_artifact(context: RunContext, name: str, data: bytes | str) ->
     return path
 
 
-def _git_commit() -> str:
-    """Return the harness git commit, or ``"unknown"`` outside a checkout."""
-    package_dir = Path(__file__).resolve().parent
+def _run_git_bytes(args: list[str], *, cwd: Path) -> bytes | None:
     try:
-        result = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=package_dir,
-            capture_output=True,
-            text=True,
-            timeout=10,
+        process = _GIT_POPEN(
+            ["git", *args],
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
         )
+        stdout, _ = process.communicate(timeout=10)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate()
+        return None
     except (OSError, subprocess.SubprocessError):
-        return "unknown"
-    if result.returncode != 0:
-        return "unknown"
-    commit = result.stdout.strip()
-    return commit if commit else "unknown"
+        return None
+    if process.returncode != 0:
+        return None
+    return stdout
+
+
+def _length_framed(digest: Any, value: bytes) -> None:
+    digest.update(len(value).to_bytes(8, "big"))
+    digest.update(value)
+
+
+def _untracked_identity(root: Path, paths_raw: bytes) -> bytes | None:
+    """Hash untracked names, kinds, modes, and bytes without recording them."""
+
+    digest = hashlib.sha256()
+    digest.update(b"joulewise.git-untracked.nul-v1\0")
+    for raw_name in paths_raw.split(b"\0"):
+        if not raw_name:
+            continue
+        path = root / os.fsdecode(raw_name)
+        try:
+            file_stat = path.lstat()
+            if stat.S_ISREG(file_stat.st_mode):
+                kind = b"file"
+                content_digest = hashlib.sha256()
+                with path.open("rb") as handle:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        content_digest.update(chunk)
+                content_identity = content_digest.digest()
+                size = file_stat.st_size
+            elif stat.S_ISLNK(file_stat.st_mode):
+                kind = b"symlink"
+                target = os.fsencode(os.readlink(path))
+                content_identity = hashlib.sha256(target).digest()
+                size = len(target)
+            else:
+                return None
+        except OSError:
+            return None
+        _length_framed(digest, raw_name)
+        _length_framed(digest, kind)
+        _length_framed(digest, format(file_stat.st_mode & 0o7777, "o").encode("ascii"))
+        _length_framed(digest, str(size).encode("ascii"))
+        _length_framed(digest, content_identity)
+    return digest.digest()
+
+
+def _unknown_source_state() -> dict[str, str]:
+    return {
+        "git_commit": SOURCE_STATE_UNKNOWN,
+        "tracked": SOURCE_STATE_UNKNOWN,
+        "staged": SOURCE_STATE_UNKNOWN,
+        "untracked": SOURCE_STATE_UNKNOWN,
+        "diff_sha256": SOURCE_STATE_UNKNOWN,
+    }
+
+
+def _capture_source_state() -> dict[str, str]:
+    """Capture a privacy-safe identity of the harness source checkout."""
+
+    source_dir = Path(__file__).resolve().parent
+    root_raw = _run_git_bytes(
+        ["rev-parse", "--show-toplevel"],
+        cwd=source_dir,
+    )
+    if root_raw is None:
+        return _unknown_source_state()
+    try:
+        root_value = root_raw.rstrip(b"\r\n")
+        if not root_value:
+            return _unknown_source_state()
+        root = Path(os.fsdecode(root_value))
+    except (TypeError, ValueError):
+        return _unknown_source_state()
+
+    commit_raw = _run_git_bytes(["rev-parse", "HEAD"], cwd=root)
+    commit = SOURCE_STATE_UNKNOWN
+    if commit_raw is not None:
+        candidate = commit_raw.strip().decode("ascii", errors="ignore")
+        if len(candidate) == 40 and all(ch in "0123456789abcdef" for ch in candidate):
+            commit = candidate
+
+    tracked_raw = _run_git_bytes(
+        ["diff", "--no-ext-diff", "--no-textconv", "--binary"],
+        cwd=root,
+    )
+    staged_raw = _run_git_bytes(
+        ["diff", "--cached", "--no-ext-diff", "--no-textconv", "--binary"],
+        cwd=root,
+    )
+    untracked_raw = _run_git_bytes(
+        ["ls-files", "--others", "--exclude-standard", "-z"],
+        cwd=root,
+    )
+    untracked_identity = (
+        _untracked_identity(root, untracked_raw) if untracked_raw is not None else None
+    )
+
+    tracked = (
+        SOURCE_STATE_UNKNOWN
+        if tracked_raw is None
+        else SOURCE_STATE_DIRTY if tracked_raw else SOURCE_STATE_CLEAN
+    )
+    staged = (
+        SOURCE_STATE_UNKNOWN
+        if staged_raw is None
+        else SOURCE_STATE_DIRTY if staged_raw else SOURCE_STATE_CLEAN
+    )
+    untracked = (
+        SOURCE_STATE_UNKNOWN
+        if untracked_raw is None or untracked_identity is None
+        else SOURCE_STATE_DIRTY if untracked_raw else SOURCE_STATE_CLEAN
+    )
+
+    diff_sha256 = SOURCE_STATE_UNKNOWN
+    if tracked_raw is not None and staged_raw is not None and untracked_identity is not None:
+        digest = hashlib.sha256()
+        digest.update(SOURCE_DIFF_IDENTITY_VERSION.encode("ascii") + b"\0")
+        for label, value in (
+            (b"tracked", tracked_raw),
+            (b"staged", staged_raw),
+            (b"untracked", untracked_identity),
+        ):
+            _length_framed(digest, label)
+            _length_framed(digest, value)
+        diff_sha256 = digest.hexdigest()
+
+    return {
+        "git_commit": commit,
+        "tracked": tracked,
+        "staged": staged,
+        "untracked": untracked,
+        "diff_sha256": diff_sha256,
+    }
+
+
+def _source_state_known(value: dict[str, str]) -> bool:
+    return all(value[key] != SOURCE_STATE_UNKNOWN for key in value)
+
+
+def _source_provenance_reasons(
+    start: dict[str, str],
+    end: dict[str, str],
+    changed_during_run: bool | None,
+) -> list[str]:
+    reasons: list[str] = []
+    for phase, state in (("start", start), ("end", end)):
+        if state["git_commit"] == SOURCE_STATE_UNKNOWN:
+            reasons.append(f"{phase}_git_commit_unknown")
+        for component in ("tracked", "staged", "untracked"):
+            if state[component] == SOURCE_STATE_UNKNOWN:
+                reasons.append(f"{phase}_{component}_unknown")
+            elif state[component] == SOURCE_STATE_DIRTY:
+                reasons.append(f"{phase}_{component}_dirty")
+        if state["diff_sha256"] == SOURCE_STATE_UNKNOWN:
+            reasons.append(f"{phase}_diff_identity_unknown")
+    if changed_during_run is True:
+        reasons.append("source_changed_during_run")
+    return reasons
+
+
+def _source_provenance(
+    start: dict[str, str], end: dict[str, str]
+) -> dict[str, Any]:
+    changed_during_run: bool | None = None
+    if _source_state_known(start) and _source_state_known(end):
+        changed_during_run = start != end
+    reasons = _source_provenance_reasons(start, end, changed_during_run)
+    return {
+        "schema": SOURCE_PROVENANCE_SCHEMA,
+        "diff_identity": {
+            "algorithm": SOURCE_DIFF_IDENTITY_ALGORITHM,
+            "version": SOURCE_DIFF_IDENTITY_VERSION,
+        },
+        "start": start,
+        "end": end,
+        "changed_during_run": changed_during_run,
+        "claim_eligible": not reasons,
+        "reason_codes": reasons,
+    }
 
 
 class RunBundleWriter:
@@ -252,12 +579,14 @@ class RunBundleWriter:
         config: BenchmarkConfig,
         config_sha256: str,
         clock: Clock,
+        source_state_start: dict[str, str],
     ) -> None:
         self._path = path
         self._run_id = run_id
         self._config = config
         self._config_sha256 = config_sha256
         self._clock = clock
+        self._source_state_start = source_state_start
         self._metadata_written = False
         self._power_trace_written = False
         self._suite_manifest_written = False
@@ -277,6 +606,7 @@ class RunBundleWriter:
             raise BundleError(
                 f"bundle directory already exists: {path} (bundles are immutable evidence)"
             )
+        source_state_start = _capture_source_state()
         path.mkdir(parents=True)
         for subdir in ("raw", "logs", "outputs"):
             (path / subdir).mkdir()
@@ -292,6 +622,7 @@ class RunBundleWriter:
             config=config,
             config_sha256=config_sha256,
             clock=clock,
+            source_state_start=source_state_start,
         )
 
     @property
@@ -331,29 +662,68 @@ class RunBundleWriter:
         self._require_open("write power trace")
         if self._power_trace_written:
             raise BundleError("power_trace.csv already written")
+        interval_rows = any(
+            sample.interval_start_s is not None or sample.interval_end_s is not None
+            for sample in samples
+        )
+        if interval_rows and any(
+            sample.interval_start_s is None or sample.interval_end_s is None
+            for sample in samples
+        ):
+            raise BundleError(
+                "power trace cannot mix interval-supported and point samples"
+            )
         with (self._path / "power_trace.csv").open("w", newline="") as handle:
             writer = csv.writer(handle, lineterminator="\n")
-            writer.writerow(_POWER_TRACE_HEADER)
+            writer.writerow(
+                _POWER_TRACE_INTERVAL_HEADER if interval_rows else _POWER_TRACE_HEADER
+            )
             for sample in samples:
-                writer.writerow(
-                    [
-                        sample.timestamp_s,
-                        sample.power_w,
-                        sample.source,
-                        sample.rail if sample.rail is not None else "",
-                    ]
-                )
+                row = [
+                    sample.timestamp_s,
+                    sample.power_w,
+                    sample.source,
+                    sample.rail if sample.rail is not None else "",
+                ]
+                if interval_rows:
+                    row.extend([sample.interval_start_s, sample.interval_end_s])
+                writer.writerow(row)
         self._power_trace_written = True
 
     def write_metadata(self, extra: dict) -> None:
         """Write ``metadata.json`` from base fields merged with ``extra``.
 
         A key collision between ``extra`` and the base fields is an error,
-        as is a second call.
+        as is a second call. Malformed values are recursively replaced with
+        ``null`` and described by RFC 6901 path in the additive top-level
+        ``serialization_quarantine`` list. Invalid mapping keys are omitted;
+        valid siblings are retained. The diagnostic list is absent when all
+        metadata is JSON-safe, preserving valid metadata bytes unchanged.
         """
         self._require_open("write metadata")
         if self._metadata_written:
             raise BundleError("metadata.json already written")
+        base_keys = {
+            "platform",
+            "machine",
+            "python_version",
+            "joulewise_version",
+            "schema_version",
+            "config_sha256",
+            "run_id",
+            "git_commit",
+            "source_provenance",
+            "clock",
+        }
+        collisions = sorted(set(extra) & base_keys)
+        if collisions:
+            raise BundleError(
+                f"metadata extra keys collide with base fields: {', '.join(collisions)}"
+            )
+        source_provenance = _source_provenance(
+            self._source_state_start,
+            _capture_source_state(),
+        )
         base: dict[str, Any] = {
             "platform": platform.platform(),
             "machine": platform.machine(),
@@ -362,21 +732,21 @@ class RunBundleWriter:
             "schema_version": self._config.schema_version,
             "config_sha256": self._config_sha256,
             "run_id": self._run_id,
-            "git_commit": _git_commit(),
+            "git_commit": self._source_state_start["git_commit"],
+            "source_provenance": source_provenance,
             "clock": self._clock.info(),
         }
-        collisions = sorted(set(extra) & set(base))
+        collisions = sorted(set(extra) & (set(base) | {_METADATA_QUARANTINE_KEY}))
         if collisions:
             raise BundleError(
                 f"metadata extra keys collide with base fields: {', '.join(collisions)}"
             )
         merged = {**base, **extra}
-        # default=str: non-serializable adapter-supplied metadata is coerced to
-        # its str() rather than aborting the run, preserving the D-011 bundle-
-        # completion invariant (a poisoned device/connection dict must not break
-        # finalize on the failure path).
+        sanitized, diagnostics = _quarantine_metadata(merged)
+        if diagnostics:
+            sanitized[_METADATA_QUARANTINE_KEY] = diagnostics
         (self._path / "metadata.json").write_text(
-            json.dumps(merged, indent=2, sort_keys=True, default=str) + "\n"
+            json.dumps(sanitized, indent=2, sort_keys=True) + "\n"
         )
         self._metadata_written = True
 

@@ -5,47 +5,37 @@ summarizes what the project is, how it is built, where it stands, and what
 it needs, without requiring any other file. Pointers into the repository
 are provided for anyone who wants the full evidence trail.
 
-- Last updated: 2026-07-11 (C-028 closed at `main@cc3afc3`). PRs #41-#58
-  are merged and PR #59 is an open integration-review follow-up. The arc
-  completed the frozen analysis manifest, campaign verdict split, and
-  contrast/claim engine; landed the reducer 0.4.0/0.4.1/0.4.2 lattice;
-  and closed the doctor, packaging, privacy, related-work, and load-transition
-  software gates. P0-003 is closed with an iCloud Drive backup and a
-  strict-valid, byte-identical restore proof. Window A has not started, but
-  all of its software gates are satisfied; execution now requires a quiet
-  machine and Ed.
-- Project phase: Phase 1 closing; Phase 2 in progress - instrument
-  pre-campaign software review CLEARED (Window A begins with C-019
-  shakedown and P2-015-SMOKE in a lead-controlled quiet-machine session;
-  every software prerequisite and the external-backup gate are satisfied);
-  P2-013 evidence-integrity and P2-014 provenance fixes
-  are complete; workload-suite build is merged; CP-5 pre-campaign review is
-  COMPLETE and CLEARED (2026-07-09, PRs #22..#28; see
-  `docs/run_reports/2026-07-09-cp5-resume.md`); the P2-015 design doc is
-  merged; P2-038/P2-039/P2-040/P2-041/P2-042 and P2-037 are landed;
-  PR #59 remains open as a bounded follow-up and does not reopen C-028
+- Freshness owner: phase completion lives in the phase exit checklists; live
+  gates and work selection live only in the generated state-kernel regions of
+  `RUN_STATE.md` and `TASK_QUEUE.md`; the canonical suite command and CI own
+  the current verification result. This page deliberately does not duplicate
+  volatile commit, pull-request, queue, or test-count facts.
+- Repository state: the comprehensive-audit fix wave is integrated on this
+  landing branch. The Mac harness, evidence path, analysis path, packaging,
+  publication-privacy checks, and release dry-run are implemented. Those are
+  software capabilities, not new quiet-Mac or remote-hardware evidence.
+- Project phase: see the phase exit checklists for exact completion state;
+  live eligibility and next work come from the generated state kernel, not
+  this reader-facing summary.
 - Repository: `github.com/mpmdw/JouleWise` (branch `main`)
 - Live status site: https://quiet-signal-6af8833395.lakebed.app (Lakebed
-  capsule; `/status.html` is the advisor cockpit and shows live overlays
-  plus a drift banner when the repo has moved past the snapshot)
+  capsule; it is an Ed-deployed snapshot, not the repository authority.
+  `docs/site/DRIFT.md` records known differences; agents refresh that report
+  when front-facing state changes and never regenerate or deploy the site.)
 
-## This Update (as of 2026-07-11, C-028 hardening and integration arc) — 30-second read
+## Current Repository View — 30-second read
 
-**C-028 is closed; Window A is software-ready and has not started.** PRs
-#41-#58 are merged. The analysis trio is complete: P2-042 freezes the
-analysis manifest, P2-041 separates collection usability from claim
-readiness, and P2-037 executes the predeclared contrast and claim rules.
-The reducer lattice preserves the six frozen legacy arms and 0.3.x
-compatibility, then advances through 0.4.0 (verdict/precheck shape), 0.4.1
-(idle dependence and HAC variance), and 0.4.2 (the governed inter-token
-metric). Doctor preflight, packaging CI, fail-closed publication privacy,
-primary-verified related work, and load-transition software preparation also
-landed. Current main passes 1,220 tests with 10 skips; PR #59 adds four
-integration-review regressions and remains open. P0-003 is satisfied by the
-verified iCloud backup/restore. All Window-A software gates are satisfied;
-the next act is C-019 plus P2-015-SMOKE on a quiet machine with Ed. These are
-landed software and localhost results, not new quiet-Mac data or live NVIDIA
-validation; every NVIDIA/Orin protocol pin remains PROVISIONAL.
+**The audit landing integrates the reader-visible software and process fixes;
+it does not create new scientific evidence.** The analysis trio is complete:
+the manifest freezes comparisons, the verdict layer separates collection
+usability from claim readiness, and the contrast engine executes predeclared
+claim rules. The reducer retains explicit legacy compatibility arms and the
+governed current metrics. Doctor preflight, packaging CI, fail-closed
+publication privacy, release-chain checks, and load-transition preparation are
+also implemented. The verified off-machine backup/restore remains the data
+preservation evidence. Remote protocol pins remain PROVISIONAL, and all live
+work must be selected through the state kernel rather than inferred from this
+summary.
 
 ## Previous Update (as of 2026-07-09, C-027 whole-project council review) — 30-second read
 
@@ -166,9 +156,10 @@ implementing the statistical-uncertainty protocol) queued.
 
 ## Summary
 
-JouleWise is a reusable, typed, extensible benchmark harness for measuring
-the energy of LLM inference across heterogeneous local hardware. The name
-nods to JouleSort and Splitwise: energy measurement is the spine of the
+JouleWise combines a reusable, typed measurement harness with a benchmark
+defined by its frozen workload suite, run rules, and strict validator. It
+measures the energy of LLM inference across heterogeneous local hardware. The
+name nods to JouleSort and Splitwise: energy measurement is the spine of the
 system; disaggregated ("split") inference - running prefill and decode on
 different machines with the KV cache transferred between them - is the
 validating research study, not the whole architecture.
@@ -228,8 +219,8 @@ recorded in the Phase 2 plan.
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** - design artifacts complete; Hailo verdict + Phase 2 readiness closed (2026-06-12); supervisor/calendar/hardware-access gates open |
-| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** - Mac vertical slice COMPLETE (2026-07-06); flagship 122B-MoE benchmarked (2026-07-07); evidence integrity, provenance, uncertainty, workload suite, campaign automation, and the C-028 analysis/hardening arc are merged; the analysis trio is complete and reducer 0.4.2 is current; every Window-A software gate is satisfied, so C-019/P2-015-SMOKE now await a quiet machine + Ed; 2K live protocol pins remain PROVISIONAL and 2L remains gated on device access |
+| 1. Approval, feasibility, measurement design | contracts, methodology, hardware feasibility evidence | **in progress** — the Phase 1 exit checklist owns exact completion and external gates |
+| 2. Harness, Mac vertical slice, homogeneous baselines | runnable harness, first real measurements, per-target baselines | **in progress** — Mac vertical slice and analysis software are implemented; remote protocol pins remain PROVISIONAL; the state kernel and quiet-machine rules own execution eligibility |
 | 3. Disaggregation, KV replay, interconnect sweep | split-energy decomposition, crossover dataset | planned (feasibility-first) |
 | 4. Characterization and analysis | statistics, figures, claims audit | planned |
 | 5. Presentation and submission | report, colloquium, reproducible release | planned |
@@ -240,7 +231,7 @@ recorded in the Phase 2 plan.
 |---|---|---|---|
 | Background / related work | Phase 4 Stage 4.6, `docs/phase_4/related_work_draft.md` | drafted (11 verified sources) | background-chapter assembly and the Phase 4 exit pass |
 | Measurement methodology | `docs/contracts/measurement_methodology.md` | complete | Phase 4 ratification may amend statistical details against observed variance |
-| Harness / instrument | `joulewise/` | complete; pre-campaign software review cleared; C-028 closed with PRs #41-#58 merged | Window A's C-019 shakedown and P2-015-SMOKE await a quiet machine + Ed; backup and all software gates are satisfied |
+| Harness / instrument | `joulewise/` | complete; pre-campaign software review cleared; C-028 closed | live execution eligibility comes from the state kernel; quiet-machine work also requires Ed and the clean hardware lane |
 | Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | unblocked after P2-013/P2-014 | needs the 2M baseline corpus |
 | Split-inference study | Phase 3 | planned | needs KV-feasibility spikes plus a real pairing, or the synthetic-transfer + analytical-composition floor |
 | Results / limitations + claims audit | Phase 4 Stages 4.3-4.5 | analysis path implemented | P2-042/P2-041/P2-037 analysis trio is merged; Window-A data do not yet exist |
@@ -262,19 +253,18 @@ Complete so far (all verifiable in the repository):
   shared, tested read layer, which sharply reduces the risk of displayed
   numbers diverging from reported ones.
 - Typed config and output schemas with validation, JSON-Schema export, and
-  a CLI, plus a passing test suite (current count and skips live in
-  RUN_STATE.md Current Verification; current main: 1,220 tests OK,
-  10 skipped; run in CI on every push, including a
-  mock end-to-end run + bundle validation); emitted configs
+  a CLI, plus the canonical suite run in CI on every push, including a mock
+  end-to-end run and bundle validation. The command and CI output own the
+  current result; reader docs do not copy its volatile count. Emitted configs
   round-trip their own published schema, and config hashes (run identity)
   are pinned by test.
 - Adapter interface contracts (runtime / telemetry / transport), the run
   bundle artifact contract, and the measurement methodology (idle
   subtraction, measurement boundaries, clock synchronization, statistical
   protocol - highlights below).
-- Evidence-shaped plans for every phase, a design-decision log (D-001
-  through D-064 at this update, with D-060 ratified by Ed; the log
-  itself is the count authority, and most entries record the
+- Evidence-shaped plans for every phase, a design-decision log whose index is
+  mechanically checked against its decision bodies (with D-060 ratified by
+  Ed); the log itself is the structural authority, and most entries record the
   alternatives considered), a risk register with
   an explicit descope ladder, and example configs for the Mac and mock
   targets.
@@ -299,10 +289,9 @@ Complete so far (all verifiable in the repository):
   were byte-identical to their sources.
 
 Live remote-hardware validation has not started: NVIDIA/vLLM and Jetson
-Orin promotion (2K/2L) remain gated on device access. The 2K fixture-first
-implementation is MERGED (PR #11, 2026-07-08), and NV-GATE-2 code-now is
-MERGED (PR #49, 2026-07-11), but all remote protocol pins remain
-PROVISIONAL until live
+Orin promotion (2K/2L) remain gated on device access. The fixture-first
+implementation and NV-GATE-2 software hardening are landed, but all remote
+protocol pins remain PROVISIONAL until live
 hardware contact; a P1-006 evidence checklist exists there. Code-level
 specs are in `docs/phase_2/hardware_slice_implementation_guide.md`. The
 mock-first core landed first by design, so measurement code is never
@@ -326,8 +315,10 @@ work; P0-003's backup gate is satisfied, and the grading rubric/calendar
 Closed since the last revision: C-028; the full analysis trio; P0-003's
 off-machine backup and restore proof; the NV-5 localhost software gate (3/3
 lead-run); and both historic test-flake classes. The Mac privileged-telemetry
-gate had already closed on 2026-07-06. Window A itself remains unstarted and
-now awaits only lead-controlled execution on a quiet machine with Ed.
+gate had already closed on 2026-07-06. Window A's software gates are
+satisfied; its execution timing is governed by the live work-selection state
+in `RUN_STATE.md`'s generated state-kernel region, alongside the quiet-machine
+and Ed requirements.
 
 ## Architecture
 
@@ -378,9 +369,11 @@ Key elements:
 
 ## Measurement Methodology Highlights
 
-- **Idle subtraction.** Every run measures an idle baseline; energy
-  metrics report gross and idle-subtracted values, with idle variance
-  recorded.
+- **Dual-basis capture, gross headline.** Every eligible measured request
+  records gross and idle-subtracted energy plus idle variance. Gross energy is
+  the headline for cross-device, cross-configuration, and split-vs-monolithic
+  claims; idle-subtracted energy is a labeled within-device marginal view and
+  is never used to rank devices or configurations (D-067).
 - **Measurement boundaries are named, not assumed.** Each telemetry
   backend measures a different physical boundary - powermetrics: Apple
   SoC subsystems (CPU+GPU+ANE); nvidia-smi: GPU board only; Jetson rails:
@@ -555,7 +548,7 @@ Orin) is the remaining hardware gate. Work paused 2026-06-13 to
 | `docs/risk_register.md` | risks, triggers, mitigations, descope ladder |
 | `docs/milestones.md` | calendar map |
 | `docs/run_reports/` | dated work logs with commands and outcomes |
-| `joulewise/`, `tests/` | the harness package + test suite (current count and skips in RUN_STATE.md; zero expected failures, CI-enforced) |
+| `joulewise/`, `tests/` | the harness package + canonical test suite; the command and CI output own its current result |
 
 ## Process Note
 
@@ -574,23 +567,23 @@ its own review machinery); this section is the summary.
 
 **The division of labor.** Ed sets the research direction, the
 methodology standards (the decision log's non-negotiables: raw-evidence
-bundles, idle subtraction, named measurement boundaries, no
-unauditable claims), the hardware and access decisions, and — the part
+bundles, dual-basis capture with gross-energy headlines, named measurement
+boundaries, no unauditable claims), the hardware and access decisions, and — the part
 that is easy to underrate — the *process policy*: every rule below
 exists because he observed a failure or an opportunity and issued a
-standing instruction. The AI staff executes: a lead agent (Claude,
-Anthropic's Fable-class model) is the final reviewer and single point
+standing instruction. The AI staff executes: the designated lead agent is
+the final reviewer and single point
 of accountability: decomposition, design adjudication, every final diff
-gate, live verification, merges, and bookkeeping. A second, independent
-model (OpenAI Codex gpt-5.5) does the volume: implementation against
+gate, live verification, merges, and bookkeeping. Independent implementation
+and review agents do the volume work against
 pinned specs, adversarial review lenses, test writing, and
-fresh-instance test auditing. A third tier (Claude Opus) serves as
-specialist sweeper. Cross-model review is load-bearing by design: the
+fresh-instance test auditing; specialist agents handle bounded sweeps.
+Cross-model review is load-bearing by design: the
 attributed catch record shows the models and review layers catching
 different classes of defect.
 
 **The machinery, briefly.** Independent tasks run as parallel git
-worktrees, the lead driving each stream's Codex pipeline directly (a
+worktrees, the lead driving each stream's implementation/review pipeline directly (a
 topology that is itself the product of a signed cross-model
 meta-review, then validated by a full session with zero coordination
 stalls — the evolution is traced in `docs/orchestration.md`). Every
@@ -692,5 +685,8 @@ machinery survives this project and transfers to the next one.
 ## Maintenance Of This Document
 
 Updated at phase transitions and whenever advisor-visible state changes
-(a gate closes, a verdict lands, the schedule moves). The "Last updated"
-date above and the repository's run reports are the freshness check.
+(a gate closes, a verdict lands, the schedule moves). Volatile work-selection
+facts stay in the state kernel, verification results stay in command/CI output,
+and decision structure stays in the checked decision-log index. A
+front-facing change also refreshes `docs/site/DRIFT.md`; Ed alone regenerates
+and deploys the site (D-068).

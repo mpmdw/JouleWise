@@ -29,48 +29,33 @@ All wire rules live in `docs/contracts/bridge_protocol.md`
 (`bridge-protocol/v1.1`) — the ONE home. This section is the operating
 sequence, not the contract.
 
-1. Read root `AGENTS.md`; run Mission M0 for substantial work. Never launch
-   agent load during `[QUIET-MAC]` measurement.
-2. ROUTE by interaction shape (contract §4): MCP for interactive/discussion
-   and short bounded turns; audited CLI (`codex-run-v3`, fallback
-   `scripts/codex-bridge`) for autonomous, evidence-heavy, or long runs.
-3. For a read-only interactive `GENRE: discussion` turn, use the reduced-header
-   fast path in contract §1. Default to a context capsule with section-level
-   authority anchors, current HEAD plus dirty/concurrent-writer state when
-   repository-dependent, settled and rejected choices, and what remains open.
-4. For workspace writes, choose one invocation id and run `scripts/bridge
-   session-open ...`; embed its `header_fragment` unchanged. Overlap
-   hard-blocks. The lease/baseline/thread primitives remain available for
-   explicit recovery and lead overrides.
-5. Call project MCP `codex` with the Git-root `cwd`, model `gpt-5.6-sol`,
+1. Read root `AGENTS.md`; run Mission M0 for substantial work.
+2. Choose the transport using contract §4. Use the audited CLI path when the
+   contract requires durable evidence.
+3. Build the applicable contract §1 header. For writes, open the session with
+   `scripts/bridge session-open` and use its returned header fragment.
+4. Call project MCP `codex` with the Git-root `cwd`, model `gpt-5.6-sol`,
    config
    `{"model_reasoning_effort":"<selected-effort>","mcp_servers":{"claude":{"enabled":false}}}`,
-   `on-request` approvals, and the narrowest sandbox. The prompt begins with
-   the applicable full or discussion-lane `BRIDGE_TASK_V1` header (contract
-   §1) and carries `OUTPUT_PROTOCOL: bridge-report/v1`.
-6. Put `BRIDGE_ORIGIN: claude` and `BRIDGE_HOPS_REMAINING: 0` in developer
-   instructions. Sol must not call the project Claude MCP, `claude -p`, or
-   any other Claude launcher; Claude owns cross-model discussion.
-7. On return, parse the tolerant `BRIDGE_REPORT_V1` envelope: it has one
-   sentinel, one final-line JSON object, the five required typed fields, and
-   may carry unknown additional keys. Absent, duplicated, malformed, or
-   non-final remains protocol failure, never success. Honor
-   NEEDS_SCOPE/NEEDS_RULING by answering on the SAME thread with
-   prospective-only scope expansion; on `route_cli`, re-dispatch per §4.
-8. After writes, run `scripts/bridge session-close --invocation-id ID --status
-   STATUS`. It receipt-anchors scope checking, releases only a clean completed
-   session, and retains the lease for early returns or non-OK verdicts. Use
-   primitives only for recovery or adjudicated overrides.
-9. Thread reuse follows contract §5 (continue for rulings/fixes/deltas; fresh for
-   new lenses, independence, or stale context; record `resume_policy`).
-   A same-objective peer channel is never independent review. Proposal diffs
-   remain read-only advice with `pathspec: []` and the aggregate size ceiling
-   in the contract; the lead applies and verifies them. When applying one,
-   keep the required durable thread/diff-or-hash/revision/proposer/application/
-   verification provenance record.
-10. The reverse `consult_fable` tool has a per-call `effort` field; Codex-side
-    selection and the returned effort echo are documented in
-    `.agents/skills/claude-consult/SKILL.md`.
+   `on-request` approvals, and the narrowest sandbox. Put the contract's origin
+   and hop headers in developer instructions.
+5. Validate the return under contract §2. Handle early returns and routing
+   changes under §§3-4 on the thread required by §5.
+6. After writes, run `scripts/bridge session-close` as specified by contract
+   §6. Keep primitives for recovery or adjudicated overrides.
+7. Inspect every diff, replay the required lead checks, and adjudicate the
+   worker's result. The lead owns final verification.
+
+These enforcement boundaries remain explicit:
+
+- `WRITE_SCOPE` is exhaustive; never infer additional scope from tests, generated files, repository instructions, or work believed necessary for completion.
+- Never start or continue a `[QUIET-MAC]` measurement while an agent session is active.
+- Never use `danger-full-access` or sandbox/approval bypass flags.
+- Bridge depth is one hop: a Claude-originated Sol session must not call Claude by MCP, `claude -p`, or any other launcher.
+- A missing, duplicated, malformed, or non-final required envelope is protocol failure, never success.
+
+Reverse-consult operation is documented by contract §8 and
+`.agents/skills/claude-consult/SKILL.md`.
 
 The project `.mcp.json` pins `gpt-5.6-sol` with `high` only as a safe fallback
 and disables the reverse Claude server for every Claude-originated session;
@@ -82,4 +67,35 @@ For D-050/D-064 runs, prefer `~/.local/bin/codex-run-v3` with model, selected
 effort, genre, and exhaustive write scope. If unavailable, set
 `CODEX_REASONING_EFFORT` to the selected tier and use `scripts/codex-bridge`.
 
-Never use bypass flags, `danger-full-access`, or a second bridge hop.
+## Session observability + recovery (WO-027)
+
+Live visibility and discovery for bridge-launched sessions use the
+`.codex-bridge/` audit trail (this replaced the deleted `scripts/codex-watch`;
+replacement demonstrated live in the 2026-07-14 audit-resume session, which
+monitored two concurrent Sol implementations this way):
+
+- Discover RUNNING sessions: `ls -lt .codex-bridge/*.log` — the log exists
+  from launch, but `.status` files and manifest rows are written only at
+  exit, so a `.log` with no matching `.status` file is a live (or crashed,
+  incomplete) run. Its filename is the run id the follow command needs.
+- Discover finished sessions: `ls -lt .codex-bridge/*.status` (one
+  `OK`/`FAILED rc=N` file per run id) and
+  `.codex-bridge/invocation_manifest.jsonl` rows.
+- Follow live: `tail -f .codex-bridge/<run-id>.log` (the full tee'd stream).
+- Final message: `.codex-bridge/responses/<run-id>.response.md`, mirrored to
+  `.codex-bridge/last-message.md`.
+
+Recovery recipe (preserved from codex-watch) for a session with NO bridge
+trail — e.g. a crashed wrapper or a raw `codex exec`: the Codex CLI writes a
+rollout JSONL per session under `~/.codex/sessions/YYYY/MM/DD/`.
+
+- Discover: newest-first by mtime, e.g.
+  `find ~/.codex/sessions -name '*.jsonl' -mmin -480 | xargs ls -lt`.
+- Live processes: `ps -axo pid,etime,command | grep 'codex exec'`.
+- Read a rollout: each line is an event typed by `payload.type` (with
+  `session_meta` also appearing as top-level `event.type` in current
+  rollouts): `session_meta` (has `cwd`), `user_message`, `agent_message`,
+  `function_call` (arguments hold the command), `token_count`
+  (`info.total_token_usage.total_tokens`), or `task_complete`
+  (`last_agent_message` is the final response). `tail -f` follows a live
+  session; the session id in the filename is the `resume` target.

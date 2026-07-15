@@ -426,6 +426,8 @@ New mutation-style test:
 - Do not add floor/effect comparison.
 - Do not change trapezoidal integration or clamping.
 
+Superseded (2026-07-15, WO-005; D-043): reducer 0.5.0 uses positive overlap with serialized interval-average support for powermetrics while point backends retain trapezoidal semantics; see `docs/contracts/run_bundle_layout.md` §Power Trace Minimum Fields.
+
 ## FIX-4 — D-058 Runtime-Observed Total-Token Precedence (STA-7)
 
 ### Current behavior

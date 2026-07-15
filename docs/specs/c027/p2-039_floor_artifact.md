@@ -10,7 +10,29 @@ can consume. It is an `[AGENT]` prerequisite: P2-015 may run its named SMOKE
 preconditions, but it must not collect claim-facing floor cells until this
 spec's guard rule and artifact contract have been lead-adjudicated and landed.
 
-**Validator boundary (v1).** The v1 validator validates schema, arithmetic re-derivation, identity-hash recomputation, and claim-readiness invariants; it does not yet bind source provenance to actual bundle bytes or the frozen campaign order log. That binding lands with the typed loader in the pre-P2-015 integration unit, and until then floor artifacts are not claim-consumable. The existing fences remain: no CLI integration and no `reduce.py` hooks.
+**Validator and consumption boundary (v1, amended by WO-004).** The structural
+validator validates schema, arithmetic re-derivation, identity hashes, and
+claim-readiness invariants. Claim consumption additionally requires the typed
+analysis loader to bind every absolute observation and every comparative ABBA
+member to a strict-valid, succeeded calibration bundle; recompute the complete
+bundle hash and config-byte hash; and re-extract the named summary metric. The
+loader also binds a calibrated idle-drift guard's bundle hashes to that same
+successfully re-extracted calibration set. A structurally self-consistent
+artifact without this external binding is not claim-consumable.
+
+The order evidence has one deterministic production location: the frozen
+`order_manifest.json` is adjacent to the floor artifact and the executed
+`campaign_log.jsonl` is at the calibration/consumer runs root. Their exact
+bytes must match the hashes stored in artifact provenance. Every absolute
+member must occur exactly once in the same relative order in both files; each
+comparative block must additionally occur as one contiguous A/B/B/A run. This
+is campaign-order binding, distinct from D-056's within-suite `order_row`.
+Calibration and consumer bundles may share a runs root, but calibration bundle
+IDs must not be used as consumer identity. Exact resolution instead matches a
+fully bound calibration cell to the consumer's realized stack and scientific
+config identity. A LOO sensitivity row may use a strict subset of consumer
+rows only after the complete calibration cell has passed byte, metric, guard,
+and order binding; subset membership is never itself an identity proof.
 
 Authority, in descending order for this specification:
 
@@ -480,6 +502,13 @@ sha256(
 )
 ```
 
+The typed loader is authoritative for applying this algorithm to on-disk
+calibration bundles. It rejects symlinks and special files, then compares the
+result against every observation/member record before resolving either an
+exact or transported floor. A matching compact hash alone is insufficient:
+strict validation, source-provenance claim eligibility, config bytes, and the
+stored metric value must all match independently.
+
 `canonical_json` uses sorted object keys, separators `(',', ':')`, UTF-8, and
 no NaN/Infinity. This deliberately aligns with the existing bundle-pack file
 manifest semantics while giving one compact per-bundle pin.
@@ -703,6 +732,13 @@ the claim ladder separately.
 For `refused`, all three floor values are null. P2-037 maps that fact into its
 own fail-closed claim verdict; this specification does not design that engine
 or its full verdict precedence.
+
+The production analysis call constructs `FloorRequest` from realized consumer
+bundle evidence after loading the external calibration binding. The
+underscored request-factory parameter is test-only and is not exposed by the
+CLI. Production exact resolution never compares consumer `(bundle_id,
+config_sha256)` pairs with calibration observations; those bundle sets are
+expected to be distinct.
 
 ## 8. File targets and implementation units
 

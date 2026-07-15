@@ -12,10 +12,8 @@ Modes:
 
 Exit codes: 0 exact agreement / success; 1 drift; 2 invalid input or markers.
 
-NOTE (Stage-1 tooling landing): the live RUN_STATE.md / TASK_QUEUE.md have
-NOT yet been converted to marker fences — that migration is adjudication
-gated. Until then, run --check with explicit --run-state/--queue paths
-(tests do this against generator-produced fixtures).
+The live RUN_STATE.md and TASK_QUEUE.md marker-fenced regions are checked by
+default; optional paths exist only for focused fixtures.
 """
 
 from __future__ import annotations
@@ -31,7 +29,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 KERNEL_REL = "docs/process/state_kernel.json"
 SCHEMA_REL = "docs/process/state_kernel.schema.json"
-AUTHORITY_NOTICE = "NOT_AUTHORITATIVE_DERIVED_VIEW"
+AUTHORITY_NOTICE = "AUTHORITATIVE_WORK_SELECTION_STATE"
 
 RS_BEGIN = "<!-- BEGIN GENERATED: state-kernel run-state-intake -->"
 RS_END = "<!-- END GENERATED: state-kernel run-state-intake -->"
@@ -45,7 +43,9 @@ PRIORITIES = {
     "p0_safety": "P0 Safety",
     "p1_phase_gate": "P1 Phase Gate",
     "p2_next_slice": "P2 Next Slice",
+    "p3_hardening_candidates": "P3 Hardening Candidates",
     "p3_research_expansion": "P3 Research Expansion",
+    "p3_tooling": "P3 Tooling",
     "p4_polish": "P4 Polish",
 }
 STATUSES = ("queued", "active", "partial", "blocked", "shelved")
@@ -202,15 +202,15 @@ def validate(kernel) -> None:
         kernel,
         {
             "schema", "schema_version", "authority", "updated", "latest_report",
-            "active_stop_card", "tasks",
+            "active_stop_card", "active_global_gates", "tasks",
         },
         set(),
         "kernel",
     )
     if kernel["schema"] != SCHEMA_REL:
         fail(f"kernel.schema must be {SCHEMA_REL!r}")
-    if kernel["schema_version"] != 2:
-        fail("kernel.schema_version must be 2")
+    if kernel["schema_version"] != 3:
+        fail("kernel.schema_version must be 3")
     if kernel["authority"] != AUTHORITY_NOTICE:
         fail(f"kernel.authority must be {AUTHORITY_NOTICE!r}")
     if not isinstance(kernel["updated"], str) or not DATE_RE.match(kernel["updated"]):
@@ -224,6 +224,55 @@ def validate(kernel) -> None:
     tasks = kernel["tasks"]
     if not isinstance(tasks, dict):
         fail("kernel.tasks must be an object keyed by task ID")
+
+    gates = kernel["active_global_gates"]
+    if not isinstance(gates, list):
+        fail("kernel.active_global_gates must be an array")
+    gate_ids = set()
+    for i, gate in enumerate(gates):
+        where = f"active_global_gates[{i}]"
+        _check_keys(
+            gate,
+            {"id", "summary", "authority", "clearance", "scope", "allowed_task_ids"},
+            set(),
+            where,
+        )
+        gate_id = gate["id"]
+        if not isinstance(gate_id, str) or not ID_RE.match(gate_id):
+            fail(f"{where}.id: invalid id pattern")
+        if gate_id in gate_ids:
+            fail(f"{where}.id: duplicate gate id {gate_id!r}")
+        gate_ids.add(gate_id)
+        _check_cell_text(gate["summary"], f"{where}.summary")
+        authority = gate["authority"]
+        if not isinstance(authority, list) or not authority:
+            fail(f"{where}.authority: must be a nonempty string array")
+        for j, pointer in enumerate(authority):
+            _check_cell_text(pointer, f"{where}.authority[{j}]")
+        if len(authority) != len(set(authority)):
+            fail(f"{where}.authority: entries must be unique")
+        _check_cell_text(gate["clearance"], f"{where}.clearance")
+        scope = gate["scope"]
+        _check_keys(scope, {"operation", "lanes"}, set(), f"{where}.scope")
+        if scope["operation"] != "select":
+            fail(f"{where}.scope.operation must be 'select'")
+        lanes = scope["lanes"]
+        if not isinstance(lanes, list) or not lanes:
+            fail(f"{where}.scope.lanes: must be a nonempty array")
+        if any(lane not in LANES for lane in lanes):
+            fail(f"{where}.scope.lanes: unknown lane")
+        if len(lanes) != len(set(lanes)):
+            fail(f"{where}.scope.lanes: entries must be unique")
+        allowed = gate["allowed_task_ids"]
+        if not isinstance(allowed, list):
+            fail(f"{where}.allowed_task_ids: must be an array")
+        if any(not isinstance(tid, str) or not ID_RE.match(tid) for tid in allowed):
+            fail(f"{where}.allowed_task_ids: invalid task ID")
+        if len(allowed) != len(set(allowed)):
+            fail(f"{where}.allowed_task_ids: entries must be unique")
+        unresolved = sorted(set(allowed) - set(tasks))
+        if unresolved:
+            fail(f"{where}.allowed_task_ids: non-live task IDs {unresolved}")
 
     lane_ranks: dict = {}
     for tid, task in tasks.items():
@@ -327,6 +376,18 @@ def validate(kernel) -> None:
         if task["lane"] == "quiet_mac" and "lead_only" not in flags:
             fail(f"{where}: quiet_mac tasks must carry the lead_only flag")
 
+    # WO-021 item 7: DOC-010 retains both ratified hard start events.
+    if "DOC-010" in tasks:
+        doc_010_events = {
+            d["target"]
+            for d in tasks["DOC-010"]["dependencies"]
+            if d["kind"] == "event" and d["scope"] == "start"
+            and d["strength"] == "hard"
+        }
+        required_events = {"DOC-008-proven-in-use", "G6"}
+        if not required_events.issubset(doc_010_events):
+            fail("tasks[DOC-010]: requires hard start events DOC-008-proven-in-use and G6")
+
     # Invariant 7: active stop card must be referenced by an active/blocked task.
     if kernel["active_stop_card"] is not None:
         if not any(
@@ -393,6 +454,73 @@ def _later_scope_gates(task):
     ]
 
 
+def _global_gate_blockers(kernel, task):
+    """Return active select gates that exclude this task's lane/ID."""
+    return [
+        gate for gate in kernel["active_global_gates"]
+        if task["lane"] in gate["scope"]["lanes"]
+        and task["id"] not in gate["allowed_task_ids"]
+    ]
+
+
+def _dependency_ready(task):
+    return task["status"] in ("queued", "partial") and not _hard_start_blockers(task)
+
+
+def _selectable_in_lane(kernel, lane: str):
+    candidates = [
+        task for task in _lane_tasks(kernel, lane)
+        if _dependency_ready(task) and not _global_gate_blockers(kernel, task)
+    ]
+    return candidates[0] if candidates else None
+
+
+def selectable_task_ids(kernel):
+    """Return the exact lane-head task IDs selectable from this kernel state.
+
+    A stop card suspends all normal selection. Otherwise, ordinary hard-start
+    dependencies and every lane-matching global gate must permit the task;
+    lane-local rank then chooses at most one head per lane. Priority never
+    participates in admission.
+    """
+    if kernel["active_stop_card"] is not None:
+        return set()
+    return {
+        task["id"]
+        for lane in LANES
+        for task in [_selectable_in_lane(kernel, lane)]
+        if task is not None
+    }
+
+
+def _render_global_gates(kernel):
+    lines = ["## Active Global Work-Selection Gates", ""]
+    gates = sorted(kernel["active_global_gates"], key=lambda gate: gate["id"])
+    if not gates:
+        lines.append("NONE — no global work-selection gate is active.")
+        return lines
+    lines.append(
+        "Selection is conjunctive: every lane-matching gate and every ordinary"
+        " dependency must permit a task. Priority never bypasses a gate."
+    )
+    lines.append("")
+    for gate in gates:
+        lane_labels = ", ".join(LANE_LABEL[lane] for lane in gate["scope"]["lanes"])
+        allowed = ", ".join(f"`{tid}`" for tid in gate["allowed_task_ids"]) or "NONE"
+        lines += [
+            f"### `{gate['id']}`",
+            "",
+            gate["summary"],
+            "",
+            f"- Scope: `{gate['scope']['operation']}` in {lane_labels}.",
+            f"- Allowed kernel task IDs: {allowed}.",
+            f"- Authority: {'; '.join(gate['authority'])}.",
+            f"- Clearance: {gate['clearance']}",
+            "",
+        ]
+    return lines[:-1]
+
+
 def render_run_state(kernel) -> str:
     lines = [RS_BEGIN, "## ACTIVE_STOP_CARD", ""]
     card = kernel["active_stop_card"]
@@ -410,9 +538,10 @@ def render_run_state(kernel) -> str:
         lines.append(f"Affected tasks: {', '.join(affected)}.")
         lines.append("")
         lines.append("Normal lane selection is SUSPENDED; follow only the card.")
-    lines += ["", "## Restart By Machine-State Lane", ""]
+    lines += ["", *_render_global_gates(kernel), "", "## Restart By Machine-State Lane", ""]
     lines.append(
-        f"Source of truth: [state kernel]({KERNEL_REL}) (updated {kernel['updated']})."
+        f"Source of truth for work selection: [state kernel]({KERNEL_REL})"
+        f" (updated {kernel['updated']})."
         f" Latest report: {_link(kernel['latest_report'])}."
     )
     if card is None:
@@ -429,14 +558,25 @@ def render_run_state(kernel) -> str:
                         f"- CONTINUE — {LANE_PREFIX[lane]}{t['rank']} `{t['id']}`: {t['goal']}"
                     )
                 continue
-            ready = [
-                t for t in tasks
-                if t["status"] in ("queued", "partial") and not _hard_start_blockers(t)
-            ]
-            if ready:
-                t = ready[0]
+            ready = _selectable_in_lane(kernel, lane)
+            if ready is not None:
+                t = ready
                 lines.append(
                     f"- READY — {LANE_PREFIX[lane]}{t['rank']} `{t['id']}`: {t['goal']}"
+                )
+                continue
+            gated = [
+                t for t in tasks
+                if _dependency_ready(t) and _global_gate_blockers(kernel, t)
+            ]
+            if gated:
+                t = gated[0]
+                blockers = ", ".join(
+                    gate["id"] for gate in _global_gate_blockers(kernel, t)
+                )
+                lines.append(
+                    f"- GATED — {LANE_PREFIX[lane]}{t['rank']} `{t['id']}`"
+                    f" (excluded by: {blockers}): {t['goal']}"
                 )
                 continue
             blocked = [t for t in tasks if t["status"] == "blocked"]
@@ -453,8 +593,19 @@ def render_run_state(kernel) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _queue_state_cell(task) -> str:
+def _queue_state_cell(kernel, task) -> str:
     status = task["status"]
+    if kernel["active_stop_card"] is not None and status != "shelved":
+        if status == "active":
+            return "ACTIVE; STOPPED — active stop card"
+        if status == "partial":
+            return "PARTIAL; STOPPED — active stop card"
+        if status == "queued":
+            return "STOPPED — active stop card"
+        blockers = ", ".join(
+            f"{d['target']} ({d['required']})" for d in _hard_start_blockers(task)
+        )
+        return f"BLOCKED — {blockers}; STOPPED — active stop card"
     if status == "active":
         base = "ACTIVE"
     elif status == "queued":
@@ -472,6 +623,13 @@ def _queue_state_cell(task) -> str:
             if d["state"] == "pending"
         )
         base = f"SHELVED — trigger: {triggers}" if triggers else "SHELVED"
+    global_blockers = _global_gate_blockers(kernel, task)
+    if global_blockers and status in ("queued", "partial"):
+        gate_ids = ", ".join(gate["id"] for gate in global_blockers)
+        if status == "queued":
+            base = f"GATED — {gate_ids}"
+        else:
+            base = f"PARTIAL; GATED — {gate_ids}"
     gates = _later_scope_gates(task)
     if gates and status != "blocked":
         gate_bits = "; ".join(
@@ -503,7 +661,26 @@ def render_queue(kernel) -> str:
         "<!-- GENERATED from docs/process/state_kernel.json by scripts/gen_state.py."
         " Do NOT hand-edit between the markers; edit the kernel and regenerate. -->",
         "",
+        f"Source of truth for work selection: [state kernel]({KERNEL_REL})"
+        f" (updated {kernel['updated']}).",
+        "",
+        "Generated compatibility table for repository consumers; the lane"
+        " tables below are the detailed view of the same kernel state.",
+        "",
+        "| Rank | ID | Priority | Status | Task | Evidence / Acceptance |",
+        "|---|---|---|---|---|---|",
     ]
+    for lane in LANES:
+        for task in _lane_tasks(kernel, lane):
+            if task["status"] == "shelved":
+                continue
+            lines.append(
+                f"| {LANE_PREFIX[lane]}{task['rank']} | {task['id']} |"
+                f" {PRIORITIES[task['priority']]} |"
+                f" {_queue_state_cell(kernel, task)} {LANE_LABEL[lane]} |"
+                f" {task['goal']} | {_evidence_cell(task)} |"
+            )
+    lines += ["", *_render_global_gates(kernel), ""]
     header = "| Rank | ID | Priority | Queue state | Task | Evidence / Acceptance |"
     divider = "|---|---|---|---|---|---|"
     for lane in LANES:
@@ -514,7 +691,7 @@ def render_queue(kernel) -> str:
             for t in live:
                 lines.append(
                     f"| {LANE_PREFIX[lane]}{t['rank']} | {t['id']} |"
-                    f" {PRIORITIES[t['priority']]} | {_queue_state_cell(t)} |"
+                    f" {PRIORITIES[t['priority']]} | {_queue_state_cell(kernel, t)} |"
                     f" {t['goal']} | {_evidence_cell(t)} |"
                 )
         else:
@@ -530,7 +707,7 @@ def render_queue(kernel) -> str:
         for t in shelved:
             lines.append(
                 f"| {LANE_PREFIX[t['lane']]}{t['rank']} | {t['id']} |"
-                f" {PRIORITIES[t['priority']]} | {_queue_state_cell(t)} |"
+                f" {PRIORITIES[t['priority']]} | {_queue_state_cell(kernel, t)} |"
                 f" {t['goal']} | {_evidence_cell(t)} |"
             )
     else:

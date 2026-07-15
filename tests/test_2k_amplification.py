@@ -108,7 +108,9 @@ class ProtocolFakeTransport:
                 json.dumps(
                     {
                         "protocol_version": 1,
+                        "correlation_token": task["correlation_token"],
                         "task_id": task["task_id"],
+                        "run_id": task["run_id"],
                         "task_type": task["task_type"],
                         "operation": task["operation"],
                         "node_role": task["node_role"],
@@ -153,6 +155,7 @@ class ProtocolFakeTransport:
 def worker_task_base() -> dict:
     return {
         "protocol_version": 1,
+        "correlation_token": "0123456789abcdef0123456789abcdef",
         "task_id": "task-edge",
         "run_id": "run-edge",
         "task_type": "telemetry",
@@ -169,6 +172,10 @@ def worker_task_base() -> dict:
 
 
 def write_worker_task(root: Path, payload: Any) -> Path:
+    if isinstance(payload, dict) and isinstance(payload.get("paths"), dict):
+        payload = dict(payload)
+        payload["paths"] = dict(payload["paths"])
+        payload["paths"]["state_dir"] = str(root / "state")
     path = root / "task.json"
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
@@ -176,6 +183,19 @@ def write_worker_task(root: Path, payload: Any) -> Path:
 
 def read_status(artifacts_dir: Path) -> dict:
     return json.loads((artifacts_dir / "status.json").read_text(encoding="utf-8"))
+
+
+def run_worker(root: Path, task_path: Path, artifacts_dir: Path) -> int:
+    return node_worker.main(
+        [
+            "--task",
+            str(task_path),
+            "--artifacts",
+            str(artifacts_dir),
+            "--work-root",
+            str(root),
+        ]
+    )
 
 
 class ProtocolShapeAmplificationTests(unittest.TestCase):
@@ -301,7 +321,19 @@ class ProtocolShapeAmplificationTests(unittest.TestCase):
             expected_second_json["run_id"] = "run-beta"
             expected_second_json["timeout_s"] = 45.0
             expected_second_json["paths"] = {"state_dir": remote_root + "/run-beta/state"}
-            self.assertEqual(transport.put_json_payloads, [expected_first_json, expected_second_json])
+            dispatched = [dict(payload) for payload in transport.put_json_payloads]
+            correlation_tokens = [
+                payload.pop("correlation_token") for payload in dispatched
+            ]
+            self.assertEqual(dispatched, [expected_first_json, expected_second_json])
+            self.assertEqual([len(token) for token in correlation_tokens], [32, 32])
+            self.assertTrue(
+                all(
+                    set(token) <= set("0123456789abcdef")
+                    for token in correlation_tokens
+                )
+            )
+            self.assertNotEqual(correlation_tokens[0], correlation_tokens[1])
 
     def test_status_json_has_exact_documented_top_level_shape_on_validation_failure(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -309,7 +341,7 @@ class ProtocolShapeAmplificationTests(unittest.TestCase):
             artifacts_dir = root / "artifacts"
             task = worker_task_base()
             del task["paths"]
-            code = node_worker.main(["--task", str(write_worker_task(root, task)), "--artifacts", str(artifacts_dir)])
+            code = run_worker(root, write_worker_task(root, task), artifacts_dir)
 
             self.assertEqual(code, 1)
             status = read_status(artifacts_dir)
@@ -317,7 +349,9 @@ class ProtocolShapeAmplificationTests(unittest.TestCase):
                 set(status.keys()),
                 {
                     "protocol_version",
+                    "correlation_token",
                     "task_id",
+                    "run_id",
                     "task_type",
                     "operation",
                     "node_role",
@@ -333,7 +367,12 @@ class ProtocolShapeAmplificationTests(unittest.TestCase):
                 },
             )
             self.assertEqual(status["protocol_version"], 1)
+            self.assertEqual(
+                status["correlation_token"],
+                "0123456789abcdef0123456789abcdef",
+            )
             self.assertEqual(status["task_id"], "task-edge")
+            self.assertEqual(status["run_id"], "run-edge")
             self.assertEqual(status["status"], "failed")
             self.assertEqual(status["failure_reason"], "unknown_error")
             self.assertEqual(
@@ -377,8 +416,10 @@ class WorkerAdversarialInputTests(unittest.TestCase):
                 with tempfile.TemporaryDirectory() as tmp:
                     root = Path(tmp)
                     artifacts_dir = root / "artifacts"
-                    code = node_worker.main(
-                        ["--task", str(write_worker_task(root, payload)), "--artifacts", str(artifacts_dir)]
+                    code = run_worker(
+                        root,
+                        write_worker_task(root, payload),
+                        artifacts_dir,
                     )
 
                     status = read_status(artifacts_dir)
@@ -394,7 +435,7 @@ class WorkerAdversarialInputTests(unittest.TestCase):
             task["task_type"] = "transfer-send"
             task["operation"] = "stage_payload"
 
-            code = node_worker.main(["--task", str(write_worker_task(root, task)), "--artifacts", str(artifacts_dir)])
+            code = run_worker(root, write_worker_task(root, task), artifacts_dir)
 
             status = read_status(artifacts_dir)
             self.assertEqual(code, 1)
@@ -409,8 +450,10 @@ class WorkerAdversarialInputTests(unittest.TestCase):
             artifacts_dir.mkdir()
             (artifacts_dir / "preexisting.txt").write_text("keep me\n", encoding="utf-8")
 
-            code = node_worker.main(
-                ["--task", str(write_worker_task(root, worker_task_base())), "--artifacts", str(artifacts_dir)]
+            code = run_worker(
+                root,
+                write_worker_task(root, worker_task_base()),
+                artifacts_dir,
             )
 
             self.assertEqual(code, 1)
@@ -513,9 +556,7 @@ class FailureTaxonomyAmplificationTests(unittest.TestCase):
                 task["operation"] = "start_sampling"
                 task["paths"] = {"state_dir": str(root / "state")}
                 artifacts_dir = root / "artifacts"
-                code = node_worker.main(
-                    ["--task", str(write_worker_task(root, task)), "--artifacts", str(artifacts_dir)]
-                )
+                code = run_worker(root, write_worker_task(root, task), artifacts_dir)
             finally:
                 os.environ["PATH"] = old_path
 
@@ -535,12 +576,14 @@ class FailureTaxonomyAmplificationTests(unittest.TestCase):
             unsupported_dir = root / "unsupported"
             failed_dir = root / "failed"
 
-            unsupported_code = node_worker.main(
-                ["--task", str(write_worker_task(root, worker_task_base())), "--artifacts", str(unsupported_dir)]
+            unsupported_code = run_worker(
+                root,
+                write_worker_task(root, worker_task_base()),
+                unsupported_dir,
             )
             bad_json_path = root / "bad.json"
             bad_json_path.write_text("{", encoding="utf-8")
-            failed_code = node_worker.main(["--task", str(bad_json_path), "--artifacts", str(failed_dir)])
+            failed_code = run_worker(root, bad_json_path, failed_dir)
 
             unsupported = read_status(unsupported_dir)
             failed = read_status(failed_dir)

@@ -42,9 +42,9 @@ from typing import Any
 
 from joulewise.schemas import (
     BenchmarkConfig,
-    FailureReason,
     RunStatus,
     SchemaError,
+    summary_validation_problems,
 )
 from joulewise.provenance import normalized_sha256_hex, prompt_token_ids_sha256, sha256_hex
 from joulewise.suite import (
@@ -54,6 +54,7 @@ from joulewise.suite import (
     ITEM_START,
     LEVEL_END,
     LEVEL_START,
+    LEGACY_SUITE_SCHEMA_VERSION,
     MARKER_REQUIRED_METADATA_KEYS,
     REDUCER_ASSIGNABLE,
     RUNTIME_ASSIGNABLE,
@@ -77,39 +78,45 @@ __all__ = [
 
 #: Exact ``power_trace.csv`` header (D-018).
 POWER_TRACE_HEADER = "timestamp_s,power_w,source,rail"
+POWER_TRACE_INTERVAL_HEADER = (
+    "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s"
+)
+
+# The pre-D-033 corpus compatibility identity set; frozen forever.
+FROZEN_LEGACY_BUNDLE_IDENTITIES = frozenset(
+    {
+        (
+            "example-mac-mlx-local__r1",
+            "ee80585a2f6cee6aa7e12eb83c318fd88a934be02d5fa2fb2eb7509630640fd5",
+        ),
+        (
+            "example-mac-mlx-local__r2",
+            "08144a7be4a10d887babbd5fcd1a93f391c1db2d11c63d3131afad80b59cb373",
+        ),
+        (
+            "example-mac-mlx-local__r3",
+            "fe75fc3bafe0af7485fdf98b70ac3d07ccc1db502230bf1b180b94689ab54652",
+        ),
+        (
+            "example-mac-mlx-qwen35-122b-512t__r1",
+            "74761e420520e0d6d979be7d3d08aa6ff7e0f5f8ac8e48109d3dedc08d8d0b7a",
+        ),
+        (
+            "example-mac-mlx-qwen35-122b-512t__r2",
+            "8808632f0235b412d30563747283c397ad534edb711e4cec784712182cbe3b60",
+        ),
+        (
+            "example-mac-mlx-qwen35-122b-512t__r3",
+            "8be8dd955219a8631c8e37a1b3467f368f37624d07acebd2d52924137dff69f4",
+        ),
+    }
+)
 
 #: The five keys every ``events.jsonl`` record must carry, no more, no less.
 EVENT_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
 
 _REQUIRED_ARTIFACTS = ("config.json", "metadata.json", "events.jsonl", "summary_metrics.json")
 _JSON_ARTIFACTS = ("config.json", "metadata.json", "summary_metrics.json")
-_SUMMARY_WRITER_KEYS_V0_1 = {
-    "status",
-    "energy_request_j",
-    "energy_token_j",
-    "energy_output_token_j",
-    "gross_energy_j",
-    "idle_subtracted_energy_j",
-    "ttft_s",
-    "decode_latency_s",
-    "throughput_tokens_s",
-    "idle_baseline",
-    "uncertainty",
-    "measurement_quality",
-    "phase_energy_j",
-    "failure_reason",
-    "failure_message",
-}
-_SUCCEEDED_FINITE_FIELDS = {"energy_request_j", "gross_energy_j"}
-_SUCCEEDED_NULLABLE_NUMBER_FIELDS = {
-    "energy_token_j",
-    "energy_output_token_j",
-    "idle_subtracted_energy_j",
-    "ttft_s",
-    "decode_latency_s",
-    "throughput_tokens_s",
-    "inter_token_throughput_tokens_s",
-}
 
 
 class BundleReadError(Exception):
@@ -118,10 +125,12 @@ class BundleReadError(Exception):
 
 @dataclass(frozen=True)
 class TracePoint:
-    """One point on the summed power curve: ``power_w`` at ``t``."""
+    """One point or interval-average observation on the summed power trace."""
 
     t: float
     power_w: float
+    support_start_s: float | None = None
+    support_end_s: float | None = None
 
 
 @dataclass(frozen=True)
@@ -144,6 +153,29 @@ class ItemWindow:
     end_metadata: dict[str, Any]
 
 
+_PhaseSourceIdentity = tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
+class _PairedPhaseInterval:
+    phase: str
+    source_identity: _PhaseSourceIdentity
+    window: Window
+
+
+@dataclass(frozen=True)
+class _PhasePairing:
+    windows_by_phase: dict[str, list[Window]]
+    windows_by_key: dict[tuple[str, _PhaseSourceIdentity], list[Window]]
+    problems: list[str]
+
+    def windows_for_event(self, phase: str, event: dict[str, Any]) -> list[Window]:
+        return self.windows_by_key.get(
+            (phase, _phase_source_identity(event)),
+            [],
+        )
+
+
 class BundleReader:
     """Read one bundle directory; parsing and policy live here (D-025).
 
@@ -159,6 +191,12 @@ class BundleReader:
     @property
     def path(self) -> Path:
         return self._path
+
+    def is_frozen_legacy_identity(self) -> bool:
+        metadata = self.raw_metadata()
+        return isinstance(metadata, dict) and (
+            metadata.get("run_id"), metadata.get("config_sha256")
+        ) in FROZEN_LEGACY_BUNDLE_IDENTITIES
 
     # ------------------------------------------------------------------
     # Strict accessors (structured failures, used by the reducer)
@@ -261,7 +299,13 @@ class BundleReader:
         if trace.problems:
             raise BundleReadError(trace.problems[0])
         self._cache["summed_curve"] = [
-            TracePoint(t=t, power_w=trace.totals[t]) for t in sorted(trace.totals)
+            TracePoint(
+                t=t,
+                power_w=trace.totals[t],
+                support_start_s=(trace.supports[t][0] if t in trace.supports else None),
+                support_end_s=(trace.supports[t][1] if t in trace.supports else None),
+            )
+            for t in sorted(trace.totals)
         ]
         return self._cache["summed_curve"]
 
@@ -297,10 +341,6 @@ class BundleReader:
 
     def raw_summary(self) -> dict[str, Any] | None:
         return self._tolerant_json("summary_metrics.json")
-
-    def suite_manifest_raw(self) -> dict[str, Any] | None:
-        """Tolerant parsed ``suite_manifest.json``; ``None`` when absent/damaged."""
-        return self._tolerant_json("suite_manifest.json")
 
     def is_complete(self) -> bool:
         """D-011: complete iff ``summary_metrics.json`` validates by status."""
@@ -377,29 +417,16 @@ class BundleReader:
         return True
 
     def phase_windows(self) -> dict[str, list[Window]]:
-        """Pair ``phase_start``/``phase_end`` events by phase name in order.
+        """Return validated ``phase_start``/``phase_end`` windows.
 
-        Multiple intervals with the same phase name are all returned (the
-        reducer sums their energies; the report shades each span).
+        Pairing is scoped by phase plus power-source identity. Every marker
+        must pair, intervals must not reverse, and intervals attributed to one
+        source must not overlap. Concurrent intervals on distinct identified
+        nodes, each representing its own meter, are valid. Multiple valid
+        intervals with the same phase name are integrated separately and
+        summed by the reducer.
         """
-        open_starts: dict[str, list[float]] = {}
-        windows: dict[str, list[Window]] = {}
-        for event in self.events():
-            event_type = event.get("event_type")
-            phase = event.get("phase")
-            if not isinstance(phase, str):
-                continue
-            if event_type == "phase_start":
-                open_starts.setdefault(phase, []).append(float(event["timestamp_s"]))
-            elif event_type == "phase_end":
-                starts = open_starts.get(phase)
-                if not starts:
-                    continue
-                start_s = starts.pop(0)
-                windows.setdefault(phase, []).append(
-                    Window(start_s=start_s, end_s=float(event["timestamp_s"]))
-                )
-        return windows
+        return self._validated_phase_pairing().windows_by_phase
 
     def token_timestamps(self) -> list[float]:
         """Output/decode token timestamps only.
@@ -410,11 +437,11 @@ class BundleReader:
         When decode phase windows are present, the timestamp must also land
         inside one of those windows.
         """
-        decode_windows = self.phase_windows().get("decode", [])
+        pairing = self._validated_phase_pairing()
         return [
             float(event["timestamp_s"])
             for event in self.events()
-            if _is_decode_token_event(event, decode_windows)
+            if _is_decode_token_event(event, pairing)
         ]
 
     def suite_manifest(self) -> SuiteManifest | None:
@@ -422,6 +449,10 @@ class BundleReader:
 
         Returns ``None`` when ``suite_manifest.json`` is absent. If the file
         exists, it must parse and validate as a :class:`SuiteManifest`.
+        Legacy v1 reads synthesize the v2 cache verification marker; the exact
+        synthesized field name is exposed in ``manifest.synthesized_fields``
+        so consumers cannot mistake compatibility interpretation for bytes
+        that were present in the historical artifact.
         """
         if "suite_manifest" not in self._cache:
             if not (self._path / "suite_manifest.json").is_file():
@@ -435,6 +466,20 @@ class BundleReader:
                         f"suite_manifest.json does not re-validate: {exc}"
                     ) from exc
         return self._cache["suite_manifest"]
+
+    def suite_item_records(self) -> list[dict[str, Any]] | None:
+        """Return suite item outcomes in realized execution order.
+
+        These existing per-item records are the realized-output evidence of
+        record for both current and sealed suite bundles.  The bundle-level
+        ``output_policy.stop_condition`` is intentionally not interpreted as
+        one synthetic realized stop.
+        """
+
+        records, problems = _suite_item_records(self._path)
+        if problems:
+            raise BundleReadError("; ".join(problems))
+        return records
 
     def suite_window(self) -> Window | None:
         """FIFO-pair the first ``suite_start``/``suite_end`` marker."""
@@ -587,7 +632,7 @@ class BundleReader:
             problems.extend(_check_config_sha256(path, metadata))
 
         summary = parsed.get("summary_metrics.json")
-        if summary is not None:
+        if "summary_metrics.json" in parsed:
             problems.extend(_check_summary(summary))
 
         if "events.jsonl" not in missing:
@@ -615,6 +660,16 @@ class BundleReader:
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise BundleReadError(f"{name} is not valid JSON: {exc}") from exc
 
+    def _validated_phase_pairing(self) -> _PhasePairing:
+        if "phase_pairing" not in self._cache:
+            pairing = _pair_phase_windows(self.events())
+            if pairing.problems:
+                raise BundleReadError(
+                    "invalid phase markers: " + "; ".join(pairing.problems)
+                )
+            self._cache["phase_pairing"] = pairing
+        return self._cache["phase_pairing"]
+
     def _tolerant_json(self, name: str) -> dict[str, Any] | None:
         key = f"tolerant:{name}"
         if key not in self._cache:
@@ -638,6 +693,7 @@ class BundleReader:
 @dataclass(frozen=True)
 class _TraceValidation:
     totals: dict[float, float]
+    supports: dict[float, tuple[float, float]]
     problems: list[str]
 
 
@@ -679,16 +735,165 @@ def _rail_manifest_from_metadata(metadata: dict[str, Any]) -> list[str]:
     return manifest
 
 
-def _is_decode_token_event(
-    event: dict[str, Any], decode_windows: list[Window]
-) -> bool:
+def _is_decode_token_event(event: dict[str, Any], pairing: _PhasePairing) -> bool:
     if event.get("event_type") != "token" or event.get("phase") != "decode":
         return False
-    if not decode_windows:
+    if not pairing.windows_by_phase.get("decode"):
         return True
+    decode_windows = pairing.windows_for_event("decode", event)
     timestamp_s = float(event["timestamp_s"])
     return any(
         window.start_s <= timestamp_s <= window.end_s for window in decode_windows
+    )
+
+
+_PHASE_SOURCE_METADATA_KEYS = ("node_id", "node_identity")
+
+
+def _phase_source_identity(event: dict[str, Any]) -> _PhaseSourceIdentity:
+    metadata = event.get("metadata")
+    if not isinstance(metadata, dict):
+        return ()
+    identity: list[tuple[str, str]] = []
+    for key in _PHASE_SOURCE_METADATA_KEYS:
+        value = metadata.get(key)
+        if value is None:
+            continue
+        identity.append(
+            (
+                key,
+                json.dumps(
+                    value,
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
+        )
+    # WO-006: split-node streams sometimes have no stable node identifier and
+    # node_role is then their only discriminator.  Prefer an explicit node
+    # identity when one exists; contradictory role labels must not split one
+    # identified meter/source into parallel streams.
+    if not identity and metadata.get("node_role") is not None:
+        identity.append(
+            (
+                "node_role",
+                json.dumps(
+                    metadata["node_role"],
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
+        )
+    return tuple(identity)
+
+
+def _phase_source_label(identity: _PhaseSourceIdentity) -> str:
+    if not identity:
+        return "default power source"
+    return "power source " + ", ".join(
+        f"{key}={value}" for key, value in identity
+    )
+
+
+def _pair_phase_windows(events: list[dict[str, Any]]) -> _PhasePairing:
+    """Validate and pair runtime phase markers through one shared policy."""
+    open_starts: dict[
+        tuple[str, _PhaseSourceIdentity], list[tuple[float, int]]
+    ] = {}
+    intervals: list[_PairedPhaseInterval] = []
+    problems: list[str] = []
+
+    for index, event in enumerate(events, start=1):
+        event_type = event.get("event_type")
+        if event_type not in {"phase_start", "phase_end"}:
+            continue
+        phase = event.get("phase")
+        if not isinstance(phase, str) or not phase:
+            problems.append(
+                f"{event_type} marker at event {index} has a missing or non-string phase"
+            )
+            continue
+        if not isinstance(event.get("metadata"), dict):
+            problems.append(
+                f"{event_type} marker for phase {phase!r} at event {index} "
+                "has metadata that is not an object"
+            )
+            continue
+        source_identity = _phase_source_identity(event)
+        key = (phase, source_identity)
+        timestamp_s = float(event["timestamp_s"])
+        if event_type == "phase_start":
+            open_starts.setdefault(key, []).append((timestamp_s, index))
+            continue
+
+        starts = open_starts.get(key)
+        if not starts:
+            problems.append(
+                f"phase_end marker for phase {phase!r} on "
+                f"{_phase_source_label(source_identity)} has no paired phase_start"
+            )
+            continue
+        start_s, _start_index = starts.pop(0)
+        if timestamp_s < start_s:
+            problems.append(
+                f"phase markers are reversed for phase {phase!r} on "
+                f"{_phase_source_label(source_identity)}: "
+                f"start {start_s} > end {timestamp_s}"
+            )
+            continue
+        intervals.append(
+            _PairedPhaseInterval(
+                phase=phase,
+                source_identity=source_identity,
+                window=Window(start_s=start_s, end_s=timestamp_s),
+            )
+        )
+
+    for (phase, source_identity), starts in open_starts.items():
+        for _start_s, _start_index in starts:
+            problems.append(
+                f"phase_start marker for phase {phase!r} on "
+                f"{_phase_source_label(source_identity)} has no paired phase_end"
+            )
+
+    by_source: dict[_PhaseSourceIdentity, list[_PairedPhaseInterval]] = {}
+    for interval in intervals:
+        by_source.setdefault(interval.source_identity, []).append(interval)
+    for source_identity, source_intervals in by_source.items():
+        ordered = sorted(
+            source_intervals,
+            key=lambda interval: (
+                interval.window.start_s,
+                interval.window.end_s,
+                interval.phase,
+            ),
+        )
+        active: _PairedPhaseInterval | None = None
+        for interval in ordered:
+            if active is not None and interval.window.start_s < active.window.end_s:
+                problems.append(
+                    "same_source_phase_overlap: phase intervals overlap on "
+                    f"{_phase_source_label(source_identity)}: "
+                    f"{active.phase!r} [{active.window.start_s}, {active.window.end_s}] "
+                    f"overlaps {interval.phase!r} "
+                    f"[{interval.window.start_s}, {interval.window.end_s}]"
+                )
+            if active is None or interval.window.end_s > active.window.end_s:
+                active = interval
+
+    windows_by_phase: dict[str, list[Window]] = {}
+    windows_by_key: dict[tuple[str, _PhaseSourceIdentity], list[Window]] = {}
+    for interval in intervals:
+        windows_by_phase.setdefault(interval.phase, []).append(interval.window)
+        windows_by_key.setdefault(
+            (interval.phase, interval.source_identity), []
+        ).append(interval.window)
+    return _PhasePairing(
+        windows_by_phase=windows_by_phase,
+        windows_by_key=windows_by_key,
+        problems=problems,
     )
 
 
@@ -787,7 +992,17 @@ def _suite_problems(
     except SchemaError as exc:
         return [f"suite_manifest.json does not re-validate: {exc}"]
 
-    if config_hash is not None and config_hash != actual_hash:
+    accepted_config_hashes = {actual_hash}
+    if manifest.schema_version != LEGACY_SUITE_SCHEMA_VERSION:
+        # New bundles may originate from a hash-pinned v1 source. The
+        # registered config remains byte-stable while the persisted artifact
+        # is v2; this deterministic projection authenticates that migration.
+        accepted_config_hashes.add(
+            suite_manifest_sha256(
+                manifest.to_dict(schema_version=LEGACY_SUITE_SCHEMA_VERSION)
+            )
+        )
+    if config_hash is not None and config_hash not in accepted_config_hashes:
         problems.append(
             "config.workload_profile.suite_manifest_sha256 mismatch: "
             f"config has {config_hash!r}, suite_manifest.json hashes to {actual_hash!r}"
@@ -973,6 +1188,55 @@ def _suite_problems(
                 )
             records_by_index[item_index] = record
             record_item_indices.append(item_index)
+            emitted_tokens = record.get("emitted_tokens")
+            if (
+                isinstance(emitted_tokens, bool)
+                or not isinstance(emitted_tokens, int)
+                or emitted_tokens < 0
+            ):
+                problems.append(
+                    "outputs/suite_items.jsonl line "
+                    f"{line_index} emitted_tokens is not a non-negative integer: "
+                    f"{emitted_tokens!r}"
+                )
+            stop_reason = record.get("stop_reason")
+            if not _nonempty_string(stop_reason):
+                problems.append(
+                    "outputs/suite_items.jsonl line "
+                    f"{line_index} stop_reason is not a non-empty string: "
+                    f"{stop_reason!r}"
+                )
+            tokens = record.get("tokens")
+            if not isinstance(tokens, list):
+                problems.append(
+                    f"outputs/suite_items.jsonl line {line_index} tokens is not a list"
+                )
+            elif (
+                record.get("emitted_token_ids") is None
+                and isinstance(emitted_tokens, int)
+                and not isinstance(emitted_tokens, bool)
+            ):
+                if len(tokens) != emitted_tokens:
+                    problems.append(
+                        "outputs/suite_items.jsonl line "
+                        f"{line_index} tokens length {len(tokens)} does not equal "
+                        f"emitted_tokens {emitted_tokens}"
+                    )
+            emitted_token_ids = record.get("emitted_token_ids")
+            if emitted_token_ids is not None:
+                if not isinstance(emitted_token_ids, list):
+                    problems.append(
+                        "outputs/suite_items.jsonl line "
+                        f"{line_index} emitted_token_ids is not a list"
+                    )
+                elif isinstance(emitted_tokens, int) and not isinstance(
+                    emitted_tokens, bool
+                ) and len(emitted_token_ids) != emitted_tokens:
+                    problems.append(
+                        "outputs/suite_items.jsonl line "
+                        f"{line_index} emitted_token_ids length {len(emitted_token_ids)} "
+                        f"does not equal emitted_tokens {emitted_tokens}"
+                    )
             position = record.get("position")
             if position is not None:
                 if isinstance(position, bool) or not isinstance(position, int):
@@ -1490,54 +1754,15 @@ def _window_contains(outer: Window, inner: Window) -> bool:
 
 def _check_summary(summary: Any) -> list[str]:
     """Shared summary validity policy used by validation and completion."""
-    if not isinstance(summary, dict):
-        return ["summary_metrics.json is not a JSON object"]
-    problems: list[str] = []
-    raw_status = summary.get("status")
-    try:
-        status = RunStatus(raw_status)
-    except ValueError:
-        return [f"summary status is not a valid RunStatus: {raw_status!r}"]
-    raw_reason = summary.get("failure_reason")
-    if status in {RunStatus.FAILED, RunStatus.UNSUPPORTED}:
-        if raw_reason is None:
-            problems.append(f"summary status is {status.value} but failure_reason is missing")
-        else:
-            try:
-                FailureReason(raw_reason)
-            except ValueError:
-                problems.append(
-                    f"summary failure_reason is not a valid FailureReason: {raw_reason!r}"
-                )
-    elif raw_reason is not None:
-        problems.append(
-            f"summary status is succeeded but carries failure_reason {raw_reason!r}"
-        )
-    if status == RunStatus.SUCCEEDED:
-        missing = sorted(_SUMMARY_WRITER_KEYS_V0_1 - set(summary))
-        for key in missing:
-            problems.append(f"summary status is succeeded but {key} is missing")
-        for key in sorted(_SUCCEEDED_FINITE_FIELDS):
-            value = summary.get(key)
-            if not is_finite_number(value):
-                problems.append(
-                    f"summary status is succeeded but {key} is not a finite "
-                    f"number: {value!r}"
-                )
-        for key in sorted(_SUCCEEDED_NULLABLE_NUMBER_FIELDS):
-            value = summary.get(key)
-            if value is not None and not is_finite_number(value):
-                problems.append(
-                    f"summary status is succeeded but nullable numeric field "
-                    f"{key} is not null or finite: {value!r}"
-                )
-    return problems
+    return summary_validation_problems(summary)
 
 
 def _validate_trace_rows(rows: list[dict[str, str]], manifest: list[str]) -> _TraceValidation:
     manifest_set = set(manifest)
     totals: dict[float, float] = {}
+    supports: dict[float, tuple[float, float]] = {}
     rails_at: dict[float, set[str]] = {}
+    support_modes_at: dict[float, set[bool]] = {}
     seen: set[tuple[float, str]] = set()
     problems: list[str] = []
     for index, row in enumerate(rows, start=2):
@@ -1553,6 +1778,33 @@ def _validate_trace_rows(rows: list[dict[str, str]], manifest: list[str]) -> _Tr
                 row.get("power_w"),
                 f"power_trace.csv row {index} power_w",
             )
+            interval_start_raw = row.get("interval_start_s")
+            interval_end_raw = row.get("interval_end_s")
+            if interval_start_raw is None and interval_end_raw is None:
+                support = None
+            elif interval_start_raw is None or interval_end_raw is None:
+                raise ValueError(
+                    f"power_trace.csv row {index} must carry both interval support edges"
+                )
+            else:
+                interval_start_s = finite_float(
+                    interval_start_raw,
+                    f"power_trace.csv row {index} interval_start_s",
+                )
+                interval_end_s = finite_float(
+                    interval_end_raw,
+                    f"power_trace.csv row {index} interval_end_s",
+                )
+                if interval_start_s >= interval_end_s:
+                    raise ValueError(
+                        f"power_trace.csv row {index} interval support must have "
+                        "start < end"
+                    )
+                if interval_end_s != timestamp_s:
+                    raise ValueError(
+                        f"power_trace.csv row {index} interval_end_s must equal timestamp_s"
+                    )
+                support = (interval_start_s, interval_end_s)
         except ValueError as exc:
             problems.append(str(exc))
             continue
@@ -1566,6 +1818,21 @@ def _validate_trace_rows(rows: list[dict[str, str]], manifest: list[str]) -> _Tr
         seen.add(key)
         totals[timestamp_s] = totals.get(timestamp_s, 0.0) + power_w
         rails_at.setdefault(timestamp_s, set()).add(rail)
+        support_modes_at.setdefault(timestamp_s, set()).add(support is not None)
+        if support is not None:
+            existing_support = supports.get(timestamp_s)
+            if existing_support is not None and existing_support != support:
+                problems.append(
+                    "power_trace.csv rail rows have different interval support at "
+                    f"timestamp {timestamp_s}"
+                )
+            else:
+                supports[timestamp_s] = support
+        elif timestamp_s in supports:
+            problems.append(
+                "power_trace.csv mixes interval-supported and point rail rows at "
+                f"timestamp {timestamp_s}"
+            )
     if len(manifest_set) > 1:
         misaligned = sorted(t for t, rails in rails_at.items() if rails != manifest_set)
         if misaligned:
@@ -1579,7 +1846,25 @@ def _validate_trace_rows(rows: list[dict[str, str]], manifest: list[str]) -> _Tr
                 f"share one timestamp ({len(misaligned)} misaligned "
                 "timestamp(s) total)"
             )
-    return _TraceValidation(totals=totals, problems=problems)
+    if supports and len(supports) != len(totals):
+        problems.append(
+            "power_trace.csv cannot mix interval-supported and point observations"
+        )
+    if any(len(modes) != 1 for modes in support_modes_at.values()):
+        problems.append(
+            "power_trace.csv cannot mix interval-supported and point rail rows"
+        )
+    if supports:
+        ordered = [supports[t] for t in sorted(supports)]
+        for previous, current in zip(ordered, ordered[1:]):
+            tolerance = 1e-6
+            if current[0] < previous[1] - tolerance:
+                problems.append(
+                    "power_trace.csv interval supports overlap: "
+                    f"{previous!r} then {current!r}"
+                )
+                break
+    return _TraceValidation(totals=totals, supports=supports, problems=problems)
 
 
 def _check_events(events_path: Path) -> list[str]:
@@ -1629,6 +1914,7 @@ def _check_events(events_path: Path) -> list[str]:
             "events.jsonl last event is "
             f"{records[-1]['event_type']!r}, expected 'run_finalized'"
         )
+    problems.extend(_pair_phase_windows(records).problems)
     return problems
 
 
@@ -1649,10 +1935,12 @@ def _check_power_trace(path: Path, summary: Any, metadata: Any) -> list[str]:
         return [f"power_trace.csv cannot be read: {exc}"]
     if header is None:
         return ["power_trace.csv is empty (no header line)"]
-    if ",".join(header) != POWER_TRACE_HEADER:
+    joined_header = ",".join(header)
+    if joined_header not in {POWER_TRACE_HEADER, POWER_TRACE_INTERVAL_HEADER}:
         return [
             "power_trace.csv header is "
-            f"{','.join(header)!r}, expected {POWER_TRACE_HEADER!r}"
+            f"{joined_header!r}, expected {POWER_TRACE_HEADER!r} or "
+            f"{POWER_TRACE_INTERVAL_HEADER!r}"
         ]
     problems: list[str] = []
     manifest: list[str] = []

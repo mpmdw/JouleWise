@@ -540,7 +540,11 @@ Level-window gross energy at ~15–24 W busy power ≈ 13–29 J (8 items) / 26�
 
 ### Recommended sizing
 
+**SUPERSEDED (2026-07-13, WO-032/D-047) — verbatim historical passage:**
+
 **Smoke ladder (P2-010b, envelope validation):** levels **{1, 8, 64}** (endpoints + geometric midpoint — an early-EOS/CoT-leak bias would be monotone in difficulty, so 3 spanning levels detect it), **8 items/level** (item_index 0..7), plus 2 sentinel repeats of item (n=1, i=0) at suite start and end (within-bundle repeats reserved for sentinels per C-015; tagged, excluded from level stats, never inflate n). k = 26 item executions (vs the k=24 first default — 2-over is the sentinel cost; named, acceptable). Measured suite ≈ 26 × 0.15 ≈ 3.9 s; bundle wall ≈ load + 30 s idle + suite + cooldown ≈ 1.5–3 min. **B = 5 whole-suite bundles (top-up to B = 10 near the floor)** → 40–80 items/level for the gate statistics; session cost ~10–25 min. Level order rotated round-robin across bundles, `order_seed` recorded.
+
+**END SUPERSEDED PASSAGE.**
 
 **Full ladder (deferred per C-014 until C5-1.9 has a consumer):** 7 levels {1,2,4,8,16,32,64} × **16 items/level** + 2 sentinels = 114 executions/bundle ≈ 17 s measured; per-level windows 2.4 s ≈ 21 samples; **B = 10 bundles**, level order Latin-square/rotated; campaign wall ~20–30 min. Named conflict: k = 114 exceeds C-015's k ≤ 48 default even though wall time (~17 s) is nowhere near the 10–15 min block-split trigger — the k default was sized for realistic-length items, not 0.15 s items. Treating each level as a block (block = level, 16 items) is the natural structure; **the k-policy deviation needs council/lead ratification at campaign time** (cheap, since the campaign is deferred anyway).
 
@@ -550,7 +554,11 @@ Slower models only make this easier: lower tok/s and higher TTFT stretch item ti
 
 ## 3. Envelope-validation gate (AP-5 smoke gate, computed per D-036)
 
+**SUPERSEDED (2026-07-13, WO-032/D-047) — verbatim historical passage:**
+
 Inputs: per-item realized `{prompt_tokens, emitted_tokens, stop_reason, parse_status}` pooled across all strict-valid smoke bundles. The gate is emitted by the analysis script as a machine-readable verdict — `envelope_validated` iff E1–E4 all pass, else `envelope_failed([reason_codes])` — derived from recorded measurements, never asserted in prose (D-036). Thresholds are pinned here; changing them requires a decision-log entry.
+
+**END SUPERSEDED PASSAGE.**
 
 - **E1 stop-reason invariance:** per level ℓ, r_ℓ = fraction with `stop_reason != "eos"`. PASS iff `max_ℓ r_ℓ ≤ 0.05` AND `max_ℓ r_ℓ − min_ℓ r_ℓ ≤ 0.05`.
 - **E2 emitted-token mean invariance:** PASS iff `max_ℓ mean(emitted) − min_ℓ mean(emitted) ≤ 1.0 token`.
@@ -558,7 +566,38 @@ Inputs: per-item realized `{prompt_tokens, emitted_tokens, stop_reason, parse_st
 - **E4 prompt-token invariance:** PASS iff global `max − min` realized prompt tokens ≤ 4 AND level means within 2 tokens (tolerance covers the {n}-digit deviation plus BPE digit-merge jitter; tokenizer-specific, recheck per model).
 - **E5 early-EOS-bias check (C-004's named caveat; advisory, does not gate):** per level where both classes have ≥5 parsed items, `|mean emitted(incorrect) − mean emitted(correct)| ≤ 1.0 token`, else `not_evaluable` recorded. Uses quarantined correctness as a *validity* input only — within the C-004 quarantine.
 
+**SUPERSEDED (2026-07-13, WO-032/D-047) — verbatim historical passage:**
+
 Why 1.0 token / 5% are defensible and not vibes-calibrated to zero: one emitted token ≈ 3.9 ms × ~23 W ≈ 0.09 J/item ≈ 0.7 J per 8-item level window ≈ ~4% of a ~20 J window — at/below the expected comparative floor, so a passing gate bounds residual token-count confounding below measurement resolution. Sensitivity at smoke n (40–80 items/level): a 10% non-EOS rate at any level is detected with P ≥ 0.985 (1 − 0.9^40); a 1.0-token mean shift has SE ≈ 0.16 tokens at n=40. Honest limit: the smoke gate catches gross violations (systematic early-EOS, CoT leakage, cap-hitting); subtler shifts are re-gated at full-campaign n before any scored claim.
+
+**END SUPERSEDED PASSAGE.**
+
+### Correction (2026-07-13; WO-032 / D-047)
+
+This correction supersedes only the three historical passages marked above. It preserves them as the dated research record while applying the D-047 adjudication to implementation-facing sizing, inputs, and sensitivity.
+
+#### Corrected smoke sizing
+
+**Smoke ladder (P2-010b, envelope validation):** levels **{1, 8, 64}** (endpoints + geometric midpoint — an early-EOS/CoT-leak bias would be monotone in difficulty, so 3 spanning levels detect it), **8 distinct items/level** (item_index 0..7), plus 2 executions of the dedicated sentinel item at suite start and end (tagged, excluded from level stats, never inflate n). This is k = 25 distinct items / 26 executions per D-047.2. Measured suite ≈ 26 × 0.15 ≈ 3.9 s; bundle wall ≈ load + 30 s idle + suite + cooldown ≈ 1.5–3 min. **B = 5 whole-suite bundles (top-up to B = 10 near the floor)** replicates level-window energy, not token/stop-reason/correctness observations: the gate denominator remains 8 distinct items/level under deterministic decoding (D-047.3). Session cost ~10–25 min. Level order rotated round-robin across bundles, `order_seed` recorded.
+
+#### Corrected gate inputs
+
+Inputs: per-item realized `{prompt_tokens, emitted_tokens, stop_reason, parse_status}` from strict-valid smoke bundles, deduplicated by item identity so each of the 8 distinct items/level contributes once; repeated bundles cross-check deterministic item evidence and replicate energy only (D-047.3). The gate is emitted by the analysis script as a machine-readable verdict — `envelope_validated` iff E1–E4 all pass, else `envelope_failed([reason_codes])` — derived from recorded measurements, never asserted in prose (D-036). Thresholds are pinned here; changing them requires a decision-log entry.
+
+#### Corrected threshold rationale and sensitivity
+
+Why 1.0 token / 5% are defensible and not vibes-calibrated to zero: the planning arithmetic is one emitted token ≈ 3.9 ms × ~23 W ≈ 0.09 J/item ≈ 0.7 J per 8-item level window, or ~4% of a provisional ~20 J window. This is a design rationale, not empirical floor evidence. Per D-047.7, the first strict-valid smoke bundle must re-anchor the arithmetic on its measured level-window energy, and P2-015 must supply the comparative-floor evidence before any re-pin or scored claim.
+
+Sensitivity at smoke size is discrete because D-047.3 fixes the token/stop-reason denominator at 8 distinct items/level; 5–10 repeated bundles do not create 40–80 independent observations:
+
+| Gate | Attainable smoke boundary | Consequence for the pinned threshold |
+|---|---|---|
+| E1 | Per-level non-EOS rates and their spread move in 1/8 = 12.5 percentage-point steps. | The pinned 5% maximum and spread thresholds, as well as nearby cutoffs below 12.5%, all mean zero tolerated non-EOS items. 12.5% is the first attainable relaxation that could admit one item at a level. |
+| E2 | With 8 integer token counts/level, each level mean and its spread move in 1/8-token steps. | The pinned 1.0-token bound is attainable; its immediately adjacent attainable bounds are 0.875 and 1.125 tokens. |
+| E3 | With 10,000 seeded permutations, the reported p-value is `(ge + 1) / 10001`. | Around the pinned 0.01 cutoff, the last attainable failing value is `100/10001` and the first passing value is `101/10001`. |
+| E4 | Global token range is integer-valued; level-mean spread moves in 1/8-token steps. | The pinned global range 4 has adjacent attainable bounds 3 and 5; the pinned mean-spread 2.0 has adjacent attainable bounds 1.875 and 2.125. |
+
+This table is analytic pre-data sensitivity, not an empirical robustness result. The first smoke/P2-015 evidence must record the pinned verdict and its stability at the nearest attainable tighter/looser boundaries without selecting a threshold from the outcomes. Any later re-pin remains a prospective decision-log change; a failed envelope cannot be laundered into a pass. Until then, the honest claim is only that the smoke gate catches gross violations such as systematic early EOS, CoT leakage, and cap hitting.
 
 ---
 

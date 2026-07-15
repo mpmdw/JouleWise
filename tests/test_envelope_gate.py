@@ -253,7 +253,7 @@ class EnvelopeGateTests(unittest.TestCase):
         )
         self.assertEqual(result["gates"]["E5"]["status"], "expected_not_evaluable")
 
-    def test_e1_failure_reason_code(self) -> None:
+    def test_e1_n8_zero_tolerance_and_first_attainable_failure(self) -> None:
         def mutate(metadata: dict, output: dict | None) -> None:
             self.normalize_pass(metadata, output)
             if metadata["item_id"] == "affine_v1_L08_i00":
@@ -262,7 +262,17 @@ class EnvelopeGateTests(unittest.TestCase):
         result = self.verdict(self.make_bundle(mutate))
         self.assertEqual(result["verdict"], VERDICT_FAILED)
         self.assertIn(REASON_E1, result["reason_codes"])
-        self.assertEqual(result["gates"]["E1"]["counts"]["L08"]["non_eos"], 1)
+        e1 = result["gates"]["E1"]
+        self.assertEqual(e1["counts"]["L08"], {"non_eos": 1, "denominator": 8})
+        self.assertEqual(e1["rates"]["L08"], 1 / 8)
+        self.assertEqual(e1["max_rate"], 0.125)
+        self.assertLess(e1["thresholds"]["max_rate_lte"], 1 / 8)
+        self.assertLess(e1["thresholds"]["spread_lte"], 1 / 8)
+        self.assertEqual(
+            e1["thresholds"]["zero_tolerance_note"],
+            "at n=8 distinct items, the 5% threshold means zero tolerated "
+            "non-EOS items per level",
+        )
 
     def test_e2_failure_reason_code(self) -> None:
         def mutate(metadata: dict, output: dict | None) -> None:

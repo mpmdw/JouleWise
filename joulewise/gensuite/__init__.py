@@ -1398,7 +1398,6 @@ def _item(
             "prefix_group_id": None,
         },
         "output_policy": "fixed_budget_exact",
-        "status_policy": "none",
         "tags": tags or [],
     }
 
@@ -1446,7 +1445,8 @@ def _manifest_shell(
             "order_policy": order_policy,
             "within_bundle_repeats": 1,
             "cooldown_policy": "bundle_only",
-            "cache_policy": "cold_between_bundles",
+            "declared_cache_policy": "cold_between_bundles",
+            "cache_policy_verification": "declared_not_verified",
             "warmup_policy": "adapter_default",
             "default_output_policy": "fixed_budget_exact",
         },

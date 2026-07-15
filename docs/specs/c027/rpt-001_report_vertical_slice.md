@@ -88,16 +88,19 @@ change should alter their behavior.
 The six legacy bundles are ignored by Git and total approximately 110 MB.
 They will not be present in a clean hosted-CI checkout. Therefore:
 
-- the lead acceptance gate runs the complete bundle-to-report command locally
-  against the real six bundles;
+- full evidence re-derivation is controlled/internal and requires controlled
+  access to the real six-bundle corpus;
+- a pristine clone can reproducibly assemble and check the report from tracked
+  sources, but cannot re-derive the evidence artifacts;
 - hosted CI exercises bundle ingestion with synthetic strict-valid fixtures;
 - hosted CI regenerates downstream artifacts from a committed sealed dataset
   produced by the local real-bundle gate;
 - CI output must say that real-bundle ingestion was not rerun;
 - no fixture or sealed dataset may be described as live hardware validation.
 
-A future published bundle pack may enable full real-corpus CI, but RPT-001
-does not depend on REPRO-001 or external publication.
+The private corpus is not supplied by the clone or by the current transformed
+public projection. RPT-001 therefore makes no external full-reproducibility
+claim and defines no evidence handoff.
 
 ### 0.5 Claims tooling
 
@@ -400,15 +403,23 @@ Build-time bibliography checks:
 Create:
 
 ```text
-analysis/rpt001-v1/input_manifest.json
+analysis/rpt001-v2/input_manifest.json
 ```
+
+Superseded (2026-07-15, WO-015; D-043): input-manifest identity is the
+unified NUL-canonical bundle-tree identity; the v1 legacy tab-joined
+algorithm is named and validated for sealed v1 artifacts only.
 
 Minimum shape:
 
 ```json
 {
   "schema": "joulewise.report_analysis_input.v1",
-  "artifact_version": "rpt001-v1",
+  "artifact_version": "rpt001-v2",
+  "bundle_tree_identity": {
+    "algorithm": "sha256",
+    "version": "joulewise.bundle-tree.nul-v1"
+  },
   "evidence_class": "legacy_l1_manual_review_pre_2m",
   "runs_root": "runs",
   "experiments": [
@@ -451,9 +462,23 @@ Minimum shape:
 ```
 
 A bundle-tree digest is the SHA-256 of the canonical sorted list of every
-relative file path, byte SHA-256, and size in the bundle. Use the same
-file-identity semantics as `scripts/package_bundle_pack.py`; do not identify a
-bundle from `config.json` alone.
+relative file path, byte SHA-256, and size in the bundle. Two explicitly named
+versions exist:
+
+- `rpt001.bundle-tree.tab-v1` is the legacy rpt001-v1 fold. Each sorted entry
+  is UTF-8 `<path>\t<file-sha256>\t<size-bytes>\n`. The sealed rpt001-v1
+  manifests omit the descriptor because the algorithm predated this field;
+  their recorded values remain immutable and must still validate under this
+  named legacy algorithm.
+- `joulewise.bundle-tree.nul-v1` is the canonical publication fold. Each
+  sorted entry is UTF-8 path, NUL, ASCII file SHA-256, NUL, ASCII size, then
+  LF. It is implemented by `joulewise.publication_privacy.tree_sha256` and is
+  the only identity emitted by rpt001-v2 and later report paths and by the
+  publication packer.
+
+Do not identify a bundle from `config.json` alone. Do not rewrite rpt001-v1
+digests in place: migration to the canonical identity occurs only in the
+explicitly versioned rpt001-v2 tree.
 
 All paths stored in committed artifacts are repository-relative. Absolute
 local paths are forbidden.
@@ -462,7 +487,9 @@ local paths are forbidden.
 
 Before writing any output, `scripts/make_figures.py` must:
 
-1. load and schema-check the input manifest;
+1. load and schema-check the input manifest, require `artifact_version` =
+   `rpt001-v2`, and require the canonical bundle-tree algorithm/version
+   descriptor;
 2. require exactly two experiment manifests and six unique member IDs;
 3. verify experiment-manifest hashes and exact membership/order;
 4. verify each bundle-tree hash;
@@ -609,21 +636,21 @@ This seam does not pre-judge the full P2-037 artifact schema.
 Generate and track:
 
 ```text
-figures/rpt001-v1/F1_legacy_l1_instrument_results.svg
-analysis/rpt001-v1/tables/T1_legacy_l1_results.csv
-analysis/rpt001-v1/tables/T1_legacy_l1_results.md
-analysis/rpt001-v1/tables/S1_legacy_stack_identity.csv
-analysis/rpt001-v1/tables/S1_legacy_stack_identity.md
-analysis/rpt001-v1/artifact_manifest.json
+figures/rpt001-v2/F1_legacy_l1_instrument_results.svg
+analysis/rpt001-v2/tables/T1_legacy_l1_results.csv
+analysis/rpt001-v2/tables/T1_legacy_l1_results.md
+analysis/rpt001-v2/tables/S1_legacy_stack_identity.csv
+analysis/rpt001-v2/tables/S1_legacy_stack_identity.md
+analysis/rpt001-v2/artifact_manifest.json
 ```
 
 `F1_legacy_l1_instrument_results` is intentionally not the final Phase-4 F1.
 It is an F1-style vertical-slice artifact. Final registry ownership remains
 with Stage 4.2.
 
-A material semantic change after merge requires `rpt001-v2`; do not silently
-change the meaning of a versioned artifact. Exact regeneration of v1 is
-allowed and expected.
+The sealed rpt001-v1 tree remains byte-immutable. Material semantic changes,
+including the bundle-tree identity migration, belong in rpt001-v2 or a later
+explicitly versioned path; do not silently change a versioned artifact.
 
 ### 4.2 Honest n=3 spread representation
 
@@ -790,6 +817,8 @@ page also transcludes D-052’s single-unit limitation language.
 
 ### 5.1 Canonical and rendered forms
 
+Superseded (2026-07-15, WO-014; D-043): `rpt001-v2` is the canonical report artifact tree and the sealed `rpt001-v1` tree remains legacy/immutable; see §3.1 Pinned input manifest and §4.1 Versioned outputs.
+
 Canonical machine-readable row:
 
 ```text
@@ -811,6 +840,8 @@ This is a deliberate deviation from the plan’s Markdown-as-source design, not
 removal of the Markdown index.
 
 ### 5.2 RPT-001 row shape
+
+Superseded (2026-07-15, WO-014; D-043): the row shape below is retained as the sealed v1 dialect, while canonical generation and references use `analysis/rpt001-v2`; see §3.1 Pinned input manifest and §4.1 Versioned outputs.
 
 The generated row has this shape and values:
 
@@ -920,6 +951,10 @@ field names and semantics above do not change without lead adjudication.
 
 ### 5.3 `claims_lint --mode phase4`
 
+Superseded (2026-07-15, WO-013; D-043): `phase4` is now a compatibility name for the unified version-aware claims-index linter that accepts legacy and engine-linked JSONL rows; see `scripts/claims_lint.py` `lint_claim_index`.
+
+Superseded (2026-07-15, WO-014; D-043): canonical report linting targets `analysis/rpt001-v2/claims_index.jsonl`; the v1 command below is retained only as sealed legacy specification context; see §9.5 CI hook.
+
 Extend `scripts/claims_lint.py` with:
 
 ```sh
@@ -970,22 +1005,35 @@ is rendered adjacent to the result.
 
 ### 6.1 Commands
 
-Full local real-bundle build:
+Superseded (2026-07-15, WO-014; D-043): canonical independent analysis uses `analysis/rpt001-v2/input_manifest.json`; the v1 profile reference below is legacy specification context; see §3.1 Pinned input manifest.
+
+Controlled/internal full evidence re-derivation (requires controlled access to
+the internal six-bundle corpus; not available from a pristine clone):
 
 ```sh
 python3 scripts/build_capstone.py \
   --profile rpt001 \
+  --full \
+  --offline \
   --runs-root runs
 ```
 
-Read-only comparison against committed output:
+Pristine-clone source-only assembly and comparison against committed output:
 
 ```sh
 python3 scripts/build_capstone.py \
   --profile rpt001 \
-  --runs-root runs \
+  --offline \
   --check
 ```
+
+`--check` is source-only: it regenerates the committed report projection from
+tracked analysis and report sources, compares that tracked projection, and
+validates full-report assembly in memory. It does not require `runs/` and does
+not compare against the untracked `build/capstone/rpt001/report.md` product.
+This source-only path is reproducible from a pristine clone. The full command
+is controlled/internal evidence re-derivation, not external full
+reproducibility, because the required internal corpus is not supplied.
 
 Hosted-CI offline build:
 
@@ -1069,6 +1117,7 @@ Required controls:
 `artifact_manifest.json` includes:
 
 - schema and artifact version;
+- bundle-tree identity algorithm and version;
 - input manifest SHA-256;
 - each experiment-manifest SHA-256;
 - all six bundle-tree digests;
@@ -1076,6 +1125,12 @@ Required controls:
 - every output relative path and SHA-256;
 - explicit build mode (`real-bundles` or `offline-derived`);
 - no creation time.
+
+Migration acceptance additionally requires that all sealed rpt001-v1
+bundle-tree digests still validate under `rpt001.bundle-tree.tab-v1` without
+changing any rpt001-v1 byte, and that every rpt001-v2 digest equals the
+publication pipeline's `joulewise.bundle-tree.nul-v1` identity for the same
+file inventory.
 
 ---
 
@@ -1093,7 +1148,8 @@ Required controls:
 8. D-052 single-unit limitation language;
 9. D-058 tokenizer-scope limitation;
 10. claims row ID `CLM-RPT001-LEGACY-L1-001`;
-11. artifact regeneration command;
+11. pristine-clone source-only check command plus an explicit
+    controlled/internal label on the full-regeneration command;
 12. a link/path to `artifact_manifest.json`.
 
 Forbidden on the page:
@@ -1260,7 +1316,7 @@ Add after the normal unit-test step:
 - name: Capstone report vertical slice (stdlib, offline)
   run: |
     python scripts/claims_lint.py --mode phase4 \
-      --claims-index analysis/rpt001-v1/claims_index.jsonl
+      --claims-index analysis/rpt001-v2/claims_index.jsonl
     python scripts/build_capstone.py --profile rpt001 --offline --check
 ```
 
@@ -1353,6 +1409,11 @@ RPT-001 passes only when all boxes are true:
 - [ ] P2-042/P2-037 references are null and fail closed for the L1 slice.
 - [ ] One command regenerates dataset, aggregate, figure, tables, claim row,
       report page, and assembled report.
+- [ ] Source-only assembly and `--check` pass from a pristine clone using only
+      tracked sources.
+- [ ] Full evidence re-derivation is labeled controlled/internal and requires
+      controlled access to the internal corpus; it is not claimed as
+      clean-clone or external full reproducibility.
 - [ ] Two builds produce identical output hashes.
 - [ ] Hosted CI passes without analysis extras.
 - [ ] Hosted CI labels its offline evidence boundary.

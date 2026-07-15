@@ -28,18 +28,17 @@
 <div class="doc-layout">
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#how-to-use-this-log">How To Use This Log</a>
 <a href="#index">Index</a>
-<a href="#d-060-depth-before-breadth-stop-line-ratified">D-060: Depth-before-breadth stop line (RATIFIED)</a>
-<a href="#d-061-review-layer-evaluation-rule-v2-replaces-the-two-zero-sessions-drop-rule">D-061: Review-layer evaluation rule v2 (replaces the two-zero-sessions drop rule)</a>
-<a href="#d-062-confirmatory-sampling-policy-fixed-n-explicit-demotion-no-silent-top-ups">D-062: Confirmatory sampling policy — fixed n, explicit demotion, no silent top-ups</a>
-<a href="#d-063-process-architecture-v2-machine-readable-state-kernel-first">D-063: Process architecture v2 — machine-readable state kernel first</a>
-<a href="#index-row">Index row</a>
-<a href="#d-064-delegated-invocation-compliance-surface-tracked-jsonl-event-stream-report-envelope-enforced-write-scope">D-064: Delegated-invocation compliance surface — tracked JSONL event stream, report envelope, enforced write scope</a>
-<a href="#adjudication-note-was-drafting-notes-for-the-lead">Adjudication note (was: drafting notes for the lead)</a>
-<a href="#d-065-bridge-protocol-v1-1-co-work-lane-session-wrappers-tolerant-envelope">D-065: bridge-protocol/v1.1 — co-work lane, session wrappers, tolerant envelope</a></aside>
+<a href="#d-065-bridge-protocol-v1-1-co-work-lane-session-wrappers-tolerant-envelope">D-065: bridge-protocol/v1.1 — co-work lane, session wrappers, tolerant envelope</a>
+<a href="#d-066-scoped-spec-freeze-override-for-the-axi-extension-agenda-ed-override">D-066: Scoped spec-freeze override for the AXI extension agenda (Ed override)</a>
+<a href="#d-067-idle-reporting-basis-gross-headline-idle-subtracted-is-a-labeled-within-device-secondary-view">D-067: Idle reporting basis — gross headline; idle-subtracted is a labeled within-device secondary view</a>
+<a href="#d-068-site-deployment-is-ed-manual-sessions-end-with-a-drift-report-never-a-deploy">D-068: Site deployment is Ed-manual; sessions end with a drift report, never a deploy</a>
+<a href="#d-069-advisor-doc-alignment-stream-s-0-is-sanctioned-front-facing-work">D-069: Advisor-doc alignment (stream S-0) is sanctioned front-facing work</a>
+<a href="#d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings">D-070: Architectural-axes extension agenda (AXI): scope, claim posture, batch-axis rulings</a></aside>
   <div class="doc-wrap doc-source-docs-decision-log-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/decision_log.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 1844ffa"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 1844ffa</span></span></div>
-    <h1>Decision Log</h1>
+    <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit 12a8b91"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit 12a8b91</span></span></div>
+    <!-- rendered: marked@18.0.6 -->
+<h1>Decision Log</h1>
 <p>This is the canonical record of design decisions for JouleWise. Every decision
 that binds later work, trades off real alternatives, or would otherwise need to
 be re-derived by a future agent gets an entry here.</p>
@@ -382,266 +381,46 @@ must be re-examined, not quietly worked around.</li>
 <td>Process architecture v2 (state kernel first)</td>
 <td>accepted</td>
 </tr>
+<tr>
+<td>D-064</td>
+<td>Delegated-invocation compliance surface: tracked per-session JSONL event stream, canonical report envelope, enforced write scope</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-065</td>
+<td>bridge-protocol/v1.1 — co-work lane, session wrappers, tolerant envelope</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-066</td>
+<td>Scoped spec-freeze override for the AXI extension agenda (Ed override)</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-067</td>
+<td>Idle reporting basis — gross headline; idle-subtracted is a labeled within-device secondary view</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-068</td>
+<td>Site deployment is Ed-manual; sessions end with a drift report, never a deploy</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-069</td>
+<td>Advisor-doc alignment (stream S-0) is sanctioned front-facing work</td>
+<td>accepted</td>
+</tr>
+<tr>
+<td>D-070</td>
+<td>Architectural-axes extension agenda (AXI): scope, claim posture, batch-axis rulings</td>
+<td>accepted</td>
+</tr>
 </tbody></table></div>
 <hr>
 <blockquote>
-<p><strong>Site view:</strong> the complete entry index appears above; the 59 older full entries are omitted from this page for capsule size. The complete log is the repository file <a href="https://github.com/mpmdw/JouleWise/blob/main/docs/decision_log.md"><code>docs/decision_log.md</code></a>.</p>
+<p><strong>Site view:</strong> the complete entry index appears above; the 64 older full entries are omitted from this page for capsule size. The complete log is the repository file <a href="https://github.com/mpmdw/JouleWise/blob/main/docs/decision_log.md"><code>docs/decision_log.md</code></a>.</p>
 </blockquote>
-<h2 id="d-060-depth-before-breadth-stop-line-ratified">D-060: Depth-before-breadth stop line (RATIFIED)</h2>
-<ul>
-<li>Date: 2026-07-09; RATIFIED by Ed 2026-07-10 as written (C-028 session,
-live decision; the independent hardening proposal&#39;s convergent freeze
-recommendation was noted at ratification)</li>
-<li>Status: <strong>accepted</strong> (C-027 council recommendation; allocates
-Ed-facing work, so Ed ratifies or amends)</li>
-<li>Phase: cross-phase / project management</li>
-</ul>
-<p>Proposal (C-027; amends D-041/D-052 sequencing and extends R-012/R-018):
-no NEW breadth — new campaign packs, registry expansion, site features,
-meta-process growth — until four gates pass:</p>
-<ol>
-<li>Grading rubric + calendar captured by a hard date; if the program
-stays silent past it, adopt and RECORD a provisional grading contract
-with conservative internal deadlines (external silence triggers scope
-fallback, never indefinite paralysis).</li>
-<li>Off-machine backup with a restore proof, before any NEW irreplaceable
-campaign evidence is retained (P0-003). Does not block report
-drafting, analysis tooling, or correctness fixes.</li>
-<li>Window A complete in the C-027 sense: smoke, frozen sampling rule and
-guard factor (P2-039), production uncertainty evidence (P2-038),
-versioned floor artifact, floors, baselines — with the executable
-contrast/claim path (P2-037) before any L2 interpretation.</li>
-<li>One end-to-end vertical slice: report source skeleton + reproducible
-bundle→analysis→figure→claims-row→report-page path (RPT-001).</li>
-</ol>
-<p>Application note (2026-07-11, C-028 closeout): gate 2 is satisfied by the
-verified iCloud backup and byte-identical strict-valid restore. The software
-prerequisites inside gate 3 are also satisfied: P2-039, P2-038, and the
-P2-042→P2-041→P2-037 analysis trio are merged, with reducer dispatch current
-through 0.4.2. Gate 3 itself is not complete because Window-A smoke, floors,
-and baselines have not executed. That execution is a quiet-machine + Ed
-action; no landed-software statement raises its claim level or promotes the
-PROVISIONAL NVIDIA pins.</p>
-<p>Work that CLOSES these gates, correctness defects, report writing, and
-already-obligated hardware preparation are always permitted.</p>
-<p>Alternatives considered: status quo (rejected — C-027/NEGSPACE evidence:
-six real bundles vs ~6M tokens of same-day breadth work); a blanket
-freeze including correctness work (rejected — would block the gates&#39;
-own prerequisites).</p>
-<h2 id="d-061-review-layer-evaluation-rule-v2-replaces-the-two-zero-sessions-drop-rule">D-061: Review-layer evaluation rule v2 (replaces the two-zero-sessions drop rule)</h2>
-<ul>
-<li>Date: 2026-07-09</li>
-<li>Status: accepted (C-027; process-layer, within council authority)</li>
-<li>Phase: cross-phase / process instrumentation</li>
-</ul>
-<p>Context: the &quot;drop a layer after two zero-catch sessions&quot; rule was
-falsified by its own record — integration review returned zero unique
-catches twice (C-017, CP-5) and then caught five real cross-stream seams
-(C-024). Mechanical application would have deleted the layer immediately
-before its highest-value session.</p>
-<p>Decision: layer evaluation uses (a) applicability decided by
-PRE-DECLARED mechanical predicates (e.g. integration review counts only
-when 2+ independently developed streams merge touching a shared
-contract/consumer/generated artifact), never post-hoc judgment; (b) an
-outcome taxonomy separating accepted-unique-defect / duplicate /
-clean-verification / false-positive-suppression — suppression is
-valuable but is not a catch; (c) fixed severity weights declared before
-the session; (d) three applicable exposures TRIGGER an expected-loss
-review decision, never automatic deletion; (e) safety, final-head, and
-integration layers are never auto-dropped on zero-defect streaks —
-they are judged by expected-loss reduction.</p>
-<p>Alternatives considered: keep the two-zero rule (falsified); &quot;three
-applicable sessions, severity-weighted&quot; as free-text judgment (rejected
-in council — reintroduces the discretion that made the old rule
-unfalsifiable).</p>
-<h2 id="d-062-confirmatory-sampling-policy-fixed-n-explicit-demotion-no-silent-top-ups">D-062: Confirmatory sampling policy — fixed n, explicit demotion, no silent top-ups</h2>
-<ul>
-<li>Date: 2026-07-09</li>
-<li>Status: accepted (C-027; scientific protocol, ratifies the RIGOR/STATS
-adjudication; amends the top-up language in
-<code>docs/contracts/analysis_plans.md</code> — AP-EDIT applies the text)</li>
-<li>Phase: cross-phase / statistical protocol</li>
-</ul>
-<p>Context: the analysis plans repeatedly started at n=5 and added
-repetitions when an observed CI was near-floor or unsatisfactory, then
-reported ordinary 95% CIs. Outcome-dependent sample growth invalidates
-nominal coverage (C-027 RIGOR finding, adjudicated with the peer&#39;s
-counterreview).</p>
-<p>Decision: (a) confirmatory contrasts use n FROZEN before observing that
-pack&#39;s effects, sized from Window-A variance/MDE evidence — nearer 10
-than 5 for near-floor comparisons; (b) predeclare replacement rules for
-technically invalid runs (they are not top-ups); (c) any
-outcome-dependent top-up permanently DEMOTES that contrast to
-exploratory: the original fixed-n analysis is reported regardless of
-direction, pooled estimates are never presented as retaining nominal
-confirmatory coverage, and no later convenience re-promotes the claim;
-(d) a pre-registered two-look alpha-spending design (frozen max n, look
-boundaries, spending function) is PERMITTED for a specifically justified
-expensive campaign, never the default.</p>
-<p>Alternatives considered: full group-sequential machinery as default
-(rejected — avoidable defense surface for a capstone); status quo
-(rejected — statistically invalid).</p>
-<h2 id="d-063-process-architecture-v2-machine-readable-state-kernel-first">D-063: Process architecture v2 — machine-readable state kernel first</h2>
-<ul>
-<li>Date: 2026-07-09</li>
-<li>Status: accepted (C-027; process-layer)</li>
-<li>Phase: cross-phase / process architecture</li>
-</ul>
-<p>Context: five core process files grew 3,106 → 4,893 lines with ~9.5k net
-process/history lines since orchestration landed; the same-day RUN_STATE
-dual next-action drift (C-027 B3) is the demonstrated failure mode of
-hand-maintained state mirrors.</p>
-<p>Decision (staged; big-bang migration rejected by both council sides):
-Stage 1 (DOC-008) = a thin machine-readable state kernel (task id, lane,
-status, dependencies, authority pointer, acceptance pointer, stop-card
-pointer) from which the RUN_STATE restart block and the live queue view
-are GENERATED; PROJECT_STATUS compaction with a status-history archive;
-retire <code>docs/planning_reflection_protocol.md</code> as standalone intake
-(zero credited catches across four recent sessions — its useful fields
-fold into queue rows); the two-writer rule and credential-boundary push
-procedure move into <code>docs/orchestration.md</code>. Stage 2 = per-session
-findings/invocations ledgers making &quot;unique catch&quot; a query (extends
-D-050). Policy-doc generation comes LAST — supersession requires
-semantic judgment (council position, adopted from the peer&#39;s argument
-over the lead&#39;s original ordering).</p>
-<p>Alternatives considered: defer the kernel and generate
-current_policy.md first (the lead&#39;s draft position — REVERSED in
-council: it leaves the demonstrated drift mode active); full big-bang
-migration (rejected: risks the drift it cures).</p>
-<hr>
-<h2 id="index-row">Index row</h2>
-<p>| D-064 | Delegated-invocation compliance surface: tracked per-session JSONL event stream, canonical report envelope, enforced write scope | accepted |</p>
-<hr>
-<h2 id="d-064-delegated-invocation-compliance-surface-tracked-jsonl-event-stream-report-envelope-enforced-write-scope">D-064: Delegated-invocation compliance surface — tracked JSONL event stream, report envelope, enforced write scope</h2>
-<ul>
-<li>Date: 2026-07-11 (core surface adjudicated 2026-07-10, C-028 H4;
-v3/envelope/scope clauses ratified after landing in the C-028
-infrastructure wave)</li>
-<li>Status: accepted (C-028; process-layer)</li>
-<li>Phase: cross-project process instrumentation</li>
-</ul>
-<p>Context: D-050 requires substantial delegated runs to leave a
-process trace and an invocation-manifest pointer map. The C-027
-audit showed a gitignored bridge manifest cannot serve as
-repository-auditable evidence, and that run-report summaries had
-collapsed roughly one hundred invocations into zero auditable
-per-invocation rows. The D-050 revisit condition fired at
-CP-5/C-022 and is adjudicated here through MET-001 option 2 and
-C-028 H4. During the C-028 arc the surface was then exercised in
-production: a wrapper crash mid-run (lead in-place edit of the
-installed runner) and two out-of-scope diffs (p2043-impl,
-p2044-fixround) tested the recovery and enforcement semantics now
-ratified below.</p>
-<p>Decision:</p>
-<ol>
-<li><p><strong>Compliance surface.</strong> One tracked, append-only JSONL manifest
-per substantial session under <code>docs/process_traces/</code>, with rows
-for every actual invocation. Failed, capacity-ended, resumed,
-and retried invocations get their own rows; resumes may share a
-model session ID but never an invocation row. Run reports carry
-only counts plus a link to the tracked manifest. The codex-run
-observer index and raw logs remain recovery substrate, never
-the compliance surface; the gitignored bridge manifest remains
-local convenience only.</p>
-</li>
-<li><p><strong>Manifest v3 is an append-only EVENT STREAM, not a mutable
-ledger.</strong> Three event kinds: <code>run_started</code> (wrapper-authored at
-dispatch: prompt hash/bytes, contract, genre, write scope,
-head/branch at start), <code>run_finished</code> (wrapper-authored at
-exit: invocation state, report parse validity, semantic
-status/completion, finding/verification counts, scope-violation
-counts, head at end), and <code>run_consumed</code> (LEAD-authored at the
-moment the lead dispositions the output: consumed / rejected /
-deferred, with pointer). Consumption events are lead-owned
-exclusively — a wrapper or delegated session never writes them.
-Emitted rows are never mutated, rewritten, or deleted;
-corrections are new rows. When the wrapper dies without writing
-<code>run_finished</code>, the LEAD authors a recovery <code>run_finished</code> row
-that says so explicitly (<code>error_stage</code>, a note naming the
-failure, and any manually-performed classification) — silent
-reconstruction that imitates a normal wrapper row is forbidden.
-Two live defects were found on day one — a resume no-op after a
-NEEDS_SCOPE early-return, and an in-place-edit crash hazard now
-covered by the atomic-mv install rule — and both are recorded
-in the adapter&#39;s operational lessons.</p>
-</li>
-<li><p><strong>claude-codex-report/v1 is the canonical session report.</strong>
-Every delegated session returns the envelope: machine-parsed
-header (run status, completion, finding counts by severity,
-verification results, scope-deviation flags) over a prose body.
-<code>run_finished</code> records the parse verdict and the extracted
-counts. A session without a valid envelope is not consumable as
-review or implementation evidence — it is raw substrate pending
-a lead ruling or a re-run. NEEDS_RULING early-returns are
-compliant envelopes, not failures.</p>
-</li>
-<li><p><strong>WRITE_SCOPE is enforced, not advisory.</strong> Each invocation
-declares its write scope up front; the runner diffs the
-worktree against that scope after the run. On violation the
-runner exits 77, the out-of-scope work is PRESERVED in an
-evidence bundle (status <code>failed_preserved</code>) and is never
-landed; the lead inspects the bundle and decides. A session
-that discovers it needs wider scope returns NEEDS_SCOPE as a
-structured request; scope expansion is PROSPECTIVE ONLY — a new
-invocation with the widened scope — never a retroactive
-blessing of an already-out-of-scope diff. WRITE_SCOPE strictly
-overrides any in-repo end-of-work instruction (AGENTS.md
-precedence section, per the CI-002 root cause).</p>
-</li>
-</ol>
-<p>This amends and supersedes only D-050&#39;s invocation-manifest
-compliance-surface clause. D-050&#39;s stop-card authority,
-process-trace obligation, and raw-log pointer policy are
-unchanged. v2 single-row-per-invocation snapshots remain valid
-evidence for pre-v3 invocations; new sessions emit v3.</p>
-<p>Alternatives considered:</p>
-<ol>
-<li>Run-report invocation summary as the surface. Rejected:
-summarization destroyed per-invocation auditability — the exact
-failure MET-001 exists to repair.</li>
-<li>Gitignored live bridge manifest as the authority. Rejected:
-structurally local-only; unignoring a shared live file creates
-multi-worktree contention and dirty-tree noise.</li>
-<li>Mutable per-invocation rows updated in place (start → finish →
-disposition on one row). Rejected: in-place mutation destroys
-the append-only audit property, makes wrapper crashes
-indistinguishable from clean rows, and invites silent
-retro-editing; the event stream keeps every state transition
-and its author.</li>
-<li>Free-form final messages as session reports. Rejected:
-unparseable; counts and scope flags cannot be mechanically
-extracted into <code>run_finished</code>.</li>
-<li>Advisory-only write scope (prompt-level restriction without a
-runner backstop). Rejected: the CI-002 deviation demonstrated
-that in-repo end-of-work instructions override polite prompt
-scoping; enforcement must be structural, with the work
-preserved rather than discarded so enforcement never destroys
-evidence.</li>
-</ol>
-<p>Consequences: session closeout must land the tracked manifest(s)
-before bookkeeping is declared complete; every <code>run_started</code> must
-be closed by a wrapper or lead-authored <code>run_finished</code> and a
-lead-authored disposition, with missing rows recorded as missing,
-never inferred from aggregates. D-063 Stage 2 may generate queries
-and projections over these files but may not replace the row-level
-source. Council-log layer-yield claims (D-061) should cite manifest
-rows.</p>
-<p>Revisit when: three substantial sessions have landed v3 manifests;
-or the one-file-per-session scheme shows material contention or
-ambiguity; or <code>run_consumed</code> coverage proves too burdensome to
-sustain (in which case narrow the event, do not revert to mutable
-rows).</p>
-<hr>
-<h2 id="adjudication-note-was-drafting-notes-for-the-lead">Adjudication note (was: drafting notes for the lead)</h2>
-<p>Lead-adjudicated 2026-07-11: accepted as drafted. The date
-(2026-07-11 with the 07-10 H4 parenthetical), the &quot;Status: accepted
-(C-028; process-layer)&quot; voice, the clause-2 recovery-row
-generalization from the live p2037-fixround recovery row
-(<code>error_stage: wrapper_crash_lead_inplace_edit</code>), the clause-4
-exit-77/<code>failed_preserved</code> semantics (verified against the live
-p2043-impl / p2044-fixround status files), and the v2-valid-for-
-pre-v3 transition sentence all stand. One addition per lead
-dictation: the day-one-defects sentence appended to clause 2.</p>
 <h2 id="d-065-bridge-protocol-v1-1-co-work-lane-session-wrappers-tolerant-envelope">D-065: bridge-protocol/v1.1 — co-work lane, session wrappers, tolerant envelope</h2>
 <ul>
 <li>Date: 2026-07-13 (Ed-directed; spec ratified from a lead+Sol xhigh
@@ -689,10 +468,273 @@ authoritative expanded-scope record).</li>
 <p>Addendum (same session, 2026-07-13): Ed named the merge; PR #65 MERGED
 as <code>d285989</code>; the v1.1 contract is now the current contract on main
 (merged-main suite lead-run: 1387 OK).</p>
+<p>Operational note (2026-07-15, Ed-approved lease adjudication): during the
+audit fix-wave resume, WO-010&#39;s <code>session-close</code> returned SCOPE_VIOLATION
+because the lead committed the gated diff BEFORE closing the session
+(lead HEAD movement, not worker overreach — the diff was scope-checked
+SCOPE_OK by the implementer&#39;s session-end check and independently by the
+fresh checker, PASS with 0 findings). Ed approved abandoning lease
+<code>lease-fcbdb925552d4859b792bb774ce15bdb</code> with that recorded reason
+(2026-07-15, live session). The harness permission layer correctly
+refused the lead&#39;s initial self-approved abandonment — an independent
+approval was required, and that separation should be preserved. Two
+operating lessons now standing: (1) <code>session-close</code> PRECEDES the lead
+commit; (2) never <code>codex-bridge resume --last</code> when any other Codex
+session may have run since — it resolves to the GLOBAL most-recent
+session (a same-machine WO-011 fix round briefly attached to its own
+checker&#39;s thread before being killed after one read-only call,
+rollout-audited to zero writes; resume by explicit session id instead).</p>
 <p>Evidence: PR #65 (final head <code>8b96bd4</code>, CI green, suite 1387 OK);
 review arc and per-layer catches in
 <code>docs/run_reports/2026-07-13-bridge-v11.md</code>; tracked invocation
 manifest <code>docs/process_traces/2026-07-13-bridge-v11.manifest.jsonl</code>.</p>
+<h2 id="d-066-scoped-spec-freeze-override-for-the-axi-extension-agenda-ed-override">D-066: Scoped spec-freeze override for the AXI extension agenda (Ed override)</h2>
+<ul>
+<li>Date: 2026-07-14 (Ed-directed; provenance <code>docs/axi-handoff.md</code> §2.1,
+carrying Ed&#39;s explicit words: &quot;I know we spec froze a way back but
+I&#39;m overriding that&quot;)</li>
+<li>Status: accepted (Ed override of standing freeze surfaces; C-033
+coherence-reviewed; process-layer)</li>
+<li>Phase: cross-phase / project management</li>
+</ul>
+<p>Context: the standing surfaces that would otherwise block the
+architectural-axes (AXI) extension work are the D-060
+depth-before-breadth stop line (no new campaign packs or registry
+expansion until its gates pass) and the contract-freeze discipline
+over adopted contracts (D-053 analysis-registry predeclaration
+freezes; D-058 token-normalization contract; frozen reducer metric
+semantics with legacy arms).</p>
+<p>Decision: the freeze is lifted FOR THE SCOPED PURPOSE of the AXI
+extensions only — burst-decode metric semantics (stream S-A), the
+batch axis, idle-basis reporting wording (D-067), and the
+schema/reducer/contract changes those require. The override removes
+the freeze as a BLOCKER, not the process:</p>
+<ol>
+<li>Every contract change still requires its own D-entry and council
+review.</li>
+<li>Legacy arms stay frozen — no re-dispatch of existing bundles.</li>
+<li>Claim ceilings are unchanged: everything caps at L2; L3 only via
+the existing Q4/AP-1 holdout machinery (D-070 clause 5).</li>
+<li>Window A ordering and [QUIET-MAC] window ownership are untouched.</li>
+<li>The 2026-07-13 comprehensive-audit gate is NOT dissolved: this
+entry is decision-log/process work permitted under the gate; AXI
+ACTION sequences after audit clearance.</li>
+</ol>
+<p>Options considered: (a) keep the freeze and defer AXI post-capstone —
+rejected by Ed (the agenda is advisor-aligned and capstone-bearing);
+(b) blanket unfreeze — rejected (reopens every settled contract and
+invites drift); (c) scoped lift with process intact — chosen
+(Ed-directed).</p>
+<p>Considerations: D-060&#39;s own text already permits gate-closing work and
+correctness fixes; AXI adds genuine breadth, hence an explicit
+recorded override rather than a reinterpretation.</p>
+<p>Revisit trigger: if AXI scope grows beyond the four named surfaces, a
+new entry is required — this override does not travel.</p>
+<h2 id="d-067-idle-reporting-basis-gross-headline-idle-subtracted-is-a-labeled-within-device-secondary-view">D-067: Idle reporting basis — gross headline; idle-subtracted is a labeled within-device secondary view</h2>
+<ul>
+<li>Date: 2026-07-14 (Ed-directed after the advisory session with
+Dr. Rivoire; provenance <code>docs/axi-handoff.md</code> §1/§2.2; final wording
+Ed-reviewed 2026-07-14 with four amendments incorporated)</li>
+<li>Status: accepted (C-033 coherence-reviewed)</li>
+<li>Phase: Phase 2+ reporting / analysis</li>
+</ul>
+<p>Decision:</p>
+<ol>
+<li><strong>Reporting, not recording.</strong> Dual-basis capture stays MANDATORY for
+every successfully measured, idle-eligible request-level bundle: the
+measurement methodology&#39;s report-both requirement is unchanged and
+raw traces remain preserved. Failed/unsupported bundles and bundles
+without a usable idle baseline keep the existing nullable semantics
+(<code>run_bundle_layout.md</code>; the methodology&#39;s &quot;when possible&quot; wording).
+Only reader-facing headline wording changes. This clause is about
+request-level metrics; per-phase energy stays gross-only per D-032 —
+no idle-subtracted phase maps are introduced.</li>
+<li><strong>Gross energy is the headline basis</strong> for all cross-device,
+cross-configuration, and split-vs-monolithic claims.</li>
+<li><strong>Idle-subtracted energy is retained</strong> as a clearly-labeled
+within-device marginal view. It is never used to rank devices or
+configurations.</li>
+<li><strong>Q4&#39;s fixed term (E = fixed + prefill + decode) is fit on gross
+energy</strong> across the workload sweep: &quot;fixed&quot; is estimated from data —
+capturing idle, model residency, and runtime overhead — not assumed
+equal to the measured idle baseline.</li>
+<li>Every reported number states its basis; any cross-configuration
+number is gross-first.</li>
+</ol>
+<p>Rationale (Dr. Rivoire, advisory session 2026-07-14): subtracting idle
+penalizes energy-proportional devices and rewards high-idle ones; for
+split runs, subtracting both nodes&#39; idles deletes exactly the cost the
+crossover question (Q1) adjudicates.</p>
+<p>Options considered: (a) idle-subtracted headline (the prior reader-
+facing emphasis) — rejected per the rationale above; (b) symmetric
+dual-basis with no declared headline — rejected (leaves cross-device
+ranking ambiguous and lets a reader pick the flattering basis); (c)
+gross headline with labeled idle-subtracted secondary — chosen.</p>
+<p>Consequences (named fixes):</p>
+<ul>
+<li>This entry SUPERSEDES the &quot;Primary Metric&quot; clause of
+<code>docs/contracts/token_normalization.md</code> (D-058) insofar as it defines
+headline request energy as idle-subtracted; the headline is now gross.
+The contract TEXT alignment is contract-bearing work assigned to
+stream S-A (which already amends that contract under D-066), not to
+the docs-only S-0.</li>
+<li>The Lakebed/status-site and front-facing wording correction — basis
+stated on every number, gross-first for any cross-configuration
+number — is a resulting task (stream S-0). This is the contradiction
+Dr. Rivoire originally caught on the status page.</li>
+<li>Headline-basis selection is closed by this entry;
+C-023-IDLE-STATIONARITY is unaffected as a constraint — it imposes
+idle-model sensitivity on idle-subtracted conclusions and stays alive
+as a sensitivity check on the secondary view.</li>
+<li>AP-BATCH and subsequent analysis plans fit on gross energy.</li>
+</ul>
+<p>Revisit trigger: the P1-003 wall-meter decision. Wall-boundary gross is
+the ideal endpoint, and Q6 tests whether the measurement boundary
+changes conclusions; when P1-003 lands, re-examine whether rail-gross
+remains an adequate headline or wall-calibrated gross supersedes it.</p>
+<p>Scope note: no re-measurement — bundles already record both bases over
+preserved raw traces; this is a reporting/wording change.</p>
+<h2 id="d-068-site-deployment-is-ed-manual-sessions-end-with-a-drift-report-never-a-deploy">D-068: Site deployment is Ed-manual; sessions end with a drift report, never a deploy</h2>
+<ul>
+<li>Date: 2026-07-14 (Ed-directed; provenance <code>docs/axi-handoff.md</code> §2.3)</li>
+<li>Status: accepted (C-033 coherence-reviewed; process-layer; effective
+on recording)</li>
+<li>Phase: cross-phase process</li>
+</ul>
+<p>Decision:</p>
+<ol>
+<li>The end-of-session bookkeeping arc NO LONGER regenerates or deploys
+the Lakebed site. No agent regenerates or deploys the site, ever.
+Deploy is an Ed-manual action.</li>
+<li>Replacement: a <strong>site-drift report</strong>. Lightweight version first: a
+script (e.g., <code>scripts/site_drift.py</code>) compares the deployed site&#39;s
+claimed snapshot metadata (commit hash / status revision) and key
+front-facing numbers against current repo state and writes/refreshes
+<code>docs/site/DRIFT.md</code> listing what is stale and which sections need
+regeneration. Sessions that change front-facing state end by
+refreshing DRIFT.md. A subagent diff (fetch live page, compare
+against repo docs) is an acceptable mechanism. Ed is indifferent to
+mechanism, firm on outcome: <strong>automation informs; Ed deploys.</strong></li>
+<li>The existing on-site drift banner remains as-is (it already
+self-reports staleness to readers).</li>
+<li>Amendments this entry makes elsewhere: <code>RUN_STATE.md</code> end-of-work
+step 8 (the C-013 regenerate+redeploy convention; the step&#39;s prior
+text misattributed it to C-012) is replaced by the DRIFT.md refresh;
+the audit close-out plan&#39;s &quot;site regen&quot; step is likewise replaced.
+Other tracked surfaces still carrying deploy instructions
+(<code>docs/orchestration.md</code>, generated <code>docs/site/*.html</code>,
+<code>site_capsule/*</code> capsule docs) are corrected in WO-031&#39;s freshness
+pass and stream S-0; dated run reports and audit history keep their
+historical wording.</li>
+</ol>
+<p>Options considered: (a) keep automated regen+deploy (the C-013
+convention) — rejected by Ed (website building leaves the automated
+loop); (b) manual deploy with no drift instrumentation — rejected
+(staleness becomes invisible between deploys); (c) manual deploy +
+agent-maintained drift report — chosen.</p>
+<p>Revisit trigger: if the DRIFT.md refresh proves burdensome or the
+drift check cannot observe the live page, revisit the MECHANISM (script
+vs subagent); the outcome (no agent deploys) is not revisitable except
+by Ed.</p>
+<h2 id="d-069-advisor-doc-alignment-stream-s-0-is-sanctioned-front-facing-work">D-069: Advisor-doc alignment (stream S-0) is sanctioned front-facing work</h2>
+<ul>
+<li>Date: 2026-07-14 (provenance <code>docs/axi-handoff.md</code> §2.4)</li>
+<li>Status: accepted (C-033 coherence-reviewed; process-layer)</li>
+<li>Phase: cross-phase / documentation</li>
+</ul>
+<p>Decision: the idle-basis, batching-agenda, and benchmark-vs-harness
+updates to <code>PROJECT_STATUS.md</code>, <code>README.md</code>, and the site sources
+(stream S-0) are corrections of reader-facing claims and terminology —
+the same class as the existing convention that front-facing docs
+misstating claims get fixed. Terminology split adopted for all
+reader-facing docs: <strong>harness</strong> = the instrument; <strong>benchmark</strong> = the
+frozen workload suite + run rules + strict validator layered on it.
+S-0 sequences immediately after audit clearance, or folds into the
+audit&#39;s own fix wave if a finding already covers the wording.</p>
+<p>Options considered: (a) defer to publication prep (P2-027) — rejected:
+the advisor is actively reading these docs against the updated proposal
+(&quot;Senior Capstone Proposal — JouleWise, rev. 2026-07-14, repo-aligned&quot;,
+Ed&#39;s Drive); (b) fix immediately post-audit — chosen.</p>
+<p>Considerations: S-0 is docs-only; it consumes no quiet-machine time and
+touches no contract — the one contract consequence of D-067 (the
+token-normalization Primary Metric text) is assigned to stream S-A, not
+S-0. S-0 ends by refreshing <code>docs/site/DRIFT.md</code> (D-068) so Ed can run
+one manual deploy.</p>
+<h2 id="d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings">D-070: Architectural-axes extension agenda (AXI): scope, claim posture, batch-axis rulings</h2>
+<ul>
+<li>Date: 2026-07-14 (Ed-directed; provenance <code>docs/axi-handoff.md</code>
+§1.1/§4/§5 plus Ed&#39;s rulings recorded this session)</li>
+<li>Status: accepted (C-033 coherence-reviewed)</li>
+<li>Phase: Phase 2+ research program</li>
+</ul>
+<p>Decision:</p>
+<ol>
+<li><strong>Agenda.</strong> Once the harness works, it must be able to characterize
+architectural inference features generally — static batching,
+speculative decoding / MTP, MoE vs dense, quantization, and
+reasoning-length variance — framed as stress tests of the single Q4
+thesis (E = fixed + coefficients·work), not five new theses.</li>
+<li><strong>Claim posture.</strong> Instrument support (L0 smoke bundles) for ALL
+axes. Ed ruling 2026-07-14 (supersedes the handoff&#39;s narrower
+default): ALL five axes get characterized-claim commitments with
+dedicated quiet-Mac hardware time — it is Ed&#39;s own hardware and Ed
+wants maximum axis flexibility. Sequencing and floor discipline are
+unchanged: every AP remains floor-gated on P2-015 floors,
+<code>TASK_QUEUE.md</code> remains the ordering authority, Window A outranks
+everything, and no AXI stream consumes a [QUIET-MAC] window until
+Window A completes.</li>
+<li><strong>Batch axis (Ed ruling).</strong> STATIC batching only for the capstone:
+AP-BATCH covers B ∈ {1,2,4,8,16} static dispatch. Continuous
+batching is DEFERRED as a post-capstone, NV-gated extension — not
+killed. BINDING continuous-ready design constraint so the deferral
+stays additive rather than rework: all batch-related event schema is
+<strong>request-scoped, not run-scoped</strong> — token and phase events carry a
+<code>request_id</code>; each request gets its own lifecycle envelope
+(submit/prefill/decode/complete) even though static runs happen to
+synchronize them; no schema assumption that all sequences share one
+prefill boundary or one decode window. The reducer MAY exploit
+synchronization for static-mode metrics but MUST NOT require it at
+the schema level. Schema placement pin: <code>request_id</code> lives in event
+<code>metadata</code> (<code>events.jsonl</code> <code>metadata.request_id</code>) — the five-key
+event contract gains no sixth top-level key. Request-grouped
+lifecycle/phase pairing is NEW-version reducer dispatch, purely
+additive; legacy arms stay frozen and no existing bundle is
+re-dispatched (D-066 clause 2). Rationale: a single model instance
+with B KV
+caches is memory-feasible on current hardware; only the serving
+scheduler is hardware-gated, so a future continuous stream (load
+generator, steady-state detection, energy-per-token-at-offered-load
+metric) becomes purely additive on top.</li>
+<li><strong>Registry.</strong> Existing rows already carry the axes — the C5-* rows
+live in <code>docs/research_question_bank.md</code>; the C-023-* and RQ-* rows
+live in <code>docs/research_question_registry.md</code> (D-055): C5-2.2 and
+C5-2.6 (batching), C5-2.5 + C-023-OUTPUT-IDENTITY (spec decode),
+C5-1.1 / C5-1.9 / RQ-TWO-MODEL-ACTIVE-NONCLAIM (MoE/dense), C5-1.12<ul>
+<li>C-023-QUALITY-EQUIV-QUANT (quantization), RQ-ENERGY-VARIANCE +
+C5-W.2 (reasoning variance). Two new rows to mint at their gates:
+a <strong>Mac-batching leg of C5-2.2</strong> (minted ONLY on an S-B <code>supported</code>
+verdict), and <strong>MOE×BATCH</strong> (candidate, ceiling L2, forbidden
+upgrade: no MoE-serving-efficiency generalization from one pair).</li>
+</ul>
+</li>
+<li><strong>Ceilings.</strong> Everything caps at L2 (L3 only through Q4/AP-1&#39;s
+existing holdout machinery); ceilings move only via replication rows
+(C5-3.1). No live claims from fixture-first code; PROVISIONAL until
+first live hardware contact.</li>
+</ol>
+<p>Options considered: (a) five independent theses — rejected (dilutes
+Q4 and is unfundable in the timeline); (b) axes as Q4 stress tests
+with narrow claim commitments (the handoff default: MoE/dense +
+batching only) — superseded by Ed&#39;s ruling; (c) axes as Q4 stress
+tests with all-axes commitment — chosen by Ed.</p>
+<p>Open item: the D-016 matched dense/MoE model pair remains with Ed and
+the advisor; stream S-D presents the proposal (same family, matched
+active params; fallback matched total) — do not finalize unilaterally.</p>
+<p>Revisit triggers: an S-B <code>unsupported</code> verdict removes the Mac-batching
+leg (the dated negative verdict is filed as a finding, Hailo idiom);
+measured P2-015 floors that make a predeclared AXI effect size
+undetectable send that AP back for redesign before any campaign is
+scheduled.</p>
 
 
   </div>
@@ -701,7 +743,7 @@ manifest <code>docs/process_traces/2026-07-13-bridge-v11.manifest.jsonl</code>.<
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/decision_log.md · commit 1844ffa · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/decision_log.md · commit 12a8b91 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

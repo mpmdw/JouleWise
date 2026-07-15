@@ -27,7 +27,12 @@ from joulewise.schemas import (
     RunStatus,
     SummaryMetrics,
 )
-from joulewise.suite import order_seed, suite_manifest_sha256
+from joulewise.suite import (
+    SUITE_SCHEMA_VERSION,
+    migrate_suite_manifest,
+    order_seed,
+    suite_manifest_sha256,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
@@ -138,6 +143,200 @@ class ExplodingRegistry:
         return adapters.resolve_transport(config)
 
 
+class InterruptingCleanupRuntime:
+    name = "interrupting-cleanup"
+
+    def __init__(self, primary: BaseException, cleanup_error: BaseException) -> None:
+        self.primary = primary
+        self.cleanup_error = cleanup_error
+        self.cleanup_calls = 0
+
+    def prepare(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        raise self.primary
+
+    def warmup(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        raise AssertionError("warmup must not run after interrupted prepare")
+
+    def run_workload(self, config: BenchmarkConfig, context=None) -> Any:
+        raise AssertionError("workload must not run after interrupted prepare")
+
+    def cleanup(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        self.cleanup_calls += 1
+        raise self.cleanup_error
+
+
+class InterruptingCleanupRegistry:
+    def __init__(self, runtime: InterruptingCleanupRuntime) -> None:
+        self.runtime = runtime
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return self.runtime, None
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_telemetry(config, clock)
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
+class InterruptDuringStartTelemetry:
+    """Sampler becomes live, then start is interrupted before confirmation."""
+
+    name = "interrupt-during-start"
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.live = False
+        self.stop_calls = 0
+
+    def start_sampling(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        result = self._inner.start_sampling(config, context)
+        if not result.ok:
+            return result
+        self.live = True
+        raise KeyboardInterrupt("injected after sampler start")
+
+    def stop_sampling(self, config: BenchmarkConfig, context=None):
+        self.stop_calls += 1
+        samples = self._inner.stop_sampling(config, context)
+        self.live = False
+        return samples
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+class InterruptDuringStartRegistry:
+    def __init__(self) -> None:
+        self.telemetry: InterruptDuringStartTelemetry | None = None
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            self.telemetry = InterruptDuringStartTelemetry(telemetry)
+            telemetry = self.telemetry
+        return telemetry, failure
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
+class InterruptAfterStartTransitionTelemetry:
+    """Interrupt alignment work after start returned with a live capture."""
+
+    name = "interrupt-after-start-transition"
+
+    def __init__(self, inner: Any, capture_path: Path) -> None:
+        self._inner = inner
+        self.capture_path = capture_path
+        self.live = False
+        self.stop_calls = 0
+        self.salvage_calls = 0
+        self._interrupt_alignment = False
+
+    def start_sampling(self, config: BenchmarkConfig, context=None) -> AdapterResult:
+        result = self._inner.start_sampling(config, context)
+        if result.ok:
+            self.capture_path.write_bytes(b"native capture survives\n")
+            self.live = True
+            self._interrupt_alignment = True
+        return result
+
+    def clock_alignments(self) -> list[dict[str, Any]]:
+        if self._interrupt_alignment:
+            self._interrupt_alignment = False
+            raise KeyboardInterrupt("injected during post-start alignment")
+        return []
+
+    def stop_sampling(self, config: BenchmarkConfig, context=None):
+        self.stop_calls += 1
+        samples = self._inner.stop_sampling(config, context)
+        self.live = False
+        return samples
+
+    def salvage_custody(self, context) -> list[dict[str, Any]]:
+        self.salvage_calls += 1
+        if self.live:
+            self.capture_path.unlink(missing_ok=True)
+        return []
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+class InterruptAfterStartTransitionRegistry:
+    def __init__(self, capture_path: Path) -> None:
+        self.capture_path = capture_path
+        self.telemetry: InterruptAfterStartTransitionTelemetry | None = None
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            self.telemetry = InterruptAfterStartTransitionTelemetry(
+                telemetry,
+                self.capture_path,
+            )
+            telemetry = self.telemetry
+        return telemetry, failure
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
+class InterruptAfterStopTelemetry:
+    """Interrupt post-stop alignment after recording one successful stop."""
+
+    name = "interrupt-after-stop"
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+        self.stop_calls = 0
+        self.stop_records: list[int] = []
+        self._interrupt_alignment = False
+
+    def stop_sampling(self, config: BenchmarkConfig, context=None):
+        self.stop_calls += 1
+        if self.stop_calls > 1:
+            raise AssertionError("stop_sampling must not be called twice")
+        samples = self._inner.stop_sampling(config, context)
+        self.stop_records.append(len(samples))
+        self._interrupt_alignment = True
+        return samples
+
+    def clock_alignments(self) -> list[dict[str, Any]]:
+        if self._interrupt_alignment:
+            self._interrupt_alignment = False
+            raise KeyboardInterrupt("injected after successful stop")
+        return []
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._inner, name)
+
+
+class InterruptAfterStopRegistry:
+    def __init__(self) -> None:
+        self.telemetry: InterruptAfterStopTelemetry | None = None
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            self.telemetry = InterruptAfterStopTelemetry(telemetry)
+            telemetry = self.telemetry
+        return telemetry, failure
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
 class PoisonTelemetry:
     """Wraps the real mock telemetry but returns non-JSON-serializable device
     metadata AND fails start_sampling (to drive the structured failure path)."""
@@ -148,9 +347,16 @@ class PoisonTelemetry:
         self._inner = inner
 
     def device_metadata(self, config: BenchmarkConfig, context=None) -> dict:
-        # An object() is not JSON-serializable; write_metadata must coerce it
-        # via default=str rather than abort the bundle (D-011).
-        return {"poison": object()}
+        cycle: dict[str, Any] = {}
+        cycle["self"] = cycle
+        # Every malformed category must reach the bundle writer's single
+        # quarantine pass without aborting failure-path finalization (D-011).
+        return {
+            "poison": object(),
+            "cycle": cycle,
+            "not_finite": float("inf"),
+            7: "non-string-key value",
+        }
 
     def measure_idle(self, config: BenchmarkConfig, context=None):
         return self._inner.measure_idle(config)
@@ -240,6 +446,7 @@ class SuspectIdleTelemetry:
             baseline,
             gpu_idle_ratio_mean=0.4,
             gpu_idle_ratio_min=0.0,
+            gpu_freq_mhz_mean=338.0,
             gpu_freq_hz_mean=338.0,
             idle_window_suspect=True,
         )
@@ -496,6 +703,9 @@ class ControllerTestCase(unittest.TestCase):
         )
         SummaryMetrics(
             status=status,
+            energy_request_j=data["energy_request_j"],
+            gross_energy_j=data["gross_energy_j"],
+            window_evidence_precheck=data.get("window_evidence_precheck"),
             failure_reason=reason,
             failure_message=data["failure_message"],
         ).validate()
@@ -871,6 +1081,10 @@ class HappyPathTests(ControllerTestCase):
         self.assertEqual(workload["output_policy"]["requested_tokens"], 8)
         self.assertEqual(workload["output_policy"]["emitted_tokens"], 8)
         self.assertEqual(
+            metadata["workload_observed"]["output_token_count"],
+            workload["output_policy"]["emitted_tokens"],
+        )
+        self.assertEqual(
             workload["output_policy"]["stop_condition"],
             "requested_tokens_emitted",
         )
@@ -887,7 +1101,11 @@ class HappyPathTests(ControllerTestCase):
 
     def test_injected_reducer_summary_is_written(self) -> None:
         # The 2D seam: swapping the reducer changes the written summary.
-        sentinel = SummaryMetrics(status=RunStatus.SUCCEEDED, energy_request_j=12.5)
+        sentinel = SummaryMetrics(
+            status=RunStatus.SUCCEEDED,
+            energy_request_j=12.5,
+            gross_energy_j=14.0,
+        )
         seen: list[Path] = []
 
         def reducer(bundle_path: Path) -> SummaryMetrics:
@@ -1044,6 +1262,101 @@ class UnexpectedExceptionTests(ControllerTestCase):
         self.assert_timestamps_non_decreasing(events)
 
 
+class InterruptFinalizationTests(ControllerTestCase):
+    def test_interrupt_during_sampler_start_stops_potentially_live_sampler(self) -> None:
+        registry = InterruptDuringStartRegistry()
+        config = make_config("controller-interrupt-during-sampler-start")
+
+        with self.assertRaisesRegex(KeyboardInterrupt, "after sampler start"):
+            run_benchmark(
+                config,
+                self.runs_root,
+                self.clock,
+                registry=registry,
+            )
+
+        assert registry.telemetry is not None
+        self.assertEqual(registry.telemetry.stop_calls, 1)
+        self.assertFalse(registry.telemetry.live)
+        bundle_path = self.runs_root / config.run_id
+        self.assert_complete_bundle(bundle_path)
+        events = self.read_events(bundle_path)
+        self.assertNotIn("sampling_started", [event["event_type"] for event in events])
+
+    def test_interrupt_after_start_transition_stops_before_custody_salvage(self) -> None:
+        capture_path = self.runs_root / "native-transition-capture"
+        registry = InterruptAfterStartTransitionRegistry(capture_path)
+        config = make_config("controller-interrupt-after-start-transition")
+
+        with self.assertRaisesRegex(KeyboardInterrupt, "post-start alignment"):
+            run_benchmark(
+                config,
+                self.runs_root,
+                self.clock,
+                registry=registry,
+            )
+
+        assert registry.telemetry is not None
+        self.assertEqual(registry.telemetry.stop_calls, 1)
+        self.assertFalse(registry.telemetry.live)
+        self.assertEqual(registry.telemetry.salvage_calls, 1)
+        self.assertEqual(capture_path.read_bytes(), b"native capture survives\n")
+
+    def test_interrupt_after_successful_stop_does_not_double_stop(self) -> None:
+        registry = InterruptAfterStopRegistry()
+        config = make_config("controller-interrupt-after-successful-stop")
+
+        with self.assertRaisesRegex(KeyboardInterrupt, "after successful stop"):
+            run_benchmark(
+                config,
+                self.runs_root,
+                self.clock,
+                registry=registry,
+            )
+
+        assert registry.telemetry is not None
+        self.assertEqual(registry.telemetry.stop_calls, 1)
+        self.assertEqual(len(registry.telemetry.stop_records), 1)
+        self.assert_complete_bundle(self.runs_root / config.run_id)
+
+    def test_keyboardinterrupt_and_systemexit_survive_cleanup_failures(self) -> None:
+        cases = [
+            (
+                "keyboard",
+                KeyboardInterrupt("primary keyboard interrupt"),
+                SystemExit("cleanup system exit"),
+            ),
+            (
+                "system-exit",
+                SystemExit("primary system exit"),
+                KeyboardInterrupt("cleanup keyboard interrupt"),
+            ),
+        ]
+        for suffix, primary, cleanup_error in cases:
+            with self.subTest(primary=type(primary).__name__):
+                runtime = InterruptingCleanupRuntime(primary, cleanup_error)
+                registry = InterruptingCleanupRegistry(runtime)
+                config = make_config("controller-interrupt-" + suffix)
+
+                with self.assertRaises(type(primary)) as caught:
+                    run_benchmark(
+                        config,
+                        self.runs_root,
+                        self.clock,
+                        registry=registry,
+                    )
+
+                self.assertEqual(str(caught.exception), str(primary))
+                self.assertEqual(runtime.cleanup_calls, 1)
+                bundle_path = self.runs_root / config.run_id
+                self.assert_complete_bundle(bundle_path)
+                stored = self.assert_summary_round_trips(bundle_path)
+                self.assertIn(type(primary).__name__, stored["failure_message"])
+                controller_log = (bundle_path / "logs" / "controller.log").read_text()
+                self.assertIn(type(cleanup_error).__name__, controller_log)
+                self.assertIn(str(cleanup_error), controller_log)
+
+
 class PoisonMetadataTests(ControllerTestCase):
     """A hostile adapter must not break the D-011 bundle-completion invariant.
 
@@ -1059,7 +1372,7 @@ class PoisonMetadataTests(ControllerTestCase):
         )
 
     def test_run_returns_normally_with_complete_bundle(self) -> None:
-        # Must not raise (the json.dumps coercion preserves D-011).
+        # Must not raise: structured quarantine preserves D-011.
         bundle_path, summary = self.run_poison()
         self.assertEqual(summary.status, RunStatus.FAILED)
         self.assert_complete_bundle(bundle_path)
@@ -1070,9 +1383,21 @@ class PoisonMetadataTests(ControllerTestCase):
         bundle_path, _ = self.run_poison()
         events = self.read_events(bundle_path)
         self.assert_run_finalized_last(events)
-        # The poison value was coerced to its str() rather than aborting.
         metadata = json.loads((bundle_path / "metadata.json").read_text())
-        self.assertIn("poison", metadata["device"])
+        self.assertIsNone(metadata["device"]["poison"])
+        self.assertEqual(metadata["device"]["cycle"], {"self": None})
+        self.assertIsNone(metadata["device"]["not_finite"])
+        self.assertNotIn("7", metadata["device"])
+        diagnostics = metadata["serialization_quarantine"]
+        self.assertEqual(
+            [(item["path"], item["reason"]) for item in diagnostics],
+            [
+                ("/device", "non_string_key"),
+                ("/device/cycle/self", "cycle"),
+                ("/device/not_finite", "non_finite_number"),
+                ("/device/poison", "unsupported_type"),
+            ],
+        )
 
 
 class DeterministicRunIdTests(ControllerTestCase):
@@ -1405,8 +1730,37 @@ class SuiteControllerTests(ControllerTestCase):
         self.assertIsNotNone(summary.suite_metrics)
         self.assertTrue((bundle_path / "suite_manifest.json").is_file())
         self.assertTrue((bundle_path / "outputs" / "suite_items.jsonl").is_file())
+        persisted_manifest = json.loads(
+            (bundle_path / "suite_manifest.json").read_text()
+        )
+        self.assertEqual(persisted_manifest["schema_version"], SUITE_SCHEMA_VERSION)
+        self.assertEqual(
+            persisted_manifest["execution_policy"]["cache_policy_verification"],
+            "declared_not_verified",
+        )
+        self.assertNotIn(
+            "cache_policy", persisted_manifest["execution_policy"]
+        )
+        self.assertTrue(
+            all("status_policy" not in item for item in persisted_manifest["items"])
+        )
         metadata = json.loads((bundle_path / "metadata.json").read_text())
         self.assertEqual(metadata["suite"]["suite_id"], "mock_suite_smoke")
+        persisted_hash = suite_manifest_sha256(persisted_manifest)
+        self.assertEqual(metadata["suite"]["manifest_sha256"], persisted_hash)
+        persisted_config = json.loads((bundle_path / "config.json").read_text())
+        source_manifest = json.loads(SUITE_MANIFEST_PATH.read_text())
+        self.assertEqual(
+            persisted_config["workload_profile"]["suite_manifest_sha256"],
+            suite_manifest_sha256(source_manifest),
+        )
+        self.assertNotEqual(
+            persisted_config["workload_profile"]["suite_manifest_sha256"],
+            persisted_hash,
+        )
+        self.assertEqual(
+            persisted_manifest, migrate_suite_manifest(source_manifest)
+        )
         events = self.read_events(bundle_path)
         types = [event["event_type"] for event in events]
         sampling_started = types.index("sampling_started")

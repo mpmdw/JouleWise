@@ -34,7 +34,11 @@ from joulewise.adapters.powermetrics import (
     samples_from_raw_powermetrics,
 )
 from joulewise.bundle import BundleError
-from joulewise.bundle_read import BundleReader, BundleReadError
+from joulewise.bundle_read import (
+    FROZEN_LEGACY_BUNDLE_IDENTITIES,
+    BundleReader,
+    BundleReadError,
+)
 from joulewise.clock import Clock, FakeClock, SystemClock
 from joulewise.controller import run_benchmark, run_experiment
 from joulewise.doctor import doctor_report, exit_code as doctor_exit_code
@@ -49,6 +53,8 @@ from joulewise.kv_size import (
     prompt_totals,
 )
 from joulewise.provenance import (
+    FIXED_BUDGET_EXACT,
+    FIXED_BUDGET_INCOMPLETE,
     PROMPT_TOKEN_IDS_HASH_DOMAIN,
     SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN,
     suite_prompt_plan_class,
@@ -58,12 +64,14 @@ from joulewise.reduce import reduce_bundle
 from joulewise.report import ReportError, generate_report
 from joulewise.schemas import (
     BenchmarkConfig,
+    is_admissible_succeeded_summary,
     RunStatus,
     RuntimeBackend,
     SchemaError,
     SUMMARY_REDUCER_VERSION,
     SummaryMetrics,
     TelemetryBackend,
+    summary_validation_problems,
 )
 from joulewise.validation import finite_float
 from joulewise.uncertainty_evidence import (
@@ -76,35 +84,7 @@ from joulewise.uncertainty_evidence import (
 _PROMPT_TOKEN_IDS_HASH_DOMAIN = PROMPT_TOKEN_IDS_HASH_DOMAIN
 _SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN = SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN
 
-# The pre-D-033 corpus; frozen forever, never extended.
-_STRICT_LEGACY_BUNDLE_IDENTITIES = frozenset(
-    {
-        (
-            "example-mac-mlx-local__r1",
-            "ee80585a2f6cee6aa7e12eb83c318fd88a934be02d5fa2fb2eb7509630640fd5",
-        ),
-        (
-            "example-mac-mlx-local__r2",
-            "08144a7be4a10d887babbd5fcd1a93f391c1db2d11c63d3131afad80b59cb373",
-        ),
-        (
-            "example-mac-mlx-local__r3",
-            "fe75fc3bafe0af7485fdf98b70ac3d07ccc1db502230bf1b180b94689ab54652",
-        ),
-        (
-            "example-mac-mlx-qwen35-122b-512t__r1",
-            "74761e420520e0d6d979be7d3d08aa6ff7e0f5f8ac8e48109d3dedc08d8d0b7a",
-        ),
-        (
-            "example-mac-mlx-qwen35-122b-512t__r2",
-            "8808632f0235b412d30563747283c397ad534edb711e4cec784712182cbe3b60",
-        ),
-        (
-            "example-mac-mlx-qwen35-122b-512t__r3",
-            "8be8dd955219a8631c8e37a1b3467f368f37624d07acebd2d52924137dff69f4",
-        ),
-    }
-)
+_STRICT_LEGACY_BUNDLE_IDENTITIES = FROZEN_LEGACY_BUNDLE_IDENTITIES
 
 
 def _load_config(path: Path) -> dict[str, Any]:
@@ -337,7 +317,18 @@ def _strict_problems(reader: BundleReader) -> list[str]:
         )
     else:
         in_window = sum(
-            1 for point in curve if window.start_s <= point.t <= window.end_s
+            1
+            for point in curve
+            if (
+                point.support_start_s is not None
+                and point.support_end_s is not None
+                and min(window.end_s, point.support_end_s)
+                > max(window.start_s, point.support_start_s)
+            )
+            or (
+                point.support_start_s is None
+                and window.start_s <= point.t <= window.end_s
+            )
         )
         if in_window < 2:
             problems.append(
@@ -357,13 +348,23 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     stored_idle_problems = _strict_idle_mean_uncertainty_problems(summary)
     problems.extend(stored_idle_problems)
     problems.extend(_strict_workload_provenance_problems(reader, summary))
-    problems.extend(_strict_emitted_token_ids_problems(reader))
+    problems.extend(_strict_realized_output_problems(reader))
     problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
     problems.extend(_strict_uncertainty_evidence_problems(reader))
     problems.extend(_strict_raw_to_trace_problems(reader))
-    if not version_problems:
-        fresh = reduce_bundle(reader.path).to_dict()
-        # The fresh 0.4.2 derivation is the raw/metadata authority.  Inspect it
+    # A schema-invalid stored summary is already rejected structurally.  Do
+    # not add a second derivation-drift diagnosis for the same malformed
+    # object; semantic re-reduction remains applicable to valid summaries.
+    if not version_problems and not summary_validation_problems(summary):
+        fresh = (
+            reduce_bundle(reader.path).to_dict()
+            if comparison_reducer_version is None
+            else reduce_bundle(
+                reader.path,
+                reducer_version=comparison_reducer_version,
+            ).to_dict()
+        )
+        # The fresh current derivation is the raw/metadata authority. Inspect it
         # before legacy additive-absence projection can hide the governed
         # object, while retaining the stored-summary check for unsupported
         # versions and tampered current-era summaries.  Exact diagnostics are
@@ -371,10 +372,6 @@ def _strict_problems(reader: BundleReader) -> list[str]:
         for problem in _strict_idle_mean_uncertainty_problems(fresh):
             if problem not in problems:
                 problems.append(problem)
-        if comparison_reducer_version is not None:
-            fresh["summary_provenance"]["reducer_version"] = (
-                comparison_reducer_version
-            )
         differing = _strict_summary_differences(
             fresh,
             summary,
@@ -404,6 +401,11 @@ _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
     "measurement_quality.idle_window_suspect",
 }
 
+# WO-007 landed additively within the already-live reducer-0.5.0 era. Stored
+# pre-repair 0.5.0 summaries remain distinguishable by this field's absence;
+# when present, normal recursive strict comparison still checks its value.
+ADDED_DURING_0_5_0 = frozenset({"idle_baseline.gpu_freq_mhz_mean"})
+
 ADDED_SINCE_0_3_0 = frozenset(
     {
         "measurement_quality.remote_cleanup_failed",
@@ -417,6 +419,7 @@ _STRICT_LEGACY_ADDITIVE_ABSENT_TOLERANCE = (
     _STRICT_ADDITIVE_ABSENT_TOLERANCE
     | ADDED_SINCE_0_3_0
     | ADDED_SINCE_0_4_1
+    | ADDED_DURING_0_5_0
     | {
         "idle_mean_uncertainty",
         "measurement_quality.token_counts_source",
@@ -632,12 +635,39 @@ def _strict_reducer_version_dispatch(
         ], set(), False, None
     reducer_version = provenance.get("reducer_version")
     if reducer_version == SUMMARY_REDUCER_VERSION:
-        return [], set(), False, None
-    if reducer_version == "0.4.1":
-        return [], ADDED_SINCE_0_4_1, False, "0.4.1"
+        return [], set(ADDED_DURING_0_5_0), False, None
+    frozen_absence: set[str]
+    if reducer_version == "0.4.2":
+        frozen_absence = set(ADDED_DURING_0_5_0)
+    elif reducer_version == "0.4.1":
+        frozen_absence = set(ADDED_SINCE_0_4_1 | ADDED_DURING_0_5_0)
+    else:
+        return _unsupported_reducer_version_problems(reducer_version), set(), False, None
+    # A current 0.5.0 summary cannot opt into a frozen arm by changing only its
+    # version label. Authentic 0.4.x shapes predate these additive fields.
+    if any(_summary_path_present(summary, path) for path in frozen_absence):
+        return _unsupported_reducer_version_problems(reducer_version), set(), False, None
+    return [], frozen_absence, False, reducer_version
+
+
+def _unsupported_reducer_version_problems(reducer_version: Any) -> list[str]:
     return [
-        "strict: unsupported reducer version; re-reduction required"
-    ], set(), False, None
+        "strict: unsupported reducer version; re-reduction required",
+        "strict: unsupported reducer version "
+        f"{reducer_version!r} for current-era bundle; superseded versions "
+        "cannot claim the current inter_token_throughput_tokens_s reduction "
+        f"shape and explicit re-reduction with {SUMMARY_REDUCER_VERSION} is "
+        "required",
+    ]
+
+
+def _summary_path_present(summary: dict[str, Any], path: str) -> bool:
+    current: Any = summary
+    for component in path.split("."):
+        if not isinstance(current, dict) or component not in current:
+            return False
+        current = current[component]
+    return True
 
 
 def _strict_legacy_bundle_metadata(metadata: Any) -> bool:
@@ -736,6 +766,150 @@ def _strict_emitted_token_ids_problems(reader: BundleReader) -> list[str]:
     return problems
 
 
+def _strict_realized_output_problems(reader: BundleReader) -> list[str]:
+    """Validate the designated realized-output fields against raw evidence."""
+
+    metadata = reader.raw_metadata()
+    if _strict_legacy_bundle_metadata(metadata):
+        # Frozen pre-D-033 single-run bundles keep structural compatibility.
+        # They have no designated output-policy record and therefore gain no
+        # exact/replay/ratio eligibility from this exemption.
+        return []
+    if not isinstance(metadata, dict):
+        return ["strict: realized output evidence: metadata.json is missing or invalid"]
+    workload = metadata.get("workload_provenance")
+    observed = metadata.get("workload_observed")
+    policy = workload.get("output_policy") if isinstance(workload, dict) else None
+    if not isinstance(policy, dict) or not isinstance(observed, dict):
+        return ["strict: realized output evidence is missing"]
+
+    problems: list[str] = []
+    emitted = policy.get("emitted_tokens")
+    requested = policy.get("requested_tokens")
+    observed_emitted = observed.get("output_token_count")
+    stop = policy.get("stop_condition")
+    name = policy.get("name")
+    generator = workload.get("generator") if isinstance(workload, dict) else None
+    is_mlx_single = (
+        not isinstance(metadata.get("suite"), dict)
+        and isinstance(generator, dict)
+        and generator.get("name") == "mlx_lm.stream_generate"
+    )
+    if not _is_nonnegative_int(emitted):
+        problems.append(
+            "strict: metadata.workload_provenance.output_policy.emitted_tokens "
+            "is not a non-negative integer"
+        )
+    if not _is_positive_int(requested):
+        problems.append(
+            "strict: metadata.workload_provenance.output_policy.requested_tokens "
+            "is not a positive integer"
+        )
+    if not isinstance(stop, str) or not stop:
+        problems.append(
+            "strict: metadata.workload_provenance.output_policy.stop_condition "
+            "is not a non-empty string"
+        )
+    if isinstance(metadata.get("suite"), dict):
+        try:
+            records = reader.suite_item_records()
+        except BundleReadError as exc:
+            return problems + [f"strict: realized suite output evidence: {exc}"]
+        if records is None:
+            return problems + ["strict: realized suite output evidence is missing"]
+        # The suite aggregate stop is compatibility metadata only. Realized
+        # stop evidence remains on every suite item and is validated by the
+        # BundleReader structural path.
+        return problems + _strict_emitted_token_ids_problems(reader)
+
+    if observed_emitted != emitted:
+        problems.append(
+            "strict: metadata.workload_observed.output_token_count does not match "
+            "metadata.workload_provenance.output_policy.emitted_tokens"
+        )
+
+    raw_config = reader.raw_config()
+    workload_config = (
+        raw_config.get("workload_profile") if isinstance(raw_config, dict) else None
+    )
+    configured_requested = (
+        workload_config.get("output_tokens")
+        if isinstance(workload_config, dict)
+        else None
+    )
+    if (
+        is_mlx_single
+        and configured_requested is not None
+        and requested != configured_requested
+    ):
+        problems.append(
+            "strict: metadata.workload_provenance.output_policy.requested_tokens "
+            "does not match config.workload_profile.output_tokens"
+        )
+
+    if is_mlx_single and name in {FIXED_BUDGET_EXACT, FIXED_BUDGET_INCOMPLETE}:
+        if emitted != requested:
+            problems.append(
+                "strict: single fixed-budget run emitted_tokens does not equal "
+                "requested_tokens"
+            )
+        if name != FIXED_BUDGET_EXACT or stop != "requested_tokens_emitted":
+            problems.append(
+                "strict: single fixed-budget run lacks a realized exact stop"
+            )
+        token_rows, token_row_problems = _strict_jsonl_object_count(
+            reader.path / "outputs" / "tokens.jsonl",
+            "outputs/tokens.jsonl",
+        )
+        problems.extend(token_row_problems)
+        if _is_nonnegative_int(emitted) and token_rows != emitted:
+            problems.append(
+                f"strict: outputs/tokens.jsonl row count {token_rows} does not "
+                f"equal emitted_tokens {emitted}"
+            )
+        try:
+            event_count = len(reader.token_timestamps())
+        except BundleReadError as exc:
+            problems.append(f"strict: realized output token events: {exc}")
+        else:
+            if _is_nonnegative_int(emitted) and event_count != emitted:
+                problems.append(
+                    f"strict: decode token-event count {event_count} does not equal "
+                    f"emitted_tokens {emitted}"
+                )
+        response = workload.get("response") if isinstance(workload, dict) else None
+        if not isinstance(response, dict) or "emitted_token_ids" not in response:
+            problems.append(
+                "strict: metadata.workload_provenance.response.emitted_token_ids "
+                "is required for single fixed-budget output evidence"
+            )
+
+    return problems + _strict_emitted_token_ids_problems(reader)
+
+
+def _strict_jsonl_object_count(path: Path, label: str) -> tuple[int, list[str]]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return 0, [f"strict: {label} cannot be read: {exc}"]
+    count = 0
+    problems: list[str] = []
+    for line_index, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        count += 1
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError as exc:
+            problems.append(
+                f"strict: {label} line {line_index} is not valid JSON: {exc}"
+            )
+            continue
+        if not isinstance(value, dict):
+            problems.append(f"strict: {label} line {line_index} is not a JSON object")
+    return count, problems
+
+
 def _strict_emitted_token_ids_length_problems(
     emitted_token_ids: Any,
     emitted_tokens: Any,
@@ -794,24 +968,9 @@ def _strict_budgeted_suite_prompt_count_problems(reader: BundleReader) -> list[s
 
 
 def _strict_suite_item_records(reader: BundleReader) -> list[tuple[int, dict[str, Any]]]:
-    path = reader.path / "outputs" / "suite_items.jsonl"
-    if not path.is_file():
-        return []
-    try:
-        text = path.read_text()
-    except OSError:
-        return []
-    records: list[tuple[int, dict[str, Any]]] = []
-    for index, line in enumerate(text.splitlines(), start=1):
-        if not line.strip():
-            continue
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(record, dict):
-            records.append((index, record))
-    return records
+    return _tolerant_jsonl_object_records(
+        reader.path / "outputs" / "suite_items.jsonl"
+    )
 
 
 def _strict_required_object_keys(
@@ -895,7 +1054,7 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
         problems.append(
             "strict: uncertainty evidence: sample_phase does not match paired-clock/raw-plist derivation"
         )
-    events = _strict_suite_item_records_from_path(reader.path / "events.jsonl")
+    events = _tolerant_jsonl_object_records(reader.path / "events.jsonl")
     marker_epochs: dict[str, float] = {}
     for _line, event in events:
         event_type = event.get("event_type")
@@ -1024,13 +1183,17 @@ def _strict_uncertainty_scalar(
         )
 
 
-def _strict_suite_item_records_from_path(path: Path) -> list[tuple[int, dict[str, Any]]]:
+def _tolerant_jsonl_object_records(path: Path) -> list[tuple[int, dict[str, Any]]]:
+    """Collect numbered JSON-object rows without hiding adjacent diagnostics."""
+
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return []
     records: list[tuple[int, dict[str, Any]]] = []
     for index, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
         try:
             value = json.loads(line)
         except json.JSONDecodeError:
@@ -1075,6 +1238,7 @@ def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
                 raw_path.read_bytes(),
                 plist_anchor_offset_s=anchor_offset_s,
             )
+            require_interval_support = False
         else:
             evidence = metadata.get("uncertainty_evidence")
             clock_anchor = (
@@ -1092,9 +1256,12 @@ def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
                 raw_path.read_bytes(),
                 first_record_endpoint_s=point_s,
             )
+            require_interval_support = True
     except (OSError, ValueError) as exc:
         return [f"strict: raw-to-trace: cannot derive raw/{RAW_SAMPLES_NAME}: {exc}"]
-    return _compare_raw_derived_samples(reader, expected)
+    return _compare_raw_derived_samples(
+        reader, expected, require_interval_support=require_interval_support
+    )
 
 
 def _verify_mock_raw_to_trace_exemption(reader: BundleReader) -> list[str]:
@@ -1174,6 +1341,7 @@ def _compare_raw_derived_samples(
     expected: list[Any],
     *,
     backend: str | None = None,
+    require_interval_support: bool = False,
 ) -> list[str]:
     prefix = f"{backend} " if backend else ""
     try:
@@ -1224,6 +1392,32 @@ def _compare_raw_derived_samples(
                 f"{index} rail {rail!r} does not match raw-derived "
                 f"{expected_rail!r}"
             ]
+        if require_interval_support:
+            try:
+                interval_start_s = finite_float(
+                    row.get("interval_start_s"),
+                    f"power_trace.csv row {index} interval_start_s",
+                )
+                interval_end_s = finite_float(
+                    row.get("interval_end_s"),
+                    f"power_trace.csv row {index} interval_end_s",
+                )
+            except ValueError as exc:
+                return [f"strict: raw-to-trace: {exc}"]
+            if interval_start_s != sample.interval_start_s:
+                return [
+                    f"strict: raw-to-trace: {prefix}power_trace.csv row "
+                    f"{index} rail {rail!r} interval_start_s "
+                    f"{interval_start_s!r} does not match raw-derived "
+                    f"{sample.interval_start_s!r}"
+                ]
+            if interval_end_s != sample.interval_end_s:
+                return [
+                    f"strict: raw-to-trace: {prefix}power_trace.csv row "
+                    f"{index} rail {rail!r} interval_end_s "
+                    f"{interval_end_s!r} does not match raw-derived "
+                    f"{sample.interval_end_s!r}"
+                ]
     return []
 
 
@@ -1289,11 +1483,16 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
         )
         return 2
     summary = reduce_bundle(bundle_path)
+    try:
+        payload = summary.to_dict()
+    except SchemaError as exc:
+        print(f"reduced summary is not admissible: {exc}", file=sys.stderr)
+        return 3
     (bundle_path / "summary_metrics.json").write_text(
-        json.dumps(summary.to_dict(), indent=2, sort_keys=True) + "\n"
+        json.dumps(payload, indent=2, sort_keys=True) + "\n"
     )
     print(_bundle_line(bundle_path, summary))
-    return 0 if summary.status == RunStatus.SUCCEEDED else 3
+    return 0 if is_admissible_succeeded_summary(payload) else 3
 
 
 # ---------------------------------------------------------------------------

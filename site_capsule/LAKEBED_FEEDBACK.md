@@ -238,3 +238,49 @@ Capsule deploy ID: `dep_2I04CG6tQ4t0mzY7`. Live app:
 - Suggestion for the maintainer: make `npx lakebed` cache-reusable without a
   registry lookup, document a pinned local CLI path, and print stable artifact
   bytes versus the cap at the end of `build`.
+
+## 2026-07-13 — Lakebed 0.0.29 rejects legacy DB APIs, and cached packages do not satisfy offline lock generation
+- Command / action:
+  - `python3 -m unittest tests.test_pack_capsule tests.test_build_site_parsers`
+    with Lakebed resolved from the existing npm cache at
+    `~/.npm/_npx/3eb8d3eaaf4ef1b4/node_modules/lakebed/bin/lakebed.js`.
+  - `npm install --package-lock-only --ignore-scripts --offline` from both the
+    repository root and `site_capsule/` after declaring exact dependencies.
+- Expected: the cached 0.0.29 validator would build the existing capsule, and
+  npm's offline mode would reuse the already cached Marked 18.0.6 and Lakebed
+  0.0.29 tarballs/metadata to write lockfiles without registry access.
+- Observed (verbatim validator diagnostic):
+
+  ```text
+  Anonymous build failed:
+  - server/index.ts: where() is a legacy full-scan database API. Declare an index and use withIndex().
+  - server/index.ts: all() is a legacy database API. Use collect(), take(), first(), or paginate().
+  ```
+
+  Both offline npm invocations then failed with the package-specific form of:
+
+  ```text
+  npm error code ENOTCACHED
+  npm error request to https://registry.npmjs.org/lakebed failed: cache mode is 'only-if-cached' but no cached response is available.
+  npm error Log files were not written due to an error writing to the directory: /Users/edr/.npm/_logs
+  ```
+
+  Lakebed/Node invocations also repeatedly printed:
+
+  ```text
+  Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+  ```
+- Workaround: declared `by_source` indexes and migrated both reads to
+  `withIndex(...).collect()`; made writes explicitly awaited. Created the
+  committed locks from the cache installation's resolved URLs and integrity
+  metadata, then successfully normalized/validated them with
+  `npm install --package-lock-only --offline --cache /private/tmp/joulewise-npm-cache`.
+  Canonical scripts now ignore ambient npx caches and use exact locked local
+  binaries or explicit exact-version overrides.
+- Severity for a production user: blocker for the validator API migration;
+  major for reproducible offline setup; paper-cut for the color warning.
+- Suggestion for the maintainer: include a database migration note in release
+  output when legacy APIs become errors; make `--version` print the CLI version
+  (0.0.29 printed usage instead); ensure `npm --offline` can reuse an existing
+  npx package cache or document why it cannot; and avoid setting conflicting
+  color environment variables in subprocesses.

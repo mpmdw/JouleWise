@@ -561,6 +561,15 @@ that satisfies the per-status contract", not merely "parseable JSON
 object". Historical bundles are unaffected: real corpus summaries
 already carry the full field set.
 
+Superseded in part (2026-07-15, WO-002/R3; D-043): a no-idle-baseline
+reduction may remain SUCCEEDED with `energy_request_j` null under the
+R3 DISTINCT absent-energy admission state — the succeeded-summary
+predicate accepts it while every claim gate requiring request energy
+fails closed on that state. The 2026-07-07 shared-validator amendment's
+finite-energy requirement no longer binds that one admission state; see
+`docs/reviews/2026-07-13-comprehensive-audit/packets/ed-rulings.json`
+R3 and the WO-002 canonical predicate.
+
 ---
 
 ## D-012: Failure-reason to run-status mapping
@@ -838,6 +847,13 @@ paths/revisions; KV-size table row computed for the chosen models.
 
 Revisit when: a chosen model's weights become unavailable or a target cannot
 load it (then the recorded fallback candidate is promoted).
+
+Amended (2026-07-15, WO-019; D-043): CI scope extends beyond the core
+suite — a clean-clone publication release check (`scripts/release_check.py
+--dry-run`, real temporary-directory execution of every non-secret seam)
+and the WO-021 `gen_state.py --check` drift gate are CI jobs; credential-
+bearing steps (deploy) remain outside CI per D-068 and the publication
+release checklist.
 
 ---
 
@@ -1664,6 +1680,15 @@ own strict semantics), or a reducer version bump makes historical
 summaries legitimately differ from fresh reductions (then strict needs
 a provenance-aware comparison, see D-028's revisit note).
 
+Superseded in part (2026-07-15, WO-005; D-043): the P2-044 idle-
+dependence amendment's frozen arithmetic-mean and trapezoidal-point-
+estimand rules are replaced by reducer 0.5.0's duration-weighted idle
+mean/variance/HAC/ESS with first-class interval support and a declared-
+version dispatch matrix; legacy arms stay frozen under their original
+rules (no re-dispatch). See the WO-005 frozen semantics spec and
+reconciliation receipt under
+`docs/reviews/2026-07-13-comprehensive-audit/receipts/`.
+
 ---
 
 ## D-031: Multi-model council review, PR convention, and drift controls
@@ -2361,6 +2386,14 @@ Revisit when: schema v0.2 export (D-008) restates the serialization
 rules; or a third omission-serialized field is proposed (then decide a
 general rule instead of accreting exceptions).
 
+Amended (2026-07-15, WO-009/R4; D-043): per-field manifest policy-knob
+semantics are now explicit at the persistence layer (v2 bundle
+manifests): `order_policy` and `items[].output_policy` enforced;
+`cache_policy` descriptive-provenance with a mandatory declared-not-
+verified marker; `within_bundle_repeats` and `warmup_policy`
+reserved-compat; `default_output_policy` descriptive; `status_policy`
+REMOVED (non-default values rejected). See ed-rulings.json R4.
+
 ---
 
 ## D-045: Suite substrate execution semantics
@@ -2431,6 +2464,11 @@ adjudication section):
 
 Revisit when: composite/split bundles (schema v0.2) touch suite
 manifests; or the first real suite campaign contradicts a pin.
+
+Amended (2026-07-15, WO-009/R4; D-043): execution-policy knob semantics
+at the persistence layer follow the R4 per-field ruling recorded under
+D-044's amendment (enforced vs descriptive-provenance vs reserved-compat
+vs removed).
 
 ---
 
@@ -2739,6 +2777,15 @@ Revisit when: GitHub raw-content fetch becomes unreliable enough to need
 an authenticated token or when a formal advisor portal with user-specific
 state is required.
 
+Amended (2026-07-15, integration budget fix; recorded as a PARTIAL
+pre-implementation of deferred AUD-WO-039): the packed capsule omits the
+generated task-queue payload — its routes alias to the Roadmap page —
+to hold the 1-MiB Lakebed artifact under the conservative budget after
+the audit fix wave's doc growth. The tracked TASK_QUEUE.md (whose live
+queue is now the WO-021 generated region) remains the authoritative
+long-form source; the full retained-route/page inventory and any
+compatibility endpoint decision remain with AUD-WO-039 at its landing.
+
 ## D-052: Capstone scope contract — frozen umbrella headline and contribution ladder
 
 - Date: 2026-07-09
@@ -2881,6 +2928,12 @@ Consequences: suite campaigns can execute the C-015 rotation promises with
 auditable order provenance; campaign-level config ordering remains
 order_manifest.json (a distinct mechanism — see the campaign-packs README
 operator note).
+
+Amended (2026-07-15, WO-009/R4; D-043): `order_policy` is confirmed
+ENFORCED at the persistence layer under the R4 per-field ruling (see
+D-044's amendment); the remaining execution-policy knobs carry their
+ruled enforce/descriptive/reserved/removed semantics in v2 bundle
+manifests.
 
 ## D-057: Uncertainty terms — drift is a bound; claim-gate reason codes are stable vocabulary
 
@@ -3195,6 +3248,16 @@ current_policy.md first (the lead's draft position — REVERSED in
 council: it leaves the demonstrated drift mode active); full big-bang
 migration (rejected: risks the drift it cures).
 
+
+Amended (2026-07-15, WO-021/R1 choice A; D-043): the Stage-1 kernel's
+NOT_AUTHORITATIVE_DERIVED_VIEW posture is superseded — schema v3 makes
+the kernel AUTHORITATIVE_WORK_SELECTION_STATE (work selection ONLY;
+phase completion stays with exit checklists, policy with this log,
+scientific truth with evidence artifacts), adds active_global_gates
+with conjunctive select semantics beneath stop-card precedence, and
+demotes competing hand-authored work-selection surfaces to one
+generated region per file.
+
 ---
 
 ## D-064: Delegated-invocation compliance surface — tracked JSONL event stream, report envelope, enforced write scope
@@ -3398,6 +3461,14 @@ session may have run since — it resolves to the GLOBAL most-recent
 session (a same-machine WO-011 fix round briefly attached to its own
 checker's thread before being killed after one read-only call,
 rollout-audited to zero writes; resume by explicit session id instead).
+Extension (2026-07-15, same session): Ed approved two further lease
+abandonments on the same fact pattern — the supersession session
+(lead decision-log bench edits during the active lease) and the
+ultra-fix session (three receipt files excluded by the session-open
+directory-normalization gap, 4th occurrence, TOOL-01; reversal path:
+revert 913a2a6). Both recorded with approvals and reasons in
+`.codex-bridge/workspace-lease-events.jsonl`; the harness classifier
+correctly refused every lead self-approval attempt first.
 
 Evidence: PR #65 (final head `8b96bd4`, CI green, suite 1387 OK);
 review arc and per-layer catches in

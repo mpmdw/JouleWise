@@ -43,7 +43,11 @@ if str(ROOT) not in sys.path:
 from joulewise.schemas import BenchmarkConfig  # noqa: E402
 from joulewise.analysis_manifest import (  # noqa: E402
     ANALYSIS_MANIFEST_NAME,
+    AP_RELATIVE_PATH,
+    REGISTRY_RELATIVE_PATH,
     build_slice_2m_analysis_manifest,
+    load_analysis_registry,
+    sha256_bytes,
     write_manifest_atomic,
 )
 
@@ -58,9 +62,9 @@ SENTINEL_PROFILE = ("short_short_sentinel", 128, 64)
 SENTINEL_PROFILE_NAME = SENTINEL_PROFILE[0]
 SENTINEL_POSITIONS = ("start", "end")
 SENTINEL_ROLE = "drift_sentinel"
-REPETITIONS = 5
 ORDER_MANIFEST_NAME = "order_manifest.json"
 ORDER_SEED = 2000005
+MAX_AUTHORIZED_REPETITIONS = 10
 MODEL_TAG_RE = re.compile(r"^[a-z0-9_-]+$")
 PROFILE_NAMES = tuple(profile_name for profile_name, _, _ in PROFILE_MATRIX)
 
@@ -70,6 +74,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--base", required=True, help="Base config JSON path")
     parser.add_argument("--model-tag", required=True, help="Lowercase model tag for run_id")
     parser.add_argument("--out-dir", required=True, help="Directory for generated configs")
+    parser.add_argument(
+        "--analysis-registry",
+        default=str(ROOT / REGISTRY_RELATIVE_PATH),
+        help="Frozen AP-2 analysis-registry JSON; its hash-bound n controls matrix size",
+    )
     return parser.parse_args(argv)
 
 
@@ -156,15 +165,19 @@ def write_config(path: Path, config: dict[str, Any]) -> None:
     path.write_text(rendered, encoding="utf-8", newline="\n")
 
 
-def expected_output_paths(out_dir: Path, model_tag: str) -> set[Path]:
+def expected_output_paths(
+    out_dir: Path,
+    model_tag: str,
+    planned_n_blocks: int,
+) -> set[Path]:
     baseline_paths = {
         out_dir / f"{model_tag}-r{rep}-{profile_name}.json"
-        for rep in range(1, REPETITIONS + 1)
+        for rep in range(1, planned_n_blocks + 1)
         for profile_name, _, _ in PROFILE_MATRIX
     }
     sentinel_paths = {
         out_dir / f"{model_tag}-r{rep}-{SENTINEL_PROFILE_NAME}-{position}.json"
-        for rep in range(1, REPETITIONS + 1)
+        for rep in range(1, planned_n_blocks + 1)
         for position in SENTINEL_POSITIONS
     }
     return baseline_paths | sentinel_paths
@@ -222,17 +235,17 @@ def parse_generated_filename_with_suffix(
     if not model_tag or not rep_text.isdigit():
         return None
     rep = int(rep_text)
-    if 1 <= rep <= REPETITIONS:
+    if 1 <= rep <= MAX_AUTHORIZED_REPETITIONS:
         return model_tag, rep, profile_name
     return None
 
 
 def workload_order_for_rep(rep: int) -> list[str]:
     names = list(PROFILE_NAMES)
-    if rep < REPETITIONS:
+    if rep <= len(names):
         offset = rep - 1
         return names[offset:] + names[:offset]
-    rng = random.Random(ORDER_SEED)
+    rng = random.Random(ORDER_SEED if rep == 5 else ORDER_SEED + rep)
     seeded = names[:]
     rng.shuffle(seeded)
     return seeded
@@ -271,7 +284,7 @@ def generated_matrix_entries(out_dir: Path) -> list[tuple[Path, str, int, str, s
     return entries
 
 
-def build_order_manifest(out_dir: Path) -> dict[str, Any]:
+def build_order_manifest(out_dir: Path, planned_n_blocks: int) -> dict[str, Any]:
     """Build the generated execution-order manifest.
 
     ``rotation_scheme.workloads`` intentionally lists only the four rotated
@@ -285,22 +298,33 @@ def build_order_manifest(out_dir: Path) -> dict[str, Any]:
         for path, model_tag, rep, profile_name, run_id in entries
     }
     model_tags = sorted({model_tag for _, model_tag, _, _, _ in entries})
-    missing_sentinels: list[str] = []
+    incomplete_blocks: list[str] = []
+    expected_profiles = set(PROFILE_NAMES) | {
+        f"{SENTINEL_PROFILE_NAME}-{position}" for position in SENTINEL_POSITIONS
+    }
     for model_tag in model_tags:
-        for rep in range(1, REPETITIONS + 1):
-            missing_positions = [
-                position
-                for position in SENTINEL_POSITIONS
-                if (model_tag, rep, f"{SENTINEL_PROFILE_NAME}-{position}") not in by_key
-            ]
-            if missing_positions:
-                missing_sentinels.append(
-                    f"(model_tag={model_tag}, rep={rep}: {', '.join(missing_positions)})"
+        observed_reps = {
+            rep for _, candidate_tag, rep, _, _ in entries if candidate_tag == model_tag
+        }
+        expected_reps = set(range(1, planned_n_blocks + 1))
+        if observed_reps != expected_reps:
+            incomplete_blocks.append(
+                f"(model_tag={model_tag}: reps={sorted(observed_reps)}, expected={sorted(expected_reps)})"
+            )
+        for rep in sorted(expected_reps):
+            observed_profiles = {
+                profile_name
+                for _, candidate_tag, candidate_rep, profile_name, _ in entries
+                if candidate_tag == model_tag and candidate_rep == rep
+            }
+            if observed_profiles != expected_profiles:
+                incomplete_blocks.append(
+                    f"(model_tag={model_tag}, rep={rep}: profiles={sorted(observed_profiles)})"
                 )
-    if missing_sentinels:
+    if incomplete_blocks:
         raise ValueError(
-            "missing drift sentinel config(s) for block(s): "
-            + "; ".join(missing_sentinels)
+            "mixed-n composition or incomplete block authority: "
+            + "; ".join(incomplete_blocks)
         )
 
     executed_order: list[dict[str, Any]] = []
@@ -308,7 +332,7 @@ def build_order_manifest(out_dir: Path) -> dict[str, Any]:
     rep_model_order: dict[str, list[str]] = {}
     index = 1
     block_index = 1
-    for rep in range(1, REPETITIONS + 1):
+    for rep in range(1, planned_n_blocks + 1):
         workload_order = workload_order_for_rep(rep)
         model_order = model_order_for_rep(model_tags, rep)
         rep_workload_order[str(rep)] = workload_order
@@ -385,6 +409,7 @@ def build_order_manifest(out_dir: Path) -> dict[str, Any]:
         )
     return {
         "schema_version": "joulewise.order_manifest.v1",
+        "planned_n_blocks": planned_n_blocks,
         "seed": ORDER_SEED,
         "rotation_scheme": {
             "workloads": list(PROFILE_NAMES),
@@ -396,18 +421,83 @@ def build_order_manifest(out_dir: Path) -> dict[str, Any]:
     }
 
 
-def write_order_manifest(out_dir: Path) -> Path:
-    manifest = build_order_manifest(out_dir)
+def write_order_manifest(out_dir: Path, planned_n_blocks: int) -> Path:
+    manifest = build_order_manifest(out_dir, planned_n_blocks)
     path = out_dir / ORDER_MANIFEST_NAME
     write_manifest_atomic(path, manifest)
     return path
 
 
-def write_analysis_manifest(out_dir: Path) -> Path:
-    manifest = build_slice_2m_analysis_manifest(out_dir, repository_root=ROOT)
+def write_analysis_manifest(out_dir: Path, registry_path: Path) -> Path:
+    manifest = build_slice_2m_analysis_manifest(
+        out_dir,
+        repository_root=ROOT,
+        registry_path=registry_path,
+    )
     path = out_dir / ANALYSIS_MANIFEST_NAME
     write_manifest_atomic(path, manifest)
     return path
+
+
+def ensure_existing_freeze_matches(
+    out_dir: Path,
+    registry_sha256: str,
+    planned_n_blocks: int,
+) -> None:
+    """Refuse to mutate a directory already frozen under another n authority."""
+    path = out_dir / ANALYSIS_MANIFEST_NAME
+    if not path.exists():
+        return
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        frozen_hash = manifest["source"]["registry_template"]["sha256"]
+        frozen_n = manifest["design"]["sampling_plan"]["planned_n_blocks"]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ValueError(f"cannot verify existing frozen analysis manifest {path}: {exc}") from exc
+    if frozen_hash != registry_sha256 or frozen_n != planned_n_blocks:
+        raise ValueError(
+            "post-freeze n mutation detected: output directory is bound to "
+            f"registry_sha256={frozen_hash}, n={frozen_n}; requested "
+            f"registry_sha256={registry_sha256}, n={planned_n_blocks}"
+        )
+
+
+def ensure_other_models_match_block_authority(
+    out_dir: Path,
+    current_model_tag: str,
+    planned_n_blocks: int,
+) -> None:
+    """Reject mixed-n composition before writing the current model's files."""
+    expected_profiles = set(PROFILE_NAMES) | {
+        f"{SENTINEL_PROFILE_NAME}-{position}" for position in SENTINEL_POSITIONS
+    }
+    entries = generated_matrix_entries(out_dir)
+    other_tags = sorted(
+        {model_tag for _, model_tag, _, _, _ in entries if model_tag != current_model_tag}
+    )
+    expected_reps = set(range(1, planned_n_blocks + 1))
+    inconsistent: list[str] = []
+    for model_tag in other_tags:
+        observed_reps = {
+            rep for _, candidate_tag, rep, _, _ in entries if candidate_tag == model_tag
+        }
+        if observed_reps != expected_reps:
+            inconsistent.append(
+                f"(model_tag={model_tag}: reps={sorted(observed_reps)}, expected={sorted(expected_reps)})"
+            )
+            continue
+        for rep in sorted(expected_reps):
+            observed_profiles = {
+                profile_name
+                for _, candidate_tag, candidate_rep, profile_name, _ in entries
+                if candidate_tag == model_tag and candidate_rep == rep
+            }
+            if observed_profiles != expected_profiles:
+                inconsistent.append(f"(model_tag={model_tag}, rep={rep})")
+    if inconsistent:
+        raise ValueError(
+            "mixed-n composition or incomplete block authority: " + "; ".join(inconsistent)
+        )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -422,9 +512,22 @@ def main(argv: list[str] | None = None) -> int:
     try:
         base = load_json(Path(args.base))
         BenchmarkConfig.from_mapping(base).validate()
+        registry_path = Path(args.analysis_registry)
+        registry, _ = load_analysis_registry(registry_path, ROOT / AP_RELATIVE_PATH)
+        planned_n_blocks = registry.value["sampling_plan"]["planned_n_blocks"]
         out_dir = Path(args.out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
-        expected_paths = expected_output_paths(out_dir, args.model_tag)
+        ensure_existing_freeze_matches(
+            out_dir,
+            sha256_bytes(registry.raw_bytes),
+            planned_n_blocks,
+        )
+        ensure_other_models_match_block_authority(
+            out_dir,
+            args.model_tag,
+            planned_n_blocks,
+        )
+        expected_paths = expected_output_paths(out_dir, args.model_tag, planned_n_blocks)
         stale_paths = stale_same_tag_paths(out_dir, args.model_tag, expected_paths)
         if stale_paths:
             stale_list = ", ".join(str(path) for path in stale_paths)
@@ -433,7 +536,7 @@ def main(argv: list[str] | None = None) -> int:
                 f"would be left in place: {stale_list}"
             )
         written: list[Path] = []
-        for rep in range(1, REPETITIONS + 1):
+        for rep in range(1, planned_n_blocks + 1):
             for profile_name, prompt_tokens, output_tokens in PROFILE_MATRIX:
                 config = build_config(
                     base, args.model_tag, profile_name, prompt_tokens, output_tokens, rep
@@ -455,8 +558,8 @@ def main(argv: list[str] | None = None) -> int:
                 path = out_dir / f"{args.model_tag}-r{rep}-{profile_name}-{position}.json"
                 write_config(path, config)
                 written.append(path)
-        manifest_path = write_order_manifest(out_dir)
-        analysis_manifest_path = write_analysis_manifest(out_dir)
+        manifest_path = write_order_manifest(out_dir, planned_n_blocks)
+        analysis_manifest_path = write_analysis_manifest(out_dir, registry_path)
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

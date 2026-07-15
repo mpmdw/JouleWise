@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import plistlib
-import statistics
 import subprocess
 import tempfile
 import unittest
@@ -12,12 +12,14 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
-from joulewise.bundle import BundleError
+from joulewise.bundle import BundleError, write_raw_artifact as write_bundle_raw_artifact
 from joulewise.adapters import resolve_telemetry
 from joulewise.adapters.powermetrics import (
     RAIL_MANIFEST,
     RICH_IDLE_NAME,
     RICH_TELEMETRY_NAME,
+    RAW_IDLE_NAME,
+    RAW_IDLE_POST_NAME,
     RAW_SAMPLES_NAME,
     SAMPLERS,
     PowermetricsTelemetryAdapter,
@@ -25,6 +27,7 @@ from joulewise.adapters.powermetrics import (
     idle_window_gpu_quality,
     parse_powermetrics_records,
     rich_telemetry_jsonl,
+    rich_telemetry_jsonl_from_records,
     samples_from_records,
     sudoers_line,
 )
@@ -145,6 +148,21 @@ class PowermetricsParserTests(unittest.TestCase):
                 record.combined_power_w,
                 places=12,
             )
+            self.assertEqual(
+                {sample.interval_end_s for sample in rows}, {record.timestamp_s}
+            )
+            self.assertEqual(
+                {sample.interval_start_s for sample in rows},
+                {record.timestamp_s - record.elapsed_ns / 1_000_000_000.0},
+            )
+
+    def test_interval_power_matches_energy_counters_within_ten_microjoules(self) -> None:
+        for record in parse_powermetrics_records(FIXTURE.read_bytes()):
+            power_energy_j = (
+                record.combined_power_w * record.elapsed_ns / 1_000_000_000.0
+            )
+            counter_energy_j = sum(record.rail_energy_mj.values()) / 1000.0
+            self.assertLessEqual(abs(power_energy_j - counter_energy_j), 1e-5)
 
     def test_thermal_pressure_without_temperature(self) -> None:
         records = parse_powermetrics_records(FIXTURE.read_bytes())
@@ -190,6 +208,7 @@ class PowermetricsParserTests(unittest.TestCase):
         clean = idle_window_gpu_quality(decode_rich_telemetry(FIXTURE.read_bytes()))
         self.assertAlmostEqual(clean["gpu_idle_ratio_mean"], 0.9611138, places=12)
         self.assertAlmostEqual(clean["gpu_idle_ratio_min"], 0.846584, places=12)
+        self.assertAlmostEqual(clean["gpu_freq_mhz_mean"], 325.9148, places=12)
         self.assertAlmostEqual(clean["gpu_freq_hz_mean"], 325.9148, places=12)
         self.assertIs(clean["idle_window_suspect"], False)
 
@@ -210,6 +229,17 @@ class PowermetricsParserTests(unittest.TestCase):
         )
         self.assertIs(single_blip["idle_window_suspect"], False)
 
+    def test_idle_quality_keeps_rich_records_byte_identical(self) -> None:
+        records = decode_rich_telemetry(FIXTURE.read_bytes())
+        before = rich_telemetry_jsonl_from_records(records)
+
+        idle_window_gpu_quality(records)
+
+        self.assertEqual(rich_telemetry_jsonl_from_records(records), before)
+        first = json.loads(before.splitlines()[0])
+        self.assertEqual(first["gpu"]["freq_hz"], 338.0)
+        self.assertNotIn("gpu_freq_mhz_mean", first["gpu"])
+
     def test_idle_window_gpu_quality_absent_gpu_is_unknown(self) -> None:
         documents = fixture_documents()
         for document in documents:
@@ -217,6 +247,7 @@ class PowermetricsParserTests(unittest.TestCase):
         quality = idle_window_gpu_quality(decode_rich_telemetry(documents_to_stream(documents)))
         self.assertIsNone(quality["gpu_idle_ratio_mean"])
         self.assertIsNone(quality["gpu_idle_ratio_min"])
+        self.assertIsNone(quality["gpu_freq_mhz_mean"])
         self.assertIsNone(quality["gpu_freq_hz_mean"])
         self.assertIsNone(quality["idle_window_suspect"])
 
@@ -268,6 +299,7 @@ class PowermetricsParserTests(unittest.TestCase):
         quality = idle_window_gpu_quality([])
         self.assertIsNone(quality["gpu_idle_ratio_mean"])
         self.assertIsNone(quality["gpu_idle_ratio_min"])
+        self.assertIsNone(quality["gpu_freq_mhz_mean"])
         self.assertIsNone(quality["gpu_freq_hz_mean"])
         self.assertIsNone(quality["idle_window_suspect"])
 
@@ -395,6 +427,20 @@ class PowermetricsAdapterTests(unittest.TestCase):
             sum(float(document["processor"][rail]) for rail in RAIL_MANIFEST) / 1000.0
             for document in documents
         ]
+        intervals_s = [
+            int(document["elapsed_ns"]) / 1_000_000_000.0
+            for document in documents
+        ]
+        duration_s = math.fsum(intervals_s)
+        weights = [duration / duration_s for duration in intervals_s]
+        expected_mean = math.fsum(
+            weight * value for weight, value in zip(weights, expected_totals, strict=True)
+        )
+        q = math.fsum(weight * weight for weight in weights)
+        expected_variance = math.fsum(
+            weight * (value - expected_mean) ** 2
+            for weight, value in zip(weights, expected_totals, strict=True)
+        ) / (1.0 - q)
 
         def fake_run(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(fixture)
@@ -409,19 +455,21 @@ class PowermetricsAdapterTests(unittest.TestCase):
             metadata["powermetrics"]["samplers_available"], SAMPLERS.split(",")
         )
         self.assertTrue(metadata["powermetrics"]["samplers_probe"]["ok"])
-        self.assertAlmostEqual(baseline.power_w_mean, statistics.mean(expected_totals), places=12)
+        self.assertAlmostEqual(baseline.power_w_mean, expected_mean, places=12)
         self.assertAlmostEqual(
             baseline.power_w_stddev,
-            statistics.stdev(expected_totals),
+            math.sqrt(expected_variance),
             places=12,
         )
         self.assertEqual(baseline.sample_count, len(documents))
         self.assertEqual(baseline.telemetry_backend, TelemetryBackend.POWERMETRICS)
-        self.assertAlmostEqual(baseline.power_w_mean, 0.466464226, places=12)
-        self.assertAlmostEqual(baseline.power_w_stddev, 0.5963032492730296, places=12)
+        self.assertAlmostEqual(baseline.power_w_mean, 0.46465690457640496, places=12)
+        self.assertAlmostEqual(baseline.power_w_stddev, 0.5949163238867929, places=12)
         self.assertAlmostEqual(baseline.duration_s, 5.091935956, places=12)
         self.assertAlmostEqual(baseline.gpu_idle_ratio_min, 0.846584, places=12)
+        self.assertAlmostEqual(baseline.gpu_freq_mhz_mean, 325.9148, places=12)
         self.assertAlmostEqual(baseline.gpu_freq_hz_mean, 325.9148, places=12)
+        self.assertEqual(baseline.gpu_freq_mhz_mean, baseline.gpu_freq_hz_mean)
         self.assertIs(baseline.idle_window_suspect, False)
 
     def test_measure_idle_preserves_raw_and_rich_idle_artifacts_with_context(self) -> None:
@@ -732,6 +780,214 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 adapter.device_metadata(config)["rich_telemetry_error"],
             )
 
+    def test_raw_write_failure_retains_native_capture_until_salvage_ack(self) -> None:
+        fixture = FIXTURE.read_bytes()
+        config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
+        adapter = PowermetricsTelemetryAdapter(FakeClock(start=100.0))
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        class FakePopen:
+            def __init__(self, command, **kwargs):
+                Path(command[command.index("-o") + 1]).write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            context = RunContext(
+                config=config,
+                clock=FakeClock(start=100.0),
+                run_id="run-custody",
+                bundle_path=root,
+                raw_dir=root / "raw",
+                logs_dir=root / "logs",
+                outputs_dir=root / "outputs",
+            )
+            with (
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.run",
+                    side_effect=fake_run,
+                ),
+                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+            ):
+                self.assertTrue(adapter.start_sampling(config, context).ok)
+                with patch(
+                    "joulewise.adapters.powermetrics.write_raw_artifact",
+                    side_effect=BundleError("injected raw write failure"),
+                ), self.assertRaisesRegex(BundleError, "injected raw write failure"):
+                    adapter.stop_sampling(config, context)
+
+            retained = adapter._pending_captures[RAW_SAMPLES_NAME]
+            self.assertTrue(retained.is_file())
+            self.assertEqual(retained.read_bytes(), fixture)
+            self.assertFalse((context.raw_dir / RAW_SAMPLES_NAME).exists())
+
+            report = adapter.salvage_custody(context)
+
+            self.assertTrue(report[0]["acknowledged"])
+            self.assertEqual(
+                (context.raw_dir / RAW_SAMPLES_NAME).read_bytes(),
+                fixture,
+            )
+            self.assertFalse(retained.exists())
+
+    def test_ack_failure_after_raw_write_retains_native_capture_for_salvage(self) -> None:
+        fixture = FIXTURE.read_bytes()
+        config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
+        adapter = PowermetricsTelemetryAdapter(FakeClock(start=100.0))
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        class FakePopen:
+            def __init__(self, command, **kwargs):
+                Path(command[command.index("-o") + 1]).write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "run"
+            root.mkdir()
+            context = RunContext(
+                config=config,
+                clock=FakeClock(start=100.0),
+                run_id="run-ack-interrupt",
+                bundle_path=root,
+                raw_dir=root / "raw",
+                logs_dir=root / "logs",
+                outputs_dir=root / "outputs",
+            )
+            with (
+                patch(
+                    "joulewise.adapters.powermetrics.subprocess.run",
+                    side_effect=fake_run,
+                ),
+                patch("joulewise.adapters.powermetrics.subprocess.Popen", FakePopen),
+            ):
+                self.assertTrue(adapter.start_sampling(config, context).ok)
+                with patch.object(
+                    RunContext,
+                    "acknowledge_custody",
+                    side_effect=OSError("injected fsync acknowledgement failure"),
+                ), self.assertRaisesRegex(OSError, "fsync acknowledgement failure"):
+                    adapter.stop_sampling(config, context)
+
+            retained = adapter._pending_captures[RAW_SAMPLES_NAME]
+            destination = context.raw_dir / RAW_SAMPLES_NAME
+            self.assertTrue(retained.is_file())
+            self.assertEqual(destination.read_bytes(), fixture)
+            self.assertFalse((context.logs_dir / "custody").exists())
+
+            report = adapter.salvage_custody(context)
+
+            self.assertTrue(report[0]["acknowledged"])
+            self.assertFalse(retained.exists())
+            acknowledgement = (
+                context.logs_dir
+                / "custody"
+                / "powermetrics-powermetrics_plist.json"
+            )
+            self.assertTrue(acknowledgement.is_file())
+            self.assertEqual(
+                json.loads(acknowledgement.read_text())["custody_token"],
+                "powermetrics-powermetrics_plist",
+            )
+
+    def test_controller_salvages_each_native_capture_after_first_write_failure(self) -> None:
+        fixture = FIXTURE.read_bytes()
+        config = make_config(
+            workload_profile={"output_tokens": 300},
+            sampling={"power_hz": 2.0, "idle_seconds": 5.0},
+        )
+        def fake_run(command, **kwargs):
+            if "-o" not in command:
+                return completed(command)
+            Path(command[command.index("-o") + 1]).write_bytes(fixture)
+            return completed(command)
+
+        class FakePopen:
+            def __init__(self, command, **kwargs):
+                self.path = Path(command[command.index("-o") + 1])
+                self.path.write_bytes(fixture)
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.path.write_bytes(fixture)
+                self.returncode = 0
+                return b"", b""
+
+        for artifact_name in (RAW_IDLE_NAME, RAW_SAMPLES_NAME, RAW_IDLE_POST_NAME):
+            with self.subTest(artifact_name=artifact_name), tempfile.TemporaryDirectory() as tmp:
+                failed_once = False
+
+                def flaky_write(context, name, data):
+                    nonlocal failed_once
+                    if name == artifact_name and not failed_once:
+                        failed_once = True
+                        raise BundleError("injected first custody write failure")
+                    return write_bundle_raw_artifact(context, name, data)
+
+                with (
+                    patch(
+                        "joulewise.adapters.powermetrics.subprocess.run",
+                        side_effect=fake_run,
+                    ),
+                    patch(
+                        "joulewise.adapters.powermetrics.subprocess.Popen",
+                        FakePopen,
+                    ),
+                    patch(
+                        "joulewise.adapters.powermetrics.write_raw_artifact",
+                        side_effect=flaky_write,
+                    ),
+                    patch(
+                        "joulewise.controller._capture_environment",
+                        return_value={"capture_scope": "test"},
+                    ),
+                    patch("joulewise.bundle.platform.platform", return_value="test"),
+                    patch("joulewise.bundle._capture_source_state", return_value={"git_commit": "unknown", "tracked": "unknown", "staged": "unknown", "untracked": "unknown", "diff_sha256": "unknown"}),
+                ):
+                    bundle_path, _summary = run_benchmark(
+                        config,
+                        Path(tmp),
+                        FakeClock(start=10.0),
+                    )
+
+                self.assertTrue(failed_once)
+                self.assertEqual(
+                    (bundle_path / "raw" / artifact_name).read_bytes(),
+                    fixture,
+                )
+
     def test_stop_sampling_rich_write_oserror_does_not_break_samples(self) -> None:
         fixture = FIXTURE.read_bytes()
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
@@ -885,6 +1141,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
             self.assertEqual(summary.status, RunStatus.SUCCEEDED)
             self.assertEqual((bundle_path / "raw" / RAW_SAMPLES_NAME).read_bytes(), truncated_stream)
             self.assertEqual(len((bundle_path / "power_trace.csv").read_text().splitlines()), 16)
+            self.assertEqual(
+                (bundle_path / "power_trace.csv").read_text().splitlines()[0],
+                "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s",
+            )
             metadata = json.loads((bundle_path / "metadata.json").read_text())
             diagnostics = metadata["device"]["parse_diagnostics"]
             measured = [

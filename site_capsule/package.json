@@ -1,0 +1,12 @@
+{
+  "name": "joulewise-site-capsule",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "lakebed build",
+    "deploy": "lakebed deploy"
+  },
+  "devDependencies": {
+    "lakebed": "0.0.29"
+  }
+}

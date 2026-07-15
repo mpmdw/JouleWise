@@ -26,53 +26,56 @@
 </header>
 <main>
 <div class="doc-layout">
-  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#roles-an-apex-model-a-volume-model-and-a-human-at-the-top">Roles: an apex model, a volume model, and a human at the top</a>
+  <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#roles-a-lead-independent-implementers-reviewers-and-a-human-at-the-top">Roles: a lead, independent implementers/reviewers, and a human at the top</a>
 <a href="#the-loop-end-to-end">The loop, end to end</a>
 <a href="#the-artifact-system-where-rigor-becomes-auditable">The artifact system (where rigor becomes auditable)</a>
 <a href="#council-discipline">Council discipline</a>
+<a href="#spend-guardrails-wo-022-r2-ruled-ed-ratified-2026-07-13">Spend guardrails (WO-022; R2 ruled, Ed-ratified 2026-07-13)</a>
 <a href="#topology-how-it-evolved-an-example-of-the-loop-improving-itself">Topology: how it evolved (an example of the loop improving itself)</a>
 <a href="#what-one-session-looks-like-2026-07-07-08-the-merge-session">What one session looks like (2026-07-07/08, the merge session)</a>
 <a href="#reconstructing-the-loop-on-a-clean-machine">Reconstructing the loop on a clean machine</a>
 <a href="#where-to-read-the-evidence">Where to read the evidence</a></aside>
   <div class="doc-wrap doc-source-docs-orchestration-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/orchestration.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/orchestration.md · commit 5166e76"><span class="source-file">docs/<wbr>orchestration.md</span><span class="source-commit">commit 5166e76</span></span></div>
-    <h1>The Orchestration Process</h1>
+    <div class="provenance-plate"><span class="source-chip" title="docs/orchestration.md · commit 0de4cea"><span class="source-file">docs/<wbr>orchestration.md</span><span class="source-commit">commit 0de4cea</span></span></div>
+    <!-- rendered: marked@18.0.6 -->
+<h1>The Orchestration Process</h1>
 <p>How this project is actually built: a human researcher directing a
 multi-model AI system whose workflow is itself a deliberate, versioned,
 self-instrumenting piece of engineering. This document is the single
 in-repo description of that process. (The executable playbooks live
 outside the repository as reusable &quot;skills&quot; so they transfer to future
 projects; this page describes what they do and where their evidence
-lands in this repo.) As of 2026-07-08.</p>
-<h2 id="roles-an-apex-model-a-volume-model-and-a-human-at-the-top">Roles: an apex model, a volume model, and a human at the top</h2>
+lands in this repo.) Binding role and process changes live in
+<code>docs/decision_log.md</code>; this page avoids copying volatile model versions.</p>
+<h2 id="roles-a-lead-independent-implementers-reviewers-and-a-human-at-the-top">Roles: a lead, independent implementers/reviewers, and a human at the top</h2>
 <ul>
 <li><strong>Ed (researcher)</strong> sets research direction, methodology
-non-negotiables (raw-evidence bundles, idle subtraction, named
+non-negotiables (raw-evidence bundles, dual-basis capture with gross-energy
+headlines, named
 measurement boundaries, no unauditable claims), hardware/access
 decisions, and — critically — <em>process policy</em>: every rule below
 traces to a standing instruction issued after an observed failure or
 opportunity. External-facing claims and merge authority derive from
 him (he granted the lead conditional self-merge authority on
 2026-07-08 once the review gate had proven itself).</li>
-<li><strong>The lead</strong> (Claude — Anthropic&#39;s Fable-class model) is the apex:
+<li><strong>The designated lead</strong> owns
 decomposition, triage, design adjudication, every final diff gate,
 all live/hardware verification, merge decisions, bookkeeping, and
-process evolution. Ground truth of the system: every other model&#39;s
-role exists to <em>save lead-model capacity</em>, never because its judgment
-is preferred; all escalation paths terminate at the lead.</li>
-<li><strong>The volume model</strong> (OpenAI Codex, gpt-5.5) does the heavy reading
-and writing: implementation against pinned specs, adversarial review
+process evolution. Other agents save lead capacity without inheriting
+final authority; all escalation paths terminate at the lead.</li>
+<li><strong>Independent implementation and review agents</strong> do the heavy reading and
+writing: implementation against pinned specs, adversarial review
 lenses, test writing, test <em>auditing</em> (never of its own tests — a
 fresh instance audits), docs drafting, and review of the lead&#39;s own
 consequential decisions. Cross-model review is load-bearing by
 design: the attributed per-layer catch record (below) shows the two
-models consistently catching different classes of defect.</li>
-<li><strong>A third model tier</strong> (Claude Opus) serves as specialist sweeper
-(e.g. the docs-consistency sweep) and, when a stream genuinely needs
+roles consistently catching different classes of defect.</li>
+<li><strong>Specialist agents</strong> handle bounded sweeps (for example, docs
+consistency) and, when a stream genuinely needs
 mid-stream judgment, as a stream director — a role that is now the
 exception rather than the default (see Topology).</li>
-<li><strong>Image-heavy analysis routes to Codex</strong> as standing doctrine from
+<li><strong>Image-heavy analysis uses the designated image-capable review route</strong> per
 C-012, after the site-observatory stream&#39;s image-critique rounds.</li>
 <li><strong>Invited-peer validation is allowed to overturn lead designs</strong>; C-014
 recorded two lead designs overturned by an invited peer before
@@ -130,9 +133,10 @@ times after. The current operation-loop also runs its §0
 primary-deliverable check and §8 shipped-check before the session is
 considered done.</li>
 <li><strong>Post-landing verification and close-out</strong> — landed work gets the
-matching verification workflow with severity-tiered refuters; site
-changes add the regen+redeploy close-out step pointed to by
-<code>RUN_STATE.md</code> end-of-work step 8.</li>
+matching verification workflow with severity-tiered refuters. Sessions
+that change front-facing state refresh <code>docs/site/DRIFT.md</code>; no agent
+regenerates or deploys the site. Automation informs and Ed deploys
+manually, per D-068 and <code>RUN_STATE.md</code> end-of-work step 8.</li>
 <li><strong>Meta-review (the final step)</strong> — event-driven, not calendar-driven:
 when a review layer stops earning its keep, when an intervention
 repeats despite a folded fix, or when the user asks, the loop is
@@ -222,12 +226,16 @@ rank-0 queue row. That is enough to prevent accidental bypass.</p>
 <td>One record per working session: outcomes, verification evidence, a per-layer catch/yield table, the delegation-calibration ledger, restart instructions.</td>
 </tr>
 <tr>
+<td><code>docs/process/state_kernel.json</code></td>
+<td>Source of truth for work selection: active gates, dependencies, and machine-state lanes ([QUIET-MAC] / [AGENT] / [ED-EXTERNAL]).</td>
+</tr>
+<tr>
 <td><code>TASK_QUEUE.md</code></td>
-<td>Ranked queue with machine-state lanes ([QUIET-MAC] / [AGENT] / [ED-EXTERNAL]) — a session picks the top task <em>compatible with the machine&#39;s state</em>, so agent load never contaminates measurements.</td>
+<td>Generated detailed queue projection plus dated history; do not hand-copy its live rows into reader docs.</td>
 </tr>
 <tr>
 <td><code>RUN_STATE.md</code></td>
-<td>Intake pointer only: current state, latest report, next action. History lives in run reports.</td>
+<td>Intake pointer with the generated restart projection. History lives in run reports.</td>
 </tr>
 <tr>
 <td><code>docs/risk_register.md</code></td>
@@ -246,7 +254,7 @@ false-positive-suppression (suppression is not a catch); severity
 weights are fixed before the session; three applicable exposures
 TRIGGER an expected-loss review decision, never automatic deletion;
 safety/final-head/integration layers are never auto-dropped on
-zero-defect streaks. (One layer, the default Opus review lens, was
+zero-defect streaks. (One layer, the default specialist review lens, was
 dropped under the old rule before D-061.)</li>
 <li><strong>Delegation calibration:</strong> every delegated unit gets a row — task
 altitude (pinned-spec / design-freedom / judgment-call), outcome
@@ -283,6 +291,83 @@ target → closure check.</li>
 </ul>
 <p>Deferred decision-log promotion is itself a tracked obligation, not
 ambient prose in a report.</p>
+<h2 id="spend-guardrails-wo-022-r2-ruled-ed-ratified-2026-07-13">Spend guardrails (WO-022; R2 ruled, Ed-ratified 2026-07-13)</h2>
+<p>The following policy text is the R2-ratified section, landed verbatim per
+audit work order WO-022 (<code>docs/reviews/2026-07-13-comprehensive-audit/</code>).</p>
+<p>SPEND GUARDRAILS (capstone benchmark bands) — provisional calibration constants; review after two completed arcs; sunset at capstone submission.</p>
+<ol>
+<li><p>ACCOUNTING SOURCE. Sol spend: <code>codex-usage</code> local accounting (the standing snapshot convention), corroborated by codex-run-v3 manifest <code>token_usage</code> rows where populated. The extraction window must cover the full arc — sum incremental snapshots for multi-day arcs; a single trailing-24h view is insufficient. Fable spend: estimated from local usage accounting; each snapshot names its method and price-table version. Price table v2026-07 (pinned until amended): GPT-5.6-sol $5/$30 per M in/out, cached input $0.50; Fable 5 $10/$50, cache reads $1. All figures are estimates, not billing truth, and are recorded as such. Missing data is recorded as <code>accounting_unknown</code>, never as zero.</p>
+</li>
+<li><p>DENOMINATOR AND CACHED-TOKEN TREATMENT. Token bands count total tokens (cached + uncached, all directions) exactly as codex-usage reports them — cached tokens are never excluded (exclusion invites cache-heavy gaming). Dollar figures apply cached pricing honestly. Cross-family aggregate ceilings bind in combined estimated dollars, because raw cross-family token sums are not commensurable (C-028: Sol ~180x the token volume, Fable ~3.4x the cost).</p>
+</li>
+<li><p>BOUNDARIES AND ATTRIBUTION. An arc = one council-log C-row, opened at its first delegated session, closed at its closeout snapshot. A work order = one WO/task id. Failed calls, retries, resumes, refuters, fix rounds, delta re-audits, lead usage, and subagents all count against the initiating WO and arc. Arcs and WOs may not be split, renamed, or reopened to reset counters.</p>
+</li>
+<li><p>BANDS. Each dimension is independent. SOFT crossing = record-and-continue: flag in the spend snapshot plus a one-line justification in the council row. HARD crossing = pause-and-ask Ed before any NEW delegated work in that category; in-flight sessions finish; quiet-machine measurement is never interrupted.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Scope</th>
+<th>Soft</th>
+<th>Hard</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Sol high session</td>
+<td>6M tokens</td>
+<td>12M</td>
+</tr>
+<tr>
+<td>Sol xhigh session</td>
+<td>8M</td>
+<td>16M</td>
+</tr>
+<tr>
+<td>Sol ultra session</td>
+<td>40M</td>
+<td>60M</td>
+</tr>
+<tr>
+<td>Bench-effort WO</td>
+<td>10M / 3 Sol sessions / ~$40 combined</td>
+<td>20M / 6 / ~$80</td>
+</tr>
+<tr>
+<td>Session-effort WO</td>
+<td>30M / 8 Sol sessions / ~$100 combined</td>
+<td>60M / 12 / ~$200</td>
+</tr>
+<tr>
+<td>Arc</td>
+<td>100M / 25 Sol sessions / ~$400 combined / 6 Sol active-hours / 2 elapsed days</td>
+<td>200M / 40 / ~$800 / 12 h / 4 days</td>
+</tr>
+</tbody></table></div>
+<p>WO dollar figures are best-effort: when per-WO Fable attribution is accounting_unknown, the token/session pair binds. Ultra: at most 2 INTENDED ultra sessions per arc, each with a pre-run recorded statement of why xhigh is insufficient and what bounded subagent work it will perform; an unintended ultra is recorded as an anomaly and still counts.</p>
+<p>Calibration anchors (recorded so recalibration stays honest): healthy xhigh ≈ 2.3–3.5M tokens/session (C-030 post effort-fix; C-028 average); the recorded broken state averaged ~9M. C-028 (330.6M / 59 sessions / ~$1,050 / ~17.5h) crosses every substantive arc HARD dimension — it is the anti-example. The 2026-07-13 comprehensive audit (~30 Sol sessions + ~70 Fable agents, Ed-authorized) crosses arc SOFT on session count only — the intended &quot;exceptional: justify and continue&quot; outcome.</p>
+</li>
+<li><p>CHECKPOINTS (procedural; owner = the Fable lead). (a) At arc open: predeclare one accepted deliverable increment for the arc — a corpus/measurement result, analysis/figure/report increment, evaluator requirement, or cited advancement of a D-060 gate — and classify planned delegated work as deliverable-facing or process-facing (mixed sessions count as process-facing unless separately attributable). (b) Before each next delegated call: check the completed session against its tier band (a lightweight glance, not a full snapshot); no runtime killing is promised — evaluation happens on completed sessions before any resume, replacement, or new call. (c) At WO close and arc close: take the spend snapshot and evaluate all bands. One missed checkpoint blocks new process-facing delegation until reconciled.</p>
+</li>
+<li><p>DELIVERABLE-PROGRESS TRIPWIRE (binds while ANY D-060 gate is unmet). If process-facing combined estimated cost exceeds 33% of arc cost OR $250 — whichever occurs first — HARD pause-and-ask Ed before further process-facing delegation. Independently, an arc that closes with process-facing spend but NO accepted deliverable increment pauses further non-exempt process work even if the 33% threshold was not crossed.</p>
+</li>
+<li><p>EXCEPTIONS AND OVERRIDES. Gate-closing work is deliverable-facing by definition. Correctness-defect and data-preservation work may override the allocation tripwire but is always fully counted. Ed direction is NOT a blanket exemption (the finding&#39;s own exemplar — bridge v1/v1.1 — was Ed-directed): it is a recorded override carrying an incremental budget and an expiry, and its spend counts.</p>
+</li>
+<li><p>NAMED-FAILURE BAR FOR PROCESS INNOVATION. Any NEW process layer, tool, skill, wrapper version, or contract version requires a decision-log entry citing: (a) a named recorded failure it addresses, (b) why existing controls did not cover it, (c) the smallest new layer that does, (d) its applicability predicate, (e) its marginal budget, (f) a sunset/retirement condition. Absent that entry, it is D-060 breadth and waits for the gates.</p>
+</li>
+<li><p>KEEP-DEFENDER GUARANTEE. No cap consequence auto-deletes a review layer. Layers with recorded unique catches survive any cap; a cap response batches, rescopes, or seeks Ed approval — never silently drops catch-bearing gates (final-head, integration, lead-live, claim/evidence safeguards).</p>
+</li>
+<li><p>MECHANISM. This policy is PROCEDURAL, not mechanical: no checker script is built now (adding process code during an overengineering correction is self-defeating; the arithmetic is a handful of numbers already recorded at existing snapshot points). Two recorded accounting discrepancies or skipped checkpoints across two arcs constitute the named failure that authorizes an executable checker with tests — via the §8 bar.</p>
+</li>
+<li><p>RECALIBRATION AND OWNERSHIP. Band values are calibration constants: the lead may amend SOFT values at arc close with evidence via a one-line decision-log amendment; HARD values and this section&#39;s structure are Ed-owned. Scheduled review after two completed arcs. The whole policy sunsets at capstone submission.</p>
+</li>
+</ol>
+<p>Court amendments (T09, folded at the register): canonical session
+inclusion uses manifest-corroborated sessions with known token records;
+resume rows are deduplicated; non-manifest sessions are reported only as
+a labeled upper bound. The 2026-07-13 audit anchor in section 4 is
+estimated/accounting_unknown until an audit-close spend snapshot receipts
+it (docs/reviews/2026-07-13-comprehensive-audit/receipts/
+WO-022-audit-close-spend.json); only a receipted anchor may be used for
+recalibration.</p>
 <h2 id="topology-how-it-evolved-an-example-of-the-loop-improving-itself">Topology: how it evolved (an example of the loop improving itself)</h2>
 <ul>
 <li><strong>v1 (2026-07-07 AM):</strong> per-stream Fable orchestrator subagents, each
@@ -352,7 +437,7 @@ analysis-plans contracts give claim gating; <code>docs/stream_logs/</code> and
 <code>docs/run_reports/</code> provide live templates for ledgers and trace
 appendices; <code>scripts/codex-run</code> and <code>scripts/codex-bridge</code> provide
 execution entry points.</li>
-<li>Skill-only: exact conductor sequencing, Codex prompt/consumption
+<li>Skill-only: exact conductor sequencing, delegated-agent prompt/consumption
 contract, severity-tiered refuter recipes, multi-worktree stream
 operations, and consistency-sweep checklists.</li>
 </ul>
@@ -374,7 +459,7 @@ design council; C-009 topology consensus; C-010 validation).</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/orchestration.md · commit 5166e76 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/orchestration.md · commit 0de4cea · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

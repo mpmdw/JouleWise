@@ -30,9 +30,17 @@ INTERNAL_HREF_REWRITES = {
     "index.html": "/index",
     "../project_critique_review.html": "/project_critique_review.html",
 }
+# TASK_QUEUE.md already drives the advisor-facing Status and Roadmap pages.
+# Packing its generated long-form mirror duplicates that information, dominates
+# routine capsule growth, and adds little advisor value. Keep docs/site's page
+# intact, but serve its stable deep links from Roadmap inside the capsule.
+CAPSULE_PAGE_REDIRECTS = {"task_queue.html": "roadmap.html"}
 RESERVED_PATHS = {"/", "/index.html"}
 LAKEBED_ARTIFACT_CAP_BYTES = 1_048_576
 LAKEBED_TARGET_ARTIFACT_BYTES = 943_718
+MARKED_VERSION = "18.0.6"
+LAKEBED_VERSION = "0.0.29"
+LAKEBED_LOCAL_EXECUTABLE = CAPSULE / "node_modules" / ".bin" / "lakebed"
 # Lakebed 0.0.25 embeds generated modules in compiled code and again in an
 # inline base64 source map. The measured residual after subtracting both
 # copies was 70,355 bytes; add 52,281 bytes of reserve. Artifact metadata is
@@ -46,6 +54,7 @@ MAX_SHARD_BASE64_BYTES = 30_000
 MAX_FIRST_REQUEST_DECODE_BYTES = 32_000
 VALIDATOR_TOKENS = ("process", "fetch", "globalThis", "self")
 UNBOUNDED_FOR_RE = re.compile(r"\bfor\s*\(\s*;")
+LEGACY_DATABASE_API_RE = re.compile(r"\.(?:where|all)\s*\(")
 
 
 @dataclass(frozen=True)
@@ -100,11 +109,39 @@ def run_git(args: list[str]) -> str:
     ).stdout.strip()
 
 
+def site_build_identity() -> dict[str, str]:
+    manifest_path = SITE / "build_manifest.json"
+    try:
+        manifest = json.loads(read_text(manifest_path))
+        renderer = manifest["renderer"]
+        if manifest["schema"] != "joulewise-site-build/v1":
+            raise ValueError("unsupported schema")
+        mode = renderer["mode"]
+        marked_version = renderer["markedVersion"]
+        if not isinstance(mode, str) or marked_version != MARKED_VERSION:
+            raise ValueError("invalid renderer identity")
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+        raise CapsulePackError(f"{manifest_path}: invalid site build identity: {exc}") from exc
+    return {"siteRenderer": mode, "markedVersion": marked_version}
+
+
 def build_info() -> dict[str, str]:
+    source_date_epoch = os.environ.get("SOURCE_DATE_EPOCH")
+    if source_date_epoch is None:
+        built_at = dt.datetime.now(dt.UTC).replace(microsecond=0)
+    else:
+        try:
+            built_at = dt.datetime.fromtimestamp(int(source_date_epoch), dt.UTC)
+        except (ValueError, OverflowError, OSError) as exc:
+            raise CapsulePackError(f"invalid SOURCE_DATE_EPOCH: {source_date_epoch}") from exc
+    identity = site_build_identity()
     return {
         "commit": run_git(["rev-parse", "--short", "HEAD"]),
-        "branch": run_git(["branch", "--show-current"]) or "detached",
-        "builtAt": dt.datetime.now(dt.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "branch": os.environ.get("JOULEWISE_BUILD_BRANCH") or run_git(["branch", "--show-current"]) or "detached",
+        "builtAt": built_at.isoformat().replace("+00:00", "Z"),
+        "siteRenderer": identity["siteRenderer"],
+        "markedVersion": identity["markedVersion"],
+        "lakebedVersion": LAKEBED_VERSION,
     }
 
 
@@ -386,7 +423,23 @@ def site_page_specs() -> list[PageSpec]:
     html_paths = sorted(SITE.glob("*.html"))
     if not html_paths:
         raise CapsulePackError("docs/site contains no HTML pages")
-    specs = [PageSpec(path=page_path, page_name=page_path.name, aliases=page_aliases(page_path)) for page_path in html_paths]
+    redirected_aliases: dict[str, list[str]] = {}
+    for source_name, target_name in CAPSULE_PAGE_REDIRECTS.items():
+        redirected_aliases.setdefault(target_name, []).extend(page_aliases(SITE / source_name))
+    specs = [
+        PageSpec(
+            path=page_path,
+            page_name=page_path.name,
+            aliases=[*page_aliases(page_path), *redirected_aliases.get(page_path.name, [])],
+        )
+        for page_path in html_paths
+        if page_path.name not in CAPSULE_PAGE_REDIRECTS
+    ]
+    missing_targets = sorted(set(redirected_aliases) - {spec.page_name for spec in specs})
+    if missing_targets:
+        raise CapsulePackError(
+            "capsule page redirect target is missing: " + ", ".join(missing_targets)
+        )
     for spec in STANDALONE_PAGES:
         if not spec.path.is_file():
             raise CapsulePackError(f"standalone page is missing: {spec.path.relative_to(ROOT)}")
@@ -597,19 +650,36 @@ def enforce_lakebed_budget(content_size: int) -> int:
     return estimate
 
 
-def discover_lakebed_executable() -> Path | None:
-    """Find an installed or npx-cached CLI without contacting the registry."""
-    candidates: list[Path] = []
-    on_path = shutil.which("lakebed")
-    if on_path:
-        candidates.append(Path(on_path))
-    cache_root = Path.home() / ".npm" / "_npx"
-    if cache_root.is_dir():
-        candidates.extend(sorted(cache_root.glob("*/node_modules/.bin/lakebed")))
-    for candidate in candidates:
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            return candidate.resolve()
+def npm_package_version(executable: Path, package_name: str) -> str | None:
+    resolved = executable.resolve()
+    for parent in resolved.parents:
+        package_path = parent / "package.json"
+        if not package_path.is_file():
+            continue
+        try:
+            package = json.loads(read_text(package_path))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if package.get("name") == package_name:
+            version = package.get("version")
+            return version if isinstance(version, str) else None
     return None
+
+
+def discover_lakebed_executable() -> Path | None:
+    """Find only the lockfile-pinned local CLI or an explicit exact-version override."""
+    configured = os.environ.get("JOULEWISE_LAKEBED_BIN")
+    candidate = Path(configured).expanduser() if configured else LAKEBED_LOCAL_EXECUTABLE
+    if not candidate.is_file() or not os.access(candidate, os.X_OK):
+        if configured:
+            raise CapsulePackError(f"JOULEWISE_LAKEBED_BIN is not executable: {candidate}")
+        return None
+    version = npm_package_version(candidate, "lakebed")
+    if version != LAKEBED_VERSION:
+        raise CapsulePackError(
+            f"Lakebed version mismatch at {candidate}: expected {LAKEBED_VERSION}, found {version or 'unknown'}"
+        )
+    return candidate.resolve()
 
 
 def lakebed_stable_json_size(value: object) -> int:
@@ -750,6 +820,11 @@ def validate_lakebed_sources(paths: list[Path], capsule_dir: Path | None = None)
                 raise CapsulePackError(f"{label}: Lakebed validator token remains: {token}")
         if UNBOUNDED_FOR_RE.search(source):
             raise CapsulePackError(f"{label}: unbounded for-loop remains")
+        legacy_api = LEGACY_DATABASE_API_RE.search(source)
+        if legacy_api:
+            raise CapsulePackError(
+                f"{label}: Lakebed legacy database API remains: {legacy_api.group(0)}"
+            )
 
 
 def build(no_fonts: bool = False, enforce_budget: bool = True) -> int:

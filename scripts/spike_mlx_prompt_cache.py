@@ -444,16 +444,35 @@ def stage_command(
     return command
 
 
-def verdict_for(tokens_identical: bool, cache_pct: float, first_bad: int | None) -> str:
+def verdict_for(
+    tokens_identical: bool,
+    cache_pct: float,
+    first_bad: int | None,
+    *,
+    monolithic_emitted_tokens: int,
+    resumed_emitted_tokens: int,
+    requested_tokens: int,
+) -> str:
     cache_ok = abs(cache_pct) < KV_SIZE_TOLERANCE_PCT
+    decode_complete = (
+        monolithic_emitted_tokens == requested_tokens
+        and resumed_emitted_tokens == requested_tokens
+    )
     reasons: list[str] = []
     if not tokens_identical:
         reasons.append(f"tokens_diverged_at_{first_bad}")
     if not cache_ok:
         reasons.append(f"cache_size_delta_{cache_pct:.6f}_pct")
-    if tokens_identical and cache_ok:
+    if not decode_complete:
+        reasons.append(
+            "decode_count_"
+            f"mono_{monolithic_emitted_tokens}_"
+            f"resume_{resumed_emitted_tokens}_"
+            f"requested_{requested_tokens}"
+        )
+    if tokens_identical and cache_ok and decode_complete:
         return "replay_supported"
-    if not tokens_identical:
+    if not tokens_identical or not decode_complete:
         return f"replay_unsupported({','.join(reasons)})"
     return f"partial({','.join(reasons)})"
 
@@ -479,11 +498,15 @@ def assemble_report(
     cache_bytes_pct = (cache_bytes_delta / cache_bytes_predicted) * 100.0
     first_bad = first_divergence(mono_tokens, resume_tokens)
     tokens_identical = first_bad is None
+    monolithic_emitted_tokens = len(mono_tokens)
+    resumed_emitted_tokens = len(resume_tokens)
 
     return {
         "model": str(model_dir),
         "prompt_len": prompt_len,
         "decode_tokens": decode_tokens_count,
+        "monolithic_emitted_tokens": monolithic_emitted_tokens,
+        "resumed_emitted_tokens": resumed_emitted_tokens,
         "mlx_lm_version": mono_meta.get("mlx_lm_version"),
         "mlx_version": mono_meta.get("mlx_version"),
         "cache_bytes_measured": cache_bytes_measured,
@@ -501,7 +524,14 @@ def assemble_report(
             "decode": decode_meta.get("timings"),
             "subprocess": subprocess_timings,
         },
-        "verdict": verdict_for(tokens_identical, cache_bytes_pct, first_bad),
+        "verdict": verdict_for(
+            tokens_identical,
+            cache_bytes_pct,
+            first_bad,
+            monolithic_emitted_tokens=monolithic_emitted_tokens,
+            resumed_emitted_tokens=resumed_emitted_tokens,
+            requested_tokens=decode_tokens_count,
+        ),
     }
 
 
