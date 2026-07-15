@@ -8,7 +8,7 @@ Created 2026-07-09 (C-027).
 | Lockfile | Environment | Covers |
 | --- | --- | --- |
 | `mac-measurement-lock.txt` | The repo Mac measurement venv `.venv` (Python 3.13.1, macOS Apple Silicon) | The environment that produced the six strict-valid real-energy corpus bundles under `runs/` — mlx 0.31.2, mlx-lm 0.31.3, transformers 5.12.1 and their transitive closure (37 pins). |
-| `analysis-lock.txt` | The system `python3` (`/opt/homebrew/bin/python3`, Python 3.13.1) invoked from the repo root | The environment used for reduction/analysis runs from the repo root. It is nearly empty (JouleWise's core is stdlib-only); the `analysis` extra (matplotlib) is **not** installed in it — recorded as found. |
+| `analysis-lock.txt` | The system `python3` (`/opt/homebrew/bin/python3`, Python 3.13.1) invoked from the repo root | The environment used for reduction/analysis runs from the repo root. It is nearly empty (JouleWise's core is stdlib-only); the optional reporting dependency from the `analysis` extra (matplotlib) is **not** installed in it — recorded as found. |
 
 Note on the spec's open question 1 (analysis env identity): analysis does
 NOT run inside the Mac `.venv` here — the reduction path is stdlib-only and
@@ -42,8 +42,8 @@ against the corpus bundles until re-measured.
 
 ## Relationship to pyproject.toml
 
-`pyproject.toml` remains the single *intent* spec: loose, installer-facing
-pins (core stdlib-only; extras `analysis = ["matplotlib"]`,
+`pyproject.toml` remains the single *intent* spec: installer-facing
+constraints (core stdlib-only; extras `analysis = ["matplotlib>=3.9,<4"]`,
 `mac = ["mlx-lm>=0.31.3", "transformers<5.13"]`). The lockfiles are
 *reconstruction* specs, used as pip **constraints**, never as a parallel
 dependency list:
@@ -52,6 +52,21 @@ dependency list:
 python3 -m pip install -c env/mac-measurement-lock.txt -e ".[mac]"
 python3 -m pip install -c env/analysis-lock.txt -e .
 ```
+
+The analysis lock reconstructs the environment that produced the retained
+stdlib-only reductions; lock-what-IS therefore keeps matplotlib out of that
+file. To enable the optional HTML report in a local checkout, use:
+
+```sh
+python3 -m pip install -c env/analysis-lock.txt -e ".[analysis]"
+```
+
+For that optional feature, the lock constrains packages observed in the base
+analysis environment while `pyproject.toml` defines the supported matplotlib
+range (`>=3.9,<4`). This is deliberately a supported-version policy rather
+than a claim that an unobserved matplotlib installation produced the retained
+corpus. Regenerate `analysis-lock.txt` only if matplotlib is deliberately
+installed into the analysis environment for evidence-producing work.
 
 This keeps one dependency-declaration surface (pyproject) and makes the
 locks purely additive. There is no install-everything `requirements-lock`

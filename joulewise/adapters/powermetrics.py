@@ -28,6 +28,7 @@ from joulewise.clock import Clock, ClockStamp
 from joulewise.interfaces import (
     AdapterFailure,
     AdapterResult,
+    DurableCustodyAcknowledgement,
     PowerSample,
     RunContext,
     TelemetryStopResult,
@@ -61,7 +62,8 @@ TIMESTAMP_DERIVATION = (
     "envelope; record 0 is that interval endpoint and records i>0 advance by "
     "elapsed_ns for records 1..i. Whole-second plist dates are consistency-only. "
     "Exact allowlisted legacy bundles retain plist_anchor_offset_s plus the "
-    "legacy cumulative-elapsed reconstruction."
+    "legacy cumulative-elapsed reconstruction. Each emitted sample carries "
+    "its [endpoint-elapsed_ns, endpoint) averaging support."
 )
 
 
@@ -121,6 +123,7 @@ class PowermetricsTelemetryAdapter:
         self._last_records: list[PowermetricsRecord] = []
         self._pre_idle_records: list[PowermetricsRecord] = []
         self._pre_idle_quality: dict[str, float | bool | None] | None = None
+        self._pending_captures: dict[str, Path] = {}
 
     def device_metadata(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -144,9 +147,15 @@ class PowermetricsTelemetryAdapter:
 
         count = self._idle_count(config)
         capture_start_s = self._clock.now()
-        data = self._run_bounded_capture(config, count=count)
+        data = self._run_bounded_capture(
+            config,
+            count=count,
+            artifact_name=RAW_IDLE_NAME,
+            context=context,
+        )
         if context is not None:
-            write_raw_artifact(context, RAW_IDLE_NAME, data)
+            self._persist_capture(context, RAW_IDLE_NAME, data)
+        self._release_capture(RAW_IDLE_NAME)
         records, diagnostic = _parse_powermetrics_records(
             data, timestamp_anchor_s=capture_start_s
         )
@@ -165,18 +174,27 @@ class PowermetricsTelemetryAdapter:
             )
         self._remember_records(records, timestamp_anchor_s=capture_start_s)
         totals = [record.combined_power_w for record in records]
-        duration_s = sum(record.elapsed_ns for record in records) / 1_000_000_000.0
+        intervals_s = [record.elapsed_ns / 1_000_000_000.0 for record in records]
+        duration_s = math.fsum(intervals_s)
+        if len(totals) > 1:
+            idle_mean_w, idle_variance_w2 = duration_weighted_mean_and_sample_variance(
+                totals, intervals_s
+            )
+        else:
+            idle_mean_w = totals[0] if totals else 0.0
+            idle_variance_w2 = 0.0
         idle_quality = idle_window_gpu_quality(rich_records)
         self._pre_idle_records = list(records)
         self._pre_idle_quality = dict(idle_quality)
         return IdleBaseline(
-            power_w_mean=statistics.mean(totals) if totals else 0.0,
-            power_w_stddev=statistics.stdev(totals) if len(totals) > 1 else 0.0,
+            power_w_mean=idle_mean_w,
+            power_w_stddev=math.sqrt(idle_variance_w2),
             duration_s=duration_s,
             sample_count=len(totals),
             telemetry_backend=TelemetryBackend.POWERMETRICS,
             gpu_idle_ratio_mean=idle_quality["gpu_idle_ratio_mean"],
             gpu_idle_ratio_min=idle_quality["gpu_idle_ratio_min"],
+            gpu_freq_mhz_mean=idle_quality["gpu_freq_mhz_mean"],
             gpu_freq_hz_mean=idle_quality["gpu_freq_hz_mean"],
             idle_window_suspect=idle_quality["idle_window_suspect"],
         )
@@ -195,6 +213,7 @@ class PowermetricsTelemetryAdapter:
             )
 
         self._capture_path = self._new_capture_path()
+        self._pending_captures[RAW_SAMPLES_NAME] = self._capture_path
         self._pre_spawn_stamp = None
         self._first_parse_stamp = None
         command = self._command(
@@ -212,8 +231,7 @@ class PowermetricsTelemetryAdapter:
                 stderr=subprocess.DEVNULL,
             )
         except FileNotFoundError as exc:
-            self._capture_path.unlink(missing_ok=True)
-            self._capture_path = None
+            self._release_capture(RAW_SAMPLES_NAME)
             return AdapterResult(
                 ok=False,
                 failure_reason=FailureReason.TELEMETRY_UNAVAILABLE,
@@ -223,8 +241,8 @@ class PowermetricsTelemetryAdapter:
         if not ready.ok:
             self._stop_process(self._process)
             self._process = None
-            self._capture_path.unlink(missing_ok=True)
-            self._capture_path = None
+            if context is None:
+                self._release_capture(RAW_SAMPLES_NAME)
             return ready
         if self._first_parse_stamp is None:
             return AdapterResult(
@@ -252,11 +270,12 @@ class PowermetricsTelemetryAdapter:
         if data is None:
             return []
         if context is not None:
-            write_raw_artifact(context, RAW_SAMPLES_NAME, data)
+            self._persist_capture(context, RAW_SAMPLES_NAME, data)
         records, diagnostic = _parse_powermetrics_records(
             data, timestamp_anchor_s=clock_start_s
         )
         self._preserve_measured_capture(data, records, diagnostic, context)
+        self._release_capture(RAW_SAMPLES_NAME)
         return samples_from_records(records)
 
     def stop_sampling_with_evidence(
@@ -276,7 +295,7 @@ class PowermetricsTelemetryAdapter:
             )
             return TelemetryStopResult([], evidence)
         if context is not None:
-            write_raw_artifact(context, RAW_SAMPLES_NAME, data)
+            self._persist_capture(context, RAW_SAMPLES_NAME, data)
         native_records, diagnostic = _parse_powermetrics_records(data)
         post_parse_stamp = self._clock.stamp()
         stamps: dict[str, ClockStamp] = {
@@ -302,23 +321,126 @@ class PowermetricsTelemetryAdapter:
             else native_records
         )
         self._preserve_measured_capture(data, records, diagnostic, context)
+        self._release_capture(RAW_SAMPLES_NAME)
         return TelemetryStopResult(samples_from_records(records), evidence)
 
     def _take_measured_capture(self) -> tuple[bytes | None, float | None]:
         process = self._process
         self._process = None
         capture_path = self._capture_path
-        self._capture_path = None
         clock_start_s = self._clock_start_s
-        self._clock_start_s = None
         if process is not None:
             self._stop_process(process)
         if capture_path is None or not capture_path.exists():
             return None, clock_start_s
 
         data = capture_path.read_bytes()
-        capture_path.unlink(missing_ok=True)
         return data, clock_start_s
+
+    def _release_capture(self, artifact_name: str) -> None:
+        capture_path = self._pending_captures.pop(artifact_name, None)
+        if capture_path is not None:
+            capture_path.unlink(missing_ok=True)
+        if artifact_name == RAW_SAMPLES_NAME:
+            self._capture_path = None
+            self._clock_start_s = None
+            self._pre_spawn_stamp = None
+            self._first_parse_stamp = None
+
+    def salvage_custody(self, context: RunContext) -> list[dict[str, Any]]:
+        """Retry every native capture write before releasing its source file."""
+
+        report: list[dict[str, Any]] = []
+        for artifact_name, capture_path in list(self._pending_captures.items()):
+            if not capture_path.exists():
+                continue
+            try:
+                self._persist_capture(
+                    context,
+                    artifact_name,
+                    capture_path.read_bytes(),
+                )
+            except Exception as exc:  # noqa: BLE001 - try every independent capture
+                report.append(
+                    {
+                        "artifact": artifact_name,
+                        "source": str(capture_path),
+                        "acknowledged": False,
+                        "error": "%s: %s" % (type(exc).__name__, exc),
+                    }
+                )
+                continue
+            self._release_capture(artifact_name)
+            report.append(
+                {
+                    "artifact": artifact_name,
+                    "source": str(capture_path),
+                    "acknowledged": True,
+                    "error": None,
+                }
+            )
+        return report
+
+    def _persist_capture(
+        self,
+        context: RunContext,
+        artifact_name: str,
+        data: bytes,
+    ) -> DurableCustodyAcknowledgement:
+        """Write, fsync-acknowledge, then permit native-capture release."""
+
+        destination = context.raw_dir / artifact_name
+        if destination.exists():
+            if destination.read_bytes() != data:
+                raise BundleError(
+                    "existing raw artifact does not match retained native capture: "
+                    f"{destination}"
+                )
+        else:
+            write_raw_artifact(context, artifact_name, data)
+        token = self._custody_token(artifact_name)
+        acknowledgement = context.acknowledge_custody(token, [destination])
+        if not self._acknowledgement_is_valid(
+            acknowledgement,
+            token=token,
+            destination=destination,
+            bundle_path=context.bundle_path,
+        ):
+            raise RuntimeError("powermetrics custody acknowledgement is invalid")
+        return acknowledgement
+
+    @staticmethod
+    def _custody_token(artifact_name: str) -> str:
+        safe_name = "".join(
+            character if character.isalnum() else "_"
+            for character in artifact_name
+        )
+        return f"powermetrics-{safe_name}"
+
+    @staticmethod
+    def _acknowledgement_is_valid(
+        acknowledgement: DurableCustodyAcknowledgement,
+        *,
+        token: str,
+        destination: Path,
+        bundle_path: Path,
+    ) -> bool:
+        try:
+            payload = json.loads(
+                acknowledgement.acknowledgement_path.read_text(encoding="utf-8")
+            )
+            acknowledgement.acknowledgement_path.resolve().relative_to(
+                bundle_path.resolve()
+            )
+        except (OSError, ValueError, json.JSONDecodeError):
+            return False
+        return (
+            acknowledgement.token == token
+            and payload.get("custody_token") == token
+            and destination.resolve()
+            in {path.resolve() for path in acknowledgement.artifact_paths}
+            and destination.is_file()
+        )
 
     def _preserve_measured_capture(
         self,
@@ -358,7 +480,12 @@ class PowermetricsTelemetryAdapter:
         duration_s = max(3.0 * interval_s, min(5.0, baseline.duration_s))
         count = max(3, int(math.ceil(duration_s / interval_s)))
         try:
-            data = self._run_bounded_capture(config, count=count)
+            data = self._run_bounded_capture(
+                config,
+                count=count,
+                artifact_name=RAW_IDLE_POST_NAME,
+                context=context,
+            )
             records, diagnostic = _parse_powermetrics_records(
                 data, timestamp_anchor_s=self._clock.now()
             )
@@ -368,13 +495,14 @@ class PowermetricsTelemetryAdapter:
                 "idle_drift": unknown_component("post_idle_unavailable"),
             }
         if context is not None:
-            write_raw_artifact(context, RAW_IDLE_POST_NAME, data)
+            self._persist_capture(context, RAW_IDLE_POST_NAME, data)
             self._write_rich_artifact(
                 context=context,
                 name=RICH_IDLE_POST_NAME,
                 data=rich_telemetry_jsonl_from_records(rich_records),
                 error_key="rich_telemetry_idle_post_error",
             )
+        self._release_capture(RAW_IDLE_POST_NAME)
         self._record_parse_diagnostic(
             diagnostic,
             artifact=f"raw/{RAW_IDLE_POST_NAME}",
@@ -509,8 +637,16 @@ class PowermetricsTelemetryAdapter:
         }
         return AdapterResult(ok=True, metadata={"command": command})
 
-    def _run_bounded_capture(self, config: BenchmarkConfig, *, count: int) -> bytes:
+    def _run_bounded_capture(
+        self,
+        config: BenchmarkConfig,
+        *,
+        count: int,
+        artifact_name: str,
+        context: RunContext | None,
+    ) -> bytes:
         capture_path = self._new_capture_path()
+        self._pending_captures[artifact_name] = capture_path
         command = self._command(config, capture_path, count=count)
         timeout_s = self._capture_timeout_s(config, count)
         try:
@@ -525,8 +661,10 @@ class PowermetricsTelemetryAdapter:
                 stderr = completed.stderr.decode("utf-8", errors="replace").strip()
                 raise RuntimeError(f"powermetrics capture failed: {stderr}")
             return capture_path.read_bytes()
-        finally:
-            capture_path.unlink(missing_ok=True)
+        except BaseException:
+            if context is None:
+                self._release_capture(artifact_name)
+            raise
 
     def _remember_records(
         self,
@@ -914,6 +1052,7 @@ def idle_window_gpu_quality(records: list[dict[str, Any]]) -> dict[str, float | 
         return {
             "gpu_idle_ratio_mean": None,
             "gpu_idle_ratio_min": None,
+            "gpu_freq_mhz_mean": None,
             "gpu_freq_hz_mean": None,
             "idle_window_suspect": None,
         }
@@ -939,6 +1078,9 @@ def idle_window_gpu_quality(records: list[dict[str, Any]]) -> dict[str, float | 
     return {
         "gpu_idle_ratio_mean": idle_mean,
         "gpu_idle_ratio_min": idle_min,
+        "gpu_freq_mhz_mean": freq_mean,
+        # Deprecated legacy alias: preserve the historical MHz-valued number
+        # under its old false-Hz name so stored eras remain distinguishable.
         "gpu_freq_hz_mean": freq_mean,
         "idle_window_suspect": suspect,
     }
@@ -947,6 +1089,8 @@ def idle_window_gpu_quality(records: list[dict[str, Any]]) -> dict[str, float | 
 def samples_from_records(records: list[PowermetricsRecord]) -> list[PowerSample]:
     samples: list[PowerSample] = []
     for record in records:
+        interval_end_s = record.timestamp_s
+        interval_start_s = interval_end_s - record.elapsed_ns / 1_000_000_000.0
         for rail in RAIL_MANIFEST:
             samples.append(
                 PowerSample(
@@ -954,9 +1098,39 @@ def samples_from_records(records: list[PowermetricsRecord]) -> list[PowerSample]
                     power_w=record.rail_power_w[rail],
                     source="powermetrics",
                     rail=rail,
+                    interval_start_s=interval_start_s,
+                    interval_end_s=interval_end_s,
                 )
             )
     return samples
+
+
+def duration_weighted_mean_and_sample_variance(
+    values: list[float] | tuple[float, ...],
+    durations_s: list[float] | tuple[float, ...],
+) -> tuple[float, float]:
+    """Return the WO-005 duration-weighted mean and sample variance.
+
+    Durations are reliability weights. The variance denominator ``1-q``
+    makes equal-duration inputs reduce to the ordinary sample variance.
+    """
+    if len(values) != len(durations_s) or len(values) < 2:
+        raise ValueError("duration weighting requires equally sized inputs of length >= 2")
+    if any(not math.isfinite(value) for value in values):
+        raise ValueError("duration-weighted values must be finite")
+    if any(not math.isfinite(duration) or duration <= 0.0 for duration in durations_s):
+        raise ValueError("duration weights must be finite and > 0")
+    total_duration_s = math.fsum(durations_s)
+    weights = tuple(duration / total_duration_s for duration in durations_s)
+    mean = math.fsum(weight * value for weight, value in zip(weights, values, strict=True))
+    q = math.fsum(weight * weight for weight in weights)
+    if q >= 1.0:
+        raise ValueError("duration-weighted sample variance requires effective count > 1")
+    variance = math.fsum(
+        weight * (value - mean) * (value - mean)
+        for weight, value in zip(weights, values, strict=True)
+    ) / (1.0 - q)
+    return mean, variance
 
 
 def _powermetrics_documents(

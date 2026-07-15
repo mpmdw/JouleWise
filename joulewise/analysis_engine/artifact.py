@@ -241,6 +241,87 @@ _EVALUATION_KEYS = {
 }
 _EQUIVALENCE_KEYS = {"margin", "method"}
 
+# The claims index consumes the canonical artifact rendering as a reviewable
+# wire envelope.  These orders are B13/B15 linkage policy, not statistical
+# semantics; the latter remain exclusively in ``validate_claim_verdicts``.
+_CLAIMS_INDEX_KEY_ORDERS = {
+    "artifact": (
+        "schema_version",
+        "claim_verdicts_id",
+        "engine",
+        "inputs",
+        "bundle_audit",
+        "sampling_audit",
+        "families",
+        "contrasts",
+    ),
+    "artifact.engine": (
+        "implementation",
+        "algorithm_version",
+        "difference_orientation",
+        "policy_identity",
+    ),
+    "artifact.inputs": (
+        "analysis_manifest",
+        "floor_artifact",
+        "runs_root_label",
+        "evidence_class",
+        "limitations",
+    ),
+    "artifact.sampling_audit": (
+        "design",
+        "planned_n_blocks",
+        "registered_blocks",
+        "valid_replacements",
+        "unregistered_matching_bundles",
+        "top_up_detected",
+        "demoted_contrast_ids",
+    ),
+    "artifact.family": (
+        "family_instance_id",
+        "plan_id",
+        "claim_role",
+        "method",
+        "alpha",
+        "q",
+        "m",
+        "contrast_ids",
+        "finite_test_count",
+        "raw_ordering",
+        "adjusted_p_values",
+        "missing_test_ids",
+        "structural_status",
+    ),
+    "artifact.contrast": (
+        "contrast_id",
+        "plan_id",
+        "family_instance_id",
+        "claim_role",
+        "metric",
+        "conditions",
+        "hypothesized_direction",
+        "equivalence",
+        "mde",
+        "bundle_blocks",
+        "sampling",
+        "estimator",
+        "deterministic_bounds",
+        "floor",
+        "multiplicity",
+        "randomization_check",
+        "loo",
+        "sensitivity_status",
+        "claim_evaluation",
+    ),
+    "artifact.claim_evaluation": (
+        "outcome",
+        "direction",
+        "reason_codes",
+        "claim_ready_for_l2_l3",
+        "claim_level_ceiling",
+    ),
+}
+
 
 class ClaimArtifactError(ValueError):
     """Raised when a verdict artifact cannot be rendered or validated."""
@@ -2289,6 +2370,101 @@ def validate_claim_verdicts(value: Mapping[str, Any]) -> list[str]:
     return errors
 
 
+def _claims_index_key_order(
+    value: Any,
+    expected: tuple[str, ...],
+    where: str,
+    errors: list[str],
+) -> None:
+    if isinstance(value, Mapping) and set(value) == set(expected):
+        if tuple(value) != expected:
+            errors.append(f"{where}: keys are not in the pinned B13 order")
+
+
+def _claims_index_absolute_paths(value: Any, key: str = "") -> list[str]:
+    found: list[str] = []
+    if isinstance(value, Mapping):
+        for child_key, child in value.items():
+            found.extend(_claims_index_absolute_paths(child, str(child_key)))
+    elif isinstance(value, list):
+        for child in value:
+            found.extend(_claims_index_absolute_paths(child, key))
+    elif isinstance(value, str) and "path" in key.lower():
+        if Path(value).is_absolute() or re.match(r"^[A-Za-z]:[\\/]", value):
+            found.append(value)
+    return found
+
+
+def validate_claim_verdicts_for_claim_index(value: Any) -> list[str]:
+    """Return the authoritative verdict errors plus B15 envelope policy.
+
+    ``validate_claim_verdicts`` owns every verdict semantic and structural
+    rule.  This entry point adds only the claims-index consumer's pinned JSON
+    order, nested absolute-path refusal, and the current production admission
+    policy.  In particular, two-look artifacts remain engine-representable but
+    are deliberately refused here until a separate production-enablement
+    ruling changes the claims-index contract.
+    """
+
+    errors = list(validate_claim_verdicts(value))
+    if not isinstance(value, Mapping):
+        return errors
+
+    _claims_index_key_order(
+        value,
+        _CLAIMS_INDEX_KEY_ORDERS["artifact"],
+        "artifact",
+        errors,
+    )
+    for key in ("engine", "inputs", "sampling_audit"):
+        _claims_index_key_order(
+            value.get(key),
+            _CLAIMS_INDEX_KEY_ORDERS[f"artifact.{key}"],
+            f"artifact.{key}",
+            errors,
+        )
+    families = value.get("families")
+    if isinstance(families, list):
+        for index, family in enumerate(families):
+            _claims_index_key_order(
+                family,
+                _CLAIMS_INDEX_KEY_ORDERS["artifact.family"],
+                f"artifact.families[{index}]",
+                errors,
+            )
+    contrasts = value.get("contrasts")
+    if isinstance(contrasts, list):
+        for index, contrast in enumerate(contrasts):
+            _claims_index_key_order(
+                contrast,
+                _CLAIMS_INDEX_KEY_ORDERS["artifact.contrast"],
+                f"artifact.contrasts[{index}]",
+                errors,
+            )
+            evaluation = (
+                contrast.get("claim_evaluation")
+                if isinstance(contrast, Mapping)
+                else None
+            )
+            _claims_index_key_order(
+                evaluation,
+                _CLAIMS_INDEX_KEY_ORDERS["artifact.claim_evaluation"],
+                f"artifact.contrasts[{index}].claim_evaluation",
+                errors,
+            )
+
+    sampling = value.get("sampling_audit")
+    if isinstance(sampling, Mapping) and sampling.get("design") != "fixed_n":
+        errors.append(
+            "artifact.sampling_audit.design: claims-index production policy "
+            "deliberately permits only fixed_n"
+        )
+    absolute_paths = _claims_index_absolute_paths(value)
+    if absolute_paths:
+        errors.append(f"artifact: absolute path is forbidden: {absolute_paths[0]}")
+    return list(dict.fromkeys(errors))
+
+
 def finalize_claim_verdicts(value: Mapping[str, Any]) -> dict[str, Any]:
     artifact = dict(value)
     artifact["claim_verdicts_id"] = calculate_claim_verdicts_id(artifact)
@@ -2331,5 +2507,6 @@ __all__ = [
     "finalize_claim_verdicts",
     "render_claim_verdicts",
     "validate_claim_verdicts",
+    "validate_claim_verdicts_for_claim_index",
     "write_claim_verdicts_atomic",
 ]

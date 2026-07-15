@@ -72,7 +72,10 @@ def ap_document(
         "Inclusion/exclusion + quality-flag waiver rules": "Strict-valid bundles only.",
         "Order/blocking/covariates": "Manifest order and block.",
         "Floor gate": "pending-P2-015: request-window floor.",
-        "MDE/n sizing + predeclared top-up rule": "n=5; top-up near floor.",
+        "MDE/n sizing + predeclared top-up rule": (
+            "n is frozen before outcomes under D-062; any outcome-dependent "
+            "top-up permanently demotes the contrast to exploratory."
+        ),
         "Denominator provenance requirement": "Runtime-observed tokens.",
         "Holdout cells (L3 only)": "not applicable.",
         "Claim ceiling + exact forbidden upgrade": "Ceiling L2; no universal claim.",
@@ -187,6 +190,38 @@ def run_cli(args: list[str], cwd: Path = ROOT) -> subprocess.CompletedProcess[st
     )
 
 
+def run_all_cli(
+    root: Path,
+    index: Path = Path("claims.jsonl"),
+    projection: Path = Path("claims.md"),
+) -> subprocess.CompletedProcess[str]:
+    return run_cli(
+        [
+            "--mode",
+            "all",
+            "--root",
+            str(root),
+            "--analysis-plans",
+            str(ROOT / claims_lint.DEFAULT_AP_PATH),
+            "--registry",
+            str(ROOT / claims_lint.DEFAULT_REGISTRY_PATH),
+            "--campaign-packs",
+            str(ROOT / claims_lint.DEFAULT_PACK_DIR),
+            "--claims-ladder",
+            str(ROOT / claims_lint.DEFAULT_CLAIMS_LADDER_PATH),
+            "--analysis-registry",
+            str(ROOT / claims_lint.DEFAULT_ANALYSIS_REGISTRY_PATH),
+            "--claims-index",
+            str(index),
+            "--claim-verdict-dir",
+            "analysis",
+            "--claims-projection",
+            str(projection),
+            "--json",
+        ]
+    )
+
+
 class ClaimsLintFixtureTests(unittest.TestCase):
     def test_marker_mangled_pack_fails_instead_of_disappearing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -207,6 +242,26 @@ class ClaimsLintFixtureTests(unittest.TestCase):
             findings, labels = claims_lint.lint_ap_document(path, "ap")
             self.assertEqual(findings, [])
             self.assertEqual(labels, ["AP-1"])
+
+    def test_unqualified_outcome_dependent_top_up_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write(
+                Path(tmp) / "ap.md",
+                ap_document(
+                    {
+                        "MDE/n sizing + predeclared top-up rule": (
+                            "n=5; top-up near-floor cells after inspecting the CI."
+                        )
+                    }
+                ),
+            )
+
+            findings, _ = claims_lint.lint_ap_document(path, "ap")
+
+            self.assertIn(
+                "AP_UNQUALIFIED_OUTCOME_DEPENDENT_TOP_UP",
+                {finding.code for finding in findings},
+            )
 
     def test_each_required_ap_field_missing_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -554,6 +609,50 @@ class ClaimsLintFixtureTests(unittest.TestCase):
                 payload,
             )
 
+    def test_governed_surfaces_include_publication_sources_and_exclude_history(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            governed = (
+                "README.md",
+                "PROJECT_STATUS.md",
+                "docs/phase_4/claims_index.md",
+                "docs/report_src/report.md",
+                "docs/report_src/chapters/07_results.md",
+                "slides/defense.md",
+                "docs/slides/backup.md",
+                "captions/F1.md",
+                "docs/captions/F2.md",
+                "tables/T1.md",
+                "docs/tables/T2.md",
+                "analysis/rpt/tables/T3.md",
+                "figures/rpt/captions/F3.md",
+            )
+            excluded = (
+                "docs/run_reports/2026-07-13-history.md",
+                "docs/decision_log.md",
+                "docs/contracts/other_contract.md",
+            )
+            for relative in (*governed, *excluded):
+                path = root / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                write(path, "Known forbidden wording appears here.")
+
+            contracts = root / "docs/contracts"
+            write(contracts / "claims_ladder.md", claims_ladder_document())
+            actual = {
+                path.relative_to(root).as_posix()
+                for path in claims_lint.reader_facing_surfaces(root)
+            }
+            self.assertEqual(actual, set(governed))
+
+            findings = claims_lint.lint_forbidden_language(
+                root, contracts / "claims_ladder.md"
+            )
+            self.assertTrue(findings)
+            self.assertTrue(all(finding.severity == "warning" for finding in findings))
+            finding_paths = {Path(finding.path).relative_to(root).as_posix() for finding in findings}
+            self.assertEqual(finding_paths, set(governed))
+
 
 class ClaimsLintRepoTests(unittest.TestCase):
     def test_phase4_repo_projection_is_current(self) -> None:
@@ -562,24 +661,52 @@ class ClaimsLintRepoTests(unittest.TestCase):
             Path("docs/phase_4/claims_index.md"), False)
         self.assertFalse([f for f in findings if f.severity == "error"], findings)
 
-    def test_phase4_malformed_forbidden_and_projection_drift_fail(self) -> None:
+    def test_unified_index_malformed_mutated_legacy_and_projection_drift_fail(self) -> None:
         canonical = json.loads((ROOT / "analysis/rpt001-v1/claims_index.jsonl").read_text())
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             index = Path("claims.jsonl")
             projection = Path("claims.md")
             write(root / index, "not-json\n")
-            findings = claims_lint.lint_phase4(root, index, projection)
-            self.assertIn("MALFORMED_JSONL", {f.code for f in findings})
-            canonical["claim_text"] = "The smaller stack uses less energy."
+            result = run_all_cli(root, index, projection)
+            payload = json.loads(result.stdout)
+            self.assertEqual(result.returncode, 2, result.stderr + result.stdout)
+            self.assertIn(
+                "CLAIM_INDEX_MALFORMED_JSONL",
+                {finding["code"] for finding in payload["findings"]},
+            )
+
+            # Historic divergence pinned: phase4 accepted a structurally valid
+            # mutated legacy row, while claim-index rejected it as unsupported.
+            # The unified --mode all row dispatch must reject it once, uniformly.
+            canonical["claim_text"] = (
+                "Separate stack-specific L1 observations remain provisional."
+            )
             write(root / index, json.dumps(canonical) + "\n")
-            findings = claims_lint.lint_phase4(root, index, projection)
-            self.assertIn("FORBIDDEN_CLAIM_UPGRADE", {f.code for f in findings})
-            canonical["claim_text"] = "Separate stack-specific L1 observations only."
+            result = run_all_cli(root, index, projection)
+            payload = json.loads(result.stdout)
+            self.assertEqual(result.returncode, 2, result.stderr + result.stdout)
+            self.assertEqual(
+                sum(
+                    finding["code"] == "CLAIM_INDEX_UNKNOWN_DIALECT"
+                    for finding in payload["findings"]
+                ),
+                1,
+                payload,
+            )
+
+            canonical = json.loads(
+                (ROOT / "analysis/rpt001-v1/claims_index.jsonl").read_text()
+            )
             write(root / index, json.dumps(canonical) + "\n")
             write(root / projection, "stale\n")
-            findings = claims_lint.lint_phase4(root, index, projection)
-            self.assertIn("PROJECTION_DRIFT", {f.code for f in findings})
+            result = run_all_cli(root, index, projection)
+            payload = json.loads(result.stdout)
+            self.assertEqual(result.returncode, 2, result.stderr + result.stdout)
+            self.assertIn(
+                "PROJECTION_DRIFT",
+                {finding["code"] for finding in payload["findings"]},
+            )
 
     def test_real_analysis_plans_and_registries_lint_clean(self) -> None:
         result = subprocess.run(

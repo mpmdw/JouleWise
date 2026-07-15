@@ -26,7 +26,7 @@ from joulewise.adapters.powermetrics import (
     RAW_SAMPLES_NAME,
     parse_powermetrics_records,
 )
-from joulewise.clock import FakeClock
+from joulewise.clock import FakeClock, SystemClock
 from joulewise.cli import _STRICT_LEGACY_BUNDLE_IDENTITIES, main, validate_bundle
 from joulewise.bundle_read import Window
 from joulewise.controller import run_benchmark
@@ -122,6 +122,33 @@ class CliRunTestCase(unittest.TestCase):
 
 
 class RunVerbTests(CliRunTestCase):
+    def test_run_verb_binds_fake_clock_only_for_all_mock_backends(self) -> None:
+        cases = [
+            ("mock", "mock", FakeClock),
+            ("mock", "powermetrics", SystemClock),
+            ("mlx", "mock", SystemClock),
+            ("mlx", "powermetrics", SystemClock),
+        ]
+        for index, (runtime, telemetry, expected_type) in enumerate(cases):
+            data = json.loads(EXAMPLE_CONFIG_PATH.read_text())
+            data["run_id"] = f"cli-clock-{index}"
+            data["hardware_target"]["runtime_backend"] = runtime
+            data["hardware_target"]["telemetry_backend"] = telemetry
+            config_path = self.tmp / f"clock-{index}.json"
+            config_path.write_text(json.dumps(data))
+            summary = type(
+                "Summary",
+                (),
+                {"status": RunStatus.SUCCEEDED, "failure_reason": None},
+            )()
+            with self.subTest(runtime=runtime, telemetry=telemetry), patch(
+                "joulewise.cli.run_benchmark",
+                return_value=(self.runs_dir / data["run_id"], summary),
+            ) as run:
+                exit_code, _stdout, stderr = self.run_verb(config_path)
+                self.assertEqual(exit_code, 0, stderr)
+                self.assertIsInstance(run.call_args.args[2], expected_type)
+
     def test_mock_e2e_succeeds_with_greppable_line(self) -> None:
         config_path = self.write_config("cli-run-success")
         exit_code, stdout, stderr = self.run_verb(config_path)
@@ -515,7 +542,7 @@ class StrictValidateTests(CliRunTestCase):
             problems,
         )
 
-    def test_reducer_0_4_1_tolerates_only_new_metric_absence(self) -> None:
+    def test_current_era_reducer_0_4_1_cannot_claim_new_reduction(self) -> None:
         bundle = self.make_bundle("strict-v041-new-metric-absent")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         summary["summary_provenance"]["reducer_version"] = "0.4.1"
@@ -524,9 +551,16 @@ class StrictValidateTests(CliRunTestCase):
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
 
-        self.assertEqual(validate_bundle(bundle, strict=True), [])
+        self.assertIn(
+            "strict: unsupported reducer version "
+            "'0.4.1' for current-era bundle; superseded versions "
+            "cannot claim the current inter_token_throughput_tokens_s "
+            "reduction shape and explicit re-reduction with 0.5.0 is "
+            "required",
+            validate_bundle(bundle, strict=True),
+        )
 
-    def test_reducer_0_4_1_stored_new_metric_remains_exact_claim(self) -> None:
+    def test_current_era_reducer_0_4_1_with_new_metric_is_still_rejected(self) -> None:
         bundle = self.make_bundle("strict-v041-new-metric-wrong")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         summary["summary_provenance"]["reducer_version"] = "0.4.1"
@@ -535,11 +569,13 @@ class StrictValidateTests(CliRunTestCase):
             json.dumps(summary, indent=2, sort_keys=True) + "\n"
         )
 
-        problems = validate_bundle(bundle, strict=True)
-
-        self.assertTrue(
-            any("inter_token_throughput_tokens_s" in problem for problem in problems),
-            problems,
+        self.assertIn(
+            "strict: unsupported reducer version "
+            "'0.4.1' for current-era bundle; superseded versions "
+            "cannot claim the current inter_token_throughput_tokens_s "
+            "reduction shape and explicit re-reduction with 0.5.0 is "
+            "required",
+            validate_bundle(bundle, strict=True),
         )
 
     def test_current_era_reducer_0_4_0_requires_re_reduction(self) -> None:
@@ -785,6 +821,7 @@ class StrictValidateTests(CliRunTestCase):
         bundle = self.make_bundle("strict-legacy-null-additive")
         summary = json.loads((bundle / "summary_metrics.json").read_text())
         del summary["summary_provenance"]
+        del summary["idle_baseline"]["gpu_freq_mhz_mean"]
         del summary["idle_baseline"]["gpu_freq_hz_mean"]
         del summary["idle_baseline"]["gpu_idle_ratio_mean"]
         del summary["idle_baseline"]["gpu_idle_ratio_min"]
@@ -1017,6 +1054,27 @@ class StrictValidateTests(CliRunTestCase):
         problems = validate_bundle(bundle, strict=True)
         self.assertEqual(len(problems), 1)
         self.assertIn("idle_baseline.gpu_freq_hz_mean", problems[0])
+
+    def test_stored_mhz_value_drift_still_fails_strict(self) -> None:
+        bundle = self.make_bundle("strict-stored-mhz-drift")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        summary["idle_baseline"]["gpu_freq_mhz_mean"] = 123.0
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+        problems = validate_bundle(bundle, strict=True)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("idle_baseline.gpu_freq_mhz_mean", problems[0])
+
+    def test_pre_repair_0_5_summary_missing_mhz_field_passes_strict(self) -> None:
+        bundle = self.make_bundle("strict-pre-repair-0-5")
+        summary = json.loads((bundle / "summary_metrics.json").read_text())
+        del summary["idle_baseline"]["gpu_freq_mhz_mean"]
+        (bundle / "summary_metrics.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n"
+        )
+
+        self.assertEqual(validate_bundle(bundle, strict=True), [])
 
     def test_non_null_fresh_value_missing_from_stored_fails_strict(self) -> None:
         bundle = self.make_bundle("strict-missing-non-null")

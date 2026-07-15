@@ -85,6 +85,7 @@ def success_result(
     offset: float = 7.0,
     metadata: dict[str, Any] | None = None,
     worker_metadata: dict[str, Any] | None = None,
+    custody_token: str | None = None,
 ) -> NodeTaskResult:
     artifact_dir.mkdir(parents=True, exist_ok=True)
     (artifact_dir / artifact_name).write_text(text, encoding="utf-8")
@@ -104,6 +105,7 @@ def success_result(
         offset_estimate_s=offset,
         offset_bound_s=0.5,
         metadata=metadata or {"clock_alignment": {"offset_estimate_s": offset}},
+        custody_token=custody_token,
     )
 
 
@@ -121,12 +123,19 @@ class FakeClient:
     def __init__(self, results: list[NodeTaskResult]):
         self.results = list(results)
         self.tasks: list[dict[str, Any]] = []
+        self.acknowledgements = []
 
-    def run_task(self, task: dict[str, Any], *, timeout_s: float) -> NodeTaskResult:
+    def run_task(
+        self, task: dict[str, Any], *, timeout_s: float, context=None
+    ) -> NodeTaskResult:
         self.tasks.append({"task": task, "timeout_s": timeout_s})
         if not self.results:
             raise AssertionError("fake client exhausted")
         return self.results.pop(0)
+
+    def acknowledge_custody(self, acknowledgement):
+        self.acknowledgements.append(acknowledgement)
+        return []
 
 
 class NvidiaSmiParserTests(unittest.TestCase):
@@ -337,6 +346,31 @@ class NvidiaSmiAdapterTests(unittest.TestCase):
             thermal = adapter.thermal_state(config)
             self.assertEqual(thermal.temperature_c, 43.0)
             self.assertEqual(thermal.timestamp_s, rows[-1].node_timestamp_s - 7.0)
+
+    def test_stop_sampling_durably_acknowledges_bundle_custody(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = make_config()
+            context = make_context(config, root)
+            client = FakeClient(
+                [
+                    success_result(
+                        root / "artifacts",
+                        "nvidia_smi_csv",
+                        RAW_SAMPLES_NAME,
+                        CSV_FIXTURE,
+                        custody_token="custody-nvidia-success",
+                    )
+                ]
+            )
+            adapter = NvidiaSmiTelemetryAdapter(FakeClock(start=100.0), client)
+
+            adapter.stop_sampling(config, context)
+
+            self.assertEqual(len(client.acknowledgements), 1)
+            acknowledgement = client.acknowledgements[0]
+            self.assertTrue(acknowledgement.acknowledgement_path.is_file())
+            self.assertTrue((context.raw_dir / RAW_SAMPLES_NAME).is_file())
 
     def test_stop_sampling_uses_worker_node_utc_offset_not_host_timezone(self) -> None:
         old_tz = os.environ.get("TZ")

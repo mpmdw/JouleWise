@@ -39,6 +39,31 @@ IDLE_MEAN_UNCERTAINTY = {
     "reason_codes": [],
 }
 
+SOURCE_PROVENANCE = {
+    "schema": "joulewise.source_provenance.v1",
+    "diff_identity": {
+        "algorithm": "sha256",
+        "version": "joulewise.git-diff.nul-v1",
+    },
+    "start": {
+        "git_commit": "1" * 40,
+        "tracked": "clean",
+        "staged": "clean",
+        "untracked": "clean",
+        "diff_sha256": "3" * 64,
+    },
+    "end": {
+        "git_commit": "1" * 40,
+        "tracked": "clean",
+        "staged": "clean",
+        "untracked": "clean",
+        "diff_sha256": "3" * 64,
+    },
+    "changed_during_run": False,
+    "claim_eligible": True,
+    "reason_codes": [],
+}
+
 
 def _write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,6 +83,31 @@ class PublicationPrivacyTests(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.tmp = Path(tmp.name)
+
+    def test_canonical_tree_identity_algorithm_is_versioned_and_stable(self) -> None:
+        entries = [
+            {
+                "path": "a.txt",
+                "sha256": "b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51060",
+                "size_bytes": 6,
+            },
+            {
+                "path": "nested/b.bin",
+                "sha256": "06eb7d6a69ee19e5fbdf749018d3d2abfa04bcbd1365db312eb86dc7169389b8",
+                "size_bytes": 2,
+            },
+        ]
+        self.assertEqual(
+            publication_privacy.tree_identity_descriptor(),
+            {
+                "algorithm": "sha256",
+                "version": "joulewise.bundle-tree.nul-v1",
+            },
+        )
+        self.assertEqual(
+            publication_privacy.tree_sha256(entries),
+            "001e3ed0f152ef0dd6443cf3b6f5fce7fb1029582fc588afaee242de78824317",
+        )
 
     def make_secret_bundle(self, name: str = "private-bundle") -> Path:
         bundle = self.tmp / name
@@ -123,6 +173,7 @@ class PublicationPrivacyTests(unittest.TestCase):
                 "config_sha256": "0" * 64,
                 "run_id": "private-user-91__private-host-28",
                 "git_commit": "1" * 40,
+                "source_provenance": SOURCE_PROVENANCE,
                 "clock": {"kind": "synthetic"},
                 "config_warnings": [],
                 "model": {"source": "/Users/example/private/model"},
@@ -170,6 +221,13 @@ class PublicationPrivacyTests(unittest.TestCase):
                         }
                     ]
                 },
+                "serialization_quarantine": [
+                    {
+                        "path": "/device/API_TOKEN_PRIVATE_83",
+                        "reason": "unsupported_type",
+                        "value_type": "fixture.SecretValue",
+                    }
+                ],
             },
         )
         event = {
@@ -238,6 +296,10 @@ class PublicationPrivacyTests(unittest.TestCase):
 
         self.assertEqual(source_hashes, _file_hashes(source))
         self.assertEqual(transformation["source_bundle_sha256"], audit.source_bundle_sha256)
+        self.assertEqual(
+            transformation["bundle_tree_identity"],
+            publication_privacy.tree_identity_descriptor(),
+        )
         self.assertNotEqual(
             transformation["source_bundle_sha256"], transformation["output_bundle_sha256"]
         )
@@ -257,6 +319,8 @@ class PublicationPrivacyTests(unittest.TestCase):
         self.assertFalse((destination / "logs").exists())
         self.assertFalse((destination / "raw").exists())
         summary = json.loads((destination / "summary_metrics.json").read_text())
+        metadata = json.loads((destination / "metadata.json").read_text())
+        self.assertEqual(metadata["source_provenance"], SOURCE_PROVENANCE)
         quality = summary["measurement_quality"]
         self.assertEqual(
             quality["remote_cleanup_failed"],
@@ -266,6 +330,103 @@ class PublicationPrivacyTests(unittest.TestCase):
         self.assertEqual(summary["inter_token_throughput_tokens_s"], 20.0)
         self.assertEqual(summary["idle_mean_uncertainty"], IDLE_MEAN_UNCERTAINTY)
         self.assertIsNone(summary["window_evidence_precheck"])
+        metadata = json.loads((destination / "metadata.json").read_text())
+        self.assertEqual(
+            metadata["serialization_quarantine"],
+            {
+                "redacted": True,
+                "classification": "metadata.serialization_quarantine",
+            },
+        )
+
+    def test_custody_acknowledgement_is_named_and_omitted_from_public_bundle(self) -> None:
+        source = self.make_secret_bundle("custody-acknowledgement")
+        acknowledgement_path = (
+            source / "logs" / "custody" / "powermetrics-native.json"
+        )
+        _write_json(
+            acknowledgement_path,
+            {
+                "schema_version": 1,
+                "custody_token": "powermetrics-native",
+                "artifacts": ["/Users/example/private/native-capture.plist"],
+            },
+        )
+        destination = self.tmp / "public-custody"
+
+        audit = publication_privacy.audit_private_bundle(source)
+        audited = next(
+            item
+            for item in audit.files
+            if item.path == "logs/custody/powermetrics-native.json"
+        )
+        self.assertEqual(
+            audited.classification,
+            publication_privacy.CLASS_OMIT_CUSTODY_LOG,
+        )
+        self.assertEqual(audited.operation, publication_privacy.OP_OMIT)
+        self.assertEqual(
+            audit.classification_counts[
+                publication_privacy.CLASS_OMIT_CUSTODY_LOG
+            ],
+            1,
+        )
+
+        transformation = publication_privacy.transform_public_bundle(
+            source,
+            destination,
+        )
+
+        transformed = next(
+            item
+            for item in transformation["files"]
+            if item["path"] == "logs/custody/powermetrics-native.json"
+        )
+        self.assertEqual(
+            transformed["classification"],
+            publication_privacy.CLASS_OMIT_CUSTODY_LOG,
+        )
+        self.assertEqual(transformed["operation"], publication_privacy.OP_OMIT)
+        self.assertIsNone(transformed["output_sha256"])
+        self.assertFalse((destination / "logs" / "custody").exists())
+
+    def test_duration_weighted_interval_trace_is_named_and_retained_as_sample_evidence(self) -> None:
+        source = self.make_secret_bundle("interval-trace-evidence")
+        summary_path = source / "summary_metrics.json"
+        summary = json.loads(summary_path.read_text(encoding="utf-8"))
+        summary["idle_mean_uncertainty"]["method"] = (
+            "duration_weighted_newey_west_bartlett_10s_iid_floor_v2"
+        )
+        _write_json(summary_path, summary)
+        trace_path = source / "power_trace.csv"
+        trace_path.write_text(
+            "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+            "1.0,10.0,powermetrics,cpu_power,0.5,1.0\n",
+            encoding="utf-8",
+        )
+        source_trace = trace_path.read_bytes()
+        destination = self.tmp / "public-interval-trace"
+
+        audit = publication_privacy.audit_private_bundle(source)
+        trace_audit = next(item for item in audit.files if item.path == "power_trace.csv")
+        transformation = publication_privacy.transform_public_bundle(source, destination)
+        trace_transform = next(
+            item for item in transformation["files"] if item["path"] == "power_trace.csv"
+        )
+
+        self.assertEqual(trace_audit.classification, publication_privacy.CLASS_RETAIN)
+        self.assertEqual(trace_audit.operation, publication_privacy.OP_RETAIN)
+        self.assertEqual(trace_transform["classification"], publication_privacy.CLASS_RETAIN)
+        self.assertEqual(trace_transform["operation"], publication_privacy.OP_RETAIN)
+        self.assertIs(trace_transform["byte_identical"], True)
+        self.assertEqual((destination / "power_trace.csv").read_bytes(), source_trace)
+        public_summary = json.loads(
+            (destination / "summary_metrics.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            public_summary["idle_mean_uncertainty"]["method"],
+            "duration_weighted_newey_west_bartlett_10s_iid_floor_v2",
+        )
 
     def test_unknown_fields_and_paths_fail_closed(self) -> None:
         mutations = {
@@ -280,9 +441,12 @@ class PublicationPrivacyTests(unittest.TestCase):
             ),
             "idle uncertainty field": self._add_idle_uncertainty_field,
             "idle uncertainty reason": self._add_idle_uncertainty_reason,
+            "idle uncertainty method": self._set_unreviewed_idle_uncertainty_method,
             "measurement quality field": self._add_quality_field,
+            "source provenance value": self._poison_source_provenance,
             "event field": self._add_event_field,
             "power source value": self._set_unreviewed_power_source,
+            "power interval column": self._add_unreviewed_power_interval_column,
             "artifact path": lambda bundle: (bundle / "private-extra.txt").write_text(
                 "fixture-only", encoding="utf-8"
             ),
@@ -293,7 +457,7 @@ class PublicationPrivacyTests(unittest.TestCase):
                 mutate(bundle)
                 with self.assertRaisesRegex(
                     publication_privacy.PrivacyAuditError,
-                    "unclassified",
+                    "unclassified|source_provenance",
                 ):
                     publication_privacy.audit_private_bundle(bundle)
 
@@ -337,6 +501,13 @@ class PublicationPrivacyTests(unittest.TestCase):
         _write_json(path, value)
 
     @staticmethod
+    def _poison_source_provenance(bundle: Path) -> None:
+        path = bundle / "metadata.json"
+        value = json.loads(path.read_text())
+        value["source_provenance"]["start"]["tracked"] = ["clean"]
+        _write_json(path, value)
+
+    @staticmethod
     def _add_idle_uncertainty_field(bundle: Path) -> None:
         path = bundle / "summary_metrics.json"
         value = json.loads(path.read_text())
@@ -351,6 +522,13 @@ class PublicationPrivacyTests(unittest.TestCase):
         _write_json(path, value)
 
     @staticmethod
+    def _set_unreviewed_idle_uncertainty_method(bundle: Path) -> None:
+        path = bundle / "summary_metrics.json"
+        value = json.loads(path.read_text())
+        value["idle_mean_uncertainty"]["method"] = "unreviewed_weighting_method"
+        _write_json(path, value)
+
+    @staticmethod
     def _add_event_field(bundle: Path) -> None:
         path = bundle / "events.jsonl"
         value = json.loads(path.read_text())
@@ -362,6 +540,15 @@ class PublicationPrivacyTests(unittest.TestCase):
         path = bundle / "power_trace.csv"
         path.write_text(
             path.read_text(encoding="utf-8").replace(",mock,mock", ",private-host-28,mock"),
+            encoding="utf-8",
+        )
+
+    @staticmethod
+    def _add_unreviewed_power_interval_column(bundle: Path) -> None:
+        path = bundle / "power_trace.csv"
+        path.write_text(
+            "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s,weights\n"
+            "1.0,10.0,mock,mock,0.5,1.0,private\n",
             encoding="utf-8",
         )
 

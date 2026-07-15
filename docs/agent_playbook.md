@@ -358,7 +358,7 @@ Wrapper notes beyond the guide:
 - Bring-up order: real MLX runtime + MOCK telemetry first (composition
   is the point of the adapter split); a complete bundle from that
   pairing is this mission's smoke evidence.
-- The install itself (venv, `pip install 'joulewise[mac]'`) needs user
+- The install itself (venv, `pip install -e '.[mac]'`) needs user
   approval per R-003; record versions in the run report.
 - Handoff: applicability-table row updated, run report with the smoke
   bundle path and token-timeline evidence, exit-checklist 2G row.

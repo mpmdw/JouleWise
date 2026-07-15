@@ -55,7 +55,12 @@ from joulewise.analysis_engine.ratio import (  # noqa: E402
     ratio_collection_evidence_reasons,
     ratio_evidence_reasons,
 )
-from joulewise.schemas import RunStatus, RuntimeBackend, TelemetryBackend  # noqa: E402
+from joulewise.schemas import (  # noqa: E402
+    PromptTokenEvidencePolicy,
+    RunStatus,
+    RuntimeBackend,
+    TelemetryBackend,
+)
 
 
 STATUSES = (
@@ -91,6 +96,7 @@ class ConfigInfo:
     repetitions: int
     generator_sidecar_ref: str | None = None
     suite_manifest_ref: str | None = None
+    prompt_token_evidence_policy: PromptTokenEvidencePolicy | None = None
 
 
 @dataclass(frozen=True)
@@ -133,6 +139,8 @@ class PromptHashCheck:
             return ("prompt_hash_mismatch",)
         if self.status == "error":
             return ("prompt_hash_check_error",)
+        if self.status == "missing_evidence":
+            return ("prompt_token_evidence_missing",)
         return ()
 
     def to_log(self) -> dict[str, Any]:
@@ -415,6 +423,25 @@ def suite_manifest_ref_from_config(data: dict[str, Any]) -> str | None:
     return None
 
 
+def prompt_token_evidence_policy_from_config(
+    data: dict[str, Any],
+) -> PromptTokenEvidencePolicy | None:
+    workload_profile = data.get("workload_profile")
+    if not isinstance(workload_profile, dict):
+        return None
+    value = workload_profile.get("prompt_token_evidence_policy")
+    if value is None:
+        return None
+    try:
+        return PromptTokenEvidencePolicy(value)
+    except ValueError as exc:
+        allowed = ", ".join(policy.value for policy in PromptTokenEvidencePolicy)
+        raise ValueError(
+            "workload_profile.prompt_token_evidence_policy must be one of: "
+            f"{allowed}"
+        ) from exc
+
+
 def load_config_info(config_path: Path) -> ConfigInfo:
     try:
         data = json.loads(config_path.read_text(encoding="utf-8"))
@@ -448,6 +475,7 @@ def load_config_info(config_path: Path) -> ConfigInfo:
         repetitions=repetitions,
         generator_sidecar_ref=generator_sidecar_ref_from_config(data),
         suite_manifest_ref=suite_manifest_ref_from_config(data),
+        prompt_token_evidence_policy=prompt_token_evidence_policy_from_config(data),
     )
 
 
@@ -978,6 +1006,38 @@ def _classify_inferred_prompt_sidecar(sidecar_path: Path) -> PromptHashCheck | N
     )
 
 
+def _check_prompt_token_evidence_policy(
+    bundle_dir: Path,
+    info: ConfigInfo,
+    *,
+    neighboring_sidecar: Path | None = None,
+) -> PromptHashCheck:
+    sidecar_label = str(neighboring_sidecar) if neighboring_sidecar is not None else None
+    _, text_items, manifest_problems = _manifest_text_items(bundle_dir)
+    if text_items is None or manifest_problems:
+        return PromptHashCheck(
+            "error",
+            sidecar_label,
+            problems=tuple(manifest_problems),
+        )
+    if not text_items:
+        return PromptHashCheck("not_applicable", sidecar_label)
+    if (
+        info.prompt_token_evidence_policy
+        == PromptTokenEvidencePolicy.EXEMPT_AFFINE_GENERATED_TEXT
+    ):
+        return PromptHashCheck("policy_exempt", sidecar_label)
+    return PromptHashCheck(
+        "missing_evidence",
+        sidecar_label,
+        problems=(
+            "text-tokenized suite is missing prompt-token evidence: provide an "
+            "explicit prompt-token sidecar or set the validated "
+            "exempt_affine_generated_text policy",
+        ),
+    )
+
+
 def _load_json_object(path: Path, label: str) -> tuple[dict[str, Any] | None, str | None]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -1045,9 +1105,9 @@ def _manifest_text_items(
         if not isinstance(source, dict):
             problems.append(f"suite_manifest.json items[{item_index}].source is not an object")
             continue
-        if source.get("prompt_token_ids") is not None or raw_item.get("item_type") == "ids_prompt":
-            continue
-        if source.get("prompt_text") is None and raw_item.get("item_type") != "text_prompt":
+        # Match SuiteItem.prompt_source_kind() and the runtime adapters: an
+        # explicit prompt_text is text-tokenized regardless of item_type.
+        if source.get("prompt_text") is None:
             continue
         text_items.append((item_index, item_id))
     return manifest, text_items, problems
@@ -1189,11 +1249,19 @@ def check_prompt_hashes_for_config_bundle(bundle_dir: Path, info: ConfigInfo) ->
     explicit = resolve_sidecar_path(info.path, info.generator_sidecar_ref)
     if explicit is not None:
         return check_prompt_hashes_for_bundle(bundle_dir, explicit)
+    if info.suite_manifest_ref is None:
+        return PromptHashCheck("not_applicable")
     inferred = inferred_prompt_sidecar_path(info.path, info.suite_manifest_ref)
     if inferred is None:
-        return PromptHashCheck("not_applicable")
+        return _check_prompt_token_evidence_policy(bundle_dir, info)
     inferred_classification = _classify_inferred_prompt_sidecar(inferred)
     if inferred_classification is not None:
+        if inferred_classification.status == "not_applicable":
+            return _check_prompt_token_evidence_policy(
+                bundle_dir,
+                info,
+                neighboring_sidecar=inferred,
+            )
         return inferred_classification
     return check_prompt_hashes_for_bundle(bundle_dir, inferred)
 
@@ -1763,6 +1831,11 @@ def _idle_baseline_from_summary(summary: dict[str, Any] | None):
     try:
         from joulewise.schemas import IdleBaseline, TelemetryBackend
 
+        gpu_freq_mhz_mean = (
+            raw.get("gpu_freq_mhz_mean")
+            if "gpu_freq_mhz_mean" in raw
+            else raw.get("gpu_freq_hz_mean")
+        )
         return IdleBaseline(
             power_w_mean=float(raw["power_w_mean"]),
             power_w_stddev=float(raw["power_w_stddev"]),
@@ -1771,6 +1844,7 @@ def _idle_baseline_from_summary(summary: dict[str, Any] | None):
             telemetry_backend=TelemetryBackend(raw["telemetry_backend"]),
             gpu_idle_ratio_mean=raw.get("gpu_idle_ratio_mean"),
             gpu_idle_ratio_min=raw.get("gpu_idle_ratio_min"),
+            gpu_freq_mhz_mean=gpu_freq_mhz_mean,
             gpu_freq_hz_mean=raw.get("gpu_freq_hz_mean"),
             idle_window_suspect=raw.get("idle_window_suspect"),
         )

@@ -102,6 +102,7 @@ def write_suite_config(
     *,
     sidecar: str | Path | None = None,
     suite_manifest: str | Path | None = None,
+    prompt_token_evidence_policy: str | None = None,
 ) -> Path:
     path = config_dir / filename
     payload = json.loads(SUITE_CONFIG.read_text(encoding="utf-8"))
@@ -110,6 +111,10 @@ def write_suite_config(
         payload["workload_profile"]["suite_manifest_ref"] = str(suite_manifest)
     if sidecar is not None:
         payload["workload_profile"]["generator_sidecar_ref"] = str(sidecar)
+    if prompt_token_evidence_policy is not None:
+        payload["workload_profile"]["prompt_token_evidence_policy"] = (
+            prompt_token_evidence_policy
+        )
     path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
     return path
 
@@ -2244,7 +2249,7 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(check["sidecar_path"], str(sidecar))
             self.assertIn("not valid JSON", check["problems"][0])
 
-    def test_inferred_sidecar_with_annotations_marker_is_not_applicable(self) -> None:
+    def test_neighboring_non_prompt_annotations_sidecar_is_missing_evidence(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -2278,14 +2283,20 @@ class RunCampaignTests(unittest.TestCase):
 
             result = run_campaign(config_dir, runs_dir)
 
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.returncode, 1, result.stderr)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
-            check = rows[0]["members"][0]["prompt_hash_check"]
-            self.assertEqual(check["status"], "not_applicable")
+            member = rows[0]["members"][0]
+            check = member["prompt_hash_check"]
+            self.assertEqual(check["status"], "missing_evidence")
             self.assertEqual(check["sidecar_path"], str(sidecar))
             self.assertEqual(check["checked_items"], 0)
+            self.assertEqual(
+                member["collection_integrity_flags"],
+                ["prompt_token_evidence_missing"],
+            )
+            self.assertEqual(member["collection_classification"], "failed")
 
-    def test_inferred_sidecar_with_known_non_prompt_schema_is_not_applicable(self) -> None:
+    def test_explicit_affine_text_evidence_exemption_is_honored(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -2304,17 +2315,24 @@ class RunCampaignTests(unittest.TestCase):
                 encoding="utf-8",
             )
             write_suite_config(
-                config_dir, "suite.json", "suite-inferred-schema", suite_manifest=manifest
+                config_dir,
+                "suite.json",
+                "suite-inferred-schema",
+                suite_manifest=manifest,
+                prompt_token_evidence_policy="exempt_affine_generated_text",
             )
 
             result = run_campaign(config_dir, runs_dir)
 
             self.assertEqual(result.returncode, 0, result.stderr)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
-            check = rows[0]["members"][0]["prompt_hash_check"]
-            self.assertEqual(check["status"], "not_applicable")
+            member = rows[0]["members"][0]
+            check = member["prompt_hash_check"]
+            self.assertEqual(check["status"], "policy_exempt")
             self.assertEqual(check["sidecar_path"], str(sidecar))
             self.assertEqual(check["checked_items"], 0)
+            self.assertEqual(member["collection_integrity_flags"], [])
+            self.assertEqual(member["collection_classification"], "usable")
 
     def test_unknown_schema_inferred_prompt_hash_sidecar_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2426,7 +2444,7 @@ class RunCampaignTests(unittest.TestCase):
                 ],
             )
 
-    def test_absent_inferred_prompt_hash_sidecar_is_not_applicable(self) -> None:
+    def test_required_text_evidence_missing_flags_member_unusable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
@@ -2445,10 +2463,68 @@ class RunCampaignTests(unittest.TestCase):
 
             result = run_campaign(config_dir, runs_dir)
 
-            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.returncode, 1, result.stderr)
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
-            check = rows[0]["members"][0]["prompt_hash_check"]
-            self.assertEqual(check, {"status": "not_applicable", "checked_items": 0})
+            member = rows[0]["members"][0]
+            check = member["prompt_hash_check"]
+            self.assertEqual(check["status"], "missing_evidence")
+            self.assertIn("missing prompt-token evidence", check["problems"][0])
+            self.assertEqual(
+                member["collection_integrity_flags"],
+                ["prompt_token_evidence_missing"],
+            )
+            self.assertEqual(member["collection_classification"], "failed")
+
+    def test_ids_prompt_label_does_not_bypass_text_evidence_requirement(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            manifest = tmp_path / "mislabeled_text_suite.json"
+            config_dir.mkdir()
+            manifest_data = json.loads(
+                (
+                    ROOT
+                    / "configs"
+                    / "suite_manifests"
+                    / "mock_suite_manifest.json"
+                ).read_text(encoding="utf-8")
+            )
+            text_item = next(
+                item
+                for item in manifest_data["items"]
+                if item["source"].get("prompt_text") is not None
+            )
+            text_item["item_type"] = "ids_prompt"
+            manifest.write_text(json.dumps(manifest_data) + "\n", encoding="utf-8")
+            config = write_suite_config(
+                config_dir,
+                "suite.json",
+                "suite-mislabeled-text",
+                suite_manifest=manifest,
+            )
+            from joulewise.suite import suite_manifest_sha256
+
+            config_data = json.loads(config.read_text(encoding="utf-8"))
+            config_data["workload_profile"]["suite_manifest_sha256"] = (
+                suite_manifest_sha256(manifest_data)
+            )
+            config.write_text(json.dumps(config_data) + "\n", encoding="utf-8")
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 1, result.stderr)
+            rows = read_jsonl(runs_dir / "campaign_log.jsonl")
+            member = rows[0]["members"][0]
+            self.assertEqual(
+                member["prompt_hash_check"]["status"],
+                "missing_evidence",
+            )
+            self.assertEqual(
+                member["collection_integrity_flags"],
+                ["prompt_token_evidence_missing"],
+            )
+            self.assertEqual(member["collection_classification"], "failed")
 
     def test_prompt_hash_sidecar_top_level_alias_resolves_relative_to_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2663,13 +2739,42 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(member["collection_classification"], "waived")
             self.assertEqual(member["waiver"]["scope"], "prompt_hash_check_error")
 
-    def test_sidecarless_campaign_records_prompt_hash_check_not_applicable(self) -> None:
+    def test_id_native_suite_without_sidecar_remains_not_applicable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             config_dir = tmp_path / "configs"
             runs_dir = tmp_path / "runs"
+            manifest = tmp_path / "id_native_suite.json"
             config_dir.mkdir()
-            write_suite_config(config_dir, "suite.json", "suite-no-sidecar")
+            manifest_data = json.loads(
+                (
+                    ROOT
+                    / "configs"
+                    / "suite_manifests"
+                    / "mock_suite_manifest.json"
+                ).read_text(encoding="utf-8")
+            )
+            for item in manifest_data["items"]:
+                if item["item_type"] != "text_prompt":
+                    continue
+                count = item["shape"]["planned_prompt_tokens"]
+                item["item_type"] = "ids_prompt"
+                item["source"]["prompt_text"] = None
+                item["source"]["prompt_token_ids"] = list(range(1, count + 1))
+            manifest.write_text(json.dumps(manifest_data) + "\n", encoding="utf-8")
+            config = write_suite_config(
+                config_dir,
+                "suite.json",
+                "suite-no-sidecar",
+                suite_manifest=manifest,
+            )
+            from joulewise.suite import suite_manifest_sha256
+
+            config_data = json.loads(config.read_text(encoding="utf-8"))
+            config_data["workload_profile"]["suite_manifest_sha256"] = (
+                suite_manifest_sha256(manifest_data)
+            )
+            config.write_text(json.dumps(config_data) + "\n", encoding="utf-8")
 
             result = run_campaign(config_dir, runs_dir)
 
@@ -2678,6 +2783,25 @@ class RunCampaignTests(unittest.TestCase):
             rows = read_jsonl(runs_dir / "campaign_log.jsonl")
             check = rows[0]["members"][0]["prompt_hash_check"]
             self.assertEqual(check, {"status": "not_applicable", "checked_items": 0})
+
+    def test_unknown_prompt_token_evidence_policy_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            config_dir = tmp_path / "configs"
+            runs_dir = tmp_path / "runs"
+            config_dir.mkdir()
+            write_suite_config(
+                config_dir,
+                "suite.json",
+                "suite-unknown-policy",
+                prompt_token_evidence_policy="trust_neighboring_annotations",
+            )
+
+            result = run_campaign(config_dir, runs_dir)
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("prompt_token_evidence_policy must be one of", result.stderr)
+            self.assertFalse(runs_dir.exists())
 
     def test_post_hoc_prompt_hash_check_flag_on_fixture_pair(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2690,7 +2814,12 @@ class RunCampaignTests(unittest.TestCase):
                 sidecar,
                 item_003_hash="059b92ad883522ede0ed6466c53233117801ea5d28c3af1ff6d0777487b37e10",
             )
-            write_suite_config(config_dir, "suite.json", "suite-posthoc")
+            write_suite_config(
+                config_dir,
+                "suite.json",
+                "suite-posthoc",
+                prompt_token_evidence_policy="exempt_affine_generated_text",
+            )
             campaign = run_campaign(config_dir, runs_dir)
             self.assertEqual(campaign.returncode, 0, campaign.stderr)
 
@@ -2722,7 +2851,12 @@ class RunCampaignTests(unittest.TestCase):
             sidecar = tmp_path / "mixed.annotations.json"
             config_dir.mkdir()
             write_prompt_sidecar(sidecar, item_003_hash="0" * 64)
-            write_suite_config(config_dir, "suite.json", "suite-posthoc-nonzero")
+            write_suite_config(
+                config_dir,
+                "suite.json",
+                "suite-posthoc-nonzero",
+                prompt_token_evidence_policy="exempt_affine_generated_text",
+            )
             campaign = run_campaign(config_dir, runs_dir)
             self.assertEqual(campaign.returncode, 0, campaign.stderr)
 

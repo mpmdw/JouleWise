@@ -10,6 +10,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from joulewise.analysis_engine import AnalysisInputError, analyze_claims
 from joulewise.analysis_engine.artifact import render_claim_verdicts
@@ -20,22 +21,51 @@ from joulewise.analysis_engine.artifact import (
 from joulewise.analysis_manifest import calculate_manifest_id
 from joulewise.analysis_engine.multiplicity import holm_adjust
 from joulewise.analysis_engine.estimators import StochasticVarianceTerm
-from joulewise.analysis_engine.inputs import load_analysis_inputs
+from joulewise.analysis_engine.inputs import (
+    FloorEvidenceBinding,
+    floor_binding_reason_codes,
+    floor_request_for_evidence,
+    floor_stack_identity,
+    load_analysis_inputs,
+)
 from joulewise.cli import main, validate_bundle
 from joulewise.detection_floor import (
+    abba_delta,
+    absolute_false_effect_floor,
+    build_absolute_record,
+    build_comparative_record,
     build_floor_artifact,
     build_transport_group,
+    canonical_domain_sha256,
+    comparative_false_effect_floor,
+    complete_bundle_sha256,
+    STACK_IDENTITY_DOMAIN,
 )
 from scripts.generate_matrix import main as generate_matrix
-from tests.test_detection_floor import make_artifact, make_cell
+from tests.test_detection_floor import condition_family, make_artifact, make_cell
 
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_CONFIG = ROOT / "configs" / "examples" / "mock_local.json"
 SIDECARS = {"order_manifest.json", "analysis_manifest.json"}
+CLEAN_SOURCE_STATE = {
+    "git_commit": "1" * 40,
+    "tracked": "clean",
+    "staged": "clean",
+    "untracked": "clean",
+    "diff_sha256": "2" * 64,
+}
 
 
 class AnalysisIntegrationTests(unittest.TestCase):
+    def setUp(self):
+        source_patch = mock.patch(
+            "joulewise.bundle._capture_source_state",
+            return_value=dict(CLEAN_SOURCE_STATE),
+        )
+        source_patch.start()
+        self.addCleanup(source_patch.stop)
+
     @classmethod
     def setUpClass(cls):
         cls._temporary = tempfile.TemporaryDirectory()
@@ -56,13 +86,17 @@ class AnalysisIntegrationTests(unittest.TestCase):
             )
         if code != 0:
             raise AssertionError(f"matrix generation failed: {code}")
-        for config in sorted(cls.config_dir.glob("*.json")):
-            if config.name in SIDECARS:
-                continue
-            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
-                code = main(["run", str(config), "--runs-dir", str(cls.runs_root)])
-            if code != 0:
-                raise AssertionError(f"mock run failed for {config.name}: {code}")
+        with mock.patch(
+            "joulewise.bundle._capture_source_state",
+            return_value=dict(CLEAN_SOURCE_STATE),
+        ):
+            for config in sorted(cls.config_dir.glob("*.json")):
+                if config.name in SIDECARS:
+                    continue
+                with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                    code = main(["run", str(config), "--runs-dir", str(cls.runs_root)])
+                if code != 0:
+                    raise AssertionError(f"mock run failed for {config.name}: {code}")
         cls.floor_path.write_text(
             json.dumps(make_artifact(), indent=2) + "\n", encoding="utf-8"
         )
@@ -102,6 +136,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 self.assertNotIn(
                     "window_evidence_precheck_missing", evaluation["reason_codes"]
                 )
+
                 self.assertIn(
                     "campaign_cooldown_evidence_missing", evaluation["reason_codes"]
                 )
@@ -133,6 +168,71 @@ class AnalysisIntegrationTests(unittest.TestCase):
         omitted_loo["contrasts"][0]["loo"] = {"status": "not_run", "rows": []}
         omitted_loo["claim_verdicts_id"] = calculate_claim_verdicts_id(omitted_loo)
         self.assertTrue(validate_claim_verdicts(omitted_loo))
+
+    def test_production_request_factory_reaches_predeclared_transport(self):
+        loaded = load_analysis_inputs(
+            self.manifest_path,
+            self.runs_root,
+            self.floor_path,
+            strict_validator=validate_bundle,
+        )
+        contrast = loaded.manifest["contrasts"][0]
+        condition_id = contrast["condition_a_id"]
+        evidence = [
+            row
+            for row in loaded.effective.values()
+            if row.entry.get("condition_id") == condition_id
+        ]
+        self.assertTrue(evidence)
+        stack = floor_stack_identity(evidence[0].raw_config, evidence[0].metadata)
+        self.assertIsNotNone(stack)
+        source = make_cell(cell_id="transport-source", condition="calibration-only")
+        source["key"].update(
+            backend="mock",
+            metric=contrast["floor_selector"]["metric"],
+            window_class=contrast["floor_selector"]["window_class"],
+        )
+        source["source_regime"]["stack_identity"] = stack
+        source["source_regime"]["stack_identity_sha256"] = canonical_domain_sha256(
+            STACK_IDENTITY_DOMAIN, stack
+        )
+        source["transport_group_id"] = "tg-production-transport"
+        group = build_transport_group(
+            transport_group_id="tg-production-transport",
+            backend="mock",
+            metric=contrast["floor_selector"]["metric"],
+            window_class=contrast["floor_selector"]["window_class"],
+            stack_identity=stack,
+            source_cells=[source],
+            allowed_consumer_condition_families=[condition_family(condition_id)],
+        )
+        artifact = build_floor_artifact(
+            artifact_id="production-transport",
+            calibration_scope="window_a",
+            provenance=make_artifact()["provenance"],
+            cells=[source],
+            transport_groups=[group],
+        )
+        binding = FloorEvidenceBinding(
+            bound_cell_ids=frozenset({source["cell_id"]}),
+            cell_scientific_identity_sha256={},
+            cell_stack_identity_sha256={
+                source["cell_id"]: source["source_regime"]["stack_identity_sha256"]
+            },
+            bound_bundle_sha256s=frozenset(),
+            problems_by_cell={source["cell_id"]: ()},
+            global_problems=(),
+        )
+        request = floor_request_for_evidence(
+            artifact,
+            binding,
+            contrast,
+            condition_id,
+            evidence,
+        )
+        self.assertIsNotNone(request)
+        self.assertEqual(request.condition_family_id, condition_id)
+        self.assertEqual(request.stack_identity_sha256, group["stack_identity_sha256"])
 
     def test_named_strata_manifest_completes_leave_one_block_out(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -357,7 +457,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
         )
         self.assertGreater(metrology_width, repeat_width)
 
-    def test_cli_default_resolves_exact_floor_from_declared_bundle_inputs(self):
+    def test_cli_binds_distinct_calibration_bundles_and_preserves_loo_rows(self):
         manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         condition_ids = sorted(
             {
@@ -366,7 +466,36 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 if entry["role"] == "condition"
             }
         )
+        # Calibration and consumer bundles share only the immutable runs root;
+        # every calibration run ID below is distinct from every manifest
+        # consumer run ID.
+        calibration_root = self.root / "independent-consumer-and-calibration-runs"
+        shutil.copytree(self.runs_root, calibration_root)
+        floor_dir = self.root / "independent-floor"
+        floor_dir.mkdir(exist_ok=True)
+        calibration_plan_path = floor_dir / "calibration_plan.json"
+        calibration_plan_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": "joulewise.detection_floor_calibration_plan.v1",
+                    "plan_id": "floor-exact-cli-plan",
+                    "condition_family_ids": condition_ids,
+                    "comparative_member_labels": ["A", "B", "B", "A"],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        calibration_plan_sha256 = hashlib.sha256(
+            calibration_plan_path.read_bytes()
+        ).hexdigest()
         cells = []
+        groups = []
+        order_rows = []
+        campaign_rows = []
+        all_bound_hashes = []
         for condition_id in condition_ids:
             entries = sorted(
                 (
@@ -376,47 +505,178 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 ),
                 key=lambda entry: entry["planned_rep_index"],
             )
-            cell = make_cell(cell_id=f"floor-{condition_id}", condition=condition_id)
-            cell["key"].update(backend="mock", metric="gross_energy_j")
-            observations = cell["absolute"]["bundle_observations"]
-            for observation, entry in zip(observations, entries, strict=True):
-                observation["bundle_id"] = entry["run_id"]
-                observation["config_sha256"] = hashlib.sha256(
-                    (self.runs_root / entry["run_id"] / "config.json").read_bytes()
-                ).hexdigest()
-            cell["provenance"]["bundle_ids"] = [
-                observation["bundle_id"] for observation in observations
-            ]
-            cells.append(cell)
-        group = build_transport_group(
-            transport_group_id="tg-exact-cli",
-            backend="mock",
-            metric="gross_energy_j",
-            window_class="request",
-            stack_identity=cells[0]["source_regime"]["stack_identity"],
-            source_cells=cells,
-            allowed_consumer_condition_families=[
-                {
-                    key: cell["key"][key]
-                    for key in (
-                        "condition_family_id",
-                        "condition_family_definition",
-                        "condition_family_sha256",
+            source_config = json.loads(
+                (self.config_dir / entries[0]["config"]).read_text(encoding="utf-8")
+            )
+            calibration_ids = []
+            with mock.patch(
+                "joulewise.bundle._capture_source_state",
+                return_value=dict(CLEAN_SOURCE_STATE),
+            ):
+                for index in range(25):
+                    run_id = f"cal-{condition_id}-{index:02d}"
+                    calibration_config = json.loads(json.dumps(source_config))
+                    calibration_config["run_id"] = run_id
+                    tags = calibration_config["run_metadata"]["tags"]
+                    tags.append(
+                        f"calibration-plan-sha256={calibration_plan_sha256}"
                     )
+                    if index >= 5:
+                        block_index = (index - 5) // 4
+                        sequence_index = (index - 5) % 4
+                        labels = ("A", "B", "B", "A")
+                        tags.extend(
+                            (
+                                f"calibration-abba-block-id=floor-{condition_id}-b{block_index}",
+                                f"calibration-abba-label={labels[sequence_index]}",
+                                f"calibration-abba-sequence-index={sequence_index + 1}",
+                            )
+                        )
+                    config_path = floor_dir / f"{run_id}.json"
+                    config_path.write_text(
+                        json.dumps(calibration_config, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                        code = main(
+                            ["run", str(config_path), "--runs-dir", str(calibration_root)]
+                        )
+                    self.assertEqual(code, 0)
+                    calibration_ids.append(run_id)
+                    order_rows.append(
+                        {"index": len(order_rows) + 1, "config": config_path.name, "run_id": run_id}
+                    )
+                    campaign_rows.append(
+                        {"run_index": len(campaign_rows) + 1, "run_id": run_id}
+                    )
+
+            def calibration_record(run_id):
+                bundle = calibration_root / run_id
+                summary = json.loads((bundle / "summary_metrics.json").read_text(encoding="utf-8"))
+                bundle_hash = complete_bundle_sha256(bundle)
+                all_bound_hashes.append(bundle_hash)
+                return {
+                    "bundle_id": run_id,
+                    "bundle_sha256": bundle_hash,
+                    "config_sha256": hashlib.sha256((bundle / "config.json").read_bytes()).hexdigest(),
+                    "metric_value_j": summary["gross_energy_j"],
                 }
-                for cell in cells
-            ],
+
+            observations = [calibration_record(run_id) for run_id in calibration_ids[:5]]
+            absolute = build_absolute_record(
+                absolute_false_effect_floor(
+                    [row["metric_value_j"] for row in observations]
+                ),
+                observations,
+            )
+            blocks = []
+            for block_index in range(5):
+                ids = calibration_ids[5 + block_index * 4 : 9 + block_index * 4]
+                member_records = [calibration_record(run_id) for run_id in ids]
+                positioned = [
+                    {"position": position, **record}
+                    for position, record in zip(
+                        ("A1", "B1", "B2", "A2"), member_records, strict=True
+                    )
+                ]
+                delta = abba_delta(
+                    positioned[0]["metric_value_j"],
+                    positioned[1]["metric_value_j"],
+                    positioned[2]["metric_value_j"],
+                    positioned[3]["metric_value_j"],
+                )
+                blocks.append(
+                    {
+                        "block_id": f"floor-{condition_id}-b{block_index}",
+                        "executed_labels": ["A", "B", "B", "A"],
+                        "members": positioned,
+                        "delta_j": delta,
+                    }
+                )
+            comparative = build_comparative_record(
+                comparative_false_effect_floor([block["delta_j"] for block in blocks]),
+                blocks,
+            )
+            cell = make_cell(cell_id=f"floor-{condition_id}", condition=condition_id)
+            first_bundle = calibration_root / calibration_ids[0]
+            stack = floor_stack_identity(
+                json.loads((first_bundle / "config.json").read_text(encoding="utf-8")),
+                json.loads((first_bundle / "metadata.json").read_text(encoding="utf-8")),
+            )
+            self.assertIsNotNone(stack)
+            cell["key"].update(backend="mock", metric="gross_energy_j", window_class="request")
+            cell["absolute"] = absolute
+            cell["comparative"] = comparative
+            cell["floor_abs_j"] = absolute["guarded_floor_j"]
+            cell["floor_cmp_j"] = comparative["guarded_floor_j"]
+            cell["floor_gate_j"] = max(cell["floor_abs_j"], cell["floor_cmp_j"])
+            cell["source_regime"]["stack_identity"] = stack
+            cell["source_regime"]["stack_identity_sha256"] = canonical_domain_sha256(
+                STACK_IDENTITY_DOMAIN, stack
+            )
+            cell["transport_group_id"] = f"tg-{condition_id}"
+            cell["provenance"]["bundle_ids"] = [row["bundle_id"] for row in observations]
+            cell["provenance"]["bundle_sha256s"] = [row["bundle_sha256"] for row in observations]
+            cells.append(cell)
+            groups.append(
+                build_transport_group(
+                    transport_group_id=f"tg-{condition_id}",
+                    backend="mock",
+                    metric="gross_energy_j",
+                    window_class="request",
+                    stack_identity=stack,
+                    source_cells=[cell],
+                    allowed_consumer_condition_families=[
+                        {
+                            key: cell["key"][key]
+                            for key in (
+                                "condition_family_id",
+                                "condition_family_definition",
+                                "condition_family_sha256",
+                            )
+                        }
+                    ],
+                )
+            )
+        order_path = floor_dir / "order_manifest.json"
+        order_path.write_text(
+            json.dumps(
+                {"schema_version": "joulewise.order_manifest.v1", "executed_order": order_rows},
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
         )
-        for cell in cells:
-            cell["transport_group_id"] = "tg-exact-cli"
+        campaign_path = calibration_root / "campaign_log.jsonl"
+        campaign_path.write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in campaign_rows),
+            encoding="utf-8",
+        )
+        provenance = make_artifact()["provenance"]
+        provenance["calibration_plan"] = {
+            "plan_id": "floor-exact-cli-plan",
+            "sha256": calibration_plan_sha256,
+        }
+        provenance["order_manifest"]["sha256"] = hashlib.sha256(order_path.read_bytes()).hexdigest()
+        provenance["campaign_log"]["sha256"] = hashlib.sha256(campaign_path.read_bytes()).hexdigest()
         exact_floor = build_floor_artifact(
             artifact_id="floor-exact-cli",
             calibration_scope="window_a",
-            provenance=make_artifact()["provenance"],
+            provenance=provenance,
             cells=cells,
-            transport_groups=[group],
+            transport_groups=groups,
+            idle_drift_guard={
+                "calibration_status": "calibrated",
+                "method": "p2_015_prediction_guard_v1",
+                "guard_w": 0.25,
+                "n_bundles": 2,
+                "bundle_sha256": all_bound_hashes[:2],
+                "cell_id": cells[0]["cell_id"],
+                "artifact_sha256": "3" * 64,
+            },
         )
-        floor_path = self.root / "floor-exact-cli.json"
+        floor_path = floor_dir / "floor-exact-cli.json"
         floor_path.write_text(json.dumps(exact_floor, indent=2) + "\n", encoding="utf-8")
         output = self.root / "exact-cli-claim-verdicts.json"
         with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as stderr:
@@ -426,7 +686,7 @@ class AnalysisIntegrationTests(unittest.TestCase):
                     "--analysis-manifest",
                     str(self.manifest_path),
                     "--runs-root",
-                    str(self.runs_root),
+                    str(calibration_root),
                     "--floor-artifact",
                     str(floor_path),
                     "--output",
@@ -447,6 +707,227 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 resolution["status"] == "exact"
                 for contrast in gross
                 for resolution in contrast["floor"]["resolutions"]
+            )
+        )
+        self.assertTrue(all(contrast["loo"]["status"] == "complete" for contrast in gross))
+        self.assertTrue(all(len(contrast["loo"]["rows"]) == 5 for contrast in gross))
+
+        def refresh_first_cell(candidate):
+            changed_cell = candidate["cells"][0]
+            changed_blocks = changed_cell["comparative"]["blocks"]
+            for changed_block in changed_blocks:
+                members = changed_block["members"]
+                changed_block["delta_j"] = abba_delta(
+                    members[0]["metric_value_j"],
+                    members[1]["metric_value_j"],
+                    members[2]["metric_value_j"],
+                    members[3]["metric_value_j"],
+                )
+            changed_cell["comparative"] = build_comparative_record(
+                comparative_false_effect_floor(
+                    [block["delta_j"] for block in changed_blocks]
+                ),
+                changed_blocks,
+            )
+            changed_cell["floor_cmp_j"] = changed_cell["comparative"]["guarded_floor_j"]
+            changed_cell["floor_gate_j"] = max(
+                changed_cell["floor_abs_j"], changed_cell["floor_cmp_j"]
+            )
+            candidate["transport_groups"][0] = build_transport_group(
+                transport_group_id=changed_cell["transport_group_id"],
+                backend="mock",
+                metric="gross_energy_j",
+                window_class="request",
+                stack_identity=changed_cell["source_regime"]["stack_identity"],
+                source_cells=[changed_cell],
+                allowed_consumer_condition_families=[
+                    {
+                        key: changed_cell["key"][key]
+                        for key in (
+                            "condition_family_id",
+                            "condition_family_definition",
+                            "condition_family_sha256",
+                        )
+                    }
+                ],
+            )
+
+        def binding_for(candidate, name):
+            candidate_path = floor_dir / name
+            candidate_path.write_text(
+                json.dumps(candidate, indent=2) + "\n", encoding="utf-8"
+            )
+            return load_analysis_inputs(
+                self.manifest_path,
+                calibration_root,
+                candidate_path,
+                strict_validator=validate_bundle,
+            ).floor_binding
+
+        relabeled = json.loads(json.dumps(exact_floor))
+        relabeled_members = relabeled["cells"][0]["comparative"]["blocks"][0]["members"]
+        payload_keys = (
+            "bundle_id",
+            "bundle_sha256",
+            "config_sha256",
+            "metric_value_j",
+        )
+        for key in payload_keys:
+            relabeled_members[0][key], relabeled_members[1][key] = (
+                relabeled_members[1][key],
+                relabeled_members[0][key],
+            )
+        refresh_first_cell(relabeled)
+        relabeled_binding = binding_for(relabeled, "floor-relabeled-abba.json")
+        self.assertTrue(
+            any(
+                "calibration_abba_label_mismatch" in problem
+                for problem in relabeled_binding.problems_by_cell[relabeled["cells"][0]["cell_id"]]
+            )
+        )
+        self.assertNotIn(
+            relabeled["cells"][0]["cell_id"], relabeled_binding.bound_cell_ids
+        )
+        self.assertIn(
+            "calibration_abba_label_mismatch",
+            floor_binding_reason_codes(relabeled_binding),
+        )
+        relabeled_result = analyze_claims(
+            self.manifest_path,
+            calibration_root,
+            floor_dir / "floor-relabeled-abba.json",
+            strict_validator=validate_bundle,
+        )
+        self.assertTrue(
+            any(
+                "calibration_abba_label_mismatch" in resolution["reason_codes"]
+                for contrast in relabeled_result["contrasts"]
+                for resolution in contrast["floor"]["resolutions"]
+            )
+        )
+
+        reordered = json.loads(json.dumps(exact_floor))
+        reordered_members = reordered["cells"][0]["comparative"]["blocks"][0]["members"]
+        for key in payload_keys:
+            reordered_members[1][key], reordered_members[2][key] = (
+                reordered_members[2][key],
+                reordered_members[1][key],
+            )
+        refresh_first_cell(reordered)
+        reordered_binding = binding_for(reordered, "floor-reordered-members.json")
+        self.assertTrue(
+            any(
+                "calibration_abba_member_order_mismatch" in problem
+                for problem in reordered_binding.problems_by_cell[reordered["cells"][0]["cell_id"]]
+            )
+        )
+        self.assertNotIn(
+            reordered["cells"][0]["cell_id"], reordered_binding.bound_cell_ids
+        )
+        self.assertIn(
+            "calibration_abba_member_order_mismatch",
+            floor_binding_reason_codes(reordered_binding),
+        )
+
+        plan_bytes = calibration_plan_path.read_bytes()
+        try:
+            calibration_plan_path.write_bytes(plan_bytes + b" ")
+            plan_binding = binding_for(exact_floor, "floor-tampered-plan.json")
+        finally:
+            calibration_plan_path.write_bytes(plan_bytes)
+        self.assertIn(
+            "calibration_plan_bytes_hash_mismatch", plan_binding.global_problems
+        )
+        self.assertFalse(plan_binding.bound_cell_ids)
+        self.assertIn(
+            "calibration_plan_bytes_hash_mismatch",
+            floor_binding_reason_codes(plan_binding),
+        )
+
+        guard_tampered = json.loads(json.dumps(exact_floor))
+        guard_tampered["idle_drift_guard"]["bundle_sha256"] = all_bound_hashes[25:27]
+        guard_binding = binding_for(guard_tampered, "floor-tampered-guard.json")
+        self.assertIn(
+            "idle_drift_guard_provenance_mismatch", guard_binding.global_problems
+        )
+        self.assertFalse(guard_binding.bound_cell_ids)
+        self.assertIn(
+            "idle_drift_guard_provenance_mismatch",
+            floor_binding_reason_codes(guard_binding),
+        )
+
+        fabricated = json.loads(json.dumps(exact_floor))
+        fabricated_cell = fabricated["cells"][0]
+        fake_observations = fabricated_cell["absolute"]["bundle_observations"]
+        for observation in fake_observations:
+            observation["metric_value_j"] += 1.0
+        fabricated_cell["absolute"] = build_absolute_record(
+            absolute_false_effect_floor(
+                [observation["metric_value_j"] for observation in fake_observations]
+            ),
+            fake_observations,
+        )
+        fabricated_cell["floor_abs_j"] = fabricated_cell["absolute"]["guarded_floor_j"]
+        fabricated_cell["floor_gate_j"] = max(
+            fabricated_cell["floor_abs_j"], fabricated_cell["floor_cmp_j"]
+        )
+        fabricated["transport_groups"][0] = build_transport_group(
+            transport_group_id=fabricated_cell["transport_group_id"],
+            backend="mock",
+            metric="gross_energy_j",
+            window_class="request",
+            stack_identity=fabricated_cell["source_regime"]["stack_identity"],
+            source_cells=[fabricated_cell],
+            allowed_consumer_condition_families=[
+                {
+                    key: fabricated_cell["key"][key]
+                    for key in (
+                        "condition_family_id",
+                        "condition_family_definition",
+                        "condition_family_sha256",
+                    )
+                }
+            ],
+        )
+        fabricated_path = floor_dir / "floor-fabricated-metrics.json"
+        fabricated_path.write_text(
+            json.dumps(fabricated, indent=2) + "\n", encoding="utf-8"
+        )
+        fabricated_output = self.root / "fabricated-floor-claim-verdicts.json"
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()) as stderr:
+            code = main(
+                [
+                    "analyze-claims",
+                    "--analysis-manifest",
+                    str(self.manifest_path),
+                    "--runs-root",
+                    str(calibration_root),
+                    "--floor-artifact",
+                    str(fabricated_path),
+                    "--output",
+                    str(fabricated_output),
+                ]
+            )
+        self.assertEqual(code, 0, stderr.getvalue())
+        refused = json.loads(fabricated_output.read_text(encoding="utf-8"))
+        affected_condition = fabricated_cell["key"]["condition_family_id"]
+        affected = [
+            resolution
+            for contrast in refused["contrasts"]
+            for resolution in contrast["floor"]["resolutions"]
+            if resolution["source_cell_ids"] == []
+            or affected_condition
+            in {
+                contrast["conditions"]["condition_a_id"],
+                contrast["conditions"]["condition_b_id"],
+            }
+        ]
+        self.assertTrue(affected)
+        self.assertTrue(
+            any(
+                row["status"] == "refused"
+                and "artifact_schema_invalid" in row["reason_codes"]
+                for row in affected
             )
         )
 

@@ -1,0 +1,268 @@
+{
+  "authoritative_reference": {
+    "name": "support_overlap_power_times_duration_over_sampling_boundaries",
+    "reason": "It is the frozen reducer estimand, uses the canonical D-026 sampling boundaries, and is independently counter-consistent."
+  },
+  "bundles": [
+    {
+      "authoritative_support_overlap_power_j": 49.4884819364212,
+      "bundle": "example-mac-mlx-local__r1",
+      "canonical_sampling_window": {
+        "duration_s": 2.0916740894317627,
+        "end_s": 1783396991.959214,
+        "start_s": 1783396989.86754
+      },
+      "canonical_support_overlap_counter_j": 49.488495111377055,
+      "counter_consistency": {
+        "all_records_within_tolerance": true,
+        "max_per_record_abs_delta_j": 5.843519999881863e-06,
+        "tolerance_j": 1e-05
+      },
+      "idle": {
+        "arithmetic_mean_w": 3.5067153511666667,
+        "arithmetic_minus_weighted_w": 0.024659737353872835,
+        "corrected_idle_subtracted_j": 42.20515643104857,
+        "duration_weighted_mean_w": 3.482055613812794,
+        "legacy_idle_subtracted_j": 40.651390505883796,
+        "legacy_minus_corrected_idle_subtracted_j": -1.5537659251647753,
+        "record_count": 300
+      },
+      "legacy_minus_authoritative_j": -1.502185791489481,
+      "legacy_minus_authoritative_pct": -3.035425078141148,
+      "legacy_minus_stage_envelope_pct": -5.18094847914466,
+      "legacy_trapezoid_gross_j": 47.98629614493172,
+      "noncanonical_stage_envelope": {
+        "duration_s": 2.96230411529541,
+        "end_s": 1783396992.001197,
+        "start_s": 1783396989.038893
+      },
+      "raw_sha256": {
+        "powermetrics.plist": "6641fae2e1767fb7fbf7a627518a728653df25fe2d25a63efce94c8ab4eef05a",
+        "powermetrics_idle.plist": "ba7b2e614a887307cdce402fee7378cf41d3990b4e4f910c90924ff72b7cdd03"
+      },
+      "record_count": 19,
+      "stage_envelope_support_overlap_counter_j": 50.60829640878208,
+      "stage_envelope_support_overlap_power_j": 50.60828533427925
+    },
+    {
+      "authoritative_support_overlap_power_j": 48.4878424526865,
+      "bundle": "example-mac-mlx-local__r2",
+      "canonical_sampling_window": {
+        "duration_s": 2.0908148288726807,
+        "end_s": 1783397339.1011379,
+        "start_s": 1783397337.010323
+      },
+      "canonical_support_overlap_counter_j": 48.48781324709173,
+      "counter_consistency": {
+        "all_records_within_tolerance": true,
+        "max_per_record_abs_delta_j": 5.858315559770233e-06,
+        "tolerance_j": 1e-05
+      },
+      "idle": {
+        "arithmetic_mean_w": 0.3442006276,
+        "arithmetic_minus_weighted_w": 0.0002392182355434036,
+        "corrected_idle_subtracted_j": 47.76868283742735,
+        "duration_weighted_mean_w": 0.34396140936445657,
+        "legacy_idle_subtracted_j": 46.31701654002997,
+        "legacy_minus_corrected_idle_subtracted_j": -1.4516662973973808,
+        "record_count": 300
+      },
+      "legacy_minus_authoritative_j": -1.4511661363631703,
+      "legacy_minus_authoritative_pct": -2.9928453462931253,
+      "legacy_minus_stage_envelope_pct": -5.2069522915339475,
+      "legacy_trapezoid_gross_j": 47.03667631632333,
+      "noncanonical_stage_envelope": {
+        "duration_s": 2.9700350761413574,
+        "end_s": 1783397339.144035,
+        "start_s": 1783397336.174
+      },
+      "raw_sha256": {
+        "powermetrics.plist": "295a14ef3f5db73bac7a682d82b9249ef20b9bdcc36ef5670136987310aae1da",
+        "powermetrics_idle.plist": "f43c3f241bca94d0da8339e69cf3ffebf2b231453c086a5385c8e953ffcf2c09"
+      },
+      "record_count": 19,
+      "stage_envelope_support_overlap_counter_j": 49.62035576590699,
+      "stage_envelope_support_overlap_power_j": 49.62038615003033
+    },
+    {
+      "authoritative_support_overlap_power_j": 48.021862350987675,
+      "bundle": "example-mac-mlx-local__r3",
+      "canonical_sampling_window": {
+        "duration_s": 2.0911171436309814,
+        "end_s": 1783397499.779434,
+        "start_s": 1783397497.6883168
+      },
+      "canonical_support_overlap_counter_j": 48.02186438118472,
+      "counter_consistency": {
+        "all_records_within_tolerance": true,
+        "max_per_record_abs_delta_j": 5.787559999692604e-06,
+        "tolerance_j": 1e-05
+      },
+      "idle": {
+        "arithmetic_mean_w": 0.1573152609,
+        "arithmetic_minus_weighted_w": -1.831134671112511e-05,
+        "corrected_idle_subtracted_j": 47.69285942079387,
+        "duration_weighted_mean_w": 0.15733357224671113,
+        "legacy_idle_subtracted_j": 46.309333376402556,
+        "legacy_minus_corrected_idle_subtracted_j": -1.383526044391317,
+        "record_count": 300
+      },
+      "legacy_minus_authoritative_j": -1.3835643355623475,
+      "legacy_minus_authoritative_pct": -2.881113450890335,
+      "legacy_minus_stage_envelope_pct": -5.101086556911348,
+      "legacy_trapezoid_gross_j": 46.63829801542533,
+      "noncanonical_stage_envelope": {
+        "duration_s": 2.974976062774658,
+        "end_s": 1783397499.824712,
+        "start_s": 1783397496.849736
+      },
+      "raw_sha256": {
+        "powermetrics.plist": "52916483c488f28bd56d2028c274b9fe68f85143b02a23fe2f120220bb766b15",
+        "powermetrics_idle.plist": "9df3ec7b959386803654fa45e7649996a25cd13b50ffcf5d5e22c1e07cecc293"
+      },
+      "record_count": 20,
+      "stage_envelope_support_overlap_counter_j": 49.1452391124347,
+      "stage_envelope_support_overlap_power_j": 49.14523920592046
+    },
+    {
+      "authoritative_support_overlap_power_j": 305.0542010720239,
+      "bundle": "example-mac-mlx-qwen35-122b-512t__r1",
+      "canonical_sampling_window": {
+        "duration_s": 11.320980072021484,
+        "end_s": 1783425241.3545501,
+        "start_s": 1783425230.03357
+      },
+      "canonical_support_overlap_counter_j": 305.0542424426875,
+      "counter_consistency": {
+        "all_records_within_tolerance": true,
+        "max_per_record_abs_delta_j": 5.8727289697912965e-06,
+        "tolerance_j": 1e-05
+      },
+      "idle": {
+        "arithmetic_mean_w": 0.3762576787333334,
+        "arithmetic_minus_weighted_w": 0.00027968607447348415,
+        "corrected_idle_subtracted_j": 300.7977617096143,
+        "duration_weighted_mean_w": 0.3759779926588599,
+        "legacy_idle_subtracted_j": 299.27523049207525,
+        "legacy_minus_corrected_idle_subtracted_j": -1.52253121753904,
+        "record_count": 300
+      },
+      "legacy_minus_authoritative_j": -1.5193648970634968,
+      "legacy_minus_authoritative_pct": -0.4980639151088996,
+      "legacy_minus_stage_envelope_pct": -0.9341208373633685,
+      "legacy_trapezoid_gross_j": 303.5348361749604,
+      "noncanonical_stage_envelope": {
+        "duration_s": 12.366611003875732,
+        "end_s": 1783425241.565994,
+        "start_s": 1783425229.199383
+      },
+      "raw_sha256": {
+        "powermetrics.plist": "7c9e665fb13f91e00ad33c917e7c11d6767cffc65f708ce0892526095e932efc",
+        "powermetrics_idle.plist": "fbae20654140641a926ed8e4ab0bcab2f3e963edc1b73eff7ba5a3472168d759"
+      },
+      "record_count": 101,
+      "stage_envelope_support_overlap_counter_j": 306.39699623404437,
+      "stage_envelope_support_overlap_power_j": 306.3969539670129
+    },
+    {
+      "authoritative_support_overlap_power_j": 304.9761931207392,
+      "bundle": "example-mac-mlx-qwen35-122b-512t__r2",
+      "canonical_sampling_window": {
+        "duration_s": 11.394273042678833,
+        "end_s": 1783425351.475486,
+        "start_s": 1783425340.081213
+      },
+      "canonical_support_overlap_counter_j": 304.9761883050714,
+      "counter_consistency": {
+        "all_records_within_tolerance": true,
+        "max_per_record_abs_delta_j": 5.949675000227472e-06,
+        "tolerance_j": 1e-05
+      },
+      "idle": {
+        "arithmetic_mean_w": 0.41885357343333335,
+        "arithmetic_minus_weighted_w": 0.0004317908318045016,
+        "corrected_idle_subtracted_j": 300.208581082773,
+        "duration_weighted_mean_w": 0.41842178260152885,
+        "legacy_idle_subtracted_j": 298.69673038563093,
+        "legacy_minus_corrected_idle_subtracted_j": -1.5118506971420516,
+        "record_count": 300
+      },
+      "legacy_minus_authoritative_j": -1.5069307545071524,
+      "legacy_minus_authoritative_pct": -0.49411422547023626,
+      "legacy_minus_stage_envelope_pct": -1.3146631835233735,
+      "legacy_trapezoid_gross_j": 303.46926236623204,
+      "noncanonical_stage_envelope": {
+        "duration_s": 12.490896940231323,
+        "end_s": 1783425351.69104,
+        "start_s": 1783425339.200143
+      },
+      "raw_sha256": {
+        "powermetrics.plist": "0fd97074338f66b4293e51af8624af3c391085668221446233a72efd2df197af",
+        "powermetrics_idle.plist": "98f79326ef8fa8087bf7982c01d7dd86c0f53a893fe394fb5aa0da0602f3509b"
+      },
+      "record_count": 102,
+      "stage_envelope_support_overlap_counter_j": 307.51200625273276,
+      "stage_envelope_support_overlap_power_j": 307.51200954057487
+    },
+    {
+      "authoritative_support_overlap_power_j": 306.5464415135585,
+      "bundle": "example-mac-mlx-qwen35-122b-512t__r3",
+      "canonical_sampling_window": {
+        "duration_s": 11.406859636306763,
+        "end_s": 1783425460.1207838,
+        "start_s": 1783425448.7139242
+      },
+      "canonical_support_overlap_counter_j": 306.5464240248222,
+      "counter_consistency": {
+        "all_records_within_tolerance": true,
+        "max_per_record_abs_delta_j": 5.950055769865514e-06,
+        "tolerance_j": 1e-05
+      },
+      "idle": {
+        "arithmetic_mean_w": 0.6106921251666666,
+        "arithmetic_minus_weighted_w": 0.00038209523852339444,
+        "corrected_idle_subtracted_j": 299.58472066753797,
+        "duration_weighted_mean_w": 0.6103100299281432,
+        "legacy_idle_subtracted_j": 298.08998844931847,
+        "legacy_minus_corrected_idle_subtracted_j": -1.4947322182194966,
+        "record_count": 300
+      },
+      "legacy_minus_authoritative_j": -1.4903737114659634,
+      "legacy_minus_authoritative_pct": -0.4861820297463948,
+      "legacy_minus_stage_envelope_pct": -1.000178596167397,
+      "legacy_trapezoid_gross_j": 305.0560678020925,
+      "noncanonical_stage_envelope": {
+        "duration_s": 12.51608920097351,
+        "end_s": 1783425460.3315752,
+        "start_s": 1783425447.815486
+      },
+      "raw_sha256": {
+        "powermetrics.plist": "ed462a0ce37f5cb0cc52092aaf0bf54a9e87c9f2c6271ba0e6624414699652b5",
+        "powermetrics_idle.plist": "58494ba55398b7826b1c8d969edef5fdeb28bbf874e80a54c740e1baf21fa33f"
+      },
+      "record_count": 101,
+      "stage_envelope_support_overlap_counter_j": 308.13798281239735,
+      "stage_envelope_support_overlap_power_j": 308.1379981058055
+    }
+  ],
+  "corpus": {
+    "bundle_count": 6,
+    "logical_root": "runs"
+  },
+  "frozen_semantics": {
+    "counter_tolerance_j_per_record": 1e-05,
+    "endpoint_interpolation": false,
+    "partial_edges": "power_w_times_positive_overlap_duration",
+    "record_support": "[endpoint-elapsed_ns/1e9, endpoint)",
+    "whole_interval_assignment": false,
+    "window": "sampling_started_to_sampling_stopped"
+  },
+  "schema": "joulewise.wo005_reconciliation.v1",
+  "t07_reconciliation": {
+    "authoritative_bundle": "example-mac-mlx-qwen35-122b-512t__r1",
+    "resolution": "The scanner used the canonical sampling_started/sampling_stopped window (-0.498%). The approximately -0.93% verifier result used the wider stage_started/stage_completed measured_run envelope, which includes telemetry startup and shutdown outside the energy estimand.",
+    "scanner_reconstruction_pct": -0.4980639151088996,
+    "verifier_reconstruction_pct": -0.9341208373633685
+  },
+  "work_order": "WO-005"
+}

@@ -15,7 +15,12 @@ import unittest
 from pathlib import Path
 
 from joulewise.bundle import RunBundleWriter
-from joulewise.bundle_read import BundleReader, BundleReadError, _marker_pair_problems
+from joulewise.bundle_read import (
+    BundleReader,
+    BundleReadError,
+    Window,
+    _marker_pair_problems,
+)
 from joulewise.cli import (
     _strict_budgeted_suite_prompt_count_problems,
     _strict_emitted_token_ids_problems,
@@ -34,6 +39,7 @@ from joulewise.suite import (
     BLOCK_START,
     LEVEL_END,
     LEVEL_START,
+    LEGACY_SUITE_SCHEMA_VERSION,
     SuiteManifest,
     canonical_effective_manifest,
     order_seed,
@@ -127,6 +133,8 @@ class ReaderTestCase(unittest.TestCase):
         event_type: str,
         phase: str,
         timestamp_s: float,
+        *,
+        metadata: dict | None = None,
     ) -> None:
         writer.append_event(
             RuntimeEvent(
@@ -134,6 +142,7 @@ class ReaderTestCase(unittest.TestCase):
                 event_type=event_type,
                 phase=phase,
                 message=f"{event_type} {phase}",
+                metadata=metadata or {},
             )
         )
 
@@ -144,6 +153,25 @@ class ReaderTestCase(unittest.TestCase):
 
 
 class StrictAccessorTests(ReaderTestCase):
+    def test_legacy_v1_suite_manifest_names_synthesized_cache_marker(self) -> None:
+        writer = self.make_bundle("legacy-suite-manifest")
+        legacy = json.loads(SUITE_MANIFEST_PATH.read_text())
+        self.assertEqual(legacy["schema_version"], LEGACY_SUITE_SCHEMA_VERSION)
+        writer.write_suite_manifest(canonical_effective_manifest(legacy))
+
+        manifest = BundleReader(writer.path).suite_manifest()
+
+        self.assertIsNotNone(manifest)
+        assert manifest is not None
+        self.assertEqual(
+            manifest.execution_policy.cache_policy_verification,
+            "declared_not_verified",
+        )
+        self.assertEqual(
+            manifest.synthesized_fields,
+            ("execution_policy.cache_policy_verification",),
+        )
+
     def test_missing_config_is_structured_read_error(self) -> None:
         reader = BundleReader(self.runs_root / "does-not-exist")
         with self.assertRaises(BundleReadError) as ctx:
@@ -232,6 +260,71 @@ class StrictAccessorTests(ReaderTestCase):
         self.assertEqual(reader.rail_manifest(), ["mock"])
 
 
+class PhasePairingTests(ReaderTestCase):
+    def test_unmatched_phase_markers_are_rejected(self) -> None:
+        cases = (
+            ("phase_start", "no paired phase_end"),
+            ("phase_end", "no paired phase_start"),
+        )
+        for event_type, expected in cases:
+            with self.subTest(event_type=event_type):
+                writer = self.make_bundle(f"unmatched-{event_type}")
+                self.add_event(writer, event_type, "decode", 1.0)
+
+                with self.assertRaisesRegex(BundleReadError, expected):
+                    BundleReader(writer.path).phase_windows()
+
+    def test_reversed_phase_pair_is_rejected(self) -> None:
+        writer = self.make_bundle("reversed-phase")
+        self.add_event(writer, "phase_start", "decode", 2.0)
+        self.add_event(writer, "phase_end", "decode", 1.0)
+
+        with self.assertRaisesRegex(BundleReadError, "reversed"):
+            BundleReader(writer.path).phase_windows()
+
+    def test_same_source_overlapping_same_phase_windows_are_rejected(self) -> None:
+        writer = self.make_bundle("overlapping-same-source-phase")
+        first = {"node_id": "node-a", "node_role": "prefill"}
+        second = {"node_id": "node-a", "node_role": "decode"}
+        self.add_event(writer, "phase_start", "decode", 1.0, metadata=first)
+        self.add_event(writer, "phase_start", "decode", 2.0, metadata=second)
+        self.add_event(writer, "phase_end", "decode", 3.0, metadata=first)
+        self.add_event(writer, "phase_end", "decode", 4.0, metadata=second)
+
+        with self.assertRaisesRegex(BundleReadError, "same_source_phase_overlap"):
+            BundleReader(writer.path).phase_windows()
+
+    def test_parallel_sources_pair_and_filter_tokens_by_source(self) -> None:
+        writer = self.make_bundle("parallel-node-phase")
+        node_a = {"node_role": "decode", "node_identity": {"host": "node-a"}}
+        node_b = {"node_role": "decode", "node_identity": {"host": "node-b"}}
+        self.add_event(writer, "phase_start", "decode", 1.0, metadata=node_a)
+        self.add_event(writer, "phase_end", "decode", 3.0, metadata=node_a)
+        self.add_event(writer, "phase_start", "decode", 2.0, metadata=node_b)
+        self.add_event(writer, "phase_end", "decode", 4.0, metadata=node_b)
+        self.add_event(
+            writer,
+            "token",
+            "decode",
+            3.5,
+            metadata={**node_a, "index": 0},
+        )
+        self.add_event(
+            writer,
+            "token",
+            "decode",
+            3.5,
+            metadata={**node_b, "index": 1},
+        )
+
+        reader = BundleReader(writer.path)
+        self.assertEqual(
+            reader.phase_windows(),
+            {"decode": [Window(1.0, 3.0), Window(2.0, 4.0)]},
+        )
+        self.assertEqual(reader.token_timestamps(), [3.5])
+
+
 class CompletionStateTests(ReaderTestCase):
     def test_bundle_without_summary_is_incomplete(self) -> None:
         writer = self.make_bundle("incomplete")
@@ -255,8 +348,8 @@ class CompletionStateTests(ReaderTestCase):
             status=RunStatus.SUCCEEDED,
             energy_request_j=1.0,
             gross_energy_j=1.0,
-            inter_token_throughput_tokens_s=float("inf"),
         ).to_dict()
+        summary["inter_token_throughput_tokens_s"] = float("inf")
         (writer.path / "summary_metrics.json").write_text(json.dumps(summary))
 
         problems = BundleReader(writer.path).problems()
@@ -1080,11 +1173,16 @@ class SuiteReaderTests(ReaderTestCase):
         records = read_jsonl(output_path)
         records[0]["emitted_token_ids"] = [1]
         write_jsonl(output_path, records)
+        output_path.write_text("\nnot-json\n" + output_path.read_text())
 
         problems = _strict_emitted_token_ids_problems(BundleReader(writer.path))
 
         self.assertTrue(
-            any("emitted_token_ids length 1 does not equal emitted_tokens 3" in p for p in problems),
+            any(
+                "outputs/suite_items.jsonl line 3.emitted_token_ids length 1 "
+                "does not equal emitted_tokens 3" in problem
+                for problem in problems
+            ),
             problems,
         )
 

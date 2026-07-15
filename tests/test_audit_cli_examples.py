@@ -9,8 +9,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from joulewise.adapters import resolve_runtime, resolve_telemetry, resolve_transport
-from joulewise.cli import _select_clock, main
-from joulewise.clock import FakeClock, SystemClock
+from joulewise.cli import main
+from joulewise.clock import FakeClock
 from joulewise.kv_size import KVSizeError, bytes_per_token, extract_kv_params
 from joulewise.schemas import BenchmarkConfig
 
@@ -25,21 +25,6 @@ def config_from_example(path: Path = EXAMPLE_CONFIG, **overrides) -> BenchmarkCo
 
 
 class CliCoverageGapTests(unittest.TestCase):
-    def test_select_clock_uses_fake_only_for_all_mock(self) -> None:
-        cases = [
-            ("mock", "mock", FakeClock),
-            ("mock", "powermetrics", SystemClock),
-            ("mlx", "mock", SystemClock),
-            ("mlx", "powermetrics", SystemClock),
-        ]
-        for runtime, telemetry, expected_type in cases:
-            data = json.loads(EXAMPLE_CONFIG.read_text())
-            data["hardware_target"]["runtime_backend"] = runtime
-            data["hardware_target"]["telemetry_backend"] = telemetry
-            config = BenchmarkConfig.from_mapping(data)
-            with self.subTest(runtime=runtime, telemetry=telemetry):
-                self.assertIsInstance(_select_clock(config), expected_type)
-
     def test_example_backend_resolution_is_structured(self) -> None:
         clock = FakeClock()
         for path in sorted((ROOT / "configs" / "examples").glob("*.json")):

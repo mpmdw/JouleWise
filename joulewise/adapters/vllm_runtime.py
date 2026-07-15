@@ -82,6 +82,7 @@ class VllmRuntimeAdapter:
             block=self._runtime_block(config),
         )
         self._preserve_worker_log(result, context, "prepare")
+        self._acknowledge_result_custody(result, context)
         return self._adapter_result(result)
 
     def warmup(
@@ -95,6 +96,7 @@ class VllmRuntimeAdapter:
             block=self._runtime_block(config),
         )
         self._preserve_worker_log(result, context, "warmup")
+        self._acknowledge_result_custody(result, context)
         return self._adapter_result(result)
 
     def run_workload(
@@ -109,6 +111,7 @@ class VllmRuntimeAdapter:
         )
         self._preserve_worker_log(result, context, "run_workload")
         if not result.ok:
+            self._acknowledge_result_custody(result, context)
             self._raise_task_failure(result, "vLLM workload failed")
 
         events_text = self._artifact_text(result, "events_jsonl", WORKER_EVENTS_NAME)
@@ -118,6 +121,7 @@ class VllmRuntimeAdapter:
             write_raw_artifact(context, RAW_EVENTS_NAME, events_text)
             write_raw_artifact(context, RAW_RESPONSE_NAME, response_text)
             write_raw_artifact(context, RAW_TOKENS_NAME, tokens_text)
+        self._acknowledge_result_custody(result, context)
 
         offset = self._offset(result)
         events = parse_vllm_events_jsonl(events_text, offset)
@@ -169,6 +173,7 @@ class VllmRuntimeAdapter:
             block=self._runtime_block(config),
         )
         self._preserve_worker_log(result, context, "cleanup")
+        self._acknowledge_result_custody(result, context)
         return self._adapter_result(result)
 
     def _run_task(
@@ -193,7 +198,7 @@ class VllmRuntimeAdapter:
             task["workload"] = block
         else:
             task["runtime"] = block
-        result = self._client.run_task(task, timeout_s=timeout_s)
+        result = self._client.run_task(task, timeout_s=timeout_s, context=context)
         self._record_clock_alignment(result)
         return result
 
@@ -302,6 +307,19 @@ class VllmRuntimeAdapter:
             encoding="utf-8",
         )
 
+    def _acknowledge_result_custody(
+        self,
+        result: NodeTaskResult,
+        context: RunContext | None,
+    ) -> None:
+        if context is None or result.custody_token is None or result.artifacts_path is None:
+            return
+        acknowledgement = context.acknowledge_custody(
+            result.custody_token,
+            [result.artifacts_path],
+        )
+        self._client.acknowledge_custody(acknowledgement)
+
     def _raise_task_failure(self, result: NodeTaskResult, fallback: str) -> None:
         raise AdapterFailure(
             result.failure_reason or FailureReason.UNKNOWN_ERROR,
@@ -313,6 +331,10 @@ class VllmRuntimeAdapter:
         metadata = dict(result.metadata)
         if result.raw_status and isinstance(result.raw_status.get("metadata"), dict):
             metadata["worker_metadata"] = result.raw_status["metadata"]
+        if result.raw_status is not None:
+            metadata["node_worker_protocol_version"] = result.raw_status.get(
+                "protocol_version"
+            )
         metadata["worker_status"] = result.status
         if result.offset_estimate_s is not None:
             metadata["offset_estimate_s"] = result.offset_estimate_s

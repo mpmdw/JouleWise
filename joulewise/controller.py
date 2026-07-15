@@ -55,7 +55,7 @@ import hashlib
 import json
 import traceback
 from collections.abc import Callable
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
@@ -75,6 +75,7 @@ from joulewise.interfaces import (
     AdapterFailure,
     AdapterResult,
     BoundedTelemetryAdapter,
+    EvidenceCustodyProvider,
     IdleDriftEvidenceProvider,
     PowerSample,
     RunContext,
@@ -99,7 +100,7 @@ from joulewise.schemas import (
 from joulewise.suite import (
     SuiteManifest,
     canonical_effective_manifest,
-    load_suite_manifest,
+    migrate_suite_manifest,
     order_seed,
     suite_manifest_sha256,
 )
@@ -187,6 +188,9 @@ def run_benchmark(
     which the reducer copies into the run's ``measurement_quality``.
     """
     config.validate()
+    config, suite_preparation, suite_preparation_failure = (
+        _prepare_suite_manifest_for_new_bundle(config)
+    )
     if registry is None:
         registry = joulewise.adapters
     writer = RunBundleWriter.create(runs_root, config, clock)
@@ -198,6 +202,8 @@ def run_benchmark(
         reducer,
         extra_metadata,
         environment_snapshot,
+        suite_preparation,
+        suite_preparation_failure,
     ).execute()
 
 
@@ -216,6 +222,69 @@ class _StageFailure(Exception):
         self.reason = reason
         self.message = message
         self.traceback_text = traceback_text
+
+
+@dataclass(frozen=True)
+class _PreparedSuiteManifest:
+    manifest: SuiteManifest
+    effective_manifest: dict[str, Any]
+    manifest_sha256: str
+    source_file_sha256: str
+
+
+def _prepare_suite_manifest_for_new_bundle(
+    config: BenchmarkConfig,
+) -> tuple[
+    BenchmarkConfig,
+    _PreparedSuiteManifest | None,
+    _StageFailure | None,
+]:
+    """Authenticate a source manifest and normalize new-bundle identity to v2.
+
+    Legacy v1 source pins remain accepted as source authentication and remain
+    unchanged in ``config.json`` so campaign registration identity is stable.
+    The bundle metadata, marker events, and embedded ``suite_manifest.json``
+    all use the canonical v2 digest; the reader verifies the deterministic
+    source-pin-to-artifact migration.
+    """
+
+    profile = config.workload_profile
+    if profile.suite_manifest_ref is None:
+        return config, None, None
+    ref_path = Path(profile.suite_manifest_ref)
+    try:
+        source_bytes = ref_path.read_bytes()
+        raw_manifest = json.loads(source_bytes)
+        source_effective = canonical_effective_manifest(raw_manifest)
+        source_hash = suite_manifest_sha256(source_effective)
+        effective = migrate_suite_manifest(raw_manifest)
+        manifest = SuiteManifest.from_mapping(effective)
+        manifest_hash = suite_manifest_sha256(effective)
+    except Exception as exc:  # noqa: BLE001 - becomes a complete failure bundle
+        return config, None, _StageFailure(
+            "validate",
+            FailureReason.UNKNOWN_ERROR,
+            f"suite manifest cannot be loaded from {profile.suite_manifest_ref!r}: "
+            f"{type(exc).__name__}: {exc}",
+        )
+    if profile.suite_manifest_sha256 not in {source_hash, manifest_hash}:
+        return config, None, _StageFailure(
+            "validate",
+            FailureReason.UNKNOWN_ERROR,
+            "suite manifest hash mismatch: "
+            f"config has {profile.suite_manifest_sha256!r}, "
+            f"{profile.suite_manifest_ref!r} hashes to {source_hash!r}",
+        )
+    return (
+        config,
+        _PreparedSuiteManifest(
+            manifest=manifest,
+            effective_manifest=effective,
+            manifest_sha256=manifest_hash,
+            source_file_sha256=hashlib.sha256(source_bytes).hexdigest(),
+        ),
+        None,
+    )
 
 
 def _jsonable(value: Any) -> Any:
@@ -251,6 +320,8 @@ class _Execution:
         reducer: Reducer | None,
         extra_metadata: dict[str, Any] | None = None,
         environment_snapshot: dict[str, Any] | None | object = _ENVIRONMENT_UNSET,
+        suite_preparation: _PreparedSuiteManifest | None = None,
+        suite_preparation_failure: _StageFailure | None = None,
     ) -> None:
         self._config = config
         self._writer = writer
@@ -259,6 +330,8 @@ class _Execution:
         self._reducer = reducer
         self._extra_metadata = dict(extra_metadata) if extra_metadata else {}
         self._environment_snapshot = environment_snapshot
+        self._suite_preparation = suite_preparation
+        self._suite_preparation_failure = suite_preparation_failure
         # D-024: one immutable context, constructed after bundle creation,
         # passed to every adapter lifecycle call. Context is data (paths and
         # identity), never the writer.
@@ -309,11 +382,12 @@ class _Execution:
         self._uncertainty_evidence: dict[str, Any] | None = None
         self._sampling_started_stamp: ClockStamp | None = None
         self._sampling_active = False
+        self._sampling_start_in_progress = False
+        self._sampling_stop_claimed = False
         # Idempotence flags so the failure path writes only what is missing.
         self._outputs_written = False
         self._trace_written = False
         self._metadata_written = False
-        self._events_flushed = False
         self._events_flushed_count = 0
 
     # ------------------------------------------------------------------
@@ -321,27 +395,31 @@ class _Execution:
 
     def execute(self) -> tuple[Path, SummaryMetrics]:
         try:
-            summary = self._run_lifecycle()
-        except _StageFailure as failure:
-            summary = self._handle_failure(failure)
-        except AdapterFailure as failure:
-            summary = self._handle_failure(
-                _StageFailure(
-                    stage=self._current_stage,
-                    reason=failure.failure_reason,
-                    message=failure.message,
+            try:
+                summary = self._run_lifecycle()
+            except _StageFailure as failure:
+                summary = self._handle_failure(failure)
+            except AdapterFailure as failure:
+                summary = self._handle_failure(
+                    _StageFailure(
+                        stage=self._current_stage,
+                        reason=failure.failure_reason,
+                        message=failure.message,
+                    )
                 )
-            )
-        except Exception as exc:  # noqa: BLE001 - D-011: a controller bug must still finalize
-            summary = self._handle_failure(
-                _StageFailure(
-                    stage=self._current_stage,
-                    reason=FailureReason.UNKNOWN_ERROR,
-                    message=f"unexpected {type(exc).__name__}: {exc}",
-                    traceback_text=traceback.format_exc(),
+            except Exception as exc:  # noqa: BLE001 - D-011 finalizes controller bugs
+                summary = self._handle_failure(
+                    _StageFailure(
+                        stage=self._current_stage,
+                        reason=FailureReason.UNKNOWN_ERROR,
+                        message=f"unexpected {type(exc).__name__}: {exc}",
+                        traceback_text=traceback.format_exc(),
+                    )
                 )
-            )
-        self._finish()
+            self._finish()
+        except (KeyboardInterrupt, SystemExit) as interrupt:
+            self._finalize_interrupted_run(interrupt)
+            raise
         return self._writer.path, summary
 
     def _run_lifecycle(self) -> SummaryMetrics:
@@ -463,12 +541,23 @@ class _Execution:
         self._begin_stage("measured_run")
         assert self._runtime is not None and self._telemetry is not None
         self._thermal_pre = self._telemetry.thermal_state(self._config, self._context)
-        start_result = self._telemetry.start_sampling(self._config, self._context)
+        self._sampling_start_in_progress = True
+        try:
+            start_result = self._telemetry.start_sampling(self._config, self._context)
+        except BaseException:
+            # Finalization must treat the sampler as potentially live if start
+            # was interrupted after it created native capture state.
+            raise
+        else:
+            # Keep liveness continuous across the successful-start transition:
+            # an interrupt between these assignments still leaves at least one
+            # flag set, so finalization stops the sampler before custody salvage.
+            self._sampling_active = True
+            self._sampling_start_in_progress = False
         self._telemetry_metadata = dict(start_result.metadata)
         self._check(start_result, "measured_run", "telemetry start_sampling failed")
         self._capture_adapter_alignments()
         self._capture_adapter_metadata()
-        self._sampling_active = True
         # D-026: the measured window the reducer integrates is bounded by the
         # sampling_started/sampling_stopped marker events, not the stage
         # boundaries, so sampler spawn latency (sudo probe, process start,
@@ -509,17 +598,7 @@ class _Execution:
         # the stable flush-sort keeps it bracketing them.
         sampling_stopped_stamp = _clock_stamp(self._clock)
         self._capture_adapter_alignments()
-        if isinstance(self._telemetry, BoundedTelemetryAdapter):
-            stop_result = self._telemetry.stop_sampling_with_evidence(
-                self._config,
-                self._context,
-                sampling_started=sampling_started_stamp,
-                sampling_stopped=sampling_stopped_stamp,
-            )
-            self._samples = stop_result.samples
-            self._uncertainty_evidence = dict(stop_result.uncertainty_evidence)
-        else:
-            self._samples = self._telemetry.stop_sampling(self._config, self._context)
+        self._stop_sampling_once(sampling_stopped_stamp)
         self._capture_adapter_alignments()
         self._capture_adapter_metadata()
         self._sampling_active = False
@@ -578,7 +657,7 @@ class _Execution:
             }
         for key in ("idle_drift", "idle_drift_guard"):
             if key in result:
-                self._uncertainty_evidence[key] = _jsonable(result[key])
+                self._uncertainty_evidence[key] = result[key]
         if "idle_drift_bound_w" in result:
             self._uncertainty_evidence["idle_drift_bound_w"] = result[
                 "idle_drift_bound_w"
@@ -599,6 +678,7 @@ class _Execution:
         # run is recorded in the controller log and the stage_completed event
         # metadata but does not change run status.
         self._begin_stage("cleanup")
+        self._salvage_adapter_custody()
         assert self._runtime is not None
         metadata: dict[str, Any] = {"cleanup_ok": True}
         try:
@@ -671,13 +751,17 @@ class _Execution:
         )
         if failure.traceback_text:
             self._log(self._controller_log, failure.traceback_text)
-        self._stop_sampling_best_effort()
-        self._cleanup_best_effort()
-        self._capture_failure_fallback_environment()
-        # Preserve whatever partial evidence exists (D-002).
-        self._write_outputs()
-        self._write_trace()
-        self._write_metadata()
+        # Every salvage action is independent: one broken writer or adapter
+        # cannot prevent later evidence and cleanup attempts.
+        self._attempt_salvage_step("stop_sampling", self._stop_sampling_best_effort)
+        self._attempt_salvage_step("adapter_custody", self._salvage_adapter_custody)
+        self._attempt_salvage_step("runtime_cleanup", self._cleanup_best_effort)
+        self._attempt_salvage_step(
+            "failure_environment", self._capture_failure_fallback_environment
+        )
+        self._attempt_salvage_step("outputs", self._write_outputs)
+        self._attempt_salvage_step("power_trace", self._write_trace)
+        self._attempt_salvage_step("metadata", self._write_metadata)
         summary = SummaryMetrics(
             status=STATUS_BY_REASON[failure.reason],
             failure_reason=failure.reason,
@@ -688,23 +772,111 @@ class _Execution:
         self._writer.write_summary(summary)
         return summary
 
+    def _attempt_salvage_step(self, name: str, action: Callable[[], Any]) -> None:
+        try:
+            action()
+        except Exception:  # noqa: BLE001 - later salvage steps must still run
+            self._log(
+                self._controller_log,
+                "independent salvage step %s raised:" % name,
+            )
+            self._log(self._controller_log, traceback.format_exc())
+
+    def _finalize_interrupted_run(
+        self,
+        interrupt: KeyboardInterrupt | SystemExit,
+    ) -> None:
+        """Salvage and finalize without ever replacing the original interrupt."""
+
+        self._buffer_event(
+            "failure",
+            self._current_stage,
+            "%s: %s" % (type(interrupt).__name__, interrupt),
+            {"failure_reason": FailureReason.UNKNOWN_ERROR.value},
+        )
+        self._log(
+            self._controller_log,
+            "interrupt in stage %s: %s: %s"
+            % (self._current_stage, type(interrupt).__name__, interrupt),
+        )
+        actions: list[tuple[str, Callable[[], Any]]] = [
+            ("stop_sampling", self._stop_sampling_best_effort),
+            ("adapter_custody", self._salvage_adapter_custody),
+            ("runtime_cleanup", self._cleanup_best_effort),
+            ("failure_environment", self._capture_failure_fallback_environment),
+            ("outputs", self._write_outputs),
+            ("power_trace", self._write_trace),
+            ("metadata", self._write_metadata),
+        ]
+        for name, action in actions:
+            try:
+                action()
+            except BaseException as cleanup_error:  # preserve the first interrupt
+                self._log(
+                    self._controller_log,
+                    "interrupt salvage step %s raised %s: %s"
+                    % (name, type(cleanup_error).__name__, cleanup_error),
+                )
+        summary = SummaryMetrics(
+            status=RunStatus.FAILED,
+            failure_reason=FailureReason.UNKNOWN_ERROR,
+            failure_message="%s: %s" % (type(interrupt).__name__, interrupt),
+            idle_baseline=self._baseline,
+            measurement_quality=self._minimal_quality(),
+        )
+        try:
+            self._writer.write_summary(summary)
+        except BaseException as cleanup_error:
+            self._log(
+                self._controller_log,
+                "interrupt summary staging raised %s: %s"
+                % (type(cleanup_error).__name__, cleanup_error),
+            )
+        try:
+            self._finish()
+        except BaseException:
+            # The caller's KeyboardInterrupt/SystemExit remains authoritative;
+            # retention manifests and native pending paths preserve retry data.
+            pass
+
     def _stop_sampling_best_effort(self) -> None:
-        if not self._sampling_active or self._telemetry is None:
+        if (
+            not self._sampling_active
+            and not self._sampling_start_in_progress
+        ) or self._telemetry is None or self._sampling_stop_claimed:
             return
-        self._sampling_active = False
         # D-026: even on the failure path the sampling window gets its closing
         # marker, stamped before the stop call, so post-hoc re-reduction sees
         # the same window semantics as a successful run.
         sampling_stopped_stamp = _clock_stamp(self._clock)
-        self._events.append(
-            RuntimeEvent(
-                timestamp_s=sampling_stopped_stamp.epoch_s,
-                event_type="sampling_stopped",
-                phase="measured_run",
-                message="telemetry sampling stopping (failure path)",
-                metadata={},
+        if self._sampling_active:
+            self._events.append(
+                RuntimeEvent(
+                    timestamp_s=sampling_stopped_stamp.epoch_s,
+                    event_type="sampling_stopped",
+                    phase="measured_run",
+                    message="telemetry sampling stopping (failure path)",
+                    metadata={},
+                )
             )
-        )
+        try:
+            self._stop_sampling_once(sampling_stopped_stamp)
+            self._capture_adapter_alignments()
+            self._sampling_active = False
+            self._sampling_start_in_progress = False
+        except Exception:  # noqa: BLE001 - evidence salvage must not mask the failure
+            self._log(
+                self._controller_log,
+                "best-effort stop_sampling raised after failure:",
+            )
+            self._log(self._controller_log, traceback.format_exc())
+
+    def _stop_sampling_once(self, sampling_stopped_stamp: ClockStamp) -> bool:
+        """Claim and execute the sampler stop at most once per lifecycle."""
+
+        if self._sampling_stop_claimed or self._telemetry is None:
+            return False
+        self._sampling_stop_claimed = True
         try:
             if (
                 isinstance(self._telemetry, BoundedTelemetryAdapter)
@@ -722,13 +894,23 @@ class _Execution:
                 self._samples = self._telemetry.stop_sampling(
                     self._config, self._context
                 )
-            self._capture_adapter_alignments()
-        except Exception:  # noqa: BLE001 - evidence salvage must not mask the failure
-            self._log(
-                self._controller_log,
-                "best-effort stop_sampling raised after failure:",
-            )
-            self._log(self._controller_log, traceback.format_exc())
+        except Exception:
+            # Ordinary failures remain retryable by the failure-salvage path.
+            self._sampling_stop_claimed = False
+            raise
+        return True
+
+    def _salvage_adapter_custody(self) -> None:
+        for adapter in (self._telemetry, self._runtime):
+            if not isinstance(adapter, EvidenceCustodyProvider):
+                continue
+            report = adapter.salvage_custody(self._context)
+            for item in report:
+                if item.get("acknowledged") is not True:
+                    self._log(
+                        self._controller_log,
+                        "adapter custody remains retained: %s" % item,
+                    )
 
     def _cleanup_best_effort(self) -> None:
         if self._runtime is None:
@@ -774,14 +956,16 @@ class _Execution:
             return
         extra: dict[str, Any] = {}
         extra["config_warnings"] = [dict(item) for item in self._config.config_warnings]
-        extra["model"] = _jsonable(asdict(self._config.model))
-        extra["quantization"] = _jsonable(asdict(self._config.quantization))
+        extra["model"] = asdict(self._config.model)
+        extra["quantization"] = asdict(self._config.quantization)
         if self._device_metadata is not None:
-            extra["device"] = _jsonable(self._device_metadata)
+            # Preserve adapter values verbatim for the bundle writer's single
+            # path-aware quarantine pass (including exact cycle locations).
+            extra["device"] = self._device_metadata
         if self._connection_metadata is not None:
-            extra["connection"] = _jsonable(self._connection_metadata)
+            extra["connection"] = self._connection_metadata
         if self._environment is not None:
-            extra["environment"] = _jsonable(self._environment)
+            extra["environment"] = self._environment
         adapters: dict[str, Any] = {}
         if self._runtime is not None:
             adapters["runtime"] = {
@@ -793,28 +977,26 @@ class _Execution:
                     adapters["runtime"], self._runtime_result.metadata
                 )
             if self._runtime_cleanup_metadata is not None:
-                adapters["runtime"]["cleanup_metadata"] = _jsonable(
-                    self._runtime_cleanup_metadata
-                )
+                adapters["runtime"]["cleanup_metadata"] = self._runtime_cleanup_metadata
             if self._runtime_alignments:
-                adapters["runtime"]["clock_alignments"] = _jsonable(self._runtime_alignments)
+                adapters["runtime"]["clock_alignments"] = self._runtime_alignments
         if self._telemetry is not None:
             adapters["telemetry"] = {"name": self._telemetry.name}
             if self._telemetry_metadata:
                 _merge_adapter_metadata(adapters["telemetry"], self._telemetry_metadata)
             if self._telemetry_alignments:
-                adapters["telemetry"]["clock_alignments"] = _jsonable(self._telemetry_alignments)
+                adapters["telemetry"]["clock_alignments"] = self._telemetry_alignments
         extra["adapters"] = adapters
         if self._baseline is not None:
-            extra["idle_baseline"] = _jsonable(asdict(self._baseline))
+            extra["idle_baseline"] = asdict(self._baseline)
         if self._thermal_pre is not None:
-            extra["thermal_pre"] = _jsonable(asdict(self._thermal_pre))
+            extra["thermal_pre"] = asdict(self._thermal_pre)
         if self._thermal_post is not None:
-            extra["thermal_post"] = _jsonable(asdict(self._thermal_post))
+            extra["thermal_post"] = asdict(self._thermal_post)
         if self._uncertainty_evidence is not None:
             evidence = dict(self._uncertainty_evidence)
             idle_bound_w = evidence.pop("idle_drift_bound_w", None)
-            extra["uncertainty_evidence"] = _jsonable(evidence)
+            extra["uncertainty_evidence"] = evidence
             clock_anchor = evidence.get("clock_anchor")
             if isinstance(clock_anchor, dict) and clock_anchor.get("status") == "bounded":
                 extra["clock_anchor_bound_s"] = clock_anchor.get(
@@ -846,9 +1028,7 @@ class _Execution:
                     token_count_source
                 )
             if self._runtime_result.workload_provenance is not None:
-                extra["workload_provenance"] = _jsonable(
-                    self._runtime_result.workload_provenance
-                )
+                extra["workload_provenance"] = self._runtime_result.workload_provenance
         if self._suite_manifest is not None:
             extra["suite"] = {
                 "suite_id": self._suite_manifest.suite_id,
@@ -873,7 +1053,7 @@ class _Execution:
         if node_cleanup:
             controller_extra["node_cleanup"] = node_cleanup
         if controller_extra:
-            extra["extra"] = _jsonable(controller_extra)
+            extra["extra"] = controller_extra
         self._writer.write_metadata(extra)
         self._metadata_written = True
 
@@ -1011,32 +1191,21 @@ class _Execution:
                 FailureReason.UNSUPPORTED_WORKLOAD,
                 "runtime adapter does not support suite workloads",
             )
-        ref_path = Path(profile.suite_manifest_ref)
-        try:
-            source_bytes = ref_path.read_bytes()
-            manifest = load_suite_manifest(ref_path)
-            effective = canonical_effective_manifest(json.loads(source_bytes))
-        except Exception as exc:  # noqa: BLE001 - fail closed into a complete bundle
+        if self._suite_preparation_failure is not None:
+            raise self._suite_preparation_failure
+        preparation = self._suite_preparation
+        if preparation is None:  # defensive: suite refs always preflight above
             raise _StageFailure(
                 "validate",
                 FailureReason.UNKNOWN_ERROR,
-                f"suite manifest cannot be loaded from {profile.suite_manifest_ref!r}: "
-                f"{type(exc).__name__}: {exc}",
-            ) from exc
-        actual_hash = suite_manifest_sha256(effective)
-        if actual_hash != profile.suite_manifest_sha256:
-            raise _StageFailure(
-                "validate",
-                FailureReason.UNKNOWN_ERROR,
-                "suite manifest hash mismatch: "
-                f"config has {profile.suite_manifest_sha256!r}, "
-                f"{profile.suite_manifest_ref!r} hashes to {actual_hash!r}",
+                "suite manifest preparation is missing",
             )
+        manifest = preparation.manifest
         rep_index = _suite_rep_index_from_run_id(self._config.run_id)
         self._suite_manifest = manifest
-        self._suite_effective_manifest = effective
-        self._suite_manifest_sha256 = actual_hash
-        self._suite_source_file_sha256 = hashlib.sha256(source_bytes).hexdigest()
+        self._suite_effective_manifest = preparation.effective_manifest
+        self._suite_manifest_sha256 = preparation.manifest_sha256
+        self._suite_source_file_sha256 = preparation.source_file_sha256
         self._suite_order_seed = order_seed(
             manifest.suite_seed,
             manifest.execution_policy.order_policy,
@@ -1077,7 +1246,6 @@ class _Execution:
         for event in sorted(pending, key=lambda event: event.timestamp_s):
             self._writer.append_event(event)
         self._events_flushed_count = len(self._events)
-        self._events_flushed = True
 
     def _finish(self) -> None:
         """Flush buffered logs and events, then finalize (D-011, D-013)."""
@@ -1228,7 +1396,9 @@ def _adapter_cleanup_report(adapter: Any) -> list[dict[str, Any]]:
 
 
 def _merge_adapter_metadata(target: dict[str, Any], metadata: dict[str, Any]) -> None:
-    for key, value in _jsonable(metadata).items():
+    # Do not recursively normalize here: RunBundleWriter owns the one
+    # deterministic quarantine pass and its path-addressed diagnostics.
+    for key, value in metadata.items():
         if key in target:
             collision_metadata = target.get("metadata")
             if not isinstance(collision_metadata, dict):
@@ -1243,21 +1413,6 @@ def _merge_adapter_metadata(target: dict[str, Any], metadata: dict[str, Any]) ->
 
 # ---------------------------------------------------------------------------
 # Environment snapshot policy (INT-002)
-
-
-def _environment_for_run(
-    clock: Clock,
-    *,
-    provided: dict[str, Any] | None | object = _ENVIRONMENT_UNSET,
-) -> dict[str, Any] | None:
-    if provided is not _ENVIRONMENT_UNSET:
-        return dict(provided) if provided is not None else None
-    return _capture_environment(
-        clock,
-        capture_scope="run",
-        captured_for_rep=None,
-        settle_s=PRE_IDLE_SETTLE_S,
-    )
 
 
 def _environment_for_experiment(clock: Clock) -> dict[str, Any]:
@@ -1381,9 +1536,22 @@ def run_experiment(
         manifest["members"].append(bundle_path.name)
         manifest["member_gaps"].append(_member_gap_note(bundle_path))
         manifest["condition_order"].append(condition_name)
-        manifest["aggregate"] = aggregate_experiment(runs_root, manifest)
-        # Incremental write: a kill before the next rep leaves a valid manifest
-        # listing exactly the members that completed (D-005 acceptance).
+        # Commit member custody before the reconstructable aggregate derivation.
+        # Removing the prior aggregate prevents an interrupt from leaving a
+        # newly extended member list beside a stale aggregate.
+        manifest.pop("aggregate", None)
+        manifest_path = write_experiment_manifest(runs_root, manifest)
+        try:
+            manifest["aggregate"] = aggregate_experiment(runs_root, manifest)
+        except Exception as exc:
+            manifest["aggregate_error"] = {
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+                "retryable": True,
+            }
+            write_experiment_manifest(runs_root, manifest)
+            raise
+        manifest.pop("aggregate_error", None)
         manifest_path = write_experiment_manifest(runs_root, manifest)
 
         if rep < repetitions:

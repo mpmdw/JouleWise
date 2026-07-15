@@ -105,6 +105,125 @@ class BadRunsDirTests(unittest.TestCase):
             generate_report(missing, Path(tmp.name) / "report")
 
 
+class PublicReportSecurityTests(unittest.TestCase):
+    def test_generate_report_escapes_malicious_metadata_and_summary_values(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        runs_dir = root / "runs"
+        output_dir = root / "report"
+        bundle = _build_bundle(runs_dir, "report-malicious")
+
+        metadata_path = bundle / "metadata.json"
+        metadata = json.loads(metadata_path.read_text())
+        metadata["notes"] = "<script>alert(1)</script>"
+        metadata_path.write_text(json.dumps(metadata, indent=2))
+        summary_path = bundle / "summary_metrics.json"
+        summary = json.loads(summary_path.read_text())
+        summary["failure_message"] = "<b>bad</b>"
+        summary_path.write_text(json.dumps(summary, indent=2))
+
+        with mock.patch(
+            "joulewise.report._require_matplotlib", return_value=object()
+        ), mock.patch("joulewise.report._render_chart", return_value=False):
+            generate_report(runs_dir, output_dir)
+
+        page = (output_dir / "run" / "report-malicious.html").read_text()
+        self.assertNotIn("<script>", page)
+        self.assertNotIn("<b>bad</b>", page)
+        self.assertIn("&lt;script&gt;alert(1)&lt;/script&gt;", page)
+        self.assertIn("&lt;b&gt;bad&lt;/b&gt;", page)
+
+
+class DiagnosticBrowserContractTests(unittest.TestCase):
+    """WO-029 safeguards exercise the production ``generate_report`` path."""
+
+    def setUp(self) -> None:
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        self.runs_dir = self.root / "runs"
+        self.output_dir = self.root / "report"
+
+    def generate(self) -> Path:
+        with mock.patch(
+            "joulewise.report._require_matplotlib", return_value=object()
+        ), mock.patch("joulewise.report._render_chart", return_value=False):
+            return generate_report(self.runs_dir, self.output_dir)
+
+    def test_token_metric_is_co_displayed_with_diagnostic_state_and_provenance(
+        self,
+    ) -> None:
+        _build_bundle(self.runs_dir, "report-provenance")
+
+        index_html = self.generate().read_text()
+
+        self.assertIn("Diagnostic browser only.", index_html)
+        self.assertIn("artifact consistency only", index_html)
+        self.assertIn("strict validation", index_html)
+        self.assertIn("pass", index_html)
+        self.assertIn("request energy (J)", index_html)
+        self.assertIn("tokenizer-scoped energy/token (J)", index_html)
+        self.assertIn("measurement boundary", index_html)
+        self.assertIn("joulewise.mock_tokenizer.v1", index_html)
+        self.assertIn("total-token denominator source", index_html)
+        self.assertIn("runtime_observed", index_html)
+        # The mock single-request bundle has no recorded D-046 suite fields;
+        # the diagnostic browser must say so rather than silently omit them.
+        self.assertIn("<strong>prompt source:</strong> unknown", index_html)
+        self.assertIn("<strong>BOS present:</strong> unknown", index_html)
+
+        page = (self.output_dir / "run" / "report-provenance.html").read_text()
+        self.assertIn("Summary metrics and provenance", page)
+        self.assertIn("diagnostic.request_energy_j", page)
+        self.assertIn("diagnostic.measurement_boundary", page)
+        self.assertIn("tokenizer identifier", page)
+        self.assertIn("total-token denominator source", page)
+        self.assertIn("energy_token_j", page)
+
+    def test_strict_invalid_and_incomplete_bundles_remain_visible(self) -> None:
+        bundle = _build_bundle(self.runs_dir, "report-strict-invalid")
+        summary_path = bundle / "summary_metrics.json"
+        summary = json.loads(summary_path.read_text())
+        summary["energy_request_j"] += 1.0
+        summary_path.write_text(json.dumps(summary, indent=2))
+
+        incomplete = self.runs_dir / "report-incomplete"
+        incomplete.mkdir()
+        (incomplete / "config.json").write_text(
+            json.dumps({"schema_version": "0.1"})
+        )
+
+        index_html = self.generate().read_text()
+
+        self.assertIn("report-strict-invalid", index_html)
+        self.assertIn("report-incomplete", index_html)
+        self.assertGreaterEqual(index_html.count("validation-fail"), 2)
+        self.assertTrue(
+            (self.output_dir / "run" / "report-strict-invalid.html").is_file()
+        )
+        self.assertFalse(
+            (self.output_dir / "run" / "report-incomplete.html").exists()
+        )
+        invalid_page = (
+            self.output_dir / "run" / "report-strict-invalid.html"
+        ).read_text()
+        self.assertIn("Strict-validation diagnostics", invalid_page)
+        self.assertIn("does not match a fresh re-reduction", invalid_page)
+        # WO-029 pinned disposition: the diagnostic browser must never imply
+        # claim readiness or eligibility — for ANY bundle state (lead-added
+        # negative assertion per the order's checker).
+        for page in (invalid_page, *(
+            path.read_text()
+            for path in (self.output_dir / "run").glob("report-*.html")
+        )):
+            lowered = page.lower()
+            for banned in ("claim-ready", "claim ready", "claim-eligible",
+                           "claim eligible", "eligible for claims",
+                           "readiness"):
+                self.assertNotIn(banned, lowered)
+
+
 # ---------------------------------------------------------------------------
 # Chart-producing rendering (gated on matplotlib)
 

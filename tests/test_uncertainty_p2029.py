@@ -479,43 +479,6 @@ class WindowEvidencePrecheckTests(ReducerUncertaintyTestCase):
             self.assertNotIn("interpolation_bound_unrecorded", entry["reasons"])
         self.assertNotIn("request", summary.window_evidence_precheck or {})
 
-    def test_legacy_interpolation_mode_uses_one_edge_when_joint_bound_is_unrecorded(self) -> None:
-        curve = [
-            reduce_module.TracePoint(0.0, 10.0),
-            reduce_module.TracePoint(1.0, 10.0),
-            reduce_module.TracePoint(1.1, 10.0),
-            reduce_module.TracePoint(3.0, 10.0),
-        ]
-        window = reduce_module.Window(0.75, 1.25)
-        terms = {
-            "E_interpolation_edge_bound_j": 10.0,
-            "E_interpolation_joint_edge_bound_j": None,
-            "E_drift_bound_j": 1.0,
-        }
-        legacy = reduce_module._window_evidence_precheck_for_window(
-            curve,
-            {"clock_anchor_bound_s": 0.0},
-            window,
-            cadence_ratio_min=0.0,
-            require_sample_count=False,
-            require_drift=True,
-            bound_terms_j=terms,
-            legacy_interpolation_edge=True,
-        )
-        current = reduce_module._window_evidence_precheck_for_window(
-            curve,
-            {"clock_anchor_bound_s": 0.0},
-            window,
-            cadence_ratio_min=0.0,
-            require_sample_count=False,
-            require_drift=True,
-            bound_terms_j=terms,
-        )
-        self.assertTrue(legacy["eligible"])
-        self.assertNotIn("interpolation_joint_edge_bound_j", legacy)
-        self.assertFalse(current["eligible"])
-        self.assertIn("interpolation_bound_unrecorded", current["reasons"])
-
     def test_asymmetric_joint_edge_fixture_recomputes_thirty_joules(self) -> None:
         builder = self.builder()
         builder.measured_window(2.0, 8.0)

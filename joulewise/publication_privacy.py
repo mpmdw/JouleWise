@@ -25,6 +25,12 @@ TRANSFORMATION_SCHEMA = "joulewise.publication_transformation.v1"
 REDACTED_TEXT = "[REDACTED:PUBLICATION_PRIVACY]"
 REDACTED_PATH = "[REDACTED:ABSOLUTE_PATH]"
 REDACTED_IDENTITY = "[REDACTED:USER_OR_HOST_IDENTITY]"
+TREE_IDENTITY_ALGORITHM = "sha256"
+TREE_IDENTITY_VERSION = "joulewise.bundle-tree.nul-v1"
+SOURCE_PROVENANCE_SCHEMA = "joulewise.source_provenance.v1"
+SOURCE_DIFF_IDENTITY_ALGORITHM = "sha256"
+SOURCE_DIFF_IDENTITY_VERSION = "joulewise.git-diff.nul-v1"
+SOURCE_STATE_VALUES = frozenset({"clean", "dirty", "unknown"})
 REDACTED_CONTENT = "[REDACTED:PROMPT_OR_RESPONSE_CONTENT]"
 REDACTED_CLEANUP_PATH = "[REDACTED:REMOTE_CLEANUP_PATH]"
 
@@ -32,6 +38,7 @@ CLASS_RETAIN = "retain_reviewed_measurement"
 CLASS_TRANSFORM = "transform_reviewed_structure"
 CLASS_OMIT_CONTENT = "omit_prompt_response_or_token_content"
 CLASS_OMIT_LOG = "omit_controller_or_worker_log"
+CLASS_OMIT_CUSTODY_LOG = "omit_machine_local_custody_operational_log"
 CLASS_OMIT_RAW = "omit_backend_native_or_rich_telemetry"
 
 OP_RETAIN = "retain_bytes"
@@ -89,6 +96,7 @@ _METADATA_KEYS = frozenset(
         "config_sha256",
         "run_id",
         "git_commit",
+        "source_provenance",
         "clock",
         "config_warnings",
         "model",
@@ -109,6 +117,9 @@ _METADATA_KEYS = frozenset(
         "workload_provenance",
         "suite",
         "extra",
+        # Private diagnostics can contain adapter-defined metadata paths, so
+        # the public transform accepts the field but redacts its whole subtree.
+        "serialization_quarantine",
     }
 )
 
@@ -120,6 +131,7 @@ _METADATA_RETAIN_KEYS = frozenset(
     {
         "config_sha256",
         "git_commit",
+        "source_provenance",
         "clock_anchor_bound_s",
         "marker_to_first_sample_phase_bound_s",
         "marker_to_last_sample_phase_bound_s",
@@ -269,6 +281,23 @@ _WORKER_LOG_RE = re.compile(
 _WINDOWS_ABSOLUTE_RE = re.compile(r"^[A-Za-z]:[\\/]")
 _POWER_SOURCES = frozenset({"mock", "powermetrics", "nvidia_smi"})
 _POWER_RAILS = frozenset({"", "mock", "cpu_power", "gpu_power", "ane_power", "gpu_board"})
+_IDLE_MEAN_UNCERTAINTY_METHODS = frozenset(
+    {
+        "newey_west_bartlett_10s_iid_floor_v1",
+        "duration_weighted_newey_west_bartlett_10s_iid_floor_v2",
+    }
+)
+_POWER_TRACE_POINT_COLUMNS = (
+    "timestamp_s",
+    "power_w",
+    "source",
+    "rail",
+)
+_POWER_TRACE_INTERVAL_COLUMNS = (
+    *_POWER_TRACE_POINT_COLUMNS,
+    "interval_start_s",
+    "interval_end_s",
+)
 
 
 class PrivacyAuditError(RuntimeError):
@@ -300,7 +329,22 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def tree_identity_descriptor() -> dict[str, str]:
+    """Return the canonical bundle-tree identity algorithm/version descriptor."""
+
+    return {
+        "algorithm": TREE_IDENTITY_ALGORITHM,
+        "version": TREE_IDENTITY_VERSION,
+    }
+
+
 def tree_sha256(entries: list[dict[str, Any]] | tuple[AuditedFile, ...]) -> str:
+    """Fold sorted path/hash/size entries with NUL field delimiters.
+
+    This is the canonical ``joulewise.bundle-tree.nul-v1`` identity primitive
+    shared by publication packs and versioned report artifacts.
+    """
+
     digest = hashlib.sha256()
     for item in sorted(entries, key=lambda value: value.path if isinstance(value, AuditedFile) else value["path"]):
         if isinstance(item, AuditedFile):
@@ -325,6 +369,11 @@ def _path_policy(rel: str) -> tuple[str, str] | None:
         return CLASS_RETAIN, OP_RETAIN
     if rel == "suite_manifest.json" or rel in _OUTPUT_PATHS:
         return CLASS_OMIT_CONTENT, OP_OMIT
+    # Custody acknowledgements are operational recovery records.  Their
+    # artifact paths are meaningful only on the machine holding the private
+    # bundle, so name the class in the audited inventory and never publish it.
+    if rel.startswith("logs/custody/"):
+        return CLASS_OMIT_CUSTODY_LOG, OP_OMIT
     if rel in _LOG_PATHS or _WORKER_LOG_RE.fullmatch(rel):
         return CLASS_OMIT_LOG, OP_OMIT
     if rel in _RAW_PATHS or rel in _RICH_PATHS:
@@ -389,6 +438,136 @@ def _audit_metadata(path: Path) -> None:
         not isinstance(git_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", git_commit)
     ):
         raise PrivacyAuditError("metadata.json.git_commit is not a lowercase Git object id")
+    if "source_provenance" in value:
+        problems = source_provenance_problems(value["source_provenance"])
+        if problems:
+            raise PrivacyAuditError(f"metadata.json.source_provenance: {problems[0]}")
+        if git_commit != value["source_provenance"]["start"]["git_commit"]:
+            raise PrivacyAuditError(
+                "metadata.json.git_commit does not match source_provenance.start.git_commit"
+            )
+
+
+def _source_snapshot_problems(value: Any, label: str) -> list[str]:
+    problems: list[str] = []
+    required = {"git_commit", "tracked", "staged", "untracked", "diff_sha256"}
+    if not isinstance(value, dict):
+        return [f"{label} must be an object"]
+    actual = set(value)
+    if actual != required:
+        problems.append(
+            f"{label} keys must be exactly {', '.join(sorted(required))}"
+        )
+        return problems
+    commit = value["git_commit"]
+    if commit != "unknown" and (
+        not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit)
+    ):
+        problems.append(f"{label}.git_commit must be unknown or a lowercase Git object id")
+    for component in ("tracked", "staged", "untracked"):
+        if (
+            not isinstance(value[component], str)
+            or value[component] not in SOURCE_STATE_VALUES
+        ):
+            problems.append(
+                f"{label}.{component} must be clean, dirty, or unknown"
+            )
+    diff_sha256 = value["diff_sha256"]
+    if diff_sha256 != "unknown" and (
+        not isinstance(diff_sha256, str)
+        or not re.fullmatch(r"[0-9a-f]{64}", diff_sha256)
+    ):
+        problems.append(
+            f"{label}.diff_sha256 must be unknown or a lowercase SHA-256"
+        )
+    components_known = all(
+        value[component] != "unknown" for component in ("tracked", "staged", "untracked")
+    )
+    if components_known != (diff_sha256 != "unknown"):
+        problems.append(
+            f"{label}.diff_sha256 must be known exactly when all diff components are known"
+        )
+    return problems
+
+
+def _snapshot_fully_known(value: dict[str, Any]) -> bool:
+    return all(value[key] != "unknown" for key in value)
+
+
+def _expected_source_reason_codes(
+    start: dict[str, Any],
+    end: dict[str, Any],
+    changed_during_run: bool | None,
+) -> list[str]:
+    reasons: list[str] = []
+    for phase, state in (("start", start), ("end", end)):
+        if state["git_commit"] == "unknown":
+            reasons.append(f"{phase}_git_commit_unknown")
+        for component in ("tracked", "staged", "untracked"):
+            if state[component] == "unknown":
+                reasons.append(f"{phase}_{component}_unknown")
+            elif state[component] == "dirty":
+                reasons.append(f"{phase}_{component}_dirty")
+        if state["diff_sha256"] == "unknown":
+            reasons.append(f"{phase}_diff_identity_unknown")
+    if changed_during_run is True:
+        reasons.append("source_changed_during_run")
+    return reasons
+
+
+def source_provenance_problems(
+    value: Any, *, require_eligible: bool = False
+) -> list[str]:
+    """Validate the governed source-provenance record and its eligibility rule."""
+
+    required = {
+        "schema",
+        "diff_identity",
+        "start",
+        "end",
+        "changed_during_run",
+        "claim_eligible",
+        "reason_codes",
+    }
+    if not isinstance(value, dict):
+        return ["must be an object"]
+    if set(value) != required:
+        return [f"keys must be exactly {', '.join(sorted(required))}"]
+    problems: list[str] = []
+    if value["schema"] != SOURCE_PROVENANCE_SCHEMA:
+        problems.append(f"schema must be {SOURCE_PROVENANCE_SCHEMA}")
+    if value["diff_identity"] != {
+        "algorithm": SOURCE_DIFF_IDENTITY_ALGORITHM,
+        "version": SOURCE_DIFF_IDENTITY_VERSION,
+    }:
+        problems.append("diff_identity descriptor is not governed")
+    problems.extend(_source_snapshot_problems(value["start"], "start"))
+    problems.extend(_source_snapshot_problems(value["end"], "end"))
+    if problems:
+        return problems
+
+    start = value["start"]
+    end = value["end"]
+    expected_changed: bool | None = None
+    if _snapshot_fully_known(start) and _snapshot_fully_known(end):
+        expected_changed = start != end
+    if value["changed_during_run"] is not expected_changed:
+        problems.append(
+            f"changed_during_run must be {expected_changed!r} for the recorded snapshots"
+        )
+    expected_reasons = _expected_source_reason_codes(start, end, expected_changed)
+    if value["reason_codes"] != expected_reasons:
+        problems.append("reason_codes do not match the recorded snapshots")
+    expected_eligible = not expected_reasons
+    if not isinstance(value["claim_eligible"], bool) or value["claim_eligible"] is not expected_eligible:
+        problems.append(
+            f"claim_eligible must be {expected_eligible!r} for the recorded snapshots"
+        )
+    if require_eligible and not expected_eligible:
+        problems.append(
+            "claim-ineligible source provenance: " + ", ".join(expected_reasons)
+        )
+    return problems
 
 
 def _audit_summary(path: Path) -> None:
@@ -442,7 +621,7 @@ def _audit_idle_mean_uncertainty(value: Any) -> None:
         "not_estimable",
     }:
         raise PrivacyAuditError(f"{label}.status is unclassified")
-    if value["method"] != "newey_west_bartlett_10s_iid_floor_v1":
+    if value["method"] not in _IDLE_MEAN_UNCERTAINTY_METHODS:
         raise PrivacyAuditError(f"{label}.method is unclassified")
     if value["source_artifact"] != "raw/powermetrics_idle.plist":
         raise PrivacyAuditError(f"{label}.source_artifact is unclassified")
@@ -523,21 +702,32 @@ def _audit_power_trace(path: Path) -> None:
         header = next(reader)
     except StopIteration as exc:
         raise PrivacyAuditError("power_trace.csv is empty") from exc
-    expected = ["timestamp_s", "power_w", "source", "rail"]
-    if header != expected:
+    expected_headers = {
+        _POWER_TRACE_POINT_COLUMNS,
+        _POWER_TRACE_INTERVAL_COLUMNS,
+    }
+    header_tuple = tuple(header)
+    if header_tuple not in expected_headers:
         raise PrivacyAuditError(
-            f"unclassified power_trace.csv columns: expected {expected!r}, got {header!r}"
+            "unclassified power_trace.csv columns: expected exactly "
+            f"{list(_POWER_TRACE_POINT_COLUMNS)!r} or "
+            f"{list(_POWER_TRACE_INTERVAL_COLUMNS)!r}, got {header!r}"
         )
+    interval_trace = header_tuple == _POWER_TRACE_INTERVAL_COLUMNS
     for index, row in enumerate(reader, start=2):
-        if len(row) != len(expected):
+        if len(row) != len(header):
             raise PrivacyAuditError(f"power_trace.csv line {index} has {len(row)} columns")
         try:
-            float(row[0])
-            float(row[1])
+            timestamp_s = float(row[0])
+            power_w = float(row[1])
         except ValueError as exc:
             raise PrivacyAuditError(
                 f"power_trace.csv line {index} has a non-numeric timestamp or power value"
             ) from exc
+        if not math.isfinite(timestamp_s) or not math.isfinite(power_w):
+            raise PrivacyAuditError(
+                f"power_trace.csv line {index} has a non-finite timestamp or power value"
+            )
         if row[2] not in _POWER_SOURCES:
             raise PrivacyAuditError(
                 f"unclassified power_trace.csv source at line {index}: {row[2]!r}"
@@ -546,6 +736,26 @@ def _audit_power_trace(path: Path) -> None:
             raise PrivacyAuditError(
                 f"unclassified power_trace.csv rail at line {index}: {row[3]!r}"
             )
+        if interval_trace:
+            try:
+                interval_start_s = float(row[4])
+                interval_end_s = float(row[5])
+            except ValueError as exc:
+                raise PrivacyAuditError(
+                    f"power_trace.csv line {index} has a non-numeric interval support edge"
+                ) from exc
+            if not math.isfinite(interval_start_s) or not math.isfinite(interval_end_s):
+                raise PrivacyAuditError(
+                    f"power_trace.csv line {index} has a non-finite interval support edge"
+                )
+            if interval_start_s >= interval_end_s:
+                raise PrivacyAuditError(
+                    f"power_trace.csv line {index} interval support must have start < end"
+                )
+            if interval_end_s != timestamp_s:
+                raise PrivacyAuditError(
+                    f"power_trace.csv line {index} interval_end_s must equal timestamp_s"
+                )
 
 
 def audit_private_bundle(bundle: Path) -> PrivacyAudit:
@@ -809,6 +1019,7 @@ def transform_public_bundle(source: Path, destination: Path) -> dict[str, Any]:
     return {
         "schema": TRANSFORMATION_SCHEMA,
         "privacy_policy_schema": POLICY_SCHEMA,
+        "bundle_tree_identity": tree_identity_descriptor(),
         "public_bundle_id": public_id,
         "source_bundle_sha256": audit.source_bundle_sha256,
         "output_bundle_sha256": output_tree_hash,
@@ -841,6 +1052,13 @@ def verify_public_bundle(bundle: Path, expected_public_id: str | None = None) ->
         problems.append(f"config.run_id {public_id!r} does not match {expected_public_id!r}")
     if metadata.get("run_id") != public_id:
         problems.append("metadata.run_id does not match the public config run_id")
+    provenance_problems = source_provenance_problems(
+        metadata.get("source_provenance"),
+        require_eligible=True,
+    )
+    problems.extend(
+        f"metadata.source_provenance {problem}" for problem in provenance_problems
+    )
     for section, keys in {
         "model": ("source",),
         "hardware_target": ("id", "host", "notes"),

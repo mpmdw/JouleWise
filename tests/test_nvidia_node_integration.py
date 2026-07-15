@@ -307,9 +307,12 @@ class StubNode:
         mapped.update(artifacts or {})
         payload = {
             "protocol_version": 1,
+            "correlation_token": task["correlation_token"],
             "task_id": task["task_id"],
+            "run_id": task["run_id"],
             "task_type": task["task_type"],
             "operation": task["operation"],
+            "node_role": task["node_role"],
             "status": status,
             "failure_reason": failure_reason.value if failure_reason else None,
             "message": message,

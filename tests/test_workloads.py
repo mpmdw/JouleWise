@@ -6,7 +6,13 @@ from collections import Counter
 from pathlib import Path
 
 from joulewise.schemas import BenchmarkConfig, SchemaError
-from joulewise.suite import SuiteManifest, suite_manifest_sha256
+from joulewise.suite import (
+    LEGACY_SUITE_SCHEMA_VERSION,
+    SUITE_SCHEMA_VERSION,
+    SuiteManifest,
+    migrate_suite_manifest,
+    suite_manifest_sha256,
+)
 from joulewise.workloads import (
     DEFAULT_SMOKE_ITEMS_PER_LEVEL,
     DEFAULT_SMOKE_LEVELS,
@@ -167,7 +173,14 @@ class AffineSmokeManifestTests(unittest.TestCase):
             self.assertEqual(len(level_items), DEFAULT_SMOKE_ITEMS_PER_LEVEL)
             self.assertEqual(len({item.item_id for item in level_items}), DEFAULT_SMOKE_ITEMS_PER_LEVEL)
             self.assertTrue(all("sentinel" not in item.tags for item in level_items))
-        self.assertEqual(manifest.execution_policy.default_output_policy, "natural_eos")
+        self.assertEqual(manifest.schema_version, SUITE_SCHEMA_VERSION)
+        self.assertEqual(
+            manifest.execution_policy.recorded_default_output_policy, "natural_eos"
+        )
+        self.assertEqual(
+            manifest.execution_policy.cache_policy_verification,
+            "declared_not_verified",
+        )
         self.assertEqual(
             manifest.generator.parameters_hash,
             "2dd6347eb863a81b55f30378bf37ccce66296e093768a99af55001d479494847",
@@ -242,14 +255,17 @@ class AffineSmokeManifestTests(unittest.TestCase):
         )
         manifest = json.loads(manifest_path.read_text())
         sidecar = json.loads(sidecar_path.read_text())
-        self.assertEqual(manifest, build_affine_smoke_manifest())
+        self.assertEqual(migrate_suite_manifest(manifest), build_affine_smoke_manifest())
         self.assertEqual(sidecar, build_affine_smoke_annotations(manifest))
 
     def test_generated_manifest_bytes_match_canonical_builder_bytes(self) -> None:
         manifest_path = ROOT / "configs" / "suite_manifests" / "affine_smoke_v1.json"
         built = build_affine_smoke_manifest(DEFAULT_SMOKE_SUITE_SEED)
+        retained_legacy = SuiteManifest.from_mapping(built).to_dict(
+            schema_version=LEGACY_SUITE_SCHEMA_VERSION
+        )
         canonical_bytes = (
-            json.dumps(built, indent=2, sort_keys=True) + "\n"
+            json.dumps(retained_legacy, indent=2, sort_keys=True) + "\n"
         ).encode("utf-8")
         self.assertEqual(canonical_bytes, manifest_path.read_bytes())
 

@@ -15,6 +15,8 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from joulewise.provenance import FIXED_BUDGET_EXACT, FIXED_BUDGET_INCOMPLETE
+
 from .claims import ordered_reason_codes
 from .estimators import (
     DeterministicBoundTerm,
@@ -173,6 +175,7 @@ def _output_policy_identity(value: object) -> str | None:
         return None
     name = value.get("name")
     requested = value.get("requested_tokens")
+    emitted = value.get("emitted_tokens")
     sampler = value.get("sampler")
     if (
         not isinstance(name, str)
@@ -180,6 +183,9 @@ def _output_policy_identity(value: object) -> str | None:
         or isinstance(requested, bool)
         or not isinstance(requested, int)
         or requested <= 0
+        or isinstance(emitted, bool)
+        or not isinstance(emitted, int)
+        or emitted < 0
         or (sampler is not None and not isinstance(sampler, Mapping))
     ):
         return None
@@ -214,6 +220,7 @@ def ratio_evidence_reasons(
             reasons.append("stop_reason_required")
         if _output_policy_identity(provenance.get("output_policy")) is None:
             reasons.append("output_policy_required")
+        reasons.extend(_realized_output_reasons(provenance))
         if _canonical_identity(provenance.get("tokenizer_identity")) is None:
             reasons.append("tokenizer_identity_mismatch")
 
@@ -238,6 +245,83 @@ def ratio_evidence_reasons(
     ):
         reasons.append("tokenizer_identity_mismatch")
     return tuple(ordered_reason_codes(reasons))
+
+
+def _realized_output_reasons(provenance: Mapping[str, Any]) -> list[str]:
+    """Fail closed unless configured, observed, and token evidence agree."""
+
+    reasons: list[str] = []
+    tokens = provenance.get("output_tokens")
+    policy = provenance.get("output_policy")
+    emitted = policy.get("emitted_tokens") if isinstance(policy, Mapping) else None
+    if (
+        isinstance(emitted, bool)
+        or not isinstance(emitted, int)
+        or emitted < 0
+        or emitted != tokens
+    ):
+        reasons.append("runtime_token_denominator_required")
+    if not isinstance(policy, Mapping):
+        return reasons
+
+    items = policy.get("realized_items")
+    if items is None:
+        name = policy.get("name")
+        if name in {FIXED_BUDGET_EXACT, FIXED_BUDGET_INCOMPLETE} and (
+            name != FIXED_BUDGET_EXACT
+            or policy.get("requested_tokens") != emitted
+            or provenance.get("stop_reason") != "requested_tokens_emitted"
+        ):
+            reasons.append("output_policy_required")
+        return reasons
+
+    if not isinstance(items, (list, tuple)) or not items:
+        return reasons + ["runtime_token_denominator_required", "stop_reason_required"]
+    item_total = 0
+    for item in items:
+        if not isinstance(item, Mapping):
+            reasons.append("runtime_token_denominator_required")
+            continue
+        # Suite item records and item-end markers are independently persisted
+        # views of the same realized outcome.  Neither may silently override a
+        # conflicting peer: policy admission fails closed on any disagreement.
+        if item.get("record_marker_agreement") is not True:
+            reasons.append("output_policy_required")
+        item_requested = item.get("requested_tokens")
+        item_emitted = item.get("emitted_tokens")
+        item_stop = item.get("stop_reason")
+        if (
+            isinstance(item_requested, bool)
+            or not isinstance(item_requested, int)
+            or item_requested <= 0
+            or isinstance(item_emitted, bool)
+            or not isinstance(item_emitted, int)
+            or item_emitted < 0
+            or item.get("token_evidence_count") != item_emitted
+            or (
+                item.get("emitted_token_ids_count") is not None
+                and item.get("emitted_token_ids_count") != item_emitted
+            )
+        ):
+            reasons.append("runtime_token_denominator_required")
+            continue
+        item_total += item_emitted
+        if not isinstance(item_stop, str) or not item_stop:
+            reasons.append("stop_reason_required")
+        item_policy = item.get("output_policy")
+        if item_policy == FIXED_BUDGET_EXACT and (
+            item.get("status") != "succeeded"
+            or item_requested != item_emitted
+            or item_stop != "requested_tokens_emitted"
+        ):
+            reasons.append("output_policy_required")
+        elif item_policy not in {FIXED_BUDGET_EXACT, "natural_eos"}:
+            reasons.append("output_policy_required")
+        if item.get("status") not in {"succeeded", "capped"}:
+            reasons.append("runtime_token_denominator_required")
+    if item_total != emitted:
+        reasons.append("runtime_token_denominator_required")
+    return reasons
 
 
 def ratio_collection_evidence_reasons(

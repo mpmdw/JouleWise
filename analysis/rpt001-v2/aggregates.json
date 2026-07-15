@@ -1,0 +1,570 @@
+{
+  "artifact_version": "rpt001-v2",
+  "evidence_class": "legacy_l1_manual_review_pre_2m",
+  "experiments": {
+    "example-mac-mlx-local": {
+      "confidence": 0.95,
+      "member_problems": [],
+      "members_failed": 0,
+      "members_read": 3,
+      "members_succeeded": 3,
+      "members_total": 3,
+      "members_unsupported": 0,
+      "method": "mean_sample_stddev_student_t_95",
+      "metrics": {
+        "decode_latency_s": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 1.9852578146863913,
+          "mean": 1.9889810880025227,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.0014986982463409315,
+          "upper": 1.9927043613186541
+        },
+        "energy_output_token_j": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 0.07090824550776581,
+          "mean": 0.08676936225411219,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 1,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [
+            {
+              "member": "example-mac-mlx-local__r1",
+              "modified_z": -496.7071705396305,
+              "value": 0.07939724708180429
+            }
+          ],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.006384443427714038,
+          "upper": 0.10263047900045857
+        },
+        "energy_request_j": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "energy_bound_terms_j": {
+            "E_drift_bound_j": null,
+            "E_interpolation_edge_bound_j": null,
+            "E_interpolation_joint_edge_bound_j": null
+          },
+          "energy_uncertainty_status": "not_estimable",
+          "energy_variance_terms_j2": {
+            "E_gross_repetition_j2": 0.4795970077775576,
+            "E_idle_mean_j2": null,
+            "E_idle_sub_total_j2": null
+          },
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 36.305021699976095,
+          "mean": 44.42591347410544,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 1,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [
+            {
+              "member": "example-mac-mlx-local__r1",
+              "modified_z": -496.7071705396305,
+              "value": 40.651390505883796
+            }
+          ],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 3.2688350349895874,
+          "upper": 52.54680524823479
+        },
+        "energy_token_j": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 0.06875951079540926,
+          "mean": 0.08413998764035122,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 1,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [
+            {
+              "member": "example-mac-mlx-local__r1",
+              "modified_z": -496.7071705395299,
+              "value": 0.0769912698975072
+            }
+          ],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.006190975445056036,
+          "upper": 0.09952046448529317
+        },
+        "gross_energy_j": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 45.49994617541606,
+          "mean": 47.22042349222679,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.6925294273729872,
+          "upper": 48.94090080903752
+        },
+        "idle_subtracted_energy_j": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "energy_bound_terms_j": {
+            "E_drift_bound_j": null,
+            "E_interpolation_edge_bound_j": null,
+            "E_interpolation_joint_edge_bound_j": null
+          },
+          "energy_uncertainty_status": "not_estimable",
+          "energy_variance_terms_j2": {
+            "E_gross_repetition_j2": 0.4795970077775576,
+            "E_idle_mean_j2": null,
+            "E_idle_sub_total_j2": null
+          },
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 36.305021699976095,
+          "mean": 44.42591347410544,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 1,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [
+            {
+              "member": "example-mac-mlx-local__r1",
+              "modified_z": -496.7071705396305,
+              "value": 40.651390505883796
+            }
+          ],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 3.2688350349895874,
+          "upper": 52.54680524823479
+        },
+        "inter_token_throughput_tokens_s": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": true,
+          "headline_includes_outliers": true,
+          "interval_available": false,
+          "interval_status": "unavailable",
+          "lower": null,
+          "mean": null,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [
+            {
+              "member": "example-mac-mlx-local__r1",
+              "reason": "metric_null"
+            },
+            {
+              "member": "example-mac-mlx-local__r2",
+              "reason": "metric_null"
+            },
+            {
+              "member": "example-mac-mlx-local__r3",
+              "reason": "metric_null"
+            }
+          ],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "not_enough_values",
+          "outliers": [],
+          "partial_metric": true,
+          "repetitions": 0,
+          "stddev": null,
+          "upper": null
+        },
+        "phase_energy_j.decode": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 45.4398932775379,
+          "mean": 47.16752449064848,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.6954090257609551,
+          "upper": 48.895155703759066
+        },
+        "phase_energy_j.prefill": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 0.021895312031922153,
+          "mean": 0.030228715672039986,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.00335437566922229,
+          "upper": 0.03856211931215782
+        },
+        "throughput_tokens_s": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 256.9364824773004,
+          "mean": 257.4183318659283,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.19395482749234202,
+          "upper": 257.9001812545562
+        },
+        "ttft_s": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 0.09121082529214118,
+          "mean": 0.09410508473714192,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 1,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [
+            {
+              "member": "example-mac-mlx-local__r3",
+              "modified_z": -3.637363476425053,
+              "value": 0.0927741527557373
+            }
+          ],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.0011650021866203533,
+          "upper": 0.09699934418214266
+        }
+      },
+      "schema_version": 1
+    },
+    "example-mac-mlx-qwen35-122b-512t": {
+      "confidence": 0.95,
+      "member_problems": [],
+      "members_failed": 0,
+      "members_read": 3,
+      "members_succeeded": 3,
+      "members_total": 3,
+      "members_unsupported": 0,
+      "method": "mean_sample_stddev_student_t_95",
+      "metrics": {
+        "decode_latency_s": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 10.993585876917086,
+          "mean": 11.093574126561483,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.0402474386576752,
+          "upper": 11.19356237620588
+        },
+        "energy_output_token_j": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 0.5804978634456869,
+          "mean": 0.5833736649264484,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.0011575724557659017,
+          "upper": 0.5862494664072099
+        },
+        "energy_request_j": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "energy_bound_terms_j": {
+            "E_drift_bound_j": null,
+            "E_interpolation_edge_bound_j": null,
+            "E_interpolation_joint_edge_bound_j": null
+          },
+          "energy_uncertainty_status": "not_estimable",
+          "energy_variance_terms_j2": {
+            "E_gross_repetition_j2": 0.8060661798424211,
+            "E_idle_mean_j2": null,
+            "E_idle_sub_total_j2": null
+          },
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 297.2149060841917,
+          "mean": 298.68731644234157,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.5926770973521417,
+          "upper": 300.15972680049146
+        },
+        "energy_token_j": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 0.5629070190988479,
+          "mean": 0.5656956750801924,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.0011224945025608962,
+          "upper": 0.5684843310615368
+        },
+        "gross_energy_j": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 301.78958707935993,
+          "mean": 304.02005544776165,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 1,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [
+            {
+              "member": "example-mac-mlx-qwen35-122b-512t__r3",
+              "modified_z": 15.647569546422929,
+              "value": 305.0560678020925
+            }
+          ],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.8978118844403994,
+          "upper": 306.25052381616337
+        },
+        "idle_subtracted_energy_j": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "energy_bound_terms_j": {
+            "E_drift_bound_j": null,
+            "E_interpolation_edge_bound_j": null,
+            "E_interpolation_joint_edge_bound_j": null
+          },
+          "energy_uncertainty_status": "not_estimable",
+          "energy_variance_terms_j2": {
+            "E_gross_repetition_j2": 0.8060661798424211,
+            "E_idle_mean_j2": null,
+            "E_idle_sub_total_j2": null
+          },
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 297.2149060841917,
+          "mean": 298.68731644234157,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.5926770973521417,
+          "upper": 300.15972680049146
+        },
+        "inter_token_throughput_tokens_s": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": true,
+          "headline_includes_outliers": true,
+          "interval_available": false,
+          "interval_status": "unavailable",
+          "lower": null,
+          "mean": null,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [
+            {
+              "member": "example-mac-mlx-qwen35-122b-512t__r1",
+              "reason": "metric_null"
+            },
+            {
+              "member": "example-mac-mlx-qwen35-122b-512t__r2",
+              "reason": "metric_null"
+            },
+            {
+              "member": "example-mac-mlx-qwen35-122b-512t__r3",
+              "reason": "metric_null"
+            }
+          ],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "not_enough_values",
+          "outliers": [],
+          "partial_metric": true,
+          "repetitions": 0,
+          "stddev": null,
+          "upper": null
+        },
+        "phase_energy_j.decode": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 301.1608804198411,
+          "mean": 303.48568616630814,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 1,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [
+            {
+              "member": "example-mac-mlx-qwen35-122b-512t__r3",
+              "modified_z": 44.171430905794466,
+              "value": 304.5661442463773
+            }
+          ],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.9357847247522785,
+          "upper": 305.8104919127752
+        },
+        "phase_energy_j.prefill": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 0.3995648822287445,
+          "mean": 0.5086672996142418,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.04391608880787066,
+          "upper": 0.6177697169997393
+        },
+        "throughput_tokens_s": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 45.73649551228267,
+          "mean": 46.153250091961894,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 0,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.16775275535473347,
+          "upper": 46.570004671641115
+        },
+        "ttft_s": {
+          "below_headline_protocol": true,
+          "below_minimum_protocol": false,
+          "headline_includes_outliers": true,
+          "interval_available": true,
+          "interval_status": "computed",
+          "lower": 0.2568759686244999,
+          "mean": 0.27168480555216473,
+          "method": "mean_sample_stddev_student_t_95",
+          "missing": [],
+          "outlier_count": 1,
+          "outlier_method": "modified_z_mad_3.5",
+          "outlier_method_status": "computed",
+          "outliers": [
+            {
+              "member": "example-mac-mlx-qwen35-122b-512t__r1",
+              "modified_z": -23.249001615508885,
+              "value": 0.2648038864135742
+            }
+          ],
+          "partial_metric": false,
+          "repetitions": 3,
+          "stddev": 0.005960877982737094,
+          "upper": 0.28649364247982956
+        }
+      },
+      "schema_version": 1
+    }
+  },
+  "note": "aggregate_experiment() output preserved verbatim; the RPT-001 figure deliberately renders raw points + mean + min-max, not the Student-t interval (spec §4.2).",
+  "schema": "joulewise.report_analysis_aggregates.v1"
+}

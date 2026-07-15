@@ -25,10 +25,39 @@ ITEM_START = "item_start"
 ITEM_END = "item_end"
 
 SUITE_PHASE = "suite"
-SUITE_SCHEMA_VERSION = "suite_manifest.v1"
+LEGACY_SUITE_SCHEMA_VERSION = "suite_manifest.v1"
+SUITE_SCHEMA_VERSION = "suite_manifest.v2"
+SUPPORTED_SUITE_SCHEMA_VERSIONS: frozenset[str] = frozenset(
+    {LEGACY_SUITE_SCHEMA_VERSION, SUITE_SCHEMA_VERSION}
+)
+
+# R4 / WO-009 migration contract: v1 remains readable with its historical hash.
+# Its constant ``items[].status_policy == "none"`` is validated and discarded;
+# its ambiguous execution-policy names are migrated to the explicit v2 names,
+# whose persisted bytes receive a distinct v2 hash.
+SUITE_SCHEMA_MIGRATION_NOTE = (
+    "suite_manifest.v1 is read as legacy compatibility input: status_policy must "
+    "be 'none' and is removed; cache/cooldown/default-output declarations are "
+    "provenance, not verified runtime state"
+)
 
 OUTPUT_POLICIES: frozenset[str] = frozenset({"fixed_budget_exact", "natural_eos"})
-STATUS_POLICIES: frozenset[str] = frozenset({"none"})
+LEGACY_STATUS_POLICY = "none"
+CACHE_POLICY_VERIFICATION_DECLARED_NOT_VERIFIED = "declared_not_verified"
+LEGACY_V1_SYNTHESIZED_FIELDS: tuple[str, ...] = (
+    "execution_policy.cache_policy_verification",
+)
+RESERVED_WARMUP_POLICY = "adapter_default"
+SUITE_POLICY_SEMANTICS: dict[str, str] = {
+    "execution_policy.order_policy": "enforced",
+    "execution_policy.within_bundle_repeats": "reserved_compat",
+    "execution_policy.cooldown_policy": "descriptive_provenance",
+    "execution_policy.cache_policy": "descriptive_provenance_declared_not_verified",
+    "execution_policy.warmup_policy": "reserved_compat",
+    "execution_policy.default_output_policy": "descriptive_provenance",
+    "items[].output_policy": "enforced",
+    "items[].status_policy": "removed",
+}
 ORDER_POLICY_MANIFEST = "manifest_order"
 ORDER_POLICY_BLOCK_ROUND_ROBIN_V1 = "block_round_robin_v1"
 ORDER_POLICY_BLOCK_LATIN_SQUARE_V1 = "block_latin_square_v1"
@@ -278,16 +307,31 @@ class AnalysisContract:
 
 @dataclass(frozen=True)
 class ExecutionPolicy:
+    """R4-classified suite policy fields.
+
+    ``order_policy`` is enforced. The ``reserved_*`` fields are validated
+    compatibility slots with one legal value. The ``recorded_*`` and
+    ``declared_*`` fields are descriptive provenance and do not assert that a
+    runtime established the recorded condition.
+    """
+
     order_policy: str
-    within_bundle_repeats: int
-    cooldown_policy: str
-    cache_policy: str
-    warmup_policy: str
-    default_output_policy: str
+    reserved_within_bundle_repeats: int
+    recorded_cooldown_policy: str
+    declared_cache_policy: str
+    cache_policy_verification: str
+    reserved_warmup_policy: str
+    recorded_default_output_policy: str
 
     @classmethod
-    def from_mapping(cls, data: Any) -> "ExecutionPolicy":
+    def from_mapping(cls, data: Any, *, schema_version: str) -> "ExecutionPolicy":
         data = _require_mapping(data, "execution_policy")
+        if schema_version == LEGACY_SUITE_SCHEMA_VERSION:
+            return cls._from_v1_mapping(data)
+        return cls._from_v2_mapping(data)
+
+    @classmethod
+    def _from_v1_mapping(cls, data: dict[str, Any]) -> "ExecutionPolicy":
         _reject_unknown(
             data,
             {
@@ -306,28 +350,103 @@ class ExecutionPolicy:
                 "execution_policy.order_policy",
                 ORDER_POLICIES,
             ),
-            within_bundle_repeats=_positive_int(
+            reserved_within_bundle_repeats=_positive_int(
                 data.get("within_bundle_repeats"),
                 "execution_policy.within_bundle_repeats",
             ),
-            cooldown_policy=_require_string(
+            recorded_cooldown_policy=_require_string(
                 data.get("cooldown_policy"), "execution_policy.cooldown_policy"
             ),
-            cache_policy=_require_string(
+            declared_cache_policy=_require_string(
                 data.get("cache_policy"), "execution_policy.cache_policy"
             ),
-            warmup_policy=_require_string(
-                data.get("warmup_policy"), "execution_policy.warmup_policy"
+            cache_policy_verification=CACHE_POLICY_VERIFICATION_DECLARED_NOT_VERIFIED,
+            reserved_warmup_policy=_require_choice(
+                data.get("warmup_policy"),
+                "execution_policy.warmup_policy",
+                frozenset({RESERVED_WARMUP_POLICY}),
             ),
-            default_output_policy=_require_choice(
+            recorded_default_output_policy=_require_choice(
                 data.get("default_output_policy"),
                 "execution_policy.default_output_policy",
                 OUTPUT_POLICIES,
             ),
         )
 
-    def to_dict(self) -> dict[str, Any]:
-        return _plain_dataclass_dict(asdict(self))
+    @classmethod
+    def _from_v2_mapping(cls, data: dict[str, Any]) -> "ExecutionPolicy":
+        _reject_unknown(
+            data,
+            {
+                "order_policy",
+                "within_bundle_repeats",
+                "cooldown_policy",
+                "declared_cache_policy",
+                "cache_policy_verification",
+                "warmup_policy",
+                "default_output_policy",
+            },
+            "execution_policy",
+        )
+        return cls(
+            order_policy=_require_choice(
+                data.get("order_policy"),
+                "execution_policy.order_policy",
+                ORDER_POLICIES,
+            ),
+            reserved_within_bundle_repeats=_positive_int(
+                data.get("within_bundle_repeats"),
+                "execution_policy.within_bundle_repeats",
+            ),
+            recorded_cooldown_policy=_require_string(
+                data.get("cooldown_policy"),
+                "execution_policy.cooldown_policy",
+            ),
+            declared_cache_policy=_require_string(
+                data.get("declared_cache_policy"),
+                "execution_policy.declared_cache_policy",
+            ),
+            cache_policy_verification=_require_choice(
+                data.get("cache_policy_verification"),
+                "execution_policy.cache_policy_verification",
+                frozenset({CACHE_POLICY_VERIFICATION_DECLARED_NOT_VERIFIED}),
+            ),
+            reserved_warmup_policy=_require_choice(
+                data.get("warmup_policy"),
+                "execution_policy.warmup_policy",
+                frozenset({RESERVED_WARMUP_POLICY}),
+            ),
+            recorded_default_output_policy=_require_choice(
+                data.get("default_output_policy"),
+                "execution_policy.default_output_policy",
+                OUTPUT_POLICIES,
+            ),
+        )
+
+    @property
+    def default_output_policy(self) -> str:
+        """Legacy adapter-facing label alias; descriptive, never a fallback."""
+        return self.recorded_default_output_policy
+
+    def to_dict(self, *, schema_version: str) -> dict[str, Any]:
+        if schema_version == LEGACY_SUITE_SCHEMA_VERSION:
+            return {
+                "order_policy": self.order_policy,
+                "within_bundle_repeats": self.reserved_within_bundle_repeats,
+                "cooldown_policy": self.recorded_cooldown_policy,
+                "cache_policy": self.declared_cache_policy,
+                "warmup_policy": self.reserved_warmup_policy,
+                "default_output_policy": self.recorded_default_output_policy,
+            }
+        return {
+            "order_policy": self.order_policy,
+            "within_bundle_repeats": self.reserved_within_bundle_repeats,
+            "cooldown_policy": self.recorded_cooldown_policy,
+            "declared_cache_policy": self.declared_cache_policy,
+            "cache_policy_verification": self.cache_policy_verification,
+            "warmup_policy": self.reserved_warmup_policy,
+            "default_output_policy": self.recorded_default_output_policy,
+        }
 
 
 @dataclass(frozen=True)
@@ -550,12 +669,24 @@ class SuiteItem:
     source: ItemSource
     grouping: ItemGrouping
     output_policy: str
-    status_policy: str
     tags: list[str] = field(default_factory=list)
 
     @classmethod
-    def from_mapping(cls, data: Any) -> "SuiteItem":
+    def from_mapping(cls, data: Any, *, schema_version: str) -> "SuiteItem":
         data = _require_mapping(data, "items[]")
+        if schema_version == LEGACY_SUITE_SCHEMA_VERSION:
+            legacy_status = data.get("status_policy")
+            if legacy_status != LEGACY_STATUS_POLICY:
+                raise SchemaError(
+                    "items[].status_policy was removed in suite_manifest.v2; "
+                    "legacy suite_manifest.v1 permits only 'none'; "
+                    f"got {legacy_status!r}"
+                )
+        elif "status_policy" in data:
+            raise SchemaError(
+                "items[].status_policy was removed in suite_manifest.v2; omit it "
+                "(legacy suite_manifest.v1 permits only 'none')"
+            )
         _reject_unknown(
             data,
             {
@@ -567,9 +698,9 @@ class SuiteItem:
                 "source",
                 "grouping",
                 "output_policy",
-                "status_policy",
                 "tags",
-            },
+            }
+            | ({"status_policy"} if schema_version == LEGACY_SUITE_SCHEMA_VERSION else set()),
             "items[]",
             deferred={
                 "scoring",
@@ -597,11 +728,6 @@ class SuiteItem:
                 data.get("output_policy"),
                 "items[].output_policy",
                 OUTPUT_POLICIES,
-            ),
-            status_policy=_require_choice(
-                data.get("status_policy"),
-                "items[].status_policy",
-                STATUS_POLICIES,
             ),
             tags=list(tags),
         )
@@ -639,8 +765,11 @@ class SuiteItem:
             return "prompt_token_ids"
         return "synthetic"
 
-    def to_dict(self) -> dict[str, Any]:
-        return _plain_dataclass_dict(asdict(self))
+    def to_dict(self, *, schema_version: str) -> dict[str, Any]:
+        data = _plain_dataclass_dict(asdict(self))
+        if schema_version == LEGACY_SUITE_SCHEMA_VERSION:
+            data["status_policy"] = LEGACY_STATUS_POLICY
+        return data
 
     def prompt_token_ids(self) -> list[int]:
         if self.source.prompt_token_ids is not None:
@@ -662,6 +791,12 @@ class SuiteManifest:
     items: list[SuiteItem]
     markers: dict[str, str] = field(default_factory=lambda: dict(MARKER_DEFAULTS))
     outputs: dict[str, str] = field(default_factory=lambda: dict(OUTPUT_DEFAULTS))
+    # Read-side provenance only. It names fields supplied by compatibility
+    # parsing rather than persisted in the manifest bytes and is deliberately
+    # excluded from every serialized/hash representation.
+    synthesized_fields: tuple[str, ...] = field(
+        default_factory=tuple, compare=False, repr=False
+    )
 
     @classmethod
     def from_mapping(cls, data: Any) -> "SuiteManifest":
@@ -706,9 +841,10 @@ class SuiteManifest:
             )
         )
         schema_version = _require_string(data.get("schema_version"), "schema_version")
-        if schema_version != SUITE_SCHEMA_VERSION:
+        if schema_version not in SUPPORTED_SUITE_SCHEMA_VERSIONS:
+            expected = ", ".join(sorted(SUPPORTED_SUITE_SCHEMA_VERSIONS))
             raise SchemaError(
-                f"schema_version expected {SUITE_SCHEMA_VERSION!r}; got {schema_version!r}"
+                f"schema_version expected one of: {expected}; got {schema_version!r}"
             )
         manifest = cls(
             schema_version=schema_version,
@@ -718,11 +854,21 @@ class SuiteManifest:
             suite_seed=_require_string(data.get("suite_seed"), "suite_seed"),
             generator=SuiteGenerator.from_mapping(data.get("generator")),
             analysis_contract=AnalysisContract.from_mapping(data.get("analysis_contract")),
-            execution_policy=ExecutionPolicy.from_mapping(data.get("execution_policy")),
+            execution_policy=ExecutionPolicy.from_mapping(
+                data.get("execution_policy"), schema_version=schema_version
+            ),
             source_manifest=SourceManifest.from_mapping(data.get("source_manifest")),
-            items=[SuiteItem.from_mapping(item) for item in raw_items],
+            items=[
+                SuiteItem.from_mapping(item, schema_version=schema_version)
+                for item in raw_items
+            ],
             markers=markers,
             outputs=outputs,
+            synthesized_fields=(
+                LEGACY_V1_SYNTHESIZED_FIELDS
+                if schema_version == LEGACY_SUITE_SCHEMA_VERSION
+                else ()
+            ),
         )
         manifest.validate()
         return manifest
@@ -768,13 +914,38 @@ class SuiteManifest:
                     "duplicate item_id entries are reserved for sentinel items: "
                     f"{item_id}"
                 )
-        if self.execution_policy.within_bundle_repeats != 1:
-            raise SchemaError("execution_policy.within_bundle_repeats must be 1")
+        if self.execution_policy.reserved_within_bundle_repeats != 1:
+            field_name = (
+                "execution_policy.within_bundle_repeats"
+                if self.schema_version == LEGACY_SUITE_SCHEMA_VERSION
+                else "execution_policy.within_bundle_repeats"
+            )
+            raise SchemaError(f"{field_name} is reserved compatibility and must be 1")
         if not seen_blocks or not seen_level_runs:
             raise SchemaError("items must define block_id and level_id")
 
-    def to_dict(self) -> dict[str, Any]:
-        return _plain_dataclass_dict(asdict(self))
+    def to_dict(self, *, schema_version: str | None = None) -> dict[str, Any]:
+        target_version = self.schema_version if schema_version is None else schema_version
+        if target_version not in SUPPORTED_SUITE_SCHEMA_VERSIONS:
+            raise SchemaError(f"unsupported suite manifest target version: {target_version!r}")
+        return {
+            "schema_version": target_version,
+            "suite_id": self.suite_id,
+            "suite_profile": self.suite_profile,
+            "suite_revision": self.suite_revision,
+            "suite_seed": self.suite_seed,
+            "generator": self.generator.to_dict(),
+            "analysis_contract": self.analysis_contract.to_dict(),
+            "execution_policy": self.execution_policy.to_dict(
+                schema_version=target_version
+            ),
+            "source_manifest": self.source_manifest.to_dict(),
+            "items": [
+                item.to_dict(schema_version=target_version) for item in self.items
+            ],
+            "markers": dict(self.markers),
+            "outputs": dict(self.outputs),
+        }
 
 
 @dataclass(frozen=True)
@@ -917,8 +1088,18 @@ def canonical_effective_manifest(mapping: dict[str, Any]) -> dict[str, Any]:
     return SuiteManifest.from_mapping(mapping).to_dict()
 
 
+def migrate_suite_manifest(mapping: dict[str, Any]) -> dict[str, Any]:
+    """Validate a v1/v2 manifest and return its explicit v2 representation."""
+    return SuiteManifest.from_mapping(mapping).to_dict(schema_version=SUITE_SCHEMA_VERSION)
+
+
 def suite_manifest_sha256(mapping: dict[str, Any]) -> str:
-    """SHA-256 of the canonical effective manifest (D-044/D-001 JSON form)."""
+    """SHA-256 of the manifest's own canonical schema representation.
+
+    A persisted v1 manifest retains its historical v1 digest. A new v2
+    manifest hashes the v2 bytes, including the explicit cache-policy
+    verification marker and excluding removed ``status_policy`` fields.
+    """
     effective = canonical_effective_manifest(mapping)
     payload = json.dumps(effective, indent=2, sort_keys=True) + "\n"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()

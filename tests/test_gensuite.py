@@ -422,7 +422,11 @@ class GenSuiteTests(unittest.TestCase):
                 indices = [i for i, value in enumerate(blocks) if value == block]
                 self.assertEqual(indices, list(range(min(indices), max(indices) + 1)))
             self.assertTrue(all(item["output_policy"] == "fixed_budget_exact" for item in build.manifest["items"]))
-            self.assertTrue(all(item["status_policy"] == "none" for item in build.manifest["items"]))
+            self.assertTrue(all("status_policy" not in item for item in build.manifest["items"]))
+            self.assertEqual(
+                build.manifest["execution_policy"]["cache_policy_verification"],
+                "declared_not_verified",
+            )
 
     def test_manifest_builders_write_sidecars_without_manifest_annotations(self) -> None:
         tokenizer = QuirkyFakeTokenizer()

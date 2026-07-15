@@ -101,7 +101,7 @@ python3 -m joulewise validate-bundle runs/example-mock-local
 # Re-derive summary metrics from a bundle's recorded trace/events (post-hoc):
 python3 -m joulewise reduce runs/example-mock-local
 
-# Render a static HTML run browser (needs: pip install 'joulewise[analysis]'):
+# Render a static HTML run browser (first: pip install -e '.[analysis]'):
 python3 -m joulewise report runs --output report
 ```
 

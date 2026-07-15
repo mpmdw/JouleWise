@@ -9,6 +9,8 @@ from typing import Any
 PROMPT_TOKEN_IDS_HASH_DOMAIN = "joulewise.prompt_token_ids.v1"
 SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN = "joulewise.suite_prompt_token_ids.v1"
 MODEL_ARTIFACT_HASH_DOMAIN = "joulewise.model_artifact_identity.v1"
+FIXED_BUDGET_EXACT = "fixed_budget_exact"
+FIXED_BUDGET_INCOMPLETE = "fixed_budget_incomplete"
 
 
 def sha256_hex(data: bytes | str) -> str:
@@ -79,6 +81,25 @@ def output_policy(
         "emitted_tokens": emitted_tokens,
         "stop_condition": stop_condition,
     }
+
+
+def fixed_budget_outcome_name(
+    *, requested_tokens: int, emitted_tokens: int, stop_condition: str
+) -> str:
+    """Name the realized outcome of a fixed-budget generation attempt.
+
+    ``fixed_budget_exact`` is evidence-bearing: it is emitted only when the
+    requested count was realized and the runtime recorded the corresponding
+    stop.  An underrun retains the same existing output-policy record but is
+    labelled incomplete rather than falsely asserting exactness.
+    """
+
+    if (
+        emitted_tokens == requested_tokens
+        and stop_condition == "requested_tokens_emitted"
+    ):
+        return FIXED_BUDGET_EXACT
+    return FIXED_BUDGET_INCOMPLETE
 
 
 def prompt_provenance(token_ids: list[int], text: str | None = None) -> dict[str, Any]:

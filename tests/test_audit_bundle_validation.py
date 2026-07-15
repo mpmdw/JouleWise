@@ -89,11 +89,15 @@ class BundleValidationBugPins(BundleAuditCase):
         problems = validate_bundle(bundle)
         self.assertTrue(any("energy_request_j" in problem for problem in problems), problems)
 
-    def test_is_complete_false_for_status_only_succeeded_summary(self) -> None:
-        bundle = self.make_complete_bundle("audit-status-only-complete")
-        (bundle / "summary_metrics.json").write_text('{"status": "succeeded"}\n')
+    def test_json_null_summary_is_not_complete_or_valid(self) -> None:
+        bundle = self.make_complete_bundle("audit-json-null-summary")
+        (bundle / "summary_metrics.json").write_text("null\n")
 
         self.assertFalse(BundleReader(bundle).is_complete())
+        self.assertIn(
+            "summary_metrics.json is not a JSON object",
+            validate_bundle(bundle),
+        )
 
     def test_summary_validator_consistency_for_completion(self) -> None:
         cases = [
@@ -237,6 +241,70 @@ class BundleValidationBugPins(BundleAuditCase):
         with self.assertRaisesRegex(BundleReadError, "keys"):
             BundleReader(bundle).events()
 
+    def test_validate_bundle_rejects_unmatched_phase_marker(self) -> None:
+        bundle = self.make_complete_bundle("audit-unmatched-phase")
+        records = [
+            json.loads(line)
+            for line in (bundle / "events.jsonl").read_text().splitlines()
+        ]
+        records.insert(
+            -1,
+            {
+                "timestamp_s": 2.5,
+                "event_type": "phase_start",
+                "phase": "decode",
+                "message": "decode started",
+                "metadata": {},
+            },
+        )
+        (bundle / "events.jsonl").write_text(
+            "".join(json.dumps(record) + "\n" for record in records)
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("no paired phase_end" in problem for problem in problems),
+            problems,
+        )
+
+    def test_validate_bundle_rejects_same_source_phase_overlap(self) -> None:
+        bundle = self.make_complete_bundle("audit-overlapping-phase")
+        original = [
+            json.loads(line)
+            for line in (bundle / "events.jsonl").read_text().splitlines()
+        ]
+        phase_records = [
+            {
+                "timestamp_s": timestamp_s,
+                "event_type": event_type,
+                "phase": "decode",
+                "message": f"{event_type} decode",
+                "metadata": {"node_id": "node-a", "node_role": node_role},
+            }
+            for timestamp_s, event_type, node_role in (
+                (0.25, "phase_start", "prefill"),
+                (0.5, "phase_start", "decode"),
+                (1.25, "phase_end", "prefill"),
+                (1.5, "phase_end", "decode"),
+            )
+        ]
+        records = sorted(
+            original[:-1] + phase_records,
+            key=lambda record: record["timestamp_s"],
+        )
+        records.append(original[-1])
+        (bundle / "events.jsonl").write_text(
+            "".join(json.dumps(record) + "\n" for record in records)
+        )
+
+        problems = validate_bundle(bundle, strict=True)
+
+        self.assertTrue(
+            any("same_source_phase_overlap" in problem for problem in problems),
+            problems,
+        )
+
     # Rank 24: experiment IDs like "..." sanitize to punctuation-only run IDs instead of failing.
     def test_punctuation_only_run_id_sanitizes_to_allowed_nonempty_value(self) -> None:
         writer = RunBundleWriter.create(self.runs_root, load_config("..."), self.clock)
@@ -281,7 +349,7 @@ class StrictValidateZeroWindowTests(BundleAuditCase):
     """P2-040 FIX-1 (ARC-3): strict admission of succeeded zero-window bundles."""
 
     def make_succeeded_zero_window_bundle(self, run_id: str) -> Path:
-        from joulewise.schemas import RunStatus, SummaryMetrics
+        from joulewise.schemas import EnergyEvidence, RunStatus, SummaryMetrics
 
         writer = RunBundleWriter.create(self.runs_root, load_config(run_id), self.clock)
         writer.append_event(RuntimeEvent(2.0, "stage_started", "measured_run", "start"))
@@ -301,7 +369,17 @@ class StrictValidateZeroWindowTests(BundleAuditCase):
         )
         # A (wrongly) succeeded stored summary over the zero window.
         writer.write_summary(
-            SummaryMetrics(status=RunStatus.SUCCEEDED, gross_energy_j=0.0)
+            SummaryMetrics(
+                status=RunStatus.SUCCEEDED,
+                gross_energy_j=0.0,
+                window_evidence_precheck={
+                    "idle_subtracted_request": {
+                        "energy_evidence": EnergyEvidence.ABSENT.value,
+                        "eligible": False,
+                        "reasons": ["idle_baseline_unrecorded"],
+                    }
+                },
+            )
         )
         self.clock.sleep(3.0)
         return writer.finalize()
