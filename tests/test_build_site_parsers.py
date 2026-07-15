@@ -414,6 +414,12 @@ Text.
             self.assertTrue((content / "pages.ts").is_file())
             self.assertTrue((content / "buildinfo.ts").is_file())
             self.assertFalse((content / "styles.ts").exists())
+            manifest = json.loads((site / "build_manifest.json").read_text(encoding="utf-8"))
+            expected_mode = "offline-fallback" if force_offline_renderer else "marked"
+            self.assertEqual(manifest["renderer"]["mode"], expected_mode)
+            self.assertEqual(
+                manifest["renderer"]["markedVersion"], build_site.MARKED_VERSION
+            )
 
     def test_production_build_output_packs_below_conservative_lakebed_budget(self):
         self._assert_production_build_output_packs_below_lakebed_budget(
@@ -422,8 +428,20 @@ Text.
 
     def test_connected_marked_build_output_packs_below_lakebed_budget(self):
         try:
+            executable = build_site.discover_marked_executable()
+        except build_site.SiteBuildError as exc:
+            self.fail(str(exc))
+        if executable is None:
+            message = (
+                "WO-018 MARKED INTEGRATION GATE SKIP: pinned local Marked "
+                "18.0.6 unavailable; run npm ci or set JOULEWISE_MARKED_BIN "
+                "to an exact 18.0.6 package binary"
+            )
+            print(message, file=sys.stderr)
+            self.skipTest(message)
+        try:
             probe = subprocess.run(
-                ["npx", "--yes", "marked", "--gfm"],
+                [str(executable), "--gfm"],
                 input="# Probe\n",
                 capture_output=True,
                 text=True,
@@ -437,14 +455,14 @@ Text.
             else:
                 detail = str(exc)
             message = (
-                "SITE-01 MARKED RENDERER GATE SKIP: npx marked unavailable "
+                "WO-018 MARKED INTEGRATION GATE SKIP: pinned Marked unavailable "
                 f"({detail})"
             )
             print(message, file=sys.stderr)
             self.skipTest(message)
         if "<h1>Probe</h1>" not in probe.stdout:
             message = (
-                "SITE-01 MARKED RENDERER GATE SKIP: npx marked unavailable "
+                "WO-018 MARKED INTEGRATION GATE SKIP: pinned Marked unavailable "
                 "(probe did not return expected GFM HTML)"
             )
             print(message, file=sys.stderr)

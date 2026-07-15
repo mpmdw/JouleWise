@@ -1,0 +1,8 @@
+{
+  "renderer": {
+    "markedVersion": "18.0.6",
+    "mode": "marked",
+    "offlineImplementation": "builtin-v1"
+  },
+  "schema": "joulewise-site-build/v1"
+}

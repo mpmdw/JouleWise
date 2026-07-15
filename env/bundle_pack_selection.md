@@ -26,7 +26,19 @@ r1/r2/r3 of `example-mac-mlx-local` at 16M each and r1/r2/r3 of
 
 ## Next steps (not done here)
 
-Pack with PR #25 tooling, copy `env/analysis-lock.txt` into the pack
-directory, tar, and publish as a GitHub Release asset (`repro-pack-v1`)
-with the top-level sha256 in the release body — see spec REPRO-2
-decisions 2-4 and the dirty-tree fence (open question 3).
+At the controlled/private-corpus gate, construct and verify the recommended
+three-bundle privacy-transformed pack with:
+
+```sh
+python3 scripts/package_bundle_pack.py --output dist/jw-pack-2026-07-09 \
+  runs/example-mac-mlx-local__r1 \
+  runs/example-mac-mlx-local__r2 \
+  runs/example-mac-mlx-qwen35-122b-512t__r1
+python3 scripts/package_bundle_pack.py --verify dist/jw-pack-2026-07-09
+```
+
+Then copy `env/analysis-lock.txt` into the release staging directory, tar, and
+publish as a GitHub Release asset (`repro-pack-v1`) with the top-level SHA-256
+in the release body — see spec REPRO-2 decisions 2-4, the dirty-tree fence
+(open question 3), and `docs/publication_release_checklist.md`. Construction is
+controlled/internal work; it is not evidence that publication occurred.

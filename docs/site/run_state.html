@@ -40,8 +40,9 @@
 <a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit a89195e"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit a89195e</span></span></div>
-    <h1>JouleWise Run State</h1>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit e3fc14a"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit e3fc14a</span></span></div>
+    <!-- rendered: marked@18.0.6 -->
+<h1>JouleWise Run State</h1>
 <p>Last updated: 2026-07-13 (STEADY STATE FOR THE AUDIT GATE. Bridge v1.1
 MERGED: PR #65 landed as <code>d285989</code> (Ed-named merge) — discussion lane,
 <code>scripts/bridge session-open</code>/<code>session-close</code> (receipt-anchored,
@@ -49,9 +50,9 @@ MERGED: PR #65 landed as <code>d285989</code> (Ed-named merge) — discussion la
 reverse-consult effort, peer channels + bounded proposal diffs (D-065,
 C-032). Merged-main suite lead-run: 1387 OK (skipped=10); bridge checker
 all PASS; no active leases; merged bridge branches deleted local+origin;
-site regenerated and packed (artifact 864,661 B, under cap) — the ONE
-outstanding action is the Lakebed upload, blocked by session permissions:
-<code>cd site_capsule &amp;&amp; npx lakebed deploy</code> (Ed). <strong>NEXT GATE unchanged:
+site regenerated, packed, and DEPLOYED live by Ed (2026-07-13T23:49Z,
+lakebed 0.0.29; lead-verified routes 3/3 HTTP 200 and /api/freshness
+serving, baked commit <code>a89195e</code>). No outstanding actions. <strong>NEXT GATE unchanged:
 Ed&#39;s declared whole-project comprehensive audit precedes further feature
 work; method proposal pending Ed&#39;s approval.</strong> Window-A execution still
 requires a quiet machine + Ed. Records:
@@ -479,7 +480,8 @@ convention; the tree is clean after the site-regen commit. Merged
 bridge branches were deleted local+origin. One stale nested worktree
 (<code>.claude/worktrees/magical-jones-79e5f4</code>, detached, clean) was
 removed this session; the long-lived <code>JouleWise-wt/*</code> stream worktrees
-are untouched. Only pending action: the Lakebed site upload (Ed).</li>
+are untouched. The Lakebed upload was completed by Ed and
+lead-verified live; no pending actions remain.</li>
 <li>The generated state-kernel blocks are explicitly non-authoritative;
 <code>RUN_STATE.md</code>, <code>TASK_QUEUE.md</code>, and <code>docs/decision_log.md</code> remain
 authoritative.</li>
@@ -516,7 +518,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit a89195e · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit e3fc14a · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
