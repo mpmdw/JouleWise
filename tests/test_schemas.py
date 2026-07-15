@@ -15,6 +15,7 @@ from joulewise.schemas import (
     EnergyEvidence,
     FailureReason,
     IdleBaseline,
+    PromptTokenEvidencePolicy,
     RunStatus,
     SchemaError,
     SUMMARY_REDUCER_ID,
@@ -53,6 +54,7 @@ OMITTED_OPTIONAL_KEYS = {
         "suite_manifest_ref",
         "suite_manifest_sha256",
         "generator_sidecar_ref",
+        "prompt_token_evidence_policy",
     },
 }
 
@@ -200,6 +202,43 @@ class BenchmarkConfigTests(unittest.TestCase):
             config.to_dict()["workload_profile"]["generator_sidecar_ref"],
             "suite_annotations.json",
         )
+
+    def test_prompt_token_evidence_policy_is_validated_and_exported(self) -> None:
+        data = json.loads(
+            (ROOT / "configs" / "examples" / "mock_suite_local.json").read_text()
+        )
+        data["workload_profile"]["prompt_token_evidence_policy"] = (
+            "exempt_affine_generated_text"
+        )
+
+        config = BenchmarkConfig.from_mapping(data)
+
+        self.assertEqual(
+            config.workload_profile.prompt_token_evidence_policy,
+            PromptTokenEvidencePolicy.EXEMPT_AFFINE_GENERATED_TEXT,
+        )
+        self.assertEqual(
+            config.to_dict()["workload_profile"]["prompt_token_evidence_policy"],
+            "exempt_affine_generated_text",
+        )
+        policy_schema = BenchmarkConfig.json_schema()["$defs"]["workload_profile"][
+            "properties"
+        ]["prompt_token_evidence_policy"]
+        self.assertEqual(
+            policy_schema["enum"],
+            ["required", "exempt_affine_generated_text", None],
+        )
+
+    def test_unknown_prompt_token_evidence_policy_is_rejected(self) -> None:
+        data = json.loads(
+            (ROOT / "configs" / "examples" / "mock_suite_local.json").read_text()
+        )
+        data["workload_profile"]["prompt_token_evidence_policy"] = "trust_neighbor"
+
+        with self.assertRaisesRegex(
+            SchemaError, "prompt_token_evidence_policy must be one of"
+        ):
+            BenchmarkConfig.from_mapping(data)
 
     def test_json_schema_has_required_contract_fields(self) -> None:
         schema = BenchmarkConfig.json_schema()
@@ -655,6 +694,7 @@ class EmittedConfigRoundTripTests(unittest.TestCase):
                     "suite_manifest_ref",
                     "suite_manifest_sha256",
                     "generator_sidecar_ref",
+                    "prompt_token_evidence_policy",
                 }
             },
         )
@@ -668,7 +708,10 @@ class EmittedConfigRoundTripTests(unittest.TestCase):
                 if section_key == "workload_profile":
                     suite_ref = section_value.get("suite_manifest_ref")
                     suite_sha = section_value.get("suite_manifest_sha256")
-                    expected = {"generator_sidecar_ref"}
+                    expected = {
+                        "generator_sidecar_ref",
+                        "prompt_token_evidence_policy",
+                    }
                     if suite_ref is None and suite_sha is None:
                         expected.update({"suite_manifest_ref", "suite_manifest_sha256"})
                 else:

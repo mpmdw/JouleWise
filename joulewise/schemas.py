@@ -132,6 +132,7 @@ _CONFIG_KEYS_BY_PATH: dict[str, frozenset[str]] = {
             "suite_manifest_ref",
             "suite_manifest_sha256",
             "generator_sidecar_ref",
+            "prompt_token_evidence_policy",
             "repetitions",
             "warmup_runs",
         }
@@ -183,6 +184,13 @@ class RunStatus(str, Enum):
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     UNSUPPORTED = "unsupported"
+
+
+class PromptTokenEvidencePolicy(str, Enum):
+    """Validated policy for text-suite prompt-token integrity evidence."""
+
+    REQUIRED = "required"
+    EXEMPT_AFFINE_GENERATED_TEXT = "exempt_affine_generated_text"
 
 
 class EnergyEvidence(str, Enum):
@@ -312,6 +320,14 @@ def _enum_value(enum_type: type[Enum], value: Any, field_name: str) -> Enum:
         raise SchemaError(f"{field_name} must be one of: {valid}") from exc
 
 
+def _optional_enum_value(
+    enum_type: type[Enum], value: Any, field_name: str
+) -> Enum | None:
+    if value is None:
+        return None
+    return _enum_value(enum_type, value, field_name)
+
+
 def _string_enum_schema(enum_type: type[Enum]) -> dict[str, Any]:
     return {"type": "string", "enum": [item.value for item in enum_type]}
 
@@ -405,6 +421,7 @@ class WorkloadProfile:
     suite_manifest_ref: str | None = None
     suite_manifest_sha256: str | None = None
     generator_sidecar_ref: str | None = None
+    prompt_token_evidence_policy: PromptTokenEvidencePolicy | None = None
     repetitions: int = 1
     warmup_runs: int = 1
 
@@ -436,6 +453,11 @@ class WorkloadProfile:
             generator_sidecar_ref=_optional_string(
                 data.get("generator_sidecar_ref"),
                 "workload_profile.generator_sidecar_ref",
+            ),
+            prompt_token_evidence_policy=_optional_enum_value(
+                PromptTokenEvidencePolicy,
+                data.get("prompt_token_evidence_policy"),
+                "workload_profile.prompt_token_evidence_policy",
             ),
             repetitions=_positive_int(repetitions, "workload_profile.repetitions"),
             warmup_runs=_positive_int(warmup_runs, "workload_profile.warmup_runs"),
@@ -585,6 +607,8 @@ class BenchmarkConfig:
             del workload["suite_manifest_sha256"]
         if workload.get("generator_sidecar_ref") is None:
             del workload["generator_sidecar_ref"]
+        if workload.get("prompt_token_evidence_policy") is None:
+            del workload["prompt_token_evidence_policy"]
         return data
 
     @staticmethod
@@ -682,6 +706,14 @@ class BenchmarkConfig:
                         "suite_manifest_ref": nullable_string,
                         "suite_manifest_sha256": nullable_string,
                         "generator_sidecar_ref": nullable_string,
+                        "prompt_token_evidence_policy": {
+                            "type": ["string", "null"],
+                            "enum": [
+                                PromptTokenEvidencePolicy.REQUIRED.value,
+                                PromptTokenEvidencePolicy.EXEMPT_AFFINE_GENERATED_TEXT.value,
+                                None,
+                            ],
+                        },
                         "repetitions": {"type": "integer", "minimum": 1},
                         "warmup_runs": {"type": "integer", "minimum": 1},
                     },
