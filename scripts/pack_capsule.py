@@ -30,6 +30,11 @@ INTERNAL_HREF_REWRITES = {
     "index.html": "/index",
     "../project_critique_review.html": "/project_critique_review.html",
 }
+# TASK_QUEUE.md already drives the advisor-facing Status and Roadmap pages.
+# Packing its generated long-form mirror duplicates that information, dominates
+# routine capsule growth, and adds little advisor value. Keep docs/site's page
+# intact, but serve its stable deep links from Roadmap inside the capsule.
+CAPSULE_PAGE_REDIRECTS = {"task_queue.html": "roadmap.html"}
 RESERVED_PATHS = {"/", "/index.html"}
 LAKEBED_ARTIFACT_CAP_BYTES = 1_048_576
 LAKEBED_TARGET_ARTIFACT_BYTES = 943_718
@@ -418,7 +423,23 @@ def site_page_specs() -> list[PageSpec]:
     html_paths = sorted(SITE.glob("*.html"))
     if not html_paths:
         raise CapsulePackError("docs/site contains no HTML pages")
-    specs = [PageSpec(path=page_path, page_name=page_path.name, aliases=page_aliases(page_path)) for page_path in html_paths]
+    redirected_aliases: dict[str, list[str]] = {}
+    for source_name, target_name in CAPSULE_PAGE_REDIRECTS.items():
+        redirected_aliases.setdefault(target_name, []).extend(page_aliases(SITE / source_name))
+    specs = [
+        PageSpec(
+            path=page_path,
+            page_name=page_path.name,
+            aliases=[*page_aliases(page_path), *redirected_aliases.get(page_path.name, [])],
+        )
+        for page_path in html_paths
+        if page_path.name not in CAPSULE_PAGE_REDIRECTS
+    ]
+    missing_targets = sorted(set(redirected_aliases) - {spec.page_name for spec in specs})
+    if missing_targets:
+        raise CapsulePackError(
+            "capsule page redirect target is missing: " + ", ".join(missing_targets)
+        )
     for spec in STANDALONE_PAGES:
         if not spec.path.is_file():
             raise CapsulePackError(f"standalone page is missing: {spec.path.relative_to(ROOT)}")

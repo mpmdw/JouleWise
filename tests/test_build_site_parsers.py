@@ -346,15 +346,26 @@ Text.
                 "status.html", "task_queue.html",
             }
             self.assertEqual({path.name for path in site.glob("*.html")}, expected_names)
+            self.assertEqual(
+                pack_capsule.CAPSULE_PAGE_REDIRECTS,
+                {"task_queue.html": "roadmap.html"},
+            )
+            capsule_names = expected_names - {"task_queue.html"}
             expected_canonical = {
                 pack_capsule.canonical_path(pack_capsule.page_aliases(site / name))
-                for name in expected_names
+                for name in capsule_names
             } | {"/project_critique_review.html"}
             self.assertEqual(set(packed_site["routes"]), expected_canonical)
             for path, route in packed_site["routes"].items():
                 self.assertIn(path, decoded_shards[route["shard"]])
-            for name in expected_names:
+            for name in capsule_names:
                 aliases = pack_capsule.page_aliases(site / name)
+                aliases.extend(
+                    alias
+                    for source_name, target_name in pack_capsule.CAPSULE_PAGE_REDIRECTS.items()
+                    if target_name == name
+                    for alias in pack_capsule.page_aliases(site / source_name)
+                )
                 canonical = pack_capsule.canonical_path(aliases)
                 expected_aliases = [
                     alias
@@ -407,9 +418,15 @@ Text.
                     readme_html,
                 )
             self.assertIn("postcondition mode: estimator-only advisory", pack_stdout.getvalue())
+            estimated_artifact = pack_capsule.estimate_lakebed_artifact_size(total)
             self.assertLessEqual(
-                pack_capsule.estimate_lakebed_artifact_size(total),
+                estimated_artifact,
                 pack_capsule.LAKEBED_TARGET_ARTIFACT_BYTES,
+            )
+            self.assertLessEqual(
+                estimated_artifact,
+                920_000,
+                "production capsule must retain integration headroom for routine doc growth",
             )
             self.assertTrue((content / "pages.ts").is_file())
             self.assertTrue((content / "buildinfo.ts").is_file())
