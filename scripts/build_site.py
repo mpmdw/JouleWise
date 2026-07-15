@@ -3,13 +3,15 @@
 
 Generated pages use repository-local sources as truth. Markdown rendering is
 isolated in render_markdown(); use --no-marked in networkless sandboxes to
-exercise parsers/templates without invoking npx marked.
+exercise parsers/templates without invoking the pinned local Marked package.
 """
 
 from __future__ import annotations
 
 import argparse
 import html
+import json
+import os
 import re
 import subprocess
 import sys
@@ -19,6 +21,8 @@ from typing import Iterable
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "site"
+MARKED_VERSION = "18.0.6"
+MARKED_LOCAL_EXECUTABLE = ROOT / "node_modules" / ".bin" / "marked"
 
 
 class SiteBuildError(RuntimeError):
@@ -145,6 +149,7 @@ NAV_ORDER = [
 
 MARKED_UNAVAILABLE = False
 MARKED_FALLBACK_WARNED = False
+MARKED_EXECUTABLE: Path | None = None
 
 
 def fail(component: str, source: str, expected: str) -> None:
@@ -399,45 +404,67 @@ def parse_council_index(md: str, source: str = "docs/council_log.md") -> list[Co
     return sorted(councils, key=lambda row: row.council_id)
 
 
+def npm_package_version(executable: Path, package_name: str) -> str | None:
+    resolved = executable.resolve()
+    for parent in resolved.parents:
+        package_path = parent / "package.json"
+        if not package_path.is_file():
+            continue
+        try:
+            package = json.loads(package_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if package.get("name") == package_name:
+            version = package.get("version")
+            return version if isinstance(version, str) else None
+    return None
+
+
+def discover_marked_executable() -> Path | None:
+    configured = os.environ.get("JOULEWISE_MARKED_BIN")
+    candidate = Path(configured).expanduser() if configured else MARKED_LOCAL_EXECUTABLE
+    if not candidate.is_file():
+        if configured:
+            raise SiteBuildError(f"JOULEWISE_MARKED_BIN is not a file: {candidate}")
+        return None
+    version = npm_package_version(candidate, "marked")
+    if version != MARKED_VERSION:
+        raise SiteBuildError(
+            f"Marked version mismatch at {candidate}: expected {MARKED_VERSION}, found {version or 'unknown'}"
+        )
+    return candidate.resolve()
+
+
 def render_markdown(path: Path, no_marked: bool = False, text: str | None = None) -> str:
-    global MARKED_UNAVAILABLE
+    global MARKED_EXECUTABLE, MARKED_UNAVAILABLE
     if text is None:
         text = path.read_text(encoding="utf-8")
     if no_marked:
         return '<pre class="markdown-placeholder">' + html.escape(text) + "</pre>"
     if MARKED_UNAVAILABLE:
         return render_offline_fallback(text)
-    try:
-        result = subprocess.run(
-            ["npx", "--yes", "marked", "--gfm"],
-            input=text,
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=ROOT,
-            timeout=12,
-        )
-        return wrap_tables(result.stdout)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-        raw_stderr = exc.stderr or ""
-        stderr = raw_stderr.decode("utf-8", "replace") if isinstance(raw_stderr, bytes) else str(raw_stderr)
-        npm_network_error = (
-            isinstance(exc, subprocess.TimeoutExpired)
-            or "ENOTFOUND" in stderr
-            or "EAI_AGAIN" in stderr
-            or "network" in stderr.lower()
-        )
-        if not npm_network_error:
-            raise
+    if MARKED_EXECUTABLE is None:
+        MARKED_EXECUTABLE = discover_marked_executable()
+    if MARKED_EXECUTABLE is None:
         MARKED_UNAVAILABLE = True
         return render_offline_fallback(text)
+    result = subprocess.run(
+        [str(MARKED_EXECUTABLE), "--gfm"],
+        input=text,
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=ROOT,
+        timeout=12,
+    )
+    return "<!-- rendered: marked@" + MARKED_VERSION + " -->\n" + wrap_tables(result.stdout)
 
 
 def render_offline_fallback(text: str) -> str:
     global MARKED_FALLBACK_WARNED
     if not MARKED_FALLBACK_WARNED:
         print(
-            "build_site.py: WARNING: npx marked is unavailable; using offline fallback markdown renderer.",
+            "build_site.py: WARNING: pinned Marked is unavailable; using offline fallback markdown renderer.",
             file=sys.stderr,
         )
         MARKED_FALLBACK_WARNED = True
@@ -1326,6 +1353,27 @@ def write(path: Path, content: str) -> None:
     print(f"built {path.name}")
 
 
+def write_build_manifest(no_marked: bool) -> None:
+    if no_marked:
+        mode = "hermetic-placeholder"
+    elif MARKED_UNAVAILABLE:
+        mode = "offline-fallback"
+    else:
+        mode = "marked"
+    manifest = {
+        "schema": "joulewise-site-build/v1",
+        "renderer": {
+            "mode": mode,
+            "markedVersion": MARKED_VERSION,
+            "offlineImplementation": "builtin-v1",
+        },
+    }
+    write(
+        OUT / "build_manifest.json",
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+    )
+
+
 def build(no_marked: bool = False) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     project_md = read_source("PROJECT_STATUS.md")
@@ -1360,6 +1408,7 @@ def build(no_marked: bool = False) -> None:
         write(OUT / doc.out_name, render_doc_page(doc, no_marked, stamps[doc.source]))
     write(OUT / "library.html", render_library(docs, stamps))
     update_hand_page_nav()
+    write_build_manifest(no_marked)
     print(f"built docs/site -> {OUT}")
 
 

@@ -221,30 +221,30 @@ function newestDocRow(rows: LiveDocRow[]): LiveDocRow | undefined {
     .sort((left, right) => Date.parse(right.checkedAt) - Date.parse(left.checkedAt))[0];
 }
 
-function replaceFreshnessRows(ctx: any, row: CacheRow, rows: CacheRow[]) {
+async function replaceFreshnessRows(ctx: any, row: CacheRow, rows: CacheRow[]) {
   const newest = newestRow(rows);
   if (newest && newest.id) {
-    ctx.db.freshness.update(newest.id, row);
+    await ctx.db.freshness.update(newest.id, row);
   } else {
-    ctx.db.freshness.insert(row);
+    await ctx.db.freshness.insert(row);
   }
   for (const old of rows) {
     if (old.id && old.id !== newest?.id) {
-      ctx.db.freshness.delete(old.id);
+      await ctx.db.freshness.delete(old.id);
     }
   }
 }
 
-function replaceLiveDocRows(ctx: any, row: LiveDocRow, rows: LiveDocRow[]) {
+async function replaceLiveDocRows(ctx: any, row: LiveDocRow, rows: LiveDocRow[]) {
   const newest = newestDocRow(rows);
   if (newest && newest.id) {
-    ctx.db.liveDocs.update(newest.id, row);
+    await ctx.db.liveDocs.update(newest.id, row);
   } else {
-    ctx.db.liveDocs.insert(row);
+    await ctx.db.liveDocs.insert(row);
   }
   for (const old of rows) {
     if (old.id && old.id !== newest?.id) {
-      ctx.db.liveDocs.delete(old.id);
+      await ctx.db.liveDocs.delete(old.id);
     }
   }
 }
@@ -370,7 +370,9 @@ async function computeFreshness(ctx: any): Promise<Record<string, unknown>> {
 
   try {
     for (const source of bakedBySource.keys()) {
-      const rows = ctx.db.freshness.where("source", source).all() as CacheRow[];
+      const rows = await ctx.db.freshness
+        .withIndex("by_source", (query: any) => query.eq("source", source))
+        .collect() as CacheRow[];
       cachedRows.set(source, rows);
       const newest = newestRow(rows);
       if (newest) {
@@ -394,7 +396,7 @@ async function computeFreshness(ctx: any): Promise<Record<string, unknown>> {
         const row = { source, liveSha: live.sha, checkedAt };
         observations.set(source, row);
         staleSources.delete(source);
-        replaceFreshnessRows(ctx, row, cachedRows.get(source) || []);
+        await replaceFreshnessRows(ctx, row, cachedRows.get(source) || []);
       } catch (error: any) {
         rateLimited = rateLimited || Boolean(error && error.rateLimited);
         refreshFailed = true;
@@ -560,7 +562,9 @@ async function computeLiveStatus(ctx: any): Promise<Record<string, unknown>> {
 
   try {
     for (const source of sources) {
-      const rows = ctx.db.liveDocs.where("source", source).all() as LiveDocRow[];
+      const rows = await ctx.db.liveDocs
+        .withIndex("by_source", (query: any) => query.eq("source", source))
+        .collect() as LiveDocRow[];
       const newest = newestDocRow(rows);
       const checkedMs = newest ? Date.parse(newest.checkedAt) : NaN;
       if (newest) {
@@ -578,7 +582,7 @@ async function computeLiveStatus(ctx: any): Promise<Record<string, unknown>> {
         const row = { source, sha: live.sha, body: live.body, checkedAt };
         docs[source] = row;
         staleSources.delete(source);
-        replaceLiveDocRows(ctx, row, rows);
+        await replaceLiveDocRows(ctx, row, rows);
       } catch (error: any) {
         rateLimited = rateLimited || Boolean(error && error.rateLimited);
         refreshFailed = true;
@@ -630,13 +634,13 @@ export default capsule({
       source: string(),
       liveSha: string(),
       checkedAt: string(),
-    }),
+    }).index("by_source", ["source"]),
     liveDocs: table({
       source: string(),
       sha: string(),
       body: string(),
       checkedAt: string(),
-    }),
+    }).index("by_source", ["source"]),
   },
 
   endpoints,
