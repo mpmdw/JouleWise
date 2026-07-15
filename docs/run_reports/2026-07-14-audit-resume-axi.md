@@ -112,6 +112,28 @@ subagent work: one verification subagent per landed work order plus one
 synthesis pass; no implementation authority (read-only sandbox pinned
 at `978e4c6`).
 
+## AXI xhigh consult (Ed-directed; ran at close, pre-clearance)
+
+Sol xhigh consult on the AXI handoff completed read-only; full response
+tracked at `docs/process_traces/2026-07-15-axi-xhigh-consult/response.md`.
+Headline judgments (all adopted as S-0/S-A/S-E execution inputs): versioned
+burst event semantics (never reinterpret existing token events; sibling
+manifest version, AP-2 v1 byte-identical); frozen counter contract with
+spec.mode discriminator (off/draft_model/native_mtp); matched GROSS
+request energy + gross J per committed output token as the spec-on/off
+estimand (J-per-accepted-token demoted to spec-only diagnostic);
+request-aware reducer rules (union, don't sum, synchronized duplicate
+phase windows — pre-empts a ~B-fold overcount; no per-request division of
+overlapping traces without an attribution model); S-A/S-E cycle fix
+(minimal AP-SPEC freeze moves into S-A's front); S-B structured verdict
+(runtime batching without per-sequence observability =
+unsupported_for_joulewise, no Mac registry leg); S-D pre-registered
+selection scorecard + the D-016 8GB-fit trap (may need a separate AXI
+pair — Ed question); AP ownership gaps for quant/variance/MOE-BATCH
+(S-E adds AP-QUANT, AP-REASON-VARIANCE, AP-MOE-BATCH); n=5 provisional
+pending P2-015 floors per D-062; the S-0 advisor basis paragraph drafted
+(gross-headline with boundary labels).
+
 ## Close-out record (all complete, 2026-07-15)
 
 Everything queued at draft time DONE on `impl/audit-integration`
