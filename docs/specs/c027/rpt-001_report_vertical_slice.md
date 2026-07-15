@@ -813,6 +813,8 @@ page also transcludes D-052’s single-unit limitation language.
 
 ### 5.1 Canonical and rendered forms
 
+Superseded (2026-07-15, WO-014; D-043): `rpt001-v2` is the canonical report artifact tree and the sealed `rpt001-v1` tree remains legacy/immutable; see §3.1 Pinned input manifest and §4.1 Versioned outputs.
+
 Canonical machine-readable row:
 
 ```text
@@ -834,6 +836,8 @@ This is a deliberate deviation from the plan’s Markdown-as-source design, not
 removal of the Markdown index.
 
 ### 5.2 RPT-001 row shape
+
+Superseded (2026-07-15, WO-014; D-043): the row shape below is retained as the sealed v1 dialect, while canonical generation and references use `analysis/rpt001-v2`; see §3.1 Pinned input manifest and §4.1 Versioned outputs.
 
 The generated row has this shape and values:
 
@@ -943,6 +947,10 @@ field names and semantics above do not change without lead adjudication.
 
 ### 5.3 `claims_lint --mode phase4`
 
+Superseded (2026-07-15, WO-013; D-043): `phase4` is now a compatibility name for the unified version-aware claims-index linter that accepts legacy and engine-linked JSONL rows; see `scripts/claims_lint.py` `lint_claim_index`.
+
+Superseded (2026-07-15, WO-014; D-043): canonical report linting targets `analysis/rpt001-v2/claims_index.jsonl`; the v1 command below is retained only as sealed legacy specification context; see §9.5 CI hook.
+
 Extend `scripts/claims_lint.py` with:
 
 ```sh
@@ -992,6 +1000,8 @@ is rendered adjacent to the result.
 ## 6. Build commands and deterministic behavior
 
 ### 6.1 Commands
+
+Superseded (2026-07-15, WO-014; D-043): canonical independent analysis uses `analysis/rpt001-v2/input_manifest.json`; the v1 profile reference below is legacy specification context; see §3.1 Pinned input manifest.
 
 Controlled/internal full evidence re-derivation (requires controlled access to
 the internal six-bundle corpus; not available from a pristine clone):

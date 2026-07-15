@@ -23,6 +23,7 @@ final checklist: green here means submission-ready.
 - A new developer could add a backend from the guide alone (5.1 evidence).
 - Final figures regenerate from published, hash-verified data (5.3
   evidence).
+  Superseded (2026-07-15, WO-017; D-043): full figure re-derivation is controlled/internal by default; an externally re-reducible evidence handoff is optional and requires an affirmative privacy ruling; see `docs/specs/c027/rpt-001_report_vertical_slice.md` §0.4.
 - Every quantitative claim in report and slides traces to bundles (4.3 +
   5.5 evidence).
 - The ordered publication checklist has a green clean-clone component smoke,

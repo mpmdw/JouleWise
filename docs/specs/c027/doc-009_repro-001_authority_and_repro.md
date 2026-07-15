@@ -149,6 +149,8 @@ DECISIONS:
 
 ### REPRO-2: bundle-pack publication
 
+Superseded (2026-07-15, WO-017; D-043): full evidence re-derivation is controlled/internal by default, while any re-reducible evidence-handoff pack is an owner opt-in pending an affirmative privacy ruling; see `docs/specs/c027/rpt-001_report_vertical_slice.md` §0.4 and `docs/contracts/publication_privacy.md` §Publication boundary.
+
 Corpus: six strict-valid real bundles under `runs/` — three 1.5B reps
 (`example-mac-mlx-local__r{1,2,3}`, Qwen2.5-1.5B-Instruct-4bit, ~16 MiB
 each) and three 122B reps (`example-mac-mlx-qwen35-122b-512t__r{1,2,3}`,
@@ -188,6 +190,8 @@ DECISIONS:
    ```
 
 ### REPRO-3: external re-reduction protocol
+
+Superseded (2026-07-15, WO-017; D-043): uninvolved-party re-reduction is no longer a default project-completion obligation and applies only if the owner opts into a separately privacy-approved evidence handoff; see `docs/specs/c027/rpt-001_report_vertical_slice.md` §0.4 and `docs/contracts/publication_privacy.md` §Publication boundary.
 
 1. **Who counts as external:** an uninvolved person — not Ed, not any
    agent operating in this repo, and no one with commits in the

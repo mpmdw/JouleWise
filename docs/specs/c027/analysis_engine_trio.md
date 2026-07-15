@@ -1168,6 +1168,8 @@ code must not improvise alternate spellings.
 
 Extend `scripts/claims_lint.py`; do not create a competing claims linter.
 
+Superseded (2026-07-15, WO-013; D-043): one version-aware claims-index entry point now accepts both the engine-linked and legacy RPT-001 row dialects, with `claim-index` and `phase4` as compatibility mode names; see `scripts/claims_lint.py` `lint_claim_index` and CLI mode handling.
+
 Add explicit mode and arguments:
 
 ```text
