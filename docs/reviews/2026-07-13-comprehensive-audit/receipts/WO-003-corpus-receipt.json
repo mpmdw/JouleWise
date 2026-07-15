@@ -194,7 +194,7 @@
       "relative_path": "example-mac-mlx-qwen35-122b-512t__r3"
     }
   ],
-  "corpus_root": "/Users/edr/code/JouleWise/runs",
+  "corpus_root": "runs",
   "schema_version": "joulewise.corpus_compat_receipt.v1",
   "summary": {
     "exact": {

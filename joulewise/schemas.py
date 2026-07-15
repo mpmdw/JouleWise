@@ -617,8 +617,12 @@ class BenchmarkConfig:
         # ``to_dict()`` emits ``null`` for absent optionals (dataclass
         # ``asdict``), and a bundle's normalized ``config.json`` must validate
         # against this exported schema (round-trip pinned by tests).
-        non_empty_string = {"type": "string", "minLength": 1}
-        nullable_string = {"type": ["string", "null"], "minLength": 1}
+        non_empty_string = {"type": "string", "minLength": 1, "pattern": r"\S"}
+        nullable_string = {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "pattern": r"\S",
+        }
         nullable_positive_int = {"type": ["integer", "null"], "minimum": 1}
         return {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -895,6 +899,65 @@ def summary_validation_problems(summary: Any) -> list[str]:
                 f"summary status is {status.value} but energy field {key} is "
                 f"not null or a finite number: {summary[key]!r}"
             )
+
+    idle_baseline = summary.get("idle_baseline")
+    if idle_baseline is not None:
+        if not isinstance(idle_baseline, Mapping):
+            problems.append("summary idle_baseline is not null or an object")
+        else:
+            required_idle_fields = (
+                "power_w_mean",
+                "power_w_stddev",
+                "duration_s",
+                "sample_count",
+                "telemetry_backend",
+            )
+            for key in required_idle_fields:
+                if key not in idle_baseline:
+                    problems.append(f"summary idle_baseline.{key} is missing")
+            for key in ("power_w_mean", "power_w_stddev", "duration_s"):
+                value = idle_baseline.get(key)
+                if key in idle_baseline and not _is_finite_number(value):
+                    problems.append(
+                        f"summary idle_baseline.{key} is not a finite number: {value!r}"
+                    )
+            sample_count = idle_baseline.get("sample_count")
+            if "sample_count" in idle_baseline and (
+                isinstance(sample_count, bool) or not isinstance(sample_count, int)
+            ):
+                problems.append(
+                    "summary idle_baseline.sample_count is not an integer: "
+                    f"{sample_count!r}"
+                )
+            telemetry_backend = idle_baseline.get("telemetry_backend")
+            if "telemetry_backend" in idle_baseline:
+                try:
+                    TelemetryBackend(telemetry_backend)
+                except (TypeError, ValueError):
+                    problems.append(
+                        "summary idle_baseline.telemetry_backend is not a valid "
+                        f"TelemetryBackend: {telemetry_backend!r}"
+                    )
+            for key in (
+                "gpu_idle_ratio_mean",
+                "gpu_idle_ratio_min",
+                "gpu_freq_mhz_mean",
+                "gpu_freq_hz_mean",
+            ):
+                value = idle_baseline.get(key)
+                if value is not None and not _is_finite_number(value):
+                    problems.append(
+                        f"summary idle_baseline.{key} is not null or a finite "
+                        f"number: {value!r}"
+                    )
+            idle_window_suspect = idle_baseline.get("idle_window_suspect")
+            if idle_window_suspect is not None and not isinstance(
+                idle_window_suspect, bool
+            ):
+                problems.append(
+                    "summary idle_baseline.idle_window_suspect is not null or a "
+                    f"boolean: {idle_window_suspect!r}"
+                )
 
     raw_reason = summary.get("failure_reason")
     if status in {RunStatus.FAILED, RunStatus.UNSUPPORTED}:

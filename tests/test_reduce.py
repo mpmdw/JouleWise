@@ -10,16 +10,23 @@ controller invokes it before ``finalize()``.
 
 from __future__ import annotations
 
+import importlib.util
 import json
+import math
+import plistlib
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
 from joulewise import reduce as reduce_module
+from joulewise.adapters.powermetrics import duration_weighted_mean_and_sample_variance
 from joulewise.bundle import RunBundleWriter
 from joulewise.clock import FakeClock
+from joulewise.cli import validate_bundle
 from joulewise.controller import run_benchmark
+from joulewise.idle_dependence import estimate_newey_west_bartlett
 from joulewise.interfaces import PowerSample, RuntimeEvent
 from joulewise.schemas import (
     BenchmarkConfig,
@@ -67,6 +74,26 @@ def read_jsonl(path: Path) -> list[dict]:
 
 def write_jsonl(path: Path, records: list[dict]) -> None:
     path.write_text("".join(json.dumps(record, sort_keys=True) + "\n" for record in records))
+
+
+def powermetrics_stream(powers_w: list[float], intervals_s: list[float]) -> bytes:
+    documents = []
+    for power_w, interval_s in zip(powers_w, intervals_s, strict=True):
+        documents.append(
+            {
+                "timestamp": datetime(2026, 7, 14, tzinfo=timezone.utc),
+                "elapsed_ns": int(interval_s * 1_000_000_000),
+                "processor": {
+                    "cpu_power": power_w * 1000.0,
+                    "gpu_power": 0.0,
+                    "ane_power": 0.0,
+                    "cpu_energy": power_w * interval_s * 1000.0,
+                    "gpu_energy": 0.0,
+                    "ane_energy": 0.0,
+                },
+            }
+        )
+    return b"\0".join(plistlib.dumps(document) for document in documents)
 
 
 class BundleBuilder:
@@ -500,6 +527,25 @@ class PhaseAttributionTests(ReduceTestCase):
         builder.add_event("phase_end", "decode", 3.0, metadata=node_a)
         builder.add_event("phase_end", "decode", 4.0, metadata=node_b)
         builder.write_trace(constant_samples(0.0, 10.0, hz=1.0, power_w=2.0))
+        builder.write_metadata(rail_manifest=["mock"])
+
+        summary = reduce_module.reduce_bundle(builder.path)
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        self.assertEqual(summary.phase_energy_j, {"decode": 8.0})
+
+    def test_role_only_split_streams_sum_concurrent_phase_energy(self) -> None:
+        builder = self.builder(run_id="role-only-split-overlap")
+        builder.measured_window(0.0, 10.0)
+        prefill_role = {"node_role": "prefill"}
+        decode_role = {"node_role": "decode"}
+        builder.add_event("phase_start", "decode", 1.0, metadata=prefill_role)
+        builder.add_event("phase_end", "decode", 3.0, metadata=prefill_role)
+        builder.add_event("phase_start", "decode", 2.0, metadata=decode_role)
+        builder.add_event("phase_end", "decode", 4.0, metadata=decode_role)
+        builder.write_trace(
+            constant_samples(0.0, 10.0, hz=1.0, power_w=2.0)
+        )
         builder.write_metadata(rail_manifest=["mock"])
 
         summary = reduce_module.reduce_bundle(builder.path)
@@ -1073,6 +1119,215 @@ class SuiteReduceTests(ReduceTestCase):
         self.assertEqual(
             summary.summary_provenance["reducer_version"],
             reduce_module.REDUCER_VERSION,
+        )
+
+    def test_authentic_frozen_v1_and_current_v2_summaries_each_revalidate(self) -> None:
+        powers_w = [4.0] * 27 + [10.0] * 6
+        intervals_s = [1.0] * 27 + [1.2] * 6
+        raw_idle = powermetrics_stream(powers_w, intervals_s)
+        arithmetic_mean_w = math.fsum(powers_w) / len(powers_w)
+        arithmetic_variance_w2 = math.fsum(
+            (value - arithmetic_mean_w) ** 2 for value in powers_w
+        ) / (len(powers_w) - 1)
+        weighted_mean_w, weighted_variance_w2 = (
+            duration_weighted_mean_and_sample_variance(powers_w, intervals_s)
+        )
+        expected_v1 = estimate_newey_west_bartlett(powers_w, 10)
+        expected_v2 = estimate_newey_west_bartlett(
+            powers_w, 10, intervals_s
+        )
+        self.assertNotEqual(
+            expected_v1.governed_variance_of_mean_w2,
+            expected_v2.governed_variance_of_mean_w2,
+        )
+
+        def make_bundle(run_id: str, *, frozen: bool) -> Path:
+            bundle_path, _ = run_benchmark(
+                load_config(run_id=run_id),
+                self.runs_root,
+                FakeClock(start=1_700_000_000.0),
+            )
+            (bundle_path / "raw" / "powermetrics_idle.plist").write_bytes(
+                raw_idle
+            )
+            metadata_path = bundle_path / "metadata.json"
+            metadata = json.loads(metadata_path.read_text())
+            metadata["idle_baseline"] = {
+                "power_w_mean": (
+                    arithmetic_mean_w if frozen else weighted_mean_w
+                ),
+                "power_w_stddev": math.sqrt(
+                    arithmetic_variance_w2 if frozen else weighted_variance_w2
+                ),
+                "duration_s": math.fsum(intervals_s),
+                "sample_count": len(powers_w),
+                "telemetry_backend": "powermetrics",
+            }
+            metadata_path.write_text(
+                json.dumps(metadata, indent=2, sort_keys=True) + "\n"
+            )
+            return bundle_path
+
+        current_bundle = make_bundle("current-v2-unequal-duration", frozen=False)
+        current_summary = reduce_module.reduce_bundle(current_bundle).to_dict()
+        (current_bundle / "summary_metrics.json").write_text(
+            json.dumps(current_summary, indent=2, sort_keys=True) + "\n"
+        )
+        self.assertEqual(
+            current_summary["summary_provenance"]["reducer_version"], "0.5.0"
+        )
+        self.assertEqual(
+            current_summary["idle_mean_uncertainty"]["method"],
+            "duration_weighted_newey_west_bartlett_10s_iid_floor_v2",
+        )
+        self.assertAlmostEqual(
+            current_summary["idle_mean_uncertainty"][
+                "governed_variance_of_mean_w2"
+            ],
+            expected_v2.governed_variance_of_mean_w2,
+        )
+        self.assertEqual(validate_bundle(current_bundle, strict=True), [])
+
+        for version in ("0.4.1", "0.4.2"):
+            with self.subTest(version=version):
+                bundle_path = make_bundle(
+                    f"frozen-v1-unequal-duration-{version}", frozen=True
+                )
+                summary_path = bundle_path / "summary_metrics.json"
+                summary = reduce_module.reduce_bundle(
+                    bundle_path, reducer_version=version
+                ).to_dict()
+                summary["idle_baseline"].pop("gpu_freq_mhz_mean")
+                if version == "0.4.1":
+                    summary.pop("inter_token_throughput_tokens_s")
+                summary_path.write_text(
+                    json.dumps(summary, indent=2, sort_keys=True) + "\n"
+                )
+
+                self.assertEqual(
+                    summary["summary_provenance"]["reducer_version"], version
+                )
+                self.assertEqual(
+                    summary["idle_mean_uncertainty"]["method"],
+                    "newey_west_bartlett_10s_iid_floor_v1",
+                )
+                self.assertAlmostEqual(
+                    summary["idle_mean_uncertainty"][
+                        "governed_variance_of_mean_w2"
+                    ],
+                    expected_v1.governed_variance_of_mean_w2,
+                )
+                self.assertNotEqual(
+                    summary["idle_mean_uncertainty"][
+                        "governed_variance_of_mean_w2"
+                    ],
+                    current_summary["idle_mean_uncertainty"][
+                        "governed_variance_of_mean_w2"
+                    ],
+                )
+                self.assertEqual(
+                    (bundle_path / "raw" / "powermetrics_idle.plist").read_bytes(),
+                    (current_bundle / "raw" / "powermetrics_idle.plist").read_bytes(),
+                )
+                self.assertEqual(validate_bundle(bundle_path, strict=True), [])
+
+    def test_reconciliation_script_verify_interface_builds_and_verifies_receipt(
+        self,
+    ) -> None:
+        script_path = REPO_ROOT / "scripts" / "reconcile_retained_powermetrics.py"
+        spec = importlib.util.spec_from_file_location(
+            "reconcile_retained_powermetrics", script_path
+        )
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        runs_root = self.runs_root / "reconciliation-corpus"
+        target_pct = -0.4980639151088995
+        legacy_gross_j = 1.0 * (1.0 + target_pct / 100.0)
+        stage_duration_s = legacy_gross_j / (1.0 - 0.0093)
+        raw = powermetrics_stream([1.0], [2.0])
+        bundle_names = [
+            "example-mac-mlx-qwen35-122b-512t__r1",
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+        ]
+        for bundle_name in bundle_names:
+            bundle = runs_root / bundle_name
+            (bundle / "raw").mkdir(parents=True)
+            (bundle / "raw" / "powermetrics.plist").write_bytes(raw)
+            (bundle / "raw" / "powermetrics_idle.plist").write_bytes(raw)
+            (bundle / "metadata.json").write_text(
+                json.dumps(
+                    {
+                        "run_id": bundle_name,
+                        "uncertainty_evidence": {
+                            "clock_anchor": {
+                                "first_sample_end_point_epoch_s": 2.0
+                            }
+                        },
+                    }
+                )
+                + "\n"
+            )
+            events = [
+                {
+                    "timestamp_s": timestamp_s,
+                    "event_type": event_type,
+                    "phase": "measured_run",
+                    "message": event_type,
+                    "metadata": {},
+                }
+                for timestamp_s, event_type in (
+                    (0.5, "sampling_started"),
+                    (1.5, "sampling_stopped"),
+                    (0.5, "stage_started"),
+                    (0.5 + stage_duration_s, "stage_completed"),
+                )
+            ]
+            write_jsonl(
+                bundle / "events.jsonl",
+                sorted(events, key=lambda event: event["timestamp_s"]),
+            )
+            (bundle / "summary_metrics.json").write_text(
+                json.dumps(
+                    {
+                        "gross_energy_j": legacy_gross_j,
+                        "idle_subtracted_energy_j": legacy_gross_j - 0.5,
+                    }
+                )
+                + "\n"
+            )
+
+        output = self.runs_root / "reconciliation.json"
+        exit_code = module.main(
+            [
+                "--runs-root",
+                str(runs_root),
+                "--output",
+                str(output),
+                "--verify",
+            ]
+        )
+
+        self.assertEqual(exit_code, 0)
+        receipt = json.loads(output.read_text())
+        self.assertEqual(receipt["corpus"]["bundle_count"], 6)
+        self.assertAlmostEqual(
+            receipt["t07_reconciliation"]["scanner_reconstruction_pct"],
+            target_pct,
+        )
+        self.assertAlmostEqual(
+            receipt["t07_reconciliation"]["verifier_reconstruction_pct"],
+            -0.93,
+        )
+        self.assertTrue(
+            all(
+                row["counter_consistency"]["all_records_within_tolerance"]
+                for row in receipt["bundles"]
+            )
         )
 
     def test_powermetrics_interval_partial_edges_use_overlap_not_trapezoids(self) -> None:

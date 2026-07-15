@@ -223,6 +223,41 @@ class DiagnosticBrowserContractTests(unittest.TestCase):
                            "readiness"):
                 self.assertNotIn(banned, lowered)
 
+    def test_absent_request_energy_is_explicitly_unknown_beside_token_metrics(
+        self,
+    ) -> None:
+        bundle = _build_bundle(self.runs_dir, "report-unknown-request-energy")
+        summary_path = bundle / "summary_metrics.json"
+        summary = json.loads(summary_path.read_text())
+        for key in (
+            "energy_request_j",
+            "energy_token_j",
+            "energy_output_token_j",
+            "idle_subtracted_energy_j",
+            "idle_baseline",
+        ):
+            summary[key] = None
+        summary["window_evidence_precheck"]["idle_subtracted_request"] = {
+            "energy_evidence": "absent",
+            "eligible": False,
+            "reasons": ["idle_baseline_unrecorded"],
+        }
+        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+
+        index_html = self.generate().read_text()
+        self.assertIn("<td>unknown</td><td>unknown</td>", index_html)
+        self.assertNotIn("<td>-</td><td>unknown</td>", index_html)
+
+        page = (
+            self.output_dir / "run" / "report-unknown-request-energy.html"
+        ).read_text()
+        self.assertIn(
+            "<code>diagnostic.request_energy_j</code></td><td>unknown</td>",
+            page,
+        )
+        self.assertIn("<code>energy_request_j</code></td><td>unknown</td>", page)
+        self.assertIn("<code>energy_token_j</code></td><td>unknown</td>", page)
+
 
 # ---------------------------------------------------------------------------
 # Chart-producing rendering (gated on matplotlib)

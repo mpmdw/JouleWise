@@ -21,6 +21,7 @@ from joulewise.bundle_read import BundleReadError, BundleReader
 from joulewise.schemas import IdleBaseline, TelemetryBackend
 
 METHOD_ID = "duration_weighted_newey_west_bartlett_10s_iid_floor_v2"
+FROZEN_METHOD_ID_V1 = "newey_west_bartlett_10s_iid_floor_v1"
 SOURCE_ARTIFACT = "raw/powermetrics_idle.plist"
 BANDWIDTH_S = 10.0
 CADENCE_P95_P05_MAX = 1.25
@@ -61,7 +62,11 @@ def estimate_newey_west_bartlett(
     lag_count: int,
     durations_s: Sequence[float] | None = None,
 ) -> IdleDependenceEstimate:
-    """Return the frozen v2 weighted HAC/IID-floor estimate."""
+    """Return frozen v1 unweighted or v2 duration-weighted HAC/IID math.
+
+    Omitting ``durations_s`` selects the arithmetic v1 formulas; supplying
+    durations selects v2 (equal durations remain algebraically identical).
+    """
     values = tuple(float(value) for value in samples_w)
     n = len(values)
     if n < 2:
@@ -174,22 +179,27 @@ def idle_mean_energy_variance_j2(
 def derive_idle_mean_uncertainty(
     reader: BundleReader,
     idle_baseline: IdleBaseline | None,
+    *,
+    method_id: str = METHOD_ID,
 ) -> dict[str, Any]:
     """Derive the governed summary object from raw evidence and metadata."""
+    if method_id not in {FROZEN_METHOD_ID_V1, METHOD_ID}:
+        raise ValueError(f"unsupported idle-dependence method: {method_id!r}")
+    use_frozen_unweighted = method_id == FROZEN_METHOD_ID_V1
     backend = idle_baseline.telemetry_backend if idle_baseline is not None else None
     if backend in _PHYSICAL_BACKENDS and backend != TelemetryBackend.POWERMETRICS:
-        return _not_estimable(["backend_policy_not_frozen"])
+        return _not_estimable(["backend_policy_not_frozen"], method_id=method_id)
     if backend != TelemetryBackend.POWERMETRICS:
         # Mock is deliberately non-claim-bearing; a missing baseline likewise
         # has no physical raw trace from which this estimator can be derived.
-        return _not_estimable(["raw_idle_trace_unavailable"])
+        return _not_estimable(["raw_idle_trace_unavailable"], method_id=method_id)
 
     try:
         raw = reader.raw_artifact_bytes("powermetrics_idle.plist")
     except BundleReadError:
-        return _not_estimable(["raw_idle_trace_invalid"])
+        return _not_estimable(["raw_idle_trace_invalid"], method_id=method_id)
     if raw is None:
-        return _not_estimable(["raw_idle_trace_unavailable"])
+        return _not_estimable(["raw_idle_trace_unavailable"], method_id=method_id)
 
     source_sha256 = hashlib.sha256(raw).hexdigest()
     try:
@@ -201,7 +211,9 @@ def derive_idle_mean_uncertainty(
             if any(token in message for token in ("nan", "inf", "infinity"))
             else "raw_idle_trace_invalid"
         )
-        return _not_estimable([reason], source_sha256=source_sha256)
+        return _not_estimable(
+            [reason], source_sha256=source_sha256, method_id=method_id
+        )
 
     powers_w = tuple(
         math.fsum(record.rail_power_w.values()) for record in records
@@ -217,7 +229,10 @@ def derive_idle_mean_uncertainty(
     n = len(powers_w)
     if any(not math.isfinite(value) for value in powers_w):
         return _not_estimable(
-            ["nonfinite_idle_power"], source_sha256=source_sha256, raw_sample_count=n
+            ["nonfinite_idle_power"],
+            source_sha256=source_sha256,
+            raw_sample_count=n,
+            method_id=method_id,
         )
     if any(
         not math.isfinite(value) or value <= 0.0
@@ -227,6 +242,7 @@ def derive_idle_mean_uncertainty(
             ["raw_idle_trace_invalid"],
             source_sha256=source_sha256,
             raw_sample_count=n,
+            method_id=method_id,
         )
 
     median_interval_s = _percentile(intervals_s, 0.5) if intervals_s else None
@@ -245,32 +261,36 @@ def derive_idle_mean_uncertainty(
     if cadence_ratio is not None and cadence_ratio > CADENCE_P95_P05_MAX:
         reasons.append("idle_cadence_irregular")
     if idle_baseline is not None and n >= 2:
-        raw_mean_w, raw_variance_w2 = duration_weighted_mean_and_sample_variance(
-            powers_w, capture_intervals_s
+        arithmetic_mean_w = math.fsum(powers_w) / n
+        arithmetic_variance_w2 = math.fsum(
+            (value - arithmetic_mean_w) ** 2 for value in powers_w
+        ) / (n - 1)
+        weighted_mean_w, weighted_variance_w2 = (
+            duration_weighted_mean_and_sample_variance(
+                powers_w, capture_intervals_s
+            )
         )
-        raw_stddev_w = math.sqrt(raw_variance_w2)
-        weighted_matches = _metadata_matches(
+        selected_matches = _metadata_matches(
             idle_baseline,
             sample_count=n,
-            mean_w=raw_mean_w,
-            stddev_w=raw_stddev_w,
+            mean_w=(arithmetic_mean_w if use_frozen_unweighted else weighted_mean_w),
+            stddev_w=math.sqrt(
+                arithmetic_variance_w2
+                if use_frozen_unweighted
+                else weighted_variance_w2
+            ),
             duration_s=duration_s,
         )
         legacy_matches = False
-        if reader.is_frozen_legacy_identity():
-            arithmetic_mean_w = math.fsum(powers_w) / n
-            arithmetic_stddev_w = math.sqrt(
-                math.fsum((value - arithmetic_mean_w) ** 2 for value in powers_w)
-                / (n - 1)
-            )
+        if not use_frozen_unweighted and reader.is_frozen_legacy_identity():
             legacy_matches = _metadata_matches(
                 idle_baseline,
                 sample_count=n,
                 mean_w=arithmetic_mean_w,
-                stddev_w=arithmetic_stddev_w,
+                stddev_w=math.sqrt(arithmetic_variance_w2),
                 duration_s=duration_s,
             )
-        if not weighted_matches and not legacy_matches:
+        if not selected_matches and not legacy_matches:
             reasons.append("idle_metadata_mismatch")
 
     common = {
@@ -281,14 +301,17 @@ def derive_idle_mean_uncertainty(
         "lag_count": lag_count,
     }
     if reasons or lag_count is None:
-        return _not_estimable(reasons, **common)
+        return _not_estimable(reasons, method_id=method_id, **common)
 
     estimate = estimate_newey_west_bartlett(
-        powers_w, lag_count, capture_intervals_s
+        powers_w,
+        lag_count,
+        None if use_frozen_unweighted else capture_intervals_s,
     )
     return _base_payload(
         status="estimated",
         reason_codes=[],
+        method_id=method_id,
         **common,
         sample_variance_w2=estimate.sample_variance_w2,
         iid_variance_of_mean_w2=estimate.iid_variance_of_mean_w2,
@@ -343,15 +366,26 @@ def _percentile(values: Sequence[float], probability: float) -> float:
     )
 
 
-def _not_estimable(reason_codes: Sequence[str], **known: Any) -> dict[str, Any]:
+def _not_estimable(
+    reason_codes: Sequence[str],
+    *,
+    method_id: str = METHOD_ID,
+    **known: Any,
+) -> dict[str, Any]:
     ordered = [reason for reason in REASON_CODES if reason in reason_codes]
-    return _base_payload(status="not_estimable", reason_codes=ordered, **known)
+    return _base_payload(
+        status="not_estimable",
+        reason_codes=ordered,
+        method_id=method_id,
+        **known,
+    )
 
 
 def _base_payload(
     *,
     status: str,
     reason_codes: list[str],
+    method_id: str = METHOD_ID,
     source_sha256: str | None = None,
     raw_sample_count: int | None = None,
     median_sample_interval_s: float | None = None,
@@ -365,7 +399,7 @@ def _base_payload(
 ) -> dict[str, Any]:
     return {
         "status": status,
-        "method": METHOD_ID,
+        "method": method_id,
         "source_artifact": SOURCE_ARTIFACT,
         "source_sha256": source_sha256,
         "raw_sample_count": raw_sample_count,

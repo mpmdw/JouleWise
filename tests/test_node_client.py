@@ -252,6 +252,21 @@ class NonzeroPhraseWorkerTransport(SuccessfulWorkerTransport):
         return result
 
 
+class InterruptAfterDispatchTransport(SuccessfulWorkerTransport):
+    """Starts the worker and writes evidence, then loses the caller to Ctrl-C."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.interrupt_worker_once = True
+
+    def run(self, command: list[str], *, timeout_s: float | None = None) -> AdapterResult:
+        result = super().run(command, timeout_s=timeout_s)
+        if self.interrupt_worker_once and "--task" in command:
+            self.interrupt_worker_once = False
+            raise KeyboardInterrupt("interrupted after remote dispatch")
+        return result
+
+
 class RecoverableWorkerTransport(LoopbackTransport):
     """Leaves real remote evidence once, then permits a later-session sweep."""
 
@@ -646,6 +661,79 @@ class NodeClientTests(unittest.TestCase):
             ]
             self.assertTrue(reclaimed)
             self.assertTrue(all(row["removed"] for row in reclaimed))
+
+    def test_interrupt_after_dispatch_cannot_create_dispatch_only_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            remote_root = str(root / "remote")
+            retention_root = root / "retention"
+            transport = InterruptAfterDispatchTransport()
+            first = NodeWorkerClient(
+                transport,
+                SequencedClock([100.0, 100.2]),
+                remote_work_root=remote_root,
+                remote_python=sys.executable,
+                retention_root=retention_root,
+            )
+
+            with self.assertRaisesRegex(
+                KeyboardInterrupt, "interrupted after remote dispatch"
+            ):
+                first.run_task(
+                    valid_telemetry_task("task-interrupted"), timeout_s=10
+                )
+
+            manifest = json.loads(first.retention_manifest_path.read_text())
+            self.assertEqual(len(manifest["records"]), 1)
+            interrupted = manifest["records"][0]
+            self.assertIs(interrupted["worker_may_have_run"], True)
+            self.assertIs(interrupted["collection_complete"], False)
+            remote_artifacts = (
+                root
+                / "remote"
+                / "run-loopback-001"
+                / "artifacts"
+                / "task-interrupted"
+            )
+            self.assertTrue(remote_artifacts.is_dir())
+
+            second = NodeWorkerClient(
+                transport,
+                SequencedClock([101.0, 101.2, 102.0, 102.2]),
+                remote_work_root=remote_root,
+                remote_python=sys.executable,
+                retention_root=retention_root,
+            )
+            current = second.run_task(
+                valid_telemetry_task("task-current"), timeout_s=10
+            )
+
+            self.assertTrue(current.ok, current)
+            self.assertFalse(remote_artifacts.exists())
+            manifest = json.loads(second.retention_manifest_path.read_text())
+            self.assertNotIn(
+                interrupted["token"],
+                [record["token"] for record in manifest["records"]],
+            )
+            acknowledgement = (
+                retention_root
+                / "standalone"
+                / interrupted["token"]
+                / "logs"
+                / "custody"
+                / (interrupted["token"] + ".json")
+            )
+            self.assertTrue(acknowledgement.is_file())
+            self.assertFalse(
+                (
+                    retention_root
+                    / "standalone"
+                    / interrupted["token"]
+                    / "raw"
+                    / "node-custody"
+                    / "dispatch-retention.json"
+                ).exists()
+            )
 
     def test_interleaved_sweeps_cannot_lose_a_manifest_entry(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

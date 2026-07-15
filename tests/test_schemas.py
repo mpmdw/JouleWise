@@ -2,6 +2,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import re
 import tempfile
 import unittest
 import warnings
@@ -69,9 +70,18 @@ def valid_succeeded_summary(**changes: Any) -> SummaryMetrics:
     return SummaryMetrics(**values)
 
 
-def _fragment_matches(instance: Any, fragment: dict[str, Any]) -> bool:
+def _fragment_matches(
+    instance: Any,
+    fragment: dict[str, Any],
+    root: dict[str, Any] | None = None,
+) -> bool:
     """Evaluate the exported schemas' semantic-condition subset in bare CI."""
 
+    if root is None:
+        root = fragment
+    ref = fragment.get("$ref")
+    if isinstance(ref, str) and ref.startswith("#/$defs/"):
+        return _fragment_matches(instance, root["$defs"][ref.split("/")[-1]], root)
     expected_type = fragment.get("type")
     if expected_type is not None:
         allowed = [expected_type] if isinstance(expected_type, str) else expected_type
@@ -89,6 +99,16 @@ def _fragment_matches(instance: Any, fragment: dict[str, Any]) -> bool:
         return False
     if "enum" in fragment and instance not in fragment["enum"]:
         return False
+    if isinstance(instance, str):
+        if len(instance) < fragment.get("minLength", 0):
+            return False
+        pattern = fragment.get("pattern")
+        if isinstance(pattern, str) and re.search(pattern, instance) is None:
+            return False
+    if isinstance(instance, (int, float)) and not isinstance(instance, bool):
+        minimum = fragment.get("minimum")
+        if isinstance(minimum, (int, float)) and instance < minimum:
+            return False
     if "required" in fragment:
         if not isinstance(instance, dict) or any(
             key not in instance for key in fragment["required"]
@@ -96,64 +116,52 @@ def _fragment_matches(instance: Any, fragment: dict[str, Any]) -> bool:
             return False
     if isinstance(instance, dict):
         for key, child in fragment.get("properties", {}).items():
-            if key in instance and not _fragment_matches(instance[key], child):
+            if key in instance and not _fragment_matches(instance[key], child, root):
                 return False
-    if "not" in fragment and _fragment_matches(instance, fragment["not"]):
+    if isinstance(instance, list) and isinstance(fragment.get("items"), dict):
+        if any(
+            not _fragment_matches(item, fragment["items"], root)
+            for item in instance
+        ):
+            return False
+    if "not" in fragment and _fragment_matches(instance, fragment["not"], root):
         return False
     if "allOf" in fragment and not all(
-        _fragment_matches(instance, child) for child in fragment["allOf"]
+        _fragment_matches(instance, child, root) for child in fragment["allOf"]
     ):
         return False
     if "oneOf" in fragment and sum(
-        _fragment_matches(instance, child) for child in fragment["oneOf"]
+        _fragment_matches(instance, child, root) for child in fragment["oneOf"]
     ) != 1:
+        return False
+    if "anyOf" in fragment and not any(
+        _fragment_matches(instance, child, root) for child in fragment["anyOf"]
+    ):
         return False
     if "contains" in fragment and not (
         isinstance(instance, list)
-        and any(_fragment_matches(item, fragment["contains"]) for item in instance)
+        and any(
+            _fragment_matches(item, fragment["contains"], root) for item in instance
+        )
     ):
         return False
     condition = fragment.get("if")
-    if condition is not None and _fragment_matches(instance, condition):
-        if not _fragment_matches(instance, fragment.get("then", {})):
+    if condition is not None and _fragment_matches(instance, condition, root):
+        if not _fragment_matches(instance, fragment.get("then", {}), root):
             return False
     return True
 
 
 def exported_config_semantics_accept(data: dict[str, Any]) -> bool:
     schema = BenchmarkConfig.json_schema()
-    return _fragment_matches(
-        data["workload_profile"],
-        {"allOf": schema["$defs"]["workload_profile"]["allOf"]},
-    ) and _fragment_matches(
-        data["hardware_target"],
-        {"allOf": schema["$defs"]["hardware_target"]["allOf"]},
-    )
+    return _fragment_matches(data, schema, schema)
 
 
 def exported_summary_semantics_accept(data: Any) -> bool:
     if not isinstance(data, dict):
         return False
     schema = SummaryMetrics.json_schema()
-    relevant = {
-        "type": schema["type"],
-        "required": schema["required"],
-        "properties": {
-            key: schema["properties"][key]
-            for key in (
-                "status",
-                "energy_request_j",
-                "energy_token_j",
-                "energy_output_token_j",
-                "gross_energy_j",
-                "idle_subtracted_energy_j",
-                "failure_reason",
-            )
-            if key in data
-        },
-        "allOf": schema["allOf"],
-    }
-    return _fragment_matches(data, relevant)
+    return _fragment_matches(data, schema, schema)
 
 
 class BenchmarkConfigTests(unittest.TestCase):
@@ -305,6 +313,11 @@ class BenchmarkConfigTests(unittest.TestCase):
             lambda data: data["workload_profile"].update(additive_optional=True),
             True,
         )
+        add(
+            "whitespace-only-model-name",
+            lambda data: data["model"].update(name=" \t"),
+            False,
+        )
 
         for label, data, accepted in cases:
             with self.subTest(label=label):
@@ -386,6 +399,20 @@ class SummaryMetricsTests(unittest.TestCase):
                 False,
             ),
             ("failed-without-reason", {"status": "failed"}, False),
+            (
+                "malformed-nested-idle-baseline",
+                {
+                    **available,
+                    "idle_baseline": {
+                        "power_w_mean": 1.0,
+                        "power_w_stddev": 0.1,
+                        "duration_s": 5.0,
+                        "sample_count": "two",
+                        "telemetry_backend": "mock",
+                    },
+                },
+                False,
+            ),
         ]
 
         # This is deliberately the full status x energy-field x validity

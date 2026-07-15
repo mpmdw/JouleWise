@@ -266,6 +266,13 @@ class NodeWorkerClient:
                 custody_token=custody_token,
             )
 
+        # Dispatch is the point after which the remote worker may create the
+        # only copy of evidence. Persist that state before crossing the
+        # transport boundary: ``transport.run`` may raise KeyboardInterrupt or
+        # SystemExit after the remote process has started but before returning.
+        # A later-session sweep must then recollect and validate the response,
+        # never manufacture a dispatch-only acknowledgement and delete it.
+        self._mark_worker_may_have_run(custody_token)
         run_result = self.transport.run(
             [
                 self.remote_python,
@@ -286,6 +293,13 @@ class NodeWorkerClient:
             )
         )
         if execution_state == "not_started":
+            # A returned, explicit not-started result closes the ambiguity
+            # introduced before dispatch. Restore the dispatch-only state so
+            # the normal sweep can reclaim task scaffolding without trying to
+            # collect artifacts that the worker could not have created.
+            self._update_retention_field(
+                custody_token, "worker_may_have_run", False
+            )
             return self._with_remote_cleanup(
                 self._task_failure_from_adapter(
                     run_result,
@@ -300,7 +314,6 @@ class NodeWorkerClient:
                 custody_token=custody_token,
             )
 
-        self._mark_worker_may_have_run(custody_token)
         post = self.take_clock_marker()
         post_marker = post if isinstance(post, ClockMarker) else None
         alignment = None

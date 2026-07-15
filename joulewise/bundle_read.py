@@ -770,6 +770,22 @@ def _phase_source_identity(event: dict[str, Any]) -> _PhaseSourceIdentity:
                 ),
             )
         )
+    # WO-006: split-node streams sometimes have no stable node identifier and
+    # node_role is then their only discriminator.  Prefer an explicit node
+    # identity when one exists; contradictory role labels must not split one
+    # identified meter/source into parallel streams.
+    if not identity and metadata.get("node_role") is not None:
+        identity.append(
+            (
+                "node_role",
+                json.dumps(
+                    metadata["node_role"],
+                    ensure_ascii=False,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            )
+        )
     return tuple(identity)
 
 

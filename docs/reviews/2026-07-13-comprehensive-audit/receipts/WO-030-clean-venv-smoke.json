@@ -1,0 +1,27 @@
+{
+  "boundary": {
+    "disposition": "Both clean virtual environments were created and both documented install commands were executed. Build isolation could not resolve setuptools>=61 because this managed sandbox denies package-index network access; rerun the same commands in a network-capable clean environment.",
+    "name": "sandbox_network_dependency_resolution_denied"
+  },
+  "forms": [
+    {
+      "command": "python3 -m pip install -e '.[analysis]'",
+      "id": "readme-editable-analysis-extra",
+      "import_smoke": "blocked_by_install_boundary",
+      "install": "boundary",
+      "install_failure": "build isolation could not resolve setuptools>=61 from the package index",
+      "venv_creation": "pass"
+    },
+    {
+      "command": "python3 -m pip install -c env/analysis-lock.txt -e '.[analysis]'",
+      "id": "analysis-lock-constrained-editable-extra",
+      "import_smoke": "blocked_by_install_boundary",
+      "install": "boundary",
+      "install_failure": "build isolation could not resolve setuptools>=61 from the package index",
+      "venv_creation": "pass"
+    }
+  ],
+  "result": "boundary",
+  "schema": "joulewise.wo030_clean_venv_smoke.v1",
+  "work_order": "WO-030"
+}

@@ -1,0 +1,40 @@
+{
+  "boundary": {
+    "disposition": "No retained runs directory is mounted in this checkout; the lead must rerun this read-only gate where the sealed corpus is available.",
+    "name": "retained_runs_root_absent"
+  },
+  "bundles": [],
+  "corpus": {
+    "bundle_count": 0,
+    "incomplete_directory_count": 0,
+    "logical_root": "runs"
+  },
+  "failure_reasons": [],
+  "incomplete_directories": [],
+  "result": "boundary",
+  "schema": "joulewise.wo003_sealed_bundle_compatibility.v1",
+  "summary": {
+    "exact": {
+      "eligible": 0,
+      "revoked": 0
+    },
+    "ratio": {
+      "eligible": 0,
+      "revoked": 0
+    },
+    "replay": {
+      "eligible": 0,
+      "revoked": 0
+    },
+    "strict_readable": {
+      "eligible": 0,
+      "revoked": 0
+    }
+  },
+  "verified_gates": [
+    "exact",
+    "replay",
+    "ratio"
+  ],
+  "work_order": "WO-003"
+}

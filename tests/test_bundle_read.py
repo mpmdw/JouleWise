@@ -324,6 +324,38 @@ class PhasePairingTests(ReaderTestCase):
         )
         self.assertEqual(reader.token_timestamps(), [3.5])
 
+    def test_parallel_role_only_streams_pair_without_false_overlap(self) -> None:
+        writer = self.make_bundle("parallel-role-only-phase")
+        prefill_role = {"node_role": "prefill"}
+        decode_role = {"node_role": "decode"}
+        self.add_event(
+            writer, "phase_start", "decode", 1.0, metadata=prefill_role
+        )
+        self.add_event(writer, "phase_end", "decode", 3.0, metadata=prefill_role)
+        self.add_event(writer, "phase_start", "decode", 2.0, metadata=decode_role)
+        self.add_event(writer, "phase_end", "decode", 4.0, metadata=decode_role)
+        self.add_event(
+            writer,
+            "token",
+            "decode",
+            3.5,
+            metadata={**prefill_role, "index": 0},
+        )
+        self.add_event(
+            writer,
+            "token",
+            "decode",
+            3.5,
+            metadata={**decode_role, "index": 1},
+        )
+
+        reader = BundleReader(writer.path)
+        self.assertEqual(
+            reader.phase_windows(),
+            {"decode": [Window(1.0, 3.0), Window(2.0, 4.0)]},
+        )
+        self.assertEqual(reader.token_timestamps(), [3.5])
+
 
 class CompletionStateTests(ReaderTestCase):
     def test_bundle_without_summary_is_incomplete(self) -> None:

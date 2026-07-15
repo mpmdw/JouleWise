@@ -71,6 +71,7 @@ from joulewise.schemas import (
     SUMMARY_REDUCER_VERSION,
     SummaryMetrics,
     TelemetryBackend,
+    summary_validation_problems,
 )
 from joulewise.validation import finite_float
 from joulewise.uncertainty_evidence import (
@@ -351,8 +352,18 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
     problems.extend(_strict_uncertainty_evidence_problems(reader))
     problems.extend(_strict_raw_to_trace_problems(reader))
-    if not version_problems:
-        fresh = reduce_bundle(reader.path).to_dict()
+    # A schema-invalid stored summary is already rejected structurally.  Do
+    # not add a second derivation-drift diagnosis for the same malformed
+    # object; semantic re-reduction remains applicable to valid summaries.
+    if not version_problems and not summary_validation_problems(summary):
+        fresh = (
+            reduce_bundle(reader.path).to_dict()
+            if comparison_reducer_version is None
+            else reduce_bundle(
+                reader.path,
+                reducer_version=comparison_reducer_version,
+            ).to_dict()
+        )
         # The fresh current derivation is the raw/metadata authority. Inspect it
         # before legacy additive-absence projection can hide the governed
         # object, while retaining the stored-summary check for unsupported
@@ -361,10 +372,6 @@ def _strict_problems(reader: BundleReader) -> list[str]:
         for problem in _strict_idle_mean_uncertainty_problems(fresh):
             if problem not in problems:
                 problems.append(problem)
-        if comparison_reducer_version is not None:
-            fresh["summary_provenance"]["reducer_version"] = (
-                comparison_reducer_version
-            )
         differing = _strict_summary_differences(
             fresh,
             summary,
@@ -629,6 +636,21 @@ def _strict_reducer_version_dispatch(
     reducer_version = provenance.get("reducer_version")
     if reducer_version == SUMMARY_REDUCER_VERSION:
         return [], set(ADDED_DURING_0_5_0), False, None
+    frozen_absence: set[str]
+    if reducer_version == "0.4.2":
+        frozen_absence = set(ADDED_DURING_0_5_0)
+    elif reducer_version == "0.4.1":
+        frozen_absence = set(ADDED_SINCE_0_4_1 | ADDED_DURING_0_5_0)
+    else:
+        return _unsupported_reducer_version_problems(reducer_version), set(), False, None
+    # A current 0.5.0 summary cannot opt into a frozen arm by changing only its
+    # version label. Authentic 0.4.x shapes predate these additive fields.
+    if any(_summary_path_present(summary, path) for path in frozen_absence):
+        return _unsupported_reducer_version_problems(reducer_version), set(), False, None
+    return [], frozen_absence, False, reducer_version
+
+
+def _unsupported_reducer_version_problems(reducer_version: Any) -> list[str]:
     return [
         "strict: unsupported reducer version; re-reduction required",
         "strict: unsupported reducer version "
@@ -636,7 +658,16 @@ def _strict_reducer_version_dispatch(
         "cannot claim the current inter_token_throughput_tokens_s reduction "
         f"shape and explicit re-reduction with {SUMMARY_REDUCER_VERSION} is "
         "required",
-    ], set(), False, None
+    ]
+
+
+def _summary_path_present(summary: dict[str, Any], path: str) -> bool:
+    current: Any = summary
+    for component in path.split("."):
+        if not isinstance(current, dict) or component not in current:
+            return False
+        current = current[component]
+    return True
 
 
 def _strict_legacy_bundle_metadata(metadata: Any) -> bool:

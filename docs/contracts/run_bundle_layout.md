@@ -242,20 +242,20 @@ readers must not assume only prefill/decode exist.
 
 Phase pairing and validation are one fail-closed operation shared by strict
 bundle validation, phase-energy attribution, and decode-token filtering. A
-pairing key is the phase name plus its meter/source identity. Source identity
-includes each non-null `metadata.node_id` and `metadata.node_identity` value;
-values are compared as canonical JSON so structured node identities remain
-stable. `metadata.node_role` is a workload role, not a meter/source identity,
-and never separates windows. Markers with no node identity all belong to one
-default source. A start and end must have the same full key. Unmatched starts
-or ends and reversed bounds invalidate the bundle and reduction with an
-explicit phase-marker reason.
+pairing key is the phase name plus its phase-stream identity. Stream identity
+uses each non-null `metadata.node_id` and `metadata.node_identity` value. When
+neither is present, a non-null `metadata.node_role` is the stream identity, so
+role-only split markers remain distinct. Values are compared as canonical JSON
+so structured node identities remain stable. Markers with no node role or
+identity all belong to one default stream. A start and end must have the same
+full key. Unmatched starts or ends and reversed bounds invalidate the bundle
+and reduction with an explicit phase-marker reason.
 
 Phase energy is integrated separately per valid window and contributions with
 the same phase name are summed. Windows attributed to distinct identified
 nodes may overlap because each node has its own meter/source, so 2 W over
 `[1,3]` on one node plus 2 W over `[2,4]` on another legitimately sums to 8 J.
-Windows attributed to the same meter/source must not overlap, even when their
+Windows attributed to the same phase stream must not overlap, even when their
 phase names differ: overlap is marker corruption and fails closed with the
 named reason `same_source_phase_overlap`; it is never silently unioned (the
 union in the same 2 W example would be 6 J). Boundary-touching intervals are
@@ -478,14 +478,15 @@ Reducer `0.5.0` summaries use exact strict comparison except for the absence of
 `idle_baseline.gpu_freq_mhz_mean`, which was added during the already-live
 0.5.0 era. Its absence is tolerated only for compatibility with stored
 pre-repair 0.5.0 summaries; when present, its value is compared exactly. All
-pre-0.5 current-era summaries are unsupported and require explicit
-re-reduction because active
-energy and idle point/variance/ESS estimands changed together. There is no
-absence projection across that semantic boundary. The previously frozen
-`0.4.2`, `0.4.1`, `0.4.0`, and `0.3.x` meanings are not rewritten.
+current-era summaries declaring reducer `0.4.1` or `0.4.2` are strictly
+re-derived through their frozen v1 unweighted idle estimator arm; they are
+never compared with relabelled v2 numbers. Their era-specific additive field
+absences remain tolerated, while present claims compare exactly. Reducer
+`0.4.0`, `0.3.x`, recorded `0.2.x`, and unknown reducer versions are
+unsupported and require explicit re-reduction. The frozen meanings are not
+rewritten.
 The six frozen legacy identities keep their provenance-less additive-absence
-tolerance unchanged; recorded `0.2.x` and unknown reducer versions are also
-unsupported and require explicit re-reduction.
+tolerance unchanged.
 A succeeded summary requires a measured window with duration strictly greater
 than zero. A reducer encountering a nonpositive measured window emits an
 honest `failed` summary without derived energy, phase, or suite metrics;
@@ -541,8 +542,16 @@ least two records and `n >= 3*(L+1)`. Cadence still requires type-7 linear
 `p95(d_i)/p05(d_i) <= 1.25`. The method never resamples, trims, detrends,
 repairs stationarity, selects bandwidth adaptively, or shops estimators.
 
-Raw sample count, duration-weighted mean, duration-weighted sample standard
-deviation, and total duration are cross-checked against
+Strict re-reduction of summaries declaring reducer `0.4.1` or `0.4.2` selects
+the frozen v1 arm: arithmetic mean and sample variance, unweighted Bartlett
+autocovariances, `v_iid=s^2/n`, `v_governed=max(v_iid,v_HAC)`, and the v1 ESS.
+Its metadata cross-check is likewise arithmetic. Reducer `0.5.0` and later
+select the duration-weighted v2 formulas above. Unequal record durations may
+therefore yield two different valid numeric summaries for the same immutable
+raw trace, each admitted only under its declared reducer arm.
+
+For the v2 arm, raw sample count, duration-weighted mean, duration-weighted
+sample standard deviation, and total duration are cross-checked against
 `metadata.idle_baseline`. Count must match exactly; floats use `rel_tol=1e-9`,
 `abs_tol=1e-12`. Any mismatch emits
 `idle_metadata_mismatch`, withholds governed variance, and fails strict

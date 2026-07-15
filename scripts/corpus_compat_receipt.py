@@ -124,11 +124,21 @@ def _gate(reasons: Sequence[str]) -> dict[str, Any]:
     return {"eligible": not stable, "revocation_reasons": stable}
 
 
-def _bundle_paths(root: Path) -> list[Path]:
+def _artifact_directory_paths(root: Path) -> list[Path]:
     candidates: set[Path] = set()
     for artifact in ("config.json", "metadata.json", "summary_metrics.json"):
         candidates.update(path.parent for path in root.rglob(artifact))
     return sorted(candidates, key=lambda path: path.relative_to(root).as_posix())
+
+
+def _bundle_paths(root: Path) -> list[Path]:
+    """Return only D-011-complete bundle directories in stable path order."""
+
+    return [
+        path
+        for path in _artifact_directory_paths(root)
+        if BundleReader(path).is_complete()
+    ]
 
 
 def evaluate_bundle(path: Path, corpus_root: Path) -> dict[str, Any]:
@@ -187,7 +197,7 @@ def build_receipt(corpus_root: Path) -> dict[str, Any]:
         }
     return {
         "schema_version": SCHEMA_VERSION,
-        "corpus_root": str(root),
+        "corpus_root": "runs",
         "bundle_count": len(bundles),
         "bundles": bundles,
         "summary": summary,

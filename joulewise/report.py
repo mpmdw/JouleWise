@@ -336,6 +336,14 @@ def _format_number(value: float | None, digits: int = 6) -> str:
     return f"{value:.{digits}g}"
 
 
+def _format_token_metric_context(value: float | None, digits: int = 6) -> str:
+    """Render governed token-metric context with an explicit missing label."""
+
+    if value is None:
+        return "unknown"
+    return f"{value:.{digits}g}"
+
+
 def _known(value: Any) -> str:
     if value is None or isinstance(value, (dict, list)):
         return "unknown"
@@ -457,8 +465,8 @@ def _render_index(bundles: list[_Bundle]) -> str:
             f'<td class="{_status_class(bundle.status)}">{_esc(bundle.status)}</td>'
             f'<td class="validation-{_esc(bundle.strict_validation)}">'
             f"{_esc(_strict_validation_label(bundle))}</td>"
-            f"<td>{_format_number(bundle.energy_request_j)}</td>"
-            f"<td>{_format_number(bundle.energy_token_j)}</td>"
+            f"<td>{_format_token_metric_context(bundle.energy_request_j)}</td>"
+            f"<td>{_format_token_metric_context(bundle.energy_token_j)}</td>"
             f"<td>{_esc(bundle.boundary)}</td>"
             f"<td>{_provenance_lines(_tokenizer_provenance(bundle))}</td>"
             f"<td>{_provenance_lines(_denominator_provenance(bundle))}</td>"
@@ -516,6 +524,18 @@ def _key_value_table(pairs: list[tuple[str, str]]) -> str:
     )
 
 
+def _summary_metric_pairs(summary: dict[str, Any]) -> list[tuple[str, str]]:
+    governed = {
+        "energy_request_j",
+        "energy_token_j",
+        "energy_output_token_j",
+    }
+    return [
+        (key, "unknown" if key in governed and value == "" else value)
+        for key, value in _flatten(summary)
+    ]
+
+
 def _render_run_page(bundle: _Bundle, chart_rel: str | None) -> str:
     parts: list[str] = [f"<h1>Run <code>{_esc(bundle.run_id)}</code></h1>"]
     parts.append(_diagnostic_notice())
@@ -562,12 +582,15 @@ def _render_run_page(bundle: _Bundle, chart_rel: str | None) -> str:
 
     parts.append("<h2>Summary metrics and provenance</h2>")
     metric_context = [
-        ("diagnostic.request_energy_j", _format_number(bundle.energy_request_j)),
+        (
+            "diagnostic.request_energy_j",
+            _format_token_metric_context(bundle.energy_request_j),
+        ),
         ("diagnostic.measurement_boundary", bundle.boundary),
         *_tokenizer_provenance(bundle),
         *_denominator_provenance(bundle),
     ]
-    parts.append(_key_value_table(metric_context + _flatten(bundle.summary)))
+    parts.append(_key_value_table(metric_context + _summary_metric_pairs(bundle.summary)))
 
     return _page(f"Run {bundle.run_id}", "\n".join(parts))
 

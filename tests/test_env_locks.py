@@ -18,6 +18,14 @@ LOCKFILES = (
     ENV_DIR / "mac-measurement-lock.txt",
 )
 CANONICAL_BUNDLE_METADATA = REPO_ROOT / "runs" / "example-mac-mlx-local__r1" / "metadata.json"
+WO030_RECEIPT = (
+    REPO_ROOT
+    / "docs"
+    / "reviews"
+    / "2026-07-13-comprehensive-audit"
+    / "receipts"
+    / "WO-030-clean-venv-smoke.json"
+)
 
 
 def _requirement_lines(path: Path) -> list[str]:
@@ -67,6 +75,44 @@ class TestEnvLocks(unittest.TestCase):
                     expected_version,
                     f"mac lock pin for {package} does not match canonical bundle",
                 )
+
+    def test_clean_venv_receipt_records_both_install_forms_or_named_boundary(
+        self,
+    ) -> None:
+        receipt = json.loads(WO030_RECEIPT.read_text(encoding="utf-8"))
+        self.assertEqual(
+            receipt["schema"], "joulewise.wo030_clean_venv_smoke.v1"
+        )
+        self.assertEqual(receipt["work_order"], "WO-030")
+        forms = receipt["forms"]
+        self.assertEqual(
+            [form["command"] for form in forms],
+            [
+                "python3 -m pip install -e '.[analysis]'",
+                "python3 -m pip install -c env/analysis-lock.txt -e '.[analysis]'",
+            ],
+        )
+        self.assertTrue(all(form["venv_creation"] == "pass" for form in forms))
+        if receipt["result"] == "pass":
+            self.assertTrue(all(form["install"] == "pass" for form in forms))
+            self.assertTrue(all(form["import_smoke"] == "pass" for form in forms))
+            self.assertIsNone(receipt.get("boundary"))
+        else:
+            self.assertEqual(receipt["result"], "boundary")
+            self.assertEqual(
+                receipt["boundary"]["name"],
+                "sandbox_network_dependency_resolution_denied",
+            )
+            self.assertTrue(all(form["install"] == "boundary" for form in forms))
+            self.assertTrue(
+                all(
+                    form["import_smoke"] == "blocked_by_install_boundary"
+                    for form in forms
+                )
+            )
+        serialized = json.dumps(receipt, sort_keys=True)
+        self.assertNotIn(str(REPO_ROOT), serialized)
+        self.assertNotIn("/tmp/", serialized)
 
 
 if __name__ == "__main__":

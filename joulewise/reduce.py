@@ -48,11 +48,14 @@ from typing import Any
 
 from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window
 from joulewise.idle_dependence import (
+    FROZEN_METHOD_ID_V1,
+    METHOD_ID as IDLE_DEPENDENCE_METHOD_ID,
     derive_idle_mean_uncertainty,
     idle_mean_energy_variance_j2,
 )
 from joulewise.schemas import (
     BenchmarkConfig,
+    CONFIG_SCHEMA_VERSION,
     EnergyEvidence,
     FailureReason,
     IdleBaseline,
@@ -60,6 +63,7 @@ from joulewise.schemas import (
     RunStatus,
     SUMMARY_REDUCER_ID,
     SUMMARY_REDUCER_VERSION,
+    SUMMARY_SCHEMA_VERSION,
     SuiteGroupMetrics,
     SuiteItemMetrics,
     SuiteSummary,
@@ -70,6 +74,7 @@ from joulewise.validation import finite_float
 
 REDUCER_ID = SUMMARY_REDUCER_ID
 REDUCER_VERSION = SUMMARY_REDUCER_VERSION
+FROZEN_REDUCER_VERSIONS = frozenset({"0.4.1", "0.4.2"})
 MIN_PHASE_SAMPLES = 3
 SHORT_WINDOW_CADENCE_RATIO_MIN = 2.0
 REQUEST_WINDOW_CADENCE_RATIO_MIN = 4.0
@@ -828,7 +833,11 @@ def _bracketing_gap_s(curve: list[TracePoint], t: float) -> float | None:
 # Top-level reducer
 
 
-def reduce_bundle(path: Path) -> SummaryMetrics:
+def reduce_bundle(
+    path: Path,
+    *,
+    reducer_version: str = REDUCER_VERSION,
+) -> SummaryMetrics:
     """Reduce the bundle at ``path`` to a :class:`SummaryMetrics`.
 
     Pure over the on-disk artifacts (D-002): re-runnable post hoc (the
@@ -844,6 +853,8 @@ def reduce_bundle(path: Path) -> SummaryMetrics:
     token timestamp because runtime suite items execute serially in marker
     order.
     """
+    if reducer_version not in FROZEN_REDUCER_VERSIONS | {REDUCER_VERSION}:
+        raise ValueError(f"unsupported reducer version: {reducer_version!r}")
     reader = BundleReader(Path(path))
     try:
         config = reader.config()
@@ -853,6 +864,7 @@ def reduce_bundle(path: Path) -> SummaryMetrics:
         # block; status/reason/message still make the failure structured.
         return SummaryMetrics(
             status=RunStatus.FAILED,
+            summary_provenance=_summary_provenance(reducer_version),
             failure_reason=FailureReason.UNKNOWN_ERROR,
             failure_message=str(exc),
         )
@@ -860,10 +872,17 @@ def reduce_bundle(path: Path) -> SummaryMetrics:
     idle_baseline: IdleBaseline | None = None
     try:
         idle_baseline = _idle_baseline(metadata)
-        return _reduce(reader, config, metadata, idle_baseline)
+        return _reduce(
+            reader,
+            config,
+            metadata,
+            idle_baseline,
+            reducer_version=reducer_version,
+        )
     except (_ReduceError, BundleReadError) as exc:
         return SummaryMetrics(
             status=RunStatus.FAILED,
+            summary_provenance=_summary_provenance(reducer_version),
             failure_reason=FailureReason.UNKNOWN_ERROR,
             failure_message=str(exc),
             idle_baseline=idle_baseline,
@@ -894,6 +913,8 @@ def _reduce(
     config: BenchmarkConfig,
     metadata: dict[str, Any],
     idle_baseline: IdleBaseline | None,
+    *,
+    reducer_version: str,
 ) -> SummaryMetrics:
     window = reader.measured_window()
     if window is None:
@@ -953,7 +974,15 @@ def _reduce(
     phase_energy_j = _phase_energy(phase_windows, curve)
     phase_identifiability = _phase_identifiability(phase_windows, curve)
     suite_metrics = _suite_metrics(reader, curve)
-    idle_mean_uncertainty = derive_idle_mean_uncertainty(reader, idle_baseline)
+    idle_mean_uncertainty = derive_idle_mean_uncertainty(
+        reader,
+        idle_baseline,
+        method_id=(
+            FROZEN_METHOD_ID_V1
+            if reducer_version in FROZEN_REDUCER_VERSIONS
+            else IDLE_DEPENDENCE_METHOD_ID
+        ),
+    )
     energy_variance_terms_j2 = _energy_variance_terms_j2(
         idle_mean_uncertainty, window
     )
@@ -1012,7 +1041,17 @@ def _reduce(
         energy_variance_terms_j2=energy_variance_terms_j2,
         energy_bound_terms_j=energy_bound_terms_j,
         window_evidence_precheck=window_evidence_precheck,
+        summary_provenance=_summary_provenance(reducer_version),
     )
+
+
+def _summary_provenance(reducer_version: str) -> dict[str, str]:
+    return {
+        "summary_schema_version": SUMMARY_SCHEMA_VERSION,
+        "reducer_id": REDUCER_ID,
+        "reducer_version": reducer_version,
+        "config_schema_version": CONFIG_SCHEMA_VERSION,
+    }
 
 
 # ----------------------------------------------------------------------------
