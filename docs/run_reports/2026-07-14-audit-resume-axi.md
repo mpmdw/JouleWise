@@ -152,7 +152,17 @@ crossing (251M tokens / 28 Sol sessions) recorded honestly;
 DRIFT.md created (no deploy); RUN_STATE header updated; C-034 council
 row on main.
 
-Open at session close: (1) Ed's adoption merge of the
+POST-MERGE ADDENDUM (2026-07-15): Ed merged PR #66 (`e377f93`); the
+audit gate was CLEARED from the kernel same session (`08fa290`,
+fidelity tests moved to fixture-driven gate semantics — clearance is
+loud by design). AXI stream rows minted (AXI-S0..SE, consult
+sequencing; `4683c89`). AXI-S0 LANDED (`e4ca294`): advisor docs carry
+basis+boundary on every energy number, the attributed
+energy-proportionality rationale, the harness/benchmark split, and the
+five-axis Q4 agenda; DRIFT.md is current for Ed's one manual deploy.
+AXI-SA (burst-decode contract) is the READY agent head for the next
+session. Ed's codex-watch non-use confirmation recorded (report §8.5).
+Formerly open at session close: (1) Ed's adoption merge of the
 `impl/audit-integration` PR — the audit gate stays ACTIVE until then;
 gate removal from the kernel is a one-line follow-up at/after merge.
 (2) Ed's explicit codex-watch NON-USE confirmation (ULTRA F18; asked
