@@ -89,6 +89,11 @@ class TestKernelValidity(unittest.TestCase):
 
     def test_invalid_kernels_rejected(self):
         base = load_kernel()
+        # Gate-shaped mutations need a live gate; the audit gate was CLEARED
+        # 2026-07-15 (Ed's adoption merge), so inject the frozen historical
+        # gate artifact for mutation purposes.
+        base["active_global_gates"] = copy.deepcopy(
+            load_fixture("historical_audit_gate.json")["active_global_gates"])
         cases = [
             ("unknown top-level field", lambda k: k.update(surprise=1)),
             ("bad schema_version", lambda k: k.update(schema_version=1)),
@@ -176,12 +181,16 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         for tid in sorted(TERMINAL_IDS):
             self.assertIn(f"| {tid} |", completed)
 
-    def test_stop_card_cleared_and_frozen_global_gate_active(self):
+    def test_stop_card_cleared_and_audit_gate_cleared(self):
+        # The comprehensive-audit gate was removed at close-out (Ed's
+        # adoption merge of PR #66, 2026-07-15); gate semantics remain
+        # tested against the frozen fixtures below.
         self.assertIsNone(self.kernel["active_stop_card"])
         for task in self.tasks.values():
             self.assertIsNone(task["stop_card"])
-        self.assertEqual(len(self.kernel["active_global_gates"]), 1)
-        self.assertEqual(gen_state.selectable_task_ids(self.kernel), set())
+        self.assertEqual(self.kernel["active_global_gates"], [])
+        selected = gen_state.selectable_task_ids(self.kernel)
+        self.assertTrue({"P1-008", "P2-038"} <= selected)
 
     def _hard_start_targets(self, tid):
         return {
@@ -390,10 +399,10 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             set(oracle["expected_selectable_task_ids"]),
         )
 
-    def test_live_gate_is_exact_frozen_historical_gate_artifact(self):
+    def test_frozen_historical_gate_artifact_suppresses_exactly(self):
+        # The live-kernel equality pin was retired at gate clearance
+        # (2026-07-15); the frozen artifact remains the migration fixture.
         oracle = load_fixture("historical_audit_gate.json")
-        self.assertEqual(load_kernel()["active_global_gates"],
-                         oracle["active_global_gates"])
         kernel = self._kernel_with(oracle["active_global_gates"])
         self._assert_oracle(kernel, oracle)
         selected = gen_state.selectable_task_ids(kernel)
@@ -551,18 +560,28 @@ class TestWorkSelectionFidelity(unittest.TestCase):
             gen_state.validate(kernel)
 
     def test_gate_rendered_in_both_regions_and_forbidden_tasks_never_ready(self):
-        kernel = load_kernel()
+        gate = load_fixture("historical_audit_gate.json")["active_global_gates"]
+        kernel = self._kernel_with(gate)
         run_state = gen_state.render_run_state(kernel)
         queue = gen_state.render_queue(kernel)
         for rendered in (run_state, queue):
             self.assertIn("## Active Global Work-Selection Gates", rendered)
             self.assertIn("gate-2026-07-13-comprehensive-audit", rendered)
-            self.assertIn(kernel["active_global_gates"][0]["clearance"], rendered)
+            self.assertIn(gate[0]["clearance"], rendered)
             self.assertIn("Source of truth for work selection:", rendered)
             self.assertNotIn("Source of truth:", rendered)
         self.assertNotIn("- READY —", run_state)
         self.assertNotIn("| READY |", queue)
         self.assertNotIn("PARTIAL; READY", queue)
+
+    def test_cleared_live_kernel_renders_no_gate_and_ready_heads(self):
+        kernel = load_kernel()
+        run_state = gen_state.render_run_state(kernel)
+        queue = gen_state.render_queue(kernel)
+        for rendered in (run_state, queue):
+            self.assertIn("NONE — no global work-selection gate is active", rendered)
+            self.assertNotIn("GATED —", rendered)
+        self.assertIn("- READY —", run_state)
 
 
 class TestGeneratorSelfConsistency(unittest.TestCase):

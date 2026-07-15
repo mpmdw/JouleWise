@@ -1,18 +1,16 @@
 # JouleWise Run State
 
-Last updated: 2026-07-15 (COMPREHENSIVE AUDIT FIX WAVE COMPLETE on
-branch `impl/audit-integration`, awaiting Ed's adoption merge — the
-audit gate stays ACTIVE in the kernel until the close-out session
-removes it at/after that merge. All 34 non-deferred work orders landed
-(S1-S5, S4, bench, WO-021/022/027); D-043 supersession closure done;
-ULTRA comparison audit ran with full triage (report §8.5); report
-§7/§8/§9 synthesized; completeness-critic gaps closed; 7 deferred
-orders + follow-ups promoted as gated kernel tasks (AUD-*). Suite on
-the branch: canonical 1532 OK. The 2026-07-13 checkpoint is now
-HISTORY, not a resume authority. Session record:
-`docs/run_reports/2026-07-14-audit-resume-axi.md`. AXI intake
-(D-066..D-070) recorded on main same arc; AXI streams launch after
-audit clearance.)
+Last updated: 2026-07-15 (COMPREHENSIVE AUDIT CLOSED: Ed merged the
+adoption PR #66 (`e377f93`) and the gate was removed from the kernel
+the same session — the generated region below now shows READY lane
+heads again. All 34 non-deferred work orders landed; D-043 closure,
+ULTRA triage (report §8.5), §7/§8/§9 synthesis, critic gaps closed,
+AUD-* promotions all on main. Canonical suite 1532 OK at the merge.
+The 2026-07-13 checkpoint is HISTORY. Session record:
+`docs/run_reports/2026-07-14-audit-resume-axi.md`. NEXT: the AXI arc
+(D-066..D-070; xhigh consult recorded under process_traces) — S-0
+advisor-doc alignment first, then S-A; Window A ordering unchanged and
+outranks AXI in the quiet-Mac lane.)
 
 ## Start Here For Every Big Run
 
@@ -75,16 +73,7 @@ Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([de
 
 ## Active Global Work-Selection Gates
 
-Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.
-
-### `gate-2026-07-13-comprehensive-audit`
-
-Comprehensive whole-project audit declared by Ed 2026-07-13: no feature work, queue pulls, or campaign prep until the audit fix wave completes and findings are adjudicated. Decision-log/process recording and the audit's own work orders remain permitted (they are not kernel tasks).
-
-- Scope: `select` in [AGENT], [QUIET-MAC], [ED-EXTERNAL].
-- Allowed kernel task IDs: NONE.
-- Authority: RUN_STATE.md restart block item 2 (Ed, 2026-07-13); TASK_QUEUE.md Current Queue preamble; docs/reviews/2026-07-13-comprehensive-audit/CHECKPOINT.md.
-- Clearance: docs/reviews/2026-07-13-comprehensive-audit/ close-out: fix wave complete, report synthesis + adjudication recorded, RUN_STATE refreshed (audit close-out session removes this gate from the kernel).
+NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
@@ -92,15 +81,15 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [ED-EXTERNAL]
 
-- GATED — E1 `P1-008` (excluded by: gate-2026-07-13-comprehensive-audit): Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
+- READY — E1 `P1-008`: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
 
 ### [QUIET-MAC]
 
-- GATED — Q7 `P2-038` (excluded by: gate-2026-07-13-comprehensive-audit): Close the production uncertainty live tail: execute the merged clock-anchor, marker-phase, idle-drift, and idle-guard path on true MLX plus /usr/bin/powermetrics and retain the backed-up shakedown evidence.
+- READY — Q7 `P2-038`: Close the production uncertainty live tail: execute the merged clock-anchor, marker-phase, idle-drift, and idle-guard path on true MLX plus /usr/bin/powermetrics and retain the backed-up shakedown evidence.
 
 ### [AGENT]
 
-- GATED — A9 `SPLIT-AP` (excluded by: gate-2026-07-13-comprehensive-audit): Freeze the split pre-registration: one primary estimand and service-state assumption covering gross versus idle-subtracted charged states per NEG-7, both monolithic references predeclared with joint adjusted contrast intervals and split wins only if both are beaten per RIG-5, and missing composite and transfer floor cells named as prerequisites.
+- READY — A9 `SPLIT-AP`: Freeze the split pre-registration: one primary estimand and service-state assumption covering gross versus idle-subtracted charged states per NEG-7, both monolithic references predeclared with joint adjusted contrast intervals and split wins only if both are beaten per RIG-5, and missing composite and transfer floor cells named as prerequisites.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
