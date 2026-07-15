@@ -1,10 +1,4 @@
-"""DOC-008 Stage-1 tests: state-kernel validity, migration fidelity, and
-generator determinism / --check self-consistency.
-
-The live RUN_STATE.md / TASK_QUEUE.md have NOT been converted to marker
-fences yet (adjudication-gated), so --check runs against generator-produced
-fixture files, i.e. against the kernel itself.
-"""
+"""DOC-008 state-kernel validity, work-selection fidelity, and drift tests."""
 
 import copy
 import json
@@ -14,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "scripts"))
@@ -23,12 +18,15 @@ import gen_state  # noqa: E402
 KERNEL_PATH = os.path.join(ROOT, "docs", "process", "state_kernel.json")
 SCHEMA_PATH = os.path.join(ROOT, "docs", "process", "state_kernel.schema.json")
 GEN = os.path.join(ROOT, "scripts", "gen_state.py")
+FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
 
 EXPECTED_IDS = {
     # [AGENT]
     "P2-035", "P2-036", "P3-000", "P2-022", "P2-023",
     "P2-024", "P3-001b", "P2-004", "P2-005", "P2-016",
-    "P2-047A", "P2-048", "CI-003", "DOC-010",
+    "P2-047A", "P2-048", "P2-050", "SITE-02", "SPLIT-AP", "TOOL-01",
+    "CI-003", "DOC-010",
+    "DOC-008", "DOC-008-INTAKE", "DOC-008-REFLECTION", "DOC-008-STATUS",
     # [QUIET-MAC]
     "P2-015-SMOKE", "P2-015", "P2-006", "P2-010", "P2-019", "P2-020",
     "P2-012", "P2-038", "P2-046B", "P2-047B",
@@ -36,12 +34,16 @@ EXPECTED_IDS = {
     "P1-008", "P2-027", "P1-001", "P1-003", "P1-004", "P1-006",
 }
 
-TERMINAL_IDS = {"P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
-                "DOC-008"}
+TERMINAL_IDS = {"P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034"}
 
 
 def load_kernel():
     with open(KERNEL_PATH, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def load_fixture(name):
+    with open(os.path.join(FIXTURE_DIR, name), encoding="utf-8") as fh:
         return json.load(fh)
 
 
@@ -52,14 +54,26 @@ def run_gen(*args):
 
 
 class TestKernelValidity(unittest.TestCase):
-    def test_schema_declares_v2_authority_contract(self):
+    def test_schema_declares_v3_work_selection_authority_contract(self):
         with open(SCHEMA_PATH, encoding="utf-8") as fh:
             schema = json.load(fh)
-        self.assertEqual(schema["properties"]["schema_version"]["const"], 2)
-        self.assertIn("authority", schema["required"])
+        self.assertEqual(schema["properties"]["schema_version"]["const"], 3)
+        self.assertIn("active_global_gates", schema["required"])
         self.assertEqual(
             schema["properties"]["authority"]["const"],
             gen_state.AUTHORITY_NOTICE,
+        )
+        gate = schema["$defs"]["globalGate"]
+        self.assertEqual(gate["properties"]["scope"]["properties"]["operation"]["const"],
+                         "select")
+        self.assertEqual(
+            set(gate["properties"]["scope"]["properties"]["lanes"]["items"]["enum"]),
+            set(gen_state.LANES),
+        )
+        self.assertTrue(
+            {"p3_hardening_candidates", "p3_tooling"}.issubset(
+                schema["$defs"]["task"]["properties"]["priority"]["enum"]
+            )
         )
 
     def test_kernel_validates(self):
@@ -77,6 +91,16 @@ class TestKernelValidity(unittest.TestCase):
             ("bad schema_version", lambda k: k.update(schema_version=1)),
             ("missing authority", lambda k: k.pop("authority")),
             ("altered authority", lambda k: k.update(authority="AUTHORITATIVE")),
+            ("missing active_global_gates", lambda k: k.pop("active_global_gates")),
+            ("bad gate operation",
+             lambda k: k["active_global_gates"][0]["scope"].update(operation="run")),
+            ("unknown gate lane",
+             lambda k: k["active_global_gates"][0]["scope"]["lanes"].append("cloud")),
+            ("duplicate gate id",
+             lambda k: k["active_global_gates"].append(
+                 copy.deepcopy(k["active_global_gates"][0]))),
+            ("non-live gate allowlist ID",
+             lambda k: k["active_global_gates"][0]["allowed_task_ids"].append("NOPE-1")),
             ("id/key mismatch", lambda k: k["tasks"]["P2-016"].update(id="P2-999")),
             ("terminal status", lambda k: k["tasks"]["P2-016"].update(status="done")),
             ("duplicate lane rank", lambda k: k["tasks"]["P2-016"].update(rank=0)),
@@ -101,6 +125,10 @@ class TestKernelValidity(unittest.TestCase):
              lambda k: k["tasks"]["P2-022"].update(
                  dependencies=[d for d in k["tasks"]["P2-022"]["dependencies"]
                                if d["target"] != "P2-006"], status="queued")),
+            ("DOC-010 missing G6 dependency",
+             lambda k: k["tasks"]["DOC-010"].update(
+                 dependencies=[d for d in k["tasks"]["DOC-010"]["dependencies"]
+                               if d["target"] != "G6"])),
         ]
         for name, mutate in cases:
             kernel = copy.deepcopy(base)
@@ -126,12 +154,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_30(self):
+    def test_exact_live_id_set_38(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 30)
+        self.assertEqual(len(self.tasks), 38)
 
-    def test_schema_v2_authority_notice(self):
-        self.assertEqual(self.kernel["schema_version"], 2)
+    def test_schema_v3_work_selection_authority_notice(self):
+        self.assertEqual(self.kernel["schema_version"], 3)
         self.assertEqual(
             self.kernel["authority"], gen_state.AUTHORITY_NOTICE
         )
@@ -145,10 +173,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         for tid in sorted(TERMINAL_IDS):
             self.assertIn(f"| {tid} |", completed)
 
-    def test_stop_card_cleared(self):
+    def test_stop_card_cleared_and_frozen_global_gate_active(self):
         self.assertIsNone(self.kernel["active_stop_card"])
         for task in self.tasks.values():
             self.assertIsNone(task["stop_card"])
+        self.assertEqual(len(self.kernel["active_global_gates"]), 1)
+        self.assertEqual(gen_state.selectable_task_ids(self.kernel), set())
 
     def _hard_start_targets(self, tid):
         return {
@@ -233,13 +263,303 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             self.assertIn("migration_inferred_lane", self.tasks[tid]["flags"])
         self.assertIn("provisional_until_live", self.tasks["P2-005"]["flags"])
 
-    def test_doc_008_retired(self):
-        # DOC-008 completed (PR #60 merged 2026-07-11); the kernel holds only
-        # live tasks, and DOC-010's trigger became an event dependency.
-        self.assertNotIn("DOC-008", self.tasks)
-        (dep,) = self.tasks["DOC-010"]["dependencies"]
-        self.assertEqual(dep["kind"], "event")
-        self.assertEqual(dep["state"], "pending")
+    def test_doc_008_reopened_record_and_doc_010_two_part_fence(self):
+        self.assertEqual(self.tasks["DOC-008"]["status"], "partial")
+        self.assertEqual(
+            {d["target"] for d in self.tasks["DOC-008"]["dependencies"]},
+            {"DOC-008-INTAKE", "DOC-008-REFLECTION", "DOC-008-STATUS"},
+        )
+        for tid in ("DOC-008-INTAKE", "DOC-008-REFLECTION", "DOC-008-STATUS"):
+            self.assertIn(tid, self.tasks)
+        deps = self.tasks["DOC-010"]["dependencies"]
+        self.assertEqual({d["target"] for d in deps}, {"DOC-008-proven-in-use", "G6"})
+        for dep in deps:
+            self.assertEqual(dep["kind"], "event")
+            self.assertEqual(dep["scope"], "start")
+            self.assertEqual(dep["strength"], "hard")
+            self.assertEqual(dep["state"], "pending")
+        with open(os.path.join(ROOT, "TASK_QUEUE.md"), encoding="utf-8") as fh:
+            queue_text = fh.read()
+        self.assertIn("| DOC-008 | P2 Next Slice | PARTIAL — REOPENED 2026-07-15 |",
+                      queue_text)
+
+    def _completed_queue_ids(self):
+        with open(os.path.join(ROOT, "TASK_QUEUE.md"), encoding="utf-8") as fh:
+            queue_text = fh.read()
+        completed = queue_text.split("## Completed Queue Items", 1)[1]
+        completed = completed.split("## Shelved Follow-Ups With Triggers", 1)[0]
+        return {
+            cells[1].strip()
+            for line in completed.splitlines()
+            if line.startswith("|")
+            for cells in [line.split("|")]
+            if len(cells) > 2 and cells[1].strip() not in ("ID", "---")
+        }
+
+    def _assert_pre_demotion_task_record_parity(self, tasks):
+        snapshot = load_fixture("selection_semantics.json")[
+            "pre_demotion_queue_snapshot"
+        ]
+        live_coverage = set(tasks)
+        for source_id, successor_ids in snapshot["documented_id_migrations"].items():
+            self.assertTrue(
+                set(successor_ids).issubset(tasks),
+                f"{source_id} migration successors missing",
+            )
+            live_coverage.add(source_id)
+        self.assertTrue(
+            set(snapshot["task_ids"]).issubset(
+                live_coverage | self._completed_queue_ids()
+            ),
+            "pre-demotion queue task record silently lost",
+        )
+
+    def test_pre_demotion_task_record_parity(self):
+        self._assert_pre_demotion_task_record_parity(self.tasks)
+        for task_id in ("SITE-02", "SPLIT-AP", "P2-050", "TOOL-01"):
+            with self.subTest(negative_removed_task_id=task_id):
+                mutated = copy.deepcopy(self.tasks)
+                mutated.pop(task_id)
+                with self.assertRaises(AssertionError):
+                    self._assert_pre_demotion_task_record_parity(mutated)
+
+    def test_recovered_task_semantics(self):
+        self.assertEqual(self.tasks["SITE-02"]["priority"], "p4_polish")
+        self.assertEqual(self.tasks["SPLIT-AP"]["priority"], "p2_next_slice")
+        self.assertEqual(self.tasks["SPLIT-AP"]["rank"], 9)
+        self.assertEqual(
+            self.tasks["P2-050"]["priority"], "p3_hardening_candidates"
+        )
+        self.assertEqual(self.tasks["TOOL-01"]["priority"], "p3_tooling")
+        self.assertEqual(
+            self.tasks["TOOL-01"]["status_note"],
+            "lead personal tooling, non-repo",
+        )
+        for task_id in ("SITE-02", "SPLIT-AP", "P2-050", "TOOL-01"):
+            self.assertEqual(self.tasks[task_id]["lane"], "agent")
+            self.assertEqual(self.tasks[task_id]["status"], "queued")
+            self.assertEqual(self.tasks[task_id]["dependencies"], [])
+
+    def test_phase_c_has_one_generated_work_selection_region_per_surface(self):
+        with open(os.path.join(ROOT, "RUN_STATE.md"), encoding="utf-8") as fh:
+            run_state = fh.read()
+        with open(os.path.join(ROOT, "TASK_QUEUE.md"), encoding="utf-8") as fh:
+            queue = fh.read()
+
+        self.assertEqual(run_state.count(gen_state.RS_BEGIN), 1)
+        self.assertEqual(run_state.count(gen_state.RS_END), 1)
+        self.assertEqual(queue.count(gen_state.Q_BEGIN), 1)
+        self.assertEqual(queue.count(gen_state.Q_END), 1)
+
+        run_outside = run_state.split(gen_state.RS_BEGIN, 1)[0]
+        run_outside += run_state.split(gen_state.RS_END, 1)[1]
+        queue_outside = queue.split(gen_state.Q_BEGIN, 1)[0]
+        queue_outside += queue.split(gen_state.Q_END, 1)[1]
+
+        self.assertNotIn("RESTART HERE (next session)", run_outside)
+        self.assertNotIn("## What Is Next", run_outside)
+        self.assertNotIn("explicitly non-authoritative", run_outside)
+        self.assertIn("authoritative for work selection", run_outside)
+        self.assertIn("Historical restart snapshot", run_outside)
+        self.assertIn("Historical Next-Work Snapshot", run_outside)
+
+        self.assertNotIn("SOFTWARE-READY", queue_outside)
+        self.assertNotIn(
+            "| Rank | ID | Priority | Status | Task | Evidence / Acceptance |",
+            queue_outside,
+        )
+        self.assertEqual(queue_outside.count("## Current Queue"), 1)
+        self.assertIn("sole live work-selection view", queue_outside)
+
+
+class TestWorkSelectionFidelity(unittest.TestCase):
+    """Exact selection assertions against hand-written, frozen JSON oracles."""
+
+    def _kernel_with(self, active_global_gates):
+        kernel = copy.deepcopy(load_kernel())
+        kernel["active_global_gates"] = copy.deepcopy(active_global_gates)
+        gen_state.validate(kernel)
+        return kernel
+
+    def _assert_oracle(self, kernel, oracle):
+        self.assertSetEqual(
+            gen_state.selectable_task_ids(kernel),
+            set(oracle["expected_selectable_task_ids"]),
+        )
+
+    def test_live_gate_is_exact_frozen_historical_gate_artifact(self):
+        oracle = load_fixture("historical_audit_gate.json")
+        self.assertEqual(load_kernel()["active_global_gates"],
+                         oracle["active_global_gates"])
+        kernel = self._kernel_with(oracle["active_global_gates"])
+        self._assert_oracle(kernel, oracle)
+        selected = gen_state.selectable_task_ids(kernel)
+        self.assertTrue(set(oracle["must_suppress_task_ids"]).isdisjoint(selected))
+
+    def test_run_state_suppressed_lane_heads_are_exactly_one_gated_entry_per_lane(self):
+        gate_oracle = load_fixture("historical_audit_gate.json")
+        head_oracle = load_fixture("cleared_audit_gate.json")
+        kernel = self._kernel_with(gate_oracle["active_global_gates"])
+        rendered = gen_state.render_run_state(kernel)
+        gate_id = gate_oracle["active_global_gates"][0]["id"]
+        expected_by_lane = {
+            kernel["tasks"][task_id]["lane"]: task_id
+            for task_id in head_oracle["expected_selectable_task_ids"]
+        }
+        self.assertEqual(set(expected_by_lane), set(gen_state.LANES))
+
+        restart = rendered.split("## Restart By Machine-State Lane", 1)[1]
+        for index, lane in enumerate(gen_state.LANES):
+            section = restart.split(f"### {gen_state.LANE_LABEL[lane]}", 1)[1]
+            if index + 1 < len(gen_state.LANES):
+                section = section.split(
+                    f"### {gen_state.LANE_LABEL[gen_state.LANES[index + 1]]}", 1
+                )[0]
+            entries = [line for line in section.splitlines() if line.startswith("- ")]
+            self.assertEqual(len(entries), 1, lane)
+            task_id = expected_by_lane[lane]
+            task = kernel["tasks"][task_id]
+            self.assertTrue(
+                entries[0].startswith(
+                    f"- GATED — {gen_state.LANE_PREFIX[lane]}{task['rank']} `{task_id}` "
+                ),
+                entries[0],
+            )
+            self.assertIn(f"(excluded by: {gate_id})", entries[0])
+            self.assertNotIn("READY", entries[0])
+
+    def test_clearing_gate_restores_exact_dependency_rank_heads(self):
+        oracle = load_fixture("cleared_audit_gate.json")
+        kernel = self._kernel_with(oracle["active_global_gates"])
+        self._assert_oracle(kernel, oracle)
+
+    def test_allowlist_lane_matching_and_multi_gate_intersection(self):
+        fixture = load_fixture("selection_semantics.json")
+        for scenario in fixture["scenarios"]:
+            with self.subTest(scenario=scenario["name"]):
+                kernel = self._kernel_with(scenario["active_global_gates"])
+                self._assert_oracle(kernel, scenario)
+
+    def test_stop_card_precedes_gates_and_clear_restores_still_active_gate(self):
+        fixture = load_fixture("selection_semantics.json")
+        lane_oracle = next(
+            scenario for scenario in fixture["scenarios"]
+            if scenario["name"] == "lane_matching"
+        )
+        kernel = self._kernel_with(lane_oracle["active_global_gates"])
+        stop_fixture = fixture["stop_card_precedence"]
+        card = copy.deepcopy(stop_fixture["active_stop_card"])
+        stopped_task_id = stop_fixture["task_id"]
+        kernel["active_stop_card"] = card
+        kernel["tasks"][stopped_task_id]["stop_card"] = copy.deepcopy(card)
+
+        with tempfile.TemporaryDirectory(prefix="state_kernel_stop_card.") as root:
+            for name in os.listdir(ROOT):
+                if name != "docs":
+                    os.symlink(os.path.join(ROOT, name), os.path.join(root, name))
+            docs = os.path.join(root, "docs")
+            os.mkdir(docs)
+            source_docs = os.path.join(ROOT, "docs")
+            for name in os.listdir(source_docs):
+                os.symlink(os.path.join(source_docs, name), os.path.join(docs, name))
+            stop_cards = os.path.join(docs, "stop_cards")
+            os.mkdir(stop_cards)
+            with open(os.path.join(stop_cards, "fixture-active.md"), "w",
+                      encoding="utf-8") as fh:
+                fh.write("# Fixture Active Stop Card\n")
+
+            with mock.patch.object(gen_state, "ROOT", root):
+                gen_state.validate(kernel)
+                self.assertEqual(gen_state.selectable_task_ids(kernel), set())
+                stopped_queue = gen_state.render_queue(kernel)
+                self.assertNotIn("| READY |", stopped_queue)
+                self.assertNotIn("PARTIAL; READY", stopped_queue)
+                self.assertIn("STOPPED — active stop card", stopped_queue)
+
+                kernel["active_stop_card"] = None
+                kernel["tasks"][stopped_task_id]["stop_card"] = None
+                gen_state.validate(kernel)
+                self._assert_oracle(kernel, lane_oracle)
+
+    def test_priority_relabel_cannot_bypass_gate(self):
+        oracle = load_fixture("historical_audit_gate.json")
+        kernel = self._kernel_with(oracle["active_global_gates"])
+        kernel["tasks"]["P2-004"]["priority"] = "p0_safety"
+        gen_state.validate(kernel)
+        self._assert_oracle(kernel, oracle)
+
+    def test_only_both_doc_010_events_release_start(self):
+        base = load_kernel()
+        gate = {
+            "id": "gate-fixture-doc-010",
+            "summary": "Fixture gate permits DOC-010 in the agent lane.",
+            "authority": ["Hand-written selection test setup"],
+            "clearance": "Fixture-only clearance.",
+            "scope": {"operation": "select", "lanes": ["agent"]},
+            "allowed_task_ids": ["DOC-010"],
+        }
+        evidence = {
+            "path": "docs/specs/c027/doc-008_state_kernel.md",
+            "label": "DOC-008 state-kernel spec",
+        }
+
+        for only_target in ("DOC-008-proven-in-use", "G6"):
+            with self.subTest(only_satisfied=only_target):
+                kernel = copy.deepcopy(base)
+                kernel["active_global_gates"] = [copy.deepcopy(gate)]
+                task = kernel["tasks"]["DOC-010"]
+                task["status"] = "blocked"
+                dep = next(d for d in task["dependencies"] if d["target"] == only_target)
+                dep["state"] = "satisfied"
+                dep["evidence"] = copy.deepcopy(evidence)
+                gen_state.validate(kernel)
+                self.assertNotIn("DOC-010", gen_state.selectable_task_ids(kernel))
+
+        kernel = copy.deepcopy(base)
+        kernel["active_global_gates"] = [copy.deepcopy(gate)]
+        task = kernel["tasks"]["DOC-010"]
+        task["status"] = "queued"
+        for dep in task["dependencies"]:
+            dep["state"] = "satisfied"
+            dep["evidence"] = copy.deepcopy(evidence)
+        gen_state.validate(kernel)
+        self.assertIn("DOC-010", gen_state.selectable_task_ids(kernel))
+
+    def test_negative_gate_removed_and_allowlist_widened_fail_oracle(self):
+        oracle = load_fixture("historical_audit_gate.json")
+
+        removed = self._kernel_with([])
+        with self.assertRaises(AssertionError):
+            self._assert_oracle(removed, oracle)
+
+        widened_gates = copy.deepcopy(oracle["active_global_gates"])
+        widened_gates[0]["allowed_task_ids"] = ["P1-008"]
+        widened = self._kernel_with(widened_gates)
+        with self.assertRaises(AssertionError):
+            self._assert_oracle(widened, oracle)
+
+    def test_negative_doc_010_g6_drop_fails_validation(self):
+        kernel = copy.deepcopy(load_kernel())
+        kernel["tasks"]["DOC-010"]["dependencies"] = [
+            dep for dep in kernel["tasks"]["DOC-010"]["dependencies"]
+            if dep["target"] != "G6"
+        ]
+        with self.assertRaises(gen_state.KernelError):
+            gen_state.validate(kernel)
+
+    def test_gate_rendered_in_both_regions_and_forbidden_tasks_never_ready(self):
+        kernel = load_kernel()
+        run_state = gen_state.render_run_state(kernel)
+        queue = gen_state.render_queue(kernel)
+        for rendered in (run_state, queue):
+            self.assertIn("## Active Global Work-Selection Gates", rendered)
+            self.assertIn("gate-2026-07-13-comprehensive-audit", rendered)
+            self.assertIn(kernel["active_global_gates"][0]["clearance"], rendered)
+            self.assertIn("Source of truth for work selection:", rendered)
+            self.assertNotIn("Source of truth:", rendered)
+        self.assertNotIn("- READY —", run_state)
+        self.assertNotIn("| READY |", queue)
+        self.assertNotIn("PARTIAL; READY", queue)
 
 
 class TestGeneratorSelfConsistency(unittest.TestCase):
@@ -292,7 +612,7 @@ class TestGeneratorSelfConsistency(unittest.TestCase):
 
     def test_one_byte_drift_detected_read_only(self):
         run_gen(*self.paths)
-        drifted = self.read(self.queue).replace(b"READY", b"REKDY", 1)
+        drifted = self.read(self.queue).replace(b"Source of truth", b"Source of trvth", 1)
         with open(self.queue, "wb") as fh:
             fh.write(drifted)
         check = run_gen("--check", *self.paths)

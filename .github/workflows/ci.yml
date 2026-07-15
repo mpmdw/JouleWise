@@ -17,6 +17,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: State kernel and generated-view drift
+        run: python scripts/gen_state.py --check
       - name: Compile Python sources
         run: python -m compileall -q joulewise tests
       - name: Unit tests (stdlib core only, per D-009/D-017)

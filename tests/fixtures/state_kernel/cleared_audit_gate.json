@@ -1,0 +1,8 @@
+{
+  "active_global_gates": [],
+  "expected_selectable_task_ids": [
+    "P1-008",
+    "P2-038",
+    "SPLIT-AP"
+  ]
+}
