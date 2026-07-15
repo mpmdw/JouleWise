@@ -7,6 +7,7 @@ literals. Decision-index completeness is a separate structural invariant.
 
 from __future__ import annotations
 
+import html
 import re
 import unittest
 from pathlib import Path
@@ -15,6 +16,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 DOC_PATHS = ("README.md", "PROJECT_STATUS.md", "docs/orchestration.md")
+CAPSULE_DOC_PATHS = (
+    "site_capsule/AGENTS.md",
+    "site_capsule/CLAUDE.md",
+    "site_capsule/README.md",
+)
+GENERATED_SITE_PATHS = tuple(
+    str(path.relative_to(ROOT)) for path in sorted((ROOT / "docs/site").glob("*.html"))
+)
 
 FORBIDDEN_VOLATILE_FACTS = {
     "suite result count": re.compile(
@@ -32,12 +41,7 @@ SITE_PUBLISH_SUBJECT = re.compile(
 SITE_CONTEXT = re.compile(r"\b(?:site|capsule)\b", re.IGNORECASE)
 SITE_REGENERATE = re.compile(r"\b(?:regenerat\w*|rebuild\w*)\b", re.IGNORECASE)
 SITE_DEPLOY = re.compile(r"\bdeploy\w*\b", re.IGNORECASE)
-NEGATED_INSTRUCTION = re.compile(
-    r"\b(?:never|must\s+not|do(?:es)?\s+not|may\s+not|cannot|can't)\s+"
-    r"(?:\w+\s+){0,3}(?:regenerat\w*|rebuild\w*|deploy\w*)\b|"
-    r"\bno\s+agents?\b[^.!?]{0,80}(?:regenerat\w*|rebuild\w*|deploy\w*)\b",
-    re.IGNORECASE,
-)
+NEGATION = r"(?:never|no\s+longer|must\s+(?:never|not)|do(?:es)?\s+not|don't|doesn't|may\s+not|cannot|can't)"
 
 
 def _read(path: str) -> str:
@@ -65,7 +69,9 @@ def _after(text: str, start: str) -> str:
 def _without_code(text: str) -> str:
     """Remove code spans whose tool names are not prose status facts."""
     text = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
-    return re.sub(r"`[^`\n]*`", "", text)
+    text = re.sub(r"`[^`\n]*`", "", text)
+    text = re.sub(r"<(?:script|style)\b[^>]*>.*?</(?:script|style)>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    return html.unescape(re.sub(r"<[^>]+>", " ", text))
 
 
 def _documents() -> dict[str, str]:
@@ -110,6 +116,20 @@ def _current_sections(docs: dict[str, str] | None = None) -> dict[str, str]:
     }
 
 
+def _site_publish_sections(docs: dict[str, str] | None = None) -> dict[str, str]:
+    """Return active source, nested-instruction, and generated site surfaces."""
+    sections = _current_sections(docs)
+    sections.update({path: _read(path) for path in CAPSULE_DOC_PATHS})
+    for path in GENERATED_SITE_PATHS:
+        text = _read(path)
+        if path == "docs/site/task_queue.html":
+            # The generated page also renders the explicitly historical
+            # completed-queue ledger. Check its live kernel projection.
+            text = _after(text, '<h2 id="current-queue">Current Queue</h2>')
+        sections[path] = text
+    return sections
+
+
 def _volatile_violations(sections: dict[str, str]) -> list[tuple[str, str, str]]:
     violations: list[tuple[str, str, str]] = []
     for section_name, section in sections.items():
@@ -124,24 +144,30 @@ def _volatile_violations(sections: dict[str, str]) -> list[tuple[str, str, str]]
 def _site_publish_instructions(
     sections: dict[str, str],
 ) -> list[tuple[str, str]]:
-    """Find positive agent instructions to regenerate/rebuild and deploy a site."""
+    """Find positive agent instructions for either site regeneration or deploy."""
     violations: list[tuple[str, str]] = []
     for section_name, section in sections.items():
-        for match in re.finditer(r"[^.!?]*(?:[.!?]|$)", _without_code(section)):
+        for match in re.finditer(r"[^.!?;]*(?:[.!?;]|$)", _without_code(section)):
             clause = match.group(0).strip()
             if not clause:
                 continue
-            if not all(
-                pattern.search(clause)
-                for pattern in (
-                    SITE_PUBLISH_SUBJECT,
-                    SITE_CONTEXT,
-                    SITE_REGENERATE,
-                    SITE_DEPLOY,
-                )
-            ):
+            if not SITE_PUBLISH_SUBJECT.search(clause) or not SITE_CONTEXT.search(clause):
                 continue
-            if not NEGATED_INSTRUCTION.search(clause):
+            positive_action = False
+            for action in (SITE_REGENERATE, SITE_DEPLOY):
+                if not action.search(clause):
+                    continue
+                negated_action = re.search(
+                    rf"\b{NEGATION}\b[^.!?;]{{0,100}}{action.pattern}|"
+                    rf"\bno\s+(?:agents?|sessions?|workers?|automation)\b"
+                    rf"[^.!?;]{{0,120}}{action.pattern}",
+                    clause,
+                    re.IGNORECASE,
+                )
+                if negated_action is None:
+                    positive_action = True
+                    break
+            if positive_action:
                 violations.append((section_name, clause))
     return violations
 
@@ -192,7 +218,30 @@ class DocsFreshnessTests(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertIn("docs/site/DRIFT.md", text)
                 self.assertIsNotNone(ed_deploy.search(text))
-        self.assertEqual([], _site_publish_instructions(_current_sections(docs)))
+        self.assertEqual([], _site_publish_instructions(_site_publish_sections(docs)))
+
+    def test_site_publish_checker_covers_actions_and_all_active_surfaces(self) -> None:
+        sections = _site_publish_sections()
+        for path in (*CAPSULE_DOC_PATHS, *GENERATED_SITE_PATHS):
+            self.assertIn(path, sections)
+
+        probes = (
+            "Agents deploy the site.",
+            "Agents regenerate the site.",
+            "Agents regenerate and deploy the site.",
+            "Sessions should rebuild this capsule.",
+            "Automation deploys the site after closeout.",
+        )
+        for surface in sections:
+            for probe in probes:
+                with self.subTest(surface=surface, probe=probe):
+                    self.assertTrue(_site_publish_instructions({surface: probe}))
+
+        ed_manual = (
+            "ED-MANUAL-ONLY: Ed regenerates and deploys the site manually. "
+            "Agents never run this runbook."
+        )
+        self.assertEqual([], _site_publish_instructions({"Ed runbook": ed_manual}))
 
     def test_checker_mutation_probes_are_rejected_and_history_is_ignored(self) -> None:
         docs = _documents()
@@ -210,6 +259,11 @@ class DocsFreshnessTests(unittest.TestCase):
         mutated = dict(docs)
         mutated["README.md"] += "\nAgents regenerate the site and deploy it.\n"
         self.assertTrue(_site_publish_instructions(_current_sections(mutated)))
+
+        for probe in ("Agents deploy the site.", "Agents regenerate the site."):
+            mutated = dict(docs)
+            mutated["README.md"] += "\n" + probe + "\n"
+            self.assertTrue(_site_publish_instructions(_current_sections(mutated)))
 
         mutated = dict(docs)
         history_heading = "## Previous Update"

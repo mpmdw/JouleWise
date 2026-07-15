@@ -41,7 +41,7 @@
 <a href="#statistical-protocol">Statistical Protocol</a></aside>
   <div class="doc-wrap doc-source-docs-contracts-measurement-methodology-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/contracts/measurement_methodology.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/measurement_methodology.md · commit 359641e"><span class="source-file">docs/<wbr>contracts/<wbr>measurement_methodology.md</span><span class="source-commit">commit 359641e</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="docs/contracts/measurement_methodology.md · commit 1902d16"><span class="source-file">docs/<wbr>contracts/<wbr>measurement_methodology.md</span><span class="source-commit">commit 1902d16</span></span></div>
     <!-- rendered: marked@18.0.6 -->
 <h1>Measurement Methodology</h1>
 <p>Living cross-phase contract, drafted in Phase 1. Changes require a
@@ -73,6 +73,42 @@ thermal pressure, backup capacity, and quiet-machine warnings. These are
 preflight observations, not substitutes for per-bundle provenance or live
 measurement gates. In particular, doctor never starts powermetrics and never
 certifies that a machine is quiet.</p>
+<h3>Per-bundle source provenance</h3>
+<p><code>RunBundleWriter.create</code> captures the harness source state before it creates
+bundle artifacts or returns control to any adapter. <code>write_metadata</code> captures
+the end state after adapter execution. <code>metadata.git_commit</code> remains the
+creation-time commit for compatibility; the governed record is
+<code>metadata.source_provenance</code> with schema <code>joulewise.source_provenance.v1</code>.</p>
+<p>Each <code>start</code> and <code>end</code> snapshot records <code>git_commit</code>, <code>tracked</code>, <code>staged</code>,
+<code>untracked</code>, and <code>diff_sha256</code>. The three state values are independently:</p>
+<ul>
+<li><code>clean</code>: the corresponding Git probe succeeded and found no change;</li>
+<li><code>dirty</code>: an unstaged tracked diff, staged diff, or non-ignored untracked path
+was present, respectively; or</li>
+<li><code>unknown</code>: the corresponding probe or required file read failed. Failure is
+never interpreted as clean.</li>
+</ul>
+<p>The privacy-safe diff identity descriptor is <code>sha256</code> /
+<code>joulewise.git-diff.nul-v1</code>. The producer captures the byte output of
+<code>git diff --no-ext-diff --no-textconv --binary</code>, the analogous <code>--cached</code>
+command, and <code>git ls-files --others --exclude-standard -z</code>. For each sorted
+untracked path it hashes, without serializing, the NUL-safe length-framed path,
+file kind, mode, size, and SHA-256 of regular-file bytes or symlink-target
+bytes. The final identity is SHA-256 over the version plus length-framed
+<code>tracked</code>, <code>staged</code>, and untracked-inventory byte identities. Bundles contain
+only the final digest and state labels: never a diff, path, untracked file
+content, or secret.</p>
+<p><code>changed_during_run</code> is true when two fully known snapshots differ, false when
+they match, and null when either snapshot is not fully known. <code>claim_eligible</code>
+is true only when both commits and diff identities are known, all six component
+states are clean, and the snapshots match. <code>reason_codes</code> is the deterministic
+list of every start/end unknown or dirty component followed, when applicable,
+by <code>source_changed_during_run</code>. Bundle completion remains allowed in every
+state so raw evidence is not discarded.</p>
+<p>Dirty, unknown, changed, missing, or internally inconsistent provenance is a
+hard exclusion for claim-bearing use. The publication pack preflight enforces
+that boundary and refuses such bundles. Analysis-side admission propagation is
+separate from capture and field semantics and is owned by WO-004/T11.</p>
 <ol>
 <li>Validate config.</li>
 <li>Create run directory.</li>
@@ -315,7 +351,7 @@ contrast CI lies entirely within that margin.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>docs/contracts/measurement_methodology.md · commit 359641e · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>docs/contracts/measurement_methodology.md · commit 1902d16 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

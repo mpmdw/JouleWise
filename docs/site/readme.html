@@ -28,19 +28,21 @@
 <div class="doc-layout">
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#current-state">Current State</a>
 <a href="#verify">Verify</a>
+<a href="#release">Release</a>
 <a href="#run-the-harness-mock-target-no-hardware-or-extras-needed">Run The Harness (mock target — no hardware or extras needed)</a>
 <a href="#config-and-schema-verbs">Config And Schema Verbs</a>
 <a href="#documentation-map">Documentation Map</a></aside>
   <div class="doc-wrap doc-source-readme-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>README.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="README.md · commit dd2c9f1"><span class="source-file">README.md</span><span class="source-commit">commit dd2c9f1</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="README.md · commit 0de4cea"><span class="source-file">README.md</span><span class="source-commit">commit 0de4cea</span></span></div>
     <!-- rendered: marked@18.0.6 -->
 <h1>JouleWise</h1>
-<p>JouleWise is an extensible benchmark for energy-wise LLM inference across
-heterogeneous local hardware. The name is a deliberate nod to JouleSort and
-Splitwise: energy measurement as the spine, split inference as the first major
-research application.</p>
-<p>The benchmark is designed around three stable ideas:</p>
+<p>JouleWise is an extensible measurement harness for energy-wise LLM inference
+across heterogeneous local hardware. The benchmark layered on that harness is
+the frozen workload suite, run rules, and strict validator. The name is a
+deliberate nod to JouleSort and Splitwise: energy measurement as the spine,
+split inference as the first major research application.</p>
+<p>The harness is designed around three stable ideas:</p>
 <ul>
 <li>Typed experiment configs define what should run.</li>
 <li>Runtime and telemetry adapters define how each hardware target is exercised
@@ -48,15 +50,14 @@ and measured.</li>
 <li>Run bundles preserve raw traces, events, metadata, logs, and summary metrics
 for later audit and analysis.</li>
 </ul>
-<p><strong>Status:</strong> research prototype. The Mac (Apple M3 Max) measurement harness
-has cleared its pre-campaign software review. C-028 is closed: PRs #41-#58
-are merged, the analysis trio is complete, and the reducer compatibility
-lattice now terminates at 0.4.2. PR #59 is an open integration-review
-follow-up, not an unlanded Window-A prerequisite. All Window-A software
-gates are satisfied; execution begins with the C-019 shakedown and
-P2-015-SMOKE in a lead-controlled quiet-machine session with Ed. The P0-003
-external-backup gate is satisfied. The verified end-user quickstart remains
-a Phase 5 deliverable.</p>
+<p><strong>Status:</strong> research prototype. The Mac (Apple M3 Max) measurement harness has
+cleared its pre-campaign software review, the analysis path is implemented,
+and the comprehensive-audit fix wave is integrated on this landing branch.
+This summary does not select work: the generated state-kernel regions in
+<code>RUN_STATE.md</code> and <code>TASK_QUEUE.md</code> own the live gate and next-task state.
+Quiet-machine execution still requires the lead-controlled hardware lane with
+Ed; no audit or software landing is new measurement evidence. The verified
+end-user quickstart remains a Phase 5 deliverable.</p>
 <h2 id="current-state">Current State</h2>
 <p>Phase 1 is in its final stretch; <strong>Phase 2&#39;s Mac vertical slice is complete
 and the project has its first real energy measurements</strong> (2026-07-06). From a
@@ -75,24 +76,22 @@ trace from raw plist evidence, re-derives summary metrics from the recorded
 trace and event log, checks the legacy additive summary comparison, and
 requires shape-valid provenance for new-era bundles. This validates the
 recorded evidence path; it does not independently rerun the hardware session.
-Remaining backends plug into the same adapter interfaces: the
-fixture-first 2K NVIDIA stack (SSH transport, node worker, nvidia-smi +
-vLLM adapters) now includes NV-GATE-2 code-now hardening from PR #49:
-per-backend raw-lineage verifier registration, usage-first vLLM streaming,
-and identity-aware process-survival handling. The NV-5 localhost lead gate
-passed 3/3, but ALL remote protocol pins remain PROVISIONAL pending first
-live hardware contact; Jetson Orin (2L) remains gated on device access.</p>
-<p>The C-028 merge arc landed P2-042&#39;s frozen analysis manifest (PR #46), the
-P2-040 remainder and reducer 0.3.1 compatibility arm (PR #47), P2-038&#39;s
-production-uncertainty software path (PR #48), P2-041&#39;s verdict split and
-reducer 0.4.0 (PR #54), idle-dependence/HAC uncertainty and reducer 0.4.1
-(PR #55), the 0.4.2 inter-token metric (PR #56), doctor preflight (PR #57),
-and the P2-037 contrast/claim engine (PR #58). The analysis trio—manifest,
-verdict split, and contrast/claim engine—is complete. The six frozen legacy
-arms and 0.3.x/0.4.x dispatch rules remain explicit; landed software is not
-being presented as new live evidence. P0-003 closed with an iCloud Drive
-backup and a fresh restore that was strict-valid and byte-identical. No new
-live NVIDIA or quiet-Mac measurement is claimed here.</p>
+Remaining backends plug into the same adapter interfaces: the fixture-first
+2K NVIDIA stack (SSH transport, node worker, nvidia-smi + vLLM adapters)
+includes NV-GATE-2 software hardening: per-backend raw-lineage verifier
+registration, usage-first vLLM streaming, and identity-aware process-survival
+handling. The NV-5 localhost lead gate passed 3/3, but ALL remote protocol
+pins remain PROVISIONAL pending first live hardware contact; Jetson Orin (2L)
+remains gated on device access.</p>
+<p>The landed C-028 arc includes the frozen analysis manifest, the
+production-uncertainty path, the campaign-verdict split, idle-dependence/HAC
+uncertainty, the inter-token metric, doctor preflight, and the contrast/claim
+engine. The analysis trio—manifest, verdict split, and contrast/claim
+engine—is complete. The six frozen legacy arms and 0.3.x/0.4.x dispatch rules
+remain explicit; landed software is not being presented as new live evidence.
+P0-003 closed with an iCloud Drive backup and a fresh restore that was
+strict-valid and byte-identical. No new live NVIDIA or quiet-Mac measurement
+is claimed here.</p>
 <p>The repository currently contains:</p>
 <ul>
 <li>Typed config and output schemas with JSON-Schema export and validation.</li>
@@ -103,19 +102,22 @@ shared bundle read layer, static HTML report generator, and a CLI
 (<code>run</code>, <code>validate-bundle</code>, <code>reduce</code>, <code>report</code>).</li>
 <li>Example Mac-local and mock-local configs.</li>
 <li>Phase 1 methodology, feasibility, and measurement-design docs.</li>
-<li>A test suite (current main: 1,220 tests OK, 10 skipped; PR #59 branch:
-1,224 tests OK in its worktree convention; count authority:
-<code>RUN_STATE.md</code> Current Verification) run in CI on every push, including a
-mock end-to-end run + bundle validation.</li>
+<li>A test suite run in CI on every push, including a mock end-to-end run and
+bundle validation. The canonical command below and CI output own the current
+result; reader docs intentionally do not copy its volatile count.</li>
 </ul>
 <h2 id="verify">Verify</h2>
 <pre><code class="language-bash">python3 -m unittest discover -s tests
 </code></pre>
-<p>(The canonical result on current main is 1,220 tests OK with 10
-optional/environment-gated skips and zero expected failures. Both historic
-intermittent failure classes are fixed on main: the fake-nvidia-smi idle
-deadline now begins at sampler readiness, and the P2-038 rail-only fixture
-deterministically supplies the right-edge sample.)</p>
+<p>The command&#39;s output is the current result. CI runs the same suite; this page
+does not pin a pass or skip count that would drift as coverage grows.</p>
+<h2 id="release">Release</h2>
+<p>The ordered publication path, including private-corpus, network, Node/Lakebed,
+and credential boundaries, is in
+<a href="docs/publication_release_checklist.md"><code>docs/publication_release_checklist.md</code></a>.
+Its clean-clone fixture/component gate is
+<code>python3 scripts/release_check.py --dry-run</code>; it performs real temporary-directory
+builds and never deploys.</p>
 <h2 id="run-the-harness-mock-target-no-hardware-or-extras-needed">Run The Harness (mock target — no hardware or extras needed)</h2>
 <pre><code class="language-bash"># Produce a complete run bundle from the mock target (deterministic):
 python3 -m joulewise run configs/examples/mock_local.json --runs-dir runs
@@ -149,8 +151,8 @@ project.</p>
 <p>See <code>AGENT_PLAN.md</code> for the phase index; each phase has a detailed plan and
 an evidence-based exit checklist under <code>docs/phase_N/</code> — the exit checklist
 is the per-item status authority (D-023). See <code>RUN_STATE.md</code> before starting
-substantial work; it is the current handoff note for what was done and what
-should happen next. Future phase starts should use
+substantial work; its generated state-kernel region is the current
+work-selection view. Future phase starts should use
 <code>docs/planning_reflection_protocol.md</code> to audit whether each step has evidence
 and acceptance criteria before implementation begins.</p>
 <p><strong>Agents executing &quot;the next step&quot; start with <code>docs/agent_playbook.md</code></strong> —
@@ -163,7 +165,9 @@ options and considerations behind them) live in <code>docs/decision_log.md</code
 triggers, and the descope ladder live in <code>docs/risk_register.md</code>; calendar
 constraints live in <code>docs/milestones.md</code>; cross-model review sessions
 (implementer/reviewer positions, votes, resolutions - see D-031) live in
-<code>docs/council_log.md</code>.</p>
+<code>docs/council_log.md</code>. Agents never regenerate or deploy the status site:
+sessions that change front-facing state refresh <code>docs/site/DRIFT.md</code>, and Ed
+deploys manually (D-068).</p>
 
 
   </div>
@@ -172,7 +176,7 @@ constraints live in <code>docs/milestones.md</code>; cross-model review sessions
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>README.md · commit dd2c9f1 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>README.md · commit 0de4cea · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

@@ -21,7 +21,12 @@ drift banner if so.
 - `client/index.tsx` is a tiny Preact shell that redirects `/` → `/index`
   (Lakebed reserves `/` and `/index.html` for the client shell).
 
-## Deploy / update (the canonical flow)
+## ED-MANUAL-ONLY deploy / update runbook
+
+Per D-068, this is Ed's manual runbook. Only Ed may run the commands in this
+section: agents never regenerate or deploy the site. Agent sessions instead
+refresh `docs/site/DRIFT.md` when front-facing state changes so Ed can decide
+when to use this runbook.
 
 ```sh
 # from the repo root — install the exact locked renderer, then regenerate:
@@ -93,9 +98,9 @@ it returns the newest cached markdown-derived payload when available, marks
 those source rows stale, and sets `unavailableRefresh: true`; otherwise, the
 baked page remains the source of visible truth.
 
-## Production smoke / inspection
+## ED-MANUAL-ONLY production smoke / inspection
 
-After deploying, verify the public endpoints:
+After Ed deploys, Ed verifies the public endpoints:
 
 ```sh
 curl -s -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' \

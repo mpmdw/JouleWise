@@ -27,8 +27,9 @@
 <main>
 <div class="doc-layout">
   <aside class="toc-sidebar"><div class="card-label">Table of contents</div><a href="#start-here-for-every-big-run">Start Here For Every Big Run</a>
+<a href="#historical-stop-card-note">Historical Stop-Card Note</a>
 <a href="#active-stop-card">ACTIVE_STOP_CARD</a>
-<a href="#active-stop-card">ACTIVE_STOP_CARD</a>
+<a href="#active-global-work-selection-gates">Active Global Work-Selection Gates</a>
 <a href="#restart-by-machine-state-lane">Restart By Machine-State Lane</a>
 <a href="#superseded-stop-card-c-028">Superseded stop card (C-028)</a>
 <a href="#superseded-stop-card-cp-5">Superseded stop card (CP-5)</a>
@@ -36,28 +37,25 @@
 <a href="#session-history-pointers-only-run-reports-own-the-narrative">Session History (pointers only — run reports own the narrative)</a>
 <a href="#current-verification">Current Verification</a>
 <a href="#known-workspace-state">Known Workspace State</a>
-<a href="#what-is-next">What Is Next</a>
-<a href="#open-decisions-and-blockers">Open Decisions And Blockers</a></aside>
+<a href="#historical-next-work-snapshot-superseded-2026-07-15">Historical Next-Work Snapshot (superseded 2026-07-15)</a>
+<a href="#reference-decisions-and-blockers-non-selection-context">Reference Decisions And Blockers (non-selection context)</a></aside>
   <div class="doc-wrap doc-source-run-state-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>RUN_STATE.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit e3fc14a"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit e3fc14a</span></span></div>
+    <div class="provenance-plate"><span class="source-chip" title="RUN_STATE.md · commit c7ee7ca"><span class="source-file">RUN_STATE.md</span><span class="source-commit">commit c7ee7ca</span></span></div>
     <!-- rendered: marked@18.0.6 -->
 <h1>JouleWise Run State</h1>
-<p>Last updated: 2026-07-13 (STEADY STATE FOR THE AUDIT GATE. Bridge v1.1
-MERGED: PR #65 landed as <code>d285989</code> (Ed-named merge) — discussion lane,
-<code>scripts/bridge session-open</code>/<code>session-close</code> (receipt-anchored,
-<code>session.lock</code>-serialized, write-only), tolerant envelopes, per-call
-reverse-consult effort, peer channels + bounded proposal diffs (D-065,
-C-032). Merged-main suite lead-run: 1387 OK (skipped=10); bridge checker
-all PASS; no active leases; merged bridge branches deleted local+origin;
-site regenerated, packed, and DEPLOYED live by Ed (2026-07-13T23:49Z,
-lakebed 0.0.29; lead-verified routes 3/3 HTTP 200 and /api/freshness
-serving, baked commit <code>a89195e</code>). No outstanding actions. <strong>NEXT GATE unchanged:
-Ed&#39;s declared whole-project comprehensive audit precedes further feature
-work; method proposal pending Ed&#39;s approval.</strong> Window-A execution still
-requires a quiet machine + Ed. Records:
-<code>docs/run_reports/2026-07-13-bridge-v11.md</code> (this session, incl. merge
-addendum) + <code>docs/run_reports/2026-07-13-restart-merge-deploy.md</code>.</p>
+<p>Last updated: 2026-07-13 (COMPREHENSIVE AUDIT: method + execution through
+the fix wave&#39;s bench batch, CHECKPOINTED mid-wave for Ed&#39;s resume — read
+<code>docs/reviews/2026-07-13-comprehensive-audit/CHECKPOINT.md</code> FIRST; it is
+the resume authority for the fix wave. Audit: 15/15 scans, 61 verified
+findings (0 refuted), 43 operative + 39 work orders, Sol final round
+30 amendments baked, R1/R2 rulings ALIGNED+accepted (state-kernel
+choice-A; spend guardrails), bench batch landed on <code>impl/audit-wave</code>
+(Fable checker PASS x5). KNOWN RED: canonical suite fails 1 test on any
+machine with cached Lakebed 0.0.29 (audit finding C2-018 self-demonstrated
+post-deploy); stream S3/WO-018 fixes it FIRST on resume. Streams S1-S5
+NOT yet launched. Bridge v1.1 + steady-state records: earlier this file&#39;s
+history and <code>docs/run_reports/2026-07-13-bridge-v11.md</code>.)</p>
 <h2 id="start-here-for-every-big-run">Start Here For Every Big Run</h2>
 <p>Before starting substantial work:</p>
 <ol>
@@ -82,10 +80,12 @@ report and no recorded break, start with a milestones + risk review.</li>
 </ol>
 <p>At the end of substantial work:</p>
 <ol>
-<li>Update this file with what changed.</li>
-<li>Update <code>TASK_QUEUE.md</code> with completed, added, or re-ranked tasks.</li>
+<li>Update only hand-authored factual/history sections of this file.</li>
+<li>Update <code>docs/process/state_kernel.json</code> for live task state and regenerate;
+do not hand-edit either generated region.</li>
 <li>Add or update a detailed report in <code>docs/run_reports/</code>.</li>
-<li>Record tests, commands, blockers, and the next best task.</li>
+<li>Record tests, commands, and blockers; generated lane heads own next-work
+selection.</li>
 <li>Record new decision-log entries and any risk-register status changes.</li>
 <li>Refresh <code>PROJECT_STATUS.md</code> if advisor-visible state changed.</li>
 <li>Push green commits promptly (small doc/bookkeeping commits straight
@@ -96,31 +96,43 @@ accumulate unpushed local state — the remote and the high-level docs
 (delegate to a fast subagent): stale test counts, gate-state
 contradictions between prose summaries and checklist matrix rows,
 numbers cited in multiple places (C-002; D-023 extension).
-After any session that changed front-facing docs, REGENERATE and
-REDEPLOY the site so the public snapshot tracks the repo (C-012):
-<code>python3 scripts/build_site.py &amp;&amp; python3 scripts/pack_capsule.py &amp;&amp; (cd site_capsule &amp;&amp; npx lakebed deploy)</code>.</li>
+After any session that changed front-facing state, refresh
+<code>docs/site/DRIFT.md</code> (site-drift report) instead of deploying:
+per D-068 (2026-07-14) NO agent regenerates or deploys the site,
+ever — automation informs; Ed deploys manually. (Supersedes the
+C-013 regenerate+redeploy convention.)</li>
 <li>Call out any dirty working-tree state that should not be accidentally
 committed.</li>
 </ol>
-<h2 id="active-stop-card">ACTIVE_STOP_CARD</h2>
-<p>None. The C-028 card was <strong>CLEARED 2026-07-11</strong> — see the superseded
-record below. Normal queue/mission pointers apply.</p>
+<h2 id="historical-stop-card-note">Historical Stop-Card Note</h2>
+<p>This 2026-07-11 clearance note is retained as history only; current stop-card
+and work-selection state is generated immediately below from the kernel.</p>
 <!-- BEGIN GENERATED: state-kernel run-state-intake -->
-<h2>ACTIVE_STOP_CARD</h2>
+<h2 id="active-stop-card">ACTIVE_STOP_CARD</h2>
 <p>Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 (<a href="docs/decision_log.md">decision log</a>).</p>
+<h2 id="active-global-work-selection-gates">Active Global Work-Selection Gates</h2>
+<p>Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.</p>
+<h3><code>gate-2026-07-13-comprehensive-audit</code></h3>
+<p>Comprehensive whole-project audit declared by Ed 2026-07-13: no feature work, queue pulls, or campaign prep until the audit fix wave completes and findings are adjudicated. Decision-log/process recording and the audit&#39;s own work orders remain permitted (they are not kernel tasks).</p>
+<ul>
+<li>Scope: <code>select</code> in [AGENT], [QUIET-MAC], [ED-EXTERNAL].</li>
+<li>Allowed kernel task IDs: NONE.</li>
+<li>Authority: RUN_STATE.md restart block item 2 (Ed, 2026-07-13); TASK_QUEUE.md Current Queue preamble; docs/reviews/2026-07-13-comprehensive-audit/CHECKPOINT.md.</li>
+<li>Clearance: docs/reviews/2026-07-13-comprehensive-audit/ close-out: fix wave complete, report synthesis + adjudication recorded, RUN_STATE refreshed (audit close-out session removes this gate from the kernel).</li>
+</ul>
 <h2 id="restart-by-machine-state-lane">Restart By Machine-State Lane</h2>
-<p>Source of truth: <a href="docs/process/state_kernel.json">state kernel</a> (updated 2026-07-13). Latest report: <a href="docs/run_reports/2026-07-13-bridge-v11.md">Bridge v1.1 merged (PR #65): co-work lane + session wrappers; steady state for audit gate</a>.</p>
+<p>Source of truth for work selection: <a href="docs/process/state_kernel.json">state kernel</a> (updated 2026-07-15). Latest report: <a href="docs/run_reports/2026-07-13-bridge-v11.md">Bridge v1.1 merged (PR #65): co-work lane + session wrappers; steady state for audit gate</a>.</p>
 <h3>[ED-EXTERNAL]</h3>
 <ul>
-<li>READY — E1 <code>P1-008</code>: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).</li>
+<li>GATED — E1 <code>P1-008</code> (excluded by: gate-2026-07-13-comprehensive-audit): Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).</li>
 </ul>
 <h3>[QUIET-MAC]</h3>
 <ul>
-<li>READY — Q7 <code>P2-038</code>: Close the production uncertainty live tail: execute the merged clock-anchor, marker-phase, idle-drift, and idle-guard path on true MLX plus /usr/bin/powermetrics and retain the backed-up shakedown evidence.</li>
+<li>GATED — Q7 <code>P2-038</code> (excluded by: gate-2026-07-13-comprehensive-audit): Close the production uncertainty live tail: execute the merged clock-anchor, marker-phase, idle-drift, and idle-guard path on true MLX plus /usr/bin/powermetrics and retain the backed-up shakedown evidence.</li>
 </ul>
 <h3>[AGENT]</h3>
 <ul>
-<li>READY — A22 <code>P2-004</code>: Close model selection (D-016): decision-log entry with models, revisions, artifact paths, local mirror, fallback candidate; mid-model pick, CUDA load, GGUF paths outstanding.</li>
+<li>GATED — A9 <code>SPLIT-AP</code> (excluded by: gate-2026-07-13-comprehensive-audit): Freeze the split pre-registration: one primary estimand and service-state assumption covering gross versus idle-subtracted charged states per NEG-7, both monolithic references predeclared with joint adjusted contrast intervals and split wins only if both are beaten per RIG-5, and missing composite and transfer floor cells named as prerequisites.</li>
 </ul>
 <!-- END GENERATED: state-kernel run-state-intake --><h2 id="superseded-stop-card-c-028">Superseded stop card (C-028)</h2>
 <p>Status: <strong>CLEARED 2026-07-11.</strong> Every clearance criterion met: all
@@ -163,8 +175,9 @@ gates are ALL satisfied; execution needs a quiet machine + Ed.</p>
 implies live evidence. P0-003 is satisfied
 by the verified iCloud backup/restore. All NVIDIA/Orin protocol pins remain
 PROVISIONAL pending P1-006 live evidence.</p>
-<p><strong>RESTART HERE (next session) — this is the ONLY next-action block; the
-queue owns ordering:</strong></p>
+<p><strong>Historical restart snapshot (recorded 2026-07-13; non-operative).</strong> The
+numbered sequence below is retained as dated handoff narrative, not current
+work-selection authority. Use the generated region above for selection.</p>
 <ol>
 <li>DONE 2026-07-13: #61-#63 merged at delta-audited heads; site deployed
 live under the cap; XSI-1 CI hardening green on main; bridge landed
@@ -482,12 +495,17 @@ bridge branches were deleted local+origin. One stale nested worktree
 removed this session; the long-lived <code>JouleWise-wt/*</code> stream worktrees
 are untouched. The Lakebed upload was completed by Ed and
 lead-verified live; no pending actions remain.</li>
-<li>The generated state-kernel blocks are explicitly non-authoritative;
-<code>RUN_STATE.md</code>, <code>TASK_QUEUE.md</code>, and <code>docs/decision_log.md</code> remain
-authoritative.</li>
+<li>The generated state-kernel blocks are authoritative for work selection.
+Hand-authored <code>RUN_STATE.md</code> and <code>TASK_QUEUE.md</code> text remains authoritative
+only for its own factual, policy, and historical domains;
+<code>docs/decision_log.md</code> remains the policy authority, exit checklists own
+phase completion, and evidence artifacts own scientific truth.</li>
 <li>Retained corpus and session scratchpad evidence are immutable.</li>
 </ul>
-<h2 id="what-is-next">What Is Next</h2>
+<h2 id="historical-next-work-snapshot-superseded-2026-07-15">Historical Next-Work Snapshot (superseded 2026-07-15)</h2>
+<p>The following 2026-07-13 narrative is retained for chronology only. It is not
+a live queue or restart instruction; the generated work-selection region is
+the sole selector.</p>
 <p>The comprehensive whole-project audit is the declared gate (Ed,
 2026-07-13): method proposal pending Ed&#39;s approval, then the audit runs
 and its findings are adjudicated before any further feature work. After
@@ -498,7 +516,9 @@ windows. <code>TASK_QUEUE.md</code> remains the ordering authority.</p>
 <p>Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
 C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),
 calendar mapping (P1-008).</p>
-<h2 id="open-decisions-and-blockers">Open Decisions And Blockers</h2>
+<h2 id="reference-decisions-and-blockers-non-selection-context">Reference Decisions And Blockers (non-selection context)</h2>
+<p>These pointers retain external-dependency context but do not rank or select
+work. The generated region controls task selection.</p>
 <ul>
 <li>Supervisor approval and scope pending (P1-001, R-001 — mitigation
 holding); gates FULL D-016 closure.</li>
@@ -518,7 +538,7 @@ different identity is needed.</li>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>RUN_STATE.md · commit e3fc14a · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>RUN_STATE.md · commit c7ee7ca · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
