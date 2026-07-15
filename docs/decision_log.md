@@ -3096,6 +3096,16 @@ six real bundles vs ~6M tokens of same-day breadth work); a blanket
 freeze including correctness work (rejected — would block the gates'
 own prerequisites).
 
+Amendment (2026-07-15, WO-022/R2, Ed-ratified 2026-07-13): the spend
+guardrails extending this stop line landed verbatim in
+`docs/orchestration.md` §"Spend guardrails (WO-022...)" — capstone
+benchmark bands (session/WO/arc tiers, soft record-and-continue vs hard
+pause-and-ask-Ed), the deliverable-progress tripwire bound to these
+D-060 gates, the named-failure bar for process innovation, and the
+keep-defender guarantee. Landing snapshot receipt (estimated; close-out
+refresh owed):
+`docs/reviews/2026-07-13-comprehensive-audit/receipts/WO-022-audit-close-spend.json`.
+
 ## D-061: Review-layer evaluation rule v2 (replaces the two-zero-sessions drop rule)
 
 - Date: 2026-07-09

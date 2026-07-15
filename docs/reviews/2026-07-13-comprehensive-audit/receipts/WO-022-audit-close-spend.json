@@ -1,0 +1,80 @@
+{
+ "schema": "wo022-audit-close-spend/v1",
+ "created": "2026-07-15",
+ "accounting_status": "estimated",
+ "session_inclusion": "manifest-corroborated-known-token-resumes-deduplicated",
+ "method": "Sol: total_token_usage.total_tokens summed from ~/.codex/sessions rollout JSONLs filtered to JouleWise checkouts (cwd match), corroborated against .codex-bridge invocation manifests in each worktree; resume continuations share their parent rollout so no double count. Fable: no local usage accounting available in this headless harness -> accounting_unknown. codex-usage tool unavailable on this machine (personal tooling absent).",
+ "price_table": "v2026-07 (GPT-5.6-sol $5/$30 per M in/out, cached input $0.50; Fable 5 $10/$50, cache reads $1)",
+ "window_note": "SNAPSHOT AT WO-022 LANDING, arc still open (audit resume arc, 2026-07-14/15). REFRESH OWED at audit close-out; only the refreshed receipt is the recalibration anchor per T09.",
+ "arc": "audit-resume-axi-2026-07-14 (council row pending at close-out)",
+ "sol_sessions": [
+  {
+   "session": "c033-axi-consult",
+   "role": "coherence review",
+   "effort": "high",
+   "total_tokens": 1002995
+  },
+  {
+   "session": "wo010-impl+resume",
+   "role": "implementation",
+   "effort": "high",
+   "total_tokens": 21763088,
+   "band_flag": "PRE-POLICY HARD crossing of Sol-high session band (12M); full remote-protocol hardening + NEEDS_SCOPE fixture extension + two canonical suite runs in one session; predates guardrail landing; recorded as calibration data"
+  },
+  {
+   "session": "wo019-impl",
+   "role": "implementation",
+   "effort": "high",
+   "total_tokens": 3733150
+  },
+  {
+   "session": "wo019-checker",
+   "role": "review",
+   "effort": "high",
+   "total_tokens": 3184688
+  },
+  {
+   "session": "wo027-checker",
+   "role": "review",
+   "effort": "high",
+   "total_tokens": 737740
+  },
+  {
+   "session": "wo010-checker",
+   "role": "review",
+   "effort": "high",
+   "total_tokens": 2765002
+  },
+  {
+   "session": "wo011-impl+fix",
+   "role": "implementation",
+   "effort": "high",
+   "total_tokens": 9872185
+  },
+  {
+   "session": "wo011-checker+aborted-misresume",
+   "role": "review",
+   "effort": "high",
+   "total_tokens": 1800491,
+   "anomaly": "fix round mis-resumed onto this checker thread via resume --last (global-last hazard); killed after 1 read-only call; zero writes (rollout-audited)"
+  },
+  {
+   "session": "wo011-delta-checker",
+   "role": "review",
+   "effort": "high",
+   "total_tokens": 546445
+  },
+  {
+   "session": "wo021-phaseA",
+   "role": "implementation",
+   "effort": "xhigh",
+   "total_tokens": 310385,
+   "note": "RUNNING at snapshot; final count at close-out refresh"
+  }
+ ],
+ "sol_total_tokens_at_snapshot": 45716169,
+ "sol_estimated_dollars_note": "~97%+ of Sol volume is cached input (C-028 measured pattern); honest cached pricing puts this arc's Sol spend at roughly $25-45 at snapshot; recorded as estimate, not billing truth",
+ "fable_spend": "accounting_unknown",
+ "non_manifest_upper_bound_note": "One non-JouleWise personal Codex session observed on this machine in the window (excluded by cwd/prompt); no other unaccounted JouleWise sessions found",
+ "prior_audit_phase_note": "The pre-checkpoint audit phase (~30 Sol sessions + ~70 Fable agents, Ed-authorized) remains estimated/accounting_unknown per T09 until this receipt's close-out refresh can bound it; its rollouts predate this snapshot window"
+}

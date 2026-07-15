@@ -35,7 +35,7 @@ Conventions:
 | R-015 | Schema changes after data collection starts | 2+ | low | high | mitigated |
 | R-016 | Measurement-corpus loss (`runs/` has no backup path) | 2-5 | low | high | mitigated (2026-07-10: iCloud Drive destination live, fresh restore test passed; re-verify before each window — eviction caveat) |
 | R-017 | Repo on iCloud-synced Desktop (EPERM lock recurrence) | all | low | medium | mitigated (repo moved 2026-07-05; residual: session launch paths) |
-| R-018 | Agent-loop self-expansion consumes calendar without grader-facing output | all | medium | high | mitigated-in-policy (D-060 RATIFIED 2026-07-10; enforcement = queue discipline) |
+| R-018 | Agent-loop self-expansion consumes calendar without grader-facing output | all | medium | high | mitigated-in-policy (D-060 RATIFIED 2026-07-10; enforcement = queue discipline + spend guardrails, WO-022/R2, `docs/orchestration.md` §Spend guardrails) |
 
 ## R-001: Supervisor approval delayed or scope shifts
 
