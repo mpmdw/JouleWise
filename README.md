@@ -1,11 +1,12 @@
 # JouleWise
 
-JouleWise is an extensible benchmark for energy-wise LLM inference across
-heterogeneous local hardware. The name is a deliberate nod to JouleSort and
-Splitwise: energy measurement as the spine, split inference as the first major
-research application.
+JouleWise is an extensible measurement harness for energy-wise LLM inference
+across heterogeneous local hardware. The benchmark layered on that harness is
+the frozen workload suite, run rules, and strict validator. The name is a
+deliberate nod to JouleSort and Splitwise: energy measurement as the spine,
+split inference as the first major research application.
 
-The benchmark is designed around three stable ideas:
+The harness is designed around three stable ideas:
 
 - Typed experiment configs define what should run.
 - Runtime and telemetry adapters define how each hardware target is exercised
@@ -13,15 +14,14 @@ The benchmark is designed around three stable ideas:
 - Run bundles preserve raw traces, events, metadata, logs, and summary metrics
   for later audit and analysis.
 
-**Status:** research prototype. The Mac (Apple M3 Max) measurement harness
-has cleared its pre-campaign software review. C-028 is closed: PRs #41-#58
-are merged, the analysis trio is complete, and the reducer compatibility
-lattice now terminates at 0.4.2. PR #59 is an open integration-review
-follow-up, not an unlanded Window-A prerequisite. All Window-A software
-gates are satisfied; execution begins with the C-019 shakedown and
-P2-015-SMOKE in a lead-controlled quiet-machine session with Ed. The P0-003
-external-backup gate is satisfied. The verified end-user quickstart remains
-a Phase 5 deliverable.
+**Status:** research prototype. The Mac (Apple M3 Max) measurement harness has
+cleared its pre-campaign software review, the analysis path is implemented,
+and the comprehensive-audit fix wave is integrated on this landing branch.
+This summary does not select work: the generated state-kernel regions in
+`RUN_STATE.md` and `TASK_QUEUE.md` own the live gate and next-task state.
+Quiet-machine execution still requires the lead-controlled hardware lane with
+Ed; no audit or software landing is new measurement evidence. The verified
+end-user quickstart remains a Phase 5 deliverable.
 
 ## Current State
 
@@ -42,25 +42,23 @@ trace from raw plist evidence, re-derives summary metrics from the recorded
 trace and event log, checks the legacy additive summary comparison, and
 requires shape-valid provenance for new-era bundles. This validates the
 recorded evidence path; it does not independently rerun the hardware session.
-Remaining backends plug into the same adapter interfaces: the
-fixture-first 2K NVIDIA stack (SSH transport, node worker, nvidia-smi +
-vLLM adapters) now includes NV-GATE-2 code-now hardening from PR #49:
-per-backend raw-lineage verifier registration, usage-first vLLM streaming,
-and identity-aware process-survival handling. The NV-5 localhost lead gate
-passed 3/3, but ALL remote protocol pins remain PROVISIONAL pending first
-live hardware contact; Jetson Orin (2L) remains gated on device access.
+Remaining backends plug into the same adapter interfaces: the fixture-first
+2K NVIDIA stack (SSH transport, node worker, nvidia-smi + vLLM adapters)
+includes NV-GATE-2 software hardening: per-backend raw-lineage verifier
+registration, usage-first vLLM streaming, and identity-aware process-survival
+handling. The NV-5 localhost lead gate passed 3/3, but ALL remote protocol
+pins remain PROVISIONAL pending first live hardware contact; Jetson Orin (2L)
+remains gated on device access.
 
-The C-028 merge arc landed P2-042's frozen analysis manifest (PR #46), the
-P2-040 remainder and reducer 0.3.1 compatibility arm (PR #47), P2-038's
-production-uncertainty software path (PR #48), P2-041's verdict split and
-reducer 0.4.0 (PR #54), idle-dependence/HAC uncertainty and reducer 0.4.1
-(PR #55), the 0.4.2 inter-token metric (PR #56), doctor preflight (PR #57),
-and the P2-037 contrast/claim engine (PR #58). The analysis trio—manifest,
-verdict split, and contrast/claim engine—is complete. The six frozen legacy
-arms and 0.3.x/0.4.x dispatch rules remain explicit; landed software is not
-being presented as new live evidence. P0-003 closed with an iCloud Drive
-backup and a fresh restore that was strict-valid and byte-identical. No new
-live NVIDIA or quiet-Mac measurement is claimed here.
+The landed C-028 arc includes the frozen analysis manifest, the
+production-uncertainty path, the campaign-verdict split, idle-dependence/HAC
+uncertainty, the inter-token metric, doctor preflight, and the contrast/claim
+engine. The analysis trio—manifest, verdict split, and contrast/claim
+engine—is complete. The six frozen legacy arms and 0.3.x/0.4.x dispatch rules
+remain explicit; landed software is not being presented as new live evidence.
+P0-003 closed with an iCloud Drive backup and a fresh restore that was
+strict-valid and byte-identical. No new live NVIDIA or quiet-Mac measurement
+is claimed here.
 
 The repository currently contains:
 
@@ -72,10 +70,9 @@ The repository currently contains:
   (`run`, `validate-bundle`, `reduce`, `report`).
 - Example Mac-local and mock-local configs.
 - Phase 1 methodology, feasibility, and measurement-design docs.
-- A test suite (current main: 1,220 tests OK, 10 skipped; PR #59 branch:
-  1,224 tests OK in its worktree convention; count authority:
-  `RUN_STATE.md` Current Verification) run in CI on every push, including a
-  mock end-to-end run + bundle validation.
+- A test suite run in CI on every push, including a mock end-to-end run and
+  bundle validation. The canonical command below and CI output own the current
+  result; reader docs intentionally do not copy its volatile count.
 
 ## Verify
 
@@ -83,11 +80,8 @@ The repository currently contains:
 python3 -m unittest discover -s tests
 ```
 
-(The canonical result on current main is 1,220 tests OK with 10
-optional/environment-gated skips and zero expected failures. Both historic
-intermittent failure classes are fixed on main: the fake-nvidia-smi idle
-deadline now begins at sampler readiness, and the P2-038 rail-only fixture
-deterministically supplies the right-edge sample.)
+The command's output is the current result. CI runs the same suite; this page
+does not pin a pass or skip count that would drift as coverage grows.
 
 ## Release
 
@@ -141,8 +135,8 @@ project.
 See `AGENT_PLAN.md` for the phase index; each phase has a detailed plan and
 an evidence-based exit checklist under `docs/phase_N/` — the exit checklist
 is the per-item status authority (D-023). See `RUN_STATE.md` before starting
-substantial work; it is the current handoff note for what was done and what
-should happen next. Future phase starts should use
+substantial work; its generated state-kernel region is the current
+work-selection view. Future phase starts should use
 `docs/planning_reflection_protocol.md` to audit whether each step has evidence
 and acceptance criteria before implementation begins.
 
@@ -157,4 +151,6 @@ options and considerations behind them) live in `docs/decision_log.md`; risks,
 triggers, and the descope ladder live in `docs/risk_register.md`; calendar
 constraints live in `docs/milestones.md`; cross-model review sessions
 (implementer/reviewer positions, votes, resolutions - see D-031) live in
-`docs/council_log.md`.
+`docs/council_log.md`. Agents never regenerate or deploy the status site:
+sessions that change front-facing state refresh `docs/site/DRIFT.md`, and Ed
+deploys manually (D-068).

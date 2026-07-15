@@ -6,36 +6,37 @@ self-instrumenting piece of engineering. This document is the single
 in-repo description of that process. (The executable playbooks live
 outside the repository as reusable "skills" so they transfer to future
 projects; this page describes what they do and where their evidence
-lands in this repo.) As of 2026-07-08.
+lands in this repo.) Binding role and process changes live in
+`docs/decision_log.md`; this page avoids copying volatile model versions.
 
-## Roles: an apex model, a volume model, and a human at the top
+## Roles: a lead, independent implementers/reviewers, and a human at the top
 
 - **Ed (researcher)** sets research direction, methodology
-  non-negotiables (raw-evidence bundles, idle subtraction, named
+  non-negotiables (raw-evidence bundles, dual-basis capture with gross-energy
+  headlines, named
   measurement boundaries, no unauditable claims), hardware/access
   decisions, and — critically — *process policy*: every rule below
   traces to a standing instruction issued after an observed failure or
   opportunity. External-facing claims and merge authority derive from
   him (he granted the lead conditional self-merge authority on
   2026-07-08 once the review gate had proven itself).
-- **The lead** (Claude — Anthropic's Fable-class model) is the apex:
+- **The designated lead** owns
   decomposition, triage, design adjudication, every final diff gate,
   all live/hardware verification, merge decisions, bookkeeping, and
-  process evolution. Ground truth of the system: every other model's
-  role exists to *save lead-model capacity*, never because its judgment
-  is preferred; all escalation paths terminate at the lead.
-- **The volume model** (OpenAI Codex, gpt-5.5) does the heavy reading
-  and writing: implementation against pinned specs, adversarial review
+  process evolution. Other agents save lead capacity without inheriting
+  final authority; all escalation paths terminate at the lead.
+- **Independent implementation and review agents** do the heavy reading and
+  writing: implementation against pinned specs, adversarial review
   lenses, test writing, test *auditing* (never of its own tests — a
   fresh instance audits), docs drafting, and review of the lead's own
   consequential decisions. Cross-model review is load-bearing by
   design: the attributed per-layer catch record (below) shows the two
-  models consistently catching different classes of defect.
-- **A third model tier** (Claude Opus) serves as specialist sweeper
-  (e.g. the docs-consistency sweep) and, when a stream genuinely needs
+  roles consistently catching different classes of defect.
+- **Specialist agents** handle bounded sweeps (for example, docs
+  consistency) and, when a stream genuinely needs
   mid-stream judgment, as a stream director — a role that is now the
   exception rather than the default (see Topology).
-- **Image-heavy analysis routes to Codex** as standing doctrine from
+- **Image-heavy analysis uses the designated image-capable review route** per
   C-012, after the site-observatory stream's image-critique rounds.
 - **Invited-peer validation is allowed to overturn lead designs**; C-014
   recorded two lead designs overturned by an invited peer before
@@ -94,9 +95,10 @@ Every substantial session runs one conductor procedure:
    primary-deliverable check and §8 shipped-check before the session is
    considered done.
 9. **Post-landing verification and close-out** — landed work gets the
-   matching verification workflow with severity-tiered refuters; site
-   changes add the regen+redeploy close-out step pointed to by
-   `RUN_STATE.md` end-of-work step 8.
+   matching verification workflow with severity-tiered refuters. Sessions
+   that change front-facing state refresh `docs/site/DRIFT.md`; no agent
+   regenerates or deploys the site. Automation informs and Ed deploys
+   manually, per D-068 and `RUN_STATE.md` end-of-work step 8.
 10. **Meta-review (the final step)** — event-driven, not calendar-driven:
     when a review layer stops earning its keep, when an intervention
     repeats despite a folded fix, or when the user asks, the loop is
@@ -148,8 +150,9 @@ Each fact has exactly one home; everything else points at it:
 | `docs/contracts/` | Claim/evidence contracts: `claims_ladder.md` (D-037) plus `analysis_plans.md` (D-038) form the claim gate; strict validation is the evidence ticket. |
 | `docs/stream_logs/` | Per-stream decision ledgers, committed WITH the code they justify: every non-trivial in-stream decision (`A-1..A-30`, `B-1..B-46`, …) with mandatory evidence pointers; wrong pins are SUPERSEDED in place, never erased. |
 | `docs/run_reports/` | One record per working session: outcomes, verification evidence, a per-layer catch/yield table, the delegation-calibration ledger, restart instructions. |
-| `TASK_QUEUE.md` | Ranked queue with machine-state lanes ([QUIET-MAC] / [AGENT] / [ED-EXTERNAL]) — a session picks the top task *compatible with the machine's state*, so agent load never contaminates measurements. |
-| `RUN_STATE.md` | Intake pointer only: current state, latest report, next action. History lives in run reports. |
+| `docs/process/state_kernel.json` | Source of truth for work selection: active gates, dependencies, and machine-state lanes ([QUIET-MAC] / [AGENT] / [ED-EXTERNAL]). |
+| `TASK_QUEUE.md` | Generated detailed queue projection plus dated history; do not hand-copy its live rows into reader docs. |
+| `RUN_STATE.md` | Intake pointer with the generated restart projection. History lives in run reports. |
 | `docs/risk_register.md` | Live risks with triggers and mitigation states. |
 
 Instrumentation ledgers close the loop on the process itself:
@@ -164,7 +167,7 @@ Instrumentation ledgers close the loop on the process itself:
   weights are fixed before the session; three applicable exposures
   TRIGGER an expected-loss review decision, never automatic deletion;
   safety/final-head/integration layers are never auto-dropped on
-  zero-defect streaks. (One layer, the default Opus review lens, was
+  zero-defect streaks. (One layer, the default specialist review lens, was
   dropped under the old rule before D-061.)
 - **Delegation calibration:** every delegated unit gets a row — task
   altitude (pinned-spec / design-freedom / judgment-call), outcome
@@ -328,7 +331,7 @@ Pointer map only; mechanics stay in their owning files.
   `docs/run_reports/` provide live templates for ledgers and trace
   appendices; `scripts/codex-run` and `scripts/codex-bridge` provide
   execution entry points.
-- Skill-only: exact conductor sequencing, Codex prompt/consumption
+- Skill-only: exact conductor sequencing, delegated-agent prompt/consumption
   contract, severity-tiered refuter recipes, multi-worktree stream
   operations, and consistency-sweep checklists.
 
