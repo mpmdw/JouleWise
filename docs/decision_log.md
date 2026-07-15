@@ -3382,6 +3382,23 @@ Addendum (same session, 2026-07-13): Ed named the merge; PR #65 MERGED
 as `d285989`; the v1.1 contract is now the current contract on main
 (merged-main suite lead-run: 1387 OK).
 
+Operational note (2026-07-15, Ed-approved lease adjudication): during the
+audit fix-wave resume, WO-010's `session-close` returned SCOPE_VIOLATION
+because the lead committed the gated diff BEFORE closing the session
+(lead HEAD movement, not worker overreach — the diff was scope-checked
+SCOPE_OK by the implementer's session-end check and independently by the
+fresh checker, PASS with 0 findings). Ed approved abandoning lease
+`lease-fcbdb925552d4859b792bb774ce15bdb` with that recorded reason
+(2026-07-15, live session). The harness permission layer correctly
+refused the lead's initial self-approved abandonment — an independent
+approval was required, and that separation should be preserved. Two
+operating lessons now standing: (1) `session-close` PRECEDES the lead
+commit; (2) never `codex-bridge resume --last` when any other Codex
+session may have run since — it resolves to the GLOBAL most-recent
+session (a same-machine WO-011 fix round briefly attached to its own
+checker's thread before being killed after one read-only call,
+rollout-audited to zero writes; resume by explicit session id instead).
+
 Evidence: PR #65 (final head `8b96bd4`, CI green, suite 1387 OK);
 review arc and per-layer catches in
 `docs/run_reports/2026-07-13-bridge-v11.md`; tracked invocation
