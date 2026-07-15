@@ -46,8 +46,9 @@ docs, the scientific claims, the statistics implementation, the
 architecture, and the operating loop itself. Verdict: the evidence
 discipline and instrument core are sound, but reader-facing claims had
 drifted from the evidence (the 1.5B per-token headline used the wrong
-denominator — now corrected to ~79-90 mJ per generated output token,
-idle-subtracted), the D-053 contrast-CI machinery exists as binding
+denominator — now corrected as **P2-003, idle-subtracted energy — M3 Max /
+powermetrics SoC rails:** ~79-90 mJ per generated output token), the D-053
+contrast-CI machinery exists as binding
 specs but not yet as code (now owned as queue rows P2-037..P2-042 and
 gating Window-A interpretation), and the loop's own audit trail and the
 capstone-critical path (grading rubric, report skeleton, off-machine
@@ -105,8 +106,9 @@ P2-015-SMOKE.)* Five parallel work streams landed (PRs #2-#6):
 (1) **statistical uncertainty** — every multi-repetition experiment now
 carries per-metric 95% confidence intervals with outlier detection and
 explicit below-protocol flags, re-derivable byte-identically from the
-raw evidence bundles (verified on a live 3-repetition run:
-99.19 ± 1.36 mJ/output-token); (2) **contamination detection** — an
+raw evidence bundles (verified on a live 3-repetition run as **D-014
+verification workload, idle-subtracted energy — M3 Max / powermetrics SoC
+rails:** 99.19 ± 1.36 mJ/output-token); (2) **contamination detection** — an
 idle-window quality gate that mechanically flags runs taken on a
 non-quiet machine (it caught its first real contamination during
 verification); (3) **deep telemetry** — per-sample GPU/CPU-cluster
@@ -125,18 +127,21 @@ baseline matrix on a quiet machine.
 
 **A flagship-class model is now benchmarked.** Qwen3.5-122B (Feb 2026
 generation, 122B-parameter mixture-of-experts with 10B active, a
-reasoning model) ran through the identical harness and workload on the
-M3 Max: **~304.0 J gross per 512-token request (~298.7 J
-idle-subtracted; ~583 mJ per generated output token, idle-subtracted
-basis) at 46 tokens/s, with a gross-energy
-sample CV of 0.3% across three sequential repetitions in one warm-cache
-session** — alongside the earlier 1.5B model's ~47.2 J gross (~87
-mJ/output-token idle-subtracted at 257 tok/s). *(Metric bases and CV
-wording corrected 2026-07-09, C-027.)* First cross-model finding:
+reasoning model) ran through the identical harness and workload on the M3
+Max. **FLAGSHIP-001, gross energy — M3 Max / powermetrics SoC rails:**
+~304.0 J per 512-token request. **FLAGSHIP-001, idle-subtracted energy — M3
+Max / powermetrics SoC rails:** ~298.7 J per request and ~583 mJ per generated
+output token. Throughput was 46 tokens/s, and the gross-energy sample CV was
+0.3% across three sequential repetitions in one warm-cache session. The
+earlier model recorded **P2-003, gross energy — M3 Max / powermetrics SoC
+rails:** ~47.2 J per request and **P2-003, idle-subtracted energy — M3 Max /
+powermetrics SoC rails:** ~87 mJ per generated output token at 257 tok/s.
+*(Metric bases and CV wording corrected 2026-07-09, C-027.)* First cross-model finding:
 the two measured points differ in size, architecture, and quantization,
 so they are not a demonstrated scaling law. They are, however,
-consistent with the fixed-vs-marginal structure Q4 models: decode power
-barely moved (~23.5 → ~27.5 W), while the bigger model's cost showed up
+consistent with the fixed-vs-marginal structure Q4 models: **unsubtracted
+decode-window mean power — M3 Max / powermetrics SoC rails:** ~23.5 W for
+P2-003 and ~27.5 W for FLAGSHIP-001, while the bigger model's cost showed up
 mostly as time. Also this update: the
 research agenda grew to six named questions (Q4-Q6) after a
 multi-model review council, with a curated question bank
@@ -149,7 +154,7 @@ implementing the statistical-uncertainty protocol) queued.
 | date | label | one-line outcome | run-report link |
 |---|---|---|---|
 | 2026-07-10/11 | C-028 hardening and integration arc | PRs #41-#58 merged; analysis trio complete; reducer lattice through 0.4.2; P0-003 restore proof and every Window-A software gate satisfied; PR #59 open as a bounded follow-up; no new live evidence claimed. | `docs/run_reports/2026-07-11-c028-continuation.md` |
-| 2026-07-06 | third update / first real energy | Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements: ~47.2 J gross per 512-token request, ~79-90 mJ/generated-output-token (idle-subtracted; the originally reported 77-88 range used the prompt+output denominator — corrected 2026-07-09, C-027), TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz; short prefill energy is below the current detection capability and is not a quantitative result (D-055). | `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md` |
+| 2026-07-06 | third update / first real energy | Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements. **P2-003, gross energy — M3 Max / powermetrics SoC rails:** ~47.2 J per 512-token request. **P2-003, idle-subtracted energy — M3 Max / powermetrics SoC rails:** ~79-90 mJ per generated output token; the originally reported range used the prompt+output denominator and was corrected 2026-07-09 (C-027). TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz; short prefill energy is below the current detection capability and is not a quantitative result (D-055). | `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md` |
 | 2026-07-06 | third update / powermetrics telemetry | The powermetrics telemetry adapter and privileged sampling path were brought up, preserving raw plists and exposing the real sampling-rate constraints. | `docs/run_reports/2026-07-06-slice-2h-powermetrics.md` |
 | 2026-07-06 | third update / pre-hardware hardening | Slice 2N closed the evidence-path hardening before real hardware: raw evidence retention, measured-window markers, rail validation, shared bundle reading, and post-hoc reduction. | `docs/run_reports/2026-07-06-slice-2n-pre-hardware-hardening.md` |
 | 2026-06-12 | first/second updates / mock vertical slice | The mock-first harness reached an end-to-end auditable run path before hardware time: typed config to complete bundle, validation, reduction, and report. | `docs/run_reports/2026-06-12-phase-2-mock-vertical-slice.md` |
@@ -215,6 +220,19 @@ The capability map by claim ceiling is reflected in
 v2 and benchmark interop direction; the guaranteed-capstone stop-line is
 recorded in the Phase 2 plan.
 
+**Q4 architectural stress-test agenda (D-070).** Static batching,
+speculative decoding / native MTP, MoE versus dense execution, quantization,
+and reasoning-length variance are five stress tests of Q4's single
+fixed-plus-marginal energy thesis, not five additional theses. The harness
+must instrument every axis well enough to produce strict-valid L0 smoke
+bundles; the benchmark supplies the frozen workload suite, run rules, and
+strict validator for claim-bearing runs. Per Ed's ruling, all five axes have
+characterized-study commitments. Every study remains floor-gated and capped
+at L2; L3 is available only through Q4/AP-1's existing holdout machinery.
+Window A remains first, and no AXI quiet-Mac characterization starts before
+Window A completes. Static batching is the capstone scope; continuous
+batching remains a post-capstone extension.
+
 ## Status At A Glance
 
 | Phase | Scope | Status |
@@ -272,11 +290,17 @@ Complete so far (all verifiable in the repository):
   `powermetrics` telemetry adapter (2H, parser pinned to a captured
   privileged sample, raw plists preserved verbatim in every bundle), and
   the flagship integration (2I) — three strict-valid repetition bundles
-  of real energy measurements on the M3 Max (~47.2 J gross per 512-token
-  request, ~44.4 J idle-subtracted, ~79-90 mJ per generated output token
-  on the idle-subtracted basis, TTFT ~94 ms at 257 tokens/s; legacy L1
-  preliminary observations, provisional model Qwen2.5-1.5B-Instruct-4bit
-  mirrored locally).
+  of real energy measurements on the M3 Max. **P2-003, gross energy — M3
+  Max / powermetrics SoC rails:** ~47.2 J per 512-token request.
+  **P2-003, idle-subtracted energy — M3 Max / powermetrics SoC rails:**
+  ~44.4 J per request and ~79-90 mJ per generated output token. TTFT was
+  ~94 ms at 257 tokens/s; these are legacy L1 preliminary observations for
+  provisional model Qwen2.5-1.5B-Instruct-4bit, mirrored locally. The
+  separately recorded **FLAGSHIP-001, gross energy — M3 Max / powermetrics
+  SoC rails:** ~304.0 J per 512-token request; **FLAGSHIP-001,
+  idle-subtracted energy — M3 Max / powermetrics SoC rails:** ~298.7 J per
+  request and ~583 mJ per generated output token. These historical values
+  are basis labels on the recorded results, not a new reduction.
 - The P2-042 frozen analysis manifest, P2-041 campaign verdict split,
   P2-037 contrast/claim engine, P2-040 reducer/gate remainder, P2-038
   production-uncertainty software path, and NV-GATE-2 code-now hardening.
@@ -295,7 +319,8 @@ protocol pins remain PROVISIONAL until live
 hardware contact; a P1-006 evidence checklist exists there. Code-level
 specs are in `docs/phase_2/hardware_slice_implementation_guide.md`. The
 mock-first core landed first by design, so measurement code is never
-debugging the harness and the instrument at the same time.
+debugging the measurement harness and a live hardware integration at the
+same time.
 
 Waiting on external input (most of it does not block current software
 work; P0-003's backup gate is satisfied, and the grading rubric/calendar
@@ -369,11 +394,24 @@ Key elements:
 
 ## Measurement Methodology Highlights
 
-- **Dual-basis capture, gross headline.** Every eligible measured request
-  records gross and idle-subtracted energy plus idle variance. Gross energy is
-  the headline for cross-device, cross-configuration, and split-vs-monolithic
-  claims; idle-subtracted energy is a labeled within-device marginal view and
-  is never used to rank devices or configurations (D-067).
+Unless a figure explicitly states otherwise, JouleWise uses gross measured
+energy within the named measurement boundary as the headline basis. Gross
+energy retains the idle, model-residency, and runtime overhead present during
+the measured interval, so comparisons across devices, configurations, and
+split versus monolithic execution use gross energy. Idle-subtracted energy is
+reported separately as a within-device secondary view of activity above the
+measured idle baseline; it is not used to rank devices or configurations. In
+Q4, the fixed term is estimated from the gross-energy workload sweep and is
+not set equal to measured idle energy.
+
+This reporting choice follows Dr. Rivoire's advisor review, as recorded in
+D-067: subtracting idle penalizes energy-proportional devices and rewards
+high-idle ones; for split runs, subtracting both nodes' idles deletes exactly
+the cost that the Q1 crossover question adjudicates.
+
+- **Dual-basis capture.** Every eligible measured request records gross and
+  idle-subtracted energy plus idle variance; the reporting rule above changes
+  no stored evidence (D-067).
 - **Measurement boundaries are named, not assumed.** Each telemetry
   backend measures a different physical boundary - powermetrics: Apple
   SoC subsystems (CPU+GPU+ANE); nvidia-smi: GPU board only; Jetson rails:
@@ -558,8 +596,8 @@ stale assumptions, and review-induced drift.
 This project is developed by a human researcher directing a multi-agent
 AI system he designed and iteratively engineered over the course of the
 project — the orchestration itself is a second, deliberate piece of
-engineering alongside the benchmark, and by now it is interesting in its
-own right.
+engineering alongside the measurement harness and its benchmark, and by now
+it is interesting in its own right.
 
 The full description lives in `docs/orchestration.md` (the loop, the
 roles, the artifact system, and how the topology itself evolved under

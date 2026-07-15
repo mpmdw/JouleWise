@@ -31,10 +31,11 @@ typed config, one command produces a complete, schema-valid, auditable run
 bundle and reduces it to energy/latency summary metrics — proven first on
 deterministic mock adapters, and now live on real hardware: the MLX runtime +
 `powermetrics` telemetry adapters measured Qwen2.5-1.5B-Instruct (4-bit) on an
-Apple M3 Max at ~47.2 J gross rail energy per 512-token request (~44.4 J
-idle-subtracted; ~79-90 mJ per generated output token on the idle-subtracted
-basis, mean 86.8 mJ; 257 tok/s). These are legacy L1 preliminary
-observations (pre-2M, manual review) under
+Apple M3 Max. **P2-003, gross energy — M3 Max / powermetrics SoC rails:**
+~47.2 J per 512-token request. **P2-003, idle-subtracted energy — M3 Max /
+powermetrics SoC rails:** ~44.4 J per request and ~79-90 mJ per generated
+output token (mean 86.8 mJ). Throughput was 257 tok/s. These are legacy L1
+preliminary observations (pre-2M, manual review) under
 `docs/contracts/claims_ladder.md`; metric bases per
 `docs/contracts/token_normalization.md`. The six real corpus bundles pass `validate-bundle --strict`
 read-only and unrewritten: strict re-derives the recorded powermetrics power
@@ -42,6 +43,28 @@ trace from raw plist evidence, re-derives summary metrics from the recorded
 trace and event log, checks the legacy additive summary comparison, and
 requires shape-valid provenance for new-era bundles. This validates the
 recorded evidence path; it does not independently rerun the hardware session.
+
+Unless a figure explicitly states otherwise, JouleWise uses gross measured
+energy within the named measurement boundary as the headline basis. Gross
+energy retains the idle, model-residency, and runtime overhead present during
+the measured interval, so comparisons across devices, configurations, and
+split versus monolithic execution use gross energy. Idle-subtracted energy is
+reported separately as a within-device secondary view of activity above the
+measured idle baseline; it is not used to rank devices or configurations. In
+Q4, the fixed term is estimated from the gross-energy workload sweep and is
+not set equal to measured idle energy. The advisor-review rationale and full
+basis/boundary rule are recorded in
+[`PROJECT_STATUS.md`](PROJECT_STATUS.md#measurement-methodology-highlights).
+
+Under D-070, static batching, speculative decoding / native MTP, MoE versus
+dense execution, quantization, and reasoning-length variance are five stress
+tests of Q4's single thesis. The harness must instrument all five axes and all
+five have strict-valid L0 smoke-bundle support plus characterization
+commitments, but every study remains floor-gated, capped at L2, and sequenced
+after Window A. See the fuller
+[Q4 architectural stress-test agenda](PROJECT_STATUS.md#summary)
+in `PROJECT_STATUS.md`.
+
 Remaining backends plug into the same adapter interfaces: the fixture-first
 2K NVIDIA stack (SSH transport, node worker, nvidia-smi + vLLM adapters)
 includes NV-GATE-2 software hardening: per-backend raw-lineage verifier

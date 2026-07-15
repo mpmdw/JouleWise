@@ -1,24 +1,39 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-15, audit close-out session. Automation informs; Ed
-deploys.
+Refreshed: 2026-07-15, AXI-S0 advisor-document alignment. Automation informs;
+Ed deploys.
 
 Live capsule state (last deploy 2026-07-13, `7d3ea57`-era snapshot at
 854,349 B): STALE against this branch.
 
 Stale sections needing regeneration at Ed's next manual deploy:
 
-- Every generated page is behind the audit fix wave (44+ commits):
-  `run_state`, `task_queue` (route now aliases Roadmap per the capsule
-  page-set change), `decision_log` (D-066..D-070 + amendments),
-  `council_log` (C-033), `risk_register` (R-018), `orchestration`
-  (spend guardrails), `project_status`, `readme`, `record`,
-  `measurement_methodology` (WO-005/WO-006 contract lines).
-- `docs/site/*.html` in this branch were regenerated 2026-07-15
-  (deterministic double-build verified) — the deploy step is:
+- Every current site page is stale against the source and audit wave. The full
+  page set is: `index`, `status`, `roadmap`, `record`, `results`, `process`,
+  `research`, `library`, `readme`, `project_status`, `agent_plan`, `run_state`,
+  `task_queue`, `risk_register`, `adapter_contracts`,
+  `measurement_methodology`, `claims_ladder`, `orchestration`, `decision_log`,
+  `council_log`, `milestones`, and `latest_run_report`.
+- The generated `index` and `results` pages specifically still contain both
+  confirmed reader-facing defects: they conflate the benchmark with the
+  measurement harness, and they use idle-subtracted energy to rank
+  configurations. Ed's regeneration must replace both defects with the D-067
+  gross-headline / named-boundary rule and the D-069 terminology split.
+- The generated `project_status`, `status`, and `readme` pages do not yet
+  contain the D-067 gross-headline / named-boundary wording, the D-069
+  harness-versus-benchmark split, or the D-070 five-axis Q4 stress-test
+  agenda now present in their source documents.
+- The generated `research` page does not yet reflect the D-067
+  C-023-IDLE-STATIONARITY framing note or the aligned C5-1.1/static-batching
+  bank text. Generated library/provenance surfaces likewise predate these
+  source edits.
+- The generated `run_state`, `task_queue` / `roadmap`, `decision_log`,
+  `council_log`, `risk_register`, `orchestration`, `record`, and
+  `measurement_methodology` pages still predate their named audit-wave source
+  updates; the remaining pages in the full set above inherit the same stale
+  snapshot and provenance stamps.
+- The ED-MANUAL-ONLY regeneration and deploy command is:
   `python3 scripts/build_site.py && python3 scripts/pack_capsule.py &&
   (cd site_capsule && npx lakebed deploy)` — ED-MANUAL ONLY (D-068).
-- Estimated artifact at last local pack: 879,212 B (64.5 KB headroom
-  under the conservative budget).
 
 The on-site drift banner continues to self-report staleness to readers.

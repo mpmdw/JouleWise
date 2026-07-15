@@ -591,10 +591,13 @@ cheap.
 - **C5-1.1 Active-parameter energy scaling (the honest version of the
   122B observation).** Does decode energy/token scale with active rather
   than total parameters across dense and MoE models on one pinned stack?
-  Measure: decode-window idle-subtracted joules, mean power, throughput
-  across 4-6 model points (dense 1.5B/7B/14B bridge + ≥2 MoE), same quant
-  recipe, pinned MLX version, fixed shapes, n≥5 interleaved; fit
-  mJ/token ~ active_params (+ total-param/KV covariates) with intervals.
+  Measure on the named M3 Max / MLX / powermetrics SoC-rail boundary:
+  gross decode-window joules, mean power, and throughput across 4-6 model
+  points (dense 1.5B/7B/14B bridge + ≥2 MoE), same quant recipe, pinned MLX
+  version, fixed shapes, n≥5 interleaved; fit gross mJ/token ~ active_params
+  (+ total-param/KV covariates) with intervals. Any idle-subtracted result is
+  a labeled within-device secondary sensitivity view, not the scaling
+  headline (D-067).
   Hardware: now. Methodology: runtime is part of the condition — rerun
   after MLX updates as a separate condition. Threat: model families
   differ in more than active params; the dense bridge and quant pinning
@@ -821,11 +824,13 @@ meter decision (R-007), P1-004 network topology (1GbE / 2.5GbE / optional
   runtime teams.
 
 - **C5-2.2 Batch size and the prefill/decode energy split.** Does
-  batching reshape energy/request and the phase split under an
-  interactive latency bound? Measure: batch 1-8, joules/request +
-  latency distribution, memory-fit failures recorded. Gate: P1-006
-  (vLLM/llama.cpp batching; MLX support permitting). Who cares: serving
-  researchers, scheduler developers.
+  static batching reshape gross energy/request and the phase split under
+  an interactive latency bound? Measure: B in {1,2,4,8,16}, group gross
+  energy and gross joules/request within the named target/telemetry
+  boundary, latency distribution, and structured memory-fit failures.
+  The Mac leg requires the S-B support verdict; the serving-style leg remains
+  gated on P1-006. Continuous batching is a post-capstone extension (D-070).
+  Who cares: serving researchers, scheduler developers.
 
 - **C5-2.3 Predicted-vs-measured KV economics.** Does the analytic
   kv-size model predict serialized cache size, transfer energy, and

@@ -89,7 +89,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- READY — A2 `AXI-S0`: Align PROJECT_STATUS.md, README.md, and site sources with the consult's idle-energy basis-plus-boundary wording, the harness-versus-benchmark terminology split, and the batching and five-axis Q4 agenda; add the C-023-IDLE-STATIONARITY framing note, leave D-067 token-normalization contract alignment to AXI-SA, and end with docs/site/DRIFT.md refresh.
+- READY — A3 `AXI-SA`: Freeze and implement the burst-decode metric-semantics contract: versioned request-scoped emission events, proposal and acceptance counters, speculation.mode and draft or native-MTP identity, request lifecycle and outputs, burst-safe reducer metrics, and legacy compatibility; put a sibling manifest plus minimal AP-SPEC denominator and C-023 identity gate in front, align D-067 token normalization, then add the mock spec adapter last with zero live claims.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

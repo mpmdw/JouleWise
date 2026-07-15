@@ -396,62 +396,6 @@
       "status_note": "Partial page trim landed 2026-07-15 by redirecting the duplicative capsule task-queue mirror while preserving its routes; remaining payload work is open. D-043 supersession closure falls due at landing through the dated D-051 amendment identified by PA-2.",
       "stop_card": null
     },
-    "AXI-S0": {
-      "acceptance": {
-        "evidence": [
-          "PROJECT_STATUS.md, README.md, and site sources carry the consult's gross-energy basis-plus-boundary paragraph and label every reported number by basis and measurement boundary",
-          "Reader-facing sources consistently distinguish harness as instrument from benchmark as the frozen workload suite, run rules, and strict validator, and frame batching plus the five architectural axes as Q4 stress tests",
-          "C-023-IDLE-STATIONARITY records that D-067 closes headline-basis selection while retaining idle-model sensitivity, token_normalization.md remains assigned to AXI-SA, and docs/site/DRIFT.md is refreshed without site regeneration or deployment"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/AXI-S0/acceptance",
-          "label": "AXI-S0 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Advisor-facing sources align with D-067 and the consult's basis-and-boundary wording, use the harness/benchmark terminology split, frame the AXI batching agenda under Q4, preserve the idle-sensitivity row, and finish with a drift refresh."
-      },
-      "authority": {
-        "anchor": "4-work-program-post-audit-clearance-streams",
-        "label": "AXI handoff work program S-0",
-        "path": "docs/axi-handoff.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Binding AXI xhigh consult",
-            "path": "docs/process_traces/2026-07-15-axi-xhigh-consult/response.md"
-          },
-          "rule": "Apply the consult's basis-plus-boundary paragraph without calling rail-gross energy full-system or wall energy"
-        },
-        {
-          "authority": {
-            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
-            "label": "D-070 AXI scope and ordering",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Keep all five axes framed as stress tests of Q4 and preserve the L2 ceiling"
-        },
-        {
-          "authority": {
-            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
-            "label": "D-070 Window A ownership",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Window A retains every quiet-Mac measurement slot; AXI-S0 is agent-lane documentation work and consumes no quiet-Mac campaign time"
-        }
-      ],
-      "flags": [],
-      "goal": "Align PROJECT_STATUS.md, README.md, and site sources with the consult's idle-energy basis-plus-boundary wording, the harness-versus-benchmark terminology split, and the batching and five-axis Q4 agenda; add the C-023-IDLE-STATIONARITY framing note, leave D-067 token-normalization contract alignment to AXI-SA, and end with docs/site/DRIFT.md refresh.",
-      "id": "AXI-S0",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 2,
-      "status": "queued",
-      "status_note": "D-067 alignment in docs/contracts/token_normalization.md belongs to AXI-SA, not this docs-only row.",
-      "stop_card": null
-    },
     "AXI-SA": {
       "acceptance": {
         "evidence": [
@@ -473,11 +417,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "AXI-S0 landed 2026-07-15 (advisor-doc alignment; checker FAIL 4 majors -> fix -> delta PASS)",
+            "path": "docs/run_reports/2026-07-14-audit-resume-axi.md"
+          },
           "kind": "task",
           "required": "advisor-facing AXI-S0 alignment lands before the contract-bearing S-A stream starts",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "AXI-S0"
         }
@@ -514,7 +461,7 @@
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 3,
-      "status": "blocked",
+      "status": "queued",
       "stop_card": null
     },
     "AXI-SB": {

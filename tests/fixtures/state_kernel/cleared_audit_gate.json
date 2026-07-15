@@ -1,8 +1,8 @@
 {
-  "active_global_gates": [],
-  "expected_selectable_task_ids": [
-    "AXI-S0",
-    "P1-008",
-    "P2-038"
-  ]
+ "active_global_gates": [],
+ "expected_selectable_task_ids": [
+  "AXI-SA",
+  "P1-008",
+  "P2-038"
+ ]
 }
