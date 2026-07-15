@@ -38,10 +38,12 @@ Before starting substantial work:
 
 At the end of substantial work:
 
-1. Update this file with what changed.
-2. Update `TASK_QUEUE.md` with completed, added, or re-ranked tasks.
+1. Update only hand-authored factual/history sections of this file.
+2. Update `docs/process/state_kernel.json` for live task state and regenerate;
+   do not hand-edit either generated region.
 3. Add or update a detailed report in `docs/run_reports/`.
-4. Record tests, commands, blockers, and the next best task.
+4. Record tests, commands, and blockers; generated lane heads own next-work
+   selection.
 5. Record new decision-log entries and any risk-register status changes.
 6. Refresh `PROJECT_STATUS.md` if advisor-visible state changed.
 7. Push green commits promptly (small doc/bookkeeping commits straight
@@ -60,31 +62,44 @@ At the end of substantial work:
 9. Call out any dirty working-tree state that should not be accidentally
    committed.
 
-## ACTIVE_STOP_CARD
+## Historical Stop-Card Note
 
-None. The C-028 card was **CLEARED 2026-07-11** — see the superseded
-record below. Normal queue/mission pointers apply.
+This 2026-07-11 clearance note is retained as history only; current stop-card
+and work-selection state is generated immediately below from the kernel.
 
 <!-- BEGIN GENERATED: state-kernel run-state-intake -->
 ## ACTIVE_STOP_CARD
 
 Status: NONE — no stop card is active. Stop-card authority: D-050 / D-063 ([decision log](docs/decision_log.md)).
 
+## Active Global Work-Selection Gates
+
+Selection is conjunctive: every lane-matching gate and every ordinary dependency must permit a task. Priority never bypasses a gate.
+
+### `gate-2026-07-13-comprehensive-audit`
+
+Comprehensive whole-project audit declared by Ed 2026-07-13: no feature work, queue pulls, or campaign prep until the audit fix wave completes and findings are adjudicated. Decision-log/process recording and the audit's own work orders remain permitted (they are not kernel tasks).
+
+- Scope: `select` in [AGENT], [QUIET-MAC], [ED-EXTERNAL].
+- Allowed kernel task IDs: NONE.
+- Authority: RUN_STATE.md restart block item 2 (Ed, 2026-07-13); TASK_QUEUE.md Current Queue preamble; docs/reviews/2026-07-13-comprehensive-audit/CHECKPOINT.md.
+- Clearance: docs/reviews/2026-07-13-comprehensive-audit/ close-out: fix wave complete, report synthesis + adjudication recorded, RUN_STATE refreshed (audit close-out session removes this gate from the kernel).
+
 ## Restart By Machine-State Lane
 
-Source of truth: [state kernel](docs/process/state_kernel.json) (updated 2026-07-13). Latest report: [Bridge v1.1 merged (PR #65): co-work lane + session wrappers; steady state for audit gate](docs/run_reports/2026-07-13-bridge-v11.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-15). Latest report: [Bridge v1.1 merged (PR #65): co-work lane + session wrappers; steady state for audit gate](docs/run_reports/2026-07-13-bridge-v11.md).
 
 ### [ED-EXTERNAL]
 
-- READY — E1 `P1-008`: Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
+- GATED — E1 `P1-008` (excluded by: gate-2026-07-13-comprehensive-audit): Map phases to the academic calendar and capture the evaluator acceptance bar (minimum figures, demo expectation, reproducibility threshold, Mac-only plus split-deferral acceptability).
 
 ### [QUIET-MAC]
 
-- READY — Q7 `P2-038`: Close the production uncertainty live tail: execute the merged clock-anchor, marker-phase, idle-drift, and idle-guard path on true MLX plus /usr/bin/powermetrics and retain the backed-up shakedown evidence.
+- GATED — Q7 `P2-038` (excluded by: gate-2026-07-13-comprehensive-audit): Close the production uncertainty live tail: execute the merged clock-anchor, marker-phase, idle-drift, and idle-guard path on true MLX plus /usr/bin/powermetrics and retain the backed-up shakedown evidence.
 
 ### [AGENT]
 
-- READY — A22 `P2-004`: Close model selection (D-016): decision-log entry with models, revisions, artifact paths, local mirror, fallback candidate; mid-model pick, CUDA load, GGUF paths outstanding.
+- GATED — A9 `SPLIT-AP` (excluded by: gate-2026-07-13-comprehensive-audit): Freeze the split pre-registration: one primary estimand and service-state assumption covering gross versus idle-subtracted charged states per NEG-7, both monolithic references predeclared with joint adjusted contrast intervals and split wins only if both are beaten per RIG-5, and missing composite and transfer floor cells named as prerequisites.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
@@ -136,8 +151,9 @@ implies live evidence. P0-003 is satisfied
 by the verified iCloud backup/restore. All NVIDIA/Orin protocol pins remain
 PROVISIONAL pending P1-006 live evidence.
 
-**RESTART HERE (next session) — this is the ONLY next-action block; the
-queue owns ordering:**
+**Historical restart snapshot (recorded 2026-07-13; non-operative).** The
+numbered sequence below is retained as dated handoff narrative, not current
+work-selection authority. Use the generated region above for selection.
 1. DONE 2026-07-13: #61-#63 merged at delta-audited heads; site deployed
    live under the cap; XSI-1 CI hardening green on main; bridge landed
    and lead-verified (8/8 protocol checks; suite 1318 OK).
@@ -419,12 +435,18 @@ current restart instructions. Current state is the C-028 block above.
   removed this session; the long-lived `JouleWise-wt/*` stream worktrees
   are untouched. The Lakebed upload was completed by Ed and
   lead-verified live; no pending actions remain.
-- The generated state-kernel blocks are explicitly non-authoritative;
-  `RUN_STATE.md`, `TASK_QUEUE.md`, and `docs/decision_log.md` remain
-  authoritative.
+- The generated state-kernel blocks are authoritative for work selection.
+  Hand-authored `RUN_STATE.md` and `TASK_QUEUE.md` text remains authoritative
+  only for its own factual, policy, and historical domains;
+  `docs/decision_log.md` remains the policy authority, exit checklists own
+  phase completion, and evidence artifacts own scientific truth.
 - Retained corpus and session scratchpad evidence are immutable.
 
-## What Is Next
+## Historical Next-Work Snapshot (superseded 2026-07-15)
+
+The following 2026-07-13 narrative is retained for chronology only. It is not
+a live queue or restart instruction; the generated work-selection region is
+the sole selector.
 
 The comprehensive whole-project audit is the declared gate (Ed,
 2026-07-13): method proposal pending Ed's approval, then the audit runs
@@ -438,7 +460,10 @@ Hardware-gated (unchanged): 2K/2L (P1-006; NV-GATE-2 additions from
 C-027 apply at live promotion), wall meter (P1-003), topology (P1-004),
 calendar mapping (P1-008).
 
-## Open Decisions And Blockers
+## Reference Decisions And Blockers (non-selection context)
+
+These pointers retain external-dependency context but do not rank or select
+work. The generated region controls task selection.
 
 - Supervisor approval and scope pending (P1-001, R-001 — mitigation
   holding); gates FULL D-016 closure.

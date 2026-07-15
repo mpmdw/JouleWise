@@ -4,7 +4,7 @@ Status: ADJUDICATED 2026-07-09 (C-028) — rulings in `ADJUDICATION.md` in this 
 
 Authority: D-063 (binding architecture and staging), D-061 (process-layer evaluation semantics), C-027 review §5-Q1 and disposition table, C-027 counterreview position Q1, and `docs/reviews/c027/lens-meta.md` findings 1, 5, 8, and 9 plus its design-judgment table. Where this draft makes a migration choice not fixed by those authorities, it labels the choice as design judgment.
 
-Purpose: make work-selection state a single hand-edited, machine-readable source and make the two current next-work views deterministic projections of that source. This is the smallest vertical slice that closes the demonstrated same-day `RUN_STATE.md` drift without attempting D-063 Stage 2 ledgers or later semantic policy-document generation.
+Purpose: make work-selection state a single hand-edited, machine-readable source and make the two current next-work views deterministic projections of that source. The kernel is authoritative for work selection only: phase completion stays with exit checklists (D-023), policy stays with the decision log, and scientific truth stays with evidence artifacts. This is the smallest vertical slice that closes the demonstrated same-day `RUN_STATE.md` drift without attempting D-063 Stage 2 ledgers or later semantic policy-document generation.
 
 ## 1. Binding outcomes, premise corrections, and fences
 
@@ -76,20 +76,20 @@ The kernel is hand-edited; views are generated. Generating the kernel from Markd
 | Field | Type | Required | Contract |
 |---|---|---:|---|
 | `schema` | string | yes | Exact value `docs/process/state_kernel.schema.json`. |
-| `schema_version` | integer | yes | Exact value `2`. Changed meaning requires a new version and migration. |
-| `authority` | string | yes | Exact value `NOT_AUTHORITATIVE_DERIVED_VIEW`. This mandatory notice states that the kernel is a derived work-selection view; owning plans, contracts, decisions, and exit checklists remain authoritative. |
+| `schema_version` | integer | yes | Exact value `3`. Changed meaning requires a new version and migration. |
+| `authority` | string | yes | Exact value `AUTHORITATIVE_WORK_SELECTION_STATE`. The kernel authoritatively controls work selection only; it does not supersede checklist phase completion, decision-log policy, or evidence-artifact scientific truth. |
 | `updated` | string | yes | Explicit `YYYY-MM-DD`; never generated from wall-clock time. |
 | `latest_report` | Pointer | yes | Latest substantial handoff report. |
 | `active_stop_card` | Pointer or null | yes | Null when no card is active; otherwise points to `docs/stop_cards/<id>.md`. |
+| `active_global_gates` | GlobalGate array | yes | Active cross-task work-selection gates. Multiple lane-matching gates combine conjunctively. |
 | `tasks` | object keyed by task ID | yes | Live nonterminal tasks only. Object order has no meaning. |
 
-Schema version 2 is the 2026-07-11 migration that adds the required
-top-level `authority` notice. Version 1 kernels are not accepted after this
-migration; the field is not optional compatibility metadata, and no other
-field changes meaning in this version bump. The notice does not weaken the
-kernel's role as the sole editable source for live work-selection state. It
-prevents that derived state from superseding the authorities referenced by
-each task or D-023's checklist ownership of phase completion.
+Schema version 3 is the 2026-07-15 work-selection-authority migration. It
+adds required `active_global_gates` semantics and replaces the schema-v2
+derived-view notice with the narrowly scoped authority constant above.
+Version 1 and 2 kernels are not accepted. The authority is intentionally
+narrow: it decides which live task may be selected, not whether a phase is
+complete, which policy applies, or which scientific claim is true.
 
 ### 3.2 Pointer
 
@@ -186,7 +186,7 @@ Priority is not a dependency. C-027’s P2-040 → P2-038 → P2-039 → RPT-001
 
 The generator rejects the kernel unless:
 
-1. `schema_version` is `2`, `authority` is exactly `NOT_AUTHORITATIVE_DERIVED_VIEW`, IDs match object keys, lane ranks are unique, and no unknown fields exist.
+1. `schema_version` is `3`, `authority` is exactly `AUTHORITATIVE_WORK_SELECTION_STATE`, IDs match object keys, lane ranks are unique, and no unknown fields exist.
 2. No task has terminal status.
 3. For non-shelved tasks, `blocked` exactly matches hard pending start dependencies.
 4. Pending task dependencies resolve; no self-dependency exists; pending hard task edges are acyclic across all scopes.
@@ -195,8 +195,33 @@ The generator rejects the kernel unless:
 7. If `active_stop_card` is null, every task `stop_card` is null. If active, at least one active/blocked task points to it.
 8. `blocked_post_2m` requires a P2-006 dependency and a binding authority that establishes the post-2M gate. P2-022 and P2-023 must specifically resolve to D-041.
 9. `quiet_mac` tasks are labeled lead-controlled; generator execution never authorizes measurement work.
+10. Every global-gate allowlist ID resolves to a live kernel task; gate IDs, lanes, authority pointers, and allowlist IDs are unique within their owning arrays.
+11. DOC-010 carries both ratified hard start events: `DOC-008-proven-in-use` and `G6`.
 
-### 3.7 Normative example
+### 3.7 Active global work-selection gates
+
+Each `GlobalGate` has exactly:
+
+| Field | Type | Required | Contract |
+|---|---|---:|---|
+| `id` | string | yes | Stable gate ID using the task-ID pattern. |
+| `summary` | string | yes | One-line reason and admitted non-kernel work, if any. |
+| `authority` | nonempty string array | yes | Exact repository authority pointer text frozen by the gate owner. |
+| `clearance` | string | yes | Exact clearance pointer and condition. |
+| `scope` | object | yes | `operation` is exactly `select`; `lanes` is a nonempty unique subset of the three machine-state lanes. |
+| `allowed_task_ids` | string array | yes | Unique IDs resolving to live kernel tasks; empty means no kernel task is admitted in matching lanes. |
+
+`select` means starting or resuming queued/partial work. A task is selectable
+only when every active gate whose lane scope matches the task includes its ID,
+its ordinary hard start dependencies permit it, and lane-local rank selects it
+as the head. Gates combine conjunctively; priority labels never participate in
+admission and cannot bypass a gate.
+
+`active_stop_card` remains a separate, higher-precedence mechanism. While a
+stop card is active normal lane selection is suspended. Clearing the card
+restores the still-active global gates; it does not clear or weaken them.
+
+### 3.8 Normative example
 
 ```json
 {
@@ -290,7 +315,12 @@ With no active card, render `[ED-EXTERNAL]`, `[QUIET-MAC]`, and `[AGENT]` in tha
 3. If none is ready, show the lowest-rank blocked task and its blockers.
 4. If no live task exists, show `NONE`.
 
-The region includes the kernel and `latest_report` links.
+The region includes the kernel and `latest_report` links. It renders every
+active global gate with ID, summary, lane scope, exact allowed task IDs,
+authority pointers, and clearance pointer before the lane heads. A task
+excluded by any lane-matching gate is rendered `GATED`, never `READY`. The
+kernel link is introduced as the "source of truth for work selection," never
+as an unqualified source of truth.
 
 Delete during migration:
 
@@ -316,9 +346,13 @@ Keep the `## Current Queue` heading and place one generated region beneath it:
 
 The region contains:
 
-1. A source/generation warning.
-2. Lane tables in `[ED-EXTERNAL]`, `[QUIET-MAC]`, `[AGENT]` order.
-3. A final Shelved task records table.
+1. A source/generation warning and work-selection-only authority statement.
+2. One generated all-lane compatibility table consumed by the existing site
+   parser; it is a projection of the same kernel state, not another editable
+   queue.
+3. Every active global gate with its full admission and clearance record.
+4. Lane tables in `[ED-EXTERNAL]`, `[QUIET-MAC]`, `[AGENT]` order.
+5. A final Shelved task records table.
 
 Columns:
 
@@ -676,7 +710,7 @@ Named decisions win: missions do not override dependencies, ranks do not overrid
 
 `tests/test_gen_state.py` covers:
 
-1. valid minimal and migrated schema-version-2 kernels, including rejection of a missing or altered top-level `authority` notice;
+1. valid migrated schema-version-3 kernels, including rejection of a missing or altered top-level work-selection `authority` notice;
 2. missing/unknown fields and enums;
 3. ID mismatch, duplicate lane rank, invalid pointers/paths, self-dependency, dangling task, and cycles;
 4. blocked/status consistency and later-scope gates;
@@ -691,7 +725,9 @@ Named decisions win: missions do not override dependencies, ranks do not overrid
 13. one-byte drift detection with read-only failure;
 14. rejection of terminal live tasks;
 15. `blocked_post_2m` invariants; and
-16. manual-validator/schema enum and required-field synchronization.
+16. manual-validator/schema enum and required-field synchronization;
+17. exact selectable-ID sets from hand-written frozen oracle fixtures for gate clearing, allowlist resolution, lane matching, conjunctive multi-gate behavior, and stop-card precedence; and
+18. negative mutations proving that gate removal, allowlist widening, or dropping DOC-010's G6 dependency is detected.
 
 ### 10.2 CI
 

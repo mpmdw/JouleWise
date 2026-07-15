@@ -1,0 +1,152 @@
+{
+  "pre_demotion_queue_snapshot": {
+    "documented_id_migrations": {
+      "P2-047": [
+        "P2-047A",
+        "P2-047B"
+      ]
+    },
+    "task_ids": [
+      "P2-015-SMOKE",
+      "P2-015",
+      "P2-006",
+      "P2-010",
+      "P2-046B",
+      "P2-019",
+      "P2-047",
+      "P2-020",
+      "P2-012",
+      "P2-022",
+      "P2-023",
+      "P2-024",
+      "P1-008",
+      "P2-027",
+      "SITE-02",
+      "P3-001b",
+      "SPLIT-AP",
+      "P1-001",
+      "P1-003",
+      "P2-048",
+      "P1-004",
+      "P1-006",
+      "P2-004",
+      "P2-005",
+      "P2-050",
+      "TOOL-01",
+      "P2-016",
+      "P2-035",
+      "P2-036",
+      "P3-000"
+    ]
+  },
+  "stop_card_precedence": {
+    "active_stop_card": {
+      "label": "Fixture active stop card",
+      "path": "docs/stop_cards/fixture-active.md"
+    },
+    "task_id": "P2-035"
+  },
+  "scenarios": [
+    {
+      "name": "allowlist_resolution",
+      "active_global_gates": [
+        {
+          "id": "gate-fixture-allow-p2-004",
+          "summary": "Fixture gate permits exactly P2-004.",
+          "authority": [
+            "Hand-written selection oracle fixture"
+          ],
+          "clearance": "Fixture-only clearance.",
+          "scope": {
+            "operation": "select",
+            "lanes": [
+              "agent",
+              "quiet_mac",
+              "ed_external"
+            ]
+          },
+          "allowed_task_ids": [
+            "P2-004"
+          ]
+        }
+      ],
+      "expected_selectable_task_ids": [
+        "P2-004"
+      ]
+    },
+    {
+      "name": "lane_matching",
+      "active_global_gates": [
+        {
+          "id": "gate-fixture-agent-only",
+          "summary": "Fixture gate suppresses only the agent lane.",
+          "authority": [
+            "Hand-written selection oracle fixture"
+          ],
+          "clearance": "Fixture-only clearance.",
+          "scope": {
+            "operation": "select",
+            "lanes": [
+              "agent"
+            ]
+          },
+          "allowed_task_ids": []
+        }
+      ],
+      "expected_selectable_task_ids": [
+        "P1-008",
+        "P2-038"
+      ]
+    },
+    {
+      "name": "multi_gate_intersection",
+      "active_global_gates": [
+        {
+          "id": "gate-fixture-broad",
+          "summary": "Fixture gate admits all three dependency-ready lane heads.",
+          "authority": [
+            "Hand-written selection oracle fixture"
+          ],
+          "clearance": "Fixture-only clearance.",
+          "scope": {
+            "operation": "select",
+            "lanes": [
+              "agent",
+              "quiet_mac",
+              "ed_external"
+            ]
+          },
+          "allowed_task_ids": [
+            "P1-008",
+            "P2-038",
+            "P2-004"
+          ]
+        },
+        {
+          "id": "gate-fixture-narrow",
+          "summary": "Fixture gate removes the quiet-Mac head from the intersection.",
+          "authority": [
+            "Hand-written selection oracle fixture"
+          ],
+          "clearance": "Fixture-only clearance.",
+          "scope": {
+            "operation": "select",
+            "lanes": [
+              "agent",
+              "quiet_mac",
+              "ed_external"
+            ]
+          },
+          "allowed_task_ids": [
+            "P1-008",
+            "P2-004"
+          ]
+        }
+      ],
+      "expected_selectable_task_ids": [
+        "P1-008",
+        "P2-004"
+      ]
+    }
+  ]
+}

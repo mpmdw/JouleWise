@@ -1,0 +1,342 @@
+{
+ "schema": "wo021-pre-demotion-freeze-cross-check/v1",
+ "created": "2026-07-15",
+ "result": "pass",
+ "checker": "fresh gpt-5.6-sol high read-only session (independent; did not implement WO-021); lead did not self-grade",
+ "worktree_state": "impl/audit-wo021 uncommitted phase-A tree at BASE_HEAD 5fcd1cd15d04ca5643bbc2a72a82c22be8942f6b",
+ "frozen_gate": "gate-2026-07-13-comprehensive-audit, scope select/[agent,quiet_mac,ed_external], allowed_task_ids []",
+ "summary": "PASS: the current uncommitted kernel exactly represents the sole live global work-selection gate, with an empty kernel-task allowlist across all lanes; no stop card is active and no prose-declared global selection gate is omitted or spuriously added.",
+ "surfaces_examined": [
+  {
+   "file": "RUN_STATE.md",
+   "line": 65,
+   "text_excerpt": "None. The C-028 card was CLEARED 2026-07-11.",
+   "classification": "other",
+   "kernel_match": "matched: current stop-card declaration agrees with active_stop_card=null"
+  },
+  {
+   "file": "RUN_STATE.md",
+   "line": 71,
+   "text_excerpt": "Status: NONE \u2014 no stop card is active.",
+   "classification": "other",
+   "kernel_match": "matched: generated stop-card projection agrees with active_stop_card=null"
+  },
+  {
+   "file": "RUN_STATE.md",
+   "line": 79,
+   "text_excerpt": "no feature work, queue pulls, or campaign prep until the audit fix wave completes and findings are adjudicated",
+   "classification": "live_work_selection_gate",
+   "kernel_match": "matched: same audit gate, all lanes, no kernel tasks admitted"
+  },
+  {
+   "file": "RUN_STATE.md",
+   "line": 157,
+   "text_excerpt": "Comprehensive whole-project audit (declared gate) ... no further feature work, queue pulls, or campaign prep",
+   "classification": "live_work_selection_gate",
+   "kernel_match": "matched: same audit gate and empty kernel-task allowlist"
+  },
+  {
+   "file": "RUN_STATE.md",
+   "line": 442,
+   "text_excerpt": "The comprehensive whole-project audit is the declared gate ... findings are adjudicated before any further feature work.",
+   "classification": "live_work_selection_gate",
+   "kernel_match": "matched: same audit gate"
+  },
+  {
+   "file": "RUN_STATE.md",
+   "line": 104,
+   "text_excerpt": "Superseded stop card (C-028)",
+   "classification": "historical_narrative",
+   "kernel_match": "not applicable as a live gate; explicitly superseded and cleared"
+  },
+  {
+   "file": "RUN_STATE.md",
+   "line": 131,
+   "text_excerpt": "No stop card is active.",
+   "classification": "historical_narrative",
+   "kernel_match": "consistent with current active_stop_card=null"
+  },
+  {
+   "file": "TASK_QUEUE.md",
+   "line": 15,
+   "text_excerpt": "If RUN_STATE.md contains an ACTIVE ACTIVE_STOP_CARD, that card outranks this queue.",
+   "classification": "other",
+   "kernel_match": "not a current gate declaration; generic stop-card precedence rule"
+  },
+  {
+   "file": "TASK_QUEUE.md",
+   "line": 97,
+   "text_excerpt": "A whole-project comprehensive audit is the declared next gate before further feature work.",
+   "classification": "live_work_selection_gate",
+   "kernel_match": "matched: same audit gate"
+  },
+  {
+   "file": "TASK_QUEUE.md",
+   "line": 258,
+   "text_excerpt": "gate-2026-07-13-comprehensive-audit",
+   "classification": "live_work_selection_gate",
+   "kernel_match": "matched: generated gate has allowed kernel task IDs NONE"
+  },
+  {
+   "file": "docs/axi-handoff.md",
+   "line": 22,
+   "text_excerpt": "The comprehensive audit ... remains the active gate for feature work and campaign prep. This handoff does NOT dissolve it.",
+   "classification": "live_work_selection_gate",
+   "kernel_match": "matched: preserves the existing audit gate; introduces no new gate"
+  },
+  {
+   "file": "docs/axi-handoff.md",
+   "line": 116,
+   "text_excerpt": "record the D-entry now and sequence the ACTION after audit clearance",
+   "classification": "other",
+   "kernel_match": "matched: sequencing behind the existing audit gate, not a distinct gate"
+  },
+  {
+   "file": "docs/axi-handoff.md",
+   "line": 152,
+   "text_excerpt": "Sequence S-0 immediately after audit clearance",
+   "classification": "other",
+   "kernel_match": "matched: post-clearance ordering only"
+  },
+  {
+   "file": "docs/axi-handoff.md",
+   "line": 166,
+   "text_excerpt": "Work program (post-audit-clearance streams)",
+   "classification": "other",
+   "kernel_match": "matched: post-clearance program, not a new selection gate"
+  },
+  {
+   "file": "docs/decision_log.md",
+   "line": 3055,
+   "text_excerpt": "D-060: Depth-before-breadth stop line ... no NEW breadth ... until four gates pass",
+   "classification": "other",
+   "kernel_match": "not an active_global_gates select declaration: standing scope-admission fence for creating/admitting new breadth, with ordinary dependencies and explicit scoped overrides"
+  },
+  {
+   "file": "docs/decision_log.md",
+   "line": 3389,
+   "text_excerpt": "standing surfaces that would otherwise block the architectural-axes extension work are the D-060 depth-before-breadth stop line and contract-freeze discipline",
+   "classification": "other",
+   "kernel_match": "not a global queued-task select gate; D-066 supplies a scoped AXI policy override"
+  },
+  {
+   "file": "docs/decision_log.md",
+   "line": 3409,
+   "text_excerpt": "The 2026-07-13 comprehensive-audit gate is NOT dissolved ... AXI ACTION sequences after audit clearance.",
+   "classification": "live_work_selection_gate",
+   "kernel_match": "matched: confirms the same audit gate remains live"
+  },
+  {
+   "file": "docs/decision_log.md",
+   "line": 3551,
+   "text_excerpt": "S-0 sequences immediately after audit clearance",
+   "classification": "other",
+   "kernel_match": "matched: sequencing behind existing gate only"
+  },
+  {
+   "file": "docs/reviews/2026-07-13-comprehensive-audit/CHECKPOINT.md",
+   "line": 22,
+   "text_excerpt": "QUEUED after streams ... WO-021 ... lead freezes then-current gate first",
+   "classification": "other",
+   "kernel_match": "supports current audit execution state; does not declare an additional gate"
+  },
+  {
+   "file": "docs/reviews/2026-07-13-comprehensive-audit/CHECKPOINT.md",
+   "line": 82,
+   "text_excerpt": "lead freezes the then-current global gate immediately before implementation",
+   "classification": "other",
+   "kernel_match": "WO-021 freeze instruction, not a separate live gate"
+  },
+  {
+   "file": "docs/council_log.md",
+   "line": 1500,
+   "text_excerpt": "PAUSE: comprehensive whole-project audit declared next gate (Ed)",
+   "classification": "historical_narrative",
+   "kernel_match": "historical origin record matches the live audit gate"
+  },
+  {
+   "file": "docs/run_reports/2026-07-13-restart-merge-deploy.md",
+   "line": 104,
+   "text_excerpt": "PAUSE POINT: whole-project comprehensive audit requested by Ed before further feature work",
+   "classification": "historical_narrative",
+   "kernel_match": "historical origin record matches the live audit gate"
+  },
+  {
+   "file": "docs/run_reports/2026-07-13-bridge-v11.md",
+   "line": 139,
+   "text_excerpt": "The Ed-declared whole-project comprehensive audit remains the next gate for feature work",
+   "classification": "historical_narrative",
+   "kernel_match": "historical status confirmation matches the live audit gate"
+  },
+  {
+   "file": "docs/run_reports/2026-07-13-bridge-v11.md",
+   "line": 202,
+   "text_excerpt": "declared steady state for the comprehensive audit gate",
+   "classification": "historical_narrative",
+   "kernel_match": "historical status confirmation matches the live audit gate"
+  },
+  {
+   "file": "docs/process_traces/2026-07-14-c033-axi-consult/response.md",
+   "line": 3,
+   "text_excerpt": "the audit gate ... remain intact",
+   "classification": "other",
+   "kernel_match": "read-only advisory confirmation; same gate, no new authority"
+  },
+  {
+   "file": "docs/reviews/2026-07-13-comprehensive-audit/receipts/D7.json",
+   "line": 32,
+   "text_excerpt": "generated live-state mechanism ... renders READY while ... declare the comprehensive audit the exclusive next gate",
+   "classification": "historical_narrative",
+   "kernel_match": "prior-state defect evidence; current tree repairs the described mismatch"
+  },
+  {
+   "file": "docs/reviews/2026-07-13-comprehensive-audit/receipts/W5.json",
+   "line": 47,
+   "text_excerpt": "manually authoritative surfaces prohibit feature work until the comprehensive audit",
+   "classification": "historical_narrative",
+   "kernel_match": "prior-state defect evidence; current tree now encodes the gate"
+  },
+  {
+   "file": "docs/reviews/2026-07-13-comprehensive-audit/packets/ed-rulings.json",
+   "line": 5,
+   "text_excerpt": "encode the lead-frozen THEN-CURRENT gate",
+   "classification": "other",
+   "kernel_match": "WO-021 design instruction, not an independent gate declaration"
+  },
+  {
+   "file": "docs/reviews/2026-07-13-comprehensive-audit/packets/fable-court-holdings.json",
+   "line": 55,
+   "text_excerpt": "READY against the declared audit gate",
+   "classification": "historical_narrative",
+   "kernel_match": "prior-tree mismatch analysis; repaired in current tree"
+  },
+  {
+   "file": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl",
+   "line": 82,
+   "text_excerpt": "PRE-DEMOTION INDEPENDENT FREEZE CROSS-CHECK ... frozen active_global_gates and exact allowed_task_ids",
+   "classification": "other",
+   "kernel_match": "acceptance requirement for this review, not another gate"
+  },
+  {
+   "file": "docs/reviews/2026-07-13-comprehensive-audit/register.jsonl",
+   "line": 83,
+   "text_excerpt": "missed checkpoint blocks new process-facing delegation until reconciled",
+   "classification": "other",
+   "kernel_match": "future WO-022 policy text in a planned work order, not currently enacted global selection state"
+  },
+  {
+   "file": "PROJECT_STATUS.md",
+   "line": 62,
+   "text_excerpt": "need attention before any new breadth",
+   "classification": "historical_narrative",
+   "kernel_match": "dated previous-update summary of scope discipline, not a current global select gate"
+  },
+  {
+   "file": "PROJECT_STATUS.md",
+   "line": 524,
+   "text_excerpt": "Until then, the dependency structure is the schedule",
+   "classification": "other",
+   "kernel_match": "ordinary dependency scheduling, not an active global gate"
+  },
+  {
+   "file": "PROJECT_STATUS.md",
+   "line": 529,
+   "text_excerpt": "remote-device access ... is the remaining hardware gate",
+   "classification": "other",
+   "kernel_match": "task-local hardware dependency, not an active cross-task selection gate"
+  },
+  {
+   "file": "docs/orchestration.md",
+   "line": 108,
+   "text_excerpt": "Stop cards and paused work ... While active, that card is the single restart authority",
+   "classification": "other",
+   "kernel_match": "generic stop-card mechanism; current card state is null"
+  },
+  {
+   "file": "docs/agent_playbook.md",
+   "line": 27,
+   "text_excerpt": "Take the highest-ranked task ... whose gate is open.",
+   "classification": "other",
+   "kernel_match": "generic selection procedure referring to owning gates/dependencies"
+  },
+  {
+   "file": "docs/agent_playbook.md",
+   "line": 31,
+   "text_excerpt": "Gate summary ... dependency shape",
+   "classification": "other",
+   "kernel_match": "explicitly non-live dependency summary, not global gate state"
+  },
+  {
+   "file": "AGENT_PLAN.md",
+   "line": 140,
+   "text_excerpt": "Model selection checkpoint ... full closure remains gated on P1-001 scope.",
+   "classification": "other",
+   "kernel_match": "ordinary task dependency; kernel records P2-004 dependency on P1-001"
+  },
+  {
+   "file": "docs/planning_reflection_protocol.md",
+   "line": 3,
+   "text_excerpt": "Every phase and substantial run must begin with a planning audit before new implementation work starts.",
+   "classification": "other",
+   "kernel_match": "standing intake procedure, not an active_global_gates selection declaration"
+  },
+  {
+   "file": "AGENTS.md",
+   "line": 42,
+   "text_excerpt": "An active stop card overrides every other restart or queue pointer.",
+   "classification": "other",
+   "kernel_match": "generic stop-card precedence rule; current card state is null"
+  },
+  {
+   "file": "AGENTS.md",
+   "line": 60,
+   "text_excerpt": "Never start or continue a QUIET-MAC measurement task from this bridge.",
+   "classification": "other",
+   "kernel_match": "bridge-specific machine-state safety rule, not a global gate; quiet-machine lane ownership remains independently binding"
+  },
+  {
+   "file": "docs/specs/c027/doc-008_state_kernel.md",
+   "line": 220,
+   "text_excerpt": "active_stop_card remains a separate, higher-precedence mechanism",
+   "classification": "other",
+   "kernel_match": "schema semantics, not a current card declaration"
+  },
+  {
+   "file": "docs/run_reports/2026-07-09-claude-codex-mcp-bridge.md",
+   "line": 97,
+   "text_excerpt": "CP-5 stop card was cleared and no stop card is active",
+   "classification": "historical_narrative",
+   "kernel_match": "historical state consistent with current null card"
+  },
+  {
+   "file": "docs/run_reports/2026-07-11-c028-continuation.md",
+   "line": 448,
+   "text_excerpt": "C-028 is closed and no stop card is active.",
+   "classification": "historical_narrative",
+   "kernel_match": "historical clearance record consistent with current null card"
+  },
+  {
+   "file": "docs/run_reports/2026-07-11-p2046-load-transition-prep.md",
+   "line": 11,
+   "text_excerpt": "No active stop card was present.",
+   "classification": "historical_narrative",
+   "kernel_match": "historical intake state, not a live gate"
+  },
+  {
+   "file": "docs/specs/c027/p2-039_floor_artifact.md",
+   "line": 948,
+   "text_excerpt": "no active stop card exists",
+   "classification": "historical_narrative",
+   "kernel_match": "recorded prior intake state consistent with current null card"
+  }
+ ],
+ "classification_note": "D-060 depth-before-breadth classified as a scope-admission fence for NEW breadth, not a select gate over queued kernel tasks; AXI handoff preserves the audit gate without declaring a new one; stop-card state none on every surface",
+ "verification": [
+  "HEAD 5fcd1cd15d04ca5643bbc2a72a82c22be8942f6b matches BASE_HEAD on impl/audit-wo021",
+  "Tracked-tree git-grep sweep covered the named prose surfaces plus audit, clearance, pause, freeze, stop-card, and gate-declaration variants",
+  "PYTHONDONTWRITEBYTECODE=1 python3 scripts/gen_state.py --check: exit 0",
+  "jq semantic assertion: authority AUTHORITATIVE_WORK_SELECTION_STATE; exactly one audit gate; select scope covers agent/quiet_mac/ed_external; allowed_task_ids=[]; active_stop_card=null; no task stop_card pointers: true",
+  "Final git status confirmed no review-created changes"
+ ],
+ "response_sha256": "04d13d2420e6e0e843a647775ac1f82a5947cbeed609d2d8a079262abadae58e"
+}
