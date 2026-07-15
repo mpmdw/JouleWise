@@ -89,6 +89,15 @@ intermittent failure classes are fixed on main: the fake-nvidia-smi idle
 deadline now begins at sampler readiness, and the P2-038 rail-only fixture
 deterministically supplies the right-edge sample.)
 
+## Release
+
+The ordered publication path, including private-corpus, network, Node/Lakebed,
+and credential boundaries, is in
+[`docs/publication_release_checklist.md`](docs/publication_release_checklist.md).
+Its clean-clone fixture/component gate is
+`python3 scripts/release_check.py --dry-run`; it performs real temporary-directory
+builds and never deploys.
+
 ## Run The Harness (mock target — no hardware or extras needed)
 
 ```bash

@@ -108,3 +108,27 @@ jobs:
               e.startswith("cannot infer the JouleWise repository root") for e in errors
           ), errors
           PY
+
+  release-chain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            site_capsule/package-lock.json
+      - name: Install pinned publication build tools (network, no credentials)
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm --prefix site_capsule ci --ignore-scripts --no-audit --no-fund
+      - name: Exercise non-secret publication chain in a clean temporary snapshot
+        env:
+          JOULEWISE_MARKED_BIN: ${{ github.workspace }}/node_modules/.bin/marked
+          JOULEWISE_LAKEBED_BIN: ${{ github.workspace }}/site_capsule/node_modules/.bin/lakebed
+        run: python scripts/release_check.py --dry-run
