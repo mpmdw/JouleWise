@@ -547,7 +547,7 @@ ruling:
 | QUEUED, kernel task `AUD-FOLLOWUPS` (this file is its accepted-residue list) | F7 owned D-062 lint queue row, F9 WO-014 discriminating realized-token test, F11 WO-017 no-handoff regression assertion, F12 WO-020 standalone bridge-checker decision, F22 WO-040 absolute path + genuine pristine-clone test |
 | ACCEPTED with disposition (Ed ruling: features/project over meta-process; work verified green) | F6 WO-009 persistence-migration scope expansion (migration sound, v1/v2 tests green); F20 misc bounded-scope overruns; F8/F14 ceremony-class receipt/test formality where adequate substitutes exist |
 | RECORDED process deviations (historical; cannot unbreach) | F15→WO-023 DO-FIRST precursor ordering breach (landed after S2 opened; caught only at ULTRA) |
-| PENDING Ed recording | F18 WO-027 codex-watch non-use confirmation: Ed's checkpoint deferral authorized deletion; the explicit non-use confirmation is being collected in the 2026-07-15 close-out session and recorded on this file when given |
+| RECORDED (Ed, 2026-07-15 close-out session) | F18 WO-027 codex-watch non-use: Ed confirmed verbatim "No flow uses it, only you use it. if no functionality is lost, go ahead." Functionality preserved: recovery recipe in the codex skill + the .codex-bridge observability replacement (demonstrated live). Acceptance clause CLOSED. |
 
 ## 9. Method notes and deviations
 
