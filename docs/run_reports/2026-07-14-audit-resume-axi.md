@@ -168,3 +168,42 @@ gate removal from the kernel is a one-line follow-up at/after merge.
 (2) Ed's explicit codex-watch NON-USE confirmation (ULTRA F18; asked
 in-session). (3) The AXI arc (tasks: Sol xhigh handoff consult → S-0 →
 S-A → S-B/C/D/E queue rows) launches after clearance.
+
+## AXI spec-design phase (2026-07-15, post-clearance; arc C-035)
+
+Arc-open declaration (WO-022 §5a): predeclared deliverable = three
+council-reviewed AXI spec documents (deliverable-facing: predeclared
+contract/analysis artifacts the campaigns require). Delivered:
+
+- `docs/specs/axi/sa_burst_decode_contract.md` (2,311 lines, `3b5c4bf`):
+  xhigh author -> xhigh counterreview (2 blockers + 4 majors + 2
+  moderates) -> fix round -> xhigh delta (1 new blocker: gameable
+  attempt ledger) -> closed-set micro-round -> lead-terminated.
+- `docs/specs/axi/sd_model_pair_scorecard.md` (`1464c93`): high author
+  -> counterreview (1 blocker + 5 majors) -> fix -> delta (2 majors) ->
+  micro-round -> lead-verified. Carries the four-option D-016 8GB-fit
+  decision box for Ed.
+- `docs/specs/axi/se_analysis_plans_draft.md` (`d2bd5ee`): xhigh author
+  -> xhigh counterreview (6 HIGH + 3 MED) -> fix -> delta residue ->
+  ESTIMAND DEMOTION ruling (AP-REASON-VARIANCE claims only the
+  identifiable replay-conditional decomposition; natural-sampling
+  variance descriptive L1) -> lead-terminated. 21 PROVISIONAL cells
+  with named freeze triggers.
+
+Every spec failed its first counterreview; 30+ substantive findings
+were fixed pre-landing (notably: the counterreview refuted the SA
+draft's byte-identical frozen-arm claim against actual reducer code —
+restated honestly as current-behavior goldens; and the SE floor
+transport's max() guard was proven non-conservative under aligned
+errors — replaced with union bounds + Markov quantile guards).
+
+Spend (estimated, rollout-derived): ~14 Sol sessions ≈ 71.2M total
+tokens post-clearance (S-0 + row minting + three spec pipelines).
+Within arc soft bands. Three benign ATTRIBUTION_INDETERMINATE lease
+closes (lead commits moving HEAD under long parallel leases — same
+adjudicated class; leases retained pending Ed batch approval; every
+diff verified + landed).
+
+NEXT HEAD: AXI-SA implementation (the spec is its authority; branch +
+PR series per D-031 — gh is now authenticated). Then AXI-SB spike
+against the landed contract.
