@@ -1,17 +1,18 @@
 # JouleWise Run State
 
-Last updated: 2026-07-13 (COMPREHENSIVE AUDIT: method + execution through
-the fix wave's bench batch, CHECKPOINTED mid-wave for Ed's resume — read
-`docs/reviews/2026-07-13-comprehensive-audit/CHECKPOINT.md` FIRST; it is
-the resume authority for the fix wave. Audit: 15/15 scans, 61 verified
-findings (0 refuted), 43 operative + 39 work orders, Sol final round
-30 amendments baked, R1/R2 rulings ALIGNED+accepted (state-kernel
-choice-A; spend guardrails), bench batch landed on `impl/audit-wave`
-(Fable checker PASS x5). KNOWN RED: canonical suite fails 1 test on any
-machine with cached Lakebed 0.0.29 (audit finding C2-018 self-demonstrated
-post-deploy); stream S3/WO-018 fixes it FIRST on resume. Streams S1-S5
-NOT yet launched. Bridge v1.1 + steady-state records: earlier this file's
-history and `docs/run_reports/2026-07-13-bridge-v11.md`.)
+Last updated: 2026-07-15 (COMPREHENSIVE AUDIT FIX WAVE COMPLETE on
+branch `impl/audit-integration`, awaiting Ed's adoption merge — the
+audit gate stays ACTIVE in the kernel until the close-out session
+removes it at/after that merge. All 34 non-deferred work orders landed
+(S1-S5, S4, bench, WO-021/022/027); D-043 supersession closure done;
+ULTRA comparison audit ran with full triage (report §8.5); report
+§7/§8/§9 synthesized; completeness-critic gaps closed; 7 deferred
+orders + follow-ups promoted as gated kernel tasks (AUD-*). Suite on
+the branch: canonical 1532 OK. The 2026-07-13 checkpoint is now
+HISTORY, not a resume authority. Session record:
+`docs/run_reports/2026-07-14-audit-resume-axi.md`. AXI intake
+(D-066..D-070) recorded on main same arc; AXI streams launch after
+audit clearance.)
 
 ## Start Here For Every Big Run
 

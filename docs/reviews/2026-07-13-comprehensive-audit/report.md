@@ -530,6 +530,25 @@ court {'conclusion-amended': 11, 'conclusion-stands': 1}
 rulings ['R1', 'R2', 'R3', 'R4']
 ```
 
+## 8.5 ULTRA comparison audit (post-wave verification modality)
+
+Ran 2026-07-15 (Sol ULTRA, read-only, pinned worktree at `978e4c6`;
+WO-022 pre-run statement in the 2026-07-14 run report; full response
+preserved at `receipts/ULTRA-comparison-response.md`). Per-order
+verdicts: 12 LANDED-FAITHFUL, 22 LANDED-WITH-DEVIATION, 6
+DEFERRED-CONFIRMED (WO-034..039 sampled set), 0 NOT-FOUND. Two blockers
+and twenty findings, triaged under Ed's same-day substance-over-ceremony
+ruling:
+
+| Disposition | Findings |
+|---|---|
+| FIXED, commit `913a2a6` (fresh xhigh checker FAIL on F2/F4 residue → fix round → delta PASS) | F1 custody window (blocker), F2 sealed-bundle gate (blocker), F3 schema parity, F4 frozen-v1-arm dispatch regression, F5 node_role identity, F16 explicit unknown rendering, F17 clean-venv boundary receipts |
+| FIXED, lead bench `7853fc4` | F13 D-063 authority amendment, F10 WO-015 supersession line, F15 R-018 ratified-D-060 wording, F21 D-051 page-trim amendment (partial AUD-WO-039 pre-implementation recorded) |
+| QUEUED, kernel task `AUD-FOLLOWUPS` (this file is its accepted-residue list) | F7 owned D-062 lint queue row, F9 WO-014 discriminating realized-token test, F11 WO-017 no-handoff regression assertion, F12 WO-020 standalone bridge-checker decision, F22 WO-040 absolute path + genuine pristine-clone test |
+| ACCEPTED with disposition (Ed ruling: features/project over meta-process; work verified green) | F6 WO-009 persistence-migration scope expansion (migration sound, v1/v2 tests green); F20 misc bounded-scope overruns; F8/F14 ceremony-class receipt/test formality where adequate substitutes exist |
+| RECORDED process deviations (historical; cannot unbreach) | F15→WO-023 DO-FIRST precursor ordering breach (landed after S2 opened; caught only at ULTRA) |
+| PENDING Ed recording | F18 WO-027 codex-watch non-use confirmation: Ed's checkpoint deferral authorized deletion; the explicit non-use confirmation is being collected in the 2026-07-15 close-out session and recorded on this file when given |
+
 ## 9. Method notes and deviations
 
 Charter-review dissent record: the Sol co-planner's round-2 design included
@@ -539,5 +558,43 @@ produce keep-rows for undisputed code (audit-theater by this charter's own
 standard); the lead sided with the fresh-eyes review and folded keep-prior
 paragraphs into those domains' scan prompts instead.
 
-(Filled at close: what deviated from this charter and why; spend summary;
-per-layer catch attribution.)
+### Close-out record (2026-07-15)
+
+Deviations from this charter, and why:
+
+- The wave PAUSED mid-flight at the bench batch (2026-07-13 checkpoint)
+  for Ed's resume; the 2026-07-14/15 session completed it. The
+  checkpoint, not this charter, governed resume ordering.
+- WO-023's DO-FIRST precursor ordering was breached (landed after S2
+  opened); undetected by the per-order layers, caught by the ULTRA
+  comparison audit; recorded, not repairable.
+- The close-out's "site regen" step was superseded mid-wave by D-068
+  (Ed-directed): sessions end with a `docs/site/DRIFT.md` refresh; Ed
+  deploys manually.
+- The ULTRA comparison audit ran after the integration tree and
+  supersession closure rather than after a main-merge adoption commit:
+  Ed's merge is the adoption act (D-031 convention), so verification
+  preceded adoption rather than following it.
+- Two lead cross-tree/sequencing errors during resume (commit-before-
+  close on WO-010; bench edits under an active lease) plus two
+  hand-extended-sha prompt defects and one `resume --last` cross-thread
+  mis-attach — all caught by the harness/wrapper layers, all
+  adjudicated with Ed approvals recorded in the lease event chain and
+  decision log (D-065 operational note).
+
+Spend summary: `receipts/WO-022-audit-close-spend.json` (refreshed at
+close; estimated basis, rollout-derived, cached-dominated; the arc's
+band crossings are recorded there with the pre-policy flag on WO-010's
+21.8M-token implementation session).
+
+Per-layer catch attribution (resume arc; unique catches only):
+
+| Layer | Unique catches |
+|---|---|
+| Fresh per-order Sol checkers | WO-011 item_type-label evidence bypass (major); WO-021 four-record silent queue loss (blocker); WO-031 three freshness-coverage majors (with mutation probes); WO-027 live-discovery gap; ULTRA-fix F2 fail-open residue + F4 inauthentic regression (blocker+major) |
+| C-033 coherence council | six D-entry corrections incl. the D-058 Primary Metric supersession |
+| Integration review (xhigh) | capsule budget breach from stream-union growth; D-068 vacuous-green on capsule/generated deploy surfaces |
+| ULTRA comparison audit | the WO-001/010 custody interrupt window (blocker), the sealed-bundle vacuous gate (blocker), the frozen-arm dispatch regression, node_role identity collapse, + 18 further deviations/dispositions (§8.5) |
+| Fable completeness critic | unfilled §9 close record; ULTRA modality absent from the durable record with a dangling AUD-FOLLOWUPS pointer; three undispositioned majors |
+| Harness permission classifier | three refusals of lead self-approved lease abandonments (all subsequently Ed-adjudicated) |
+| Lead-live | checker-thread `resume --last` mis-attach caught and killed after one read-only call |
