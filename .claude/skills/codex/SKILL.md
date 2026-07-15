@@ -74,8 +74,13 @@ Live visibility and discovery for bridge-launched sessions use the
 replacement demonstrated live in the 2026-07-14 audit-resume session, which
 monitored two concurrent Sol implementations this way):
 
-- Discover sessions: `ls -lt .codex-bridge/*.status` (one `OK`/`FAILED rc=N`
-  file per run id) and `.codex-bridge/invocation_manifest.jsonl` rows.
+- Discover RUNNING sessions: `ls -lt .codex-bridge/*.log` — the log exists
+  from launch, but `.status` files and manifest rows are written only at
+  exit, so a `.log` with no matching `.status` file is a live (or crashed,
+  incomplete) run. Its filename is the run id the follow command needs.
+- Discover finished sessions: `ls -lt .codex-bridge/*.status` (one
+  `OK`/`FAILED rc=N` file per run id) and
+  `.codex-bridge/invocation_manifest.jsonl` rows.
 - Follow live: `tail -f .codex-bridge/<run-id>.log` (the full tee'd stream).
 - Final message: `.codex-bridge/responses/<run-id>.response.md`, mirrored to
   `.codex-bridge/last-message.md`.
@@ -87,8 +92,9 @@ rollout JSONL per session under `~/.codex/sessions/YYYY/MM/DD/`.
 - Discover: newest-first by mtime, e.g.
   `find ~/.codex/sessions -name '*.jsonl' -mmin -480 | xargs ls -lt`.
 - Live processes: `ps -axo pid,etime,command | grep 'codex exec'`.
-- Read a rollout: each line is an event whose `payload.type` is one of
-  `session_meta` (has `cwd`), `user_message`, `agent_message`,
+- Read a rollout: each line is an event typed by `payload.type` (with
+  `session_meta` also appearing as top-level `event.type` in current
+  rollouts): `session_meta` (has `cwd`), `user_message`, `agent_message`,
   `function_call` (arguments hold the command), `token_count`
   (`info.total_token_usage.total_tokens`), or `task_complete`
   (`last_agent_message` is the final response). `tail -f` follows a live
