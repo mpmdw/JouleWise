@@ -86,6 +86,13 @@ be re-derived by a future agent gets an entry here.
 | D-061 | Review-layer evaluation rule v2 | accepted |
 | D-062 | Confirmatory sampling policy (fixed n, demotion) | accepted |
 | D-063 | Process architecture v2 (state kernel first) | accepted |
+| D-064 | Delegated-invocation compliance surface: tracked per-session JSONL event stream, canonical report envelope, enforced write scope | accepted |
+| D-065 | bridge-protocol/v1.1 — co-work lane, session wrappers, tolerant envelope | accepted |
+| D-066 | Scoped spec-freeze override for the AXI extension agenda (Ed override) | accepted |
+| D-067 | Idle reporting basis — gross headline; idle-subtracted is a labeled within-device secondary view | accepted |
+| D-068 | Site deployment is Ed-manual; sessions end with a drift report, never a deploy | accepted |
+| D-069 | Advisor-doc alignment (stream S-0) is sanctioned front-facing work | accepted |
+| D-070 | Architectural-axes extension agenda (AXI): scope, claim posture, batch-axis rulings | accepted |
 
 ---
 
@@ -3180,12 +3187,6 @@ migration (rejected: risks the drift it cures).
 
 ---
 
-## Index row
-
-| D-064 | Delegated-invocation compliance surface: tracked per-session JSONL event stream, canonical report envelope, enforced write scope | accepted |
-
----
-
 ## D-064: Delegated-invocation compliance surface — tracked JSONL event stream, report envelope, enforced write scope
 
 - Date: 2026-07-11 (core surface adjudicated 2026-07-10, C-028 H4;
@@ -3375,3 +3376,264 @@ Evidence: PR #65 (final head `8b96bd4`, CI green, suite 1387 OK);
 review arc and per-layer catches in
 `docs/run_reports/2026-07-13-bridge-v11.md`; tracked invocation
 manifest `docs/process_traces/2026-07-13-bridge-v11.manifest.jsonl`.
+
+## D-066: Scoped spec-freeze override for the AXI extension agenda (Ed override)
+
+- Date: 2026-07-14 (Ed-directed; provenance `docs/axi-handoff.md` §2.1,
+  carrying Ed's explicit words: "I know we spec froze a way back but
+  I'm overriding that")
+- Status: accepted (Ed override of standing freeze surfaces; C-033
+  coherence-reviewed; process-layer)
+- Phase: cross-phase / project management
+
+Context: the standing surfaces that would otherwise block the
+architectural-axes (AXI) extension work are the D-060
+depth-before-breadth stop line (no new campaign packs or registry
+expansion until its gates pass) and the contract-freeze discipline
+over adopted contracts (D-053 analysis-registry predeclaration
+freezes; D-058 token-normalization contract; frozen reducer metric
+semantics with legacy arms).
+
+Decision: the freeze is lifted FOR THE SCOPED PURPOSE of the AXI
+extensions only — burst-decode metric semantics (stream S-A), the
+batch axis, idle-basis reporting wording (D-067), and the
+schema/reducer/contract changes those require. The override removes
+the freeze as a BLOCKER, not the process:
+
+1. Every contract change still requires its own D-entry and council
+   review.
+2. Legacy arms stay frozen — no re-dispatch of existing bundles.
+3. Claim ceilings are unchanged: everything caps at L2; L3 only via
+   the existing Q4/AP-1 holdout machinery (D-070 clause 5).
+4. Window A ordering and [QUIET-MAC] window ownership are untouched.
+5. The 2026-07-13 comprehensive-audit gate is NOT dissolved: this
+   entry is decision-log/process work permitted under the gate; AXI
+   ACTION sequences after audit clearance.
+
+Options considered: (a) keep the freeze and defer AXI post-capstone —
+rejected by Ed (the agenda is advisor-aligned and capstone-bearing);
+(b) blanket unfreeze — rejected (reopens every settled contract and
+invites drift); (c) scoped lift with process intact — chosen
+(Ed-directed).
+
+Considerations: D-060's own text already permits gate-closing work and
+correctness fixes; AXI adds genuine breadth, hence an explicit
+recorded override rather than a reinterpretation.
+
+Revisit trigger: if AXI scope grows beyond the four named surfaces, a
+new entry is required — this override does not travel.
+
+## D-067: Idle reporting basis — gross headline; idle-subtracted is a labeled within-device secondary view
+
+- Date: 2026-07-14 (Ed-directed after the advisory session with
+  Dr. Rivoire; provenance `docs/axi-handoff.md` §1/§2.2; final wording
+  Ed-reviewed 2026-07-14 with four amendments incorporated)
+- Status: accepted (C-033 coherence-reviewed)
+- Phase: Phase 2+ reporting / analysis
+
+Decision:
+
+1. **Reporting, not recording.** Dual-basis capture stays MANDATORY for
+   every successfully measured, idle-eligible request-level bundle: the
+   measurement methodology's report-both requirement is unchanged and
+   raw traces remain preserved. Failed/unsupported bundles and bundles
+   without a usable idle baseline keep the existing nullable semantics
+   (`run_bundle_layout.md`; the methodology's "when possible" wording).
+   Only reader-facing headline wording changes. This clause is about
+   request-level metrics; per-phase energy stays gross-only per D-032 —
+   no idle-subtracted phase maps are introduced.
+2. **Gross energy is the headline basis** for all cross-device,
+   cross-configuration, and split-vs-monolithic claims.
+3. **Idle-subtracted energy is retained** as a clearly-labeled
+   within-device marginal view. It is never used to rank devices or
+   configurations.
+4. **Q4's fixed term (E = fixed + prefill + decode) is fit on gross
+   energy** across the workload sweep: "fixed" is estimated from data —
+   capturing idle, model residency, and runtime overhead — not assumed
+   equal to the measured idle baseline.
+5. Every reported number states its basis; any cross-configuration
+   number is gross-first.
+
+Rationale (Dr. Rivoire, advisory session 2026-07-14): subtracting idle
+penalizes energy-proportional devices and rewards high-idle ones; for
+split runs, subtracting both nodes' idles deletes exactly the cost the
+crossover question (Q1) adjudicates.
+
+Options considered: (a) idle-subtracted headline (the prior reader-
+facing emphasis) — rejected per the rationale above; (b) symmetric
+dual-basis with no declared headline — rejected (leaves cross-device
+ranking ambiguous and lets a reader pick the flattering basis); (c)
+gross headline with labeled idle-subtracted secondary — chosen.
+
+Consequences (named fixes):
+
+- This entry SUPERSEDES the "Primary Metric" clause of
+  `docs/contracts/token_normalization.md` (D-058) insofar as it defines
+  headline request energy as idle-subtracted; the headline is now gross.
+  The contract TEXT alignment is contract-bearing work assigned to
+  stream S-A (which already amends that contract under D-066), not to
+  the docs-only S-0.
+- The Lakebed/status-site and front-facing wording correction — basis
+  stated on every number, gross-first for any cross-configuration
+  number — is a resulting task (stream S-0). This is the contradiction
+  Dr. Rivoire originally caught on the status page.
+- Headline-basis selection is closed by this entry;
+  C-023-IDLE-STATIONARITY is unaffected as a constraint — it imposes
+  idle-model sensitivity on idle-subtracted conclusions and stays alive
+  as a sensitivity check on the secondary view.
+- AP-BATCH and subsequent analysis plans fit on gross energy.
+
+Revisit trigger: the P1-003 wall-meter decision. Wall-boundary gross is
+the ideal endpoint, and Q6 tests whether the measurement boundary
+changes conclusions; when P1-003 lands, re-examine whether rail-gross
+remains an adequate headline or wall-calibrated gross supersedes it.
+
+Scope note: no re-measurement — bundles already record both bases over
+preserved raw traces; this is a reporting/wording change.
+
+## D-068: Site deployment is Ed-manual; sessions end with a drift report, never a deploy
+
+- Date: 2026-07-14 (Ed-directed; provenance `docs/axi-handoff.md` §2.3)
+- Status: accepted (C-033 coherence-reviewed; process-layer; effective
+  on recording)
+- Phase: cross-phase process
+
+Decision:
+
+1. The end-of-session bookkeeping arc NO LONGER regenerates or deploys
+   the Lakebed site. No agent regenerates or deploys the site, ever.
+   Deploy is an Ed-manual action.
+2. Replacement: a **site-drift report**. Lightweight version first: a
+   script (e.g., `scripts/site_drift.py`) compares the deployed site's
+   claimed snapshot metadata (commit hash / status revision) and key
+   front-facing numbers against current repo state and writes/refreshes
+   `docs/site/DRIFT.md` listing what is stale and which sections need
+   regeneration. Sessions that change front-facing state end by
+   refreshing DRIFT.md. A subagent diff (fetch live page, compare
+   against repo docs) is an acceptable mechanism. Ed is indifferent to
+   mechanism, firm on outcome: **automation informs; Ed deploys.**
+3. The existing on-site drift banner remains as-is (it already
+   self-reports staleness to readers).
+4. Amendments this entry makes elsewhere: `RUN_STATE.md` end-of-work
+   step 8 (the C-013 regenerate+redeploy convention; the step's prior
+   text misattributed it to C-012) is replaced by the DRIFT.md refresh;
+   the audit close-out plan's "site regen" step is likewise replaced.
+   Other tracked surfaces still carrying deploy instructions
+   (`docs/orchestration.md`, generated `docs/site/*.html`,
+   `site_capsule/*` capsule docs) are corrected in WO-031's freshness
+   pass and stream S-0; dated run reports and audit history keep their
+   historical wording.
+
+Options considered: (a) keep automated regen+deploy (the C-013
+convention) — rejected by Ed (website building leaves the automated
+loop); (b) manual deploy with no drift instrumentation — rejected
+(staleness becomes invisible between deploys); (c) manual deploy +
+agent-maintained drift report — chosen.
+
+Revisit trigger: if the DRIFT.md refresh proves burdensome or the
+drift check cannot observe the live page, revisit the MECHANISM (script
+vs subagent); the outcome (no agent deploys) is not revisitable except
+by Ed.
+
+## D-069: Advisor-doc alignment (stream S-0) is sanctioned front-facing work
+
+- Date: 2026-07-14 (provenance `docs/axi-handoff.md` §2.4)
+- Status: accepted (C-033 coherence-reviewed; process-layer)
+- Phase: cross-phase / documentation
+
+Decision: the idle-basis, batching-agenda, and benchmark-vs-harness
+updates to `PROJECT_STATUS.md`, `README.md`, and the site sources
+(stream S-0) are corrections of reader-facing claims and terminology —
+the same class as the existing convention that front-facing docs
+misstating claims get fixed. Terminology split adopted for all
+reader-facing docs: **harness** = the instrument; **benchmark** = the
+frozen workload suite + run rules + strict validator layered on it.
+S-0 sequences immediately after audit clearance, or folds into the
+audit's own fix wave if a finding already covers the wording.
+
+Options considered: (a) defer to publication prep (P2-027) — rejected:
+the advisor is actively reading these docs against the updated proposal
+("Senior Capstone Proposal — JouleWise, rev. 2026-07-14, repo-aligned",
+Ed's Drive); (b) fix immediately post-audit — chosen.
+
+Considerations: S-0 is docs-only; it consumes no quiet-machine time and
+touches no contract — the one contract consequence of D-067 (the
+token-normalization Primary Metric text) is assigned to stream S-A, not
+S-0. S-0 ends by refreshing `docs/site/DRIFT.md` (D-068) so Ed can run
+one manual deploy.
+
+## D-070: Architectural-axes extension agenda (AXI): scope, claim posture, batch-axis rulings
+
+- Date: 2026-07-14 (Ed-directed; provenance `docs/axi-handoff.md`
+  §1.1/§4/§5 plus Ed's rulings recorded this session)
+- Status: accepted (C-033 coherence-reviewed)
+- Phase: Phase 2+ research program
+
+Decision:
+
+1. **Agenda.** Once the harness works, it must be able to characterize
+   architectural inference features generally — static batching,
+   speculative decoding / MTP, MoE vs dense, quantization, and
+   reasoning-length variance — framed as stress tests of the single Q4
+   thesis (E = fixed + coefficients·work), not five new theses.
+2. **Claim posture.** Instrument support (L0 smoke bundles) for ALL
+   axes. Ed ruling 2026-07-14 (supersedes the handoff's narrower
+   default): ALL five axes get characterized-claim commitments with
+   dedicated quiet-Mac hardware time — it is Ed's own hardware and Ed
+   wants maximum axis flexibility. Sequencing and floor discipline are
+   unchanged: every AP remains floor-gated on P2-015 floors,
+   `TASK_QUEUE.md` remains the ordering authority, Window A outranks
+   everything, and no AXI stream consumes a [QUIET-MAC] window until
+   Window A completes.
+3. **Batch axis (Ed ruling).** STATIC batching only for the capstone:
+   AP-BATCH covers B ∈ {1,2,4,8,16} static dispatch. Continuous
+   batching is DEFERRED as a post-capstone, NV-gated extension — not
+   killed. BINDING continuous-ready design constraint so the deferral
+   stays additive rather than rework: all batch-related event schema is
+   **request-scoped, not run-scoped** — token and phase events carry a
+   `request_id`; each request gets its own lifecycle envelope
+   (submit/prefill/decode/complete) even though static runs happen to
+   synchronize them; no schema assumption that all sequences share one
+   prefill boundary or one decode window. The reducer MAY exploit
+   synchronization for static-mode metrics but MUST NOT require it at
+   the schema level. Schema placement pin: `request_id` lives in event
+   `metadata` (`events.jsonl` `metadata.request_id`) — the five-key
+   event contract gains no sixth top-level key. Request-grouped
+   lifecycle/phase pairing is NEW-version reducer dispatch, purely
+   additive; legacy arms stay frozen and no existing bundle is
+   re-dispatched (D-066 clause 2). Rationale: a single model instance
+   with B KV
+   caches is memory-feasible on current hardware; only the serving
+   scheduler is hardware-gated, so a future continuous stream (load
+   generator, steady-state detection, energy-per-token-at-offered-load
+   metric) becomes purely additive on top.
+4. **Registry.** Existing rows already carry the axes — the C5-* rows
+   live in `docs/research_question_bank.md`; the C-023-* and RQ-* rows
+   live in `docs/research_question_registry.md` (D-055): C5-2.2 and
+   C5-2.6 (batching), C5-2.5 + C-023-OUTPUT-IDENTITY (spec decode),
+   C5-1.1 / C5-1.9 / RQ-TWO-MODEL-ACTIVE-NONCLAIM (MoE/dense), C5-1.12
+   + C-023-QUALITY-EQUIV-QUANT (quantization), RQ-ENERGY-VARIANCE +
+   C5-W.2 (reasoning variance). Two new rows to mint at their gates:
+   a **Mac-batching leg of C5-2.2** (minted ONLY on an S-B `supported`
+   verdict), and **MOE×BATCH** (candidate, ceiling L2, forbidden
+   upgrade: no MoE-serving-efficiency generalization from one pair).
+5. **Ceilings.** Everything caps at L2 (L3 only through Q4/AP-1's
+   existing holdout machinery); ceilings move only via replication rows
+   (C5-3.1). No live claims from fixture-first code; PROVISIONAL until
+   first live hardware contact.
+
+Options considered: (a) five independent theses — rejected (dilutes
+Q4 and is unfundable in the timeline); (b) axes as Q4 stress tests
+with narrow claim commitments (the handoff default: MoE/dense +
+batching only) — superseded by Ed's ruling; (c) axes as Q4 stress
+tests with all-axes commitment — chosen by Ed.
+
+Open item: the D-016 matched dense/MoE model pair remains with Ed and
+the advisor; stream S-D presents the proposal (same family, matched
+active params; fallback matched total) — do not finalize unilaterally.
+
+Revisit triggers: an S-B `unsupported` verdict removes the Mac-batching
+leg (the dated negative verdict is filed as a finding, Hailo idiom);
+measured P2-015 floors that make a predeclared AXI effect size
+undetectable send that AP back for redesign before any campaign is
+scheduled.

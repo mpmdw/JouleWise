@@ -1,0 +1,72 @@
+BRIDGE_TASK_V1
+{
+  "TASK_SHAPE": "interactive",
+  "GENRE": "discussion",
+  "ROLE": "council coherence reviewer (read-only; no adjudication authority)",
+  "OBJECTIVE": "Coherence-review five freshly drafted decision-log entries (D-066..D-070, currently UNCOMMITTED edits in docs/decision_log.md) plus a RUN_STATE.md step-8 amendment, against docs/axi-handoff.md (Ed's directive, provenance) and the repo's standing decisions/contracts. The OUTCOMES are Ed-directed and are NOT up for re-decision; check coherence, accuracy of citations, and unintended contradictions only.",
+  "AUTHORITY": [
+    "docs/axi-handoff.md (Ed's explicit direction, 2026-07-14; includes an explicit spec-freeze override in section 2.1)",
+    "Ed rulings recorded this session (2026-07-14, quoted in the capsule below)",
+    "docs/decision_log.md (D-053, D-058, D-060, D-064, D-065 are the standing surfaces the new entries touch)",
+    "docs/contracts/token_normalization.md",
+    "docs/research_question_bank.md (registry rows cited in D-070)",
+    "RUN_STATE.md + docs/reviews/2026-07-13-comprehensive-audit/CHECKPOINT.md (active audit gate)"
+  ],
+  "BASE_HEAD": "28b4ff808765d6a5b2f08d7d01d0ba382ed490db",
+  "OUTPUT_PROTOCOL": "bridge-report/v1"
+}
+END_BRIDGE_TASK_V1
+
+Context capsule:
+
+- HEAD 28b4ff8 on main; dirty paths: docs/decision_log.md (the five new
+  entries D-066..D-070 appended after D-065, plus index rows D-064..D-070
+  added to the top index table), RUN_STATE.md (end-of-work step 8 rewritten
+  per D-068), untracked docs/axi-handoff.md (Ed's handoff, provenance for
+  everything). No concurrent writers; no active leases.
+- Settled (Ed-directed, not challengeable): the spec-freeze override scoped
+  to AXI; gross-headline idle basis with idle-subtracted as labeled
+  within-device secondary; site deploy becomes Ed-manual with a DRIFT.md
+  drift report replacing the end-of-session regen+deploy; S-0 advisor-doc
+  alignment sanctioned; all five architectural axes get characterized-claim
+  commitments (Ed ruling this session, superseding the handoff's narrower
+  default); static-only batching for the capstone with a BINDING
+  continuous-ready request-scoped event-schema constraint (request_id on
+  token/phase events, per-request lifecycle envelope, reducer may exploit
+  static synchronization but schema must not require it).
+- The comprehensive audit remains the active gate; these entries are
+  decision-log/process work permitted under it; AXI ACTION sequences after
+  audit clearance. Window A ordering and [QUIET-MAC] ownership untouched.
+- Ed amendment requirements for D-067 that the draft must satisfy (verify
+  each is honored): (1) reporting-not-recording — dual-basis capture in
+  every bundle stays mandatory; (2) Rivoire's argument stated accurately
+  and attributed; (3) revisit condition tied to the P1-003 wall-meter
+  decision / Q6 boundary sensitivity; (4) consequences name the concrete
+  Lakebed/status wording fix (basis stated on every number) as a resulting
+  task.
+
+Questions for this coherence review (read the dirty files):
+
+1. Do any of D-066..D-070 contradict a standing accepted decision or
+   contract in a way NOT covered by the recorded override (D-066)? Name
+   the exact clause if so.
+2. Are the citations accurate (D-053/D-058/D-060 as the freeze surfaces;
+   C-023-IDLE-STATIONARITY / C-023-OUTPUT-IDENTITY / C5-* registry rows;
+   D-032 gross-only phase energy; C-012 site convention)? Flag any
+   misattribution — especially D-032: does the existing gross-only
+   summary-v0.1 rule interact with D-067 in a way the entry should name?
+3. Does the D-068 RUN_STATE step-8 rewrite leave any other tracked doc
+   still instructing agents to deploy the site (grep for the deploy
+   command / C-012 references) that a reader would hit before S-0 fixes
+   front-facing docs? List paths only; do not propose edits to them.
+4. Are Ed's four D-067 amendment requirements each satisfied by the draft
+   text as written?
+5. Index hygiene: the top index now has rows for D-064..D-070 — any
+   mismatch with entry titles/statuses?
+6. Anything in D-070's continuous-ready schema constraint that conflicts
+   with the frozen reducer legacy arms or D-058 token-normalization
+   contract as written (i.e., would honoring it require re-dispatching
+   existing bundles, which D-066 clause 2 forbids)?
+
+Body format: Positions / Disagreements / Open questions / Recommendation,
+then the BRIDGE_REPORT_V1 envelope as the final two lines.

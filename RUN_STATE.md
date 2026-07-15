@@ -52,10 +52,11 @@ At the end of substantial work:
    (delegate to a fast subagent): stale test counts, gate-state
    contradictions between prose summaries and checklist matrix rows,
    numbers cited in multiple places (C-002; D-023 extension).
-   After any session that changed front-facing docs, REGENERATE and
-   REDEPLOY the site so the public snapshot tracks the repo (C-012):
-   `python3 scripts/build_site.py && python3 scripts/pack_capsule.py &&
-   (cd site_capsule && npx lakebed deploy)`.
+   After any session that changed front-facing state, refresh
+   `docs/site/DRIFT.md` (site-drift report) instead of deploying:
+   per D-068 (2026-07-14) NO agent regenerates or deploys the site,
+   ever — automation informs; Ed deploys manually. (Supersedes the
+   C-013 regenerate+redeploy convention.)
 9. Call out any dirty working-tree state that should not be accidentally
    committed.
 
