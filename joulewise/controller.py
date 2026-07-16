@@ -72,8 +72,10 @@ from joulewise.bundle import (
 from joulewise.clock import Clock, ClockStamp, FakeClock
 from joulewise.environment import collect_environment_snapshot, empty_environment_snapshot
 from joulewise.interfaces import (
+    AttemptIdentity,
     AdapterFailure,
     AdapterResult,
+    AxiRuntimeResult,
     BoundedTelemetryAdapter,
     EvidenceCustodyProvider,
     IdleDriftEvidenceProvider,
@@ -87,6 +89,14 @@ from joulewise.interfaces import (
     ThermalState,
     TransportAdapter,
 )
+from joulewise.analysis_engine.registry import render_dispatch_receipt
+from joulewise.axi_decode_config import (
+    AXI_CONFIG_EXTENSION,
+    EVENT_SEMANTICS_VERSION,
+    RequestRoster,
+    canonical_json_bytes as axi_canonical_json_bytes,
+    sha256_bytes as axi_sha256_bytes,
+)
 from joulewise.schemas import (
     BenchmarkConfig,
     FailureReason,
@@ -95,6 +105,7 @@ from joulewise.schemas import (
     RunStatus,
     SamplingConfig,
     SummaryMetrics,
+    SummaryMetricsV060,
     TelemetryBackend,
 )
 from joulewise.suite import (
@@ -110,6 +121,7 @@ __all__ = [
     "AdapterRegistry",
     "Reducer",
     "cooldown_gate",
+    "finalize_dispatch_receipt",
     "run_benchmark",
     "run_experiment",
 ]
@@ -142,8 +154,41 @@ STATUS_BY_REASON: dict[FailureReason, RunStatus] = {
 }
 
 #: Post-hoc summary derivation over a bundle directory (Slice 2D).
-Reducer = Callable[[Path], SummaryMetrics]
+Reducer = Callable[[Path], SummaryMetrics | SummaryMetricsV060]
 _ENVIRONMENT_UNSET = object()
+
+
+def finalize_dispatch_receipt(
+    path: Path,
+    identity: AttemptIdentity,
+    *,
+    dispatch_started: bool,
+    transport_status: str,
+    process_exit_code: int | None,
+    admitted_request_count: int,
+    finalized_run_id: str | None,
+) -> Path:
+    """Write one immutable, identity-bound receipt after dispatch handling."""
+
+    payload = {
+        "schema_version": "joulewise.dispatch_receipt.v1",
+        "manifest_id": identity.manifest_id,
+        "entry_id": identity.entry_id,
+        "pair_id": identity.pair_id,
+        "arm": identity.arm,
+        "attempt_ordinal": identity.attempt_ordinal,
+        "dispatch_started": dispatch_started,
+        "transport_status": transport_status,
+        "process_exit_code": process_exit_code,
+        "admitted_request_count": admitted_request_count,
+        "finalized_run_id": finalized_run_id,
+    }
+    rendered = render_dispatch_receipt(payload)
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("xb") as handle:
+        handle.write(rendered)
+    return target
 
 
 class AdapterRegistry(Protocol):
@@ -170,7 +215,7 @@ def run_benchmark(
     reducer: Reducer | None = None,
     extra_metadata: dict[str, Any] | None = None,
     environment_snapshot: dict[str, Any] | None | object = _ENVIRONMENT_UNSET,
-) -> tuple[Path, SummaryMetrics]:
+) -> tuple[Path, SummaryMetrics | SummaryMetricsV060]:
     """Run one benchmark and return ``(bundle path, summary)``.
 
     A :class:`~joulewise.schemas.SchemaError` from ``config.validate()`` and a
@@ -604,7 +649,16 @@ class _Execution:
         self._sampling_active = False
         self._runtime_result = runtime_result
         self._thermal_post = self._telemetry.thermal_state(self._config, self._context)
-        self._events.extend(runtime_result.events)
+        if self._is_axi_run():
+            if runtime_result.axi_result is None:
+                raise _StageFailure(
+                    "measured_run",
+                    FailureReason.UNKNOWN_ERROR,
+                    "AXI config requires request-scoped runtime result evidence",
+                )
+            self._events.extend(self._axi_request_events(runtime_result.axi_result))
+        else:
+            self._events.extend(runtime_result.events)
         self._events.append(
             RuntimeEvent(
                 timestamp_s=sampling_stopped_stamp.epoch_s,
@@ -616,6 +670,19 @@ class _Execution:
         )
         self._write_outputs()
         self._write_trace()
+        if self._is_axi_run() and runtime_result.axi_result is not None:
+            unsuccessful = [
+                request
+                for request in runtime_result.axi_result.requests
+                if request.admitted_at_s is not None
+                and request.terminal_status != "succeeded"
+            ]
+            if unsuccessful:
+                raise _StageFailure(
+                    "measured_run",
+                    FailureReason.UNKNOWN_ERROR,
+                    "request-scoped runtime result contains non-succeeded terminal",
+                )
         self._log(
             self._telemetry_log,
             f"measured window captured {len(self._samples)} power sample(s)",
@@ -762,7 +829,7 @@ class _Execution:
         self._attempt_salvage_step("outputs", self._write_outputs)
         self._attempt_salvage_step("power_trace", self._write_trace)
         self._attempt_salvage_step("metadata", self._write_metadata)
-        summary = SummaryMetrics(
+        summary = self._failure_summary(
             status=STATUS_BY_REASON[failure.reason],
             failure_reason=failure.reason,
             failure_message=failure.message,
@@ -817,7 +884,7 @@ class _Execution:
                     "interrupt salvage step %s raised %s: %s"
                     % (name, type(cleanup_error).__name__, cleanup_error),
                 )
-        summary = SummaryMetrics(
+        summary = self._failure_summary(
             status=RunStatus.FAILED,
             failure_reason=FailureReason.UNKNOWN_ERROR,
             failure_message="%s: %s" % (type(interrupt).__name__, interrupt),
@@ -838,6 +905,24 @@ class _Execution:
             # The caller's KeyboardInterrupt/SystemExit remains authoritative;
             # retention manifests and native pending paths preserve retry data.
             pass
+
+    def _failure_summary(
+        self,
+        *,
+        status: RunStatus,
+        failure_reason: FailureReason,
+        failure_message: str,
+        idle_baseline: IdleBaseline | None,
+        measurement_quality: MeasurementQuality,
+    ) -> SummaryMetrics | SummaryMetricsV060:
+        summary_type = SummaryMetricsV060 if self._is_axi_run() else SummaryMetrics
+        return summary_type(
+            status=status,
+            failure_reason=failure_reason,
+            failure_message=failure_message,
+            idle_baseline=idle_baseline,
+            measurement_quality=measurement_quality,
+        )
 
     def _stop_sampling_best_effort(self) -> None:
         if (
@@ -936,9 +1021,314 @@ class _Execution:
     # ------------------------------------------------------------------
     # Artifact writes (idempotent so the failure path writes only the missing)
 
+    def _is_axi_run(self) -> bool:
+        return self._config.schema_extensions == [AXI_CONFIG_EXTENSION]
+
+    def _axi_roster(self) -> tuple[RequestRoster, bytes]:
+        policy = self._config.batch_policy
+        if policy is None:
+            raise ValueError("AXI batch policy is unavailable")
+        source = Path(policy.request_roster_ref)
+        raw = source.read_bytes()
+        if axi_sha256_bytes(raw) != policy.request_roster_sha256:
+            raise ValueError("configured request roster byte hash mismatch")
+        roster = RequestRoster.from_mapping(json.loads(raw))
+        normalized = roster.to_bytes()
+        if normalized != raw:
+            raise ValueError("configured request roster is not normalized bytes")
+        return roster, normalized
+
+    def _axi_common_event_metadata(
+        self,
+        result: AxiRuntimeResult,
+        request: Any,
+        *,
+        scheduler_step_id: str | int | None,
+    ) -> dict[str, Any]:
+        policy = self._config.batch_policy
+        assert policy is not None
+        return {
+            "request_id": request.request_id,
+            "request_ordinal": request.request_ordinal,
+            "request_input_id": request.request_input_id,
+            "request_roster_sha256": policy.request_roster_sha256,
+            "source_identity": result.primary_source_identity,
+            "batch_group_id": result.batch.batch_group_id,
+            "scheduler_step_id": scheduler_step_id,
+        }
+
+    def _axi_request_events(self, result: AxiRuntimeResult) -> list[RuntimeEvent]:
+        events: list[RuntimeEvent] = []
+        for request in result.requests:
+            common = self._axi_common_event_metadata(
+                result, request, scheduler_step_id=None
+            )
+            local: list[RuntimeEvent] = [
+                RuntimeEvent(
+                    request.submitted_at_s,
+                    "request_submitted",
+                    "request",
+                    "request submitted",
+                    dict(common),
+                )
+            ]
+            if request.admitted_at_s is not None:
+                metadata = dict(common)
+                metadata["admitted_at_s"] = request.admitted_at_s
+                local.append(
+                    RuntimeEvent(
+                        request.admitted_at_s,
+                        "request_admitted",
+                        "request",
+                        "request admitted",
+                        metadata,
+                    )
+                )
+            for phase in request.phase_windows:
+                phase_common = self._axi_common_event_metadata(
+                    result,
+                    request,
+                    scheduler_step_id=phase.scheduler_step_id,
+                )
+                start_metadata = dict(phase_common)
+                start_metadata["request_phase_ordinal"] = phase.request_phase_ordinal
+                end_metadata = dict(start_metadata)
+                local.extend(
+                    [
+                        RuntimeEvent(
+                            phase.start_s,
+                            "phase_start",
+                            phase.phase,
+                            f"{phase.phase} started",
+                            start_metadata,
+                        ),
+                        RuntimeEvent(
+                            phase.end_s,
+                            "phase_end",
+                            phase.phase,
+                            f"{phase.phase} ended",
+                            end_metadata,
+                        ),
+                    ]
+                )
+            scheduler_by_step = {
+                emission.decode_step_ordinal: emission.scheduler_step_id
+                for emission in request.emissions
+            }
+            for emission in request.emissions:
+                metadata = self._axi_common_event_metadata(
+                    result,
+                    request,
+                    scheduler_step_id=emission.scheduler_step_id,
+                )
+                token_ids = (
+                    list(emission.emitted_token_ids)
+                    if emission.emitted_token_ids is not None
+                    else None
+                )
+                metadata.update(
+                    decode_step_ordinal=emission.decode_step_ordinal,
+                    output_token_start_ordinal=emission.output_token_start_ordinal,
+                    emitted_count=emission.emitted_count,
+                    tokens_proposed=emission.tokens_proposed,
+                    tokens_accepted=emission.tokens_accepted,
+                    target_emitted_count=emission.target_emitted_count,
+                    emitted_token_ids=token_ids,
+                    emitted_token_ids_sha256=(
+                        axi_sha256_bytes(
+                            b"joulewise.request_output_token_ids_slice.v1\n"
+                            + axi_canonical_json_bytes(token_ids)
+                        )
+                        if token_ids is not None
+                        else None
+                    ),
+                )
+                local.append(
+                    RuntimeEvent(
+                        emission.timestamp_s,
+                        "decode_emission",
+                        "decode",
+                        "decode emission",
+                        metadata,
+                    )
+                )
+            for token in request.tokens:
+                if token.timestamp_s is None:
+                    continue
+                metadata = self._axi_common_event_metadata(
+                    result,
+                    request,
+                    scheduler_step_id=scheduler_by_step.get(
+                        token.decode_step_ordinal
+                    ),
+                )
+                metadata.update(
+                    decode_step_ordinal=token.decode_step_ordinal,
+                    output_token_ordinal=token.output_token_ordinal,
+                    token_id=token.token_id,
+                    timestamp_provenance=token.timestamp_provenance,
+                )
+                local.append(
+                    RuntimeEvent(
+                        token.timestamp_s,
+                        "token",
+                        "decode",
+                        "token callback",
+                        metadata,
+                    )
+                )
+            if request.terminal_at_s is not None:
+                metadata = dict(common)
+                metadata.update(
+                    terminal_status=request.terminal_status,
+                    stop_reason=request.stop_reason,
+                    failure_reason=request.failure_reason,
+                    failure_message=request.failure_message,
+                    realized_output_token_count=len(request.tokens),
+                    cancelled_proposal_counters=(
+                        asdict(request.cancelled_proposal_counters)
+                        if request.cancelled_proposal_counters is not None
+                        else None
+                    ),
+                )
+                local.append(
+                    RuntimeEvent(
+                        request.terminal_at_s,
+                        "request_terminal",
+                        "request",
+                        "request terminal",
+                        metadata,
+                    )
+                )
+            # Stable timestamp ordering preserves the runtime/result sequence
+            # at equal boundaries: phase end precedes the next phase start,
+            # an emission precedes its singleton token callbacks, and terminal
+            # evidence remains last.  Ordinals are request-local; the writer's
+            # stable global timestamp sort then interleaves multiple requests.
+            ordered = sorted(local, key=lambda event: event.timestamp_s)
+            for ordinal, event in enumerate(ordered):
+                metadata = dict(event.metadata)
+                metadata["request_event_ordinal"] = ordinal
+                events.append(replace(event, metadata=metadata))
+        return events
+
+    def _axi_output_artifacts(self, result: AxiRuntimeResult) -> dict[str, str]:
+        roster, roster_bytes = self._axi_roster()
+        roster_by_ordinal = {
+            descriptor.request_ordinal: descriptor
+            for descriptor in roster.requests
+        }
+        request_rows: list[dict[str, Any]] = []
+        token_rows: list[dict[str, Any]] = []
+        policy = self._config.batch_policy
+        assert policy is not None
+        for request in sorted(result.requests, key=lambda row: row.request_ordinal):
+            if request.admitted_at_s is None:
+                continue
+            descriptor = roster_by_ordinal.get(request.request_ordinal)
+            if descriptor is None or descriptor.request_input_id != request.request_input_id:
+                raise ValueError("runtime request identity does not match roster")
+            emitted_count = sum(item.emitted_count for item in request.emissions)
+            proposed = (
+                sum(int(item.tokens_proposed) for item in request.emissions)
+                if self._config.speculation is not None
+                and self._config.speculation.mode != "off"
+                else None
+            )
+            accepted = (
+                sum(int(item.tokens_accepted) for item in request.emissions)
+                if proposed is not None
+                else None
+            )
+            target = sum(item.target_emitted_count for item in request.emissions)
+            if request.cancelled_proposal_counters is not None:
+                counters = request.cancelled_proposal_counters
+                if proposed is not None:
+                    proposed += counters.tokens_proposed
+                    accepted += counters.tokens_accepted
+                target += counters.target_emitted_count
+                emitted_count += counters.emitted_count
+            token_ids = [item.token_id for item in request.tokens]
+            complete_ids = all(
+                isinstance(token_id, int) and not isinstance(token_id, bool)
+                for token_id in token_ids
+            )
+            response_hash = (
+                axi_sha256_bytes(request.response_text.encode("utf-8"))
+                if request.response_text is not None
+                else None
+            )
+            request_rows.append(
+                {
+                    "request_id": request.request_id,
+                    "request_ordinal": request.request_ordinal,
+                    "request_input_id": request.request_input_id,
+                    "prompt_sha256": descriptor.prompt_sha256,
+                    "request_roster_sha256": policy.request_roster_sha256,
+                    "batch_group_id": result.batch.batch_group_id,
+                    "terminal_status": request.terminal_status,
+                    "output_policy_name": descriptor.output_policy_name,
+                    "requested_output_tokens": descriptor.requested_output_tokens,
+                    "output_token_count": emitted_count,
+                    "stop_reason": request.stop_reason,
+                    "failure_reason": request.failure_reason,
+                    "response_text": request.response_text,
+                    "response_text_sha256": response_hash,
+                    "emitted_token_ids_sha256": (
+                        axi_sha256_bytes(
+                            b"joulewise.request_output_token_ids.v1\n"
+                            + axi_canonical_json_bytes(token_ids)
+                        )
+                        if complete_ids
+                        else None
+                    ),
+                    "tokens_proposed": proposed,
+                    "tokens_accepted": accepted,
+                    "target_emitted_count": target,
+                    "acceptance_rate": (
+                        accepted / proposed
+                        if proposed is not None and proposed
+                        else None
+                    ),
+                }
+            )
+            token_rows.extend(
+                {
+                    "request_id": request.request_id,
+                    "request_ordinal": request.request_ordinal,
+                    "request_input_id": request.request_input_id,
+                    "output_token_ordinal": token.output_token_ordinal,
+                    "decode_step_ordinal": token.decode_step_ordinal,
+                    "token_id": token.token_id,
+                    "timestamp_s": token.timestamp_s,
+                    "timestamp_provenance": token.timestamp_provenance,
+                }
+                for token in request.tokens
+            )
+        root_path = self._writer.path / "request_roster.json"
+        with root_path.open("xb") as handle:
+            handle.write(roster_bytes)
+        return {
+            "requests.jsonl": "".join(
+                axi_canonical_json_bytes(row).decode("utf-8") + "\n"
+                for row in request_rows
+            ),
+            "request_tokens.jsonl": "".join(
+                axi_canonical_json_bytes(row).decode("utf-8") + "\n"
+                for row in token_rows
+            ),
+        }
+
     def _write_outputs(self) -> None:
         if self._outputs_written or self._runtime_result is None:
             return
+        if self._is_axi_run():
+            if self._runtime_result.axi_result is None:
+                raise ValueError("AXI runtime result is unavailable")
+            for name, text in self._axi_output_artifacts(
+                self._runtime_result.axi_result
+            ).items():
+                self._writer.write_output(name, text)
         for name, text in self._runtime_result.output_artifacts.items():
             self._writer.write_output(name, text)
         self._outputs_written = True
@@ -955,6 +1345,47 @@ class _Execution:
         if self._metadata_written:
             return
         extra: dict[str, Any] = {}
+        if self._is_axi_run():
+            policy = self._config.batch_policy
+            speculation = self._config.speculation
+            assert policy is not None and speculation is not None
+            extra["event_semantics_version"] = EVENT_SEMANTICS_VERSION
+            extra["speculation"] = speculation.to_dict()
+            axi = (
+                self._runtime_result.axi_result
+                if self._runtime_result is not None
+                else None
+            )
+            if axi is None:
+                extra["batch"] = {
+                    "policy_schema_version": AXI_CONFIG_EXTENSION,
+                    "configured_batch_size": policy.requested_batch_size,
+                    "realized_batch_size": 0,
+                    "submitted_request_count": 0,
+                    "admitted_request_count": 0,
+                    "terminal_request_count": 0,
+                    "batch_group_id": None,
+                    "request_roster_sha256": policy.request_roster_sha256,
+                }
+            else:
+                extra["batch"] = {
+                    "policy_schema_version": AXI_CONFIG_EXTENSION,
+                    "configured_batch_size": policy.requested_batch_size,
+                    "realized_batch_size": axi.batch.realized_batch_size,
+                    "submitted_request_count": axi.batch.submitted_request_count,
+                    "admitted_request_count": axi.batch.admitted_request_count,
+                    "terminal_request_count": axi.batch.terminal_request_count,
+                    "batch_group_id": axi.batch.batch_group_id,
+                    "request_roster_sha256": policy.request_roster_sha256,
+                }
+                extra["runtime"] = {
+                    "primary_source_identity": axi.primary_source_identity,
+                    "target_model_artifact_sha256": axi.target_model_artifact_sha256,
+                    "target_tokenizer_identity": axi.target_tokenizer_identity.to_dict(),
+                    "target_tokenizer_artifact_files": dict(
+                        axi.target_tokenizer_artifact_files
+                    ),
+                }
         extra["config_warnings"] = [dict(item) for item in self._config.config_warnings]
         extra["model"] = asdict(self._config.model)
         extra["quantization"] = asdict(self._config.quantization)

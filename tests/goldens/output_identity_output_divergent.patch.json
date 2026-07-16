@@ -1,0 +1,14 @@
+{
+  "base": "output_identity_exact.json",
+  "replacements": {
+    "/claim_disposition": "descriptive_only",
+    "/overall_state": "output_divergent",
+    "/report_id": "oir-aa9b2e6e1358917788001a8b1f420bcb0ed79f701f37c3594cffc9838ad66fa5",
+    "/requests/0/reason_codes": [
+      "response_text_differs"
+    ],
+    "/requests/0/spec_on_text_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "/requests/0/state": "output_divergent",
+    "/spec_on_bundle/requests_artifact_sha256": "bef5c2573c7d8c52651924817cecd64b89841b61110cde35c8413d8e475756e8"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "base": "legacy_reducer_041.json",
+  "replacements": {
+    "/summary_provenance/reducer_version": "0.4.2"
+  }
+}

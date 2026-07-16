@@ -1,0 +1,100 @@
+{
+  "batch_group_gross_energy_j": null,
+  "decode_counter_rollup": {
+    "acceptance_rate": 0.5,
+    "emitted_count": 3,
+    "target_emitted_count": 1,
+    "tokens_accepted": 2,
+    "tokens_proposed": 4
+  },
+  "decode_emission_burst_size_max_tokens": 2,
+  "decode_emission_burst_size_mean_tokens": 1.5,
+  "decode_emission_burst_size_p50_tokens": 1.5,
+  "decode_emission_burst_size_p95_tokens": 1.95,
+  "decode_emission_event_rate_events_s": 1.0,
+  "decode_latency_s": 2.0,
+  "decode_phase_output_throughput_tokens_s": 1.5,
+  "energy_bound_terms_j": null,
+  "energy_output_token_j": 2.6666666666666665,
+  "energy_request_j": 8.0,
+  "energy_token_j": 2.0,
+  "energy_uncertainty_status": "not_estimable",
+  "energy_variance_terms_j2": null,
+  "failure_message": null,
+  "failure_reason": null,
+  "gross_energy_j": 10.0,
+  "gross_energy_per_accepted_draft_token_j": 5.0,
+  "gross_energy_per_committed_output_token_j": 3.3333333333333335,
+  "idle_baseline": {
+    "duration_s": 1.0,
+    "gpu_freq_hz_mean": null,
+    "gpu_freq_mhz_mean": null,
+    "gpu_idle_ratio_mean": null,
+    "gpu_idle_ratio_min": null,
+    "idle_window_suspect": null,
+    "power_w_mean": 2.0,
+    "power_w_stddev": 0.0,
+    "sample_count": 2,
+    "telemetry_backend": "mock"
+  },
+  "idle_mean_uncertainty": null,
+  "idle_subtracted_energy_j": 8.0,
+  "inter_token_throughput_tokens_s": null,
+  "measurement_quality": {
+    "cooldown_cap_hit": null,
+    "dropped_samples": 0,
+    "idle_power_w_stddev": null,
+    "idle_window_suspect": null,
+    "observed_sampling_hz": 2.0,
+    "phase_identifiability": {
+      "decode": "identifiable",
+      "group_phase_windows_overlap": false
+    },
+    "remote_cleanup_failed": null,
+    "requested_sampling_hz": 2.0,
+    "runtime_cleanup_ok": null,
+    "telemetry_source": "mock:target",
+    "thermal_drift_c": null,
+    "token_count_source": null,
+    "token_counts_source": "runtime_observed"
+  },
+  "phase_energy_j": {
+    "decode": 6.0
+  },
+  "request_decode_metrics": [
+    {
+      "burst_size_max_tokens": 2,
+      "burst_size_mean_tokens": 1.5,
+      "burst_size_p50_tokens": 1.5,
+      "burst_size_p95_tokens": 1.95,
+      "decode_counter_rollup": {
+        "acceptance_rate": 0.5,
+        "emitted_count": 3,
+        "target_emitted_count": 1,
+        "tokens_accepted": 2,
+        "tokens_proposed": 4
+      },
+      "decode_duration_s": 2.0,
+      "decode_emission_event_count": 2,
+      "decode_phase_output_throughput_tokens_s": 1.5,
+      "output_token_count": 3,
+      "request_id": "request-000",
+      "request_ordinal": 0,
+      "terminal_status": "succeeded",
+      "ttft_s": 0.5
+    }
+  ],
+  "status": "succeeded",
+  "suite_metrics": null,
+  "summary_provenance": {
+    "config_schema_version": "0.1",
+    "event_semantics_version": "joulewise.events.v2",
+    "reducer_id": "joulewise.reduce_bundle",
+    "reducer_version": "0.6.0",
+    "summary_schema_version": "0.1"
+  },
+  "throughput_tokens_s": 1.5,
+  "ttft_s": 0.5,
+  "uncertainty": null,
+  "window_evidence_precheck": null
+}

@@ -8,12 +8,22 @@ semantics.
 
 from __future__ import annotations
 
+import copy
 import math
 import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Mapping
 
+from joulewise.axi_decode_config import (
+    AXI_CONFIG_EXTENSION,
+    EVENT_SEMANTICS_VERSION,
+    AxiSchemaError,
+    BatchPolicy,
+    SpeculationPolicy,
+    axi_config_schema_defs,
+    normalized_json_bytes as axi_normalized_json_bytes,
+)
 from joulewise.validation import finite_float
 
 CONFIG_SCHEMA_VERSION = "0.1"
@@ -98,6 +108,9 @@ _CONFIG_KEYS_BY_PATH: dict[str, frozenset[str]] = {
             "interconnect",
             "sampling",
             "run_metadata",
+            "schema_extensions",
+            "batch_policy",
+            "speculation",
         }
     ),
     "model": frozenset(
@@ -554,6 +567,9 @@ class BenchmarkConfig:
     sampling: SamplingConfig = field(default_factory=SamplingConfig)
     run_metadata: RunMetadata = field(default_factory=lambda: RunMetadata(project="joulewise"))
     run_id: str | None = None
+    schema_extensions: list[str] | None = None
+    batch_policy: BatchPolicy | None = None
+    speculation: SpeculationPolicy | None = None
     # Diagnostic-only construction state. It is deliberately excluded from
     # comparison, repr, and normalized config serialization so unknown values
     # cannot change D-001/D-022 identity or leak into config.json.
@@ -564,6 +580,30 @@ class BenchmarkConfig:
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "BenchmarkConfig":
         data = _require_mapping(data, "benchmark config")
+        extensions = data.get("schema_extensions")
+        try:
+            if extensions is None:
+                if "batch_policy" in data or "speculation" in data:
+                    raise AxiSchemaError(
+                        "batch_policy/speculation require schema_extensions"
+                    )
+                batch_policy = None
+                speculation = None
+            else:
+                if (
+                    not isinstance(extensions, list)
+                    or any(not isinstance(item, str) for item in extensions)
+                    or len(set(extensions)) != len(extensions)
+                    or extensions != [AXI_CONFIG_EXTENSION]
+                ):
+                    raise AxiSchemaError(
+                        "schema_extensions must contain exactly "
+                        f"{AXI_CONFIG_EXTENSION!r}"
+                    )
+                batch_policy = BatchPolicy.from_mapping(data.get("batch_policy"))
+                speculation = SpeculationPolicy.from_mapping(data.get("speculation"))
+        except AxiSchemaError as exc:
+            raise SchemaError(str(exc)) from exc
         unknown_warnings = _unknown_config_key_warnings(data)
         for warning in unknown_warnings:
             warnings.warn(warning, stacklevel=2)
@@ -582,6 +622,9 @@ class BenchmarkConfig:
             interconnect=InterconnectConfig.from_mapping(data.get("interconnect")),
             sampling=SamplingConfig.from_mapping(data.get("sampling")),
             run_metadata=RunMetadata.from_mapping(data.get("run_metadata")),
+            schema_extensions=list(extensions) if extensions is not None else None,
+            batch_policy=batch_policy,
+            speculation=speculation,
             config_warnings=tuple(warning.to_dict() for warning in unknown_warnings),
         )
         config.validate()
@@ -591,6 +634,10 @@ class BenchmarkConfig:
         self.workload_profile.validate()
         if self.hardware_target.transport == TransportKind.SSH and not self.hardware_target.host:
             raise SchemaError("hardware_target.host is required when transport is ssh")
+        if (self.schema_extensions is None) != (
+            self.batch_policy is None and self.speculation is None
+        ):
+            raise SchemaError("AXI config extension fields must be present together")
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -609,6 +656,14 @@ class BenchmarkConfig:
             del workload["generator_sidecar_ref"]
         if workload.get("prompt_token_evidence_policy") is None:
             del workload["prompt_token_evidence_policy"]
+        if self.schema_extensions is None:
+            data.pop("schema_extensions")
+            data.pop("batch_policy")
+            data.pop("speculation")
+        else:
+            data["schema_extensions"] = list(self.schema_extensions)
+            data["batch_policy"] = self.batch_policy.to_dict()
+            data["speculation"] = self.speculation.to_dict()
         return data
 
     @staticmethod
@@ -624,7 +679,7 @@ class BenchmarkConfig:
             "pattern": r"\S",
         }
         nullable_positive_int = {"type": ["integer", "null"], "minimum": 1}
-        return {
+        schema = {
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "title": "JouleWise BenchmarkConfig",
             "type": "object",
@@ -650,6 +705,15 @@ class BenchmarkConfig:
                 "interconnect": {"$ref": "#/$defs/interconnect"},
                 "sampling": {"$ref": "#/$defs/sampling"},
                 "run_metadata": {"$ref": "#/$defs/run_metadata"},
+                "schema_extensions": {
+                    "type": "array",
+                    "prefixItems": [{"const": AXI_CONFIG_EXTENSION}],
+                    "minItems": 1,
+                    "maxItems": 1,
+                    "uniqueItems": True,
+                },
+                "batch_policy": {"$ref": "#/$defs/axi_batch_policy"},
+                "speculation": {"$ref": "#/$defs/axi_speculation_policy"},
             },
             "$defs": {
                 "model": {
@@ -754,7 +818,23 @@ class BenchmarkConfig:
                     },
                 },
             },
+            "allOf": [
+                {
+                    "if": {"required": ["schema_extensions"]},
+                    "then": {"required": ["batch_policy", "speculation"]},
+                    "else": {
+                        "not": {
+                            "anyOf": [
+                                {"required": ["batch_policy"]},
+                                {"required": ["speculation"]},
+                            ]
+                        }
+                    },
+                }
+            ],
         }
+        schema["$defs"].update(axi_config_schema_defs())
+        return schema
 
 
 @dataclass(frozen=True)
@@ -1478,6 +1558,254 @@ class SummaryMetrics:
                 },
             },
         }
+
+
+@dataclass(frozen=True)
+class DecodeCounterRollup:
+    emitted_count: int
+    tokens_proposed: int | None
+    tokens_accepted: int | None
+    target_emitted_count: int
+    acceptance_rate: float | None
+
+    def validate(self, *, speculation_mode: str) -> None:
+        for key in ("emitted_count", "target_emitted_count"):
+            value = getattr(self, key)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise SchemaError(f"decode_counter_rollup.{key} must be integer >= 0")
+        if speculation_mode == "off":
+            if self.tokens_proposed is not None or self.tokens_accepted is not None or self.acceptance_rate is not None:
+                raise SchemaError("spec-off decode counter proposal/acceptance/rate fields must be null")
+            if self.target_emitted_count != self.emitted_count:
+                raise SchemaError("spec-off target emitted count must equal emitted count")
+            return
+        for key in ("tokens_proposed", "tokens_accepted"):
+            value = getattr(self, key)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise SchemaError(f"enabled decode_counter_rollup.{key} must be integer >= 0")
+        if self.tokens_accepted > self.tokens_proposed:
+            raise SchemaError("tokens_accepted exceeds tokens_proposed")
+        if self.emitted_count != self.tokens_accepted + self.target_emitted_count:
+            raise SchemaError("decode counter emitted partition mismatch")
+        expected = self.tokens_accepted / self.tokens_proposed if self.tokens_proposed else None
+        if self.acceptance_rate != expected:
+            raise SchemaError("decode counter acceptance_rate is not ratio of totals")
+
+
+@dataclass(frozen=True)
+class RequestDecodeMetric:
+    request_id: str
+    request_ordinal: int
+    terminal_status: str
+    output_token_count: int
+    decode_duration_s: float | None
+    ttft_s: float | None
+    decode_phase_output_throughput_tokens_s: float | None
+    decode_emission_event_count: int
+    decode_counter_rollup: DecodeCounterRollup
+    burst_size_mean_tokens: float | None
+    burst_size_p50_tokens: float | None
+    burst_size_p95_tokens: float | None
+    burst_size_max_tokens: int | None
+
+    def validate(self, *, speculation_mode: str) -> None:
+        if not isinstance(self.request_id, str) or not self.request_id:
+            raise SchemaError("request_decode_metrics.request_id must be non-empty")
+        if not isinstance(self.request_ordinal, int) or isinstance(self.request_ordinal, bool) or self.request_ordinal < 0:
+            raise SchemaError("request_decode_metrics.request_ordinal must be integer >= 0")
+        if self.terminal_status not in {"succeeded", "failed", "cancelled", "cancelled_after_proposal_before_output"}:
+            raise SchemaError("request_decode_metrics.terminal_status invalid")
+        for key in ("output_token_count", "decode_emission_event_count"):
+            value = getattr(self, key)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise SchemaError(f"request_decode_metrics.{key} must be integer >= 0")
+        for key in ("decode_duration_s", "ttft_s", "decode_phase_output_throughput_tokens_s"):
+            value = getattr(self, key)
+            if value is not None and (not _is_finite_number(value) or value < 0 or key == "decode_duration_s" and value <= 0):
+                raise SchemaError(f"request_decode_metrics.{key} invalid")
+        if self.decode_duration_s is None and self.decode_phase_output_throughput_tokens_s is not None:
+            raise SchemaError("request throughput requires decode duration")
+        for key in ("burst_size_mean_tokens", "burst_size_p50_tokens", "burst_size_p95_tokens"):
+            value = getattr(self, key)
+            if value is not None and (not _is_finite_number(value) or value < 1):
+                raise SchemaError(f"request_decode_metrics.{key} invalid")
+        if self.burst_size_max_tokens is not None and (
+            not isinstance(self.burst_size_max_tokens, int)
+            or isinstance(self.burst_size_max_tokens, bool)
+            or self.burst_size_max_tokens < 1
+        ):
+            raise SchemaError("request_decode_metrics.burst_size_max_tokens invalid")
+        empty = self.decode_emission_event_count == 0
+        burst_values = (
+            self.burst_size_mean_tokens,
+            self.burst_size_p50_tokens,
+            self.burst_size_p95_tokens,
+            self.burst_size_max_tokens,
+        )
+        if empty != all(value is None for value in burst_values):
+            raise SchemaError("request burst metrics must all be null iff event set is empty")
+        self.decode_counter_rollup.validate(speculation_mode=speculation_mode)
+
+
+@dataclass(frozen=True)
+class SummaryMetricsV060(SummaryMetrics):
+    """Separate canonical serializer for reducer 0.6.0 event-v2 output."""
+
+    decode_counter_rollup: DecodeCounterRollup | None = None
+    batch_group_gross_energy_j: float | None = None
+    gross_energy_per_committed_output_token_j: float | None = None
+    gross_energy_per_accepted_draft_token_j: float | None = None
+    decode_phase_output_throughput_tokens_s: float | None = None
+    decode_emission_event_rate_events_s: float | None = None
+    decode_emission_burst_size_mean_tokens: float | None = None
+    decode_emission_burst_size_p50_tokens: float | None = None
+    decode_emission_burst_size_p95_tokens: float | None = None
+    decode_emission_burst_size_max_tokens: int | None = None
+    request_decode_metrics: list[RequestDecodeMetric] = field(default_factory=list)
+    summary_provenance: dict[str, str] | None = field(
+        default_factory=lambda: {
+            "summary_schema_version": SUMMARY_SCHEMA_VERSION,
+            "reducer_id": SUMMARY_REDUCER_ID,
+            "reducer_version": "0.6.0",
+            "config_schema_version": CONFIG_SCHEMA_VERSION,
+            "event_semantics_version": EVENT_SEMANTICS_VERSION,
+        }
+    )
+
+    def validate(self) -> None:
+        super().validate()
+        if self.status != RunStatus.SUCCEEDED:
+            return
+        provenance = self.summary_provenance
+        if not isinstance(provenance, Mapping) or set(provenance) != {
+            "summary_schema_version", "reducer_id", "reducer_version",
+            "config_schema_version", "event_semantics_version",
+        }:
+            raise SchemaError("0.6.0 summary_provenance exact keys mismatch")
+        if provenance.get("reducer_version") != "0.6.0" or provenance.get("event_semantics_version") != EVENT_SEMANTICS_VERSION:
+            raise SchemaError("0.6.0 summary provenance version mismatch")
+        if self.decode_counter_rollup is None:
+            raise SchemaError("0.6.0 succeeded summary requires decode_counter_rollup")
+        mode = "off" if self.decode_counter_rollup.tokens_proposed is None else "enabled"
+        self.decode_counter_rollup.validate(speculation_mode=mode)
+        for key in (
+            "batch_group_gross_energy_j",
+            "gross_energy_per_committed_output_token_j",
+            "gross_energy_per_accepted_draft_token_j",
+            "decode_phase_output_throughput_tokens_s",
+            "decode_emission_event_rate_events_s",
+        ):
+            value = getattr(self, key)
+            if value is not None and (not _is_finite_number(value) or value < 0):
+                raise SchemaError(f"0.6.0 summary {key} invalid")
+        for key in (
+            "decode_emission_burst_size_mean_tokens",
+            "decode_emission_burst_size_p50_tokens",
+            "decode_emission_burst_size_p95_tokens",
+        ):
+            value = getattr(self, key)
+            if value is not None and (not _is_finite_number(value) or value < 1):
+                raise SchemaError(f"0.6.0 summary {key} invalid")
+        if self.decode_emission_burst_size_max_tokens is not None and (
+            not isinstance(self.decode_emission_burst_size_max_tokens, int)
+            or isinstance(self.decode_emission_burst_size_max_tokens, bool)
+            or self.decode_emission_burst_size_max_tokens < 1
+        ):
+            raise SchemaError("0.6.0 summary burst max invalid")
+        ordinals = [row.request_ordinal for row in self.request_decode_metrics]
+        if ordinals != sorted(ordinals) or len(ordinals) != len(set(ordinals)):
+            raise SchemaError("request_decode_metrics must be unique in ordinal order")
+        for row in self.request_decode_metrics:
+            row.validate(speculation_mode=mode)
+        quality = self.measurement_quality
+        phase_identity = quality.phase_identifiability if quality else None
+        if not isinstance(phase_identity, Mapping) or not isinstance(phase_identity.get("group_phase_windows_overlap"), bool):
+            raise SchemaError("0.6.0 measurement_quality requires group_phase_windows_overlap boolean")
+
+    def canonical_bytes(self) -> bytes:
+        return axi_normalized_json_bytes(self.to_dict())
+
+    @staticmethod
+    def json_schema() -> dict[str, Any]:
+        schema = copy.deepcopy(SummaryMetrics.json_schema())
+        schema["title"] = "JouleWise SummaryMetricsV060"
+        nullable_number = {"type": ["number", "null"], "minimum": 0}
+        schema["properties"].update(
+            {
+                "decode_counter_rollup": {"$ref": "#/$defs/decode_counter_rollup"},
+                "batch_group_gross_energy_j": nullable_number,
+                "gross_energy_per_committed_output_token_j": nullable_number,
+                "gross_energy_per_accepted_draft_token_j": nullable_number,
+                "decode_phase_output_throughput_tokens_s": nullable_number,
+                "decode_emission_event_rate_events_s": nullable_number,
+                "decode_emission_burst_size_mean_tokens": {"type": ["number", "null"], "minimum": 1},
+                "decode_emission_burst_size_p50_tokens": {"type": ["number", "null"], "minimum": 1},
+                "decode_emission_burst_size_p95_tokens": {"type": ["number", "null"], "minimum": 1},
+                "decode_emission_burst_size_max_tokens": {"type": ["integer", "null"], "minimum": 1},
+                "request_decode_metrics": {"type": "array", "items": {"$ref": "#/$defs/request_decode_metric"}},
+            }
+        )
+        schema["$defs"]["decode_counter_rollup"] = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["emitted_count", "tokens_proposed", "tokens_accepted", "target_emitted_count", "acceptance_rate"],
+            "properties": {
+                "emitted_count": {"type": "integer", "minimum": 0},
+                "tokens_proposed": {"type": ["integer", "null"], "minimum": 0},
+                "tokens_accepted": {"type": ["integer", "null"], "minimum": 0},
+                "target_emitted_count": {"type": "integer", "minimum": 0},
+                "acceptance_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+            },
+        }
+        schema["$defs"]["request_decode_metric"] = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "request_id", "request_ordinal", "terminal_status", "output_token_count",
+                "decode_duration_s", "ttft_s", "decode_phase_output_throughput_tokens_s",
+                "decode_emission_event_count", "decode_counter_rollup", "burst_size_mean_tokens",
+                "burst_size_p50_tokens", "burst_size_p95_tokens", "burst_size_max_tokens",
+            ],
+            "properties": {
+                "request_id": {"type": "string", "minLength": 1},
+                "request_ordinal": {"type": "integer", "minimum": 0},
+                "terminal_status": {"type": "string", "enum": ["succeeded", "failed", "cancelled", "cancelled_after_proposal_before_output"]},
+                "output_token_count": {"type": "integer", "minimum": 0},
+                "decode_duration_s": {"type": ["number", "null"], "exclusiveMinimum": 0},
+                "ttft_s": nullable_number,
+                "decode_phase_output_throughput_tokens_s": nullable_number,
+                "decode_emission_event_count": {"type": "integer", "minimum": 0},
+                "decode_counter_rollup": {"$ref": "#/$defs/decode_counter_rollup"},
+                "burst_size_mean_tokens": {"type": ["number", "null"], "minimum": 1},
+                "burst_size_p50_tokens": {"type": ["number", "null"], "minimum": 1},
+                "burst_size_p95_tokens": {"type": ["number", "null"], "minimum": 1},
+                "burst_size_max_tokens": {"type": ["integer", "null"], "minimum": 1},
+            },
+        }
+        schema["allOf"].append(
+            {
+                "if": {"required": ["status"], "properties": {"status": {"const": "succeeded"}}},
+                "then": {
+                    "required": [
+                        "decode_counter_rollup", "batch_group_gross_energy_j",
+                        "gross_energy_per_committed_output_token_j",
+                        "gross_energy_per_accepted_draft_token_j",
+                        "decode_phase_output_throughput_tokens_s",
+                        "decode_emission_event_rate_events_s",
+                        "decode_emission_burst_size_mean_tokens",
+                        "decode_emission_burst_size_p50_tokens",
+                        "decode_emission_burst_size_p95_tokens",
+                        "decode_emission_burst_size_max_tokens", "request_decode_metrics",
+                    ]
+                },
+            }
+        )
+        provenance = schema["$defs"]["summary_provenance"]
+        provenance["required"].append("event_semantics_version")
+        provenance["properties"]["event_semantics_version"] = {"const": EVENT_SEMANTICS_VERSION}
+        provenance["properties"]["reducer_version"] = {"const": "0.6.0"}
+        provenance["additionalProperties"] = False
+        return schema
 
 
 def _enum_to_value(value: Any) -> Any:

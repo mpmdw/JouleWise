@@ -139,6 +139,16 @@ OBVIOUS_DIRECTIONAL_PROSE_RE = re.compile(
 )
 D062_TOP_UP_RE = re.compile(r"\btop[- ]?up(?:ped|ping|s)?\b", re.IGNORECASE)
 D062_DEMOTION_RE = re.compile(r"\b(?:demot\w*|exploratory)\b", re.IGNORECASE)
+AXI_HOLM_ACROSS_RE = re.compile(
+    r"\bholm\s+at\s+alpha\s+0?\.05\s+across\b",
+    re.IGNORECASE,
+)
+AXI_CLOSED_TOPUP_MARKERS = (
+    "closed technical-invalid set",
+    "first-eligible-per-cell",
+    "outcome_dependent_topup_forbidden",
+    "permits no post-hoc top-up or pair subset",
+)
 
 
 @dataclass(frozen=True)
@@ -384,6 +394,8 @@ def multiplicity_rule_is_valid(value: str) -> bool:
         return False
     if re.search(r"\bholm\s+within\b", lowered):
         return True
+    if AXI_HOLM_ACROSS_RE.search(lowered):
+        return True
     has_bh_name = "benjamini-hochberg" in lowered or re.search(r"\bbh\b", lowered) is not None
     has_q = re.search(r"\bq\s*[=:<]\s*0?\.\d+", lowered) is not None
     if has_bh_name and has_q:
@@ -393,6 +405,21 @@ def multiplicity_rule_is_valid(value: str) -> bool:
         re.search(rf"\bexploratory\b.*\b{no_confirmatory}\b", lowered)
         or re.search(rf"\b{no_confirmatory}\b.*\bexploratory\b", lowered)
     )
+
+
+def top_up_rule_is_qualified(value: str) -> bool:
+    """Accept D-062 demotion or AXI-SA's stricter closed refusal rule."""
+
+    if not D062_TOP_UP_RE.search(value):
+        return True
+    lowered = value.lower()
+    d062_qualified = (
+        "D-062" in value
+        and "frozen" in lowered
+        and D062_DEMOTION_RE.search(value) is not None
+    )
+    axi_closed_refusal = all(marker in lowered for marker in AXI_CLOSED_TOPUP_MARKERS)
+    return d062_qualified or axi_closed_refusal
 
 
 def floor_gate_is_valid(value: str) -> bool:
@@ -529,11 +556,7 @@ def lint_ap_document(
             if sizing_row and len(sizing_row.cells) > 1
             else ""
         )
-        if D062_TOP_UP_RE.search(sizing_value) and not (
-            "D-062" in sizing_value
-            and "frozen" in sizing_value.lower()
-            and D062_DEMOTION_RE.search(sizing_value)
-        ):
+        if not top_up_rule_is_qualified(sizing_value):
             findings.append(
                 Finding(
                     "error",

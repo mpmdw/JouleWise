@@ -366,6 +366,10 @@ class ClaimsLintFixtureTests(unittest.TestCase):
     def test_multiplicity_rule_accepts_strict_positive_forms(self) -> None:
         accepted = [
             "Holm within FAM-FIXTURE.",
+            (
+                "Holm at alpha 0.05 across the primary paired execution-unit "
+                "gross-energy contrast and gross-per-committed-output-token companion."
+            ),
             "Benjamini-Hochberg with q=0.10 across the sweep.",
             "Explicitly exploratory/no-confirmatory-inference.",
         ]
@@ -381,6 +385,44 @@ class ClaimsLintFixtureTests(unittest.TestCase):
         for value in rejected:
             with self.subTest(value=value):
                 self.assertFalse(claims_lint.multiplicity_rule_is_valid(value))
+
+    def test_frozen_axi_rules_pass_while_prior_unqualified_rule_still_fails(self) -> None:
+        frozen_multiplicity = (
+            "Holm at alpha 0.05 across the primary paired execution-unit "
+            "gross-energy contrast and gross-per-committed-output-token companion; "
+            "accepted-draft energy is a spec-on mechanism diagnostic, not an on/off contrast."
+        )
+        frozen_top_up = (
+            "Every v2 registry freezes non-null paired n. The closed technical-invalid "
+            "set is dispatch failure and strict invalidity; unknown reasons count eligible. "
+            "Analysis uses first-eligible-per-cell. Outcome-dependent replacement is refused "
+            "as outcome_dependent_topup_forbidden; AP-SPEC permits no post-hoc top-up or pair subset."
+        )
+        prior_rejected = "n=5; top-up near-floor cells after inspecting the CI."
+        with tempfile.TemporaryDirectory() as tmp:
+            path = write(
+                Path(tmp) / "accepted.md",
+                ap_document(
+                    {
+                        "multiplicity_rule": frozen_multiplicity,
+                        "MDE/n sizing + predeclared top-up rule": frozen_top_up,
+                    }
+                ),
+            )
+            findings, _ = claims_lint.lint_ap_document(path, "ap")
+            self.assertEqual(findings, [])
+
+            rejected_path = write(
+                Path(tmp) / "rejected.md",
+                ap_document(
+                    {"MDE/n sizing + predeclared top-up rule": prior_rejected}
+                ),
+            )
+            rejected_findings, _ = claims_lint.lint_ap_document(rejected_path, "ap")
+            self.assertIn(
+                "AP_UNQUALIFIED_OUTCOME_DEPENDENT_TOP_UP",
+                {finding.code for finding in rejected_findings},
+            )
 
     def test_registry_duplicate_canonical_id_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

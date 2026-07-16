@@ -38,6 +38,7 @@ from joulewise.bundle_read import (
     FROZEN_LEGACY_BUNDLE_IDENTITIES,
     BundleReader,
     BundleReadError,
+    axi_v2_validation_problems,
 )
 from joulewise.clock import Clock, FakeClock, SystemClock
 from joulewise.controller import run_benchmark, run_experiment
@@ -59,6 +60,11 @@ from joulewise.provenance import (
     SUITE_PROMPT_TOKEN_IDS_HASH_DOMAIN,
     suite_prompt_plan_class,
     suite_prompt_rollup,
+)
+from joulewise.output_identity import (
+    OutputIdentityError,
+    build_output_identity_report,
+    render_output_identity_report,
 )
 from joulewise.reduce import reduce_bundle
 from joulewise.report import ReportError, generate_report
@@ -292,7 +298,53 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     evidence, and incomplete bundles already fail structurally, so a fresh
     reduction is only comparable when the summary claims success.
     """
+    raw_config = reader.raw_config()
+    metadata = reader.raw_metadata()
     summary = reader.raw_summary()
+    axi_selected = (
+        isinstance(raw_config, dict)
+        and raw_config.get("schema_extensions")
+        == ["joulewise.axi_decode_config.v1"]
+    ) or (
+        isinstance(metadata, dict)
+        and metadata.get("event_semantics_version") == "joulewise.events.v2"
+    ) or (
+        isinstance(summary, dict)
+        and isinstance(summary.get("summary_provenance"), dict)
+        and summary["summary_provenance"].get("reducer_version") == "0.6.0"
+    )
+    if axi_selected:
+        # Event-v2 evidence is validated completely before reducer
+        # interpretation. Only a clean evidence gate may reach the 0.6.0
+        # derivation comparison.
+        axi_problems = axi_v2_validation_problems(reader)
+        if axi_problems:
+            return axi_problems
+        if (
+            not isinstance(summary, dict)
+            or summary.get("status") != RunStatus.SUCCEEDED.value
+        ):
+            return []
+        try:
+            fresh = reduce_bundle(
+                reader.path,
+                reducer_version="0.6.0",
+            ).to_dict()
+        except (ValueError, SchemaError) as exc:
+            return [
+                "axi:event_semantics_invalid: strict reducer 0.6.0 "
+                f"dispatch failed: {exc}"
+            ]
+        differing = _strict_summary_differences(fresh, summary)
+        if differing:
+            return [
+                "axi:event_semantics_invalid: summary_metrics.json does not "
+                "match a fresh 0.6.0 "
+                "re-reduction of event-v2 evidence (differing keys: "
+                + ", ".join(differing)
+                + ")"
+            ]
+        return []
     if not isinstance(summary, dict) or summary.get("status") != RunStatus.SUCCEEDED.value:
         return []
     problems: list[str] = []
@@ -357,7 +409,10 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     # object; semantic re-reduction remains applicable to valid summaries.
     if not version_problems and not summary_validation_problems(summary):
         fresh = (
-            reduce_bundle(reader.path).to_dict()
+            reduce_bundle(
+                reader.path,
+                reducer_version=SUMMARY_REDUCER_VERSION,
+            ).to_dict()
             if comparison_reducer_version is None
             else reduce_bundle(
                 reader.path,
@@ -1495,6 +1550,39 @@ def _cmd_reduce(args: argparse.Namespace) -> int:
     return 0 if is_admissible_succeeded_summary(payload) else 3
 
 
+def _cmd_output_identity_report(args: argparse.Namespace) -> int:
+    manifest_path = Path(args.manifest)
+    manifest = json.loads(manifest_path.read_bytes())
+    if not isinstance(manifest, dict):
+        raise OutputIdentityError("analysis manifest top level must be an object")
+    pairs = manifest.get("pairs")
+    if not isinstance(pairs, list) or not any(
+        isinstance(pair, dict) and pair.get("pair_id") == args.pair_id
+        for pair in pairs
+    ):
+        raise OutputIdentityError(f"pair {args.pair_id!r} is not in the manifest")
+    manifest_id = manifest.get("manifest_id")
+    if not isinstance(manifest_id, str) or not manifest_id:
+        raise OutputIdentityError("analysis manifest ID is unavailable")
+    report = build_output_identity_report(
+        manifest_id=manifest_id,
+        pair_id=args.pair_id,
+        spec_off_bundle=(Path(args.spec_off_bundle) if args.spec_off_bundle else None),
+        spec_on_bundle=(Path(args.spec_on_bundle) if args.spec_on_bundle else None),
+        strict_validator=validate_bundle,
+    )
+    rendered = render_output_identity_report(report)
+    if args.output:
+        Path(args.output).write_bytes(rendered)
+        print(
+            f"output-identity-report: {args.output} "
+            f"state={report['overall_state']} id={report['report_id']}"
+        )
+    else:
+        sys.stdout.buffer.write(rendered)
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # P2-037 deterministic contrast/claim derivation.
 
@@ -1733,6 +1821,17 @@ def build_parser() -> argparse.ArgumentParser:
     reduce_parser.add_argument("path", help="path to a run bundle directory")
     reduce_parser.set_defaults(func=_cmd_reduce)
 
+    output_identity = subparsers.add_parser(
+        "output-identity-report",
+        help="derive the C-023 cross-bundle decoded-output identity report",
+    )
+    output_identity.add_argument("--manifest", required=True)
+    output_identity.add_argument("--pair-id", required=True)
+    output_identity.add_argument("--spec-off-bundle")
+    output_identity.add_argument("--spec-on-bundle")
+    output_identity.add_argument("--output")
+    output_identity.set_defaults(func=_cmd_output_identity_report)
+
     analyze = subparsers.add_parser(
         "analyze-claims",
         help="derive paired contrast and claim verdicts from frozen evidence",
@@ -1811,6 +1910,7 @@ def main(argv: list[str] | None = None) -> int:
         KVSizeError,
         SchemaError,
         BundleError,
+        OutputIdentityError,
         ReportError,
     ) as exc:
         print(f"error: {exc}", file=sys.stderr)

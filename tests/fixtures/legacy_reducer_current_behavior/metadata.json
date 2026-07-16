@@ -1,0 +1,26 @@
+{
+  "adapters": {
+    "telemetry": {
+      "name": "mock"
+    }
+  },
+  "config_sha256": "ede99e5f59a451b6506dd6b38916a70f60e3dca4b89588c9235d83ac257edec9",
+  "device": {
+    "rail_manifest": [
+      "system"
+    ],
+    "telemetry": "mock"
+  },
+  "idle_baseline": {
+    "duration_s": 1.0,
+    "power_w_mean": 2.0,
+    "power_w_stddev": 0.0,
+    "sample_count": 2,
+    "telemetry_backend": "mock"
+  },
+  "workload_observed": {
+    "output_token_count": 3,
+    "token_count": 5,
+    "token_count_source": "server_usage"
+  }
+}

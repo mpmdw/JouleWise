@@ -1,0 +1,4 @@
+timestamp_s,power_w,source,rail
+0.0,10.0,mock:target,system
+1.1,10.0,mock:target,system
+2.2,10.0,mock:target,system

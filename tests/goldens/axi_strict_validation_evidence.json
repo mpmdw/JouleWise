@@ -1,0 +1,15 @@
+{
+  "arm": "spec_on",
+  "attempt_ordinal": 0,
+  "entry_id": "draft-on-000",
+  "manifest_id": "am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066",
+  "pair_id": "pair-000",
+  "run_id": "axi-invalid-run",
+  "schema_version": "joulewise.strict_validation_attempt_evidence.v1",
+  "valid": false,
+  "validated_bundle_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "validator_reason_codes": [
+    "proposal_count_exceeds_configured_cap",
+    "request_output_count_mismatch"
+  ]
+}

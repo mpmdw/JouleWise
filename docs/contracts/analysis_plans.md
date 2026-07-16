@@ -21,7 +21,7 @@ remain L0/L1 capability or instrument-result language under D-037.
 | claim_role | One of `primary`, `secondary`, or `exploratory`; primary and secondary roles must be frozen before campaign execution. |
 | selection_scope | The exact metric/window/cell/category/model/shape/search space examined to find or support this claim; must be narrow enough that a reviewer can count what was searched. |
 | multiplicity_rule | Named rule for the family: Holm for small confirmatory families; Benjamini-Hochberg with the declared q level for sweeps; or explicitly exploratory/no confirmatory inference. |
-| Metric + exact window class | Metric name and exact window class: gross request, idle-subtracted request, phase window, item window, level window, or session window. |
+| Metric + exact window class | Metric name and exact window class: gross request, idle-subtracted request, static-batch gross group, phase window, item window, level window, or session window. A static-batch group is not relabeled as a request, and request windows within an overlapping group carry no per-request energy attribution. |
 | Unit of analysis + dependence structure | Bundle, level, item, session, or block; itemized suites require bundle- or block-level uncertainty and must never treat item windows as independent replicates unless a stronger repeated-bundle design is named. |
 | Estimator/formula | Estimator and formula, including fixed, marginal, categorical, paired, or equivalence terms. |
 | Inclusion/exclusion + quality-flag waiver rules | Strict-validation rule, exclusion causes, and any quality-flag waiver rule allowed by D-014/D-037. |
@@ -90,10 +90,16 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
 - Rank claims require rank gap > comparison MDE; otherwise the wording is
   `unresolved tie` (C-014).
 - Reader-facing steady-state decode-throughput claims use
-  `inter_token_throughput_tokens_s`, the N−1 inter-token-interval convention.
-  The frozen `throughput_tokens_s` N-over-span convention is retained only
-  for compatibility and explicitly labeled legacy wherever reported; it is
-  not eligible to stand in for the governed inter-token metric.
+  `inter_token_throughput_tokens_s`, the N−1 inter-token-interval convention,
+  only when every committed output token in scope has a genuine per-token
+  runtime timestamp. If any burst lacks individual timestamps, that metric is
+  null. The frozen `throughput_tokens_s` N-over-span convention is retained
+  only for compatibility and explicitly labeled legacy wherever reported; it
+  is not eligible to stand in for the governed inter-token metric.
+  Request/burst bundles instead report the separately named decode-phase
+  committed-output throughput, emission-event rate, and burst-size
+  distribution defined by
+  `docs/specs/axi/sa_burst_decode_contract.md`.
 
 ## Seeded plans
 
@@ -140,6 +146,28 @@ Pointer 2026-07-09: mechanical checks: `scripts/claims_lint.py`.
 | Claim ceiling + exact forbidden upgrade | Ceiling L2. Forbidden upgrade: no L3 fixed+prefill+decode fit from the four-cell 2M matrix. |
 | Disqualifiers + not-resolvable conditions | Below-floor differences, short-prefill <3 samples, missing sentinel/block metadata, or capped prompt mismatch force `not resolvable` or L1 wording. |
 | Linked manifests/bundle hashes | pending post-execution. |
+
+### AP-SPEC: matched-output speculative-decode contrast
+
+| Field | Value |
+|---|---|
+| Plan ID / RQ consumer | AP-SPEC / C5-2.5 plus C-023-OUTPUT-IDENTITY; speculative-on versus speculative-off under matched output policy and exact config projection. |
+| family_id | One separately frozen family per mechanism: `FAM-AXI-SPEC-DRAFT-MATCHED-OUTPUT` or `FAM-AXI-SPEC-NATIVE-MTP-MATCHED-OUTPUT`; never pooled. |
+| claim_role | primary |
+| selection_scope | One frozen target stack, request roster, sampler/output policy, batch policy, paired spec-off/spec-on configuration, manifest digest, planned n, and exhaustive contrast-ID set; only the four speculation config pointers frozen by the AXI-SA contract may differ. |
+| multiplicity_rule | Holm at alpha 0.05 across the primary paired execution-unit gross-energy contrast and gross-per-committed-output-token companion; accepted-draft energy is a spec-on mechanism diagnostic, not an on/off contrast. |
+| Metric + exact window class | Primary `gross_energy_j` on `gross_request` for single-request mode or `batch_group_gross_energy_j` on `gross_batch_group` for static-batch mode; companion `gross_energy_per_committed_output_token_j`; diagnostic `gross_energy_per_accepted_draft_token_j` for spec-on only. Static group energy is never stored or analyzed under a request-scoped name. |
+| Unit of analysis + dependence structure | Paired bundle within counterbalanced block. Static B>1 energy is group-gross; request events provide latency/count/output evidence and are not independent energy replicates. |
+| Estimator/formula | Primary mean of paired `spec_on - spec_off` execution-unit gross-energy differences. Token companions use ratio of arm totals, never mean request/event ratios. |
+| Inclusion/exclusion + quality-flag waiver rules | Strict-valid event-semantics-v2 bundles only; exact config-projection match and a C-023 output-identity report are mandatory. Ordinary D-014/D-037 exclusions apply. |
+| Order/blocking/covariates | Counterbalanced on/off order within frozen blocks; pair ID, block ID, planned replicate, request roster, and counterpart entry are manifest-bound. |
+| Floor gate | pending-P2-015: `max(floor_abs_j, floor_cmp_j)` for the same `gross_request` or `gross_batch_group` window under an explicit equal-or-harder transport rule; otherwise a dedicated calibration cell is required. |
+| MDE/n sizing + predeclared top-up rule | Every v2 registry freezes non-null paired n and binds exactly one manifest ID and byte digest before dispatch. A front-frozen mock registry fixes its mock n; after Window-A variance/MDE, a new campaign-frozen registry fixes claim-bearing n. The manifest has exactly n pairs, 2n entries, and contiguous unique replicate indices. The closed technical-invalid set is `dispatch_failed_before_bundle_creation` and `strict_bundle_invalid`, each with the AXI-SA predicate; unknown reasons count eligible. Every attempt is ledgered, and analysis uses first-eligible-per-cell by ascending attempt ordinal. Any outcome-dependent added/substituted pair, manifest, attempt selection, or retry after eligibility is refused as `outcome_dependent_topup_forbidden`; AP-SPEC permits no post-hoc top-up or pair subset. |
+| Denominator provenance requirement | Runtime-observed committed output tokens for the on/off companion; runtime-observed accepted draft/MTP tokens for the spec-on diagnostic. Spec-off accepted-token denominator is null, never zero. |
+| Holdout cells (L3 only) | not applicable. |
+| Claim ceiling + exact forbidden upgrade | Ceiling L2. Forbidden upgrade: no generic speculative-decoding, serving, hardware, or quality conclusion from one stack/pair; no matched-decoded-work claim unless output state is `exact_token_match`. |
+| Disqualifiers + not-resolvable conditions | Output state other than exact token match, unexpected config difference, missing request evidence, pending/invalid floor selector, below-floor effect, zero committed denominator, or missing counter instrumentation forces the frozen divergence disposition, `not resolvable`, or L0/L1 wording. |
+| Linked manifests/bundle hashes | Registry `planned_manifest_id` and `planned_manifest_sha256`, the complete contrast-ID set, registry semantic digest, configs, and roster are hash-bound before any mock or live AP-SPEC dispatch; the canonical complete attempt-ledger hash, bundle hashes, and immutable execution/report links are filled post-execution without mutating the manifest. |
 
 ### AP-3: Q5 within-boundary rank stability
 

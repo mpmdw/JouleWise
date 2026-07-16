@@ -1,0 +1,8 @@
+timestamp_s,power_w,source,rail
+0.0,10.0,mock,system
+0.5,10.0,mock,system
+1.0,10.0,mock,system
+1.5,10.0,mock,system
+2.0,10.0,mock,system
+2.5,10.0,mock,system
+3.0,10.0,mock,system

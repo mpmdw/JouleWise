@@ -1,0 +1,196 @@
+{
+  "batch_mode": "single_request",
+  "claim_ceiling": "L2",
+  "claim_role": "primary",
+  "contrast_ids": [
+    "primary_gross_energy",
+    "committed_output_gross_ratio"
+  ],
+  "contrasts": [
+    {
+      "alpha": 0.05,
+      "categories": [
+        "speculation_mode"
+      ],
+      "cells": [
+        "spec_off",
+        "spec_on"
+      ],
+      "claim_role": "primary",
+      "coding": "spec_on_minus_spec_off",
+      "contrast_id": "primary_gross_energy",
+      "estimand_id": "execution_unit_gross_energy",
+      "estimator": "paired_mean_of_bundle_differences",
+      "family_id": "FAM-AXI-SPEC-NATIVE-MTP-MATCHED-OUTPUT",
+      "metric": "gross_energy_j",
+      "models": {
+        "enabled_mechanism": "native_mtp",
+        "enabled_mechanism_identity_sha256": "f1f3bff21a61205258002eabec5ffcf564e85032db4992b9569c015e92ae054d",
+        "target_model_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "multiplicity_m": 2,
+      "multiplicity_method": "holm",
+      "q": null,
+      "window_class": "gross_request"
+    },
+    {
+      "alpha": 0.05,
+      "categories": [
+        "speculation_mode"
+      ],
+      "cells": [
+        "spec_off",
+        "spec_on"
+      ],
+      "claim_role": "companion",
+      "coding": "spec_on_over_spec_off",
+      "contrast_id": "committed_output_gross_ratio",
+      "estimand_id": "gross_per_committed_output_token",
+      "estimator": "ratio_of_arm_totals",
+      "family_id": "FAM-AXI-SPEC-NATIVE-MTP-MATCHED-OUTPUT",
+      "metric": "gross_energy_per_committed_output_token_j",
+      "models": {
+        "enabled_mechanism": "native_mtp",
+        "enabled_mechanism_identity_sha256": "f1f3bff21a61205258002eabec5ffcf564e85032db4992b9569c015e92ae054d",
+        "target_model_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "multiplicity_m": 2,
+      "multiplicity_method": "holm",
+      "q": null,
+      "window_class": "gross_request"
+    }
+  ],
+  "divergence_disposition": [
+    {
+      "allowed_disposition": "matched_decoded_work",
+      "primary_claim_eligible": true,
+      "required_wording": "effect of speculative decoding on matched decoded work",
+      "state": "exact_token_match"
+    },
+    {
+      "allowed_disposition": "text_matched_descriptive_or_predeclared_quality_matched",
+      "primary_claim_eligible": false,
+      "required_wording": "exact text matched but tokenizer-level work diverged; no matched-token efficiency claim",
+      "state": "text_match_token_divergent"
+    },
+    {
+      "allowed_disposition": "descriptive_only",
+      "primary_claim_eligible": false,
+      "required_wording": "outputs diverged; energy difference is not an efficiency contrast on matched work",
+      "state": "output_divergent"
+    },
+    {
+      "allowed_disposition": "refuse_efficiency_claim",
+      "primary_claim_eligible": false,
+      "required_wording": "output identity could not be established",
+      "state": "unassessable"
+    }
+  ],
+  "estimands": [
+    {
+      "aggregation": "paired_mean_of_bundle_differences",
+      "contrast_form": "spec_on_minus_spec_off",
+      "denominator": null,
+      "eligible_arms": [
+        "spec_off",
+        "spec_on"
+      ],
+      "estimand_id": "execution_unit_gross_energy",
+      "numerator": "gross_energy_j",
+      "role": "primary",
+      "unit": "J",
+      "zero_or_null_rule": "non_null_finite_required"
+    },
+    {
+      "aggregation": "ratio_of_arm_totals",
+      "contrast_form": "spec_on_over_spec_off_ratio",
+      "denominator": "decode_counter_rollup.emitted_count",
+      "eligible_arms": [
+        "spec_off",
+        "spec_on"
+      ],
+      "estimand_id": "gross_per_committed_output_token",
+      "numerator": "gross_energy_j",
+      "role": "companion",
+      "unit": "J/committed_output_token",
+      "zero_or_null_rule": "null_if_arm_denominator_zero"
+    },
+    {
+      "aggregation": "ratio_of_spec_on_totals",
+      "contrast_form": null,
+      "denominator": "decode_counter_rollup.tokens_accepted",
+      "eligible_arms": [
+        "spec_on"
+      ],
+      "estimand_id": "gross_per_accepted_draft_token",
+      "numerator": "gross_energy_j",
+      "role": "mechanism_diagnostic",
+      "unit": "J/accepted_draft_token",
+      "zero_or_null_rule": "null_for_spec_off_or_zero_accepted"
+    }
+  ],
+  "family_id": "FAM-AXI-SPEC-NATIVE-MTP-MATCHED-OUTPUT",
+  "floor_selector": {
+    "backend": null,
+    "condition_family_ids": [
+      "spec_off",
+      "spec_on"
+    ],
+    "floor_field": "max(floor_abs_j,floor_cmp_j)",
+    "metric": "gross_energy_j",
+    "source_artifact_id": null,
+    "status": "pending_p2_015",
+    "transport_rule_id": null,
+    "window_class": "gross_request"
+  },
+  "forbidden_upgrade": "No generic speculative-decoding, serving, hardware, or quality claim from this mock schema exercise.",
+  "freeze_status": "front_frozen",
+  "multiplicity": {
+    "alpha": 0.05,
+    "m": 2,
+    "method": "holm",
+    "q": null
+  },
+  "output_identity_gate": {
+    "gate_id": "C-023-OUTPUT-IDENTITY",
+    "report_schema_version": "joulewise.output_identity_report.v1",
+    "required_state_for_primary": "exact_token_match",
+    "text_comparison_rule": "exact_utf8_bytes",
+    "tokenizer_identity_rule": "exact_name_revision_and_artifact_sha256"
+  },
+  "pairing": {
+    "allowed_config_difference_pointers": [
+      "/speculation/mode",
+      "/speculation/max_proposed_tokens",
+      "/speculation/draft_model_identity",
+      "/speculation/native_mtp_identity"
+    ],
+    "difference_orientation": "spec_on_minus_spec_off",
+    "order_policy": "counterbalanced_within_block",
+    "required_entry_fields": [
+      "pair_id",
+      "block_id",
+      "planned_rep_index",
+      "arm",
+      "counterpart_entry_id",
+      "pairing_projection_sha256",
+      "request_roster_sha256"
+    ],
+    "unit": "bundle_pair_within_block"
+  },
+  "plan_id": "AP-SPEC",
+  "planned_manifest_id": "am-75373d90dd0fd3cefc04cac98ca94cc5e951848f94d222f149bc82b499f1608c",
+  "planned_manifest_sha256": "3f15d1a35458cafced68818b39f7824e98c55f8f1a8931cfdc806cdac689eaed",
+  "registry_id": "ap_spec_native_mtp_front_v1",
+  "sampling_plan": {
+    "allowed_replacement_reasons": [
+      "dispatch_failed_before_bundle_creation",
+      "strict_bundle_invalid"
+    ],
+    "design": "paired_fixed_n",
+    "freeze_basis": "mock_schema_exercise",
+    "planned_n_blocks": 2
+  },
+  "schema_version": "joulewise.analysis_registry.v2",
+  "selection_scope": "One mock target stack, one fixed request roster, one exact output policy, one single-request policy, and one native-MTP off/on pair."
+}

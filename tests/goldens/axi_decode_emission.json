@@ -1,0 +1,27 @@
+{
+  "event_type": "decode_emission",
+  "message": "mock decode emission",
+  "metadata": {
+    "batch_group_id": null,
+    "decode_step_ordinal": 0,
+    "emitted_count": 2,
+    "emitted_token_ids": [
+      10,
+      11
+    ],
+    "emitted_token_ids_sha256": "f671a4f1da57e650c97f6ed69bc4f11148add2067f2702d5ad8c346dc81325f4",
+    "output_token_start_ordinal": 0,
+    "request_event_ordinal": 3,
+    "request_id": "request-000",
+    "request_input_id": "prompt-000",
+    "request_ordinal": 0,
+    "request_roster_sha256": "502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9",
+    "scheduler_step_id": "step-000",
+    "source_identity": "mock:target",
+    "target_emitted_count": 1,
+    "tokens_accepted": 1,
+    "tokens_proposed": 2
+  },
+  "phase": "decode",
+  "timestamp_s": 2.0
+}
