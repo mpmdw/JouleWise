@@ -207,3 +207,21 @@ diff verified + landed).
 NEXT HEAD: AXI-SA implementation (the spec is its authority; branch +
 PR series per D-031 — gh is now authenticated). Then AXI-SB spike
 against the landed contract.
+
+## AXI-SA implementation (2026-07-16; PR #67 awaiting Ed's merge)
+
+Ed: "finish SA and close out the spec phase." Implemented the frozen
+contract end to end on `impl/axi-sa` (Sol xhigh, stages 0-7 per spec
+§12; one NEEDS_SCOPE before writing [3 config files, granted], one
+mid-round harness-timeout resume). Review arc: xhigh checker FAIL (5
+blockers — all validators-authenticate-where-they-must-re-derive) ->
+fix round -> xhigh delta FAIL (2 trust-chain binding blockers) ->
+micro-round -> lead termination: canonical 1626 OK (skipped=20)
+lead-run (+92 tests vs main); both binding probes verified via their
+adversarial tests; golden provenance sidecars pinned to base HEAD
+9ee8710; mock spec-decode e2e replayed at the lead bench (run ->
+strict -> reduce 0.6.0 -> strict, all green). PR #67 open via gh;
+Ed merges (D-031). On merge: AXI-SA kernel row completes, AXI-SB
+unblocks. Close artifact: the recurring session-open directory
+normalization (5th instance, tests subtree) — lease retained for the
+Ed adjudication batch; TOOL-01 already carries the defect.
