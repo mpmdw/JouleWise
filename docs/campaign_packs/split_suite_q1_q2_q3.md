@@ -4,6 +4,20 @@ Status: pre-hardware DRAFT. The AP rows are seeded rows, not frozen registry
 entries. Freeze them only after device/link placeholders are filled and before
 any split hardware execution.
 
+SPLIT-AP policy freeze: COMPLETE. The primary estimand, service state,
+reference contrasts, and execution prerequisites below are pre-registered and
+must not change in response to split data. The campaign-specific rows remain
+DRAFT only because their hardware placeholders and named execution gates are
+still open. Named open gates include `OPEN-GATE-SPLITAP-PACK-LINT`, required by
+`docs/specs/c027/ADJUDICATION.md` (SPLIT-AP / Pack-lint timing) before registry
+freeze or split execution; this documentation freeze does not close it; and
+`OPEN-SPLIT-PRED-FIXED-COMPOSITION`, required by D-067 and this pack's Q1 D-048
+Pre-Registered Prediction Obligation, which closes only when the registry
+records a fixed-term composition rule with units AND a per-stage-term
+measured-versus-predicted source selection for the serialize/deserialize
+predictor terms (predicted terms require recorded formula, source artifact,
+units, and provenance).
+
 Packaging decision: Q1/Q2/Q3 are one split-suite pack because all three consume
 the same device-pair/link matrix, composite split bundles, split-stage windows,
 transfer-boundary labels, and monolithic references. Keeping one pack prevents
@@ -17,11 +31,11 @@ leaving one DRAFT AP row per question.
 | Plan ID / RQ consumer | DRAFT-AP-SPLIT-Q1 / Q1 split reduces energy. DRAFT until registry freeze. |
 | family_id | FAM-SPLIT-Q1-ENERGY-CROSSOVER |
 | claim_role | primary |
-| selection_scope | Frozen split matrix for `<<DEVICE_PAIR>>`, `<<MODEL_SET>>` resolved at registry freeze to either `{Qwen2.5-1.5B}` or `{Qwen2.5-1.5B, Qwen2.5-7B}`, prompt lengths `{512,2048,8192}`, decode length `256`, links `<<LINK_MBPS_SET>>`, split mode `offline_replay` unless explicitly frozen as analytical composition, and both monolithic references for the same model/runtime/artifact where available. Dropping the 7B cells requires named `DROP-FEASIBILITY-P1-004-P1-006-MODEL-7B` evidence before any campaign bundle exists. |
+| selection_scope | Frozen split matrix for `<<DEVICE_PAIR>>`, `<<MODEL_SET>>` resolved at registry freeze to either `{Qwen2.5-1.5B}` or `{Qwen2.5-1.5B, Qwen2.5-7B}`, prompt lengths `{512,2048,8192}`, decode length `256`, links `<<LINK_MBPS_SET>>`, split mode `offline_replay` unless explicitly frozen as analytical composition, and both required monolithic references for the same model/runtime/artifact. Dropping the 7B cells requires named `DROP-FEASIBILITY-P1-004-P1-006-MODEL-7B` evidence before any campaign bundle exists. |
 | multiplicity_rule | Holm within FAM-SPLIT-Q1-ENERGY-CROSSOVER across the predeclared split-vs-monolithic-reference contrasts (prefill-node and decode-node references) for each frozen model x prompt x link x pairing cell. Any unplanned model, prompt, link, runtime, or boundary subset is exploratory; the Holm denominator counts both reference contrasts per cell in the enumerated contrast_id set. |
-| Metric + exact window class | Primary (single frozen estimand): `split_total_energy_j = prefill + serialize + transfer + deserialize + decode` as composite GROSS request energy, under the frozen service-state assumption of two already-powered warm nodes (decode-node model loaded before the measured window); the headline crossover verdict uses this basis only. Named sensitivity analyses, never headline-eligible: `SENS-SPLIT-Q1-IDLESUB` (composite idle-subtracted request energy, computed only where both ends have idle baselines, each end's own idle floor subtracted over its own stage windows) and `SENS-SPLIT-Q1-PROVISION` (gross composite plus the decode-oriented second node's measured idle power charged for the full request duration; descriptive, L1 ceiling). Stage descriptors use gross phase windows: `phase_energy_j.prefill`, `phase_energy_j.serialize`, `phase_energy_j.transfer`, `phase_energy_j.deserialize`, and `phase_energy_j.decode`. |
+| Metric + exact window class | Primary (single frozen estimand): `split_total_energy_j = prefill + serialize + transfer + deserialize + decode` as composite GROSS request energy, under the frozen service-state assumption of two already-powered warm nodes (decode-node model loaded before the measured window); the headline crossover verdict uses this basis only. Named sensitivity analyses, never headline-eligible: `SENS-SPLIT-Q1-IDLESUB` (composite idle-subtracted request energy, with each end's own idle floor subtracted over its own stage windows, computed only where both ends have usable idle baselines; consistent with D-067, reader-facing reporting is limited to clearly labeled per-end, within-device marginal diagnostics and cannot support a split-vs-monolithic contrast, configuration rank, Pareto frontier, or crossover verdict) and `SENS-SPLIT-Q1-PROVISION` (gross composite plus the decode-oriented second node's measured idle power charged for the full request duration; descriptive, L1 ceiling). Stage descriptors use gross phase windows: `phase_energy_j.prefill`, `phase_energy_j.serialize`, `phase_energy_j.transfer`, `phase_energy_j.deserialize`, and `phase_energy_j.decode`. |
 | Unit of analysis + dependence structure | Composite bundle repetition; stage energies are nested within a composite split bundle and are not independent replicates. Monolithic references are bundle-level repetitions matched by model/runtime/artifact/version and blocked by session/link where possible. |
-| Estimator/formula | For each frozen cell, estimate two predeclared contrasts: `delta_prefill_ref_j = split_total_energy_j - monolithic_total_j(prefill_node)` and `delta_decode_ref_j = split_total_energy_j - monolithic_total_j(decode_node)`, each with paired/block contrast when the monolithic reruns are in the same campaign block, otherwise the predeclared unpaired contrast with session covariate. Both contrasts enter the enumerated FAM-SPLIT-Q1-ENERGY-CROSSOVER contrast_id set and are Holm-adjusted within the family. "Split wins" in a cell is an intersection–union verdict: it holds only if BOTH Holm-adjusted 95% contrast intervals lie entirely below zero AND both contrasts clear the active floor gate; if either contrast fails, the cell verdict is "no crossover" or `not resolvable` per the three-way wording rule (D-053). No comparator may be selected after observing the data; the observed-minimum reference is forbidden. D-048 prediction validation also estimates prediction error `measured_split_total_j - predicted_split_total_j`, where prediction uses AP-1 Q4 coefficients + measured link-transfer energy + idle floors before any split hardware run. Crossover exists only where the intersection–union verdict above holds (both references beaten under joint Holm-adjusted intervals, both clearing the floor gate). |
+| Estimator/formula | For each frozen cell, estimate two predeclared contrasts: `delta_prefill_ref_j = split_total_energy_j - monolithic_total_j(prefill_node)` and `delta_decode_ref_j = split_total_energy_j - monolithic_total_j(decode_node)`, each with paired/block contrast when the monolithic reruns are in the same campaign block, otherwise the predeclared unpaired contrast with session covariate. Both contrasts enter the enumerated FAM-SPLIT-Q1-ENERGY-CROSSOVER contrast_id set and are Holm-adjusted within the family. "Split wins" in a cell is an intersection–union verdict: it holds only if BOTH Holm-adjusted 95% contrast intervals lie entirely below zero AND both contrasts clear the active floor gate; if either contrast fails, the cell verdict is "no crossover" or `not resolvable` per the three-way wording rule (D-053). No comparator may be selected after observing the data; the observed-minimum reference is forbidden. D-048 prediction validation also estimates prediction error `measured_split_total_j - predicted_split_total_j` on the GROSS basis, where prediction is the prefill-node AP-1 gross-fit terms plus GROSS measured-or-predicted serialize energy plus measured link-transfer energy plus GROSS measured-or-predicted deserialize energy plus the decode-node AP-1 gross-fit terms before any split hardware run; each node's fixed/overhead contribution is that node's AP-1 GROSS-FITTED fixed term, never a measured idle-floor substitute or an additional idle-floor charge. Crossover exists only where the intersection–union verdict above holds (both references beaten under joint Holm-adjusted intervals, both clearing the floor gate). |
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid composite bundles and strict-valid monolithic reference bundles only. Exclude any composite missing payload manifest, clock-offset bound, per-node metadata, stage marker pair, model/artifact hash, or greedy output-equivalence check. D-014 quality waivers must be named in the frozen registry and report text; unwaived suspect flags stay in sensitivity tables but do not support L2 wording. |
 | Order/blocking/covariates | Counterbalanced round-robin order by model x prompt x link x split/monolithic condition where model reload cost permits, following D-014/C-011 conventions. If operational blocks are forced, record executed order in the experiment manifest and include session/block/link-position drift terms. Start/end drift sentinels bracket each hardware session. |
 | Floor gate | pending-P2-015: use `max(floor_abs_j, floor_cmp_j)` for the same backend, metric, and window class. Existing request rows can gate same-node request companions, not the composite split-total metric: `DF-RQ-GROSS-MID` (`gross_energy_j`, gross request), `DF-RQ-IDLE-MID` (`energy_request_j`, `idle_subtracted_energy_j`, idle-sub request), `DF-RQ-GROSS-LONG-PROMPT` (`gross_energy_j`, gross request), `DF-RQ-IDLE-LONG-PROMPT` (`energy_request_j`, `idle_subtracted_energy_j`, idle-sub request), and `DF-CMP-ABBA-RQ` (`gross_energy_j`, `energy_request_j`, request windows). The 2048/256 request cells consume the ambiguity-rule maximum of `DF-RQ-*-MID` and `DF-RQ-*-LONG-PROMPT`; 8192/256 request cells are capped until P2-015 adds matching-or-harder >=8192 prompt / 256 decode rows or the frozen AP names an accepted AP-specific bound. Any 2048/2048 request cell is likewise capped until P2-015 adds a matching-or-harder cell or the frozen AP names a bound. Stage descriptors consume `DF-PH-PREFILL` (`phase_energy_j.prefill`, phase window), `DF-PH-DECODE` (`phase_energy_j.decode`, phase window), and `DF-CMP-ABBA-PH` (`phase_energy_j.prefill`, `phase_energy_j.decode`, phase windows). No exact P2-015 row currently exists for composite `split_total_energy_j`, `serialize`, `transfer`, or `deserialize`; standalone L2/L3 claims for those terms are capped until P2-015 adds rows, adds a composite row, or this AP freezes an accepted AP-specific bound or combination rule. Per SPLIT-AP, the missing composite/serialize/transfer/deserialize rows are an execution prerequisite, not merely a claim cap. |
@@ -40,13 +54,31 @@ model-first:
 
 ```text
 predicted_split_total_j(prompt, link, pair)
-  = AP-1 predicted_prefill_j(prefill_node, prompt)
+  = AP-1 GROSS-FIT prefill-node terms_j(fitted_fixed + prompt_level)
   + measured_or_predicted_serialize_j(prefill_node, prompt)
   + measured_link_transfer_j(payload_bytes, link, pair)
   + measured_or_predicted_deserialize_j(decode_node, payload_bytes)
-  + AP-1 predicted_decode_j(decode_node, decode_tokens)
-  + idle_floor_terms_j
+  + AP-1 GROSS-FIT decode-node terms_j(fitted_fixed + decode_level)
 ```
+
+The prediction basis is GROSS. Each node's fixed/overhead contribution enters
+only through that node's AP-1 GROSS-FITTED fixed term, which D-067 requires to
+be estimated from data and therefore captures idle, model residency, and
+runtime overhead. A measured idle floor is never substituted for either fitted
+fixed term and is never added alongside it; there is no idle-floor double-count
+path. AP-1's fitted fixed coefficient is energy (joules) per the AP-1 GROSS fit,
+not power. `OPEN-SPLIT-PRED-FIXED-COMPOSITION` is a named open item: before
+campaign-row freeze, the registry must freeze how the two fitted fixed energy
+terms compose across nodes. Any choice between active-stage-window and full-
+request composition must state the required transformation explicitly, with
+units, from each AP-1 fixed energy coefficient to the composed predictor term.
+The same gate also owns the serialize/deserialize term source: before
+campaign-row freeze the registry must select, per stage term, measured versus
+predicted; a predicted term is admissible only with its formula, source
+artifact, units, and provenance recorded at selection time. Neither the
+composition rule nor a stage-term source may be chosen or revised after
+observing split data. Split execution remains gated while any part of this
+item is open.
 
 The feasible set must include at least one pairing/link cell where the model
 predicts a crossover, if any exists after P1-004/P1-006 hardware facts are
@@ -69,7 +101,7 @@ secondary/descriptive unless a D-018 bridge is frozen and clears.
 | claim_role | primary |
 | selection_scope | Frozen `<<DEVICE_PAIR>>` and model/prompt/decode set from the split suite, limited to links `<<LINK_MBPS_SET>>` with measured effective throughput and transfer energy. |
 | multiplicity_rule | Holm within FAM-SPLIT-Q2-LINK-SENSITIVITY across predeclared link-speed contrasts within each model x prompt x device-pair cell. Exploratory for unplanned links or nominal-link-only comparisons. |
-| Metric + exact window class | Primary: transfer time seconds, effective throughput MiB/s, transfer energy joules, and split total energy joules on composite request windows. Companion latency: end-to-end split latency seconds and stage latencies seconds. |
+| Metric + exact window class | Primary: transfer time seconds, effective throughput MiB/s, gross transfer-stage energy joules, and composite GROSS `split_total_energy_j` on request windows. Companion latency: end-to-end split latency seconds and stage latencies seconds. |
 | Unit of analysis + dependence structure | Composite transfer/split bundle repetition, blocked by payload/link/session. Sender and receiver transfer windows inside one composite bundle are dependent components, not separate replicates. |
 | Estimator/formula | Within-cell link contrast: `delta_link = metric(link_b) - metric(link_a)` using paired/block contrast when the same payload order is counterbalanced across links. Crossover movement is reported as change in the prompt-length crossing point only when both links have measured transfer energy and the Q1 contrast clears its floor. |
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid composite bundles only; payload byte count and SHA-256 required; link speed must be measured, not assumed. Exclude cells with missing receiver/sender marker bounds, payload mismatch, or transfer-boundary label mismatch for a like-boundary comparison. |
@@ -91,7 +123,7 @@ secondary/descriptive unless a D-018 bridge is frozen and clears.
 | claim_role | secondary |
 | selection_scope | Frozen comparison set from Q1/Q2: monolithic references and split cells for `<<DEVICE_PAIR>>`, `<<MODEL_SET>>`, prompt lengths `{512,2048,8192}`, decode length `256`, links `<<LINK_MBPS_SET>>`, and a single frozen latency metric per figure. |
 | multiplicity_rule | Holm within FAM-SPLIT-Q3-PARETO for predeclared pairwise dominance checks in the frozen comparison set; any expanded all-pairs sweep uses Benjamini-Hochberg at q=0.10 or is exploratory, as frozen in the registry. |
-| Metric + exact window class | Energy axis: composite gross request energy (the primary energy axis, matching the SPLIT-AP frozen Q1 estimand); composite idle-subtracted request energy appears only as a `SENS-SPLIT-Q1-IDLESUB` companion figure, never as a silent basis switch for the frontier. Latency axis: one frozen metric per figure, default end-to-end request latency seconds; companion TTFT seconds and decode latency seconds are descriptive unless frozen as separate figures. |
+| Metric + exact window class | Energy axis: composite GROSS request energy (the only Pareto energy axis, matching the SPLIT-AP frozen Q1 estimand). Idle-subtracted energy does not define an energy axis: `SENS-SPLIT-Q1-IDLESUB` may appear only in a separate, clearly labeled per-end within-device marginal diagnostic and never in a Pareto figure, cross-configuration dominance contrast, or rank (D-067). Latency axis: one frozen metric per figure, default end-to-end request latency seconds; companion TTFT seconds and decode latency seconds are descriptive unless frozen as separate figures. |
 | Unit of analysis + dependence structure | Bundle/composite-bundle repetition; Pareto membership is computed from condition-level estimates with raw points shown. Stage windows inside a split bundle are not independent. |
 | Estimator/formula | A condition is Pareto-frontier only if no other frozen condition has both lower energy and lower frozen latency metric after floor and CI checks. Directional dominance uses contrast-level CI, not visual separation of marginal intervals. |
 | Inclusion/exclusion + quality-flag waiver rules | Strict-valid bundles only; every cell must carry boundary label, link label, output policy, and runtime-observed denominator evidence. Exclude cells with non-equivalent output policy or missing latency metric. |
@@ -287,29 +319,30 @@ is not eligible for energy attribution claims.
 F-SPLIT-Q1-CURVES: total energy vs prompt length.
 
 - x-axis: prompt length (tokens).
-- y-axis: split total energy and monolithic reference energy (J).
+- y-axis: composite GROSS request energy (J) for split total and both
+  monolithic references; crossover curves use this basis only.
 - Facets: `<<DEVICE_PAIR>>` x `<<LINK_LABEL>>`.
 - Caption template: `Measurements in this figure characterize one physical unit of [target hardware] running [OS/version], [runtime/library], [model artifact], [quantization], [tokenizer], [sampler/output policy], and [measurement boundary]. They support stack-specific claims under the stated boundary and do not establish hardware-class, vendor-class, or unit-general results without independent replication or calibration evidence.` Boundary labels: `[per-cell host-inclusive transfer energy]` or `[per-cell board-only lower-bound transfer energy]`. For cross-boundary cells: `Boundary labels differ across cells, so absolute energy values are descriptive rather than a calibrated cross-target ranking.`
 
 F-SPLIT-Q2-LINK: transfer energy/time vs link.
 
 - x-axis: measured effective throughput (MiB/s) and nominal link label.
-- y-axis left: transfer energy (J); y-axis right: transfer time (s).
+- y-axis left: GROSS transfer-stage energy (J); y-axis right: transfer time (s).
 - Caption includes the same single-unit language and the D-049 per-cell
   transfer-boundary label.
 
 F-SPLIT-Q3-PARETO: energy-latency frontier.
 
 - x-axis: frozen latency metric (s), default end-to-end request latency.
-- y-axis: composite request energy (J).
+- y-axis: composite GROSS request energy (J), the only Pareto energy basis.
 - Marks: raw bundle points plus condition estimate/CI.
 - Caption includes the same single-unit language and names the frozen latency
   metric; no Pareto claim is made outside the frozen comparison set.
 
 F-SPLIT-PREDICTION: predicted vs measured split total.
 
-- x-axis: predicted split total energy (J).
-- y-axis: measured split total energy (J).
+- x-axis: predicted composite GROSS split request energy (J).
+- y-axis: measured composite GROSS split request energy (J).
 - Reference: y=x line; annotate residual (J) and boundary labels.
 - Caption frames acceptance as D-048 prediction validation.
 
@@ -321,6 +354,18 @@ F-SPLIT-PREDICTION: predicted vs measured split total.
   KV replay; cross-runtime KV portability is out of scope.
 - P2-015 floor artifact for the exact backend x metric x window classes named
   in the AP rows.
+- OPEN EXECUTION/REGISTRY-FREEZE GATE `OPEN-GATE-SPLITAP-PACK-LINT`: per
+  `docs/specs/c027/ADJUDICATION.md` (SPLIT-AP / Pack-lint timing), the required
+  pack-lint must be implemented and pass before registry freeze or split
+  execution. Its implementation is deferred in this docs-only freeze; a manual
+  assertion or deferred-work note does not satisfy or close the gate.
+- OPEN EXECUTION/REGISTRY-FREEZE GATE
+  `OPEN-SPLIT-PRED-FIXED-COMPOSITION`: per D-067 and this pack's Q1 D-048
+  Pre-Registered Prediction Obligation, the registry must record a fixed-term
+  composition rule with units, plus the measured-versus-predicted source
+  selection for each serialize/deserialize predictor term (with formula,
+  source artifact, units, and provenance for any predicted term), before
+  registry freeze or split execution.
 - EXECUTION GATE (SPLIT-AP): headline Q1/Q2 split cells may not execute until
   P2-015 (or a successor floor pack) provides floor rows — or the frozen
   registry names an accepted AP-specific bound or combination rule — for
@@ -372,7 +417,13 @@ Operator sequence:
    with complete `contrast_id` enumeration, manifest hash, and a named
    same-boundary headline pairing for the Q1 D-048 L2-eligible
    calibration-free cell; cross-boundary pairings stay secondary/descriptive
-   without a D-018 bridge.
+   without a D-018 bridge. Before this registry freeze,
+   `OPEN-SPLIT-PRED-FIXED-COMPOSITION` must be closed under D-067 and this
+   pack's Q1 D-048 Pre-Registered Prediction Obligation by a recorded fixed-
+   term composition rule with units and a per-stage-term measured-versus-
+   predicted source selection for the serialize/deserialize predictor terms
+   (any predicted term with recorded formula, source artifact, units, and
+   provenance).
 2. Resolve all selection-scope alternatives to included/excluded verdicts
    before any campaign bundle exists, using named evidence such as
    `DROP-FEASIBILITY-P1-004-P1-006-MODEL-7B` for excluded cells.
