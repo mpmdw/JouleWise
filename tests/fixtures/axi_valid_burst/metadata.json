@@ -1,0 +1,52 @@
+{
+  "batch": {
+    "admitted_request_count": 1,
+    "batch_group_id": null,
+    "configured_batch_size": 1,
+    "policy_schema_version": "joulewise.axi_decode_config.v1",
+    "realized_batch_size": 1,
+    "request_roster_sha256": "502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9",
+    "submitted_request_count": 1,
+    "terminal_request_count": 1
+  },
+  "config_sha256": "79e34a9adef077ee3f82b4aed16bc551b1ad565fa285da44831917eba11ca48d",
+  "device": {
+    "rail_manifest": [
+      "system"
+    ]
+  },
+  "event_semantics_version": "joulewise.events.v2",
+  "run_id": "axi-ap-spec-draft-template",
+  "runtime": {
+    "primary_source_identity": "mock:target",
+    "target_model_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "target_tokenizer_artifact_files": {
+      "tokenizer.json": "ccf256f856ff12cc59897db26865cc8da53c8f32e4355289598e7693d3eb9137"
+    },
+    "target_tokenizer_identity": {
+      "name": "mock-tokenizer",
+      "revision": "tok-rev-1",
+      "tokenizer_artifact_sha256": "8dc5387f3f8554f444390c99cc4655cd40c8d1f757bc1a0fdce67d463287457b"
+    }
+  },
+  "speculation": {
+    "draft_model_identity": {
+      "model_artifact_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "model_name": "mock-draft",
+      "model_revision": "draft-rev-1",
+      "quantization": "none",
+      "runtime_backend": "mock_spec",
+      "runtime_version": "1.0",
+      "tokenizer": {
+        "class": "MockTokenizer",
+        "name": "mock-tokenizer",
+        "revision": "tok-rev-1",
+        "vocabulary_size": 256
+      },
+      "weight_format": "mock"
+    },
+    "max_proposed_tokens": 4,
+    "mode": "draft_model",
+    "native_mtp_identity": null
+  }
+}

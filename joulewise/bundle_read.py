@@ -38,8 +38,21 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
+from joulewise.axi_decode_config import (
+    AXI_CONFIG_EXTENSION,
+    COMMON_REQUEST_IDENTITY_KEYS,
+    EVENT_SEMANTICS_VERSION,
+    AxiSchemaError,
+    RequestRoster,
+    canonical_json_bytes as axi_canonical_json_bytes,
+    sha256_bytes as axi_sha256_bytes,
+    validate_request_row,
+    validate_request_token_row,
+    validate_v2_event,
+    validate_v2_metadata,
+)
 from joulewise.schemas import (
     BenchmarkConfig,
     RunStatus,
@@ -69,12 +82,41 @@ from joulewise.suite import (
 from joulewise.validation import finite_float, is_finite_number
 
 __all__ = [
+    "AXI_VALIDATOR_REASON_CODES",
     "BundleReadError",
     "BundleReader",
     "ItemWindow",
     "TracePoint",
     "Window",
+    "axi_v2_validation_problems",
 ]
+
+AXI_VALIDATOR_REASON_CODES = frozenset(
+    {
+        "axi_partial_opt_in",
+        "batch_observation_mismatch",
+        "cancelled_proposal_evidence_lost",
+        "event_global_order_invalid",
+        "event_semantics_invalid",
+        "event_source_identity_unresolved",
+        "primary_source_identity_unresolved",
+        "proposal_count_exceeds_configured_cap",
+        "request_counter_rollup_mismatch",
+        "request_event_ordinal_invalid",
+        "request_event_outside_decode",
+        "request_identity_mismatch",
+        "request_lifecycle_incomplete",
+        "request_output_artifact_invalid",
+        "request_output_count_mismatch",
+        "request_output_hash_mismatch",
+        "request_phase_overlap",
+        "request_phase_pairing_invalid",
+        "request_roster_hash_mismatch",
+        "request_roster_invalid",
+        "target_tokenizer_artifact_hash_mismatch",
+        "target_tokenizer_identity_unavailable",
+    }
+)
 
 #: Exact ``power_trace.csv`` header (D-018).
 POWER_TRACE_HEADER = "timestamp_s,power_w,source,rail"
@@ -341,6 +383,88 @@ class BundleReader:
 
     def raw_summary(self) -> dict[str, Any] | None:
         return self._tolerant_json("summary_metrics.json")
+
+    def is_event_v2(self) -> bool:
+        metadata = self.raw_metadata()
+        return isinstance(metadata, dict) and metadata.get(
+            "event_semantics_version"
+        ) == EVENT_SEMANTICS_VERSION
+
+    def request_roster(self) -> RequestRoster:
+        """Strict normalized RequestRoster accessor for event-v2 bundles."""
+
+        if "request_roster" not in self._cache:
+            raw = self._strict_json("request_roster.json")
+            try:
+                roster = RequestRoster.from_mapping(raw)
+            except AxiSchemaError as exc:
+                raise BundleReadError(f"request_roster.json does not re-validate: {exc}") from exc
+            path = self._path / "request_roster.json"
+            try:
+                raw_bytes = path.read_bytes()
+            except OSError as exc:
+                raise BundleReadError(f"request_roster.json cannot be read: {exc}") from exc
+            if raw_bytes != roster.to_bytes():
+                raise BundleReadError("request_roster.json is not normalized canonical bytes")
+            self._cache["request_roster"] = roster
+        return self._cache["request_roster"]
+
+    def request_rows(self) -> list[dict[str, Any]]:
+        return self._strict_jsonl_objects("outputs/requests.jsonl")
+
+    def request_token_rows(self) -> list[dict[str, Any]]:
+        return self._strict_jsonl_objects("outputs/request_tokens.jsonl")
+
+    def request_phase_windows(
+        self,
+    ) -> dict[tuple[str, str, str, int], Window]:
+        """Event-v2 windows keyed by source, request, phase, and ordinal."""
+
+        if "request_phase_windows" not in self._cache:
+            pairs, problems = _axi_phase_pairs(self.events())
+            if problems:
+                raise BundleReadError("; ".join(problems))
+            self._cache["request_phase_windows"] = pairs
+        return self._cache["request_phase_windows"]
+
+    def source_curve(self, source_identity: str) -> list[TracePoint]:
+        """Power curve for one persisted event-v2 source identity."""
+
+        key = f"source_curve:{source_identity}"
+        if key not in self._cache:
+            rows = [
+                row
+                for row in self.trace_rows()
+                if row.get("source") == source_identity
+            ]
+            rails = sorted(
+                {
+                    row["rail"]
+                    for row in rows
+                    if isinstance(row.get("rail"), str) and row["rail"]
+                }
+            )
+            if not rows or not rails:
+                raise BundleReadError(
+                    f"source identity {source_identity!r} has no telemetry rows"
+                )
+            trace = _validate_trace_rows(rows, rails)
+            if trace.problems:
+                raise BundleReadError(trace.problems[0])
+            self._cache[key] = [
+                TracePoint(
+                    t=t,
+                    power_w=trace.totals[t],
+                    support_start_s=(
+                        trace.supports[t][0] if t in trace.supports else None
+                    ),
+                    support_end_s=(
+                        trace.supports[t][1] if t in trace.supports else None
+                    ),
+                )
+                for t in sorted(trace.totals)
+            ]
+        return self._cache[key]
 
     def is_complete(self) -> bool:
         """D-011: complete iff ``summary_metrics.json`` validates by status."""
@@ -660,6 +784,29 @@ class BundleReader:
         except (UnicodeDecodeError, json.JSONDecodeError) as exc:
             raise BundleReadError(f"{name} is not valid JSON: {exc}") from exc
 
+    def _strict_jsonl_objects(self, name: str) -> list[dict[str, Any]]:
+        key = f"jsonl:{name}"
+        if key in self._cache:
+            return self._cache[key]
+        path = self._path / name
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise BundleReadError(f"{name} cannot be read: {exc}") from exc
+        rows: list[dict[str, Any]] = []
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise BundleReadError(f"{name} line {line_number} is not valid JSON: {exc}") from exc
+            if not isinstance(row, dict):
+                raise BundleReadError(f"{name} line {line_number} is not a JSON object")
+            rows.append(row)
+        self._cache[key] = rows
+        return rows
+
     def _validated_phase_pairing(self) -> _PhasePairing:
         if "phase_pairing" not in self._cache:
             pairing = _pair_phase_windows(self.events())
@@ -688,6 +835,619 @@ class BundleReader:
 
 # ---------------------------------------------------------------------------
 # Structural check helpers (validate-bundle policy details)
+
+
+def _axi_problem(code: str, detail: str) -> str:
+    return f"axi:{code}: {detail}"
+
+
+def _axi_token_sequence_sha256(token_ids: list[int]) -> str:
+    return axi_sha256_bytes(
+        b"joulewise.request_output_token_ids.v1\n"
+        + axi_canonical_json_bytes(token_ids)
+    )
+
+
+def _axi_token_slice_sha256(token_ids: list[int]) -> str:
+    return axi_sha256_bytes(
+        b"joulewise.request_output_token_ids_slice.v1\n"
+        + axi_canonical_json_bytes(token_ids)
+    )
+
+
+def _axi_tokenizer_artifact_sha256(files: Mapping[str, Any]) -> str:
+    return axi_sha256_bytes(
+        b"joulewise.tokenizer_artifact_identity.v1\0"
+        + axi_canonical_json_bytes(files)
+    )
+
+
+def _axi_phase_pairs(
+    events: list[dict[str, Any]],
+) -> tuple[dict[tuple[str, str, str, int], Window], list[str]]:
+    starts: dict[tuple[str, str, str, int], tuple[float, int]] = {}
+    pairs: dict[tuple[str, str, str, int], Window] = {}
+    problems: list[str] = []
+    for index, event in enumerate(events, start=1):
+        if event.get("event_type") not in {"phase_start", "phase_end"}:
+            continue
+        metadata = event.get("metadata")
+        if not isinstance(metadata, dict) or "request_id" not in metadata:
+            continue
+        key = (
+            str(metadata.get("source_identity")),
+            str(metadata.get("request_id")),
+            str(event.get("phase")),
+            metadata.get("request_phase_ordinal"),
+        )
+        if not isinstance(key[3], int) or isinstance(key[3], bool) or key[3] < 0:
+            problems.append(_axi_problem("request_phase_pairing_invalid", f"event {index} phase ordinal invalid"))
+            continue
+        timestamp = float(event["timestamp_s"])
+        if event["event_type"] == "phase_start":
+            if key in starts or key in pairs:
+                problems.append(_axi_problem("request_phase_pairing_invalid", f"duplicate phase start {key!r}"))
+            else:
+                starts[key] = (timestamp, index)
+            continue
+        if key not in starts:
+            problems.append(_axi_problem("request_phase_pairing_invalid", f"unmatched phase end {key!r}"))
+            continue
+        start, _ = starts.pop(key)
+        if timestamp < start:
+            problems.append(_axi_problem("request_phase_pairing_invalid", f"reversed phase pair {key!r}"))
+            continue
+        pairs[key] = Window(start, timestamp)
+    for key in starts:
+        problems.append(_axi_problem("request_phase_pairing_invalid", f"unmatched phase start {key!r}"))
+
+    by_request: dict[tuple[str, str], list[tuple[str, Window]]] = {}
+    for (source, request_id, phase, _ordinal), window in pairs.items():
+        by_request.setdefault((source, request_id), []).append((phase, window))
+    for request_key, intervals in by_request.items():
+        ordered = sorted(intervals, key=lambda item: (item[1].start_s, item[1].end_s, item[0]))
+        for left_index, (left_phase, left) in enumerate(ordered):
+            for right_phase, right in ordered[left_index + 1 :]:
+                if right.start_s >= left.end_s:
+                    break
+                if left_phase == right_phase or {left_phase, right_phase} == {"prefill", "decode"}:
+                    problems.append(
+                        _axi_problem(
+                            "request_phase_overlap",
+                            f"{request_key!r} {left_phase!r} {left!r} overlaps {right_phase!r} {right!r}",
+                        )
+                    )
+    return pairs, problems
+
+
+def axi_v2_validation_problems(
+    reader: BundleReader,
+    *,
+    allow_unfinalized_summary: bool = False,
+) -> list[str]:
+    """Validate all event-v2 request/lifecycle/output evidence.
+
+    This path is selected explicitly by metadata version.  It never repairs or
+    reinterprets historical bundles, and each refusal carries a stable code.
+    """
+
+    raw_config = reader.raw_config()
+    metadata = reader.raw_metadata()
+    summary = reader.raw_summary()
+    config_opted = isinstance(raw_config, dict) and raw_config.get("schema_extensions") == [AXI_CONFIG_EXTENSION]
+    event_opted = isinstance(metadata, dict) and metadata.get("event_semantics_version") == EVENT_SEMANTICS_VERSION
+    reducer_opted = (
+        isinstance(summary, dict)
+        and isinstance(summary.get("summary_provenance"), dict)
+        and summary["summary_provenance"].get("reducer_version") == "0.6.0"
+    )
+    if allow_unfinalized_summary and summary is None and config_opted and event_opted:
+        reducer_opted = True
+    if not any((config_opted, event_opted, reducer_opted)):
+        return []
+    if not all((config_opted, event_opted, reducer_opted)):
+        return [_axi_problem("axi_partial_opt_in", "config extension, event v2, and reducer 0.6.0 must appear together")]
+
+    problems: list[str] = []
+    try:
+        config = reader.config()
+        if config.batch_policy is None or config.speculation is None:
+            raise BundleReadError("typed AXI config fields are unavailable")
+    except BundleReadError as exc:
+        return [_axi_problem("axi_partial_opt_in", str(exc))]
+
+    if isinstance(metadata, dict):
+        for detail in _check_config_sha256(reader.path, metadata):
+            problems.append(_axi_problem("event_semantics_invalid", detail))
+
+    try:
+        validate_v2_metadata(metadata, config.batch_policy, config.speculation)
+    except AxiSchemaError as exc:
+        code = "target_tokenizer_identity_unavailable" if "target_tokenizer" in str(exc) else "event_semantics_invalid"
+        problems.append(_axi_problem(code, str(exc)))
+
+    runtime = metadata.get("runtime") if isinstance(metadata, dict) else None
+    if isinstance(runtime, dict):
+        tokenizer_files = runtime.get("target_tokenizer_artifact_files")
+        identity = runtime.get("target_tokenizer_identity")
+        if not isinstance(tokenizer_files, dict) or not tokenizer_files:
+            problems.append(_axi_problem("target_tokenizer_identity_unavailable", "runtime target tokenizer artifact map is missing"))
+        else:
+            valid_map = all(
+                isinstance(path, str)
+                and path
+                and isinstance(digest, str)
+                and len(digest) == 64
+                and all(character in "0123456789abcdef" for character in digest)
+                for path, digest in tokenizer_files.items()
+            )
+            if not valid_map:
+                problems.append(_axi_problem("target_tokenizer_identity_unavailable", "runtime target tokenizer artifact map is malformed"))
+            elif not isinstance(identity, dict) or identity.get("tokenizer_artifact_sha256") != _axi_tokenizer_artifact_sha256(tokenizer_files):
+                problems.append(_axi_problem("target_tokenizer_artifact_hash_mismatch", "target tokenizer artifact map hash does not match identity"))
+        if isinstance(identity, dict) and (
+            identity.get("name") == "unknown"
+            or identity.get("revision") == "unknown"
+        ):
+            problems.append(
+                _axi_problem(
+                    "target_tokenizer_identity_unavailable",
+                    "target tokenizer name and resolved revision must be concrete",
+                )
+            )
+
+    try:
+        roster = reader.request_roster()
+    except BundleReadError as exc:
+        return problems + [_axi_problem("request_roster_invalid", str(exc))]
+    try:
+        roster_bytes = (reader.path / "request_roster.json").read_bytes()
+    except OSError as exc:
+        return problems + [_axi_problem("request_roster_invalid", str(exc))]
+    roster_hash = axi_sha256_bytes(roster_bytes)
+    if roster_hash != config.batch_policy.request_roster_sha256:
+        problems.append(_axi_problem("request_roster_hash_mismatch", "embedded roster hash differs from config"))
+    if len(roster.requests) != config.batch_policy.requested_batch_size:
+        problems.append(_axi_problem("batch_observation_mismatch", "configured B differs from roster length"))
+    roster_by_ordinal = {row.request_ordinal: row for row in roster.requests}
+
+    try:
+        events = reader.events()
+    except BundleReadError as exc:
+        return problems + [_axi_problem("event_semantics_invalid", str(exc))]
+    timestamps = [float(event["timestamp_s"]) for event in events]
+    if timestamps != sorted(timestamps):
+        problems.append(_axi_problem("event_global_order_invalid", "events.jsonl timestamps are not nondecreasing"))
+    request_events: list[dict[str, Any]] = []
+    request_event_types = {
+        "request_submitted", "request_admitted", "phase_start", "phase_end",
+        "decode_emission", "token", "request_terminal",
+    }
+    for index, event in enumerate(events, start=1):
+        metadata_row = event.get("metadata")
+        request_scoped = event.get("event_type") in request_event_types and isinstance(metadata_row, dict) and "request_id" in metadata_row
+        if not request_scoped:
+            if event.get("event_type") in {"decode_emission", "token", "request_submitted", "request_admitted", "request_terminal"}:
+                problems.append(_axi_problem("request_identity_mismatch", f"event {index} lacks request identity"))
+            continue
+        try:
+            validate_v2_event(event, config.speculation)
+        except AxiSchemaError as exc:
+            message = str(exc)
+            if message in {"proposal_count_exceeds_configured_cap", "cancelled_proposal_evidence_lost"}:
+                code = message
+            elif any(
+                f"event.metadata.{key} is required" in message
+                for key in COMMON_REQUEST_IDENTITY_KEYS
+            ) or "request_id" in message:
+                code = "request_identity_mismatch"
+            else:
+                code = "event_semantics_invalid"
+            problems.append(_axi_problem(code, f"event {index}: {message}"))
+        request_events.append(event)
+
+    pairs, phase_problems = _axi_phase_pairs(request_events)
+    problems.extend(phase_problems)
+    decode_windows_by_request: dict[tuple[str, str], list[Window]] = {}
+    for (source, request_id, phase, _ordinal), window in pairs.items():
+        if phase == "decode":
+            decode_windows_by_request.setdefault((source, request_id), []).append(window)
+
+    by_request: dict[str, list[dict[str, Any]]] = {}
+    for event in request_events:
+        request_id = event["metadata"].get("request_id")
+        if isinstance(request_id, str):
+            by_request.setdefault(request_id, []).append(event)
+    admitted: set[str] = set()
+    terminal: dict[str, dict[str, Any]] = {}
+    for request_id, rows in by_request.items():
+        ordinals = [row["metadata"].get("request_event_ordinal") for row in rows]
+        if ordinals != list(range(len(rows))):
+            problems.append(_axi_problem("request_event_ordinal_invalid", f"{request_id} event ordinals are not contiguous in JSONL order"))
+        submitted_rows = [row for row in rows if row["event_type"] == "request_submitted"]
+        admitted_rows = [row for row in rows if row["event_type"] == "request_admitted"]
+        terminal_rows = [row for row in rows if row["event_type"] == "request_terminal"]
+        if len(submitted_rows) != 1 or len(admitted_rows) > 1 or len(terminal_rows) > 1:
+            problems.append(_axi_problem("request_lifecycle_incomplete", f"{request_id} lifecycle cardinality invalid"))
+        if admitted_rows:
+            admitted.add(request_id)
+            if len(terminal_rows) != 1:
+                problems.append(_axi_problem("request_lifecycle_incomplete", f"admitted {request_id} has no unique terminal"))
+        if terminal_rows:
+            terminal[request_id] = terminal_rows[0]
+        if rows and rows[0].get("event_type") != "request_submitted":
+            problems.append(_axi_problem("request_lifecycle_incomplete", f"{request_id} does not begin with submission"))
+        if terminal_rows and rows[-1].get("event_type") != "request_terminal":
+            problems.append(_axi_problem("request_lifecycle_incomplete", f"{request_id} terminal is not last"))
+        if submitted_rows:
+            submitted_index = rows.index(submitted_rows[0])
+            admitted_index = rows.index(admitted_rows[0]) if admitted_rows else None
+            terminal_index = rows.index(terminal_rows[0]) if terminal_rows else None
+            work_indices = [
+                index
+                for index, row in enumerate(rows)
+                if row["event_type"] in {"phase_start", "phase_end", "decode_emission", "token"}
+            ]
+            if submitted_index != 0 or (
+                work_indices and admitted_index is None
+            ) or (
+                admitted_index is not None
+                and (
+                    admitted_index <= submitted_index
+                    or any(index <= admitted_index for index in work_indices)
+                )
+            ) or (
+                terminal_index is not None
+                and any(index >= terminal_index for index in work_indices)
+            ):
+                problems.append(
+                    _axi_problem(
+                        "request_lifecycle_incomplete",
+                        f"{request_id} lifecycle event order is invalid",
+                    )
+                )
+        identity_values = {
+            (
+                row["metadata"].get("request_ordinal"),
+                row["metadata"].get("request_input_id"),
+                row["metadata"].get("request_roster_sha256"),
+                row["metadata"].get("batch_group_id"),
+            )
+            for row in rows
+        }
+        if len(identity_values) != 1:
+            problems.append(_axi_problem("request_identity_mismatch", f"{request_id} identity changes across events"))
+        elif identity_values:
+            ordinal, input_id, event_roster_hash, batch_group_id = next(iter(identity_values))
+            roster_row = roster_by_ordinal.get(ordinal)
+            if roster_row is None or roster_row.request_input_id != input_id or event_roster_hash != roster_hash:
+                problems.append(_axi_problem("request_identity_mismatch", f"{request_id} does not match roster"))
+            expected_group = None if config.batch_policy.mode == "single_request" else metadata["batch"].get("batch_group_id")
+            if batch_group_id != expected_group:
+                problems.append(_axi_problem("request_identity_mismatch", f"{request_id} batch group mismatch"))
+        for event in rows:
+            if event["event_type"] not in {"decode_emission", "token"}:
+                continue
+            event_metadata = event["metadata"]
+            windows = decode_windows_by_request.get((event_metadata.get("source_identity"), request_id), [])
+            timestamp = float(event["timestamp_s"])
+            if not any(window.start_s <= timestamp <= window.end_s for window in windows):
+                problems.append(_axi_problem("request_event_outside_decode", f"{request_id} {event['event_type']} is outside paired decode window"))
+
+    try:
+        request_rows = reader.request_rows()
+        token_rows = reader.request_token_rows()
+    except BundleReadError as exc:
+        return problems + [_axi_problem("request_output_artifact_invalid", str(exc))]
+    for index, row in enumerate(request_rows, start=1):
+        try:
+            validate_request_row(row, config.speculation)
+        except AxiSchemaError as exc:
+            problems.append(_axi_problem("request_output_artifact_invalid", f"request row {index}: {exc}"))
+    for index, row in enumerate(token_rows, start=1):
+        try:
+            validate_request_token_row(row)
+        except AxiSchemaError as exc:
+            problems.append(_axi_problem("request_output_artifact_invalid", f"token row {index}: {exc}"))
+    request_ordinals = [row.get("request_ordinal") for row in request_rows]
+    if request_ordinals != sorted(request_ordinals) or len(request_ordinals) != len(set(request_ordinals)):
+        problems.append(_axi_problem("request_output_artifact_invalid", "request rows are not unique in ordinal order"))
+    token_order = [(row.get("request_ordinal"), row.get("output_token_ordinal")) for row in token_rows]
+    if token_order != sorted(token_order) or len(token_order) != len(set(token_order)):
+        problems.append(_axi_problem("request_output_artifact_invalid", "request token rows are not unique in required order"))
+
+    response_mirror = reader.path / "outputs" / "response.txt"
+    tokens_mirror = reader.path / "outputs" / "tokens.jsonl"
+    if config.batch_policy.requested_batch_size > 1 and (
+        response_mirror.exists() or tokens_mirror.exists()
+    ):
+        problems.append(
+            _axi_problem(
+                "request_output_artifact_invalid",
+                "B>1 bundle must not contain collapsed compatibility mirrors",
+            )
+        )
+    elif config.batch_policy.requested_batch_size == 1:
+        if response_mirror.exists():
+            expected_text = (
+                request_rows[0].get("response_text")
+                if len(request_rows) == 1
+                else None
+            )
+            try:
+                response_bytes = response_mirror.read_bytes()
+            except OSError as exc:
+                problems.append(
+                    _axi_problem(
+                        "request_output_artifact_invalid",
+                        f"outputs/response.txt cannot be read: {exc}",
+                    )
+                )
+            else:
+                if (
+                    not isinstance(expected_text, str)
+                    or response_bytes != expected_text.encode("utf-8")
+                ):
+                    problems.append(
+                        _axi_problem(
+                            "request_output_artifact_invalid",
+                            "outputs/response.txt compatibility mirror differs from requests.jsonl",
+                        )
+                    )
+        if tokens_mirror.exists():
+            try:
+                mirror_rows = reader._strict_jsonl_objects(
+                    "outputs/tokens.jsonl"
+                )
+            except BundleReadError as exc:
+                problems.append(
+                    _axi_problem("request_output_artifact_invalid", str(exc))
+                )
+            else:
+                mirror_projection = [
+                    {
+                        "index": row.get("index"),
+                        "timestamp_s": row.get("timestamp_s"),
+                        "token_id": row.get("token_id"),
+                    }
+                    for row in mirror_rows
+                ]
+                expected_projection = [
+                    {
+                        "index": row.get("output_token_ordinal"),
+                        "timestamp_s": row.get("timestamp_s"),
+                        "token_id": row.get("token_id"),
+                    }
+                    for row in token_rows
+                ]
+                if mirror_projection != expected_projection:
+                    problems.append(
+                        _axi_problem(
+                            "request_output_artifact_invalid",
+                            "outputs/tokens.jsonl compatibility mirror differs from request_tokens.jsonl",
+                        )
+                    )
+
+    rows_by_id = {row.get("request_id"): row for row in request_rows if isinstance(row.get("request_id"), str)}
+    if set(rows_by_id) != admitted:
+        problems.append(_axi_problem("request_lifecycle_incomplete", "admitted request IDs do not equal request output rows"))
+    tokens_by_id: dict[str, list[dict[str, Any]]] = {}
+    for row in token_rows:
+        if isinstance(row.get("request_id"), str):
+            tokens_by_id.setdefault(row["request_id"], []).append(row)
+    emissions_by_id = {
+        request_id: [row for row in rows if row.get("event_type") == "decode_emission"]
+        for request_id, rows in by_request.items()
+    }
+    singleton_by_id = {
+        request_id: [row for row in rows if row.get("event_type") == "token"]
+        for request_id, rows in by_request.items()
+    }
+    for request_id in admitted:
+        request_row = rows_by_id.get(request_id)
+        terminal_event = terminal.get(request_id)
+        if not isinstance(request_row, dict) or not isinstance(terminal_event, dict):
+            continue
+        request_tokens = tokens_by_id.get(request_id, [])
+        ordinals = [row.get("output_token_ordinal") for row in request_tokens]
+        if ordinals != list(range(len(request_tokens))):
+            problems.append(_axi_problem("request_output_artifact_invalid", f"{request_id} token ordinals are not contiguous"))
+        emissions = emissions_by_id.get(request_id, [])
+        emission_ordinals = [event["metadata"].get("decode_step_ordinal") for event in emissions]
+        if emission_ordinals != list(range(len(emissions))):
+            problems.append(_axi_problem("request_counter_rollup_mismatch", f"{request_id} decode step ordinals invalid"))
+        cumulative = 0
+        proposed_total = 0
+        accepted_total = 0
+        target_total = 0
+        for event in emissions:
+            event_metadata = event["metadata"]
+            if event_metadata.get("output_token_start_ordinal") != cumulative:
+                problems.append(_axi_problem("request_counter_rollup_mismatch", f"{request_id} emission output slices are gapped"))
+            count = event_metadata.get("emitted_count")
+            if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+                continue
+            slice_rows = request_tokens[cumulative : cumulative + count]
+            ids = [row.get("token_id") for row in slice_rows]
+            inline = event_metadata.get("emitted_token_ids")
+            slice_hash = event_metadata.get("emitted_token_ids_sha256")
+            if inline is not None and inline != ids:
+                problems.append(_axi_problem("request_output_hash_mismatch", f"{request_id} inline emission IDs differ from token artifact"))
+            if slice_hash is not None and (any(not isinstance(token_id, int) or isinstance(token_id, bool) for token_id in ids) or slice_hash != _axi_token_slice_sha256(ids)):
+                problems.append(_axi_problem("request_output_hash_mismatch", f"{request_id} emission slice hash mismatch"))
+            cumulative += count
+            target_total += event_metadata.get("target_emitted_count", 0)
+            if config.speculation.mode != "off":
+                proposed_total += event_metadata.get("tokens_proposed", 0)
+                accepted_total += event_metadata.get("tokens_accepted", 0)
+        terminal_metadata = terminal_event["metadata"]
+        cancelled = terminal_metadata.get("cancelled_proposal_counters")
+        if isinstance(cancelled, dict):
+            proposed_total += cancelled.get("tokens_proposed", 0)
+            accepted_total += cancelled.get("tokens_accepted", 0)
+            target_total += cancelled.get("target_emitted_count", 0)
+        counts = {
+            cumulative,
+            len(request_tokens),
+            request_row.get("output_token_count"),
+            terminal_metadata.get("realized_output_token_count"),
+        }
+        if len(counts) != 1:
+            problems.append(_axi_problem("request_output_count_mismatch", f"{request_id} emission/artifact/terminal counts disagree"))
+        if request_row.get("target_emitted_count") != target_total:
+            problems.append(_axi_problem("request_counter_rollup_mismatch", f"{request_id} target emitted rollup mismatch"))
+        if config.speculation.mode != "off":
+            expected_rate = accepted_total / proposed_total if proposed_total else None
+            if (
+                request_row.get("tokens_proposed") != proposed_total
+                or request_row.get("tokens_accepted") != accepted_total
+                or request_row.get("acceptance_rate") != expected_rate
+            ):
+                problems.append(_axi_problem("request_counter_rollup_mismatch", f"{request_id} proposal/acceptance rollup mismatch"))
+        complete_ids = [row.get("token_id") for row in request_tokens]
+        if all(isinstance(token_id, int) and not isinstance(token_id, bool) for token_id in complete_ids):
+            if request_row.get("emitted_token_ids_sha256") != _axi_token_sequence_sha256(complete_ids):
+                problems.append(_axi_problem("request_output_hash_mismatch", f"{request_id} complete token hash mismatch"))
+        elif request_row.get("emitted_token_ids_sha256") is not None:
+            problems.append(_axi_problem("request_output_hash_mismatch", f"{request_id} token hash present with unavailable ID"))
+        singleton_events = singleton_by_id.get(request_id, [])
+        singleton_ordinals = [
+            event["metadata"].get("output_token_ordinal")
+            for event in singleton_events
+        ]
+        if len(singleton_ordinals) != len(set(singleton_ordinals)):
+            problems.append(
+                _axi_problem(
+                    "request_output_artifact_invalid",
+                    f"{request_id} has duplicate singleton token callbacks",
+                )
+            )
+        singleton_by_ordinal = {
+            event["metadata"].get("output_token_ordinal"): event
+            for event in singleton_events
+        }
+        expected_callback_ordinals = [
+            token_row.get("output_token_ordinal")
+            for token_row in request_tokens
+            if token_row.get("timestamp_s") is not None
+        ]
+        if sorted(singleton_ordinals) != expected_callback_ordinals:
+            problems.append(
+                _axi_problem(
+                    "request_output_artifact_invalid",
+                    f"{request_id} singleton callback coverage differs from timestamped token rows",
+                )
+            )
+        for token_row in request_tokens:
+            callback = singleton_by_ordinal.get(token_row.get("output_token_ordinal"))
+            if (
+                token_row.get("request_ordinal") != request_row.get("request_ordinal")
+                or token_row.get("request_input_id") != request_row.get("request_input_id")
+            ):
+                problems.append(
+                    _axi_problem(
+                        "request_identity_mismatch",
+                        f"{request_id} token row identity differs from request row",
+                    )
+                )
+            if token_row.get("timestamp_s") is None:
+                if callback is not None:
+                    problems.append(_axi_problem("request_output_artifact_invalid", f"{request_id} callback exists for null timestamp row"))
+                continue
+            if (
+                callback is None
+                or callback.get("timestamp_s") != token_row.get("timestamp_s")
+                or callback["metadata"].get("token_id") != token_row.get("token_id")
+                or callback["metadata"].get("decode_step_ordinal")
+                != token_row.get("decode_step_ordinal")
+            ):
+                problems.append(_axi_problem("request_output_artifact_invalid", f"{request_id} singleton token callback mismatch"))
+        roster_row = roster_by_ordinal.get(request_row.get("request_ordinal"))
+        expected_group = (
+            None
+            if config.batch_policy.mode == "single_request"
+            else metadata["batch"].get("batch_group_id")
+        )
+        if (
+            roster_row is None
+            or request_row.get("request_input_id") != roster_row.request_input_id
+            or request_row.get("prompt_sha256") != roster_row.prompt_sha256
+            or request_row.get("output_policy_name") != roster_row.output_policy_name
+            or request_row.get("requested_output_tokens") != roster_row.requested_output_tokens
+            or request_row.get("request_roster_sha256") != roster_hash
+            or request_row.get("batch_group_id") != expected_group
+        ):
+            problems.append(_axi_problem("request_identity_mismatch", f"{request_id} request row differs from roster"))
+        if request_row.get("terminal_status") != terminal_metadata.get("terminal_status") or request_row.get("stop_reason") != terminal_metadata.get("stop_reason") or request_row.get("failure_reason") != terminal_metadata.get("failure_reason"):
+            problems.append(_axi_problem("request_lifecycle_incomplete", f"{request_id} terminal row/event mismatch"))
+        if request_row.get("terminal_status") == "succeeded" and request_row.get("requested_output_tokens") is not None and (
+            request_row.get("output_token_count") != request_row.get("requested_output_tokens")
+            or request_row.get("stop_reason") != "requested_tokens_emitted"
+        ):
+            problems.append(_axi_problem("request_output_count_mismatch", f"{request_id} fixed-budget-exact success is not exact"))
+        if request_row.get("terminal_status") == "cancelled_after_proposal_before_output" and (
+            request_row.get("output_token_count") != 0
+            or request_tokens
+            or emissions
+            or terminal_metadata.get("realized_output_token_count") != 0
+            or request_row.get("acceptance_rate") != 0.0
+        ):
+            problems.append(
+                _axi_problem(
+                    "cancelled_proposal_evidence_lost",
+                    f"{request_id} cancelled proposal terminal retains output evidence",
+                )
+            )
+
+    batch = metadata.get("batch") if isinstance(metadata, dict) else None
+    if isinstance(batch, dict):
+        submitted_ids = {request_id for request_id, rows in by_request.items() if any(row["event_type"] == "request_submitted" for row in rows)}
+        terminal_ids = set(terminal)
+        expected = {
+            "configured_batch_size": config.batch_policy.requested_batch_size,
+            "realized_batch_size": len(admitted),
+            "submitted_request_count": len(submitted_ids),
+            "admitted_request_count": len(admitted),
+            "terminal_request_count": len(terminal_ids),
+            "request_roster_sha256": roster_hash,
+        }
+        if any(batch.get(key) != value for key, value in expected.items()):
+            problems.append(_axi_problem("batch_observation_mismatch", "metadata batch observations disagree with lifecycle/roster"))
+
+    try:
+        trace_rows = reader.trace_rows()
+    except BundleReadError as exc:
+        return problems + [_axi_problem("primary_source_identity_unresolved", str(exc))]
+    trace_sources = {row.get("source") for row in trace_rows if isinstance(row.get("source"), str)}
+    primary_source = runtime.get("primary_source_identity") if isinstance(runtime, dict) else None
+    if primary_source not in trace_sources:
+        problems.append(_axi_problem("primary_source_identity_unresolved", "primary source has no telemetry binding"))
+    for event in request_events:
+        source = event["metadata"].get("source_identity")
+        if source not in trace_sources:
+            problems.append(_axi_problem("event_source_identity_unresolved", f"event source {source!r} has no telemetry binding"))
+            break
+    if isinstance(summary, dict) and summary.get("status") == "succeeded":
+        failed = [request_id for request_id in admitted if isinstance(rows_by_id.get(request_id), dict) and rows_by_id[request_id].get("terminal_status") != "succeeded"]
+        if failed:
+            problems.append(_axi_problem("request_lifecycle_incomplete", f"succeeded bundle has non-succeeded admitted requests: {failed}"))
+        summary_rollup = summary.get("decode_counter_rollup")
+        if not allow_unfinalized_summary and isinstance(summary_rollup, dict):
+            totals = {
+                "emitted_count": sum(row.get("output_token_count", 0) for row in request_rows),
+                "target_emitted_count": sum(row.get("target_emitted_count", 0) for row in request_rows),
+            }
+            if config.speculation.mode == "off":
+                totals.update(tokens_proposed=None, tokens_accepted=None, acceptance_rate=None)
+            else:
+                proposed = sum(row.get("tokens_proposed", 0) for row in request_rows)
+                accepted = sum(row.get("tokens_accepted", 0) for row in request_rows)
+                totals.update(tokens_proposed=proposed, tokens_accepted=accepted, acceptance_rate=(accepted / proposed if proposed else None))
+            if summary_rollup != totals:
+                problems.append(_axi_problem("request_counter_rollup_mismatch", "summary decode counter rollup differs from request rows"))
+    # Preserve deterministic first occurrence while suppressing a flood of
+    # identical source/identity diagnostics from one malformed fixture.
+    return list(dict.fromkeys(problems))
 
 
 @dataclass(frozen=True)
@@ -1914,7 +2674,14 @@ def _check_events(events_path: Path) -> list[str]:
             "events.jsonl last event is "
             f"{records[-1]['event_type']!r}, expected 'run_finalized'"
         )
-    problems.extend(_pair_phase_windows(records).problems)
+    request_scoped_phase_markers = any(
+        record.get("event_type") in {"phase_start", "phase_end"}
+        and isinstance(record.get("metadata"), dict)
+        and "request_id" in record["metadata"]
+        for record in records
+    )
+    if not request_scoped_phase_markers:
+        problems.extend(_pair_phase_windows(records).problems)
     return problems
 
 

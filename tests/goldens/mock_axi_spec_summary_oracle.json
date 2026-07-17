@@ -1,0 +1,55 @@
+{
+  "batch_group_gross_energy_j": null,
+  "decode_counter_rollup": {
+    "acceptance_rate": 0.6666666666666666,
+    "emitted_count": 3,
+    "target_emitted_count": 1,
+    "tokens_accepted": 2,
+    "tokens_proposed": 3
+  },
+  "decode_emission_burst_size_max_tokens": 2,
+  "decode_emission_burst_size_mean_tokens": 1.5,
+  "decode_emission_burst_size_p50_tokens": 1.5,
+  "decode_emission_burst_size_p95_tokens": 1.95,
+  "decode_emission_event_rate_events_s": 33.333333333333336,
+  "decode_phase_output_throughput_tokens_s": 50.0,
+  "gross_energy_j": 0.75,
+  "gross_energy_per_accepted_draft_token_j": 0.375,
+  "gross_energy_per_committed_output_token_j": 0.25,
+  "idle_subtracted_energy_j": 0.25,
+  "phase_energy_j": {
+    "decode": 0.45,
+    "prefill": 0.1125
+  },
+  "request_decode_metrics": [
+    {
+      "burst_size_max_tokens": 2,
+      "burst_size_mean_tokens": 1.5,
+      "burst_size_p50_tokens": 1.5,
+      "burst_size_p95_tokens": 1.95,
+      "decode_counter_rollup": {
+        "acceptance_rate": 0.6666666666666666,
+        "emitted_count": 3,
+        "target_emitted_count": 1,
+        "tokens_accepted": 2,
+        "tokens_proposed": 3
+      },
+      "decode_duration_s": 0.06,
+      "decode_emission_event_count": 2,
+      "decode_phase_output_throughput_tokens_s": 50.0,
+      "output_token_count": 3,
+      "request_id": "request-000",
+      "request_ordinal": 0,
+      "terminal_status": "succeeded",
+      "ttft_s": 0.038
+    }
+  ],
+  "status": "succeeded",
+  "summary_provenance": {
+    "config_schema_version": "0.1",
+    "event_semantics_version": "joulewise.events.v2",
+    "reducer_id": "joulewise.reduce_bundle",
+    "reducer_version": "0.6.0",
+    "summary_schema_version": "0.1"
+  }
+}

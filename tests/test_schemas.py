@@ -48,6 +48,7 @@ PINNED_CONFIG_SHA256 = {
     "mac_mlx_qwen35_122b.json": "100d76977dffab1ae841124c4708727ac45ab793bbe0061dd87a6d9f54dbb97a",
     "mock_suite_local.json": "e33e9587b37996e4c94767129eaae5575079821dc07ce5dbbe4331095a4ed58d",
     "nvidia_vllm_ssh.json": "a8a8ed0ca03e5d50247ef1f3b0520962660141f144107cef8e8b4bdb6e7e8f81",
+    "mock_axi_spec.json": "6fbc1e2c94e84a86e6322aefa06d8318af2454ca42b4e4a79651932bb1e41124",
 }
 
 OMITTED_OPTIONAL_KEYS = {
@@ -58,6 +59,7 @@ OMITTED_OPTIONAL_KEYS = {
         "prompt_token_evidence_policy",
     },
 }
+OMITTED_TOP_LEVEL_KEYS = {"schema_extensions", "batch_policy", "speculation"}
 
 
 def valid_succeeded_summary(**changes: Any) -> SummaryMetrics:
@@ -700,7 +702,9 @@ class EmittedConfigRoundTripTests(unittest.TestCase):
         schema = BenchmarkConfig.json_schema()
         for name, emitted in self.emitted_examples():
             self.assertEqual(
-                set(emitted), set(schema["properties"]), f"top-level keys ({name})"
+                set(emitted) | OMITTED_TOP_LEVEL_KEYS,
+                set(schema["properties"]),
+                f"top-level keys ({name})",
             )
             for section_key, section_value in emitted.items():
                 if not isinstance(section_value, dict):

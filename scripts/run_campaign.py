@@ -34,7 +34,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -42,8 +42,25 @@ if str(ROOT) not in sys.path:
 
 from joulewise.bundle import sanitize_id_component  # noqa: E402
 from joulewise.cli import validate_bundle  # noqa: E402
-from joulewise.bundle_read import BundleReader, BundleReadError  # noqa: E402
+from joulewise.bundle_read import (  # noqa: E402
+    AXI_VALIDATOR_REASON_CODES,
+    BundleReader,
+    BundleReadError,
+)
 from joulewise.analysis_manifest import validate_analysis_manifest  # noqa: E402
+from joulewise.analysis_engine.registry import (  # noqa: E402
+    ATTEMPT_LEDGER_SCHEMA_VERSION,
+    AnalysisManifestError,
+    MANIFEST_SCHEMA_VERSION as AXI_MANIFEST_SCHEMA_VERSION,
+    STRICT_EVIDENCE_SCHEMA_VERSION,
+    canonical_json_bytes as axi_canonical_json_bytes,
+    load_and_validate_analysis_manifest_v2,
+    render_attempt_ledger,
+    render_strict_validation_evidence,
+    sha256_bytes as axi_sha256_bytes,
+    validate_attempt_ledger,
+)
+from joulewise.controller import finalize_dispatch_receipt  # noqa: E402
 from joulewise.doctor import SCHEMA_VERSION as DOCTOR_SCHEMA_VERSION  # noqa: E402
 from joulewise.doctor import config_warning_gate  # noqa: E402
 from joulewise.analysis_engine.inputs import (  # noqa: E402
@@ -60,6 +77,11 @@ from joulewise.schemas import (  # noqa: E402
     RunStatus,
     RuntimeBackend,
     TelemetryBackend,
+)
+from joulewise.interfaces import AttemptIdentity  # noqa: E402
+from joulewise.output_identity import (  # noqa: E402
+    build_output_identity_report,
+    render_output_identity_report,
 )
 
 
@@ -275,6 +297,10 @@ class AnalysisManifestState:
     @property
     def valid(self) -> bool:
         return not self.problems
+
+    @property
+    def is_axi_v2(self) -> bool:
+        return self.raw.get("schema_version") == AXI_MANIFEST_SCHEMA_VERSION
 
     def to_log(self) -> dict[str, Any]:
         row = {
@@ -550,7 +576,19 @@ def load_analysis_manifest(config_dir: Path) -> AnalysisManifestState | None:
                 raw = parsed
 
     manifest_id = raw.get("manifest_id") if isinstance(raw.get("manifest_id"), str) else None
-    problems.extend(validate_analysis_manifest(raw, manifest_dir=config_dir))
+    if raw.get("schema_version") == AXI_MANIFEST_SCHEMA_VERSION:
+        reference = raw.get("registry")
+        reference_path = reference.get("path") if isinstance(reference, dict) else None
+        if not isinstance(reference_path, str):
+            problems.append("AXI analysis manifest registry path is unavailable")
+        else:
+            registry_path = _resolve_analysis_reference(config_dir, reference_path)
+            try:
+                load_and_validate_analysis_manifest_v2(path, registry_path)
+            except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+                problems.append(f"AXI analysis manifest validation failed: {exc}")
+    else:
+        problems.extend(validate_analysis_manifest(raw, manifest_dir=config_dir))
 
     return AnalysisManifestState(
         path=path,
@@ -559,6 +597,15 @@ def load_analysis_manifest(config_dir: Path) -> AnalysisManifestState | None:
         file_sha256=_sha256_bytes(file_bytes),
         problems=tuple(problems),
     )
+
+
+def _resolve_analysis_reference(manifest_dir: Path, reference: str) -> Path:
+    """Resolve the v2 contract's normalized repository-relative references."""
+
+    path = Path(reference)
+    if path.is_file():
+        return path
+    return manifest_dir / path
 
 
 def command_for(config_path: Path, runs_dir: Path, cli_cmd: str | None) -> list[str]:
@@ -2441,6 +2488,404 @@ def append_verdict(
     append_log(log_path, row)
 
 
+def _write_immutable_bytes(path: Path, value: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("xb") as handle:
+        handle.write(value)
+
+
+def _axi_bundle_digest(path: Path) -> str:
+    inventory = {
+        file.relative_to(path).as_posix(): hashlib.sha256(file.read_bytes()).hexdigest()
+        for file in sorted(candidate for candidate in path.rglob("*") if candidate.is_file())
+    }
+    return axi_sha256_bytes(axi_canonical_json_bytes(inventory))
+
+
+def _axi_entry_config_paths(state: AnalysisManifestState) -> list[Path]:
+    result: list[Path] = []
+    seen: set[Path] = set()
+    for entry in sorted(state.raw.get("entries", []), key=lambda row: row["order_index"]):
+        path = _resolve_analysis_reference(state.path.parent, entry["config"])
+        if path not in seen:
+            result.append(path)
+            seen.add(path)
+    return result
+
+
+def _axi_attempt_bundle_path(
+    runs_dir: Path,
+    manifest_id: str,
+    entry_id: str,
+    attempt_ordinal: int,
+    run_id: str,
+) -> Path:
+    return (
+        runs_dir
+        / "axi_attempt_bundles"
+        / manifest_id
+        / sanitize_id_component(entry_id)
+        / f"a{attempt_ordinal}"
+        / sanitize_id_component(run_id)
+    )
+
+
+def _axi_discover_finalized_bundles(
+    runs_dir: Path,
+    manifest: dict[str, Any],
+) -> dict[tuple[str, int, str], Path]:
+    """Discover finalized attempts from the bundle store, independently of the ledger."""
+
+    root = runs_dir / "axi_attempt_bundles" / manifest["manifest_id"]
+    if not root.is_dir():
+        return {}
+    entry_by_component: dict[str, str] = {}
+    for entry in manifest["entries"]:
+        component = sanitize_id_component(entry["entry_id"])
+        if component in entry_by_component:
+            raise AnalysisManifestError(
+                "analysis_attempt_ledger_gap",
+                "manifest entry identifiers collide in the bundle store",
+            )
+        entry_by_component[component] = entry["entry_id"]
+
+    result: dict[tuple[str, int, str], Path] = {}
+    for summary_path in sorted(root.rglob("summary_metrics.json")):
+        bundle_path = summary_path.parent
+        relative = summary_path.relative_to(root)
+        if len(relative.parts) != 4:
+            raise AnalysisManifestError(
+                "analysis_attempt_ledger_gap",
+                f"finalized bundle has an invalid store location: {bundle_path}",
+            )
+        entry_component, attempt_component, run_component, marker = relative.parts
+        if marker != "summary_metrics.json" or entry_component not in entry_by_component:
+            raise AnalysisManifestError(
+                "analysis_attempt_ledger_gap",
+                f"finalized bundle is outside a manifest entry: {bundle_path}",
+            )
+        if not attempt_component.startswith("a") or not attempt_component[1:].isdigit():
+            raise AnalysisManifestError(
+                "analysis_attempt_ledger_gap",
+                f"finalized bundle has an invalid attempt location: {bundle_path}",
+            )
+        attempt_ordinal = int(attempt_component[1:])
+        try:
+            metadata = json.loads((bundle_path / "metadata.json").read_bytes())
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise AnalysisManifestError(
+                "analysis_attempt_ledger_gap",
+                f"finalized bundle metadata is unavailable: {bundle_path}",
+            ) from exc
+        run_id = metadata.get("run_id") if isinstance(metadata, dict) else None
+        if not isinstance(run_id, str) or not run_id or sanitize_id_component(run_id) != run_component:
+            raise AnalysisManifestError(
+                "analysis_attempt_ledger_gap",
+                f"finalized bundle run identity does not match its store location: {bundle_path}",
+            )
+        key = (entry_by_component[entry_component], attempt_ordinal, run_id)
+        if key in result:
+            raise AnalysisManifestError(
+                "analysis_attempt_ledger_gap",
+                f"duplicate finalized bundle identity: {key}",
+            )
+        result[key] = bundle_path
+    return result
+
+
+def _axi_load_rows(path: Path) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    if not path.is_dir():
+        return rows
+    for row_path in sorted(path.glob("*.jsonl")):
+        lines = [line for line in row_path.read_text(encoding="utf-8").splitlines() if line]
+        if len(lines) != 1:
+            raise ValueError(f"attempt row artifact must contain one row: {row_path}")
+        value = json.loads(lines[0])
+        if not isinstance(value, dict):
+            raise ValueError(f"attempt row artifact is not an object: {row_path}")
+        rows.append(value)
+    return rows
+
+
+def _axi_evidence_map(path: Path, pattern: str) -> dict[str, bytes]:
+    result: dict[str, bytes] = {}
+    if not path.is_dir():
+        return result
+    for evidence_path in sorted(path.glob(pattern)):
+        raw = evidence_path.read_bytes()
+        digest = axi_sha256_bytes(raw)
+        if digest in result:
+            raise ValueError(f"duplicate AXI attempt evidence digest: {digest}")
+        result[digest] = raw
+    return result
+
+
+def _axi_strict_reason_codes(problems: Sequence[str]) -> list[str]:
+    """Project strict validator diagnostics onto its frozen reason enum."""
+
+    codes = {
+        problem.split(":", 2)[1]
+        for problem in problems
+        if problem.startswith("axi:") and len(problem.split(":", 2)) == 3
+    }
+    unknown = sorted(codes - AXI_VALIDATOR_REASON_CODES)
+    if unknown:
+        raise ValueError(
+            "strict validator returned reason codes outside "
+            f"AXI_VALIDATOR_REASON_CODES: {unknown}"
+        )
+    if problems and not codes:
+        raise ValueError(
+            "strict-invalid AXI bundle produced no AXI_VALIDATOR_REASON_CODES value"
+        )
+    return sorted(codes)
+
+
+def run_axi_spec_campaign(
+    args: argparse.Namespace,
+    state: AnalysisManifestState,
+    *,
+    runs_dir: Path,
+) -> int:
+    """Dispatch a frozen v2 manifest with immutable per-attempt evidence.
+
+    Each Entry receives an isolated runs directory because paired configs keep
+    the same normalized ``run_id``.  The isolation path is campaign custody,
+    not a new runtime-support claim.
+    """
+
+    if not state.valid:
+        print("error: AXI analysis manifest is invalid: " + "; ".join(state.problems), file=sys.stderr)
+        return 2
+    manifest = state.raw
+    manifest_id = manifest["manifest_id"]
+    entries = sorted(manifest["entries"], key=lambda row: row["order_index"])
+    config_infos: dict[str, ConfigInfo] = {}
+    for entry in entries:
+        path = _resolve_analysis_reference(state.path.parent, entry["config"])
+        loaded = load_config_info(path)
+        if isinstance(loaded, ConfigError):
+            print(f"error: {loaded.message}", file=sys.stderr)
+            return 2
+        if loaded.repetitions != 1:
+            print("error: AXI manifest entries require repetitions == 1", file=sys.stderr)
+            return 2
+        config_infos[entry["entry_id"]] = loaded
+
+    evidence_root = runs_dir / "axi_attempt_evidence" / manifest_id
+    identities_dir = evidence_root / "attempt_identities"
+    receipts_dir = evidence_root / "dispatch_receipts"
+    strict_dir = evidence_root / "strict_validation"
+    rows_dir = evidence_root / "ledger_rows"
+    reports_dir = evidence_root / "output_identity_reports"
+    if args.dry_run:
+        for entry in entries:
+            info = config_infos[entry["entry_id"]]
+            command = command_for(
+                info.path,
+                runs_dir / "axi_attempt_bundles" / manifest_id / entry["entry_id"] / "a0",
+                args.cli_cmd,
+            )
+            print(f"dry_run {entry['entry_id']} attempt=0: {shell_quote(command)}")
+        return 0
+
+    lock_path: Path | None = None
+    try:
+        lock_path = acquire_campaign_lock(runs_dir)
+        rows = _axi_load_rows(rows_dir)
+        by_entry: dict[str, list[dict[str, Any]]] = {
+            entry["entry_id"]: [] for entry in entries
+        }
+        for row in rows:
+            by_entry.setdefault(str(row.get("entry_id")), []).append(row)
+
+        for entry in entries:
+            entry_id = entry["entry_id"]
+            prior = sorted(by_entry[entry_id], key=lambda row: row["attempt_ordinal"])
+            eligible = [row for row in prior if row["eligible_for_analysis"]]
+            if eligible:
+                continue
+            attempt_ordinal = len(prior)
+            identity = AttemptIdentity(
+                manifest_id=manifest_id,
+                entry_id=entry_id,
+                pair_id=entry["pair_id"],
+                arm=entry["arm"],
+                attempt_ordinal=attempt_ordinal,
+            )
+            stem = f"{entry['order_index']:06d}__{sanitize_id_component(entry_id)}__a{attempt_ordinal}"
+            identity_value = {
+                "manifest_id": identity.manifest_id,
+                "entry_id": identity.entry_id,
+                "pair_id": identity.pair_id,
+                "arm": identity.arm,
+                "attempt_ordinal": identity.attempt_ordinal,
+            }
+            _write_immutable_bytes(
+                identities_dir / f"{stem}.json",
+                (json.dumps(identity_value, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+            )
+
+            info = config_infos[entry_id]
+            attempt_runs_dir = (
+                runs_dir
+                / "axi_attempt_bundles"
+                / manifest_id
+                / sanitize_id_component(entry_id)
+                / f"a{attempt_ordinal}"
+            )
+            command = command_for(info.path, attempt_runs_dir, args.cli_cmd)
+            dispatch_error: OSError | None = None
+            try:
+                completed = subprocess.run(command, check=False)
+                exit_code: int | None = completed.returncode
+            except OSError as exc:
+                dispatch_error = exc
+                exit_code = None
+
+            bundle_path = _axi_attempt_bundle_path(
+                runs_dir, manifest_id, entry_id, attempt_ordinal, info.run_id
+            )
+            finalized = bundle_path.is_dir() and (bundle_path / "summary_metrics.json").is_file()
+            metadata: dict[str, Any] = {}
+            if finalized:
+                try:
+                    parsed = json.loads((bundle_path / "metadata.json").read_bytes())
+                    if isinstance(parsed, dict):
+                        metadata = parsed
+                except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+                    metadata = {}
+            batch = metadata.get("batch")
+            admitted = (
+                batch.get("admitted_request_count", 0)
+                if isinstance(batch, dict)
+                else 0
+            )
+            if not isinstance(admitted, int) or isinstance(admitted, bool) or admitted < 0:
+                admitted = 0
+            receipt_path = receipts_dir / f"{stem}.json"
+            finalize_dispatch_receipt(
+                receipt_path,
+                identity,
+                dispatch_started=True,
+                transport_status=(
+                    "ok" if exit_code == 0 and finalized else "failed"
+                ),
+                process_exit_code=exit_code,
+                admitted_request_count=admitted,
+                finalized_run_id=(info.run_id if finalized else None),
+            )
+            receipt_raw = receipt_path.read_bytes()
+            receipt_sha = axi_sha256_bytes(receipt_raw)
+
+            strict_problems = validate_bundle(bundle_path, strict=True) if finalized else []
+            reason: str | None = None
+            reason_sha: str | None = None
+            eligible_for_analysis = True
+            if not finalized:
+                reason = "dispatch_failed_before_bundle_creation"
+                reason_sha = receipt_sha
+                eligible_for_analysis = False
+            elif finalized and strict_problems:
+                evidence = {
+                    "schema_version": STRICT_EVIDENCE_SCHEMA_VERSION,
+                    **identity_value,
+                    "run_id": info.run_id,
+                    "validated_bundle_sha256": _axi_bundle_digest(bundle_path),
+                    "valid": False,
+                    "validator_reason_codes": _axi_strict_reason_codes(
+                        strict_problems
+                    ),
+                }
+                evidence_raw = render_strict_validation_evidence(evidence)
+                reason_sha = axi_sha256_bytes(evidence_raw)
+                _write_immutable_bytes(strict_dir / f"{stem}__{reason_sha}.json", evidence_raw)
+                reason = "strict_bundle_invalid"
+                eligible_for_analysis = False
+
+            ledger_row = {
+                "schema_version": ATTEMPT_LEDGER_SCHEMA_VERSION,
+                **identity_value,
+                "run_id": info.run_id if finalized else None,
+                "dispatch_receipt_sha256": receipt_sha,
+                "technical_invalid_reason_code": reason,
+                "reason_evidence_sha256": reason_sha,
+                "eligible_for_analysis": eligible_for_analysis,
+            }
+            _write_immutable_bytes(
+                rows_dir / f"{stem}.jsonl",
+                render_attempt_ledger([ledger_row]),
+            )
+            by_entry[entry_id].append(ledger_row)
+            if not eligible_for_analysis:
+                detail = str(dispatch_error) if dispatch_error is not None else reason
+                print(f"failed {entry_id} attempt={attempt_ordinal}: {detail}", file=sys.stderr)
+                return 1
+            print(f"ok {entry_id} attempt={attempt_ordinal}: bundle={bundle_path}")
+
+        rows = _axi_load_rows(rows_dir)
+        if any(not any(row["eligible_for_analysis"] for row in rows if row["entry_id"] == entry["entry_id"]) for entry in entries):
+            print("error: AXI attempt ledger has an unresolved manifest entry", file=sys.stderr)
+            return 1
+        receipts = _axi_evidence_map(receipts_dir, "*.json")
+        strict_evidence = _axi_evidence_map(strict_dir, "*.json")
+        finalized_bundles = _axi_discover_finalized_bundles(runs_dir, manifest)
+        selected = validate_attempt_ledger(
+            rows,
+            manifest,
+            receipts=receipts,
+            strict_evidence=strict_evidence,
+            finalized_bundles=finalized_bundles,
+        )
+        ledger_raw = render_attempt_ledger(rows)
+        ledger_path = evidence_root / "attempt_ledger.jsonl"
+        if ledger_path.exists():
+            if ledger_path.read_bytes() != ledger_raw:
+                raise FileExistsError("immutable AXI attempt ledger differs")
+        else:
+            _write_immutable_bytes(ledger_path, ledger_raw)
+
+        entry_by_id = {entry["entry_id"]: entry for entry in entries}
+        for pair in manifest["pairs"]:
+            bundles: dict[str, Path | None] = {}
+            for arm, entry_key in (
+                ("spec_off", "spec_off_entry_id"),
+                ("spec_on", "spec_on_entry_id"),
+            ):
+                entry_id = pair[entry_key]
+                row = selected[entry_id]
+                entry = entry_by_id[entry_id]
+                bundles[arm] = (
+                    finalized_bundles[(
+                        entry_id,
+                        row["attempt_ordinal"],
+                        row["run_id"],
+                    )]
+                    if row is not None and row["run_id"] is not None
+                    else None
+                )
+            report = build_output_identity_report(
+                manifest_id=manifest_id,
+                pair_id=pair["pair_id"],
+                spec_off_bundle=bundles["spec_off"],
+                spec_on_bundle=bundles["spec_on"],
+                strict_validator=validate_bundle,
+            )
+            report_path = reports_dir / f"{sanitize_id_component(pair['pair_id'])}.json"
+            report_raw = render_output_identity_report(report)
+            if report_path.exists():
+                if report_path.read_bytes() != report_raw:
+                    raise FileExistsError("immutable output identity report differs")
+            else:
+                _write_immutable_bytes(report_path, report_raw)
+        print(f"AXI attempt ledger: {ledger_path} sha256={axi_sha256_bytes(ledger_raw)}")
+        return 0
+    finally:
+        if lock_path is not None:
+            lock_path.unlink(missing_ok=True)
+
+
 def run_campaign(args: argparse.Namespace) -> int:
     assert args.config_dir is not None
     config_dir = Path(args.config_dir)
@@ -2451,10 +2896,15 @@ def run_campaign(args: argparse.Namespace) -> int:
         raise ValueError("--max-failures must be >= 1")
 
     analysis_manifest = load_analysis_manifest(config_dir)
-    order_entries, order_warning = load_order_entries(config_dir)
-    if order_warning is not None:
-        print(order_warning, file=sys.stderr)
-    configs = apply_order_manifest(discover_configs(config_dir), order_entries)
+    if analysis_manifest is not None and analysis_manifest.is_axi_v2:
+        order_entries = []
+        order_warning = None
+        configs = _axi_entry_config_paths(analysis_manifest)
+    else:
+        order_entries, order_warning = load_order_entries(config_dir)
+        if order_warning is not None:
+            print(order_warning, file=sys.stderr)
+        configs = apply_order_manifest(discover_configs(config_dir), order_entries)
     order_by_config = order_entry_by_config(order_entries)
     print_config_file_list(configs)
     doctor_gate = config_warning_gate(
@@ -2503,6 +2953,12 @@ def run_campaign(args: argparse.Namespace) -> int:
                 preflight=preflight,
             )
         return 1
+    if analysis_manifest is not None and analysis_manifest.is_axi_v2:
+        return run_axi_spec_campaign(
+            args,
+            analysis_manifest,
+            runs_dir=runs_dir,
+        )
     items = read_config_infos(configs)
     waivers = load_waivers(args.waivers)
     config_errors = [item for item in items if isinstance(item, ConfigError)]

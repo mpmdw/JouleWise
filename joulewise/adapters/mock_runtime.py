@@ -30,6 +30,7 @@ from typing import Any
 
 from joulewise import __version__
 from joulewise.adapters.suite_control import SuiteItemResult, execute_suite
+from joulewise.adapters.mock_spec_runtime import MockSpecRuntimeAdapter
 from joulewise.clock import Clock
 from joulewise.interfaces import AdapterResult, RunContext, RuntimeEvent, RuntimeResult
 from joulewise.provenance import (
@@ -72,10 +73,13 @@ class MockRuntimeAdapter:
 
     def __init__(self, clock: Clock) -> None:
         self._clock = clock
+        self._mock_spec = MockSpecRuntimeAdapter(clock)
 
     def prepare(
         self, config: BenchmarkConfig, context: RunContext | None = None
     ) -> AdapterResult:
+        if config.schema_extensions is not None:
+            return self._mock_spec.prepare(config, context)
         if config.model.name == UNSUPPORTED_MODEL_NAME:
             return AdapterResult(
                 ok=False,
@@ -99,12 +103,16 @@ class MockRuntimeAdapter:
     def warmup(
         self, config: BenchmarkConfig, context: RunContext | None = None
     ) -> AdapterResult:
+        if config.schema_extensions is not None:
+            return self._mock_spec.warmup(config, context)
         self._clock.sleep(WARMUP_SECONDS)
         return AdapterResult(ok=True)
 
     def run_workload(
         self, config: BenchmarkConfig, context: RunContext | None = None
     ) -> RuntimeResult:
+        if config.schema_extensions is not None:
+            return self._mock_spec.run_workload(config, context)
         prompt_tokens = self._prompt_tokens(config)
         prompt_token_ids = self._prompt_token_ids(prompt_tokens)
         output_tokens = config.workload_profile.output_tokens or DEFAULT_OUTPUT_TOKENS
@@ -250,6 +258,8 @@ class MockRuntimeAdapter:
     def cleanup(
         self, config: BenchmarkConfig, context: RunContext | None = None
     ) -> AdapterResult:
+        if config.schema_extensions is not None:
+            return self._mock_spec.cleanup(config, context)
         return AdapterResult(ok=True)
 
     def _run_suite_item(

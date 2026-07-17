@@ -1,0 +1,16 @@
+{
+  "base": "output_identity_exact.json",
+  "replacements": {
+    "/claim_disposition": "text_matched_descriptive_or_predeclared_quality_matched",
+    "/overall_state": "text_match_token_divergent",
+    "/report_id": "oir-a1228c5bd226809ec2194ae783fe3f53a7e78d0e90107c48078f5092c96d7965",
+    "/requests/0/output_token_count_equal": false,
+    "/requests/0/reason_codes": [
+      "output_count_differs",
+      "token_ids_differ"
+    ],
+    "/requests/0/spec_on_token_ids_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "/requests/0/state": "text_match_token_divergent",
+    "/spec_on_bundle/requests_artifact_sha256": "ca6f3736d85f0c152f9f4f9b0a086aeb8ef03eefea659ca7e4a4505b93da93a6"
+  }
+}

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Protocol, runtime_checkable
 
 from joulewise.clock import Clock, ClockStamp
+from joulewise.axi_decode_config import TargetTokenizerIdentity
 from joulewise.schemas import BenchmarkConfig, FailureReason, IdleBaseline
 
 if TYPE_CHECKING:
@@ -191,6 +192,108 @@ class RuntimeEvent:
 
 
 @dataclass(frozen=True)
+class AttemptIdentity:
+    manifest_id: str
+    entry_id: str
+    pair_id: str
+    arm: str
+    attempt_ordinal: int
+
+    def __post_init__(self) -> None:
+        if not all(
+            isinstance(value, str) and value
+            for value in (self.manifest_id, self.entry_id, self.pair_id)
+        ):
+            raise ValueError("attempt identity strings must be non-empty")
+        if self.arm not in {"spec_off", "spec_on"}:
+            raise ValueError("attempt arm must be spec_off or spec_on")
+        if (
+            not isinstance(self.attempt_ordinal, int)
+            or isinstance(self.attempt_ordinal, bool)
+            or self.attempt_ordinal < 0
+        ):
+            raise ValueError("attempt ordinal must be integer >= 0")
+
+
+@dataclass(frozen=True)
+class AxiPhaseWindow:
+    phase: str
+    request_phase_ordinal: int
+    start_s: float
+    end_s: float
+    scheduler_step_id: str | int | None = None
+
+
+@dataclass(frozen=True)
+class AxiDecodeEmission:
+    timestamp_s: float
+    decode_step_ordinal: int
+    output_token_start_ordinal: int
+    emitted_count: int
+    tokens_proposed: int | None
+    tokens_accepted: int | None
+    target_emitted_count: int
+    emitted_token_ids: tuple[int, ...] | None
+    scheduler_step_id: str | int | None = None
+
+
+@dataclass(frozen=True)
+class AxiRequestToken:
+    output_token_ordinal: int
+    decode_step_ordinal: int
+    token_id: int | None
+    timestamp_s: float | None
+    timestamp_provenance: str | None
+
+
+@dataclass(frozen=True)
+class AxiCancelledProposalCounters:
+    tokens_proposed: int
+    tokens_accepted: int = 0
+    target_emitted_count: int = 0
+    emitted_count: int = 0
+    acceptance_rate: float = 0.0
+
+
+@dataclass(frozen=True)
+class AxiRequestResult:
+    request_id: str
+    request_ordinal: int
+    request_input_id: str
+    submitted_at_s: float
+    admitted_at_s: float | None
+    phase_windows: tuple[AxiPhaseWindow, ...]
+    emissions: tuple[AxiDecodeEmission, ...]
+    tokens: tuple[AxiRequestToken, ...]
+    terminal_at_s: float | None
+    terminal_status: str | None
+    stop_reason: str | None
+    failure_reason: str | None
+    failure_message: str | None
+    response_text: str | None
+    cancelled_proposal_counters: AxiCancelledProposalCounters | None = None
+
+
+@dataclass(frozen=True)
+class AxiBatchObservation:
+    realized_batch_size: int
+    submitted_request_count: int
+    admitted_request_count: int
+    terminal_request_count: int
+    batch_group_id: str | None
+
+
+@dataclass(frozen=True)
+class AxiRuntimeResult:
+    requests: tuple[AxiRequestResult, ...]
+    batch: AxiBatchObservation
+    primary_source_identity: str
+    target_model_artifact_sha256: str
+    target_tokenizer_identity: TargetTokenizerIdentity
+    target_tokenizer_artifact_files: dict[str, str]
+
+
+@dataclass(frozen=True)
 class RuntimeResult:
     events: list[RuntimeEvent]
     output_artifacts: dict[str, str] = field(default_factory=dict)
@@ -198,6 +301,7 @@ class RuntimeResult:
     output_token_count: int | None = None
     workload_provenance: dict[str, Any] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    axi_result: AxiRuntimeResult | None = None
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,10 @@
+{"event_type":"stage_started","message":"measured run started","metadata":{},"phase":"measured_run","timestamp_s":0.0}
+{"event_type":"phase_start","message":"prefill started","metadata":{},"phase":"prefill","timestamp_s":0.2}
+{"event_type":"phase_end","message":"prefill ended","metadata":{},"phase":"prefill","timestamp_s":0.5}
+{"event_type":"phase_start","message":"decode started","metadata":{},"phase":"decode","timestamp_s":0.5}
+{"event_type":"token","message":"token 0","metadata":{"index":0},"phase":"decode","timestamp_s":1.0}
+{"event_type":"token","message":"token 1","metadata":{"index":1},"phase":"decode","timestamp_s":1.5}
+{"event_type":"token","message":"token 2","metadata":{"index":2},"phase":"decode","timestamp_s":2.0}
+{"event_type":"phase_end","message":"decode ended","metadata":{},"phase":"decode","timestamp_s":2.5}
+{"event_type":"stage_completed","message":"measured run completed","metadata":{},"phase":"measured_run","timestamp_s":3.0}
+{"event_type":"run_finalized","message":"bundle finalized","metadata":{},"phase":"finalization","timestamp_s":3.0}

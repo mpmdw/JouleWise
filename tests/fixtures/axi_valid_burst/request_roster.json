@@ -1,0 +1,13 @@
+{
+  "requests": [
+    {
+      "output_policy_name": "fixed_budget_exact",
+      "prompt_sha256": "317ebc95a0f191f1ffb64c0ef501f3d134e3036348c190d48587ce6bc56a5de0",
+      "prompt_source": "prompt_text",
+      "request_input_id": "prompt-000",
+      "request_ordinal": 0,
+      "requested_output_tokens": 3
+    }
+  ],
+  "schema_version": "joulewise.request_roster.v1"
+}

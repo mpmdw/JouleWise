@@ -1,0 +1,13 @@
+{
+  "admitted_request_count": 0,
+  "arm": "spec_off",
+  "attempt_ordinal": 0,
+  "dispatch_started": true,
+  "entry_id": "draft-off-000",
+  "finalized_run_id": null,
+  "manifest_id": "am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066",
+  "pair_id": "pair-000",
+  "process_exit_code": 1,
+  "schema_version": "joulewise.dispatch_receipt.v1",
+  "transport_status": "failed"
+}

@@ -1,0 +1,888 @@
+{
+  "$defs": {
+    "axi_batch_policy": {
+      "additionalProperties": false,
+      "properties": {
+        "admission_policy": {
+          "enum": [
+            "immediate",
+            "admit_roster_together"
+          ],
+          "type": "string"
+        },
+        "dispatch_policy": {
+          "enum": [
+            "one_request_call",
+            "one_native_batch_call"
+          ],
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "single_request",
+            "static_batch"
+          ],
+          "type": "string"
+        },
+        "request_roster_ref": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "request_roster_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "requested_batch_size": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "synchronization_policy": {
+          "enum": [
+            "none",
+            "barrier_before_prefill"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "admission_policy",
+        "dispatch_policy",
+        "mode",
+        "request_roster_ref",
+        "request_roster_sha256",
+        "requested_batch_size",
+        "synchronization_policy"
+      ],
+      "type": "object"
+    },
+    "axi_draft_model_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "model_artifact_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "model_name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "model_revision": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "quantization": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "runtime_backend": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "runtime_version": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "tokenizer": {
+          "additionalProperties": false,
+          "properties": {
+            "class": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "name": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "revision": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "vocabulary_size": {
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "class",
+            "name",
+            "revision",
+            "vocabulary_size"
+          ],
+          "type": "object"
+        },
+        "weight_format": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "model_artifact_sha256",
+        "model_name",
+        "model_revision",
+        "quantization",
+        "runtime_backend",
+        "runtime_version",
+        "tokenizer",
+        "weight_format"
+      ],
+      "type": "object"
+    },
+    "axi_native_mtp_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "draft_depth": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "head_configuration": {
+          "minProperties": 1,
+          "type": "object"
+        },
+        "head_configuration_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "head_count": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "target_model_artifact_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "draft_depth",
+        "head_configuration",
+        "head_configuration_sha256",
+        "head_count",
+        "target_model_artifact_sha256"
+      ],
+      "type": "object"
+    },
+    "axi_speculation_policy": {
+      "additionalProperties": false,
+      "properties": {
+        "draft_model_identity": {
+          "additionalProperties": false,
+          "properties": {
+            "model_artifact_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "model_name": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "model_revision": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "quantization": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "runtime_backend": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "runtime_version": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "tokenizer": {
+              "additionalProperties": false,
+              "properties": {
+                "class": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "name": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "revision": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "vocabulary_size": {
+                  "minimum": 1,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "class",
+                "name",
+                "revision",
+                "vocabulary_size"
+              ],
+              "type": "object"
+            },
+            "weight_format": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "model_artifact_sha256",
+            "model_name",
+            "model_revision",
+            "quantization",
+            "runtime_backend",
+            "runtime_version",
+            "tokenizer",
+            "weight_format"
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "max_proposed_tokens": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "off",
+            "draft_model",
+            "native_mtp"
+          ],
+          "type": "string"
+        },
+        "native_mtp_identity": {
+          "additionalProperties": false,
+          "properties": {
+            "draft_depth": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "head_configuration": {
+              "minProperties": 1,
+              "type": "object"
+            },
+            "head_configuration_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "head_count": {
+              "minimum": 1,
+              "type": "integer"
+            },
+            "target_model_artifact_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "draft_depth",
+            "head_configuration",
+            "head_configuration_sha256",
+            "head_count",
+            "target_model_artifact_sha256"
+          ],
+          "type": [
+            "object",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "draft_model_identity",
+        "max_proposed_tokens",
+        "mode",
+        "native_mtp_identity"
+      ],
+      "type": "object"
+    },
+    "axi_tokenizer_identity": {
+      "additionalProperties": false,
+      "properties": {
+        "class": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "revision": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "vocabulary_size": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "class",
+        "name",
+        "revision",
+        "vocabulary_size"
+      ],
+      "type": "object"
+    },
+    "hardware_target": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "transport": {
+                "const": "ssh"
+              }
+            },
+            "required": [
+              "transport"
+            ]
+          },
+          "then": {
+            "properties": {
+              "host": {
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              }
+            },
+            "required": [
+              "host"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "device_kind": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "host": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "notes": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "runtime_backend": {
+          "enum": [
+            "mock",
+            "mlx",
+            "vllm",
+            "llama_cpp",
+            "hailo"
+          ],
+          "type": "string"
+        },
+        "telemetry_backend": {
+          "enum": [
+            "mock",
+            "powermetrics",
+            "nvidia_smi",
+            "jetson_rails",
+            "wall_meter"
+          ],
+          "type": "string"
+        },
+        "transport": {
+          "enum": [
+            "local",
+            "ssh"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "transport",
+        "runtime_backend",
+        "telemetry_backend"
+      ],
+      "type": "object"
+    },
+    "interconnect": {
+      "properties": {
+        "link_speed_mbps": {
+          "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "name": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "notes": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "model": {
+      "properties": {
+        "context_window": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "family": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "revision": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "weight_format": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "quantization": {
+      "properties": {
+        "bits": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "group_size": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "name": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "run_metadata": {
+      "properties": {
+        "ambient_temp_c": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "notes": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "operator": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "project"
+      ],
+      "type": "object"
+    },
+    "sampling": {
+      "properties": {
+        "idle_seconds": {
+          "minimum": 0,
+          "type": "number"
+        },
+        "power_hz": {
+          "minimum": 0.001,
+          "type": "number"
+        },
+        "warmup_seconds": {
+          "minimum": 0,
+          "type": "number"
+        }
+      },
+      "type": "object"
+    },
+    "workload_profile": {
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "dataset_ref": {
+                  "type": "null"
+                },
+                "prompt_text": {
+                  "not": {
+                    "type": "null"
+                  }
+                },
+                "prompt_tokens": {
+                  "type": "null"
+                },
+                "suite_manifest_ref": {
+                  "type": "null"
+                }
+              },
+              "required": [
+                "prompt_text"
+              ]
+            },
+            {
+              "properties": {
+                "dataset_ref": {
+                  "type": "null"
+                },
+                "prompt_text": {
+                  "type": "null"
+                },
+                "prompt_tokens": {
+                  "not": {
+                    "type": "null"
+                  }
+                },
+                "suite_manifest_ref": {
+                  "type": "null"
+                }
+              },
+              "required": [
+                "prompt_tokens"
+              ]
+            },
+            {
+              "properties": {
+                "dataset_ref": {
+                  "not": {
+                    "type": "null"
+                  }
+                },
+                "prompt_text": {
+                  "type": "null"
+                },
+                "prompt_tokens": {
+                  "type": "null"
+                },
+                "suite_manifest_ref": {
+                  "type": "null"
+                }
+              },
+              "required": [
+                "dataset_ref"
+              ]
+            },
+            {
+              "properties": {
+                "dataset_ref": {
+                  "type": "null"
+                },
+                "prompt_text": {
+                  "type": "null"
+                },
+                "prompt_tokens": {
+                  "type": "null"
+                },
+                "suite_manifest_ref": {
+                  "not": {
+                    "type": "null"
+                  }
+                }
+              },
+              "required": [
+                "suite_manifest_ref"
+              ]
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "suite_manifest_ref": {
+                  "not": {
+                    "type": "null"
+                  }
+                },
+                "suite_manifest_sha256": {
+                  "not": {
+                    "type": "null"
+                  }
+                }
+              },
+              "required": [
+                "suite_manifest_ref",
+                "suite_manifest_sha256"
+              ]
+            },
+            {
+              "properties": {
+                "suite_manifest_ref": {
+                  "type": "null"
+                },
+                "suite_manifest_sha256": {
+                  "type": "null"
+                }
+              }
+            }
+          ]
+        }
+      ],
+      "properties": {
+        "dataset_ref": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "generator_sidecar_ref": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": "string"
+        },
+        "output_tokens": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "prompt_text": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt_token_evidence_policy": {
+          "enum": [
+            "required",
+            "exempt_affine_generated_text",
+            null
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "prompt_tokens": {
+          "minimum": 1,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "repetitions": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "suite_manifest_ref": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "suite_manifest_sha256": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "warmup_runs": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "batch_policy"
+              ]
+            },
+            {
+              "required": [
+                "speculation"
+              ]
+            }
+          ]
+        }
+      },
+      "if": {
+        "required": [
+          "schema_extensions"
+        ]
+      },
+      "then": {
+        "required": [
+          "batch_policy",
+          "speculation"
+        ]
+      }
+    }
+  ],
+  "properties": {
+    "batch_policy": {
+      "$ref": "#/$defs/axi_batch_policy"
+    },
+    "hardware_target": {
+      "$ref": "#/$defs/hardware_target"
+    },
+    "interconnect": {
+      "$ref": "#/$defs/interconnect"
+    },
+    "model": {
+      "$ref": "#/$defs/model"
+    },
+    "quantization": {
+      "$ref": "#/$defs/quantization"
+    },
+    "run_id": {
+      "minLength": 1,
+      "pattern": "\\S",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_metadata": {
+      "$ref": "#/$defs/run_metadata"
+    },
+    "sampling": {
+      "$ref": "#/$defs/sampling"
+    },
+    "schema_extensions": {
+      "maxItems": 1,
+      "minItems": 1,
+      "prefixItems": [
+        {
+          "const": "joulewise.axi_decode_config.v1"
+        }
+      ],
+      "type": "array",
+      "uniqueItems": true
+    },
+    "schema_version": {
+      "const": "0.1",
+      "minLength": 1,
+      "type": "string"
+    },
+    "speculation": {
+      "$ref": "#/$defs/axi_speculation_policy"
+    },
+    "workload_profile": {
+      "$ref": "#/$defs/workload_profile"
+    }
+  },
+  "required": [
+    "schema_version",
+    "model",
+    "quantization",
+    "hardware_target",
+    "workload_profile"
+  ],
+  "title": "JouleWise BenchmarkConfig",
+  "type": "object",
+  "x-joulewise-unknown-key-policy": "warn-and-ignore"
+}

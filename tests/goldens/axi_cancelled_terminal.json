@@ -1,0 +1,28 @@
+{
+  "event_type": "request_terminal",
+  "message": "cancelled after proposal",
+  "metadata": {
+    "batch_group_id": null,
+    "cancelled_proposal_counters": {
+      "acceptance_rate": 0.0,
+      "emitted_count": 0,
+      "target_emitted_count": 0,
+      "tokens_accepted": 0,
+      "tokens_proposed": 2
+    },
+    "failure_message": "mock cancellation",
+    "failure_reason": "cancelled_by_fixture",
+    "realized_output_token_count": 0,
+    "request_event_ordinal": 3,
+    "request_id": "request-000",
+    "request_input_id": "prompt-000",
+    "request_ordinal": 0,
+    "request_roster_sha256": "502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9",
+    "scheduler_step_id": null,
+    "source_identity": "mock:target",
+    "stop_reason": null,
+    "terminal_status": "cancelled_after_proposal_before_output"
+  },
+  "phase": "request",
+  "timestamp_s": 2.0
+}

@@ -1,0 +1,17 @@
+{
+  "base": "output_identity_exact.json",
+  "replacements": {
+    "/claim_disposition": "refuse_efficiency_claim",
+    "/overall_state": "unassessable",
+    "/report_id": "oir-28b4a4a06719e91ecb13eafeea93ff6f730db917b6d83710bd5af5e8fc70759c",
+    "/requests/0/missing_evidence_reasons": [
+      "spec_on_token_ids_unavailable"
+    ],
+    "/requests/0/reason_codes": [
+      "token_ids_unavailable"
+    ],
+    "/requests/0/spec_on_token_ids_sha256": null,
+    "/requests/0/state": "unassessable",
+    "/spec_on_bundle/requests_artifact_sha256": "3eea19beae8c74a0cc3e6c0cf6c9a289cb51b813a18e8a882503fb913b6337e5"
+  }
+}

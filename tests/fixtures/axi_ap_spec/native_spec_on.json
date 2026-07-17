@@ -1,0 +1,86 @@
+{
+  "batch_policy": {
+    "admission_policy": "immediate",
+    "dispatch_policy": "one_request_call",
+    "mode": "single_request",
+    "request_roster_ref": "tests/fixtures/axi_ap_spec/request_roster.json",
+    "request_roster_sha256": "502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9",
+    "requested_batch_size": 1,
+    "synchronization_policy": "none"
+  },
+  "hardware_target": {
+    "device_kind": "test",
+    "host": null,
+    "id": "mock_target",
+    "notes": null,
+    "runtime_backend": "mock",
+    "telemetry_backend": "mock",
+    "transport": "local"
+  },
+  "interconnect": {
+    "link_speed_mbps": null,
+    "name": "local",
+    "notes": null
+  },
+  "model": {
+    "context_window": 1024,
+    "family": "mock",
+    "name": "mock-target",
+    "revision": null,
+    "source": null,
+    "weight_format": "mock"
+  },
+  "quantization": {
+    "bits": null,
+    "group_size": null,
+    "name": "none"
+  },
+  "run_id": "axi-ap-spec-native-template",
+  "run_metadata": {
+    "ambient_temp_c": null,
+    "notes": null,
+    "operator": "test",
+    "project": "capstone-joulewise",
+    "tags": [
+      "axi",
+      "mock",
+      "non-live"
+    ]
+  },
+  "sampling": {
+    "idle_seconds": 1.0,
+    "power_hz": 2.0,
+    "warmup_seconds": 0.0
+  },
+  "schema_extensions": [
+    "joulewise.axi_decode_config.v1"
+  ],
+  "schema_version": "0.1",
+  "speculation": {
+    "draft_model_identity": null,
+    "max_proposed_tokens": 4,
+    "mode": "native_mtp",
+    "native_mtp_identity": {
+      "draft_depth": 4,
+      "head_configuration": {
+        "activation": "mock",
+        "layout": [
+          1,
+          2
+        ]
+      },
+      "head_configuration_sha256": "7ca1796e7b78c74d34a4f772fb6f3a6c478ef1c357e1e721e9e62d1d603de521",
+      "head_count": 2,
+      "target_model_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "workload_profile": {
+    "dataset_ref": null,
+    "name": "axi_ap_spec",
+    "output_tokens": 3,
+    "prompt_text": "Hello",
+    "prompt_tokens": null,
+    "repetitions": 1,
+    "warmup_runs": 1
+  }
+}

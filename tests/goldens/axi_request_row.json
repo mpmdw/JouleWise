@@ -1,0 +1,21 @@
+{
+  "acceptance_rate": 0.5,
+  "batch_group_id": null,
+  "emitted_token_ids_sha256": "197f28f7bd921329dcaabea6c205304f9138a6cb2347d6d7a4279ad2ea5e1e41",
+  "failure_reason": null,
+  "output_policy_name": "fixed_budget_exact",
+  "output_token_count": 3,
+  "prompt_sha256": "317ebc95a0f191f1ffb64c0ef501f3d134e3036348c190d48587ce6bc56a5de0",
+  "request_id": "request-000",
+  "request_input_id": "prompt-000",
+  "request_ordinal": 0,
+  "request_roster_sha256": "502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9",
+  "requested_output_tokens": 3,
+  "response_text": "abc",
+  "response_text_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "stop_reason": "requested_tokens_emitted",
+  "target_emitted_count": 1,
+  "terminal_status": "succeeded",
+  "tokens_accepted": 2,
+  "tokens_proposed": 4
+}

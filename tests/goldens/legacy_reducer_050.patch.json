@@ -1,0 +1,7 @@
+{
+  "base": "legacy_reducer_041.json",
+  "replacements": {
+    "/idle_mean_uncertainty/method": "duration_weighted_newey_west_bartlett_10s_iid_floor_v2",
+    "/summary_provenance/reducer_version": "0.5.0"
+  }
+}

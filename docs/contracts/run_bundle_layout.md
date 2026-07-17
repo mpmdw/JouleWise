@@ -53,8 +53,10 @@ runs/<run_id>/
     runtime.log
     telemetry.log
   outputs/
-    response.txt
-    tokens.jsonl
+    response.txt             (historical/B=1 compatibility)
+    tokens.jsonl             (historical/B=1 compatibility)
+    requests.jsonl           (event semantics v2)
+    request_tokens.jsonl     (event semantics v2)
     suite_items.jsonl        (suite runs only)
 ```
 
@@ -62,8 +64,13 @@ The bundle stores the normalized config as sorted-key JSON (`config.json`);
 its SHA-256 hash is recorded in `metadata.config_sha256` and identifies the
 configuration in later aggregation. Default bundle validation recomputes the
 SHA-256 over the on-disk `config.json` bytes and rejects a missing or
-mismatched `metadata.config_sha256`. Rationale and alternatives: decision
-D-001 in `docs/decision_log.md` (YAML input timing is D-007).
+mismatched `metadata.config_sha256`. AXI request/burst configs remain base
+schema `0.1` and declare scoped extension
+`joulewise.axi_decode_config.v1`; their typed `batch_policy` and
+`speculation` objects are normalized identity. The extension is absent from
+non-AXI configs and does not consume config schema `0.2`, which remains
+reserved for split runs. Rationale and alternatives: decision D-001 in
+`docs/decision_log.md` (YAML input timing is D-007).
 
 ## Required Artifacts
 
@@ -105,8 +112,19 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
   ```
 - `metadata.json`: a JSON object containing device, runtime, telemetry,
   model, environment, clock, `config_sha256`, rail-manifest metadata, and
-  optional workload provenance. Valid JSON with any non-object top-level
-  shape is invalid in default validation.
+  optional workload provenance. Event-semantics-v2 bundles additionally
+  require top-level `event_semantics_version: "joulewise.events.v2"`,
+  typed `batch`, and typed `speculation` objects under
+  `docs/specs/axi/sa_burst_decode_contract.md`, plus non-null
+  `runtime.primary_source_identity` and
+  `runtime.target_model_artifact_sha256`, plus exact-keyed
+  `runtime.target_tokenizer_identity` with loaded tokenizer name, immutable
+  revision, and artifact hash. The source field binds the primary runtime
+  phase/telemetry source; the target hashes are produced from actually loaded
+  artifacts rather than config assertions. Event semantics is an
+  independent bundle metadata version and is not config schema `0.2`.
+  Valid JSON with any non-object top-level shape is invalid in default
+  validation.
 - `metadata.config_warnings` is a list of structured schema-0.1 diagnostics
   (`code`, dotted `path`, and `message`). Unknown configuration keys emit
   `unknown_config_key` to stderr, are listed here, and are ignored; their
@@ -160,8 +178,11 @@ D-001 in `docs/decision_log.md` (YAML input timing is D-007).
   negative gaps are not clamped and also set
   `metadata.extra.clock_step_suspect: true`. The first member records a null
   gap.
-- `events.jsonl`: timestamped lifecycle, phase, token, transfer, and failure
-  events.
+- `events.jsonl`: timestamped lifecycle, phase, token, decode-emission,
+  transfer, and failure events. Historical token events are singleton
+  emissions. Event semantics v2 adds one request-scoped
+  `decode_emission` record per completed request decode step and never
+  encodes multiple requests in one event.
 - `power_trace.csv`: raw power samples in watts, one row per rail per
   observation. Point backends retain
   `timestamp_s,power_w,source,rail`; interval-average backends use
@@ -224,16 +245,34 @@ the merged composite `events.jsonl` records node role/identity inside each
 event's `metadata` object, not as a sixth top-level event key. The top-level
 event key set above remains stable.
 
-Output-token events are records with `event_type: "token"` in the `decode`
-phase. Prompt-side token provenance is recorded in `metadata.json`
+Under historical event semantics, output-token events remain records with
+`event_type: "token"` in the `decode` phase and each record means exactly
+one output token. They are never reinterpreted as burst counts.
+
+Event semantics v2 adds `event_type: "decode_emission"`: one request's one
+completed decode step with request ID, request-local event and decode-step
+ordinals, RequestRoster hash, explicit source identity,
+committed/proposed/accepted/target counts, and required-nullable token
+IDs/hash keys inside the existing `metadata` object. Required-nullable batch-group and
+scheduler-step IDs never replace request ID. When genuine per-token callbacks
+exist, singleton token events accompany the decode-emission event and carry
+request/output ordinals plus timestamp provenance; reducers count output from
+decode-emission records and use singleton token records only as timestamp/ID
+evidence.
+
+Every admitted v2 request has one terminal event with an explicit realized
+output count. Enabled proposal work cancelled before any output uses terminal
+state `cancelled_after_proposal_before_output` and retains its positive
+proposal counter in the terminal record; it is never collapsed to zero. Each
+observed proposal count is validated against configured
+`max_proposed_tokens`.
+
+Prompt-side token provenance is recorded in `metadata.json`
 (`workload_provenance.prompt`) and must not be counted as output-token
-runtime evidence. When decode phase windows are present, output-token events
-used by reduction must fall inside a decode window.
-For single-prompt runs, `outputs/tokens.jsonl` rows may include additive
-`token_id` fields, and `metadata.workload_provenance.response.emitted_token_ids`
-records the emitted output token IDs in order when the runtime exposes them.
-For fixed-budget-exact single runs, the row, token-event, and emitted-token-ID
-counts are strict evidence and must equal the policy's `emitted_tokens`.
+runtime evidence. V2 output evidence is request-indexed in
+`outputs/requests.jsonl` and `outputs/request_tokens.jsonl`; all emission,
+artifact, stop-reason, policy, and required-nullable token-ID evidence must agree under
+`docs/specs/axi/sa_burst_decode_contract.md`.
 
 Runtime phase windows are discovered generically from paired
 `phase_start`/`phase_end` records. MLX runs may emit non-overlapping
@@ -241,27 +280,25 @@ Runtime phase windows are discovered generically from paired
 readers must not assume only prefill/decode exist.
 
 Phase pairing and validation are one fail-closed operation shared by strict
-bundle validation, phase-energy attribution, and decode-token filtering. A
-pairing key is the phase name plus its phase-stream identity. Stream identity
-uses each non-null `metadata.node_id` and `metadata.node_identity` value. When
-neither is present, a non-null `metadata.node_role` is the stream identity, so
-role-only split markers remain distinct. Values are compared as canonical JSON
-so structured node identities remain stable. Markers with no node role or
-identity all belong to one default stream. A start and end must have the same
-full key. Unmatched starts or ends and reversed bounds invalidate the bundle
-and reduction with an explicit phase-marker reason.
+bundle validation, phase-energy attribution, and decode-token filtering.
+Historical reducer arms retain the existing phase-name plus phase-stream
+identity key and sum semantics exactly.
 
-Phase energy is integrated separately per valid window and contributions with
-the same phase name are summed. Windows attributed to distinct identified
-nodes may overlap because each node has its own meter/source, so 2 W over
-`[1,3]` on one node plus 2 W over `[2,4]` on another legitimately sums to 8 J.
-Windows attributed to the same phase stream must not overlap, even when their
-phase names differ: overlap is marker corruption and fails closed with the
-named reason `same_source_phase_overlap`; it is never silently unioned (the
-union in the same 2 W example would be 6 J). Boundary-touching intervals are
-allowed. If any decode windows exist, a decode token is eligible only when its
-timestamp falls in a decode window with the token's same source identity;
-legacy bundles with no decode windows retain the event-only fallback.
+For event semantics v2, the pairing key is source identity, request ID, phase,
+and request-phase ordinal. The producer persists a non-null
+`metadata.source_identity` resolved using the existing node-ID,
+node-identity, node-role, then default precedence; v2 reduction does not
+reconstruct it. Start and end must have the
+same full key; unmatched/reversed markers fail closed. Equal timestamps across
+requests and arbitrarily overlapping request windows are allowed. No
+validator requires shared prefill or decode boundaries.
+
+V2 group phase energy unions all request intervals for the same source and
+phase before integrating, so synchronized duplicate request windows are
+integrated once, not summed B times. Energy is summed only across distinct
+identified source/meter streams. The reducer does not divide overlapping
+trace energy among requests. Complete rules and overlap invariants are in
+`docs/specs/axi/sa_burst_decode_contract.md`.
 
 ## Suite Bundle Additions (D-044/D-045/D-046/D-047.5)
 
@@ -300,6 +337,16 @@ recomputes `prompt_token_ids_sha256(manifest ids)` and checks it against the
 line's realized `prompt.token_ids_sha256`. For text manifest items with a
 SHA-256-shaped `source.source_sha256`, validation accepts either the realized
 prompt token-ID hash domain or the prompt-text SHA-256 domain.
+
+Event-semantics-v2 bundles use
+root-level `request_roster.json` as the normalized, hash-bound configured
+request roster and
+`outputs/requests.jsonl` and `outputs/request_tokens.jsonl` as immutable,
+request-indexed output evidence. Their exact schemas, lifecycle completeness,
+counter rollups, token-ID hash domain, and compatibility-mirror rules are
+frozen in `docs/specs/axi/sa_burst_decode_contract.md`. Configured and
+realized batch size are distinct explicit fields and neither is inferred from
+event count.
 
 `metadata.suite` is a top-level metadata block, not `metadata.extra`.
 Required fields are `suite_id`, `suite_profile`, `suite_revision`,
@@ -474,18 +521,33 @@ and its derived summary are out of scope. Publication integrity is supplied by
 the bundle-pack hash chain (P2-027/REPRO-001), outside a single local
 `validate-bundle` invocation.
 
-Reducer `0.5.0` summaries use exact strict comparison except for the absence of
-`idle_baseline.gpu_freq_mhz_mean`, which was added during the already-live
-0.5.0 era. Its absence is tolerated only for compatibility with stored
-pre-repair 0.5.0 summaries; when present, its value is compared exactly. All
-current-era summaries declaring reducer `0.4.1` or `0.4.2` are strictly
-re-derived through their frozen v1 unweighted idle estimator arm; they are
-never compared with relabelled v2 numbers. Their era-specific additive field
-absences remain tolerated, while present claims compare exactly. Reducer
-`0.4.0`, `0.3.x`, recorded `0.2.x`, and unknown reducer versions are
-unsupported and require explicit re-reduction. The frozen meanings are not
-rewritten.
-The six frozen legacy identities keep their provenance-less additive-absence
+Reducer dispatch occurs before event, phase, token, or idle interpretation.
+Reducer `0.6.0` is the request/burst arm and requires
+`metadata.event_semantics_version: "joulewise.events.v2"`. It uses
+request-indexed outputs, request-keyed phase pairing, unioned group windows,
+and the burst-safe metrics frozen by
+`docs/specs/axi/sa_burst_decode_contract.md`.
+
+Reducer `0.5.0` is frozen on the historical event path and duration-weighted
+idle-v2 formulas. Its code path, derived output, and current era-aware
+comparison behavior remain unchanged, including its existing treatment of
+absent `idle_baseline.gpu_freq_mhz_mean`. Reducers `0.4.1` and `0.4.2` retain
+their current v1 unweighted-idle code paths, derived outputs, historical event
+interpretation, and current era-aware tolerated-absence sets unchanged. No
+historical arm adds tolerance for 0.6.0-only fields, and no 0.6.0 field enters
+its SummaryMetrics path.
+
+Preservation is proved by independently hand-authored, hand-checked goldens
+transcribed from current behavior for each old arm. This guarantees existing
+arms' code paths and outputs are unchanged; it does not claim that fresh
+re-reduction of every historical summary is byte-identical. A versioned
+serializer and canonical byte goldens apply only to new reducer 0.6.0 output.
+
+Reducer `0.4.0`, `0.3.x`, recorded `0.2.x`, unknown versions, and
+incoherent reducer/event-version pairs are unsupported and require an
+explicitly compatible re-reduction. Historical event bundles cannot acquire
+burst semantics by re-reduction. The frozen meanings are not rewritten. The
+six frozen legacy identities keep their provenance-less additive-absence
 tolerance unchanged.
 A succeeded summary requires a measured window with duration strictly greater
 than zero. A reducer encountering a nonpositive measured window emits an
@@ -500,12 +562,24 @@ listed in reducer-version order):
 |---|---|---|
 | `gpu_freq_mhz_mean` | `summary_metrics.json.idle_baseline` | Additive Apple GPU frequency mean with declared unit MHz. Powermetrics derives it from the verbatim rich GPU `freq_hz` number, which Apple reports in MHz. Other backends emit null unless they supply the same declared unit. |
 | `gpu_freq_hz_mean` | `summary_metrics.json.idle_baseline` | Deprecated legacy alias retained without semantic conversion. Historical and current values are actually MHz and equal `gpu_freq_mhz_mean` when both are present; the false-Hz name must not be interpreted as Hz or multiplied by one million. |
-| `inter_token_throughput_tokens_s` | `summary_metrics.json` top level and aggregate metric entries | Governed steady-state decode/inter-token throughput: `(N - 1) / (t_last - t_first)`, where N is the runtime-observed output-token count and the timestamps are the first and last observed decode-token events. It is null when N is below two, fewer than two decode timestamps exist, or their span is zero. The frozen legacy `throughput_tokens_s` remains `N / (t_last - t_first)`: it counts N tokens across N−1 inter-token intervals, is retained for compatibility, and must not be relabeled as steady-state throughput. |
+| `inter_token_throughput_tokens_s` | `summary_metrics.json` top level and aggregate metric entries | Governed steady-state decode/inter-token throughput: `(N - 1) / (t_last - t_first)`, where N is the runtime-observed output-token count and the timestamps are the first and last genuine per-token runtime callbacks. For event-semantics-v2 it retains this singleton-stream identity and is null for realized B>1. For B=1 it is null when N is below two, any committed token lacks a genuine per-token timestamp, fewer than two timestamps exist, or their span is zero. A burst event timestamp is never expanded into per-token timestamps. The frozen legacy `throughput_tokens_s` remains `N / (t_last - t_first)`: it counts N tokens across N−1 inter-token intervals, is retained for compatibility, and must not be relabeled as steady-state throughput. Burst-safe decode-phase output throughput and emission/burst metrics use new names from `docs/specs/axi/sa_burst_decode_contract.md`. |
 | `energy_uncertainty_status` | `summary_metrics.json` top level | One of `not_estimable`, `estimated`, or `bounded`. Single-bundle reducer output is `not_estimable` unless every relevant uncertainty term has an external calibrated bound; point estimates and quality fields are still emitted. |
 | `idle_mean_uncertainty` | `summary_metrics.json` top level | Governed powermetrics-v2 duration-weighted idle-mean derivation. `method` is `duration_weighted_newey_west_bartlett_10s_iid_floor_v2`, `correlation_scope` is `independent_run`, `source_artifact` is `raw/powermetrics_idle.plist`, and `source_sha256` binds the derivation to immutable bytes. The object records raw count, median interval, type-7 p95/p05 cadence ratio, 10 s bandwidth, lag count, duration-weighted sample/IID/HAC/governed variances, Kish-bounded ESS, status, and frozen reason codes. Numeric results and ESS are null when `status=not_estimable`. Mock output is non-claim-bearing. Non-powermetrics physical backends report `backend_policy_not_frozen`. |
 | `energy_variance_terms_j2` | `summary_metrics.json` top level and aggregate metric entries | Object of named stochastic variance terms in J^2. The reducer emits `E_gross_repetition_j2: null` for single bundles and, only when `idle_mean_uncertainty.status == estimated`, `E_idle_mean_j2 = measured_duration_s^2 * governed_variance_of_mean_w2`. It is null rather than falling back to metadata or raw adjacent count when the governed estimate is unavailable. Aggregates continue consuming each member's corrected scalar and add repeated-gross and total idle-subtracted variance terms. |
 | `energy_bound_terms_j` | `summary_metrics.json` top level and aggregate metric entries | Object of named deterministic bounds in J. Drift is recorded as `E_drift_bound_j` from documented `metadata.idle_drift_bound_w` evidence, or `metadata.extra.idle_drift_bound_w` for runner `extra_metadata` parity, and remains a bound, never a variance term, unless a future analysis explicitly names a distributional model. Missing drift evidence is represented as `null`. For point traces, `E_interpolation_edge_bound_j` retains the diagnostic maximum change from shifting one edge at a time by +/- half its local observed gap, and `E_interpolation_joint_edge_bound_j` is the maximum over simultaneous shifts. For interval-supported powermetrics traces both interpolation terms are exactly `0.0`: overlap clipping is the point estimand, while clock/marker uncertainty remains separately bounded. Window prechecks expose the same governed value as `interpolation_joint_edge_bound_j`. |
 | `window_evidence_precheck` | `summary_metrics.json` top level | Machine-readable evidence prechecks by metric-specific window class. `gross_request` governs `gross_energy_j` and does not require an idle baseline or drift bound. `idle_subtracted_request` governs `idle_subtracted_energy_j` and requires both. Reducer 0.4.0 writes no generic `request` alias. Each request entry records `metric_name`, `window_class`, `eligible`, stable `reasons`, window duration, sample count, local-gap observations, cadence ratio, clock/anchor bound, and joint interpolation bound. `phase`/`item`/`block`/`level` remain gross-only prechecks; rollups contain `window_count` and nested `windows[]` entries. The frozen legacy allowlist may internally map an old `claim_eligibility` field for strict comparison only; that mapping never authorizes positive claim readiness. |
+
+Reducer 0.6.0 succeeded summaries add request/burst counter rollups, gross
+energy per committed output token, `batch_group_gross_energy_j` for static
+batches, the spec-only gross energy per accepted
+draft token diagnostic, decode-phase output throughput, emission-event rate,
+burst-size distribution, and request decode metrics. Exact names, formulas,
+types, null/censoring rules, and the prohibition on per-request trace-energy
+division are frozen in
+`docs/specs/axi/sa_burst_decode_contract.md`. Existing metric names retain
+their historical identities. Static-batch gross energy is governed by
+`window_evidence_precheck.gross_batch_group`; it is not relabeled
+`gross_request`.
 
 Stable P2-029 `window_evidence_precheck.reasons` values include
 `insufficient_in_window_samples`, `cadence_ratio_unrecorded`,

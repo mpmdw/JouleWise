@@ -46,7 +46,13 @@ import statistics
 from pathlib import Path
 from typing import Any
 
-from joulewise.bundle_read import BundleReader, BundleReadError, TracePoint, Window
+from joulewise.bundle_read import (
+    BundleReader,
+    BundleReadError,
+    TracePoint,
+    Window,
+    axi_v2_validation_problems,
+)
 from joulewise.idle_dependence import (
     FROZEN_METHOD_ID_V1,
     METHOD_ID as IDLE_DEPENDENCE_METHOD_ID,
@@ -56,10 +62,12 @@ from joulewise.idle_dependence import (
 from joulewise.schemas import (
     BenchmarkConfig,
     CONFIG_SCHEMA_VERSION,
+    DecodeCounterRollup,
     EnergyEvidence,
     FailureReason,
     IdleBaseline,
     MeasurementQuality,
+    RequestDecodeMetric,
     RunStatus,
     SUMMARY_REDUCER_ID,
     SUMMARY_REDUCER_VERSION,
@@ -68,6 +76,7 @@ from joulewise.schemas import (
     SuiteItemMetrics,
     SuiteSummary,
     SummaryMetrics,
+    SummaryMetricsV060,
     TelemetryBackend,
 )
 from joulewise.validation import finite_float
@@ -75,12 +84,14 @@ from joulewise.validation import finite_float
 REDUCER_ID = SUMMARY_REDUCER_ID
 REDUCER_VERSION = SUMMARY_REDUCER_VERSION
 FROZEN_REDUCER_VERSIONS = frozenset({"0.4.1", "0.4.2"})
+AXI_REDUCER_VERSION = "0.6.0"
 MIN_PHASE_SAMPLES = 3
 SHORT_WINDOW_CADENCE_RATIO_MIN = 2.0
 REQUEST_WINDOW_CADENCE_RATIO_MIN = 4.0
 
 __all__ = [
     "MIN_PHASE_SAMPLES",
+    "AXI_REDUCER_VERSION",
     "REDUCER_ID",
     "REDUCER_VERSION",
     "reduce_bundle",
@@ -836,8 +847,8 @@ def _bracketing_gap_s(curve: list[TracePoint], t: float) -> float | None:
 def reduce_bundle(
     path: Path,
     *,
-    reducer_version: str = REDUCER_VERSION,
-) -> SummaryMetrics:
+    reducer_version: str | None = None,
+) -> SummaryMetrics | SummaryMetricsV060:
     """Reduce the bundle at ``path`` to a :class:`SummaryMetrics`.
 
     Pure over the on-disk artifacts (D-002): re-runnable post hoc (the
@@ -853,16 +864,20 @@ def reduce_bundle(
     token timestamp because runtime suite items execute serially in marker
     order.
     """
-    if reducer_version not in FROZEN_REDUCER_VERSIONS | {REDUCER_VERSION}:
-        raise ValueError(f"unsupported reducer version: {reducer_version!r}")
     reader = BundleReader(Path(path))
+    reducer_version = _resolve_reducer_version(reader, reducer_version)
     try:
         config = reader.config()
         metadata = reader.metadata()
     except BundleReadError as exc:
         # Without a readable config there is no sampling_hz for a quality
         # block; status/reason/message still make the failure structured.
-        return SummaryMetrics(
+        summary_type = (
+            SummaryMetricsV060
+            if reducer_version == AXI_REDUCER_VERSION
+            else SummaryMetrics
+        )
+        return summary_type(
             status=RunStatus.FAILED,
             summary_provenance=_summary_provenance(reducer_version),
             failure_reason=FailureReason.UNKNOWN_ERROR,
@@ -872,6 +887,8 @@ def reduce_bundle(
     idle_baseline: IdleBaseline | None = None
     try:
         idle_baseline = _idle_baseline(metadata)
+        if reducer_version == AXI_REDUCER_VERSION:
+            return _reduce_v060(reader, config, metadata, idle_baseline)
         return _reduce(
             reader,
             config,
@@ -880,7 +897,12 @@ def reduce_bundle(
             reducer_version=reducer_version,
         )
     except (_ReduceError, BundleReadError) as exc:
-        return SummaryMetrics(
+        summary_type = (
+            SummaryMetricsV060
+            if reducer_version == AXI_REDUCER_VERSION
+            else SummaryMetrics
+        )
+        return summary_type(
             status=RunStatus.FAILED,
             summary_provenance=_summary_provenance(reducer_version),
             failure_reason=FailureReason.UNKNOWN_ERROR,
@@ -888,6 +910,73 @@ def reduce_bundle(
             idle_baseline=idle_baseline,
             measurement_quality=_failed_quality(config, metadata, idle_baseline),
         )
+
+
+def _resolve_reducer_version(
+    reader: BundleReader,
+    requested: str | None,
+) -> str:
+    """Dispatch before interpreting events or metrics (§8.1)."""
+
+    summary = reader.raw_summary()
+    summary_exists = (reader.path / "summary_metrics.json").is_file()
+    recorded: Any = None
+    if isinstance(summary, dict):
+        provenance = summary.get("summary_provenance")
+        if isinstance(provenance, dict):
+            recorded = provenance.get("reducer_version")
+        elif "summary_provenance" in summary:
+            recorded = None
+    if requested is None:
+        if recorded is not None:
+            requested = recorded
+        elif summary_exists and (
+            reader.is_event_v2()
+            or (
+                not reader.is_frozen_legacy_identity()
+                and summary != {"status": "failed"}
+            )
+        ):
+            raise ValueError(
+                "finalized bundle reducer version is missing; dispatch refuses to guess"
+            )
+        elif reader.is_event_v2():
+            requested = AXI_REDUCER_VERSION
+        else:
+            requested = REDUCER_VERSION
+
+    supported = FROZEN_REDUCER_VERSIONS | {
+        REDUCER_VERSION,
+        AXI_REDUCER_VERSION,
+    }
+    if requested not in supported:
+        raise ValueError(f"unsupported reducer version: {requested!r}")
+
+    raw_config = reader.raw_config()
+    config_v2 = (
+        isinstance(raw_config, dict)
+        and raw_config.get("schema_extensions")
+        == ["joulewise.axi_decode_config.v1"]
+    )
+    event_v2 = reader.is_event_v2()
+    v060_shape = isinstance(summary, dict) and any(
+        key in summary
+        for key in (
+            "decode_counter_rollup",
+            "batch_group_gross_energy_j",
+            "request_decode_metrics",
+        )
+    )
+    if requested == AXI_REDUCER_VERSION:
+        if not config_v2 or not event_v2:
+            raise ValueError(
+                "reducer 0.6.0 requires AXI config extension and event semantics v2"
+            )
+    elif config_v2 or event_v2 or v060_shape:
+        raise ValueError(
+            "0.6.0-only bundle shape cannot enter a frozen historical reducer arm"
+        )
+    return requested
 
 
 def _failed_quality(
@@ -906,6 +995,460 @@ def _failed_quality(
         idle_window_suspect=_idle_window_suspect(idle_baseline),
         remote_cleanup_failed=_remote_cleanup_failed(metadata),
     )
+
+
+def _union_windows(windows: list[Window]) -> list[Window]:
+    ordered = sorted(windows, key=lambda row: (row.start_s, row.end_s))
+    union: list[Window] = []
+    for window in ordered:
+        if not union or window.start_s > union[-1].end_s:
+            union.append(window)
+        elif window.end_s > union[-1].end_s:
+            union[-1] = Window(union[-1].start_s, window.end_s)
+    return union
+
+
+def _type7_quantile(values: list[int], probability: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return float(ordered[0])
+    position = (len(ordered) - 1) * probability
+    lower = math.floor(position)
+    fraction = position - lower
+    return ordered[lower] + fraction * (ordered[lower + 1] - ordered[lower])
+
+
+def _burst_metrics(
+    emitted_counts: list[int],
+) -> tuple[float | None, float | None, float | None, int | None]:
+    if not emitted_counts:
+        return None, None, None, None
+    return (
+        math.fsum(emitted_counts) / len(emitted_counts),
+        _type7_quantile(emitted_counts, 0.50),
+        _type7_quantile(emitted_counts, 0.95),
+        max(emitted_counts),
+    )
+
+
+def _windows_overlap(left: list[Window], right: list[Window]) -> bool:
+    return any(
+        min(a.end_s, b.end_s) > max(a.start_s, b.start_s)
+        for a in left
+        for b in right
+    )
+
+
+def _reduce_v060(
+    reader: BundleReader,
+    config: BenchmarkConfig,
+    metadata: dict[str, Any],
+    idle_baseline: IdleBaseline | None,
+) -> SummaryMetricsV060:
+    evidence_problems = axi_v2_validation_problems(
+        reader,
+        allow_unfinalized_summary=True,
+    )
+    if evidence_problems:
+        raise _ReduceError("invalid event-v2 evidence: " + "; ".join(evidence_problems))
+
+    window = reader.measured_window()
+    if window is None:
+        raise _ReduceError("no measured_run window in events.jsonl")
+    if window.duration_s <= 0.0:
+        raise _ReduceError(
+            f"measured_run window duration must be > 0 s; got {window.duration_s}"
+        )
+    curve = reader.summed_curve()
+    if _in_window_sample_count(curve, window) < 2:
+        raise _ReduceError(
+            "fewer than 2 power samples inside the measured_run window"
+        )
+
+    gross_energy_j = _integrate(curve, window.start_s, window.end_s)
+    idle_subtracted_energy_j = None
+    if idle_baseline is not None:
+        idle_subtracted_energy_j = (
+            gross_energy_j - idle_baseline.power_w_mean * window.duration_s
+        )
+
+    request_windows = reader.request_phase_windows()
+    group_windows: dict[tuple[str, str], list[Window]] = {}
+    for (source, _request_id, phase, _ordinal), phase_window in request_windows.items():
+        group_windows.setdefault((source, phase), []).append(phase_window)
+    group_unions = {
+        key: _union_windows(windows)
+        for key, windows in group_windows.items()
+    }
+
+    phase_energy_j: dict[str, float] = {}
+    for (source, phase), windows in group_unions.items():
+        source_curve = reader.source_curve(source)
+        phase_energy_j[phase] = phase_energy_j.get(phase, 0.0) + math.fsum(
+            _integrate(source_curve, item.start_s, item.end_s)
+            for item in windows
+        )
+
+    overlap = False
+    sources = {source for source, _phase in group_unions}
+    for source in sources:
+        phases = sorted(
+            phase for candidate, phase in group_unions if candidate == source
+        )
+        for left_index, left_phase in enumerate(phases):
+            for right_phase in phases[left_index + 1 :]:
+                if _windows_overlap(
+                    group_unions[(source, left_phase)],
+                    group_unions[(source, right_phase)],
+                ):
+                    overlap = True
+
+    phase_identifiability: dict[str, str | bool] = {
+        "group_phase_windows_overlap": overlap,
+    }
+    for phase in sorted({phase for _source, phase in group_unions}):
+        identifiable = True
+        for (source, candidate), windows in group_unions.items():
+            if candidate != phase:
+                continue
+            source_curve = reader.source_curve(source)
+            if any(
+                item.duration_s > 0
+                and _in_window_sample_count(source_curve, item) < MIN_PHASE_SAMPLES
+                for item in windows
+            ):
+                identifiable = False
+        phase_identifiability[phase] = (
+            "identifiable" if identifiable else "not_resolvable_sample_count"
+        )
+
+    runtime = metadata["runtime"]
+    primary_source = runtime["primary_source_identity"]
+    primary_decode = group_unions.get((primary_source, "decode"), [])
+    decode_duration_s = math.fsum(item.duration_s for item in primary_decode)
+    valid_decode_duration = decode_duration_s if decode_duration_s > 0 else None
+
+    events = reader.events()
+    request_rows = reader.request_rows()
+    token_rows = reader.request_token_rows()
+    emissions = [row for row in events if row.get("event_type") == "decode_emission"]
+    bundle_counts = [int(row["metadata"]["emitted_count"]) for row in emissions]
+    bundle_bursts = _burst_metrics(bundle_counts)
+    emitted_total = sum(int(row["output_token_count"]) for row in request_rows)
+    target_total = sum(int(row["target_emitted_count"]) for row in request_rows)
+    enabled = config.speculation is not None and config.speculation.mode != "off"
+    if enabled:
+        proposed_total: int | None = sum(int(row["tokens_proposed"]) for row in request_rows)
+        accepted_total: int | None = sum(int(row["tokens_accepted"]) for row in request_rows)
+        acceptance_rate = (
+            accepted_total / proposed_total if proposed_total else None
+        )
+    else:
+        proposed_total = None
+        accepted_total = None
+        acceptance_rate = None
+    counter_rollup = DecodeCounterRollup(
+        emitted_count=emitted_total,
+        tokens_proposed=proposed_total,
+        tokens_accepted=accepted_total,
+        target_emitted_count=target_total,
+        acceptance_rate=acceptance_rate,
+    )
+
+    admitted_at = {
+        row["metadata"]["request_id"]: float(row["timestamp_s"])
+        for row in events
+        if row.get("event_type") == "request_admitted"
+    }
+    tokens_by_request: dict[str, list[dict[str, Any]]] = {}
+    for row in token_rows:
+        tokens_by_request.setdefault(str(row["request_id"]), []).append(row)
+    emissions_by_request: dict[str, list[dict[str, Any]]] = {}
+    for row in emissions:
+        emissions_by_request.setdefault(
+            str(row["metadata"]["request_id"]), []
+        ).append(row)
+
+    request_metrics: list[RequestDecodeMetric] = []
+    for row in request_rows:
+        request_id = str(row["request_id"])
+        request_decode_windows = _union_windows(
+            [
+                value
+                for (source, candidate_id, phase, _ordinal), value in request_windows.items()
+                if source == primary_source
+                and candidate_id == request_id
+                and phase == "decode"
+            ]
+        )
+        request_duration = math.fsum(
+            item.duration_s for item in request_decode_windows
+        )
+        request_duration_value = request_duration if request_duration > 0 else None
+        request_tokens = tokens_by_request.get(request_id, [])
+        genuine_times = sorted(
+            float(token["timestamp_s"])
+            for token in request_tokens
+            if token.get("timestamp_s") is not None
+            and token.get("timestamp_provenance") == "runtime_per_token_callback"
+        )
+        request_ttft = (
+            genuine_times[0] - admitted_at[request_id]
+            if genuine_times and request_id in admitted_at
+            else None
+        )
+        request_emissions = emissions_by_request.get(request_id, [])
+        request_bursts = _burst_metrics(
+            [int(item["metadata"]["emitted_count"]) for item in request_emissions]
+        )
+        request_rollup = DecodeCounterRollup(
+            emitted_count=int(row["output_token_count"]),
+            tokens_proposed=(int(row["tokens_proposed"]) if enabled else None),
+            tokens_accepted=(int(row["tokens_accepted"]) if enabled else None),
+            target_emitted_count=int(row["target_emitted_count"]),
+            acceptance_rate=row["acceptance_rate"],
+        )
+        request_metrics.append(
+            RequestDecodeMetric(
+                request_id=request_id,
+                request_ordinal=int(row["request_ordinal"]),
+                terminal_status=str(row["terminal_status"]),
+                output_token_count=int(row["output_token_count"]),
+                decode_duration_s=request_duration_value,
+                ttft_s=request_ttft,
+                decode_phase_output_throughput_tokens_s=(
+                    int(row["output_token_count"]) / request_duration
+                    if request_duration_value is not None
+                    else None
+                ),
+                decode_emission_event_count=len(request_emissions),
+                decode_counter_rollup=request_rollup,
+                burst_size_mean_tokens=request_bursts[0],
+                burst_size_p50_tokens=request_bursts[1],
+                burst_size_p95_tokens=request_bursts[2],
+                burst_size_max_tokens=request_bursts[3],
+            )
+        )
+    request_metrics.sort(key=lambda row: row.request_ordinal)
+
+    realized_batch_size = int(metadata["batch"]["realized_batch_size"])
+    single_request = realized_batch_size == 1
+    all_genuine = len(token_rows) == emitted_total and all(
+        row.get("timestamp_s") is not None
+        and row.get("timestamp_provenance") == "runtime_per_token_callback"
+        for row in token_rows
+    )
+    token_times = sorted(
+        float(row["timestamp_s"])
+        for row in token_rows
+        if row.get("timestamp_s") is not None
+    )
+    legacy_ttft = (
+        token_times[0] - window.start_s
+        if single_request and token_times
+        else None
+    )
+    legacy_decode_latency = (
+        token_times[-1] - token_times[0]
+        if single_request and len(token_times) >= 2
+        else None
+    )
+    legacy_throughput = (
+        emitted_total / legacy_decode_latency
+        if single_request
+        and emitted_total >= 2
+        and legacy_decode_latency is not None
+        and legacy_decode_latency > 0
+        else None
+    )
+    legacy_inter_token = (
+        (emitted_total - 1) / legacy_decode_latency
+        if single_request
+        and all_genuine
+        and emitted_total >= 2
+        and legacy_decode_latency is not None
+        and legacy_decode_latency > 0
+        else None
+    )
+
+    group_gross = (
+        gross_energy_j
+        if config.batch_policy is not None
+        and config.batch_policy.mode == "static_batch"
+        else None
+    )
+    selected_gross = group_gross if group_gross is not None else gross_energy_j
+    gross_per_committed = (
+        selected_gross / emitted_total if emitted_total else None
+    )
+    gross_per_accepted = (
+        selected_gross / accepted_total
+        if enabled and accepted_total
+        else None
+    )
+
+    bound_terms = _energy_bound_terms_j(metadata, curve, window)
+    window_precheck = _window_evidence_precheck_v060(
+        metadata,
+        curve,
+        window,
+        bound_terms,
+        idle_baseline,
+        group_unions,
+        reader,
+        static_batch=group_gross is not None,
+    )
+    idle_mean_uncertainty = derive_idle_mean_uncertainty(
+        reader,
+        idle_baseline,
+        method_id=IDLE_DEPENDENCE_METHOD_ID,
+    )
+    quality = MeasurementQuality(
+        requested_sampling_hz=config.sampling.power_hz,
+        observed_sampling_hz=_observed_sampling_hz(curve),
+        dropped_samples=_dropped_samples(curve, config.sampling.power_hz),
+        idle_power_w_stddev=(
+            idle_baseline.power_w_stddev if idle_baseline is not None else None
+        ),
+        thermal_drift_c=_thermal_drift_c(metadata),
+        telemetry_source=primary_source,
+        cooldown_cap_hit=_cooldown_cap_hit(metadata),
+        token_count_source=None,
+        idle_window_suspect=_idle_window_suspect(idle_baseline),
+        token_counts_source="runtime_observed",
+        phase_identifiability=phase_identifiability,
+        remote_cleanup_failed=_remote_cleanup_failed(metadata),
+        runtime_cleanup_ok=reader.runtime_cleanup_ok(),
+    )
+    total_tokens, _total_source = _total_tokens(metadata)
+    energy_request = idle_subtracted_energy_j if single_request else None
+    return SummaryMetricsV060(
+        status=RunStatus.SUCCEEDED,
+        energy_request_j=energy_request,
+        energy_token_j=(
+            _energy_token_j(energy_request, total_tokens)
+            if single_request
+            else None
+        ),
+        energy_output_token_j=(
+            _energy_output_token_j(energy_request, emitted_total)
+            if single_request
+            else None
+        ),
+        gross_energy_j=gross_energy_j,
+        idle_subtracted_energy_j=idle_subtracted_energy_j,
+        ttft_s=legacy_ttft,
+        decode_latency_s=legacy_decode_latency,
+        throughput_tokens_s=legacy_throughput,
+        inter_token_throughput_tokens_s=legacy_inter_token,
+        idle_baseline=idle_baseline,
+        measurement_quality=quality,
+        phase_energy_j=phase_energy_j or None,
+        suite_metrics=None,
+        energy_uncertainty_status="not_estimable",
+        idle_mean_uncertainty=idle_mean_uncertainty,
+        energy_variance_terms_j2=_energy_variance_terms_j2(
+            idle_mean_uncertainty, window
+        ),
+        energy_bound_terms_j=bound_terms,
+        window_evidence_precheck=window_precheck,
+        decode_counter_rollup=counter_rollup,
+        batch_group_gross_energy_j=group_gross,
+        gross_energy_per_committed_output_token_j=gross_per_committed,
+        gross_energy_per_accepted_draft_token_j=gross_per_accepted,
+        decode_phase_output_throughput_tokens_s=(
+            emitted_total / valid_decode_duration
+            if valid_decode_duration is not None
+            else None
+        ),
+        decode_emission_event_rate_events_s=(
+            len(emissions) / valid_decode_duration
+            if valid_decode_duration is not None
+            else None
+        ),
+        decode_emission_burst_size_mean_tokens=bundle_bursts[0],
+        decode_emission_burst_size_p50_tokens=bundle_bursts[1],
+        decode_emission_burst_size_p95_tokens=bundle_bursts[2],
+        decode_emission_burst_size_max_tokens=bundle_bursts[3],
+        request_decode_metrics=request_metrics,
+        summary_provenance=_summary_provenance(AXI_REDUCER_VERSION),
+    )
+
+
+def _window_evidence_precheck_v060(
+    metadata: dict[str, Any],
+    curve: list[TracePoint],
+    measured_window: Window,
+    bound_terms: dict[str, float | None],
+    idle_baseline: IdleBaseline | None,
+    group_unions: dict[tuple[str, str], list[Window]],
+    reader: BundleReader,
+    *,
+    static_batch: bool,
+) -> dict[str, Any]:
+    gross = _window_evidence_precheck_for_window(
+        curve,
+        metadata,
+        measured_window,
+        cadence_ratio_min=REQUEST_WINDOW_CADENCE_RATIO_MIN,
+        require_sample_count=False,
+        require_drift=False,
+        require_cooldown=True,
+        bound_terms_j=bound_terms,
+    )
+    gross_key = "gross_batch_group" if static_batch else "gross_request"
+    gross["metric_name"] = (
+        "batch_group_gross_energy_j" if static_batch else "gross_energy_j"
+    )
+    gross["window_class"] = gross_key
+    idle = _window_evidence_precheck_for_window(
+        curve,
+        metadata,
+        measured_window,
+        cadence_ratio_min=REQUEST_WINDOW_CADENCE_RATIO_MIN,
+        require_sample_count=False,
+        require_drift=True,
+        require_cooldown=True,
+        require_idle_baseline=True,
+        idle_baseline=idle_baseline,
+        bound_terms_j=bound_terms,
+    )
+    idle["metric_name"] = "idle_subtracted_energy_j"
+    idle["window_class"] = "idle_subtracted_request"
+    if idle_baseline is None:
+        idle["energy_evidence"] = EnergyEvidence.ABSENT.value
+    result: dict[str, Any] = {
+        gross_key: gross,
+        "idle_subtracted_request": idle,
+    }
+    phase_rows: dict[str, list[dict[str, Any]]] = {}
+    for (source, phase), windows in sorted(group_unions.items()):
+        phase_rows.setdefault(phase, []).append(
+            _windows_evidence_precheck(
+                reader.source_curve(source),
+                metadata,
+                windows,
+                cadence_ratio_min=SHORT_WINDOW_CADENCE_RATIO_MIN,
+                require_sample_count=True,
+                require_drift=False,
+            )
+        )
+    if phase_rows:
+        result["phase"] = {}
+        for phase, source_rows in phase_rows.items():
+            windows = [entry for row in source_rows for entry in row["windows"]]
+            reasons = sorted(
+                {reason for row in source_rows for reason in row["reasons"]}
+            )
+            result["phase"][phase] = {
+                "eligible": bool(windows) and not reasons,
+                "reasons": reasons,
+                "window_count": len(windows),
+                "windows": windows,
+            }
+    return result
 
 
 def _reduce(
@@ -1046,12 +1589,15 @@ def _reduce(
 
 
 def _summary_provenance(reducer_version: str) -> dict[str, str]:
-    return {
+    provenance = {
         "summary_schema_version": SUMMARY_SCHEMA_VERSION,
         "reducer_id": REDUCER_ID,
         "reducer_version": reducer_version,
         "config_schema_version": CONFIG_SCHEMA_VERSION,
     }
+    if reducer_version == AXI_REDUCER_VERSION:
+        provenance["event_semantics_version"] = "joulewise.events.v2"
+    return provenance
 
 
 # ----------------------------------------------------------------------------

@@ -17,18 +17,27 @@ D-053; `docs/contracts/claims_ladder.md`;
 
 Request energy is the PRIMARY reader-facing energy metric.
 
-Request energy means idle-subtracted joules per request under a named
-measurement boundary. The boundary label is part of the metric identity, not
-caption garnish.
+Request energy means gross joules per request under a named measurement
+boundary. The basis and boundary labels are parts of the metric identity, not
+caption garnish. Gross energy retains idle, model-residency, and runtime
+overhead inside the measured interval and is the headline basis for every
+cross-device, cross-configuration, and split-versus-monolithic claim.
 
-Per-token metrics never replace request energy in a headline. They may appear
-as companion metrics when their tokenizer scope and denominator provenance are
-explicit.
+Idle-subtracted joules per request remain a clearly labeled within-device
+secondary view of activity above the measured idle baseline. They are never
+used to rank devices or configurations. The stored historical field
+`energy_request_j` is not renamed or redefined; reader-facing gross request
+energy is `gross_energy_j`.
+
+Per-token metrics never replace gross request energy in a headline. They may
+appear as companion metrics when their tokenizer scope, energy basis, and
+denominator provenance are explicit.
 
 A headline means the primary reader-facing figure or table and any
 abstract-level claim, not only the title. In any reader-facing figure or
-table containing token-normalized metrics, request energy must be co-displayed
-with equal or greater salience.
+table containing token-normalized metrics, gross request energy must be
+co-displayed with equal or greater salience. Every reported energy number
+states its basis and boundary; any cross-configuration number is gross-first.
 
 ## J/Token As Tokenizer-Scoped Companion Metrics
 
@@ -38,7 +47,12 @@ produced the denominator; they are not tokenizer-blind work units.
 
 Requirements:
 
-- Per-token denominators must be runtime-observed token counts. This is the
+- Per-token denominators must be runtime-observed token counts. Committed
+  output tokens and accepted draft/MTP tokens are distinct denominators and
+  must never be substituted for one another. For speculative-on/off
+  efficiency, gross joules per committed output token is the companion
+  denominator; gross joules per accepted draft token is a speculation-enabled
+  mechanism-yield diagnostic only and is undefined for spec-off. This is the
   D-037 claims-ladder rider; use `docs/contracts/claims_ladder.md` Global
   Rules as the downgrade authority rather than restating it here.
 - The tokenizer identity must be named wherever a per-token number appears:
@@ -53,6 +67,24 @@ Requirements:
   `docs/contracts/run_bundle_layout.md`.
 - `J/token` values from different tokenizers are NEVER an efficiency ranking
   by themselves.
+
+Burst-decode bundles use the counter meanings and null rules frozen by
+`docs/specs/axi/sa_burst_decode_contract.md`. Acceptance rate is the ratio
+of aggregate accepted to aggregate proposed tokens, never a mean of local
+rates, and is null when proposal total is zero. Spec-off proposal,
+acceptance, and acceptance-rate fields are null rather than zero.
+
+`inter_token_throughput_tokens_s` is eligible only when every committed
+output token in scope has a genuine per-token runtime timestamp. Burst-safe
+decode-phase output throughput and emission/burst metrics use their new names
+and must not be reported under either frozen throughput name.
+
+For an event-semantics-v2 static batch, the energy analysis unit is the
+complete batch group and its governed gross metric is
+`batch_group_gross_energy_j` on window class `gross_batch_group`. It must not
+appear in a request-scoped object or under a request-energy estimand name, and
+trace energy must not be divided among overlapping requests. Single-request
+gross energy remains `gross_energy_j` on `gross_request`.
 
 ## Cross-Tokenizer And Cross-Model-Family Comparisons
 
@@ -102,13 +134,21 @@ bundle/provenance surface when it is already known.
 | Quantization | Quantization format, precision, and runtime quantization label, or `none`/`unknown` if that is the recorded state. | `metadata.runtime`; model/config fields; `metadata.workload_provenance` model fields where recorded. |
 | Tokenizer identity | Tokenizer name, revision, class, and vocabulary size where available; prompt source and BOS handling (`prompt_source`, `bos_present`) when per-token metrics are shown; token-ID hash domain and hash when the caption cites prompt-token identity. | `metadata.workload_provenance` (D-033); `outputs/suite_items.jsonl` item `prompt_source`, `bos_present`, and per-item token hashes; single-prompt domain `joulewise.prompt_token_ids.v1`; suite rollup domain `joulewise.suite_prompt_token_ids.v1`. |
 | Sampler/output policy | Sampler settings, stop condition, runtime stop reason, and output cap/policy label. | `events.jsonl` `item_start` event metadata `output_policy`; `outputs/suite_items.jsonl` item `stop_reason`; `metadata.workload_provenance.output_policy`; `metadata.workload_provenance.sampler` (single-prompt and suite runs); suite sampler provenance per `docs/contracts/run_bundle_layout.md`. |
-| Batching/concurrency policy | Always applicable: state explicit batch size/concurrency policy, `single-request sequential`, or `unavailable`. | Runtime adapter metadata, serving-stack configuration, run orchestration metadata, or explicit `unavailable` when not captured. |
+| Batching/concurrency policy | Always applicable: state configured and realized batch size separately; mode, admission, synchronization, and dispatch policy; and `single-request` or explicit `unavailable`. Static batch-group identity and required-nullable scheduler-step identity never replace request identity. | Normalized `config.json.batch_policy`; `metadata.batch`; request-scoped `events.jsonl` metadata; or explicit `unavailable` only for historical compatibility. |
 | Measurement boundary label | Named boundary whose joules are reported, including rail/source semantics. | `metadata.telemetry`, `power_trace.csv` `source`/`rail`, rail-manifest metadata, and D-018 boundary label used under `docs/contracts/claims_ladder.md`. |
 | Telemetry backend | Backend that produced the power trace, including version or command semantics where available. | `metadata.telemetry`; `metadata.device.powermetrics` for powermetrics sampler evidence; backend-native artifacts under `raw/`; telemetry logs. |
 
 Every field in this table must appear on every governed surface as either a
 concrete value or an explicit `unavailable`/`unknown`; silent omission of any
 field is non-compliant.
+
+Event-semantics-v2 bundles record the actually loaded target tokenizer at
+`metadata.runtime.target_tokenizer_identity` with exact name, immutable
+revision, and `tokenizer_artifact_sha256`. C-023 compares all three strings
+byte-for-byte; it performs no case folding, alias resolution, revision-prefix
+matching, Unicode normalization, display-name fallback, or config-only
+fallback. Missing or malformed runtime identity is unassessable, never an
+asserted equality.
 
 ## Caption-Compliance Rule
 

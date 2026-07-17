@@ -14,6 +14,10 @@ jobs:
         python-version: ["3.11", "3.14"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Golden provenance sidecars replay `git archive` against their
+          # pinned base commit; a shallow checkout lacks that object.
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}

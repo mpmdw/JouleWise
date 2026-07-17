@@ -1,0 +1,813 @@
+{
+  "$defs": {
+    "idle_baseline": {
+      "properties": {
+        "duration_s": {
+          "type": "number"
+        },
+        "gpu_freq_hz_mean": {
+          "deprecated": true,
+          "description": "Deprecated legacy alias; historical values are megahertz (MHz), not hertz.",
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-unit": "MHz"
+        },
+        "gpu_freq_mhz_mean": {
+          "description": "Mean Apple GPU frequency in megahertz (MHz).",
+          "type": [
+            "number",
+            "null"
+          ],
+          "x-unit": "MHz"
+        },
+        "gpu_idle_ratio_mean": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "gpu_idle_ratio_min": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "idle_window_suspect": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "power_w_mean": {
+          "type": "number"
+        },
+        "power_w_stddev": {
+          "type": "number"
+        },
+        "sample_count": {
+          "type": "integer"
+        },
+        "telemetry_backend": {
+          "enum": [
+            "mock",
+            "powermetrics",
+            "nvidia_smi",
+            "jetson_rails",
+            "wall_meter"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "power_w_mean",
+        "power_w_stddev",
+        "duration_s",
+        "sample_count",
+        "telemetry_backend"
+      ],
+      "type": "object"
+    },
+    "idle_mean_uncertainty": {
+      "properties": {
+        "bandwidth_s": {
+          "const": 10.0,
+          "type": "number"
+        },
+        "cadence_p95_p05_ratio": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "correlation_scope": {
+          "const": "independent_run",
+          "type": "string"
+        },
+        "effective_sample_size": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "governed_variance_of_mean_w2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "hac_variance_of_mean_w2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "iid_variance_of_mean_w2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "lag_count": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "median_sample_interval_s": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "method": {
+          "const": "duration_weighted_newey_west_bartlett_10s_iid_floor_v2",
+          "type": "string"
+        },
+        "raw_sample_count": {
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason_codes": {
+          "items": {
+            "enum": [
+              "raw_idle_trace_unavailable",
+              "raw_idle_trace_invalid",
+              "nonfinite_idle_power",
+              "insufficient_idle_samples",
+              "idle_trace_span_below_three_bandwidths",
+              "idle_cadence_irregular",
+              "idle_metadata_mismatch",
+              "backend_policy_not_frozen"
+            ],
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "sample_variance_w2": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "source_artifact": {
+          "const": "raw/powermetrics_idle.plist",
+          "type": "string"
+        },
+        "source_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "status": {
+          "enum": [
+            "estimated",
+            "not_estimable"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "method",
+        "source_artifact",
+        "source_sha256",
+        "raw_sample_count",
+        "median_sample_interval_s",
+        "cadence_p95_p05_ratio",
+        "bandwidth_s",
+        "lag_count",
+        "sample_variance_w2",
+        "iid_variance_of_mean_w2",
+        "hac_variance_of_mean_w2",
+        "governed_variance_of_mean_w2",
+        "effective_sample_size",
+        "correlation_scope",
+        "reason_codes"
+      ],
+      "type": "object"
+    },
+    "measurement_quality": {
+      "properties": {
+        "cooldown_cap_hit": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "dropped_samples": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "idle_power_w_stddev": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "idle_window_suspect": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "observed_sampling_hz": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "phase_identifiability": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "remote_cleanup_failed": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "requested_sampling_hz": {
+          "type": "number"
+        },
+        "runtime_cleanup_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "telemetry_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thermal_drift_c": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "token_count_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "token_counts_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "requested_sampling_hz"
+      ],
+      "type": "object"
+    },
+    "suite_group_metrics": {
+      "properties": {
+        "energy_gross_j": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "group_id": {
+          "type": "string"
+        },
+        "identifiability": {
+          "type": "string"
+        },
+        "item_count": {
+          "type": "integer"
+        },
+        "status_counts": {
+          "type": "object"
+        }
+      },
+      "required": [
+        "group_id",
+        "identifiability",
+        "item_count",
+        "status_counts"
+      ],
+      "type": "object"
+    },
+    "suite_item_metrics": {
+      "properties": {
+        "emitted_tokens": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "end_s": {
+          "type": "number"
+        },
+        "energy_gross_j": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "identifiability": {
+          "type": "string"
+        },
+        "item_id": {
+          "type": "string"
+        },
+        "item_index": {
+          "type": "integer"
+        },
+        "response_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start_s": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string"
+        },
+        "stop_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "item_id",
+        "item_index",
+        "status",
+        "start_s",
+        "end_s",
+        "identifiability"
+      ],
+      "type": "object"
+    },
+    "suite_summary": {
+      "properties": {
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/suite_group_metrics"
+          },
+          "type": "array"
+        },
+        "executed_item_count": {
+          "type": "integer"
+        },
+        "floor_abs_j": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "floor_cmp_j": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "floor_source": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/suite_item_metrics"
+          },
+          "type": "array"
+        },
+        "levels": {
+          "items": {
+            "$ref": "#/$defs/suite_group_metrics"
+          },
+          "type": "array"
+        },
+        "manifest_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "planned_item_count": {
+          "type": "integer"
+        },
+        "status_counts": {
+          "type": "object"
+        },
+        "suite_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "suite_id",
+        "planned_item_count",
+        "executed_item_count",
+        "status_counts",
+        "items",
+        "blocks",
+        "levels",
+        "floor_abs_j",
+        "floor_cmp_j",
+        "floor_source"
+      ],
+      "type": "object"
+    },
+    "summary_provenance": {
+      "properties": {
+        "config_schema_version": {
+          "type": "string"
+        },
+        "reducer_id": {
+          "type": "string"
+        },
+        "reducer_version": {
+          "type": "string"
+        },
+        "summary_schema_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "summary_schema_version",
+        "reducer_id",
+        "reducer_version",
+        "config_schema_version"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "succeeded"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "oneOf": [
+          {
+            "not": {
+              "properties": {
+                "window_evidence_precheck": {
+                  "properties": {
+                    "idle_subtracted_request": {
+                      "properties": {
+                        "energy_evidence": {
+                          "const": "absent"
+                        }
+                      },
+                      "required": [
+                        "energy_evidence"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "idle_subtracted_request"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "window_evidence_precheck"
+              ]
+            },
+            "properties": {
+              "energy_request_j": {
+                "type": "number"
+              }
+            }
+          },
+          {
+            "properties": {
+              "energy_output_token_j": {
+                "type": "null"
+              },
+              "energy_request_j": {
+                "type": "null"
+              },
+              "energy_token_j": {
+                "type": "null"
+              },
+              "idle_baseline": {
+                "type": "null"
+              },
+              "idle_subtracted_energy_j": {
+                "type": "null"
+              },
+              "window_evidence_precheck": {
+                "properties": {
+                  "idle_subtracted_request": {
+                    "properties": {
+                      "eligible": {
+                        "const": false
+                      },
+                      "energy_evidence": {
+                        "const": "absent"
+                      },
+                      "reasons": {
+                        "contains": {
+                          "const": "idle_baseline_unrecorded"
+                        },
+                        "type": "array"
+                      }
+                    },
+                    "required": [
+                      "energy_evidence",
+                      "eligible",
+                      "reasons"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "idle_subtracted_request"
+                ],
+                "type": "object"
+              }
+            },
+            "required": [
+              "window_evidence_precheck"
+            ]
+          }
+        ],
+        "properties": {
+          "failure_reason": {
+            "type": "null"
+          },
+          "gross_energy_j": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "decode_latency_s",
+          "energy_output_token_j",
+          "energy_request_j",
+          "energy_token_j",
+          "failure_message",
+          "failure_reason",
+          "gross_energy_j",
+          "idle_baseline",
+          "idle_subtracted_energy_j",
+          "measurement_quality",
+          "phase_energy_j",
+          "status",
+          "throughput_tokens_s",
+          "ttft_s",
+          "uncertainty"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "failed",
+              "unsupported"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "failure_reason": {
+            "enum": [
+              "did_not_fit",
+              "runtime_unavailable",
+              "telemetry_unavailable",
+              "format_unavailable",
+              "permission_denied",
+              "transport_unavailable",
+              "unsupported_workload",
+              "cleanup_failed",
+              "unknown_error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "failure_reason"
+        ]
+      }
+    }
+  ],
+  "properties": {
+    "decode_latency_s": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "energy_bound_terms_j": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "energy_output_token_j": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "energy_request_j": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "energy_token_j": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "energy_uncertainty_status": {
+      "enum": [
+        "not_estimable",
+        "estimated",
+        "bounded",
+        null
+      ],
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "energy_variance_terms_j2": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "failure_message": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "failure_reason": {
+      "anyOf": [
+        {
+          "enum": [
+            "did_not_fit",
+            "runtime_unavailable",
+            "telemetry_unavailable",
+            "format_unavailable",
+            "permission_denied",
+            "transport_unavailable",
+            "unsupported_workload",
+            "cleanup_failed",
+            "unknown_error"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gross_energy_j": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "idle_baseline": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/idle_baseline"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "idle_mean_uncertainty": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/idle_mean_uncertainty"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "idle_subtracted_energy_j": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "inter_token_throughput_tokens_s": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "measurement_quality": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/measurement_quality"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "phase_energy_j": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "status": {
+      "enum": [
+        "succeeded",
+        "failed",
+        "unsupported"
+      ],
+      "type": "string"
+    },
+    "suite_metrics": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/suite_summary"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "summary_provenance": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/summary_provenance"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "throughput_tokens_s": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "ttft_s": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "uncertainty": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "window_evidence_precheck": {
+      "type": [
+        "object",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "JouleWise SummaryMetrics",
+  "type": "object"
+}

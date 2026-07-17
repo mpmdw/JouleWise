@@ -1,0 +1,228 @@
+{
+  "contrast_ids": [
+    "primary_gross_energy",
+    "committed_output_gross_ratio"
+  ],
+  "contrasts": [
+    {
+      "alpha": 0.05,
+      "categories": [
+        "speculation_mode"
+      ],
+      "cells": [
+        "spec_off",
+        "spec_on"
+      ],
+      "claim_role": "primary",
+      "coding": "spec_on_minus_spec_off",
+      "contrast_id": "primary_gross_energy",
+      "estimand_id": "execution_unit_gross_energy",
+      "estimator": "paired_mean_of_bundle_differences",
+      "family_id": "FAM-AXI-SPEC-DRAFT-MATCHED-OUTPUT",
+      "metric": "gross_energy_j",
+      "models": {
+        "enabled_mechanism": "draft_model",
+        "enabled_mechanism_identity_sha256": "a432131a62f745d7c3d12fa25640e7de6ca0476e2658ddf6c303b510e3b14260",
+        "target_model_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "multiplicity_m": 2,
+      "multiplicity_method": "holm",
+      "q": null,
+      "window_class": "gross_request"
+    },
+    {
+      "alpha": 0.05,
+      "categories": [
+        "speculation_mode"
+      ],
+      "cells": [
+        "spec_off",
+        "spec_on"
+      ],
+      "claim_role": "companion",
+      "coding": "spec_on_over_spec_off",
+      "contrast_id": "committed_output_gross_ratio",
+      "estimand_id": "gross_per_committed_output_token",
+      "estimator": "ratio_of_arm_totals",
+      "family_id": "FAM-AXI-SPEC-DRAFT-MATCHED-OUTPUT",
+      "metric": "gross_energy_per_committed_output_token_j",
+      "models": {
+        "enabled_mechanism": "draft_model",
+        "enabled_mechanism_identity_sha256": "a432131a62f745d7c3d12fa25640e7de6ca0476e2658ddf6c303b510e3b14260",
+        "target_model_artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "multiplicity_m": 2,
+      "multiplicity_method": "holm",
+      "q": null,
+      "window_class": "gross_request"
+    }
+  ],
+  "design": {
+    "design_id": "axi_ap_spec_v1",
+    "difference_orientation": "spec_on_minus_spec_off",
+    "order_policy": "counterbalanced_within_block",
+    "plan_id": "AP-SPEC",
+    "sampling_plan": {
+      "allowed_replacement_reasons": [
+        "dispatch_failed_before_bundle_creation",
+        "strict_bundle_invalid"
+      ],
+      "design": "paired_fixed_n",
+      "freeze_basis": "mock_schema_exercise",
+      "planned_n_blocks": 2
+    },
+    "unit_of_analysis": "bundle_pair_within_block"
+  },
+  "entries": [
+    {
+      "arm": "spec_off",
+      "block_id": "block-000",
+      "config": "tests/fixtures/axi_ap_spec/draft_spec_off.json",
+      "config_sha256": "d92d961d8db31f6e086404aa6f21ebb0e815733bd11583373b279394730cd96e",
+      "counterpart_entry_id": "draft-on-000",
+      "entry_id": "draft-off-000",
+      "order_index": 0,
+      "pair_id": "pair-000",
+      "pairing_projection_sha256": "8459a22091549b1a99ac2de658a2c63cdff5eb8a405b61a5729fdedffb3527a9",
+      "planned_rep_index": 0,
+      "request_roster_sha256": "502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9"
+    },
+    {
+      "arm": "spec_on",
+      "block_id": "block-000",
+      "config": "tests/fixtures/axi_ap_spec/draft_spec_on.json",
+      "config_sha256": "79e34a9adef077ee3f82b4aed16bc551b1ad565fa285da44831917eba11ca48d",
+      "counterpart_entry_id": "draft-off-000",
+      "entry_id": "draft-on-000",
+      "order_index": 1,
+      "pair_id": "pair-000",
+      "pairing_projection_sha256": "8459a22091549b1a99ac2de658a2c63cdff5eb8a405b61a5729fdedffb3527a9",
+      "planned_rep_index": 0,
+      "request_roster_sha256": "502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9"
+    },
+    {
+      "arm": "spec_on",
+      "block_id": "block-001",
+      "config": "tests/fixtures/axi_ap_spec/draft_spec_on.json",
+      "config_sha256": "79e34a9adef077ee3f82b4aed16bc551b1ad565fa285da44831917eba11ca48d",
+      "counterpart_entry_id": "draft-off-001",
+      "entry_id": "draft-on-001",
+      "order_index": 2,
+      "pair_id": "pair-001",
+      "pairing_projection_sha256": "8459a22091549b1a99ac2de658a2c63cdff5eb8a405b61a5729fdedffb3527a9",
+      "planned_rep_index": 1,
+      "request_roster_sha256": "502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9"
+    },
+    {
+      "arm": "spec_off",
+      "block_id": "block-001",
+      "config": "tests/fixtures/axi_ap_spec/draft_spec_off.json",
+      "config_sha256": "d92d961d8db31f6e086404aa6f21ebb0e815733bd11583373b279394730cd96e",
+      "counterpart_entry_id": "draft-on-001",
+      "entry_id": "draft-off-001",
+      "order_index": 3,
+      "pair_id": "pair-001",
+      "pairing_projection_sha256": "8459a22091549b1a99ac2de658a2c63cdff5eb8a405b61a5729fdedffb3527a9",
+      "planned_rep_index": 1,
+      "request_roster_sha256": "502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9"
+    }
+  ],
+  "estimands": [
+    {
+      "aggregation": "paired_mean_of_bundle_differences",
+      "contrast_form": "spec_on_minus_spec_off",
+      "denominator": null,
+      "eligible_arms": [
+        "spec_off",
+        "spec_on"
+      ],
+      "estimand_id": "execution_unit_gross_energy",
+      "numerator": "gross_energy_j",
+      "role": "primary",
+      "unit": "J",
+      "zero_or_null_rule": "non_null_finite_required"
+    },
+    {
+      "aggregation": "ratio_of_arm_totals",
+      "contrast_form": "spec_on_over_spec_off_ratio",
+      "denominator": "decode_counter_rollup.emitted_count",
+      "eligible_arms": [
+        "spec_off",
+        "spec_on"
+      ],
+      "estimand_id": "gross_per_committed_output_token",
+      "numerator": "gross_energy_j",
+      "role": "companion",
+      "unit": "J/committed_output_token",
+      "zero_or_null_rule": "null_if_arm_denominator_zero"
+    },
+    {
+      "aggregation": "ratio_of_spec_on_totals",
+      "contrast_form": null,
+      "denominator": "decode_counter_rollup.tokens_accepted",
+      "eligible_arms": [
+        "spec_on"
+      ],
+      "estimand_id": "gross_per_accepted_draft_token",
+      "numerator": "gross_energy_j",
+      "role": "mechanism_diagnostic",
+      "unit": "J/accepted_draft_token",
+      "zero_or_null_rule": "null_for_spec_off_or_zero_accepted"
+    }
+  ],
+  "floor_selector": {
+    "backend": null,
+    "condition_family_ids": [
+      "spec_off",
+      "spec_on"
+    ],
+    "floor_field": "max(floor_abs_j,floor_cmp_j)",
+    "metric": "gross_energy_j",
+    "source_artifact_id": null,
+    "status": "pending_p2_015",
+    "transport_rule_id": null,
+    "window_class": "gross_request"
+  },
+  "freeze_status": "front_frozen",
+  "manifest_id": "am-b0565dc0b68f55e132c38dbf5ba91140f7d5c10bb44ae2950de988ccd2362066",
+  "output_identity_gate": {
+    "gate_id": "C-023-OUTPUT-IDENTITY",
+    "report_schema_version": "joulewise.output_identity_report.v1",
+    "required_state_for_primary": "exact_token_match",
+    "text_comparison_rule": "exact_utf8_bytes",
+    "tokenizer_identity_rule": "exact_name_revision_and_artifact_sha256"
+  },
+  "pairs": [
+    {
+      "block_id": "block-000",
+      "output_identity_report_id": null,
+      "pair_id": "pair-000",
+      "pairing_projection_sha256": "8459a22091549b1a99ac2de658a2c63cdff5eb8a405b61a5729fdedffb3527a9",
+      "planned_rep_index": 0,
+      "request_roster_sha256": "502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9",
+      "spec_off_entry_id": "draft-off-000",
+      "spec_on_entry_id": "draft-on-000"
+    },
+    {
+      "block_id": "block-001",
+      "output_identity_report_id": null,
+      "pair_id": "pair-001",
+      "pairing_projection_sha256": "8459a22091549b1a99ac2de658a2c63cdff5eb8a405b61a5729fdedffb3527a9",
+      "planned_rep_index": 1,
+      "request_roster_sha256": "502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9",
+      "spec_off_entry_id": "draft-off-001",
+      "spec_on_entry_id": "draft-on-001"
+    }
+  ],
+  "registry": {
+    "path": "configs/analysis_registry/ap_spec_draft_front.v2.json",
+    "registry_id": "ap_spec_draft_front_v1",
+    "semantic_sha256": "e6cecded82102899034c43d30d86f61b2e7f3e5c210e2af8e6dee0644fb62659"
+  },
+  "request_roster": {
+    "path": "tests/fixtures/axi_ap_spec/request_roster.json",
+    "schema_version": "joulewise.request_roster.v1",
+    "sha256": "502b0c4577aee495623a33332a26be956b8b3d01d1cb3d0d225382f6bc2130f9"
+  },
+  "schema_version": "joulewise.analysis_manifest.v2"
+}
