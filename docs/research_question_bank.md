@@ -828,8 +828,12 @@ meter decision (R-007), P1-004 network topology (1GbE / 2.5GbE / optional
   an interactive latency bound? Measure: B in {1,2,4,8,16}, group gross
   energy and gross joules/request within the named target/telemetry
   boundary, latency distribution, and structured memory-fit failures.
-  The Mac leg requires the S-B support verdict; the serving-style leg remains
-  gated on P1-006. Continuous batching is a post-capstone extension (D-070).
+  The Mac leg is MINTED (2026-07-16: AXI-SB verdict `supported` on pinned
+  mlx-lm 0.31.3, lead-run B∈{2,4} live probes with full per-request
+  observability — `docs/specs/axi/sb_static_batch_verdict.md`); execution
+  still requires the follow-on batch adapter row, P2-015 floors, and its own
+  scheduled quiet-Mac block. The serving-style leg remains gated on P1-006.
+  Continuous batching is a post-capstone extension (D-070).
   Who cares: serving researchers, scheduler developers.
 
 - **C5-2.3 Predicted-vs-measured KV economics.** Does the analytic
