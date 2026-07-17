@@ -53,6 +53,8 @@ RAIL_MANIFEST = ["cpu_power", "gpu_power", "ane_power"]
 SAMPLERS = "cpu_power,gpu_power,ane_power,thermal"
 READINESS_TIMEOUT_S = 15.0
 READINESS_POLL_S = 0.05
+POST_MARKER_DRAIN_MARGIN_S = 0.25
+POST_MARKER_DRAIN_POLL_S = 0.05
 IDLE_GPU_IDLE_RATIO_THRESHOLD = 0.80
 IDLE_GPU_LOW_IDLE_FRACTION_THRESHOLD = 0.40
 IDLE_GPU_FREQ_MEAN_MHZ_THRESHOLD = 800.0
@@ -288,7 +290,14 @@ class PowermetricsTelemetryAdapter:
     ) -> TelemetryStopResult:
         """Stop the real sampler and derive current-era clock/phase evidence."""
 
-        data, _ = self._take_measured_capture()
+        try:
+            self._drain_until_stop_bracket(
+                config,
+                sampling_started=sampling_started,
+                sampling_stopped=sampling_stopped,
+            )
+        finally:
+            data, _ = self._take_measured_capture()
         if data is None:
             evidence, _ = derive_powermetrics_clock_evidence(
                 stamps={}, elapsed_s=[], plist_timestamp_s=[]
@@ -323,6 +332,100 @@ class PowermetricsTelemetryAdapter:
         self._preserve_measured_capture(data, records, diagnostic, context)
         self._release_capture(RAW_SAMPLES_NAME)
         return TelemetryStopResult(samples_from_records(records), evidence)
+
+    def _drain_until_stop_bracket(
+        self,
+        config: BenchmarkConfig,
+        *,
+        sampling_started: ClockStamp,
+        sampling_stopped: ClockStamp,
+    ) -> None:
+        """Bound sampler wind-down by a right-edge sample or two missed intervals."""
+
+        process = self._process
+        capture_path = self._capture_path
+        if process is None or capture_path is None:
+            return
+        timeout_s = 2.0 / config.sampling.power_hz + POST_MARKER_DRAIN_MARGIN_S
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline and process.poll() is None:
+            if self._capture_brackets_stop(
+                capture_path,
+                deadline=deadline,
+                sampling_started=sampling_started,
+                sampling_stopped=sampling_stopped,
+            ):
+                return
+            remaining_s = deadline - time.monotonic()
+            if remaining_s <= 0.0:
+                return
+            # This wait is after the sampling_stopped marker. It only lets the
+            # native stream provide the right-edge interval; reducer windows
+            # remain marker-bounded and exclude support after that timestamp.
+            time.sleep(min(POST_MARKER_DRAIN_POLL_S, remaining_s))
+
+    def _capture_brackets_stop(
+        self,
+        capture_path: Path,
+        *,
+        deadline: float,
+        sampling_started: ClockStamp,
+        sampling_stopped: ClockStamp,
+    ) -> bool:
+        if time.monotonic() >= deadline:
+            return False
+        if not capture_path.exists() or capture_path.stat().st_size == 0:
+            return False
+        if time.monotonic() >= deadline:
+            return False
+        try:
+            data = capture_path.read_bytes()
+        except (OSError, ValueError):
+            return False
+        if time.monotonic() >= deadline:
+            return False
+        try:
+            native_records = parse_powermetrics_records(data)
+        except (OSError, ValueError):
+            return False
+        if time.monotonic() >= deadline:
+            return False
+        stamps: dict[str, ClockStamp] = {
+            "sampling_started": sampling_started,
+            "sampling_stopped": sampling_stopped,
+            # The final evidence derivation still takes its post_parse stamp
+            # after termination. Reusing the stop stamp here is provisional
+            # and avoids changing the five-stamp evidence semantics.
+            "post_parse": sampling_stopped,
+        }
+        if self._pre_spawn_stamp is not None:
+            stamps["pre_spawn"] = self._pre_spawn_stamp
+        if self._first_parse_stamp is not None:
+            stamps["first_parse"] = self._first_parse_stamp
+        elapsed_s = [
+            record.elapsed_ns / 1_000_000_000.0 for record in native_records
+        ]
+        if time.monotonic() >= deadline:
+            return False
+        plist_timestamp_s = [
+            float(record.metadata["plist_timestamp_s"]) for record in native_records
+        ]
+        if time.monotonic() >= deadline:
+            return False
+        _evidence, point_anchor_s = derive_powermetrics_clock_evidence(
+            stamps=stamps,
+            elapsed_s=elapsed_s,
+            plist_timestamp_s=plist_timestamp_s,
+        )
+        if time.monotonic() >= deadline:
+            return False
+        if point_anchor_s is None:
+            return False
+        last_endpoint_s = point_anchor_s + math.fsum(
+            record.elapsed_ns / 1_000_000_000.0
+            for record in native_records[1:]
+        )
+        return last_endpoint_s >= sampling_stopped.epoch_s
 
     def _take_measured_capture(self) -> tuple[bytes | None, float | None]:
         process = self._process
