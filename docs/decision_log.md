@@ -3735,3 +3735,56 @@ leg (the dated negative verdict is filed as a finding, Hailo idiom);
 measured P2-015 floors that make a predeclared AXI effect size
 undetectable send that AP back for redesign before any campaign is
 scheduled.
+
+## D-071: G10 memory-fit rule ratified (axi-sd-memory-fit-shape-v1); device-list review opened
+
+Date: 2026-07-16. Owner: Ed (ruling given in-session; recorded verbatim
+in intent).
+
+1. **Ratified:** the `axi-sd-memory-fit-shape-v1` probe shape (batch 1,
+   frozen 8,192-token prompt, exactly 128 EOS-masked greedy decode
+   tokens, cold KV, no offload/swap), the peak-measurement semantics
+   (load-start through decode token 128, full time series, one named
+   counter per target), and the `H_t >= max(1 GiB, 0.15 * C_t)` reserve.
+   G10 scoring may proceed; the scorecard's PROPOSED-FOR-ED status is
+   cleared.
+2. **Cap constant tracks the device list.** The 8 GiB capacity cap
+   stands FOR NOW because it encodes D-016's 8 GB-class cross-target
+   promise. Ed's conditional ("if we have to stick to the cap and
+   device list for maximum research viability, fine — ratify") opens a
+   device-list review: Ed's actual fleet is a 128 GB M3 Max MacBook
+   Pro, a 3080 Ti (12 GiB VRAM) rig, and one or two Jetsons available
+   if useful. A Sol xhigh brief (consult, this session) must answer:
+   what research opportunity is lost by dropping the Jetson/8 GB tier
+   and re-flooring the cap at the 3080 Ti class; the cap constant moves
+   only by a recorded D-016 amendment after Ed reads that brief.
+3. **Model-family direction (Ed):** prefer a best-in-class small model
+   people actually use (Gemma-class or a current small Qwen) for the
+   D-016 primary family; the brief must weigh re-pinning costs against
+   the currently-pinned Qwen2.5-1.5B-Instruct (existing corpus, quant
+   ladder §8, manifests). Big models are NOT closed off — they live in
+   the Mac-only subsystem (Option A shape), never silently in the
+   cross-target track.
+
+## D-072: Standing self-merge-with-full-gate authority (gh merges included)
+
+Date: 2026-07-16. Owner: Ed. Ed's session-scoped delegation ("handle
+the merge yourself if all is well") is made STANDING: the lead may
+self-merge agent-authored PRs via gh when and only when the complete
+gate shape ran — fresh oversight reviews with distinct angles, lead
+triage with recorded dispositions, fix rounds each delta-re-audited,
+CI green on the final head, and a fresh pass over any post-review
+commit (final-head rule). Ed may flag any PR as Ed-merge-only at any
+time. This supersedes the per-session-delegation reading recorded
+after the 2026-07-13 harness denial (C-032 row context): the denial
+episode concerned standing-authorization-ONLY merges without an
+explicit Ed grant; this entry IS that explicit grant. Evidence of the
+gate shape lands in each merge commit body and the session run report.
+
+Lease-adjudication note extension (2026-07-16): Ed approved the
+remaining retained-lease batch — the three benign
+ATTRIBUTION_INDETERMINATE closes from the AXI spec-design phase (lead
+commits moving HEAD under long parallel leases; every diff verified
+and landed) and the recurring session-open directory-normalization
+artifact (5th instance; TOOL-01 carries the defect). Recorded per the
+same adjudicated class as the 2026-07-15 approvals above.
