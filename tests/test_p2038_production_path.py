@@ -13,6 +13,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -33,16 +34,33 @@ from scripts.run_campaign import assert_production_uncertainty
 FIXTURE_PROCESS = Path(__file__).parent / "fixtures" / "fake_powermetrics_process.py"
 
 
+class LogicalDrainTimer:
+    """Count requested drain waits, not host scheduling delays."""
+
+    def __init__(self) -> None:
+        self.now_s = 0.0
+
+    def monotonic(self) -> float:
+        return self.now_s
+
+    def sleep(self, seconds: float) -> None:
+        time.sleep(seconds)
+        self.now_s += seconds
+
+
 class ProductionShapedRegistry:
     def resolve_runtime(self, config, clock):
         return joulewise.adapters.resolve_runtime(config, clock)
 
     def resolve_telemetry(self, config, clock):
+        drain_timer = LogicalDrainTimer()
         return (
             PowermetricsTelemetryAdapter(
                 clock,
                 executable=str(FIXTURE_PROCESS),
                 privilege_prefix=(sys.executable,),
+                drain_monotonic=drain_timer.monotonic,
+                drain_sleep=drain_timer.sleep,
             ),
             None,
         )

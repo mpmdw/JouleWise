@@ -730,7 +730,6 @@ class PowermetricsAdapterTests(unittest.TestCase):
         documents = fixture_documents()
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
         clock = FakeClock(start=100.0)
-        adapter = PowermetricsTelemetryAdapter(clock)
         operational_now = [0.0]
         instances = []
 
@@ -754,6 +753,9 @@ class PowermetricsAdapterTests(unittest.TestCase):
 
             def terminate(self):
                 self.terminated = True
+                # Simulate a loaded runner descheduling the controller after
+                # it observes the bracket while the native sampler advances.
+                self.path.write_bytes(documents_to_stream(documents))
                 self.final_bytes = self.path.read_bytes()
                 self.returncode = 0
 
@@ -769,14 +771,14 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 documents_to_stream(documents[: 1 + process.appended])
             )
 
+        adapter = PowermetricsTelemetryAdapter(
+            clock,
+            drain_monotonic=lambda: operational_now[0],
+            drain_sleep=fake_sleep,
+        )
         with (
             patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
             patch("joulewise.adapters.powermetrics.subprocess.Popen", AppendingPopen),
-            patch(
-                "joulewise.adapters.powermetrics.time.monotonic",
-                side_effect=lambda: operational_now[0],
-            ),
-            patch("joulewise.adapters.powermetrics.time.sleep", side_effect=fake_sleep),
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
             sampling_started = clock.stamp()
@@ -795,7 +797,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         ]
         self.assertEqual(instances[0].appended, 2)
         self.assertTrue(instances[0].terminated)
-        expected_final_bytes = documents_to_stream(documents[:3])
+        expected_final_bytes = documents_to_stream(documents)
         self.assertEqual(instances[0].final_bytes, expected_final_bytes)
         self.assertEqual(
             instances[0].final_bytes[: len(instances[0].pre_drain_bytes)],
@@ -804,7 +806,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
         final_frames = instances[0].final_bytes.split(b"\0")
         pre_drain_frames = instances[0].pre_drain_bytes.split(b"\0")
         self.assertEqual(final_frames[: len(pre_drain_frames)], pre_drain_frames)
-        self.assertEqual(len(final_frames), len(pre_drain_frames) + 2)
+        self.assertEqual(
+            len(final_frames),
+            len(pre_drain_frames) + len(documents) - 1,
+        )
         for frame in pre_drain_frames:
             self.assertEqual(final_frames.count(frame), 1)
         self.assertEqual(len(endpoints), 3)
@@ -883,7 +888,6 @@ class PowermetricsAdapterTests(unittest.TestCase):
         documents = fixture_documents()
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
         clock = FakeClock(start=100.0)
-        adapter = PowermetricsTelemetryAdapter(clock)
         operational_now = [0.0]
         instances = []
 
@@ -944,13 +948,13 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 raise AssertionError("deadline must skip provisional derivation")
             return derive_powermetrics_clock_evidence(*args, **kwargs)
 
+        adapter = PowermetricsTelemetryAdapter(
+            clock,
+            drain_monotonic=lambda: operational_now[0],
+        )
         with (
             patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
             patch("joulewise.adapters.powermetrics.subprocess.Popen", GrowingPopen),
-            patch(
-                "joulewise.adapters.powermetrics.time.monotonic",
-                side_effect=lambda: operational_now[0],
-            ),
             patch.object(Path, "read_bytes", deadline_consuming_read),
             patch(
                 "joulewise.adapters.powermetrics.parse_powermetrics_records",
@@ -984,7 +988,6 @@ class PowermetricsAdapterTests(unittest.TestCase):
         documents = fixture_documents()
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
         clock = FakeClock(start=100.0)
-        adapter = PowermetricsTelemetryAdapter(clock)
         operational_now = [0.0]
         instances = []
 
@@ -1015,14 +1018,14 @@ class PowermetricsAdapterTests(unittest.TestCase):
         def fake_sleep(seconds):
             operational_now[0] += seconds
 
+        adapter = PowermetricsTelemetryAdapter(
+            clock,
+            drain_monotonic=lambda: operational_now[0],
+            drain_sleep=fake_sleep,
+        )
         with (
             patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
             patch("joulewise.adapters.powermetrics.subprocess.Popen", SilentPopen),
-            patch(
-                "joulewise.adapters.powermetrics.time.monotonic",
-                side_effect=lambda: operational_now[0],
-            ),
-            patch("joulewise.adapters.powermetrics.time.sleep", side_effect=fake_sleep),
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
             sampling_started = clock.stamp()
@@ -1043,7 +1046,12 @@ class PowermetricsAdapterTests(unittest.TestCase):
         initial_documents = documents[:3]
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
         clock = FakeClock(start=100.0)
-        adapter = PowermetricsTelemetryAdapter(clock)
+        adapter = PowermetricsTelemetryAdapter(
+            clock,
+            drain_sleep=lambda _seconds: (_ for _ in ()).throw(
+                AssertionError("already bracketed capture must not wait")
+            ),
+        )
 
         def fake_run(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
@@ -1069,10 +1077,6 @@ class PowermetricsAdapterTests(unittest.TestCase):
         with (
             patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
             patch("joulewise.adapters.powermetrics.subprocess.Popen", BracketedPopen),
-            patch(
-                "joulewise.adapters.powermetrics.time.sleep",
-                side_effect=AssertionError("already bracketed capture must not wait"),
-            ),
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
             sampling_started = clock.stamp()
@@ -1513,8 +1517,12 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 bundle_path, summary = run_benchmark(config, Path(tmp), FakeClock(start=10.0))
 
             self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-            self.assertEqual((bundle_path / "raw" / RAW_SAMPLES_NAME).read_bytes(), truncated_stream)
-            self.assertEqual(len((bundle_path / "power_trace.csv").read_text().splitlines()), 16)
+            expected_cutoff = b"\0".join(fixture.split(b"\0")[:4]) + b"\0" + tail
+            self.assertEqual(
+                (bundle_path / "raw" / RAW_SAMPLES_NAME).read_bytes(),
+                expected_cutoff,
+            )
+            self.assertEqual(len((bundle_path / "power_trace.csv").read_text().splitlines()), 13)
             self.assertEqual(
                 (bundle_path / "power_trace.csv").read_text().splitlines()[0],
                 "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s",
@@ -1529,7 +1537,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
             self.assertEqual(len(measured), 1)
             self.assertEqual(measured[0]["capture"], "measured_run")
             self.assertEqual(measured[0]["action"], "dropped_final_unparseable_frame")
-            self.assertEqual(measured[0]["frame_index"], 5)
+            self.assertEqual(measured[0]["frame_index"], 4)
             self.assertEqual(measured[0]["byte_count"], len(tail))
             self.assertEqual(measured[0]["sha256"], hashlib.sha256(tail).hexdigest())
 
