@@ -1,7 +1,19 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-15, AXI-S0 advisor-document alignment. Automation informs;
-Ed deploys.
+Refreshed: 2026-07-16, resumption + no-hardware batch session (PRs #67/#68/#69
+merged: AXI-SA burst-decode contract, SITE-02 D1/D2 closure, SPLIT-AP freeze;
+AXI-SB static-batch verdict `supported` with the Mac C5-2.2 leg mint staged on `impl/axi-sb` (pending merge); kernel/queue
+closures; run report `2026-07-16-resumption-nohw-batch.md`). Automation
+informs; Ed deploys.
+
+Additional 2026-07-16 staleness on top of everything below: the generated
+`run_state`, `task_queue` / `roadmap`, `record`, `research`, `risk_register`,
+`council_log`, and `latest_run_report` pages now also predate today's AXI-SA/
+SITE-02/SPLIT-AP landings, the AXI-SB `supported` verdict (+ its staged C5-2.2 Mac-leg mint, pending
+merge), the R-016 body addendum, and this session's run report. SITE-02 also
+changed `scripts/pack_capsule.py` discovery behavior (loud refusal, never
+silent estimator fallback) — Ed's next manual deploy exercises the new
+discovery path; the deploy command below is unchanged.
 
 Live capsule state (last deploy 2026-07-13, `7d3ea57`-era snapshot at
 854,349 B): STALE against this branch.

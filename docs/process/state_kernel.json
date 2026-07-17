@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Audit fix-wave resume + AXI intake/spec/implementation arc (S-0, SA/SD/SE specs, AXI-SA landed via PR #67)",
-    "path": "docs/run_reports/2026-07-14-audit-resume-axi.md"
+    "label": "Resumption + no-hardware batch: PRs #67/#68/#69 merged, AXI-SB supported verdict, kernel closures",
+    "path": "docs/run_reports/2026-07-16-resumption-nohw-batch.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,

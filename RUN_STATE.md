@@ -13,8 +13,7 @@ review found zero cross-stream defects, merged-main suite 1630 OK
 (lead-corroborated). AXI-SB spike in flight (impl/axi-sb; live probes
 are lead-only). AXI-SD web-verification memo captured for the D-016
 decision package (D-016 remains Ed's). Session record:
-`docs/run_reports/2026-07-14-audit-resume-axi.md` (addenda) until
-this session's report lands.)
+`docs/run_reports/2026-07-16-resumption-nohw-batch.md`.)
 
 ## Start Here For Every Big Run
 
@@ -81,7 +80,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-16). Latest report: [Audit fix-wave resume + AXI intake/spec/implementation arc (S-0, SA/SD/SE specs, AXI-SA landed via PR #67)](docs/run_reports/2026-07-14-audit-resume-axi.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-16). Latest report: [Resumption + no-hardware batch: PRs #67/#68/#69 merged, AXI-SB supported verdict, kernel closures](docs/run_reports/2026-07-16-resumption-nohw-batch.md).
 
 ### [ED-EXTERNAL]
 
