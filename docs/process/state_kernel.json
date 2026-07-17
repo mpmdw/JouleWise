@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Resumption + no-hardware batch: PRs #67/#68/#69 merged, AXI-SB supported verdict, kernel closures",
-    "path": "docs/run_reports/2026-07-16-resumption-nohw-batch.md"
+    "label": "Window A: shakedown+floors+brief, exploratory block (OLMoE/Qwen3-4B/122B), D-075 intake, site deployed",
+    "path": "docs/run_reports/2026-07-17-window-a-floors.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,

@@ -15,8 +15,10 @@ are provided for anyone who wants the full evidence trail.
   floor campaign produced 222 distinct strict-valid, collection-usable bundles;
   the verified floor extraction and advisor brief are published in the
   repository. Every bundle is also claim-evidence-flagged, so strict validity
-  is not claim readiness and P2-037 claim adjudication remains pending. The
-  dated update ledger carries the merge pointers.
+  is not claim readiness and P2-037 claim adjudication remains pending. A
+  separate nine-bundle OLMoE/Qwen block is now extracted below as explicitly
+  exploratory, unmatched, claim-evidence-flagged observations; it does not
+  change that gate. The dated update ledger carries the merge pointers.
 - Project phase: see the phase exit checklists for exact completion state;
   live eligibility and next work come from the generated state kernel, not
   this reader-facing summary.
@@ -75,6 +77,36 @@ view moved by 6.608 J on the same boundary. The verified extraction is
 `docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json`; the
 shipped reader deliverable is
 `docs/advisor_briefs/2026-07-17-window-a-brief.html`.
+
+### Exploratory follow-on — not a promoted claim
+
+Nine additional strict-valid, collection-usable bundles cover three
+repetitions each of unmatched OLMoE-1B-7B BF16, Qwen3-4B INT4, and
+Qwen3.5-122B-A10B INT4 configurations on the fixed five-item
+`jw_mixed_v1_sentinel` shape. Every bundle is claim-evidence-flagged, the
+model/config points differ in architecture, scale, tokenizer, and
+quantization, and the repetition count is below the headline protocol. The
+values are therefore descriptive **EXPLORATORY / L1-legacy observations
+only**.
+
+| unmatched configuration | mean gross suite energy — Apple M3 Max / powermetrics SoC rails (CPU + GPU + ANE) | mean gross energy/generated output token — same boundary | runtime-observed output throughput |
+|---|---:|---:|---:|
+| OLMoE-1B-7B BF16 | 229.028 J (227.141–231.790 J) | 178.928 mJ/token (177.454–181.086 mJ/token) | 122.361 tok/s (122.261–122.481 tok/s) |
+| Qwen3-4B INT4 | 362.772 J (362.642–362.903 J) | 283.416 mJ/token (283.314–283.518 mJ/token) | 106.519 tok/s (106.470–106.545 tok/s) |
+| Qwen3.5-122B-A10B INT4 | 1072.273 J (1061.722–1085.144 J) | 837.713 mJ/token (829.471–847.769 mJ/token) | 39.473 tok/s (39.349–39.569 tok/s) |
+
+Each bundle emitted 1,280 generated output tokens. Gross per-output-token
+values above are derived from the gross suite numerator; the stored
+`energy_output_token_j` field instead uses the idle-subtracted numerator and
+is retained as a labeled within-device secondary view in the full extraction.
+For the like-for-like suite-level gross window on the Apple M3 Max /
+powermetrics SoC-rail boundary, the exploratory OLMoE-versus-Qwen3-4B mean gap
+is 133.720 J, above the published 24.619 J suite-level gross
+`floor_gate_j`. That only says the descriptive gap exceeds the measurement
+guard: unmatched configurations, evidence flags, drift review, and the lack of
+a prospective contrast still prohibit efficiency or architecture claims.
+Every aggregate and raw repetition is bundle-cited in
+`docs/process_traces/2026-07-17-exploratory-block/results.md`.
 
 ## Previous Update (as of 2026-07-09, C-027 whole-project council review) — 30-second read
 
@@ -192,7 +224,8 @@ implementing the statistical-uncertainty protocol) queued.
 
 | date | label | one-line outcome | run-report link |
 |---|---|---|---|
-| 2026-07-17 | Window A floors + advisor brief | PRs #72/#74 closed the bounded powermetrics drain defects and P2-038 passed on merged main; PR #73 filed the AXI-SC negative applicability verdict; 222 distinct strict-valid floor bundles were extracted and independently verified, with claim-readiness caveats retained; the advisor brief shipped. | `docs/run_reports/2026-07-17-window-a-floors.md` (DRAFT-FOR-LEAD) |
+| 2026-07-17 | exploratory block + D-075 re-wrap | Nine retained OLMoE/Qwen bundles were re-validated and extracted as explicitly unmatched, claim-evidence-flagged exploratory observations; DSpark/DFlash smokes and D-075's ranked extension-axis intake were folded in without promoting evidence or adding independent theses; Ed's completed manual site deployment was recorded as the new drift baseline. | `docs/run_reports/2026-07-17-window-a-floors.md` (final re-wrap addendum; lead gate pending) |
+| 2026-07-17 | Window A floors + advisor brief | PRs #72/#74 closed the bounded powermetrics drain defects and P2-038 passed on merged main; PR #73 filed the AXI-SC negative applicability verdict; 222 distinct strict-valid floor bundles were extracted and independently verified, with claim-readiness caveats retained; the advisor brief shipped. | `docs/run_reports/2026-07-17-window-a-floors.md` (LEAD-ACCEPTED) |
 | 2026-07-16 | audit close + no-hardware resumption batch | PR #66 closed the comprehensive audit; PRs #67-#70 landed AXI-SA, SITE-02 D1/D2, the SPLIT-AP Part I freeze, and the AXI-SB `supported` verdict with its Mac C5-2.2 leg. Window A is software-unblocked but still needs Ed + quiet Mac; no new energy measurement is claimed. | `docs/run_reports/2026-07-16-resumption-nohw-batch.md` |
 | 2026-07-10/11 | C-028 hardening and integration arc | PRs #41-#58 merged; analysis trio complete; reducer lattice through 0.4.2; P0-003 restore proof and every Window-A software gate satisfied; PR #59 open as a bounded follow-up; no new live evidence claimed. | `docs/run_reports/2026-07-11-c028-continuation.md` |
 | 2026-07-06 | third update / first real energy | Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements. **P2-003, gross energy — M3 Max / powermetrics SoC rails:** ~47.2 J per 512-token request. **P2-003, idle-subtracted energy — M3 Max / powermetrics SoC rails:** ~79-90 mJ per generated output token; the originally reported range used the prompt+output denominator and was corrected 2026-07-09 (C-027). TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz; short prefill energy is below the current detection capability and is not a quantitative result (D-055). | `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md` |
@@ -273,6 +306,17 @@ at L2; L3 is available only through Q4/AP-1's existing holdout machinery.
 Window A remains first, and no AXI quiet-Mac characterization starts before
 Window A completes. Static batching is the capstone scope; continuous
 batching remains a post-capstone extension.
+
+**Ranked extension-axis intake (D-075).** The later six-axis evaluation did
+not create six more theses. It attached DSpark/DFlash break-even,
+proposal-work, and contamination-control riders to the speculative-decoding
+home; admitted an on-device MLX quantized-KV candidate and one named hybrid
+pair; and attached cache/context, module-nonattribution, kernel, and backend
+provenance riders to their existing questions. All admitted units remain
+candidate work with earliest-phase tags, named forbidden upgrades, floor
+gates, and an intake ceiling at or below L2. Unverified runtime, pair,
+adapter, and device-fit questions remain explicitly NEEDS-WEB, and Ed retains
+commitment and ordering authority under D-070.
 
 ## Status At A Glance
 
@@ -382,7 +426,10 @@ Closed since the last revision: the comprehensive audit; AXI-SA's burst-decode
 contract; SITE-02 D1/D2; the SPLIT-AP Part I pre-registration freeze;
 AXI-SB's `supported` static-batch verdict with its Mac C5-2.2 leg; P2-038's
 production-shaped live gate; and AXI-SC's `unsupported_for_joulewise` pinned-
-runtime verdict. Window A's software gates are
+runtime verdict. The later DSpark/DFlash MLX feasibility smokes and D-075
+extension-axis intake are recorded without promoting an energy claim, and the
+nine-bundle OLMoE/Qwen follow-on remains explicitly exploratory.
+Window A's software gates are
 satisfied, its first floor corpus is published, and the window remains open.
 The floors are calibration thresholds rather than claim promotion: P2-037
 adjudication remains pending because strict-valid collection and claim

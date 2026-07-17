@@ -1,16 +1,15 @@
 # JouleWise Run State
 
-Last updated: 2026-07-17 (WINDOW A OPEN — P2-038 LIVE TAIL CLOSED:
-production_uncertainty_v1 PASSED on merged main (drain fixes PR #72/#74
-after two live-bundle triage rounds; canonical record
-runs/window_a_shakedown_final, pinned in detection_floor.md). AXI-SC
-landed (PR #73): structured negative verdict, spec-decode Mac leg not
-minted on pinned mlx-lm; DSpark/DFlash identified with MLX
-implementations (extension-axes evaluation persisted). P2-015-SMOKE is
-the quiet-Mac head, then P2-015 floors; overnight measurement program
-in progress for Ed's advisor meeting. Session record:
-`docs/run_reports/2026-07-16-resumption-nohw-batch.md` (+ tonight's
-report to follow).)
+Last updated: 2026-07-17 (SESSION ARC COMPLETE: Window A floors
+published (222 strict-valid bundles; P2-015 partial pending P2-039
+artifact + P2-037 adjudication); advisor brief delivered
+(docs/advisor_briefs/); Ed DEPLOYED the README-first site + Learn
+guide (PR #75); exploratory block measured (OLMoE ~229 J / Qwen3-4B
+~362.8 J / 122B ~1072 J gross suite, n=3, exploratory-labeled);
+DSpark/DFlash MLX feasibility CONFIRMED w/ per-round observability;
+D-075 extension-axis intake folded. Session records:
+docs/run_reports/2026-07-16-resumption-nohw-batch.md +
+2026-07-17-window-a-floors.md.)
 
 ## Start Here For Every Big Run
 
@@ -77,7 +76,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-17). Latest report: [Resumption + no-hardware batch: PRs #67/#68/#69 merged, AXI-SB supported verdict, kernel closures](docs/run_reports/2026-07-16-resumption-nohw-batch.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-17). Latest report: [Window A: shakedown+floors+brief, exploratory block (OLMoE/Qwen3-4B/122B), D-075 intake, site deployed](docs/run_reports/2026-07-17-window-a-floors.md).
 
 ### [ED-EXTERNAL]
 

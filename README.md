@@ -76,6 +76,17 @@ after Window A. See the fuller
 [Q4 architectural stress-test agenda](PROJECT_STATUS.md#summary)
 in `PROJECT_STATUS.md`.
 
+D-075 now folds a ranked extension-axis evaluation into that same agenda
+without proliferating theses: DSpark/DFlash break-even and control riders,
+on-device quantized KV, one named hybrid pair, and attached
+cache/context/kernel/backend provenance work. Every admitted unit remains a
+floor-gated candidate at or below L2 with a named forbidden upgrade; unresolved
+runtime and device-fit questions stay NEEDS-WEB, and Ed retains commitment
+authority. Separate lead-run DSpark/DFlash smokes established native MLX
+execution and per-round observability only. Their thinking-mode,
+unmatched-output throughput inversion is hypothesis-generating, not energy
+evidence.
+
 Window A remains open and still requires Ed and a quiet Mac. The
 production-shaped P2-038 gate is closed and the first request, phase, and suite
 false-effect guard floors are published. Every reported energy value uses the
@@ -85,6 +96,27 @@ current floors use the Apple M3 Max / powermetrics SoC-rail boundary. The floor
 corpus does not itself promote a claim, and P2-037 adjudication remains pending.
 Use the generated state kernel—not this summary—to select the next live or
 agent-lane step.
+
+A separate nine-bundle follow-on is now available as an explicitly
+**exploratory, unmatched, no-claim** observation block. All nine bundles are
+strict-valid and collection-usable but claim-evidence-flagged; each model ran
+three repetitions of the fixed five-item sentinel shape and emitted 1,280
+generated output tokens per bundle.
+
+| unmatched configuration | mean gross suite energy — Apple M3 Max / powermetrics SoC rails (CPU + GPU + ANE) | mean gross energy/generated output token — same boundary | runtime-observed output throughput |
+|---|---:|---:|---:|
+| OLMoE-1B-7B BF16 | 229.028 J | 178.928 mJ/token | 122.361 tok/s |
+| Qwen3-4B INT4 | 362.772 J | 283.416 mJ/token | 106.519 tok/s |
+| Qwen3.5-122B-A10B INT4 | 1072.273 J | 837.713 mJ/token | 39.473 tok/s |
+
+These points differ in model scale, architecture, tokenizer, and
+quantization, so they do not establish a controlled scaling relation,
+architecture effect, or efficiency comparison. The stored per-generated-token
+field is idle-subtracted
+and appears only as D-067's labeled within-device secondary view in the
+[bundle-cited extraction](docs/process_traces/2026-07-17-exploratory-block/results.md),
+which also records spreads, every repetition, the floor comparison, and the
+Qwen thinking/config caveats.
 
 Remaining backends plug into the same adapter interfaces: the fixture-first
 2K NVIDIA stack (SSH transport, node worker, nvidia-smi + vLLM adapters)

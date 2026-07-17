@@ -216,3 +216,112 @@ rows, rework minutes, and final disposition labels.
 - The canonical Python suite was not rerun for this docs-only delegated stream:
   no code, schema, contract, kernel, queue, or generated artifact changed, and
   the focused freshness/claims checks directly cover the edited surfaces.
+
+## ADDENDUM — exploratory block, extension axes, and deploy closeout draft
+
+Date: 2026-07-17
+Status: **FINAL RE-WRAP DRAFT; lead owns the final diff gate, selector
+reconciliation, commit, and any future deploy.**
+Repository evidence through: `c6cf3e5`
+Measurement boundary for every addendum energy value: **Apple M3 Max /
+powermetrics SoC rails (CPU + GPU + ANE)**
+
+### Exploratory observation block
+
+The follow-on corpus contains nine strict-valid, collection-usable bundles:
+three repetitions each for OLMoE-1B-7B BF16, Qwen3-4B INT4, and
+Qwen3.5-122B-A10B INT4 on the five-item `jw_mixed_v1_sentinel` shape. Every
+bundle is claim-evidence-flagged and the repetition protocol is below the
+headline threshold. These are explicitly **EXPLORATORY / L1-legacy,
+unmatched, no-claim observations**.
+
+| unmatched model/config | gross suite energy — M3 Max / SoC rails, mean ± sample SD (range) | gross energy/generated output token — same boundary, mean (range) | idle-subtracted energy/generated output token — same boundary, within-device secondary, mean (range) | runtime-observed output tok/s, mean (range) |
+|---|---:|---:|---:|---:|
+| OLMoE-1B-7B BF16 | 229.028 ± 2.445 J (227.141–231.790 J) | 178.928 mJ (177.454–181.086 mJ) | 177.900 mJ (176.706–179.537 mJ) | 122.361 (122.261–122.481) |
+| Qwen3-4B INT4 | 362.772 ± 0.131 J (362.642–362.903 J) | 283.416 mJ (283.314–283.518 mJ) | 282.308 mJ (281.875–282.675 mJ) | 106.519 (106.470–106.545) |
+| Qwen3.5-122B-A10B INT4 | 1072.273 ± 11.882 J (1061.722–1085.144 J) | 837.713 mJ (829.471–847.769 mJ) | 831.787 mJ (819.319–845.298 mJ) | 39.473 (39.349–39.569) |
+
+Each bundle emitted exactly 1,280 generated output tokens across five fixed
+256-token items. The stored `energy_output_token_j` uses the idle-subtracted
+numerator; the gross mJ/output-token values above are therefore derived from
+`gross_energy_j / 1280` rather than silently relabeling the stored field.
+
+For the floor-compatible suite-level gross window on the Apple M3 Max /
+powermetrics SoC-rail boundary, the OLMoE-versus-Qwen3-4B mean gap is
+133.720 J, which clears the published 24.619 J suite-level gross
+`floor_gate_j`. The other two pairwise descriptive gaps also clear that guard.
+This is floor context only: the floor row requires drift review, the bundles
+are claim-evidence-flagged, and the model/config points are unmatched in
+architecture, scale, tokenizer, artifact, and quantization. No efficiency,
+MoE, model-size, or architecture conclusion follows.
+
+The verified extraction, all raw repetition values, denominator audit,
+Qwen thinking-policy/config caveats, floor-compatible pairwise table, and
+per-number bundle pointers are in
+`docs/process_traces/2026-07-17-exploratory-block/results.md`.
+
+### DSpark/DFlash feasibility smokes and D-075 fold-in
+
+The separate lead-run MLX feasibility trace established that both DSpark and
+DFlash execute natively with per-round acceptance observability. At the exact
+small-target, 24-new-token smoke point, DSpark recorded 45.8 tok/s and 2.60
+accepted tokens/round, DFlash 40.4 tok/s and 2.45 accepted tokens/round, and
+baseline greedy 113.0 tok/s. Thinking mode was engaged and outputs were
+unmatched. These are throughput/observability smokes, not energy measurements;
+the baseline-faster inversion is hypothesis-generating input to
+C5-2.5c's drafter-overhead break-even question, not its answer. Evidence:
+`docs/process_traces/2026-07-17-dspark-dflash-smoke/`.
+
+D-075 folds the six-axis evaluation into existing homes rather than minting a
+new thesis per suggestion. It admits C5-2.5c as the primary speculative-
+decoding Q4 break-even rider, C5-2.5b as proposal-work secondary, and
+C5-2.5d as a mandatory contamination control while deferring C5-2.5a as a
+bank-only cross-method rider. It also admits C5-2.11 on-device quantized KV and
+one named hybrid-pair row, while attaching context/KV, prompt-cache,
+module-nonattribution, kernel, and backend provenance refinements to existing
+questions. All remain floor-gated candidate work, at or below L2 for this
+intake, with named forbidden upgrades and unresolved NEEDS-WEB items. D-070
+continues to reserve commitment and quiet-Mac ordering authority to Ed.
+
+### Ed's deployment and current drift
+
+Ed completed the manual site deployment represented by `b641f26`; the site
+was current at that deploy snapshot. The real extension-axis synthesis,
+DSpark/DFlash smoke, D-075 rows, exploratory inputs, and this reader-doc
+re-wrap postdate it. `docs/site/DRIFT.md` now resets the baseline accordingly
+and recommends folding these exploratory/agenda updates into the next natural
+Ed-manual deploy, unless an imminent advisor review needs them sooner. No
+agent regenerated or deployed the site in this re-wrap.
+
+### Process notes retained without laundering
+
+- **Stale-lock runner wart:** the lead reports that a stale campaign lock
+  produced an exit-0 path instead of a clear failure. The retained exploratory
+  campaign log contains only the three successful campaign rows plus their
+  verdict rows, so this addendum records the wart as lead-reported rather than
+  inventing a repository evidence pointer. The nine bundles themselves were
+  independently strict-revalidated for this re-wrap.
+- **Forced-report placeholder:** the fold-in round refused to treat a thin
+  forced-report placeholder as the extension-axis synthesis. The real content
+  was re-persisted in `f656c90` before D-075 consumed it. The refusal prevented
+  placeholder text from becoming agenda authority.
+- **Scope-check trip:** the fold-in scope check observed the lead's stray
+  `scripts/quiet_mac_prep.sh`. It was adjudicated as benign parent-bench work
+  and later committed in `4d20aad`; the check did its job by stopping silent
+  ownership inference. This delegated re-wrap did not edit that script or any
+  out-of-scope path.
+
+### Addendum evidence and verification
+
+| item | evidence |
+|---|---|
+| nine bundle values, token denominators, flags, and strict replay | `runs/exploratory_2026_07_17/`; `docs/process_traces/2026-07-17-exploratory-block/results.md` |
+| DSpark/DFlash commands and smoke values | `docs/process_traces/2026-07-17-dspark-dflash-smoke/` |
+| D-075 dispositions and candidate ceilings | D-075 in `docs/decision_log.md`; `docs/stream_logs/2026-07-17-axes-foldin.md` |
+| deploy baseline and later commits | `git log b641f26..c6cf3e5`; `docs/site/DRIFT.md` |
+| re-wrap drafting decisions and deviations | `docs/stream_logs/2026-07-17-rewrap.md` |
+
+Verification commands for the addendum are recorded in the final delegated
+return envelope. This remains a docs-only re-wrap: raw evidence, campaign
+inputs, the state kernel, task queue, research-question rows, decision log,
+and generated site were not modified.
