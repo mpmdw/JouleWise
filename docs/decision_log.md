@@ -93,6 +93,8 @@ be re-derived by a future agent gets an entry here.
 | D-068 | Site deployment is Ed-manual; sessions end with a drift report, never a deploy | accepted |
 | D-069 | Advisor-doc alignment (stream S-0) is sanctioned front-facing work | accepted |
 | D-070 | Architectural-axes extension agenda (AXI): scope, claim posture, batch-axis rulings | accepted |
+| D-071 | G10 memory-fit rule ratified (axi-sd-memory-fit-shape-v1); device-list review opened | accepted |
+| D-072 | Standing self-merge-with-full-gate authority (gh merges included) | accepted |
 
 ---
 
