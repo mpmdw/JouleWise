@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import math
 import os
 import re
 import subprocess
@@ -21,6 +22,7 @@ from typing import Iterable
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "site"
+FLOOR_EXTRACTION_SOURCE = "docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json"
 MARKED_VERSION = "18.0.6"
 MARKED_LOCAL_EXECUTABLE = ROOT / "node_modules" / ".bin" / "marked"
 
@@ -113,6 +115,18 @@ class DocPage:
     group: str
 
 
+@dataclass(frozen=True)
+class FloorSummary:
+    request_gross_abs_j: float
+    request_gross_cmp_j: float
+    request_idle_abs_j: float
+    request_idle_cmp_j: float
+    phase_prefill_gate_j: float
+    phase_decode_gate_j: float
+    suite_item_gate_j: float
+    suite_level_gate_j: float
+
+
 BASE_DOC_PAGES = [
     DocPage("README.md", "readme.html", "README", "What the repo is and how to run the mock path end to end.", "Status & Planning"),
     DocPage("PROJECT_STATUS.md", "project_status.html", "Project Status", "Advisor-facing status, plan, and architecture.", "Status & Planning"),
@@ -130,21 +144,21 @@ BASE_DOC_PAGES = [
 ]
 
 HAND_PAGES = {
-    "index.html": "Story",
-    "results.html": "Results",
+    "index.html": "Project",
+    "results.html": "Measurements",
     "process.html": "Process",
-    "research.html": "Research",
+    "research.html": "Learn",
 }
 
 NAV_ORDER = [
-    ("index.html", "Story"),
+    ("index.html", "Project"),
+    ("research.html", "Learn"),
     ("status.html", "Status"),
     ("roadmap.html", "Roadmap"),
-    ("record.html", "Record"),
-    ("results.html", "Results"),
     ("process.html", "Process"),
-    ("research.html", "Research"),
+    ("record.html", "Record"),
     ("library.html", "Sources"),
+    ("results.html", "Measurements"),
 ]
 
 MARKED_UNAVAILABLE = False
@@ -161,6 +175,125 @@ def read_source(source: str) -> str:
     if not path.exists():
         fail("source", source, "file to exist")
     return path.read_text(encoding="utf-8")
+
+
+def read_json_source(source: str) -> object:
+    try:
+        return json.loads(read_source(source))
+    except json.JSONDecodeError as exc:
+        raise SiteBuildError(f"source: {source}: invalid JSON: {exc}") from exc
+
+
+def parse_verified_floor_summary(
+    payload: object,
+    source: str = FLOOR_EXTRACTION_SOURCE,
+) -> FloorSummary:
+    """Read the small reader-facing floor set from the verified extraction.
+
+    Comparative rows intentionally carry floor_cmp_j in the extraction
+    schema's floor_abs_j field; the row labels make that mapping explicit.
+    Fail closed if a named family, row, value, or verification disappears.
+    """
+    if not isinstance(payload, dict):
+        fail("floor extraction", source, "top-level JSON object")
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        fail("floor extraction", source, "result object")
+    extractions = result.get("extractions")
+    verifications = result.get("verifications")
+    if not isinstance(extractions, list) or not isinstance(verifications, list):
+        fail("floor extraction", source, "result.extractions and result.verifications lists")
+
+    families: dict[str, list[dict[str, object]]] = {}
+    for extraction in extractions:
+        if not isinstance(extraction, dict):
+            fail("floor extraction", source, "object extraction rows")
+        family = extraction.get("family")
+        rows = extraction.get("rows")
+        if not isinstance(family, str) or not isinstance(rows, list):
+            fail("floor extraction", source, "family string and rows list")
+        prefix = family.split(" ", 1)[0]
+        typed_rows = [row for row in rows if isinstance(row, dict)]
+        if len(typed_rows) != len(rows):
+            fail("floor extraction", source, f"object rows for {prefix}")
+        families[prefix] = typed_rows
+
+    confirmed = {
+        str(item.get("family", "")).split(" ", 1)[0]
+        for item in verifications
+        if isinstance(item, dict) and item.get("verdict") == "confirmed"
+    }
+    required_families = {"DF-RQ", "DF-PH", "DF-SU"}
+    if not required_families.issubset(confirmed):
+        fail("floor extraction", source, "confirmed DF-RQ, DF-PH, and DF-SU verifications")
+
+    def floor_value(family: str, window_class: str) -> float:
+        matches = [
+            row for row in families.get(family, [])
+            if row.get("window_class") == window_class
+        ]
+        if len(matches) != 1:
+            fail("floor extraction", source, f"one {family} row labeled {window_class!r}")
+        value = matches[0].get("floor_abs_j")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            fail("floor extraction", source, f"numeric floor_abs_j for {window_class!r}")
+        number = float(value)
+        if not math.isfinite(number) or number <= 0:
+            fail("floor extraction", source, f"positive finite floor for {window_class!r}")
+        return number
+
+    request_gross_abs = floor_value("DF-RQ", "gross_request_mid (DF-RQ-GROSS-MID, absolute)")
+    request_gross_cmp = floor_value(
+        "DF-RQ", "gross_request_mid ABBA (DF-CMP-ABBA-RQ, comparative floor_cmp_j)"
+    )
+    request_idle_abs = floor_value(
+        "DF-RQ", "idle_subtracted_request_mid (DF-RQ-IDLE-MID, absolute)"
+    )
+    request_idle_cmp = floor_value(
+        "DF-RQ", "idle_subtracted_request_mid ABBA (DF-CMP-ABBA-RQ, comparative floor_cmp_j)"
+    )
+    phase_prefill_abs = floor_value("DF-PH", "phase (prefill), absolute repeat — DF-PH-PREFILL")
+    phase_prefill_cmp = floor_value(
+        "DF-PH", "phase (prefill), comparative ABBA — DF-CMP-ABBA-PH prefill profile; value is floor_cmp_j"
+    )
+    phase_decode_abs = floor_value("DF-PH", "phase (decode), absolute repeat — DF-PH-DECODE")
+    phase_decode_cmp = floor_value(
+        "DF-PH", "phase (decode), comparative ABBA — DF-CMP-ABBA-PH decode profile; value is floor_cmp_j"
+    )
+    suite_rows = families.get("DF-SU", [])
+
+    def suite_value(window_class: str, comparative: bool) -> float:
+        matches = [
+            row for row in suite_rows
+            if row.get("window_class") == window_class
+            and ("comparative" in str(row.get("metric", ""))) == comparative
+        ]
+        if len(matches) != 1:
+            kind = "comparative" if comparative else "absolute"
+            fail("floor extraction", source, f"one {kind} DF-SU {window_class} row")
+        value = matches[0].get("floor_abs_j")
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            fail("floor extraction", source, f"numeric DF-SU {window_class} floor")
+        number = float(value)
+        if not math.isfinite(number) or number <= 0:
+            fail("floor extraction", source, f"positive finite DF-SU {window_class} floor")
+        return number
+
+    suite_item_abs = suite_value("item", False)
+    suite_level_abs = suite_value("level", False)
+    suite_item_cmp = suite_value("item", True)
+    suite_level_cmp = suite_value("level", True)
+
+    return FloorSummary(
+        request_gross_abs_j=request_gross_abs,
+        request_gross_cmp_j=request_gross_cmp,
+        request_idle_abs_j=request_idle_abs,
+        request_idle_cmp_j=request_idle_cmp,
+        phase_prefill_gate_j=max(phase_prefill_abs, phase_prefill_cmp),
+        phase_decode_gate_j=max(phase_decode_abs, phase_decode_cmp),
+        suite_item_gate_j=max(suite_item_abs, suite_item_cmp),
+        suite_level_gate_j=max(suite_level_abs, suite_level_cmp),
+    )
 
 
 def attr_escape(value: object) -> str:
@@ -846,6 +979,107 @@ def page_shell(title: str, active: str, body: str, footer: str) -> str:
 """
 
 
+def render_site_source_fragment(name: str, replacements: dict[str, str]) -> str:
+    source = f"docs/site_src/{name}"
+    rendered = read_source(source)
+    for token, value in replacements.items():
+        marker = f"@@{token}@@"
+        if marker not in rendered:
+            fail("site source", source, f"placeholder {marker}")
+        rendered = rendered.replace(marker, value)
+    unresolved = re.findall(r"@@[A-Z0-9_]+@@", rendered)
+    if unresolved:
+        fail("site source", source, f"replacements for {', '.join(sorted(set(unresolved)))}")
+    return rendered
+
+
+def floor_replacements(floors: FloorSummary) -> dict[str, str]:
+    return {
+        "FLOOR_REQUEST_GROSS_ABS": f"{floors.request_gross_abs_j:.6f}",
+        "FLOOR_REQUEST_GROSS_CMP": f"{floors.request_gross_cmp_j:.6f}",
+        "FLOOR_REQUEST_IDLE_ABS": f"{floors.request_idle_abs_j:.6f}",
+        "FLOOR_REQUEST_IDLE_CMP": f"{floors.request_idle_cmp_j:.6f}",
+        "FLOOR_PHASE_PREFILL_GATE": f"{floors.phase_prefill_gate_j:.6f}",
+        "FLOOR_PHASE_DECODE_GATE": f"{floors.phase_decode_gate_j:.6f}",
+        "FLOOR_SUITE_ITEM_GATE": f"{floors.suite_item_gate_j:.6f}",
+        "FLOOR_SUITE_LEVEL_GATE": f"{floors.suite_level_gate_j:.6f}",
+    }
+
+
+def render_project_page(stamps: dict[str, SourceStamp]) -> str:
+    body = render_site_source_fragment(
+        "index.html",
+        {
+            "README_STAMP": source_chip(stamps["README.md"]),
+            "DECISION_STAMP": source_chip(stamps["docs/decision_log.md"]),
+            "FLOOR_STAMP": source_chip(stamps[FLOOR_EXTRACTION_SOURCE]),
+            "TEMPLATE_STAMP": source_chip(stamps["docs/site_src/index.html"]),
+        },
+    )
+    footer_stamps = [
+        stamps["docs/site_src/index.html"],
+        stamps["README.md"],
+        stamps["docs/decision_log.md"],
+        stamps[FLOOR_EXTRACTION_SOURCE],
+    ]
+    return page_shell("Project README", "Project", body, page_footer(footer_stamps))
+
+
+def render_learning_page(floors: FloorSummary, stamps: dict[str, SourceStamp]) -> str:
+    replacements = {
+        **floor_replacements(floors),
+        "METHODOLOGY_STAMP": source_chip(stamps["docs/contracts/measurement_methodology.md"]),
+        "FLOOR_SPEC_STAMP": source_chip(stamps["docs/phase_2/detection_floor.md"]),
+        "FLOOR_STAMP": source_chip(stamps[FLOOR_EXTRACTION_SOURCE]),
+        "CLAIMS_STAMP": source_chip(stamps["docs/contracts/claims_ladder.md"]),
+        "TEMPLATE_STAMP": source_chip(stamps["docs/site_src/research.html"]),
+    }
+    body = render_site_source_fragment("research.html", replacements)
+    footer_stamps = [
+        stamps["docs/site_src/research.html"],
+        stamps["docs/contracts/measurement_methodology.md"],
+        stamps["docs/phase_2/detection_floor.md"],
+        stamps[FLOOR_EXTRACTION_SOURCE],
+        stamps["docs/contracts/claims_ladder.md"],
+    ]
+    return page_shell("Learn measurement science", "Learn", body, page_footer(footer_stamps))
+
+
+def render_measurements_page(floors: FloorSummary, stamps: dict[str, SourceStamp]) -> str:
+    replacements = {
+        **floor_replacements(floors),
+        "README_STAMP": source_chip(stamps["README.md"]),
+        "DECISION_STAMP": source_chip(stamps["docs/decision_log.md"]),
+        "FLOOR_STAMP": source_chip(stamps[FLOOR_EXTRACTION_SOURCE]),
+        "CLAIMS_STAMP": source_chip(stamps["docs/contracts/claims_ladder.md"]),
+        "TEMPLATE_STAMP": source_chip(stamps["docs/site_src/results.html"]),
+    }
+    body = render_site_source_fragment("results.html", replacements)
+    footer_stamps = [
+        stamps["docs/site_src/results.html"],
+        stamps["README.md"],
+        stamps["docs/decision_log.md"],
+        stamps[FLOOR_EXTRACTION_SOURCE],
+        stamps["docs/contracts/claims_ladder.md"],
+    ]
+    return page_shell("Measurements", "Measurements", body, page_footer(footer_stamps))
+
+
+def update_site_styles() -> None:
+    path = OUT / "style.css"
+    if not path.is_file():
+        fail("site stylesheet", "docs/site/style.css", "existing base stylesheet")
+    source = "docs/site_src/site_sections.css"
+    addition = read_source(source).strip()
+    start = "/* BEGIN GENERATED: docs/site_src/site_sections.css */"
+    end = "/* END GENERATED: docs/site_src/site_sections.css */"
+    current = path.read_text(encoding="utf-8")
+    block_re = re.compile(rf"\n?{re.escape(start)}.*?{re.escape(end)}\n?", re.DOTALL)
+    current = block_re.sub("\n", current).rstrip()
+    path.write_text(f"{current}\n\n{start}\n{addition}\n{end}\n", encoding="utf-8")
+    print("built style.css site-source section")
+
+
 def render_status_page(
     phases: list[StatusPhase],
     verification: Verification,
@@ -1390,9 +1624,23 @@ def build(no_marked: bool = False) -> None:
     sessions = parse_session_history(run_md)
     report_source = latest_report_source_from_sessions(sessions)
     report_md = read_source(report_source)
+    floor_summary = parse_verified_floor_summary(read_json_source(FLOOR_EXTRACTION_SOURCE))
     docs = doc_pages(report_source)
     stamps = {doc.source: git_source_stamp(doc.source) for doc in docs}
-    for source in ["PROJECT_STATUS.md", "RUN_STATE.md", "TASK_QUEUE.md", "docs/risk_register.md", "docs/decision_log.md", "docs/council_log.md", report_source]:
+    for source in [
+        "PROJECT_STATUS.md",
+        "RUN_STATE.md",
+        "TASK_QUEUE.md",
+        "docs/risk_register.md",
+        "docs/decision_log.md",
+        "docs/council_log.md",
+        "docs/phase_2/detection_floor.md",
+        FLOOR_EXTRACTION_SOURCE,
+        "docs/site_src/index.html",
+        "docs/site_src/research.html",
+        "docs/site_src/results.html",
+        report_source,
+    ]:
         stamps[source] = git_source_stamp(source)
     queue = parse_current_queue(queue_md)
     completed = parse_completed_queue(queue_md)
@@ -1401,6 +1649,10 @@ def build(no_marked: bool = False) -> None:
     decisions = parse_decision_index(decision_md)
     councils = parse_council_index(council_md)
 
+    update_site_styles()
+    write(OUT / "index.html", render_project_page(stamps))
+    write(OUT / "research.html", render_learning_page(floor_summary, stamps))
+    write(OUT / "results.html", render_measurements_page(floor_summary, stamps))
     write(OUT / "status.html", render_status_page(phases, verification, bundle_count, now, sessions, queue, risks, stamps, report_source))
     write(OUT / "roadmap.html", render_roadmap_page(queue, completed, do_not_do, stamps["TASK_QUEUE.md"]))
     write(OUT / "record.html", render_record_page(sessions, report_md, report_source, decisions, councils, stamps))
