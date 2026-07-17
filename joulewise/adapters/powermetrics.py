@@ -17,6 +17,7 @@ import statistics
 import subprocess
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -53,6 +54,8 @@ RAIL_MANIFEST = ["cpu_power", "gpu_power", "ane_power"]
 SAMPLERS = "cpu_power,gpu_power,ane_power,thermal"
 READINESS_TIMEOUT_S = 15.0
 READINESS_POLL_S = 0.05
+POST_MARKER_DRAIN_MARGIN_S = 0.25
+POST_MARKER_DRAIN_POLL_S = 0.05
 IDLE_GPU_IDLE_RATIO_THRESHOLD = 0.80
 IDLE_GPU_LOW_IDLE_FRACTION_THRESHOLD = 0.40
 IDLE_GPU_FREQ_MEAN_MHZ_THRESHOLD = 800.0
@@ -109,10 +112,16 @@ class PowermetricsTelemetryAdapter:
         *,
         executable: str = POWER_METRICS,
         privilege_prefix: tuple[str, ...] = ("sudo", "-n"),
+        drain_monotonic: Callable[[], float] | None = None,
+        drain_sleep: Callable[[float], None] | None = None,
     ) -> None:
         self._clock = clock
         self._executable = executable
         self._privilege_prefix = tuple(privilege_prefix)
+        self._drain_monotonic = (
+            drain_monotonic if drain_monotonic is not None else time.monotonic
+        )
+        self._drain_sleep = drain_sleep if drain_sleep is not None else time.sleep
         self._process: subprocess.Popen[bytes] | None = None
         self._capture_path: Path | None = None
         self._clock_start_s: float | None = None
@@ -288,14 +297,20 @@ class PowermetricsTelemetryAdapter:
     ) -> TelemetryStopResult:
         """Stop the real sampler and derive current-era clock/phase evidence."""
 
-        data, _ = self._take_measured_capture()
+        bracket_deadline: float | None = None
+        try:
+            bracket_deadline = self._drain_until_stop_bracket(
+                config,
+                sampling_started=sampling_started,
+                sampling_stopped=sampling_stopped,
+            )
+        finally:
+            data, _ = self._take_measured_capture()
         if data is None:
             evidence, _ = derive_powermetrics_clock_evidence(
                 stamps={}, elapsed_s=[], plist_timestamp_s=[]
             )
             return TelemetryStopResult([], evidence)
-        if context is not None:
-            self._persist_capture(context, RAW_SAMPLES_NAME, data)
         native_records, diagnostic = _parse_powermetrics_records(data)
         post_parse_stamp = self._clock.stamp()
         stamps: dict[str, ClockStamp] = {
@@ -315,6 +330,34 @@ class PowermetricsTelemetryAdapter:
                 for record in native_records
             ],
         )
+        if bracket_deadline is not None and point_anchor_s is not None:
+            # Freeze only after termination and the authoritative post-parse
+            # stamp. The provisional drain anchor can select an earlier record
+            # when the final wall/monotonic envelope shifts.
+            bracketed_data = self._freeze_stop_bracketing_prefix(
+                data,
+                native_records=native_records,
+                diagnostic=diagnostic,
+                point_anchor_s=point_anchor_s,
+                sampling_stopped=sampling_stopped,
+                deadline=bracket_deadline,
+            )
+            if bracketed_data is not None:
+                data = bracketed_data
+                native_records, diagnostic = _parse_powermetrics_records(data)
+                evidence, point_anchor_s = derive_powermetrics_clock_evidence(
+                    stamps=stamps,
+                    elapsed_s=[
+                        record.elapsed_ns / 1_000_000_000.0
+                        for record in native_records
+                    ],
+                    plist_timestamp_s=[
+                        float(record.metadata["plist_timestamp_s"])
+                        for record in native_records
+                    ],
+                )
+        if context is not None:
+            self._persist_capture(context, RAW_SAMPLES_NAME, data)
         records = (
             parse_powermetrics_records(data, first_record_endpoint_s=point_anchor_s)
             if point_anchor_s is not None
@@ -323,6 +366,155 @@ class PowermetricsTelemetryAdapter:
         self._preserve_measured_capture(data, records, diagnostic, context)
         self._release_capture(RAW_SAMPLES_NAME)
         return TelemetryStopResult(samples_from_records(records), evidence)
+
+    def _drain_until_stop_bracket(
+        self,
+        config: BenchmarkConfig,
+        *,
+        sampling_started: ClockStamp,
+        sampling_stopped: ClockStamp,
+    ) -> float | None:
+        """Bound sampler wind-down by a right-edge sample or two missed intervals."""
+
+        process = self._process
+        capture_path = self._capture_path
+        if process is None or capture_path is None:
+            return None
+        timeout_s = 2.0 / config.sampling.power_hz + POST_MARKER_DRAIN_MARGIN_S
+        deadline = self._drain_monotonic() + timeout_s
+        while self._drain_monotonic() < deadline and process.poll() is None:
+            brackets_stop = self._capture_brackets_stop(
+                capture_path,
+                deadline=deadline,
+                sampling_started=sampling_started,
+                sampling_stopped=sampling_stopped,
+            )
+            if brackets_stop:
+                return deadline
+            remaining_s = deadline - self._drain_monotonic()
+            if remaining_s <= 0.0:
+                return None
+            # This wait is after the sampling_stopped marker. It only lets the
+            # native stream provide the right-edge interval; reducer windows
+            # remain marker-bounded and exclude support after that timestamp.
+            self._drain_sleep(min(POST_MARKER_DRAIN_POLL_S, remaining_s))
+        return None
+
+    def _capture_brackets_stop(
+        self,
+        capture_path: Path,
+        *,
+        deadline: float,
+        sampling_started: ClockStamp,
+        sampling_stopped: ClockStamp,
+    ) -> bool:
+        if self._drain_monotonic() >= deadline:
+            return False
+        if not capture_path.exists() or capture_path.stat().st_size == 0:
+            return False
+        if self._drain_monotonic() >= deadline:
+            return False
+        try:
+            data = capture_path.read_bytes()
+        except (OSError, ValueError):
+            return False
+        if self._drain_monotonic() >= deadline:
+            return False
+        try:
+            native_records = parse_powermetrics_records(data)
+        except (OSError, ValueError):
+            return False
+        if self._drain_monotonic() >= deadline:
+            return False
+        stamps: dict[str, ClockStamp] = {
+            "sampling_started": sampling_started,
+            "sampling_stopped": sampling_stopped,
+            # The final evidence derivation still takes its post_parse stamp
+            # after termination. Reusing the stop stamp here is provisional
+            # and avoids changing the five-stamp evidence semantics.
+            "post_parse": sampling_stopped,
+        }
+        if self._pre_spawn_stamp is not None:
+            stamps["pre_spawn"] = self._pre_spawn_stamp
+        if self._first_parse_stamp is not None:
+            stamps["first_parse"] = self._first_parse_stamp
+        elapsed_s = [
+            record.elapsed_ns / 1_000_000_000.0 for record in native_records
+        ]
+        if self._drain_monotonic() >= deadline:
+            return False
+        plist_timestamp_s = [
+            float(record.metadata["plist_timestamp_s"]) for record in native_records
+        ]
+        if self._drain_monotonic() >= deadline:
+            return False
+        _evidence, point_anchor_s = derive_powermetrics_clock_evidence(
+            stamps=stamps,
+            elapsed_s=elapsed_s,
+            plist_timestamp_s=plist_timestamp_s,
+        )
+        if self._drain_monotonic() >= deadline:
+            return False
+        if point_anchor_s is None:
+            return False
+        relative_endpoint_s = 0.0
+        for index, record in enumerate(native_records):
+            if self._drain_monotonic() >= deadline:
+                return False
+            if index > 0:
+                relative_endpoint_s += record.elapsed_ns / 1_000_000_000.0
+            if point_anchor_s + relative_endpoint_s >= sampling_stopped.epoch_s:
+                return True
+        return False
+
+    def _freeze_stop_bracketing_prefix(
+        self,
+        data: bytes,
+        *,
+        native_records: list[PowermetricsRecord],
+        diagnostic: _DroppedFrameDiagnostic | None,
+        point_anchor_s: float,
+        sampling_stopped: ClockStamp,
+        deadline: float,
+    ) -> bytes | None:
+        """Select the final-anchor prefix without working past the drain deadline."""
+
+        if self._drain_monotonic() >= deadline:
+            return None
+        relative_endpoint_s = 0.0
+        bracket_index: int | None = None
+        for index, record in enumerate(native_records):
+            if self._drain_monotonic() >= deadline:
+                return None
+            if index > 0:
+                relative_endpoint_s += record.elapsed_ns / 1_000_000_000.0
+            if point_anchor_s + relative_endpoint_s >= sampling_stopped.epoch_s:
+                bracket_index = index
+                break
+        if bracket_index is None or self._drain_monotonic() >= deadline:
+            return None
+
+        split_frames = data.split(b"\0")
+        if self._drain_monotonic() >= deadline:
+            return None
+        frames: list[bytes] = []
+        for frame in split_frames:
+            if self._drain_monotonic() >= deadline:
+                return None
+            if frame.strip():
+                frames.append(frame)
+        if self._drain_monotonic() >= deadline:
+            return None
+        prefix = b"\0".join(frames[: bracket_index + 1])
+        if self._drain_monotonic() >= deadline:
+            return None
+        if diagnostic is not None:
+            # Preserve an interrupted final write as a diagnostic without
+            # re-admitting complete post-cutoff records.
+            prefix += b"\0" + frames[-1]
+            if self._drain_monotonic() >= deadline:
+                return None
+        return prefix
 
     def _take_measured_capture(self) -> tuple[bytes | None, float | None]:
         process = self._process
