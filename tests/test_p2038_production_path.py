@@ -23,6 +23,7 @@ from joulewise.adapters.powermetrics import (
     PowermetricsTelemetryAdapter,
     parse_powermetrics_records,
 )
+from joulewise.bundle_read import BundleReader
 from joulewise.cli import validate_bundle
 from joulewise.clock import SystemClock
 from joulewise.controller import run_benchmark
@@ -142,7 +143,18 @@ class P2038ProductionPathTests(unittest.TestCase):
                 "idle_subtracted_request"
             ]
             self.assertIs(request_gate["eligible"], True)
+            self.assertIsNotNone(
+                request_gate["observed_bracketing_max_sample_gap_s"]
+            )
+            self.assertIsNotNone(request_gate["cadence_ratio"])
+            self.assertGreaterEqual(request_gate["cadence_ratio"], 4.0)
             self.assertEqual(request_gate["reasons"], [])
+            reader = BundleReader(bundle)
+            measured_window = reader.measured_window()
+            self.assertIsNotNone(measured_window)
+            support_end_s = reader.summed_curve()[-1].support_end_s
+            self.assertIsNotNone(support_end_s)
+            self.assertGreaterEqual(support_end_s, measured_window.end_s)
             assertion = assert_production_uncertainty(
                 bundle, allow_mock_runtime=True
             )
