@@ -1,7 +1,12 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-17, Window-A floor publication + advisor-brief/top-doc
-refresh. Automation informs; Ed deploys.
+Refreshed: 2026-07-17 (SITE SOURCE READY FOR ED'S DEPLOY: PR #75 merged —
+README-first structure with measurements last + the new interactive Learn
+guide on /research; capsule verified 905,568 B conservative estimate /
+876 KB Lakebed-validator-measured, under cap with headroom restored. One
+manual deploy publishes: floors + Window A state, advisor-brief-aligned
+numbers, Learn section, all of this week's landings. Deploy command
+unchanged (below). Automation informs; Ed deploys.)
 
 Additional 2026-07-17 staleness on top of everything below: the deployed site
 predates P2-038's merged-main production-shaped pass, the Window-A floor corpus
