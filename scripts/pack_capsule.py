@@ -41,6 +41,7 @@ LAKEBED_TARGET_ARTIFACT_BYTES = 943_718
 MARKED_VERSION = "18.0.6"
 LAKEBED_VERSION = "0.0.29"
 LAKEBED_LOCAL_EXECUTABLE = CAPSULE / "node_modules" / ".bin" / "lakebed"
+LAKEBED_DISCOVERY_SCHEMA = "joulewise-lakebed-discovery/v1"
 # Lakebed 0.0.25 embeds generated modules in compiled code and again in an
 # inline base64 source map. The measured residual after subtracting both
 # copies was 70,355 bytes; add 52,281 bytes of reserve. Artifact metadata is
@@ -666,20 +667,74 @@ def npm_package_version(executable: Path, package_name: str) -> str | None:
     return None
 
 
-def discover_lakebed_executable() -> Path | None:
-    """Find only the lockfile-pinned local CLI or an explicit exact-version override."""
-    configured = os.environ.get("JOULEWISE_LAKEBED_BIN")
-    candidate = Path(configured).expanduser() if configured else LAKEBED_LOCAL_EXECUTABLE
+def lakebed_discovery_event(
+    *, level: str, code: str, mode: str, message: str, candidate: Path | None = None
+) -> dict[str, str]:
+    event = {
+        "schema": LAKEBED_DISCOVERY_SCHEMA,
+        "level": level,
+        "code": code,
+        "mode": mode,
+        "message": message,
+    }
+    if candidate is not None:
+        event["candidate"] = str(candidate)
+    return event
+
+
+def emit_lakebed_discovery_event(event: dict[str, str]) -> None:
+    print(json.dumps(event, sort_keys=True, separators=(",", ":")), file=sys.stderr)
+
+
+def validate_lakebed_executable(candidate: Path, source: str) -> Path:
     if not candidate.is_file() or not os.access(candidate, os.X_OK):
-        if configured:
-            raise CapsulePackError(f"JOULEWISE_LAKEBED_BIN is not executable: {candidate}")
-        return None
+        event = lakebed_discovery_event(
+            level="ERROR",
+            code="lakebed_executable_not_executable",
+            mode="refused",
+            message=f"{source} did not resolve to an executable Lakebed CLI",
+            candidate=candidate,
+        )
+        emit_lakebed_discovery_event(event)
+        raise CapsulePackError(
+            f"Lakebed executable discovery refused: {source} is not executable: {candidate}"
+        )
     version = npm_package_version(candidate, "lakebed")
     if version != LAKEBED_VERSION:
+        event = lakebed_discovery_event(
+            level="ERROR",
+            code="lakebed_version_mismatch",
+            mode="refused",
+            message=(
+                f"{source} resolved Lakebed {version or 'unknown'}; "
+                f"exact version {LAKEBED_VERSION} is required"
+            ),
+            candidate=candidate,
+        )
+        emit_lakebed_discovery_event(event)
         raise CapsulePackError(
             f"Lakebed version mismatch at {candidate}: expected {LAKEBED_VERSION}, found {version or 'unknown'}"
         )
     return candidate.resolve()
+
+
+def discover_lakebed_executable() -> Path | None:
+    """Find an exact-version Lakebed CLI through explicit, local, then OS paths."""
+    if "JOULEWISE_LAKEBED_BIN" in os.environ:
+        configured = os.environ["JOULEWISE_LAKEBED_BIN"]
+        candidate = Path(configured).expanduser() if configured else Path(configured)
+        return validate_lakebed_executable(candidate, "JOULEWISE_LAKEBED_BIN")
+
+    if LAKEBED_LOCAL_EXECUTABLE.is_file():
+        return validate_lakebed_executable(
+            LAKEBED_LOCAL_EXECUTABLE,
+            "site_capsule/node_modules/.bin/lakebed",
+        )
+
+    discovered = shutil.which("lakebed")
+    if discovered:
+        return validate_lakebed_executable(Path(discovered), "OS PATH")
+    return None
 
 
 def lakebed_stable_json_size(value: object) -> int:
@@ -749,6 +804,18 @@ def enforce_lakebed_artifact_postcondition(
     capsule_dir = CAPSULE if capsule_dir is None else capsule_dir
     executable = discover_lakebed_executable()
     if executable is None:
+        emit_lakebed_discovery_event(
+            lakebed_discovery_event(
+                level="WARNING",
+                code="lakebed_executable_unavailable",
+                mode="estimator_only_advisory",
+                message=(
+                    "No exact-version Lakebed executable was found via "
+                    "JOULEWISE_LAKEBED_BIN, site_capsule/node_modules/.bin/lakebed, "
+                    "or OS PATH; artifact size is not measured"
+                ),
+            )
+        )
         print(
             "Lakebed artifact postcondition mode: estimator-only advisory "
             "(Lakebed executable unavailable)"

@@ -1,6 +1,7 @@
 import base64
 import contextlib
 import gzip
+import importlib.util
 import io
 import json
 import os
@@ -28,6 +29,25 @@ def decode_ts_string_expression(expression):
 
 
 class PackCapsuleTests(unittest.TestCase):
+    def require_pinned_esbuild(self):
+        node_modules = pack_capsule.CAPSULE / "node_modules"
+        if not node_modules.exists():
+            message = (
+                "SITE-02 NODE EMITTED TYPESCRIPT GATE SKIP: pinned esbuild dependencies "
+                "unavailable (site_capsule/node_modules is absent; run npm ci in site_capsule)"
+            )
+            print(message, file=sys.stderr)
+            self.skipTest(message)
+
+        esbuild = node_modules / ".bin" / "esbuild"
+        self.assertTrue(
+            esbuild.is_file() and os.access(esbuild, os.X_OK),
+            "SITE-02 NODE EMITTED TYPESCRIPT GATE FAILURE: damaged provisioned "
+            "installation (site_capsule/node_modules exists but "
+            "node_modules/.bin/esbuild is missing or not executable)",
+        )
+        return esbuild
+
     def test_extracts_source_chip_stamps_once(self):
         page = (
             '<span class="source-chip" title="docs/contracts/adapter_contracts.md · commit 2254570">'
@@ -257,7 +277,7 @@ class PackCapsuleTests(unittest.TestCase):
         node = shutil.which("node")
         if node is None:
             message = (
-                "SITE-01 NODE DECODE GATE SKIP: compatible node/tsx runtime "
+                "SITE-02 NODE EMITTED TYPESCRIPT GATE SKIP: compatible node runtime "
                 "unavailable (node executable not found)"
             )
             print(message, file=sys.stderr)
@@ -278,7 +298,7 @@ class PackCapsuleTests(unittest.TestCase):
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             message = (
-                "SITE-01 NODE DECODE GATE SKIP: compatible node/tsx runtime "
+                "SITE-02 NODE EMITTED TYPESCRIPT GATE SKIP: compatible node runtime "
                 f"unavailable ({exc})"
             )
             print(message, file=sys.stderr)
@@ -286,11 +306,13 @@ class PackCapsuleTests(unittest.TestCase):
         if probe.returncode != 0:
             reason = probe.stderr.strip() or f"probe exit {probe.returncode}"
             message = (
-                "SITE-01 NODE DECODE GATE SKIP: compatible node/tsx runtime "
+                "SITE-02 NODE EMITTED TYPESCRIPT GATE SKIP: compatible node runtime "
                 f"unavailable (missing required web APIs: {reason})"
             )
             print(message, file=sys.stderr)
             self.skipTest(message)
+
+        esbuild = self.require_pinned_esbuild()
 
         known_html = "<!doctype html><html><body>Known UTF-8 page: π ⚡</body></html>"
         pages = {
@@ -303,20 +325,16 @@ class PackCapsuleTests(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
             pages_path = temp_path / "pages.ts"
-            harness_path = temp_path / "decode-harness.mjs"
+            harness_path = temp_path / "decode-harness.ts"
+            compiled_path = temp_path / "decode-harness.mjs"
             pack_capsule.emit_site(pages, "body{color:#111}", pages_path)
 
             module_source = pages_path.read_text(encoding="utf-8")
-            module_source, type_count = re.subn(
-                r"^export type [^\n]+\n", "", module_source, flags=re.MULTILINE
+            self.assertEqual(
+                len(re.findall(r"^export type [^\n]+\n", module_source, flags=re.MULTILINE)),
+                3,
             )
-            self.assertEqual(type_count, 3)
-            binding_count = module_source.count("export const PACKED_SITE: PackedSite =")
-            module_source = module_source.replace(
-                "export const PACKED_SITE: PackedSite =",
-                "const PACKED_SITE =",
-            )
-            self.assertEqual(binding_count, 1)
+            self.assertEqual(module_source.count("export const PACKED_SITE: PackedSite ="), 1)
 
             server_source = (pack_capsule.CAPSULE / "server" / "index.ts").read_text(
                 encoding="utf-8"
@@ -337,29 +355,10 @@ class PackCapsuleTests(unittest.TestCase):
                 + "\n"
                 + server_source[load_shard_start:load_shard_end]
             )
-            replacements = {
-                "(value: string): Uint8Array": "(value)",
-                "(value: string): Promise<string>": "(value)",
-                "new ReadableStream<Uint8Array>": "new ReadableStream",
-                "const chunks: Uint8Array[] = []": "const chunks = []",
-            }
-            for typed, javascript in replacements.items():
-                self.assertEqual(decoder_source.count(typed), 1)
-                decoder_source = decoder_source.replace(typed, javascript)
-            shard_replacements = {
-                "const decodedShards = new Map<number, Promise<Record<string, string>>>();":
-                    "const decodedShards = new Map();",
-                "(index: number): Promise<Record<string, string>>": "(index)",
-                " as Record<string, unknown>": "",
-                " as Record<string, string>": "",
-            }
-            for typed, javascript in shard_replacements.items():
-                self.assertEqual(shard_source.count(typed), 1)
-                shard_source = shard_source.replace(typed, javascript)
 
             harness = (
-                module_source
-                + "\nconst SITE = PACKED_SITE;\n"
+                'import { PACKED_SITE } from "./pages.ts";\n'
+                + "const SITE = PACKED_SITE;\n"
                 + decoder_source
                 + "\n"
                 + shard_source
@@ -392,8 +391,26 @@ console.log(JSON.stringify({
 '''
             )
             harness_path.write_text(harness, encoding="utf-8")
+            compiled = subprocess.run(
+                [
+                    str(esbuild),
+                    str(harness_path),
+                    "--bundle",
+                    "--platform=node",
+                    "--format=esm",
+                    "--target=node20",
+                    "--log-level=warning",
+                    f"--outfile={compiled_path}",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=20,
+            )
+            self.assertEqual(compiled.returncode, 0, compiled.stderr)
+            self.assertTrue(compiled_path.is_file())
             completed = subprocess.run(
-                [node, str(harness_path)],
+                [node, str(compiled_path)],
                 capture_output=True,
                 text=True,
                 check=False,
@@ -407,6 +424,21 @@ console.log(JSON.stringify({
             base64.b64encode(known_html.encode("utf-8")).decode("ascii"),
         )
         self.assertTrue(result["corruptRaised"])
+        print(
+            "SITE-02 NODE EMITTED TYPESCRIPT GATE PASS: "
+            f"esbuild exit {compiled.returncode}; node exit {completed.returncode}; "
+            "emitted pages.ts roundtrip and corruption refusal verified"
+        )
+
+    def test_emitted_typescript_gate_refuses_damaged_provisioned_esbuild(self):
+        with TemporaryDirectory() as temp_dir:
+            capsule = Path(temp_dir) / "site_capsule"
+            (capsule / "node_modules").mkdir(parents=True)
+            with (
+                mock.patch.object(pack_capsule, "CAPSULE", capsule),
+                self.assertRaisesRegex(AssertionError, "damaged provisioned installation"),
+            ):
+                self.require_pinned_esbuild()
 
     def test_page_shard_refuses_an_individually_oversized_page(self):
         pages = {
@@ -463,15 +495,178 @@ console.log(JSON.stringify({
 
     def test_estimator_only_postcondition_is_clearly_advisory(self):
         stdout = io.StringIO()
+        stderr = io.StringIO()
         content_size = 200_000
         with (
             mock.patch.object(pack_capsule, "discover_lakebed_executable", return_value=None),
             contextlib.redirect_stdout(stdout),
+            contextlib.redirect_stderr(stderr),
         ):
             observed = pack_capsule.enforce_lakebed_artifact_postcondition(content_size)
         self.assertEqual(observed, pack_capsule.estimate_lakebed_artifact_size(content_size))
         self.assertIn("postcondition mode: estimator-only advisory", stdout.getvalue())
         self.assertIn("Lakebed executable unavailable", stdout.getvalue())
+        notice = json.loads(stderr.getvalue())
+        self.assertEqual(notice["schema"], pack_capsule.LAKEBED_DISCOVERY_SCHEMA)
+        self.assertEqual(notice["level"], "WARNING")
+        self.assertEqual(notice["code"], "lakebed_executable_unavailable")
+        self.assertEqual(notice["mode"], "estimator_only_advisory")
+
+    def test_missing_configured_lakebed_fails_loudly_on_real_discovery_path(self):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with TemporaryDirectory() as temp_dir:
+            missing = Path(temp_dir) / "lakebed-does-not-exist"
+            with (
+                mock.patch.dict(
+                    os.environ,
+                    {
+                        "JOULEWISE_LAKEBED_BIN": str(missing),
+                        "PATH": "",
+                    },
+                    clear=True,
+                ),
+                contextlib.redirect_stdout(stdout),
+                contextlib.redirect_stderr(stderr),
+                self.assertRaisesRegex(
+                    pack_capsule.CapsulePackError,
+                    "JOULEWISE_LAKEBED_BIN is not executable",
+                ),
+            ):
+                pack_capsule.enforce_lakebed_artifact_postcondition(200_000)
+
+        notice = json.loads(stderr.getvalue())
+        self.assertEqual(notice["schema"], pack_capsule.LAKEBED_DISCOVERY_SCHEMA)
+        self.assertEqual(notice["level"], "ERROR")
+        self.assertEqual(notice["code"], "lakebed_executable_not_executable")
+        self.assertEqual(notice["mode"], "refused")
+        self.assertEqual(notice["candidate"], str(missing))
+        self.assertNotIn("estimator-only advisory", stdout.getvalue())
+
+    def test_os_path_discovers_exact_version_lakebed_off_machine_layout(self):
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            package = temp_path / "node_modules" / "lakebed"
+            executable = package / "bin" / "lakebed.js"
+            path_bin = temp_path / "bin"
+            empty_bin = temp_path / "empty-bin"
+            executable.parent.mkdir(parents=True)
+            path_bin.mkdir()
+            empty_bin.mkdir()
+            (package / "package.json").write_text(
+                json.dumps({"name": "lakebed", "version": pack_capsule.LAKEBED_VERSION}),
+                encoding="utf-8",
+            )
+            executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            executable.chmod(0o755)
+            (path_bin / "lakebed").symlink_to(executable)
+
+            isolated_script = temp_path / "checkout" / "scripts" / "pack_capsule.py"
+            isolated_script.parent.mkdir(parents=True)
+            shutil.copy2(Path(pack_capsule.__file__), isolated_script)
+            probe = (
+                "import importlib.util, pathlib, sys;"
+                "p=pathlib.Path(" + repr(str(isolated_script)) + ");"
+                "s=importlib.util.spec_from_file_location('isolated_pack_capsule',p);"
+                "m=importlib.util.module_from_spec(s);sys.modules[s.name]=m;s.loader.exec_module(m);"
+                "print(m.discover_lakebed_executable())"
+            )
+            environment = os.environ.copy()
+            environment.pop("JOULEWISE_LAKEBED_BIN", None)
+            environment["PATH"] = str(empty_bin)
+            unavailable_probe = probe.replace(
+                "print(m.discover_lakebed_executable())",
+                "print(m.enforce_lakebed_artifact_postcondition(200000))",
+            )
+            unavailable = subprocess.run(
+                [sys.executable, "-c", unavailable_probe],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+                env=environment,
+            )
+
+            environment["PATH"] = str(path_bin)
+            completed = subprocess.run(
+                [sys.executable, "-c", probe],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=10,
+                env=environment,
+            )
+
+        self.assertEqual(unavailable.returncode, 0, unavailable.stderr)
+        self.assertIn("postcondition mode: estimator-only advisory", unavailable.stdout)
+        unavailable_notice = json.loads(unavailable.stderr)
+        self.assertEqual(unavailable_notice["level"], "WARNING")
+        self.assertEqual(unavailable_notice["code"], "lakebed_executable_unavailable")
+        self.assertEqual(unavailable_notice["mode"], "estimator_only_advisory")
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout.strip(), str(executable.resolve()))
+
+    def test_os_path_wrong_version_lakebed_refuses_without_estimator_advisory(self):
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            wrong_package = temp_path / "wrong" / "node_modules" / "lakebed"
+            wrong_executable = wrong_package / "bin" / "lakebed.js"
+            wrong_path_bin = temp_path / "wrong-bin"
+            correct_package = temp_path / "correct" / "node_modules" / "lakebed"
+            correct_executable = correct_package / "bin" / "lakebed.js"
+            correct_path_bin = temp_path / "correct-bin"
+            wrong_executable.parent.mkdir(parents=True)
+            wrong_path_bin.mkdir()
+            correct_executable.parent.mkdir(parents=True)
+            correct_path_bin.mkdir()
+            (wrong_package / "package.json").write_text(
+                json.dumps({"name": "lakebed", "version": "0.0.28"}),
+                encoding="utf-8",
+            )
+            wrong_executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            wrong_executable.chmod(0o755)
+            (wrong_path_bin / "lakebed").symlink_to(wrong_executable)
+            (correct_package / "package.json").write_text(
+                json.dumps({"name": "lakebed", "version": pack_capsule.LAKEBED_VERSION}),
+                encoding="utf-8",
+            )
+            correct_executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            correct_executable.chmod(0o755)
+            (correct_path_bin / "lakebed").symlink_to(correct_executable)
+
+            isolated_script = temp_path / "checkout" / "scripts" / "pack_capsule.py"
+            isolated_script.parent.mkdir(parents=True)
+            shutil.copy2(Path(pack_capsule.__file__), isolated_script)
+            module_name = "isolated_wrong_version_pack_capsule"
+            spec = importlib.util.spec_from_file_location(module_name, isolated_script)
+            self.assertIsNotNone(spec)
+            self.assertIsNotNone(spec.loader)
+            isolated = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = isolated
+            try:
+                spec.loader.exec_module(isolated)
+                with (
+                    mock.patch.dict(
+                        os.environ,
+                        {"PATH": os.pathsep.join((str(wrong_path_bin), str(correct_path_bin)))},
+                        clear=True,
+                    ),
+                    contextlib.redirect_stdout(stdout),
+                    contextlib.redirect_stderr(stderr),
+                    self.assertRaises(isolated.CapsulePackError),
+                ):
+                    isolated.enforce_lakebed_artifact_postcondition(200_000)
+            finally:
+                sys.modules.pop(module_name, None)
+
+        notice = json.loads(stderr.getvalue())
+        self.assertEqual(notice["schema"], isolated.LAKEBED_DISCOVERY_SCHEMA)
+        self.assertEqual(notice["code"], "lakebed_version_mismatch")
+        self.assertEqual(notice["mode"], "refused")
+        self.assertEqual(notice["candidate"], str(wrong_path_bin / "lakebed"))
+        self.assertNotIn("estimator-only advisory", stdout.getvalue())
 
     def test_discovered_lakebed_build_failure_does_not_fall_back_to_estimator(self):
         stdout = io.StringIO()
