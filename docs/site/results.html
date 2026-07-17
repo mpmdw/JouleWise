@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Results — JouleWise</title>
+<title>Measurements - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -12,167 +13,25 @@
   <nav class="nav">
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
-      <a href="index.html">Story</a>
+      <a href="index.html">Project</a>
+      <a href="research.html">Learn</a>
       <a href="status.html">Status</a>
       <a href="roadmap.html">Roadmap</a>
-      <a href="record.html">Record</a>
-      <a href="results.html" class="active">Results</a>
       <a href="process.html">Process</a>
-      <a href="research.html">Research</a>
+      <a href="record.html">Record</a>
       <a href="library.html">Sources</a>
+      <a href="results.html" class="active">Measurements</a>
     </div>
   </nav>
 </header>
-
 <main>
-<div class="hero" style="padding-bottom:10px">
-  <div class="kicker">Measured evidence · Apple M3 Max · MLX runtime · powermetrics telemetry</div>
-  <h1 style="font-size:clamp(36px,5vw,56px)">What the instrument<br>has actually measured.</h1>
-  <p class="lede">Everything on this page comes from strict-validated run
-  bundles, committed spike reports, or the repository's verification
-  records (test suite, CI, run reports). Approximate values are marked
-  <span class="mono">~</span>; every figure names its source.</p>
-</div>
-
-<section class="band tight reveal">
-  <div class="kicker">Cross-model comparison</div>
-  <h2>Two models, one machine, identical harness.</h2>
-  <div class="rule"></div>
-  <div class="legend">
-    <span><span class="sw" style="background:var(--amber-data)"></span>Qwen2.5-1.5B (4-bit)</span>
-    <span><span class="sw" style="background:var(--cyan-data)"></span>Qwen3.5-122B MoE (10B active)</span>
-  </div>
-  <div class="cols c3">
-    <figure class="chart panel">
-      <div class="card-label">Energy per generated token</div>
-      <svg viewBox="0 0 300 210" role="img" aria-label="Bar chart: energy per token, 87 millijoules for the 1.5B model versus 583 for the 122B model">
-        <line class="gridline" x1="40" y1="170" x2="290" y2="170"/>
-        <rect class="bar-a" x="70"  y="146.7" width="64" height="23.3" rx="4"><title>Qwen2.5-1.5B: ~87 mJ/token</title></rect>
-        <rect class="bar-b" x="176" y="14"    width="64" height="156" rx="4"><title>Qwen3.5-122B: ~583 mJ/token</title></rect>
-        <text x="102" y="138" text-anchor="middle" class="dlabel">~87</text>
-        <text x="208" y="8"   text-anchor="middle" class="dlabel">~583</text>
-        <text x="102" y="188" text-anchor="middle" class="axis">1.5B</text>
-        <text x="208" y="188" text-anchor="middle" class="axis">122B</text>
-        <text x="36"  y="174" text-anchor="end" class="axis">0</text>
-        <text x="150" y="207" text-anchor="middle" class="dsub">mJ / output token</text>
-      </svg>
-      <figcaption>~6.7× per-token energy · run reports 2026-07-06 (2I) &amp; 2026-07-07 (flagship)</figcaption>
-    </figure>
-    <figure class="chart panel">
-      <div class="card-label">Decode power — nearly flat</div>
-      <svg viewBox="0 0 300 210" role="img" aria-label="Bar chart: decode power, 23.5 watts versus 27.5 watts">
-        <line class="gridline" x1="40" y1="170" x2="290" y2="170"/>
-        <rect class="bar-a" x="70"  y="36.6" width="64" height="133.4" rx="4"><title>Qwen2.5-1.5B: ~23.5 W decode</title></rect>
-        <rect class="bar-b" x="176" y="14"   width="64" height="156" rx="4"><title>Qwen3.5-122B: ~27.5 W decode</title></rect>
-        <text x="102" y="29" text-anchor="middle" class="dlabel">~23.5</text>
-        <text x="208" y="8"  text-anchor="middle" class="dlabel">~27.5</text>
-        <text x="102" y="188" text-anchor="middle" class="axis">1.5B</text>
-        <text x="208" y="188" text-anchor="middle" class="axis">122B</text>
-        <text x="36"  y="174" text-anchor="end" class="axis">0</text>
-        <text x="150" y="207" text-anchor="middle" class="dsub">watts during decode (axis from 0)</text>
-      </svg>
-      <figcaption>80× the parameters, ≈17% more power — the cost went to time</figcaption>
-    </figure>
-    <figure class="chart panel">
-      <div class="card-label">Throughput</div>
-      <svg viewBox="0 0 300 210" role="img" aria-label="Bar chart: throughput, 257 tokens per second versus 46">
-        <line class="gridline" x1="40" y1="170" x2="290" y2="170"/>
-        <rect class="bar-a" x="70"  y="14"    width="64" height="156" rx="4"><title>Qwen2.5-1.5B: 257 tok/s</title></rect>
-        <rect class="bar-b" x="176" y="142.1" width="64" height="27.9" rx="4"><title>Qwen3.5-122B: 46 tok/s</title></rect>
-        <text x="102" y="8"   text-anchor="middle" class="dlabel">257</text>
-        <text x="208" y="134" text-anchor="middle" class="dlabel">46</text>
-        <text x="102" y="188" text-anchor="middle" class="axis">1.5B</text>
-        <text x="208" y="188" text-anchor="middle" class="axis">122B</text>
-        <text x="36"  y="174" text-anchor="end" class="axis">0</text>
-        <text x="150" y="207" text-anchor="middle" class="dsub">tokens / second</text>
-      </svg>
-      <figcaption>512-token requests: ~47 J vs ~304 J gross per request</figcaption>
-    </figure>
-  </div>
-  <p style="margin-top:22px; font-size:14.5px"><span class="mono" style="color:var(--ink-3)">
-  Honest caveat, straight from the docs: these two points differ in size,
-  architecture, AND quantization — consistent with the fixed-vs-marginal
-  model, not proof of it.</span></p>
-</section>
-
-<section class="band reveal">
-  <div class="kicker">Precision</div>
-  <h2>The instrument repeats itself.</h2>
-  <div class="rule"></div>
-  <div class="readout-row">
-    <div class="readout"><div class="val">99.19 ± 1.36<span class="unit">mJ/token</span></div><div class="sub">n=3 verification workload (distinct from the ~87 mJ headline run) · Student-t 95% CI · CV 0.55% · n=3 is below the n=5 headline protocol and recorded as such in-bundle · re-derivable byte-identically</div></div>
-    <div class="readout plain"><div class="val">0.3<span class="unit">%</span></div><div class="sub">flagship request-energy spread across repetitions</div></div>
-    <div class="readout plain"><div class="val">94<span class="unit">ms</span></div><div class="sub">time to first token · 1.5B · prefill energy ~0.03 J</div></div>
-    <div class="readout plain"><div class="val">~8.8<span class="unit">Hz</span></div><div class="sub">observed powermetrics cadence (requested 10 — recorded, not hidden)</div></div>
-  </div>
-  <p style="margin-top:22px">Every multi-repetition experiment carries
-  per-metric confidence intervals with outlier detection, and an
-  <strong>idle-contamination gate</strong> that mechanically flags runs taken on a busy
-  machine. Its first live catch was the development system's own
-  verification run — the instrument audits its operators.</p>
-</section>
-
-<section class="band reveal">
-  <div class="kicker">Feasibility verdict · Phase 3</div>
-  <h2>A saved thought resumes exactly.</h2>
-  <div class="rule"></div>
-  <div class="cols c2">
-    <div>
-      <p>Split inference needs the model's working memory — the
-      <strong>KV cache</strong> — to survive a save, a process boundary, and a reload.
-      The Stage 3.0.1 spike proved it on this hardware: prefill in one OS
-      process, save to disk, resume decoding in a <strong>fresh process</strong>, and
-      compare against an unbroken run.</p>
-      <p>Verdict: <strong>64 of 64 decode tokens identical</strong> at both tested
-      prompt lengths, zero divergence — and the analytic cache-size model
-      predicted the on-disk size to within a constant 5.3 KiB header.</p>
-      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:6px">
-        <span class="badge good">verdict: replay_supported</span>
-        <span class="badge amber">lead re-verified at merge time — fresh process, same command</span>
-      </div>
-    </div>
-    <figure class="chart panel">
-      <div class="card-label">Cache size: predicted vs measured</div>
-      <table class="ledger">
-        <tr><th>prompt</th><th>predicted</th><th>measured</th><th>delta</th></tr>
-        <tr><td>1024 tok</td><td>28.00 MiB</td><td>28.01 MiB</td><td class="mono" style="color:var(--good)">+0.018%</td></tr>
-        <tr><td>2048 tok</td><td>56.00 MiB</td><td>56.01 MiB</td><td class="mono" style="color:var(--good)">+0.009%</td></tr>
-      </table>
-      <figcaption>constant ~5.3 KiB file header; no multiplicative error · kv_feasibility.md §3.0.1</figcaption>
-    </figure>
-  </div>
-</section>
-
-<section class="band reveal">
-  <div class="kicker">Instrument integrity</div>
-  <h2>The numbers defend themselves.</h2>
-  <div class="rule"></div>
-  <div class="cols c3">
-    <div class="readout plain"><div class="val">546</div><div class="sub">tests, zero expected failures, CI-enforced on 2 Python versions</div></div>
-    <div class="readout plain"><div class="val">6 / 6</div><div class="sub">real corpus bundles pass strict — unmodified, re-derived from raw</div></div>
-    <div class="readout plain"><div class="val">27</div><div class="sub">defects found by a repo-wide audit — pinned as 31 failing tests, all fixed</div></div>
-  </div>
-  <div class="panel" style="margin-top:28px">
-    <div class="card-label">What "strict" re-derives, in order</div>
-    <table class="ledger">
-      <tr><td>1</td><td>raw powermetrics plist → <strong>power trace</strong> — every timestamp, rail, and watt must match the stored CSV exactly</td></tr>
-      <tr><td>2</td><td>trace + event log → <strong>summary metrics</strong> — fresh reduction must equal the stored summary</td></tr>
-      <tr><td>3</td><td><strong>provenance shape</strong> — new bundles must carry reducer/schema versions and the hash of the exact prompt token IDs fed to the model</td></tr>
-    </table>
-  </div>
-</section>
+<section class="readme-hero measurement-hero"> <div class="kicker">Measurements · after method, evidence, and gates</div> <p class="readme-eyebrow">Numbers with their basis attached.</p> <h1>What the instrument<br>has observed so far.</h1> <p class="lede">This is a measurement ledger, not a leaderboard. Gross energy is the comparison headline. Idle-subtracted energy is shown only as a within-device secondary view. Strict-valid collection and claim readiness are reported separately.</p> <div class="provenance-plate"><span class="source-chip" title="docs/decision_log.md · commit ed19efa"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit ed19efa</span></span> <span class="source-chip" title="docs/contracts/claims_ladder.md · commit db150a0"><span class="source-file">docs/<wbr>contracts/<wbr>claims_ladder.md</span><span class="source-commit">commit db150a0</span></span> <span class="source-chip" title="docs/site_src/results.html · commit 632d9eb"><span class="source-file">docs/<wbr>site_src/<wbr>results.html</span><span class="source-commit">commit 632d9eb</span></span></div> </section> <section class="band tight readme-section"> <div class="kicker">Basis rule · D-067</div> <div class="basis-banner"> <div><strong>Headline basis</strong><span>gross energy within the named <code>powermetrics</code> SoC-rail boundary</span></div> <div><strong>Secondary view</strong><span>idle-subtracted energy, within-device only; never used to rank devices or configurations</span></div> <div><strong>Phase energy</strong><span>gross only, per D-032</span></div> </div> </section> <section class="band readme-section"> <div class="kicker">Legacy descriptive baseline · Apple M3 Max</div> <h2>The first live Mac observations.</h2> <p class="section-intro">These are legacy L1 preliminary observations from the initial MLX + <code>powermetrics</code> vertical slice, before the governed baseline campaign.</p> <div class="measurement-grid"> <article class="readout"><div class="card-label">Gross request energy · headline basis</div><div class="val">≈47.2<span class="unit">J/request</span></div><div class="sub">M3 Max · powermetrics SoC rails · gross measured interval</div></article> <article class="readout cyan"><div class="card-label">Idle-subtracted request energy · secondary</div><div class="val">≈44.4<span class="unit">J/request</span></div><div class="sub">same device only · activity above measured idle baseline</div></article> <article class="readout cyan"><div class="card-label">Idle-subtracted output-token energy · secondary</div><div class="val">86.8<span class="unit">mJ/token mean</span></div><div class="sub">observed range 79–90 mJ/token · same-device secondary view</div></article> <article class="readout plain"><div class="card-label">Companion performance metric</div><div class="val">257<span class="unit">token/s</span></div><div class="sub">throughput; not an energy-basis measurement</div></article> </div> <div class="provenance-plate"><span class="source-chip" title="README.md · commit 6c12e12"><span class="source-file">README.md</span><span class="source-commit">commit 6c12e12</span></span></div> </section> <section class="band readme-section"> <div class="kicker">Verified Window-A floor extraction</div> <h2>How large a change must be before this run can resolve it?</h2> <p class="section-intro">Each value below is a false-effect guard floor from the verified extraction. “Absolute” describes repeat scatter; “comparative” uses ABBA blocks and may be larger under drift. A later effect must clear the applicable gate <em>and</em> every other claim gate.</p> <div class="table-scroll"> <table class="ledger measurement-table"> <thead><tr><th>window</th><th>basis</th><th>absolute floor</th><th>comparative / governing gate</th></tr></thead> <tbody> <tr><td>mid request</td><td>gross · headline</td><td>0.527197 J</td><td>0.909237 J</td></tr> <tr><td>mid request</td><td>idle-subtracted · within-device secondary</td><td>0.536632 J</td><td>0.894215 J</td></tr> <tr><td>prefill phase</td><td>gross · phase basis</td><td>see extraction</td><td>1.738940 J governing gate</td></tr> <tr><td>decode phase</td><td>gross · phase basis</td><td>see extraction</td><td>1.026892 J governing gate</td></tr> <tr><td>suite item</td><td>gross · headline</td><td>see extraction</td><td>4.922865 J governing gate</td></tr> <tr><td>suite level</td><td>gross · headline</td><td>see extraction</td><td>24.618735 J governing gate</td></tr> </tbody> </table> </div> <div class="evidence-warning"><strong>Collection-complete is not claim-ready.</strong> Every floor bundle was strict-valid and collection-usable, but every one was also claim-evidence flagged. Clock-bound and in-window-sample flags were universal; several comparative cells also show drift or cooldown concerns. These floors are honestly reported calibration evidence pending the named adjudication gates.</div> <div class="provenance-plate"><span class="source-chip" title="docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json · commit b28c895"><span class="source-file">docs/<wbr>process_traces/<wbr>2026-07-17-floor-extraction/<wbr>extraction-verified.json</span><span class="source-commit">commit b28c895</span></span></div> </section> <section class="band readme-section"> <div class="kicker">Interpretation</div> <h2>What can—and cannot—be said today.</h2> <div class="claim-grid measurement-claims"> <div><span class="status-chip">Supported</span><p>The harness has made real, descriptive, gross-basis and labeled idle-secondary observations on the named Mac and telemetry boundary.</p></div> <div><span class="status-chip amber">Calibration only</span><p>The verified floor values describe the observed campaign conditions; they do not by themselves establish a model or configuration difference.</p></div> <div><span class="status-chip danger">Not supported</span><p>No cross-device ranking, broad content-neutrality result, or split-inference energy win is claimed from these measurements.</p></div> </div> <p><a href="research.html#floor">Use the interactive floor gate →</a></p> </section>
 </main>
-
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>sources: run reports 2026-06-12 → 2026-07-08 · <a href="library.html">library</a></span>
+    <span>docs/site_src/results.html · commit 632d9eb · README.md · commit 6c12e12 · docs/decision_log.md · commit ed19efa · docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json · commit b28c895 · docs/contracts/claims_ladder.md · commit db150a0 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
-
-<script>
-const io = new IntersectionObserver(es => es.forEach(e => e.isIntersecting && e.target.classList.add('in')), {threshold:.12});
-document.querySelectorAll('.reveal').forEach(el => io.observe(el));
-</script>
 </body>
 </html>

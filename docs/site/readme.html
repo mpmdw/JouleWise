@@ -13,14 +13,14 @@
   <nav class="nav">
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
-      <a href="index.html">Story</a>
+      <a href="index.html">Project</a>
+      <a href="research.html">Learn</a>
       <a href="status.html">Status</a>
       <a href="roadmap.html">Roadmap</a>
-      <a href="record.html">Record</a>
-      <a href="results.html">Results</a>
       <a href="process.html">Process</a>
-      <a href="research.html">Research</a>
+      <a href="record.html">Record</a>
       <a href="library.html" class="active">Sources</a>
+      <a href="results.html">Measurements</a>
     </div>
   </nav>
 </header>
@@ -34,149 +34,59 @@
 <a href="#documentation-map">Documentation Map</a></aside>
   <div class="doc-wrap doc-source-readme-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>README.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="README.md · commit 0de4cea"><span class="source-file">README.md</span><span class="source-commit">commit 0de4cea</span></span></div>
-    <!-- rendered: marked@18.0.6 -->
+    <div class="provenance-plate"><span class="source-chip" title="README.md · commit 6c12e12"><span class="source-file">README.md</span><span class="source-commit">commit 6c12e12</span></span></div>
+    <!-- rendered: offline-fallback -->
 <h1>JouleWise</h1>
-<p>JouleWise is an extensible measurement harness for energy-wise LLM inference
-across heterogeneous local hardware. The benchmark layered on that harness is
-the frozen workload suite, run rules, and strict validator. The name is a
-deliberate nod to JouleSort and Splitwise: energy measurement as the spine,
-split inference as the first major research application.</p>
+<p>JouleWise is an extensible measurement harness for energy-wise LLM inference across heterogeneous local hardware. The benchmark layered on that harness is the frozen workload suite, run rules, and strict validator. The name is a deliberate nod to JouleSort and Splitwise: energy measurement as the spine, split inference as the first major research application.</p>
 <p>The harness is designed around three stable ideas:</p>
-<ul>
-<li>Typed experiment configs define what should run.</li>
-<li>Runtime and telemetry adapters define how each hardware target is exercised
-and measured.</li>
-<li>Run bundles preserve raw traces, events, metadata, logs, and summary metrics
-for later audit and analysis.</li>
-</ul>
-<p><strong>Status:</strong> research prototype. The Mac (Apple M3 Max) measurement harness has
-cleared its pre-campaign software review, the analysis path is implemented,
-and the comprehensive-audit fix wave is integrated on this landing branch.
-This summary does not select work: the generated state-kernel regions in
-<code>RUN_STATE.md</code> and <code>TASK_QUEUE.md</code> own the live gate and next-task state.
-Quiet-machine execution still requires the lead-controlled hardware lane with
-Ed; no audit or software landing is new measurement evidence. The verified
-end-user quickstart remains a Phase 5 deliverable.</p>
+<ul><li>Typed experiment configs define what should run.</li><li>Runtime and telemetry adapters define how each hardware target is exercised and measured.</li><li>Run bundles preserve raw traces, events, metadata, logs, and summary metrics for later audit and analysis.</li></ul>
+<p><strong>Status:</strong> research prototype. The Mac (Apple M3 Max) measurement harness has cleared its pre-campaign software review, the analysis path is implemented, and the comprehensive audit is closed on <code>main</code>. P2-038 is closed by a production-shaped merged-main pass, Window A is open, and its first detection- floor set is published from 222 distinct strict-valid, collection-usable bundles. All 222 are also claim-evidence-flagged, so strict validity is not claim readiness and P2-037 claim adjudication remains pending. The verified floor table and its caveats are in <code>PROJECT_STATUS.md</code>; the shipped advisor deliverable is <code>docs/advisor_briefs/2026-07-17-window-a-brief.html</code>.</p>
+<p>The post-audit architectural verdicts remain deliberately bounded: AXI-SB is <code>supported</code> for native static-batch runtime feasibility with request-scoped observability, while AXI-SC is <code>unsupported_for_joulewise</code> on the pinned runtime because the required speculative-decode/MTP observability or execution surface is absent. Neither is energy evidence. This summary does not select work: the generated state-kernel regions in <code>RUN_STATE.md</code> and <code>TASK_QUEUE.md</code> own live gates and next-task state. Quiet-machine execution still requires the lead-controlled hardware lane with Ed. The verified end-user quickstart remains a Phase 5 deliverable.</p>
 <h2 id="current-state">Current State</h2>
-<p>Phase 1 is in its final stretch; <strong>Phase 2&#39;s Mac vertical slice is complete
-and the project has its first real energy measurements</strong> (2026-07-06). From a
-typed config, one command produces a complete, schema-valid, auditable run
-bundle and reduces it to energy/latency summary metrics — proven first on
-deterministic mock adapters, and now live on real hardware: the MLX runtime +
-<code>powermetrics</code> telemetry adapters measured Qwen2.5-1.5B-Instruct (4-bit) on an
-Apple M3 Max at ~47.2 J gross rail energy per 512-token request (~44.4 J
-idle-subtracted; ~79-90 mJ per generated output token on the idle-subtracted
-basis, mean 86.8 mJ; 257 tok/s). These are legacy L1 preliminary
-observations (pre-2M, manual review) under
-<code>docs/contracts/claims_ladder.md</code>; metric bases per
-<code>docs/contracts/token_normalization.md</code>. The six real corpus bundles pass <code>validate-bundle --strict</code>
-read-only and unrewritten: strict re-derives the recorded powermetrics power
-trace from raw plist evidence, re-derives summary metrics from the recorded
-trace and event log, checks the legacy additive summary comparison, and
-requires shape-valid provenance for new-era bundles. This validates the
-recorded evidence path; it does not independently rerun the hardware session.
-Remaining backends plug into the same adapter interfaces: the fixture-first
-2K NVIDIA stack (SSH transport, node worker, nvidia-smi + vLLM adapters)
-includes NV-GATE-2 software hardening: per-backend raw-lineage verifier
-registration, usage-first vLLM streaming, and identity-aware process-survival
-handling. The NV-5 localhost lead gate passed 3/3, but ALL remote protocol
-pins remain PROVISIONAL pending first live hardware contact; Jetson Orin (2L)
-remains gated on device access.</p>
-<p>The landed C-028 arc includes the frozen analysis manifest, the
-production-uncertainty path, the campaign-verdict split, idle-dependence/HAC
-uncertainty, the inter-token metric, doctor preflight, and the contrast/claim
-engine. The analysis trio—manifest, verdict split, and contrast/claim
-engine—is complete. The six frozen legacy arms and 0.3.x/0.4.x dispatch rules
-remain explicit; landed software is not being presented as new live evidence.
-P0-003 closed with an iCloud Drive backup and a fresh restore that was
-strict-valid and byte-identical. No new live NVIDIA or quiet-Mac measurement
-is claimed here.</p>
+<p>Phase 1 is in its final stretch; <strong>Phase 2&#x27;s Mac vertical slice is complete and the project has its first real energy measurements</strong> (2026-07-06). From a typed config, one command produces a complete, schema-valid, auditable run bundle and reduces it to energy/latency summary metrics — proven first on deterministic mock adapters, and now live on real hardware: the MLX runtime + <code>powermetrics</code> telemetry adapters measured Qwen2.5-1.5B-Instruct (4-bit) on an Apple M3 Max. <strong>P2-003, gross energy — M3 Max / powermetrics SoC rails:</strong> ~47.2 J per 512-token request. <strong>P2-003, idle-subtracted energy — M3 Max / powermetrics SoC rails:</strong> ~44.4 J per request and ~79-90 mJ per generated output token (mean 86.8 mJ). Throughput was 257 tok/s. These are legacy L1 preliminary observations (pre-2M, manual review) under <code>docs/contracts/claims_ladder.md</code>; metric bases per <code>docs/contracts/token_normalization.md</code>. The six real corpus bundles pass <code>validate-bundle --strict</code> read-only and unrewritten: strict re-derives the recorded powermetrics power trace from raw plist evidence, re-derives summary metrics from the recorded trace and event log, checks the legacy additive summary comparison, and requires shape-valid provenance for new-era bundles. This validates the recorded evidence path; it does not independently rerun the hardware session.</p>
+<p>Unless a figure explicitly states otherwise, JouleWise uses gross measured energy within the named measurement boundary as the headline basis. Gross energy retains the idle, model-residency, and runtime overhead present during the measured interval, so comparisons across devices, configurations, and split versus monolithic execution use gross energy. Idle-subtracted energy is reported separately as a within-device secondary view of activity above the measured idle baseline; it is not used to rank devices or configurations. In Q4, the fixed term is estimated from the gross-energy workload sweep and is not set equal to measured idle energy. The advisor-review rationale and full basis/boundary rule are recorded in <a href="PROJECT_STATUS.md#measurement-methodology-highlights"><code>PROJECT_STATUS.md</code></a>.</p>
+<p>Under D-070, static batching, speculative decoding / native MTP, MoE versus dense execution, quantization, and reasoning-length variance are five stress tests of Q4&#x27;s single thesis. The harness must instrument all five axes and all five have strict-valid L0 smoke-bundle support plus characterization commitments, but every study remains floor-gated, capped at L2, and sequenced after Window A. See the fuller <a href="PROJECT_STATUS.md#summary">Q4 architectural stress-test agenda</a> in <code>PROJECT_STATUS.md</code>.</p>
+<p>Window A remains open and still requires Ed and a quiet Mac. The production-shaped P2-038 gate is closed and the first request, phase, and suite false-effect guard floors are published. Every reported energy value uses the basis-and-boundary labels in <code>PROJECT_STATUS.md</code>: gross is the D-067 headline basis; idle-subtracted energy is a labeled within-device secondary view; the current floors use the Apple M3 Max / powermetrics SoC-rail boundary. The floor corpus does not itself promote a claim, and P2-037 adjudication remains pending. Use the generated state kernel—not this summary—to select the next live or agent-lane step.</p>
+<p>Remaining backends plug into the same adapter interfaces: the fixture-first 2K NVIDIA stack (SSH transport, node worker, nvidia-smi + vLLM adapters) includes NV-GATE-2 software hardening: per-backend raw-lineage verifier registration, usage-first vLLM streaming, and identity-aware process-survival handling. The NV-5 localhost lead gate passed 3/3, but ALL remote protocol pins remain PROVISIONAL pending first live hardware contact; Jetson Orin (2L) remains gated on device access.</p>
+<p>The landed C-028 arc includes the frozen analysis manifest, the production-uncertainty path, the campaign-verdict split, idle-dependence/HAC uncertainty, the inter-token metric, doctor preflight, and the contrast/claim engine. The analysis trio—manifest, verdict split, and contrast/claim engine—is complete. The six frozen legacy arms and 0.3.x/0.4.x dispatch rules remain explicit; landed software is not being presented as new live evidence. P0-003 closed with an iCloud Drive backup and a fresh restore that was strict-valid and byte-identical. No new live NVIDIA or quiet-Mac measurement is claimed here.</p>
+<p>The post-audit landings add request-scoped AXI-SA burst/decode semantics, freeze SPLIT-AP Part I before outcomes, close SITE-02&#x27;s discovery and emitted-code regression work, and establish AXI-SB&#x27;s <code>supported</code> verdict from lead-run B=2/B=4 Metal probes. The probes establish runtime feasibility and request observability only; they add no energy result. The corresponding AXI-SC pinned-runtime spike returned <code>unsupported_for_joulewise</code>: the external- draft path lacks the full proposal/acceptance/decode-boundary observability contract, and native MTP lacks a usable generation surface. No Mac energy leg was minted from that negative applicability result.</p>
 <p>The repository currently contains:</p>
-<ul>
-<li>Typed config and output schemas with JSON-Schema export and validation.</li>
-<li>Runtime, telemetry, and transport interface contracts, with shipped mock
-adapters and a backend registry.</li>
-<li>The runnable harness: bundle writer, controller lifecycle, reducer, a
-shared bundle read layer, static HTML report generator, and a CLI
-(<code>run</code>, <code>validate-bundle</code>, <code>reduce</code>, <code>report</code>).</li>
-<li>Example Mac-local and mock-local configs.</li>
-<li>Phase 1 methodology, feasibility, and measurement-design docs.</li>
-<li>A test suite run in CI on every push, including a mock end-to-end run and
-bundle validation. The canonical command below and CI output own the current
-result; reader docs intentionally do not copy its volatile count.</li>
-</ul>
+<ul><li>Typed config and output schemas with JSON-Schema export and validation.</li><li>Runtime, telemetry, and transport interface contracts, with shipped mock adapters and a backend registry.</li><li>The runnable harness: bundle writer, controller lifecycle, reducer, a shared bundle read layer, static HTML report generator, and a CLI (<code>run</code>, <code>validate-bundle</code>, <code>reduce</code>, <code>report</code>).</li><li>Example Mac-local and mock-local configs.</li><li>Phase 1 methodology, feasibility, and measurement-design docs.</li><li>A test suite run in CI on every push, including a mock end-to-end run and bundle validation. The canonical command below and CI output own the current result; reader docs intentionally do not copy its volatile count.</li></ul>
 <h2 id="verify">Verify</h2>
-<pre><code class="language-bash">python3 -m unittest discover -s tests
-</code></pre>
-<p>The command&#39;s output is the current result. CI runs the same suite; this page
-does not pin a pass or skip count that would drift as coverage grows.</p>
+<pre><code>python3 -m unittest discover -s tests</code></pre>
+<p>The command&#x27;s output is the current result. CI runs the same suite; this page does not pin a pass or skip count that would drift as coverage grows.</p>
 <h2 id="release">Release</h2>
-<p>The ordered publication path, including private-corpus, network, Node/Lakebed,
-and credential boundaries, is in
-<a href="docs/publication_release_checklist.md"><code>docs/publication_release_checklist.md</code></a>.
-Its clean-clone fixture/component gate is
-<code>python3 scripts/release_check.py --dry-run</code>; it performs real temporary-directory
-builds and never deploys.</p>
+<p>The ordered publication path, including private-corpus, network, Node/Lakebed, and credential boundaries, is in <a href="docs/publication_release_checklist.md"><code>docs/publication_release_checklist.md</code></a>. Its clean-clone fixture/component gate is <code>python3 scripts/release_check.py --dry-run</code>; it performs real temporary-directory builds and never deploys.</p>
 <h2 id="run-the-harness-mock-target-no-hardware-or-extras-needed">Run The Harness (mock target — no hardware or extras needed)</h2>
-<pre><code class="language-bash"># Produce a complete run bundle from the mock target (deterministic):
+<pre><code># Produce a complete run bundle from the mock target (deterministic):
 python3 -m joulewise run configs/examples/mock_local.json --runs-dir runs
 
 # Structurally verify any bundle:
 python3 -m joulewise validate-bundle runs/example-mock-local
 
-# Re-derive summary metrics from a bundle&#39;s recorded trace/events (post-hoc):
+# Re-derive summary metrics from a bundle&#x27;s recorded trace/events (post-hoc):
 python3 -m joulewise reduce runs/example-mock-local
 
-# Render a static HTML run browser (first: pip install -e &#39;.[analysis]&#39;):
-python3 -m joulewise report runs --output report
-</code></pre>
-<p>A run bundle (<code>runs/&lt;run_id&gt;/</code>) contains the normalized <code>config.json</code>,
-<code>metadata.json</code>, the <code>events.jsonl</code> lifecycle/phase/token log, the raw
-<code>power_trace.csv</code>, model outputs, per-component logs, and the reduced
-<code>summary_metrics.json</code> (written last; its presence marks a complete bundle).</p>
-<p>Bundles are immutable evidence: re-running the same config into the same
-<code>--runs-dir</code> fails by design with a run-ID collision (D-010/D-022). To rerun
-a member, move the old bundle aside, change <code>run_id</code>, or use a fresh runs
-dir; collisions are refusals, not bugs.</p>
+# Render a static HTML run browser (first: pip install -e &#x27;.[analysis]&#x27;):
+python3 -m joulewise report runs --output report</code></pre>
+<p>A run bundle (<code>runs/&lt;run_id&gt;/</code>) contains the normalized <code>config.json</code>, <code>metadata.json</code>, the <code>events.jsonl</code> lifecycle/phase/token log, the raw <code>power_trace.csv</code>, model outputs, per-component logs, and the reduced <code>summary_metrics.json</code> (written last; its presence marks a complete bundle).</p>
+<p>Bundles are immutable evidence: re-running the same config into the same <code>--runs-dir</code> fails by design with a run-ID collision (D-010/D-022). To rerun a member, move the old bundle aside, change <code>run_id</code>, or use a fresh runs dir; collisions are refusals, not bugs.</p>
 <h2 id="config-and-schema-verbs">Config And Schema Verbs</h2>
-<pre><code class="language-bash">python3 -m joulewise validate-config configs/examples/mock_local.json
+<pre><code>python3 -m joulewise validate-config configs/examples/mock_local.json
 python3 -m joulewise print-config-schema
-python3 -m joulewise print-output-schema
-</code></pre>
+python3 -m joulewise print-output-schema</code></pre>
 <h2 id="documentation-map">Documentation Map</h2>
-<p><strong>Advisor / high-level view:</strong> <code>PROJECT_STATUS.md</code> is the standalone status,
-plan, and architecture document - start there for a monitoring view of the
-project.</p>
-<p>See <code>AGENT_PLAN.md</code> for the phase index; each phase has a detailed plan and
-an evidence-based exit checklist under <code>docs/phase_N/</code> — the exit checklist
-is the per-item status authority (D-023). See <code>RUN_STATE.md</code> before starting
-substantial work; its generated state-kernel region is the current
-work-selection view. Future phase starts should use
-<code>docs/planning_reflection_protocol.md</code> to audit whether each step has evidence
-and acceptance criteria before implementation begins.</p>
-<p><strong>Agents executing &quot;the next step&quot; start with <code>docs/agent_playbook.md</code></strong> —
-self-contained, ordered mission guides (read-first lists, code-level routes,
-verification commands, handoff checklists) for every remaining step of the
-project.</p>
-<p>Use <code>TASK_QUEUE.md</code> to triage new tasks against the current repo state, recent
-handoffs, recent commits, and active phase gates. Design decisions (with the
-options and considerations behind them) live in <code>docs/decision_log.md</code>; risks,
-triggers, and the descope ladder live in <code>docs/risk_register.md</code>; calendar
-constraints live in <code>docs/milestones.md</code>; cross-model review sessions
-(implementer/reviewer positions, votes, resolutions - see D-031) live in
-<code>docs/council_log.md</code>. Agents never regenerate or deploy the status site:
-sessions that change front-facing state refresh <code>docs/site/DRIFT.md</code>, and Ed
-deploys manually (D-068).</p>
-
-
+<p><strong>Advisor / high-level view:</strong> <code>PROJECT_STATUS.md</code> is the standalone status, plan, and architecture document - start there for a monitoring view of the project.</p>
+<p>See <code>AGENT_PLAN.md</code> for the phase index; each phase has a detailed plan and an evidence-based exit checklist under <code>docs/phase_N/</code> — the exit checklist is the per-item status authority (D-023). See <code>RUN_STATE.md</code> before starting substantial work; its generated state-kernel region is the current work-selection view. Future phase starts should use <code>docs/planning_reflection_protocol.md</code> to audit whether each step has evidence and acceptance criteria before implementation begins.</p>
+<p><strong>Agents executing &quot;the next step&quot; start with <code>docs/agent_playbook.md</code></strong> — self-contained, ordered mission guides (read-first lists, code-level routes, verification commands, handoff checklists) for every remaining step of the project.</p>
+<p>Use <code>TASK_QUEUE.md</code> to triage new tasks against the current repo state, recent handoffs, recent commits, and active phase gates. Design decisions (with the options and considerations behind them) live in <code>docs/decision_log.md</code>; risks, triggers, and the descope ladder live in <code>docs/risk_register.md</code>; calendar constraints live in <code>docs/milestones.md</code>; cross-model review sessions (implementer/reviewer positions, votes, resolutions - see D-031) live in <code>docs/council_log.md</code>. Agents never regenerate or deploy the status site: sessions that change front-facing state refresh <code>docs/site/DRIFT.md</code>, and Ed deploys manually (D-068).</p>
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>README.md · commit 0de4cea · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>README.md · commit 6c12e12 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>

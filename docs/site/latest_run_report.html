@@ -13,14 +13,14 @@
   <nav class="nav">
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
-      <a href="index.html">Story</a>
+      <a href="index.html">Project</a>
+      <a href="research.html">Learn</a>
       <a href="status.html">Status</a>
       <a href="roadmap.html">Roadmap</a>
-      <a href="record.html">Record</a>
-      <a href="results.html">Results</a>
       <a href="process.html">Process</a>
-      <a href="research.html">Research</a>
+      <a href="record.html">Record</a>
       <a href="library.html" class="active">Sources</a>
+      <a href="results.html">Measurements</a>
     </div>
   </nav>
 </header>
@@ -34,109 +34,22 @@
   <div class="doc-wrap doc-source-docs-run-reports-2026-07-13-bridge-v1-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>docs/run_reports/2026-07-13-bridge-v1.md</code></p>
     <div class="provenance-plate"><span class="source-chip" title="docs/run_reports/2026-07-13-bridge-v1.md · commit ef53497"><span class="source-file">docs/<wbr>run_reports/<wbr>2026-07-13-bridge-v1.md</span><span class="source-commit">commit ef53497</span></span></div>
-    <!-- rendered: marked@18.0.6 -->
+    <!-- rendered: offline-fallback -->
 <h1>Bridge v1: contract, tooling, and the discussion that designed it (2026-07-13)</h1>
-<p>Ed&#39;s directive: examine the new Claude↔Codex bridge, discuss improvements
-with Sol (high) over the bridge itself, land guidance in the project, and
-improve the bridge substantially for the next batches of work.</p>
+<p>Ed&#x27;s directive: examine the new Claude↔Codex bridge, discuss improvements with Sol (high) over the bridge itself, land guidance in the project, and improve the bridge substantially for the next batches of work.</p>
 <h2 id="deliverable-check-0">Deliverable check (§0)</h2>
-<p>SHIPPED as PR #64 (<code>impl/bridge-v1</code>): <code>docs/contracts/bridge_protocol.md</code>
-(<code>bridge-protocol/v1</code>), <code>scripts/bridge</code> (leases / baselines / scope-check /
-thread registry), reverse-adapter hardening, and every consumer surface
-updated. Suite 1358 OK at the PR head.</p>
+<p>SHIPPED as PR #64 (<code>impl/bridge-v1</code>): <code>docs/contracts/bridge_protocol.md</code> (<code>bridge-protocol/v1</code>), <code>scripts/bridge</code> (leases / baselines / scope-check / thread registry), reverse-adapter hardening, and every consumer surface updated. Suite 1358 OK at the PR head.</p>
 <h2 id="the-design-discussion-held-over-the-bridge-being-designed">The design discussion (held over the bridge being designed)</h2>
-<p>Three rounds, Fable lead ↔ Sol (gpt-5.6-sol, high effort), project MCP
-server, thread <code>019f5a67-00f5-7cb1-9c9a-d0cd4916ee82</code>:</p>
-<ul>
-<li><strong>Round 1</strong> — Sol answered six pain points with a field-complete prompt
-contract, a sentinel envelope it demonstrated live in its own reply, thread
-continue-vs-fresh rules, and four gaps the lead had missed entirely
-(cancellation semantics, concurrent workspace ownership, protocol version
-negotiation, thread closure/GC).</li>
-<li><strong>Round 2</strong> — lead adjudications; Sol out-designed the lead in three
-places, all accepted: hard-block atomic leases (lead had proposed
-warn-only; Sol: &quot;warn-only would reproduce yesterday&#39;s failure while
-creating the appearance of protection&quot;), path-level baseline manifests
-(lead had proposed a status-digest; Sol showed four ways it is not
-attribution-sound), and separate lease/thread event logs joined by
-invocation_id. Sol also named the design&#39;s highest-risk failure mode:
-false confidence in scope attribution over a moving shared tree — and the
-audit-batch mitigation (pinned commit, isolated worktrees, snapshot_read
-leases, no writes until adjudication).</li>
-<li><strong>Round 3</strong> — Sol drafted the full contract in-band with five marked
-draft-choices; the lead adjudicated all five (JSON header sentinel,
-{path, match} scope entries, flock locking, warn-don&#39;t-auto-abandon
-expiry, bridge-internal path exemption).</li>
-</ul>
-<p>Lead dissents recorded: caller origin-markers KEPT on the reverse path
-(contract-compliance lint, not security); AGENTS.md deliberately restates
-Sol-side obligations (always-read enforcement surface) against the lens&#39;s
-one-fact-one-home nit.</p>
+<p>Three rounds, Fable lead ↔ Sol (gpt-5.6-sol, high effort), project MCP server, thread <code>019f5a67-00f5-7cb1-9c9a-d0cd4916ee82</code>:</p>
+<ul><li><strong>Round 1</strong> — Sol answered six pain points with a field-complete prompt contract, a sentinel envelope it demonstrated live in its own reply, thread continue-vs-fresh rules, and four gaps the lead had missed entirely (cancellation semantics, concurrent workspace ownership, protocol version negotiation, thread closure/GC).</li><li><strong>Round 2</strong> — lead adjudications; Sol out-designed the lead in three places, all accepted: hard-block atomic leases (lead had proposed warn-only; Sol: &quot;warn-only would reproduce yesterday&#x27;s failure while creating the appearance of protection&quot;), path-level baseline manifests (lead had proposed a status-digest; Sol showed four ways it is not attribution-sound), and separate lease/thread event logs joined by invocation_id. Sol also named the design&#x27;s highest-risk failure mode: false confidence in scope attribution over a moving shared tree — and the audit-batch mitigation (pinned commit, isolated worktrees, snapshot_read leases, no writes until adjudication).</li><li><strong>Round 3</strong> — Sol drafted the full contract in-band with five marked draft-choices; the lead adjudicated all five (JSON header sentinel, {path, match} scope entries, flock locking, warn-don&#x27;t-auto-abandon expiry, bridge-internal path exemption).</li></ul>
+<p>Lead dissents recorded: caller origin-markers KEPT on the reverse path (contract-compliance lint, not security); AGENTS.md deliberately restates Sol-side obligations (always-read enforcement surface) against the lens&#x27;s one-fact-one-home nit.</p>
 <h2 id="review-shape-and-catches">Review shape and catches</h2>
-<p>Implementation (Sol xhigh, CLI path — per the new routing rule the bridge
-itself prescribes) → fresh lens (xhigh) → fix round 1 (xhigh) → delta
-re-audit (xhigh) → fix round 2 (high) → lead direct verification.</p>
-<ul>
-<li><strong>Lens (4 blockers, all confirmed at the lead bench):</strong> leaseless
-SCOPE_OK; net-state HEAD checking blind to commit-then-revert; scope-check
-never anchored to the prompt-supplied digest; prospective scope expansion
-self-conflicted.</li>
-<li><strong>Delta re-audit (1 NEW blocker):</strong> malformed override events could erase
-attribution ambiguity → SCOPE_OK. Fifth recorded instance of the
-fix-rounds-inject-defects pattern; the delta-re-audit layer keeps paying
-for itself.</li>
-<li><strong>Lead gate:</strong> live probes on the real tool (overlap hard-block rc=3 with
-CONFLICT JSON; expired-lease conflict-until-abandoned semantics confirmed
-contract-correct; digest omission → CHECK_ERROR; malformed override →
-CHECK_ERROR unhealthy_lease_log; expand races; adapter FAILED-envelope
-synthesis), plus the audit-loop termination ruling: after fix round 2 the
-residual surface was verified by direct lead inspection instead of a
-fourth Sol audit.</li>
-</ul>
+<p>Implementation (Sol xhigh, CLI path — per the new routing rule the bridge itself prescribes) → fresh lens (xhigh) → fix round 1 (xhigh) → delta re-audit (xhigh) → fix round 2 (high) → lead direct verification.</p>
+<ul><li><strong>Lens (4 blockers, all confirmed at the lead bench):</strong> leaseless SCOPE_OK; net-state HEAD checking blind to commit-then-revert; scope-check never anchored to the prompt-supplied digest; prospective scope expansion self-conflicted.</li><li><strong>Delta re-audit (1 NEW blocker):</strong> malformed override events could erase attribution ambiguity → SCOPE_OK. Fifth recorded instance of the fix-rounds-inject-defects pattern; the delta-re-audit layer keeps paying for itself.</li><li><strong>Lead gate:</strong> live probes on the real tool (overlap hard-block rc=3 with CONFLICT JSON; expired-lease conflict-until-abandoned semantics confirmed contract-correct; digest omission → CHECK_ERROR; malformed override → CHECK_ERROR unhealthy_lease_log; expand races; adapter FAILED-envelope synthesis), plus the audit-loop termination ruling: after fix round 2 the residual surface was verified by direct lead inspection instead of a fourth Sol audit.</li></ul>
 <h2 id="verification-ledger">Verification ledger</h2>
-<div class="table-scroll"><table>
-<thead>
-<tr>
-<th>Gate</th>
-<th>Evidence</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Focused bridge tests</td>
-<td><code>Ran 40 tests … OK</code> (fix1 head); adapter 11 ok; expand races 3 OK</td>
-</tr>
-<tr>
-<td>Full suite at PR head</td>
-<td><code>Ran 1358 tests … OK (skipped=13)</code> (worktree convention)</td>
-</tr>
-<tr>
-<td>Defect-first discipline</td>
-<td>fix round 1 V0: 23 regression failures BEFORE fixes, green after</td>
-</tr>
-<tr>
-<td>Live probes</td>
-<td>hard-block rc=3; no-lease → ATTRIBUTION_INDETERMINATE; tampered/omitted digest → CHECK_ERROR; malformed acquire/override → fail closed</td>
-</tr>
-<tr>
-<td>Static</td>
-<td>node --check both adapters; bash -n codex-bridge; git diff --check</td>
-</tr>
-</tbody></table></div>
+<div class="table-scroll"><table><thead><tr><th>Gate</th><th>Evidence</th></tr></thead><tbody><tr><td>Focused bridge tests</td><td><code>Ran 40 tests … OK</code> (fix1 head); adapter 11 ok; expand races 3 OK</td></tr><tr><td>Full suite at PR head</td><td><code>Ran 1358 tests … OK (skipped=13)</code> (worktree convention)</td></tr><tr><td>Defect-first discipline</td><td>fix round 1 V0: 23 regression failures BEFORE fixes, green after</td></tr><tr><td>Live probes</td><td>hard-block rc=3; no-lease → ATTRIBUTION_INDETERMINATE; tampered/omitted digest → CHECK_ERROR; malformed acquire/override → fail closed</td></tr><tr><td>Static</td><td>node --check both adapters; bash -n codex-bridge; git diff --check</td></tr></tbody></table></div>
 <h2 id="process-trace-appendix">Process trace appendix</h2>
-<ul>
-<li>Shape: one stream (worktree impl/bridge-v1); MCP for the 3-round design
-discussion (interactive → MCP per the routing rule), CLI xhigh/high for
-implementation and reviews; two lead bench passes for consumer pointers.</li>
-<li>Spend: 3 MCP discussion turns (high) + 5 CLI sessions (impl xhigh, lens
-xhigh, fix1 xhigh, delta xhigh, fix2 high).</li>
-<li>Calibration: Sol design-consult on its own working conditions was the
-session&#39;s highest-yield unit — three lead proposals overturned with
-strictly better designs, four missed dimensions surfaced. The
-delegation-calibration ledger gains another design-freedom WIN row.</li>
-<li>Cross-links: C-031 council row; PR #64; contract provenance points here.</li>
-</ul>
-
-
+<ul><li>Shape: one stream (worktree impl/bridge-v1); MCP for the 3-round design discussion (interactive → MCP per the routing rule), CLI xhigh/high for implementation and reviews; two lead bench passes for consumer pointers.</li><li>Spend: 3 MCP discussion turns (high) + 5 CLI sessions (impl xhigh, lens xhigh, fix1 xhigh, delta xhigh, fix2 high).</li><li>Calibration: Sol design-consult on its own working conditions was the session&#x27;s highest-yield unit — three lead proposals overturned with strictly better designs, four missed dimensions surfaced. The delegation-calibration ledger gains another design-freedom WIN row.</li><li>Cross-links: C-031 council row; PR #64; contract provenance points here.</li></ul>
   </div>
 </div>
 </main>

@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>JouleWise — measuring the energy of machine thought</title>
+<title>Project README - JouleWise</title>
+<script>document.documentElement.classList.add("js-enabled");</script>
 <link rel="stylesheet" href="style.css">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
 </head>
@@ -12,210 +13,25 @@
   <nav class="nav">
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
-      <a href="index.html" class="active">Story</a>
+      <a href="index.html" class="active">Project</a>
+      <a href="research.html">Learn</a>
       <a href="status.html">Status</a>
       <a href="roadmap.html">Roadmap</a>
-      <a href="record.html">Record</a>
-      <a href="results.html">Results</a>
       <a href="process.html">Process</a>
-      <a href="research.html">Research</a>
+      <a href="record.html">Record</a>
       <a href="library.html">Sources</a>
+      <a href="results.html">Measurements</a>
     </div>
   </nav>
 </header>
-
 <main>
-<div class="hero">
-  <div class="kicker">An undergraduate CS capstone instrument · 2026</div>
-  <h1>How much energy does<br>a machine spend on a thought?</h1>
-  <p class="lede">JouleWise is a benchmark harness that measures the energy of
-  large-language-model inference on real, local hardware — joule by joule,
-  token by token — and packages every measurement as a self-contained evidence
-  bundle that anyone can re-derive from raw telemetry. You don't have to trust the
-  summaries: the validator recomputes them from the evidence.</p>
-
-  <svg class="hero-trace" viewBox="0 0 1040 190" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Decorative power trace: idle baseline, prefill spike, decode plateau, return to idle">
-    <defs>
-      <linearGradient id="traceGrad" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stop-color="#f2a33c" stop-opacity=".22"/>
-        <stop offset="100%" stop-color="#f2a33c" stop-opacity="0"/>
-      </linearGradient>
-    </defs>
-    <line class="gridline" x1="0" y1="150" x2="1040" y2="150" stroke="#2a251c"/>
-    <line class="gridline" x1="0" y1="100" x2="1040" y2="100" stroke="#2a251c"/>
-    <line class="gridline" x1="0" y1="50"  x2="1040" y2="50"  stroke="#2a251c"/>
-    <rect class="trace-window" x="285" y="26" width="530" height="138" rx="4"/>
-    <path class="trace-fill" d="M0,150 L60,148 120,151 180,149 250,150 285,146 300,58 316,42 330,66 350,74 380,70 420,76 470,72 530,78 590,73 650,79 710,74 770,80 815,86 830,140 870,149 920,148 980,151 1040,149 L1040,190 0,190 Z"/>
-    <path class="trace-line" d="M0,150 L60,148 120,151 180,149 250,150 285,146 300,58 316,42 330,66 350,74 380,70 420,76 470,72 530,78 590,73 650,79 710,74 770,80 815,86 830,140 870,149 920,148 980,151 1040,149"/>
-    <text x="120" y="140" class="axis" fill="#7d745f" font-size="11">idle baseline</text>
-    <text x="290" y="18" class="axis" fill="#7d745f" font-size="11">prefill</text>
-    <text x="520" y="62" class="axis" fill="#7d745f" font-size="11">decode — the measured window</text>
-    <text x="900" y="140" class="axis" fill="#7d745f" font-size="11">idle again</text>
-  </svg>
-
-  <div class="readout-row" style="margin-top:26px">
-    <div class="readout">
-      <div class="val">87<span class="unit">mJ / token</span></div>
-      <div class="sub">Qwen2.5-1.5B · Apple M3 Max · measured</div>
-    </div>
-    <div class="readout cyan">
-      <div class="val">583<span class="unit">mJ / token</span></div>
-      <div class="sub">Qwen3.5-122B MoE · same harness, same machine</div>
-    </div>
-    <div class="readout plain">
-      <div class="val">0.3<span class="unit">% spread</span></div>
-      <div class="sub">flagship repeatability across repetitions</div>
-    </div>
-  </div>
-</div>
-
-<section class="band reveal">
-  <div class="kicker">The idea</div>
-  <h2>Energy is the spine. Everything else must be auditable.</h2>
-  <div class="rule"></div>
-  <div class="cols c2">
-    <div>
-      <p>Every benchmark run produces a <strong>run bundle</strong>: the typed
-      config that requested it, the raw power telemetry exactly as the meter
-      emitted it, the token-level event log, and the derived summary — all in
-      one directory. The core rule of the project is that <strong>summaries are
-      never trusted, they are re-derived</strong>: a strict validator recomputes the
-      power trace from the raw meter output, recomputes the summary from the
-      trace and events, and refuses any bundle where stored numbers disagree
-      with recorded evidence.</p>
-      <p>Measurements subtract each machine's <strong>idle baseline</strong>, name their
-      <strong>measurement boundary</strong> (what the meter can and cannot see), and
-      record <strong>provenance</strong> down to a hash of the exact token IDs the model
-      was fed — so "same workload" is a checkable claim, not a promise.</p>
-    </div>
-    <div class="panel corner">
-      <div class="card-label">What a bundle proves</div>
-      <table class="ledger">
-        <tr><td>config.json</td><td>the exact request, schema-validated, hashed</td></tr>
-        <tr><td>raw/</td><td>meter output, byte-for-byte as captured</td></tr>
-        <tr><td>events.jsonl</td><td>token timing + the measured-window markers</td></tr>
-        <tr><td>power_trace.csv</td><td>re-derivable from raw/ — and checked</td></tr>
-        <tr><td>summary_metrics.json</td><td>re-derivable from all of the above — and checked</td></tr>
-        <tr><td>metadata.json</td><td>device, tokenizer, model &amp; prompt-hash provenance</td></tr>
-      </table>
-    </div>
-  </div>
-</section>
-
-<section class="band reveal">
-  <div class="kicker">The thesis</div>
-  <h2>Two claim tracks, one instrument.</h2>
-  <div class="rule"></div>
-  <div class="cols c2">
-    <div class="panel">
-      <div class="card-label">Guaranteed capstone</div>
-      <h3>Auditable local LLM energy measurement</h3>
-      <p style="margin-top:10px">The harness itself plus the Apple-Silicon
-      characterization it already executes: per-model, per-workload energy
-      with confidence intervals, contamination detection, and full
-      re-derivability. This exists today and grows with every campaign.</p>
-      <span class="badge good">measuring now</span>
-    </div>
-    <div class="panel">
-      <div class="card-label">Differentiating study</div>
-      <h3>Split inference: does dividing the thought save energy?</h3>
-      <p style="margin-top:10px">Run <em>prefill</em> on one machine and <em>decode</em> on
-      another, shipping the model's working memory (the KV cache) between
-      them. Under what conditions does the split beat either machine running
-      alone — and what does the crossover cost in latency? The feasibility
-      rung is already proven: a saved cache resumes <strong>token-identically</strong>
-      in a fresh process.</p>
-      <span class="badge prov">feasibility proven · hardware pending</span>
-    </div>
-  </div>
-</section>
-
-<section class="band reveal">
-  <div class="kicker">First findings</div>
-  <h2>The big model costs time, not watts.</h2>
-  <div class="rule"></div>
-  <p class="lede" style="margin-bottom:26px">Two confounded points are not a
-  law — the project's own docs say so loudly. But the first cross-model
-  comparison is already interesting: a model <strong>80× larger</strong> drew nearly
-  the same decode power. It just held the machine longer per token.</p>
-  <div class="readout-row">
-    <div class="readout"><div class="val">23.5<span class="unit">W</span></div><div class="sub">decode power · 1.5B model</div></div>
-    <div class="readout cyan"><div class="val">27.5<span class="unit">W</span></div><div class="sub">decode power · 122B MoE — nearly flat</div></div>
-    <div class="readout plain"><div class="val">257 → 46<span class="unit">tok/s</span></div><div class="sub">where the cost actually went: speed</div></div>
-  </div>
-  <div class="claim">Energy per token rose <em>≈6.7×</em> while decode power rose
-  ≈17% — on these two points, inference energy behaves like a
-  <em>fixed-plus-marginal</em> cost, not a power problem.</div>
-  <p style="font-size:14px"><span class="mono" style="color:var(--ink-3)">Consistency
-  with the Q4 model on two confounded points, not a demonstrated scaling law;
-  the two-model baseline campaign (next step) begins the controlled version.
-  Full numbers on the <a href="results.html">results page</a>.</span></p>
-</section>
-
-<section class="band reveal">
-  <div class="kicker">Where it stands</div>
-  <h2>Instrument complete for its first campaign.</h2>
-  <div class="rule"></div>
-  <div class="cols c3">
-    <div class="readout plain"><div class="val">546</div><div class="sub">tests · zero expected failures</div></div>
-    <div class="readout plain"><div class="val">6 / 6</div><div class="sub">real bundles pass strict re-derivation</div></div>
-    <div class="readout plain"><div class="val">31 / 31</div><div class="sub">audit pins fixed — 27 distinct defects, all verified</div></div>
-  </div>
-  <div style="margin-top:30px" class="panel">
-    <div class="card-label">The ladder</div>
-    <table class="ledger">
-      <tr><td>Phase 1</td><td>Contracts, methodology, feasibility evidence — <strong>design complete</strong>; supervisor/calendar/device gates open</td></tr>
-      <tr><td>Phase 2</td><td>Harness + Mac measurements — <strong>vertical slice, flagship benchmark, integrity &amp; provenance overhaul all landed</strong>; the two-model baseline campaign is next</td></tr>
-      <tr><td>Phase 3</td><td>Split inference — KV-cache replay <strong>proven byte-exact</strong> on this hardware; NVIDIA node stack built fixture-first, awaiting first live contact</td></tr>
-      <tr><td>Phase 4–5</td><td>Characterization, claims audit, packaging — designed, gated behind data</td></tr>
-    </table>
-  </div>
-</section>
-
-<section class="band reveal">
-  <div class="kicker">How it's built</div>
-  <h2>The process is the second instrument.</h2>
-  <div class="rule"></div>
-  <div class="cols c2">
-    <div>
-      <p>This project is developed by one researcher directing a
-      <strong>multi-model AI system</strong> — an orchestrating lead model, an
-      independent second model doing implementation and adversarial review,
-      and a review pipeline in which <strong>every claim, decision, and dissent is
-      written down</strong>: 36 binding design decisions, a ten-entry council
-      deliberation log, per-stream decision ledgers committed with the code
-      they justify, and per-review-layer catch records that decide — by
-      evidence — which review layers live and die.</p>
-      <p>In one recent overnight session the system resumed four parallel work
-      streams, ran ~26 delegated implementation and review sessions, caught
-      ~30 attributed catches across nine distinct review layers — including
-      two wire-protocol contracts that were confidently wrong — and merged all
-      four pull requests with the test suite growing 415 → 546.</p>
-    </div>
-    <div class="panel corner">
-      <div class="card-label">The paper trail</div>
-      <table class="ledger">
-        <tr><td>D-001…D-036</td><td>binding decisions, with alternatives &amp; revisit conditions</td></tr>
-        <tr><td>C-001…C-010</td><td>council deliberations — positions, dissents, who prevailed</td></tr>
-        <tr><td>A-1…A-30<br>B-1…B-46</td><td>in-stream decision ledgers; wrong pins superseded, never erased</td></tr>
-        <tr><td>yield tables</td><td>what each review layer uniquely caught, per session</td></tr>
-      </table>
-      <p style="margin:16px 0 0"><a href="process.html">Read the full process →</a></p>
-    </div>
-  </div>
-</section>
+<section class="readme-hero"> <div class="kicker">Project README · undergraduate capstone · local LLM energy</div> <p class="readme-eyebrow">JouleWise is an extensible measurement harness.</p> <h1>Measure first.<br>Make claims second.</h1> <p class="lede">JouleWise runs language-model inference on local hardware, records power and runtime events together, and seals the evidence into a bundle that can be checked after the machine has gone quiet. The goal is not a prettier leaderboard. It is a defensible way to ask where the joules went.</p> <div class="readme-actions"> <a class="readme-primary" href="research.html">Learn the project top to bottom</a> <a href="status.html">See the live project state</a> <a href="readme.html">Open the repository README</a> </div> <div class="provenance-plate"><span class="source-chip" title="README.md · commit 6c12e12"><span class="source-file">README.md</span><span class="source-commit">commit 6c12e12</span></span> <span class="source-chip" title="docs/decision_log.md · commit ed19efa"><span class="source-file">docs/<wbr>decision_log.md</span><span class="source-commit">commit ed19efa</span></span> <span class="source-chip" title="docs/site_src/index.html · commit 632d9eb"><span class="source-file">docs/<wbr>site_src/<wbr>index.html</span><span class="source-commit">commit 632d9eb</span></span></div> </section> <section class="band tight readme-section" id="what"> <div class="kicker">What it is</div> <h2>Instrument first, benchmark second.</h2> <div class="readme-definition-grid"> <article class="panel corner"> <div class="card-label">Harness · the instrument</div> <h3>Runs, observes, and preserves.</h3> <p>Typed experiment configs, runtime adapters, telemetry adapters, bundle writing, reduction, and strict validation form the reusable measurement harness. New hardware and runtimes plug into these seams.</p> </article> <article class="panel"> <div class="card-label">Benchmark · a governed use of it</div> <h3>Freezes workloads and rules.</h3> <p>A benchmark is the frozen workload suite, run rules, and strict validator layered on the harness. Calling the whole repository a benchmark would hide the distinction that makes its evidence reusable.</p> </article> </div> <p class="readme-note">This terminology is binding reader-facing policy under D-069. The harness can exist before a benchmark campaign is ready to support a comparison.</p> </section> <section class="band readme-section" id="why"> <div class="kicker">Why it exists</div> <h2>Energy numbers are easy to print and hard to mean.</h2> <div class="readme-problem-grid"> <article><span class="mono">boundary</span><h3>What did you measure?</h3><p>Chip rails, package power, and wall power answer different questions. JouleWise names the boundary beside the result.</p></article> <article><span class="mono">time</span><h3>When did measurement begin?</h3><p>Model loading, sampler startup, prefill, decode, and cooldown must not drift into one another unnoticed.</p></article> <article><span class="mono">noise</span><h3>Could the instrument resolve it?</h3><p>A small difference may be below the detection floor. “Not resolvable” is not the same claim as “no difference.”</p></article> <article><span class="mono">evidence</span><h3>Can someone check it?</h3><p>A summary without its trace, events, configuration, and provenance is an assertion. A strict-valid bundle is an audit trail.</p></article> </div> </section> <section class="band readme-section" id="how"> <div class="kicker">How it works</div> <h2>One path from intent to evidence.</h2> <ol class="readme-flow"> <li><span>config</span><div><h3>Describe the run.</h3><p>Model, workload shape, runtime, telemetry backend, repetitions, and evidence rules begin as typed inputs rather than shell-history folklore.</p></div></li> <li><span>adapters</span><div><h3>Exercise the target.</h3><p>The controller pairs a runtime adapter with a telemetry adapter while recording lifecycle, phase, and token events.</p></div></li> <li><span>bundle</span><div><h3>Keep the raw record.</h3><p>The normalized config, metadata, event log, raw telemetry, outputs, logs, and reduced metrics live together as immutable evidence.</p></div></li> <li><span>strict</span><div><h3>Re-derive, do not merely inspect.</h3><p>Strict validation parses the raw evidence again, recomputes metrics, checks provenance and completion, and fails closed on contradictions.</p></div></li> <li><span>claim</span><div><h3>Ask what the evidence allows.</h3><p>Detection floors, uncertainty, analysis plans, and the claims ladder decide whether a number is descriptive, comparative, or not yet claim-bearing.</p></div></li> </ol> </section> <section class="band readme-section" id="state"> <div class="kicker">Current state</div> <h2>A research prototype with a real evidence path—and unfinished claim gates.</h2> <div class="readme-state-grid"> <article class="panel"> <div class="card-label">Working now</div> <p>The Mac path runs MLX inference with <code>powermetrics</code> telemetry, creates strict-valid bundles, and re-derives results from preserved evidence. The analysis and claim-gating machinery is implemented.</p> </article> <article class="panel"> <div class="card-label">Newest evidence</div> <p>The Window-A floor collection is complete and independently verified. It produced usable floor estimates, but every contributing bundle carries claim-evidence flags. The numbers are calibration evidence, not permission to overstate a model comparison.</p> <div class="provenance-plate"><span class="source-chip" title="docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json · commit b28c895"><span class="source-file">docs/<wbr>process_traces/<wbr>2026-07-17-floor-extraction/<wbr>extraction-verified.json</span><span class="source-commit">commit b28c895</span></span></div> </article> <article class="panel"> <div class="card-label">Still gated</div> <p>Comparative campaigns, remote hardware claims, and broad rankings wait on their named floor, evidence, hardware, and analysis gates. The status and roadmap pages read those gates from repository sources.</p> </article> </div> <div class="readme-actions"> <a href="status.html">Current status</a> <a href="roadmap.html">What happens next</a> <a href="library.html">Contracts and source documents</a> </div> </section> <section class="band readme-section readme-measurements-last" id="measurements"> <div class="kicker">Measurements · deliberately last</div> <h2>Read the instrument before reading its numbers.</h2> <p class="lede">Every energy value in the measurement section names its basis and boundary. Gross energy is the headline basis for comparisons; idle-subtracted energy appears only as a labeled within-device secondary view. The page also separates strict-valid collection from claim readiness.</p> <a class="measurement-cta" href="results.html">Open measurements and floor results →</a> </section>
 </main>
-
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span><a href="library.html">primary sources</a> · numbers as of 2026-07-08 · every figure traceable to a run report</span>
+    <span>docs/site_src/index.html · commit 632d9eb · README.md · commit 6c12e12 · docs/decision_log.md · commit ed19efa · docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json · commit b28c895 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
-
-<script>
-const io = new IntersectionObserver(es => es.forEach(e => e.isIntersecting && e.target.classList.add('in')), {threshold:.12});
-document.querySelectorAll('.reveal').forEach(el => io.observe(el));
-</script>
 </body>
 </html>

@@ -13,14 +13,14 @@
   <nav class="nav">
     <a class="brand" href="index.html"><span class="dot"></span>JOULEWISE</a>
     <div class="links">
-      <a href="index.html">Story</a>
+      <a href="index.html">Project</a>
+      <a href="research.html">Learn</a>
       <a href="status.html">Status</a>
       <a href="roadmap.html">Roadmap</a>
-      <a href="record.html">Record</a>
-      <a href="results.html">Results</a>
       <a href="process.html">Process</a>
-      <a href="research.html">Research</a>
+      <a href="record.html">Record</a>
       <a href="library.html" class="active">Sources</a>
+      <a href="results.html">Measurements</a>
     </div>
   </nav>
 </header>
@@ -35,274 +35,57 @@
 <a href="#task-queue-protocol">Task Queue Protocol</a></aside>
   <div class="doc-wrap doc-source-agent-plan-md">
     <p class="doc-meta"><a href="library.html">Back to sources</a> · rendered from <code>AGENT_PLAN.md</code></p>
-    <div class="provenance-plate"><span class="source-chip" title="AGENT_PLAN.md · commit a7d1319"><span class="source-file">AGENT_PLAN.md</span><span class="source-commit">commit a7d1319</span></span></div>
-    <!-- rendered: marked@18.0.6 -->
+    <div class="provenance-plate"><span class="source-chip" title="AGENT_PLAN.md · commit 978e4c6"><span class="source-file">AGENT_PLAN.md</span><span class="source-commit">commit 978e4c6</span></span></div>
+    <!-- rendered: offline-fallback -->
 <h1>Agent Implementation Plan</h1>
-<p>This repository implements JouleWise, an extensible energy-characterization
-benchmark for LLM inference across heterogeneous local hardware. The name is a
-nod to JouleSort and Splitwise: energy measurement as the spine, split inference
-as the first research application that validates the harness.</p>
+<p>This repository implements JouleWise, an extensible energy-characterization benchmark for LLM inference across heterogeneous local hardware. The name is a nod to JouleSort and Splitwise: energy measurement as the spine, split inference as the first research application that validates the harness.</p>
 <h2 id="ground-rules-for-agents">Ground Rules For Agents</h2>
-<ul>
-<li>At the start of every substantial run, read <code>RUN_STATE.md</code> first.</li>
-<li>For any new/random user task, triage it in <code>TASK_QUEUE.md</code> before deciding
-whether it outranks the current phase work.</li>
-<li>At the start of each phase or major step, apply
-<code>docs/planning_reflection_protocol.md</code> before implementation.</li>
-<li>At the end of every substantial run, update <code>RUN_STATE.md</code> and add or update a
-detailed report in <code>docs/run_reports/</code>. If advisor-visible state changed (a
-phase or gate closed, a verdict landed, the schedule moved), refresh
-<code>PROJECT_STATUS.md</code> too.</li>
-<li>Check <code>docs/decision_log.md</code> before re-deciding anything; record new design
-decisions there with options and considerations.</li>
-<li>Per-item phase status is asserted only in
-<code>docs/phase_N/phase_N_exit_checklist.md</code> (D-023); this file&#39;s checkboxes
-are a coarse mirror updated at slice/phase closes.</li>
-<li>Review <code>docs/risk_register.md</code> at phase starts and when a trigger fires.</li>
-<li>Keep run artifacts self-contained and reproducible.</li>
-<li>Prefer small vertical slices that produce complete run bundles.</li>
-<li>Treat unsupported hardware/model combinations as structured outcomes, not
-crashes.</li>
-<li>Keep runtime adapters separate from telemetry adapters.</li>
-<li>Make every result traceable to a config, raw power trace, event log, and
-reducer output.</li>
-</ul>
+<ul><li>At the start of every substantial run, read <code>RUN_STATE.md</code> first.</li><li>For any new/random user task, triage it in <code>TASK_QUEUE.md</code> before deciding whether it outranks the current phase work.</li><li>At the start of each phase or major step, apply <code>docs/planning_reflection_protocol.md</code> before implementation.</li><li>At the end of every substantial run, update <code>RUN_STATE.md</code> and add or update a detailed report in <code>docs/run_reports/</code>. If advisor-visible state changed (a phase or gate closed, a verdict landed, the schedule moved), refresh <code>PROJECT_STATUS.md</code> too.</li><li>Check <code>docs/decision_log.md</code> before re-deciding anything; record new design decisions there with options and considerations.</li><li>Per-item phase status is asserted only in <code>docs/phase_N/phase_N_exit_checklist.md</code> (D-023); this file&#x27;s checkboxes are a coarse mirror updated at slice/phase closes.</li><li>Review <code>docs/risk_register.md</code> at phase starts and when a trigger fires.</li><li>Keep run artifacts self-contained and reproducible.</li><li>Prefer small vertical slices that produce complete run bundles.</li><li>Treat unsupported hardware/model combinations as structured outcomes, not crashes.</li><li>Keep runtime adapters separate from telemetry adapters.</li><li>Make every result traceable to a config, raw power trace, event log, and reducer output.</li></ul>
 <h2 id="single-source-of-truth-map">Single Source Of Truth Map</h2>
-<p>Detail lives in exactly one place; everything else links to it. When
-documents disagree, fix the drift in the same run and note it in the run
-report.</p>
-<div class="table-scroll"><table>
-<thead>
-<tr>
-<th>Artifact</th>
-<th>Owns</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>AGENT_PLAN.md</code> (this file)</td>
-<td>phase index, coarse status mirror, acceptance criteria (per-item status authority: the exit checklists, D-023)</td>
-</tr>
-<tr>
-<td><code>PROJECT_STATUS.md</code></td>
-<td>advisor-facing status/plan/architecture summary (derived; update when advisor-visible state changes)</td>
-</tr>
-<tr>
-<td><code>docs/phase_N/phase_N_plan.md</code></td>
-<td>step/slice detail: objectives, design, actions, evidence, fallbacks</td>
-</tr>
-<tr>
-<td><code>docs/phase_N/phase_N_exit_checklist.md</code></td>
-<td>evidence gates for closing phase N, and per-item status (the authority, D-023)</td>
-</tr>
-<tr>
-<td><code>TASK_QUEUE.md</code></td>
-<td>what to do next, and why it outranks the rest</td>
-</tr>
-<tr>
-<td><code>docs/agent_playbook.md</code></td>
-<td>per-mission execution guides for agents: read-first lists, code-level routes, verification, handoff checklists</td>
-</tr>
-<tr>
-<td><code>RUN_STATE.md</code></td>
-<td>current handoff: state, verification, next step</td>
-</tr>
-<tr>
-<td><code>docs/decision_log.md</code></td>
-<td>design decisions, options, considerations</td>
-</tr>
-<tr>
-<td><code>docs/risk_register.md</code></td>
-<td>risks, triggers, mitigations, descope ladder</td>
-</tr>
-<tr>
-<td><code>docs/milestones.md</code></td>
-<td>calendar constraints and phase target dates</td>
-</tr>
-<tr>
-<td><code>docs/contracts/measurement_methodology.md</code></td>
-<td>measurement rules (boundaries, clocks, statistics)</td>
-</tr>
-<tr>
-<td><code>docs/contracts/run_bundle_layout.md</code></td>
-<td>bundle artifact contract</td>
-</tr>
-<tr>
-<td><code>docs/contracts/adapter_contracts.md</code></td>
-<td>adapter behavior contracts</td>
-</tr>
-<tr>
-<td><code>docs/contracts/node_worker_protocol.md</code></td>
-<td>remote-execution protocol (transport-independent; pinned during 2K, reused by 2L + Phase 3)</td>
-</tr>
-</tbody></table></div>
+<p>Detail lives in exactly one place; everything else links to it. When documents disagree, fix the drift in the same run and note it in the run report.</p>
+<div class="table-scroll"><table><thead><tr><th>Artifact</th><th>Owns</th></tr></thead><tbody><tr><td><code>AGENT_PLAN.md</code> (this file)</td><td>phase index, coarse status mirror, acceptance criteria (per-item status authority: the exit checklists, D-023)</td></tr><tr><td><code>PROJECT_STATUS.md</code></td><td>advisor-facing status/plan/architecture summary (derived; update when advisor-visible state changes)</td></tr><tr><td><code>docs/phase_N/phase_N_plan.md</code></td><td>step/slice detail: objectives, design, actions, evidence, fallbacks</td></tr><tr><td><code>docs/phase_N/phase_N_exit_checklist.md</code></td><td>evidence gates for closing phase N, and per-item status (the authority, D-023)</td></tr><tr><td><code>TASK_QUEUE.md</code></td><td>what to do next, and why it outranks the rest</td></tr><tr><td><code>docs/agent_playbook.md</code></td><td>per-mission execution guides for agents: read-first lists, code-level routes, verification, handoff checklists</td></tr><tr><td><code>RUN_STATE.md</code></td><td>current handoff: state, verification, next step</td></tr><tr><td><code>docs/decision_log.md</code></td><td>design decisions, options, considerations</td></tr><tr><td><code>docs/risk_register.md</code></td><td>risks, triggers, mitigations, descope ladder</td></tr><tr><td><code>docs/milestones.md</code></td><td>calendar constraints and phase target dates</td></tr><tr><td><code>docs/contracts/measurement_methodology.md</code></td><td>measurement rules (boundaries, clocks, statistics)</td></tr><tr><td><code>docs/contracts/run_bundle_layout.md</code></td><td>bundle artifact contract</td></tr><tr><td><code>docs/contracts/adapter_contracts.md</code></td><td>adapter behavior contracts</td></tr><tr><td><code>docs/contracts/node_worker_protocol.md</code></td><td>remote-execution protocol (transport-independent; pinned during 2K, reused by 2L + Phase 3)</td></tr></tbody></table></div>
+<p>Superseded (2026-07-15, WO-021; D-043): <code>docs/process/state_kernel.json</code> is the sole editable authority for live work selection, while generated <code>TASK_QUEUE.md</code> and <code>RUN_STATE.md</code> regions are projections; see <code>docs/specs/c027/doc-008_state_kernel.md</code> §§3.1, 3.6, and 4.</p>
 <h2 id="canonical-architecture">Canonical Architecture</h2>
-<pre><code class="language-text">typed config
+<pre><code>typed config
   -&gt; controller
     -&gt; transport adapter: local or ssh
     -&gt; runtime adapter: mlx, vllm, llama.cpp (hailo: unsupported_workload — feasibility finding only)
     -&gt; telemetry adapter: powermetrics, nvidia-smi, jetson rails, wall meter
   -&gt; run bundle
     -&gt; reducers
-    -&gt; dashboard / notebooks / report figures
-</code></pre>
+    -&gt; dashboard / notebooks / report figures</code></pre>
 <h2 id="phase-index">Phase Index</h2>
 <h3>Phase 1: Approval, Feasibility, And Measurement Design</h3>
-<p>Status: in progress (most design/feasibility items closed; the remaining
-gates need external/hardware input). Detail: <code>docs/phase_1/phase_1_plan.md</code>.
-Exit: <code>docs/phase_1/phase_1_exit_checklist.md</code> (the evidence dossier). The
-contracts this phase produced live in <code>docs/contracts/</code>.</p>
-<ul>
-<li><input checked="" disabled="" type="checkbox"> Create repo-local agent plan.</li>
-<li><input checked="" disabled="" type="checkbox"> Add reusable planning reflection protocol.</li>
-<li><input checked="" disabled="" type="checkbox"> Add evidence-based Phase 1 exit checklist.</li>
-<li><input checked="" disabled="" type="checkbox"> Add task queue protocol for prioritizing new work against repo state and
-recent handoffs.</li>
-<li><input checked="" disabled="" type="checkbox"> Define draft typed benchmark config contract.</li>
-<li><input checked="" disabled="" type="checkbox"> Define draft standardized run output contract.</li>
-<li><input checked="" disabled="" type="checkbox"> Define runtime/telemetry/transport adapter interfaces.</li>
-<li><input checked="" disabled="" type="checkbox"> Define run-bundle layout.</li>
-<li><input checked="" disabled="" type="checkbox"> Add example configs for Mac-local and mock-local runs.</li>
-<li><input checked="" disabled="" type="checkbox"> Add schema/interface tests.</li>
-<li><input checked="" disabled="" type="checkbox"> Add Phase 1 CLI helpers for config validation and schema printing.</li>
-<li><input checked="" disabled="" type="checkbox"> Extend measurement methodology: boundaries, clock sync, co-residency,
-repetition/thermal protocol, statistical protocol.</li>
-<li><input checked="" disabled="" type="checkbox"> Establish decision log, risk register, and milestone map.</li>
-<li><input checked="" disabled="" type="checkbox"> Complete Hailo feasibility investigation — verdict
-<code>unsupported_workload</code> (2026-06-12, desk research; Hailo-8L has no
-autoregressive-LLM path, the GenAI path is Hailo-10H-only).</li>
-<li><input checked="" disabled="" type="checkbox"> Confirm Phase 2 readiness (mock-first can begin) — recorded
-2026-06-12.</li>
-<li><input disabled="" type="checkbox"> Confirm supervisor expectations and final proposal scope.</li>
-<li><input disabled="" type="checkbox"> Confirm wall-meter availability.</li>
-<li><input disabled="" type="checkbox"> Confirm local network plan for interconnect sweep.</li>
-<li><input disabled="" type="checkbox"> Confirm telemetry permissions on each physical target.</li>
-<li><input disabled="" type="checkbox"> Map phases to the academic calendar (<code>docs/milestones.md</code>).</li>
-</ul>
+<p>Status: in progress (most design/feasibility items closed; the remaining gates need external/hardware input). Detail: <code>docs/phase_1/phase_1_plan.md</code>. Exit: <code>docs/phase_1/phase_1_exit_checklist.md</code> (the evidence dossier). The contracts this phase produced live in <code>docs/contracts/</code>.</p>
+<ul><li>[x] Create repo-local agent plan.</li><li>[x] Add reusable planning reflection protocol.</li><li>[x] Add evidence-based Phase 1 exit checklist.</li><li>[x] Add task queue protocol for prioritizing new work against repo state and recent handoffs.</li><li>[x] Define draft typed benchmark config contract.</li><li>[x] Define draft standardized run output contract.</li><li>[x] Define runtime/telemetry/transport adapter interfaces.</li><li>[x] Define run-bundle layout.</li><li>[x] Add example configs for Mac-local and mock-local runs.</li><li>[x] Add schema/interface tests.</li><li>[x] Add Phase 1 CLI helpers for config validation and schema printing.</li><li>[x] Extend measurement methodology: boundaries, clock sync, co-residency, repetition/thermal protocol, statistical protocol.</li><li>[x] Establish decision log, risk register, and milestone map.</li><li>[x] Complete Hailo feasibility investigation — verdict <code>unsupported_workload</code> (2026-06-12, desk research; Hailo-8L has no autoregressive-LLM path, the GenAI path is Hailo-10H-only).</li><li>[x] Confirm Phase 2 readiness (mock-first can begin) — recorded 2026-06-12.</li><li>[ ] Confirm supervisor expectations and final proposal scope.</li><li>[ ] Confirm wall-meter availability.</li><li>[ ] Confirm local network plan for interconnect sweep.</li><li>[ ] Confirm telemetry permissions on each physical target.</li><li>[ ] Map phases to the academic calendar (<code>docs/milestones.md</code>).</li></ul>
 <p>Acceptance criteria:</p>
-<ul>
-<li>Example configs validate.</li>
-<li>Mock adapter tests pass.</li>
-<li>Measurement methodology is documented.</li>
-<li><code>docs/phase_1/phase_1_exit_checklist.md</code> has evidence for every required
-Phase 1 item.</li>
-<li>Every hardware target is classified as supported, pending, or intentionally
-unsupported.</li>
-<li>Phase 2 can start with a clear mock-first path toward the Mac MLX +
-powermetrics vertical slice.</li>
-</ul>
+<ul><li>Example configs validate.</li><li>Mock adapter tests pass.</li><li>Measurement methodology is documented.</li><li><code>docs/phase_1/phase_1_exit_checklist.md</code> has evidence for every required Phase 1 item.</li><li>Every hardware target is classified as supported, pending, or intentionally unsupported.</li><li>Phase 2 can start with a clear mock-first path toward the Mac MLX + powermetrics vertical slice.</li></ul>
 <h3>Phase 2: Harness, Mac Vertical Slice, And Homogeneous Baselines</h3>
-<p>Status as of 2026-07-08: in progress — all hardware-independent work
-(2A-2F, 2J, and 2N pre-hardware hardening, landed 2026-07-06) is complete
-and runnable, the Mac vertical slice (2G/2H/2I) is complete, and P2-013 /
-P2-014 closed the integrity and provenance pins (suite green, zero expected
-failures; current count per <code>RUN_STATE.md</code> Current Verification). Remaining gated work is the 2M baseline corpus plus
-remote-target live validation. The 2K fixture-first NVIDIA implementation is
-merged as of 2026-07-08 (PR #11), but it is not live hardware-validated; all
-2K protocol pins remain PROVISIONAL until P1-006 evidence is captured. Detail:
-<code>docs/phase_2/phase_2_plan.md</code>. Exit:
-<code>docs/phase_2/phase_2_exit_checklist.md</code>. Gated-slice specs:
-<code>docs/phase_2/hardware_slice_implementation_guide.md</code>.</p>
-<p>Mock-first ordering (matches <code>TASK_QUEUE.md</code>; the real-hardware slices are
-gated on Phase 1 evidence); code-level specs for the gated slices live in
-<code>docs/phase_2/hardware_slice_implementation_guide.md</code>.</p>
-<ul>
-<li><input checked="" disabled="" type="checkbox"> 2A Run-bundle writer.</li>
-<li><input checked="" disabled="" type="checkbox"> 2B Clock seam + built-in mock adapters.</li>
-<li><input checked="" disabled="" type="checkbox"> 2C Controller lifecycle with structured failure paths.</li>
-<li><input checked="" disabled="" type="checkbox"> 2D Reducer v1 with closed-form tests.</li>
-<li><input checked="" disabled="" type="checkbox"> 2E One-command run + <code>validate-bundle</code> (mock end-to-end in CI).</li>
-<li><input checked="" disabled="" type="checkbox"> 2F Repetitions, experiment manifests, cooldown gate.</li>
-<li><input disabled="" type="checkbox"> Model selection checkpoint (decision D-016) — provisional small-model
-pick made 2026-07-06 with user go-ahead; full closure remains gated on
-P1-001 scope.</li>
-<li><input checked="" disabled="" type="checkbox"> 2G MLX runtime adapter (complete 2026-07-06).</li>
-<li><input checked="" disabled="" type="checkbox"> 2H powermetrics telemetry adapter (complete 2026-07-06).</li>
-<li><input checked="" disabled="" type="checkbox"> 2I Mac vertical slice integration with variance (complete 2026-07-06).</li>
-<li><input checked="" disabled="" type="checkbox"> 2J Static report generator v1.</li>
-<li><input checked="" disabled="" type="checkbox"> 2N Pre-hardware hardening (landed 2026-07-06: RunContext seam,
-window markers, shared BundleReader, rail contract, reduce verb,
-schema round-trip, token fallback, v0.2 compatibility note;
-D-024..D-029).</li>
-<li><input checked="" disabled="" type="checkbox"> 2K NVIDIA/vLLM + nvidia-smi + SSH transport (fixture-first
-implementation merged 2026-07-08 via PR #11; live validation remains gated
-on P1-006, protocol pins PROVISIONAL).</li>
-<li><input disabled="" type="checkbox"> 2L Orin adapter (gated on P1-006).</li>
-<li><input disabled="" type="checkbox"> 2M Homogeneous baselines + prefill/decode qualitative reproduction.</li>
-</ul>
+<p>Status as of 2026-07-08: in progress — all hardware-independent work (2A-2F, 2J, and 2N pre-hardware hardening, landed 2026-07-06) is complete and runnable, the Mac vertical slice (2G/2H/2I) is complete, and P2-013 / P2-014 closed the integrity and provenance pins (suite green, zero expected failures; current count per <code>RUN_STATE.md</code> Current Verification). Remaining gated work is the 2M baseline corpus plus remote-target live validation. The 2K fixture-first NVIDIA implementation is merged as of 2026-07-08 (PR #11), but it is not live hardware-validated; all 2K protocol pins remain PROVISIONAL until P1-006 evidence is captured. Detail: <code>docs/phase_2/phase_2_plan.md</code>. Exit: <code>docs/phase_2/phase_2_exit_checklist.md</code>. Gated-slice specs: <code>docs/phase_2/hardware_slice_implementation_guide.md</code>.</p>
+<p>Mock-first ordering (matches <code>TASK_QUEUE.md</code>; the real-hardware slices are gated on Phase 1 evidence); code-level specs for the gated slices live in <code>docs/phase_2/hardware_slice_implementation_guide.md</code>.</p>
+<ul><li>[x] 2A Run-bundle writer.</li><li>[x] 2B Clock seam + built-in mock adapters.</li><li>[x] 2C Controller lifecycle with structured failure paths.</li><li>[x] 2D Reducer v1 with closed-form tests.</li><li>[x] 2E One-command run + <code>validate-bundle</code> (mock end-to-end in CI).</li><li>[x] 2F Repetitions, experiment manifests, cooldown gate.</li><li>[ ] Model selection checkpoint (decision D-016) — provisional small-model pick made 2026-07-06 with user go-ahead; full closure remains gated on P1-001 scope.</li><li>[x] 2G MLX runtime adapter (complete 2026-07-06).</li><li>[x] 2H powermetrics telemetry adapter (complete 2026-07-06).</li><li>[x] 2I Mac vertical slice integration with variance (complete 2026-07-06).</li><li>[x] 2J Static report generator v1.</li><li>[x] 2N Pre-hardware hardening (landed 2026-07-06: RunContext seam, window markers, shared BundleReader, rail contract, reduce verb, schema round-trip, token fallback, v0.2 compatibility note; D-024..D-029).</li><li>[x] 2K NVIDIA/vLLM + nvidia-smi + SSH transport (fixture-first implementation merged 2026-07-08 via PR #11; live validation remains gated on P1-006, protocol pins PROVISIONAL).</li><li>[ ] 2L Orin adapter (gated on P1-006).</li><li>[ ] 2M Homogeneous baselines + prefill/decode qualitative reproduction.</li></ul>
 <p>Acceptance criteria:</p>
-<ul>
-<li>One command creates a complete Mac run bundle.</li>
-<li>Dashboard displays the run trace and summary metrics.</li>
-<li>Repeated runs report variance.</li>
-<li>Unsupported combos fail with structured failure reasons.</li>
-</ul>
+<ul><li>One command creates a complete Mac run bundle.</li><li>Dashboard displays the run trace and summary metrics.</li><li>Repeated runs report variance.</li><li>Unsupported combos fail with structured failure reasons.</li></ul>
 <h3>Phase 3: Disaggregation, Offline KV Replay, And Interconnect Sweep</h3>
-<p>Status: planned. Detail: <code>docs/phase_3/phase_3_plan.md</code>. Exit:
-<code>docs/phase_3/phase_3_exit_checklist.md</code>. Feasibility-first per decision
-D-015: spikes before hardware scheduling, synthetic-transfer floor
-guarantees a crossover dataset.</p>
-<ul>
-<li><input disabled="" type="checkbox"> 3.0 KV persistence feasibility spikes (kv-size helper; mlx-lm;
-llama.cpp incl. cross-machine portability; vLLM time-boxed; verdict
-consolidation).</li>
-<li><input disabled="" type="checkbox"> 3.1 Schema v0.2 (<code>run_kind</code> + <code>split_plan</code>) + transfer
-microbenchmark with both-end energy.</li>
-<li><input disabled="" type="checkbox"> 3.2 Offline split runs with per-stage decomposition
-(prefill/transfer/deserialize/decode).</li>
-<li><input disabled="" type="checkbox"> 3.3 Live split (stretch beyond the required offline replay; droppable).</li>
-<li><input disabled="" type="checkbox"> 3.4 Interconnect sweep + crossover dataset (1GbE, 2.5GbE, optional
-10GbE; 3080 Ti borrow window per runbook).</li>
-</ul>
+<p>Status: planned. Detail: <code>docs/phase_3/phase_3_plan.md</code>. Exit: <code>docs/phase_3/phase_3_exit_checklist.md</code>. Feasibility-first per decision D-015: spikes before hardware scheduling, synthetic-transfer floor guarantees a crossover dataset.</p>
+<ul><li>[ ] 3.0 KV persistence feasibility spikes (kv-size helper; mlx-lm; llama.cpp incl. cross-machine portability; vLLM time-boxed; verdict consolidation).</li><li>[ ] 3.1 Schema v0.2 (<code>run_kind</code> + <code>split_plan</code>) + transfer microbenchmark with both-end energy.</li><li>[ ] 3.2 Offline split runs with per-stage decomposition (prefill/transfer/deserialize/decode).</li><li>[ ] 3.3 Live split (stretch beyond the required offline replay; droppable).</li><li>[ ] 3.4 Interconnect sweep + crossover dataset (1GbE, 2.5GbE, optional 10GbE; 3080 Ti borrow window per runbook).</li></ul>
 <p>Acceptance criteria:</p>
-<ul>
-<li>Split runs decompose prefill, transfer, and decode energy.</li>
-<li>Offline replay produces valid decode-energy measurements (or its
-documented fallback was exercised).</li>
-<li>Interconnect data supports a crossover curve.</li>
-</ul>
+<ul><li>Split runs decompose prefill, transfer, and decode energy.</li><li>Offline replay produces valid decode-energy measurements (or its documented fallback was exercised).</li><li>Interconnect data supports a crossover curve.</li></ul>
 <h3>Phase 4: Core Characterization And Analysis</h3>
-<p>Status: planned. Detail: <code>docs/phase_4/phase_4_plan.md</code>. Exit:
-<code>docs/phase_4/phase_4_exit_checklist.md</code>.</p>
-<ul>
-<li><input disabled="" type="checkbox"> 4.0 Statistical protocol ratification against observed variance.</li>
-<li><input disabled="" type="checkbox"> 4.1 Aggregation layer with exclusion-log discipline.</li>
-<li><input disabled="" type="checkbox"> 4.2 Deterministic figure pipeline (registry F1-F8).</li>
-<li><input disabled="" type="checkbox"> 4.3 Claims-to-evidence index.</li>
-<li><input disabled="" type="checkbox"> 4.4 Results and limitations draft.</li>
-<li><input disabled="" type="checkbox"> 4.5 Uncertainty and sensitivity audit.</li>
-<li><input disabled="" type="checkbox"> 4.6 Background and related-work draft (ungated desk work; may start
-any time).</li>
-</ul>
+<p>Status: planned. Detail: <code>docs/phase_4/phase_4_plan.md</code>. Exit: <code>docs/phase_4/phase_4_exit_checklist.md</code>.</p>
+<ul><li>[ ] 4.0 Statistical protocol ratification against observed variance.</li><li>[ ] 4.1 Aggregation layer with exclusion-log discipline.</li><li>[ ] 4.2 Deterministic figure pipeline (registry F1-F8).</li><li>[ ] 4.3 Claims-to-evidence index.</li><li>[ ] 4.4 Results and limitations draft.</li><li>[ ] 4.5 Uncertainty and sensitivity audit.</li><li>[ ] 4.6 Background and related-work draft (ungated desk work; may start any time).</li></ul>
 <p>Acceptance criteria:</p>
-<ul>
-<li>Claims trace back to raw run bundles.</li>
-<li>Figures regenerate from repository scripts.</li>
-<li>Results identify where splitting wins, loses, and why.</li>
-</ul>
+<ul><li>Claims trace back to raw run bundles.</li><li>Figures regenerate from repository scripts.</li><li>Results identify where splitting wins, loses, and why.</li></ul>
 <h3>Phase 5: Presentation, Repository Polish, And Final Submission</h3>
-<p>Status: planned. Detail: <code>docs/phase_5/phase_5_plan.md</code>. Exit:
-<code>docs/phase_5/phase_5_exit_checklist.md</code>.</p>
-<ul>
-<li><input disabled="" type="checkbox"> 5.0 Verified README quickstart.</li>
-<li><input disabled="" type="checkbox"> 5.1 Backend-extension guide verified by a shipped tutorial adapter.</li>
-<li><input disabled="" type="checkbox"> 5.2 Sample bundle publication with CI validation.</li>
-<li><input disabled="" type="checkbox"> 5.3 Dataset freeze and release tag.</li>
-<li><input disabled="" type="checkbox"> 5.4 Colloquium slides on frozen figures.</li>
-<li><input disabled="" type="checkbox"> 5.5 Final report assembly with claims-index final pass.</li>
-<li><input disabled="" type="checkbox"> 5.6 Repository final pass and project-complete handoff.</li>
-</ul>
+<p>Status: planned. Detail: <code>docs/phase_5/phase_5_plan.md</code>. Exit: <code>docs/phase_5/phase_5_exit_checklist.md</code>.</p>
+<ul><li>[ ] 5.0 Verified README quickstart.</li><li>[ ] 5.1 Backend-extension guide verified by a shipped tutorial adapter.</li><li>[ ] 5.2 Sample bundle publication with CI validation.</li><li>[ ] 5.3 Dataset freeze and release tag.</li><li>[ ] 5.4 Colloquium slides on frozen figures.</li><li>[ ] 5.5 Final report assembly with claims-index final pass.</li><li>[ ] 5.6 Repository final pass and project-complete handoff.</li></ul>
 <p>Acceptance criteria:</p>
-<ul>
-<li>A new user can run one local benchmark from the README.</li>
-<li>A new developer can add a backend from the adapter guide.</li>
-<li>Final figures regenerate from published data.</li>
-</ul>
+<ul><li>A new user can run one local benchmark from the README.</li><li>A new developer can add a backend from the adapter guide.</li><li>Final figures regenerate from published data. Superseded (2026-07-15, WO-017; D-043): full figure re-derivation is controlled/internal by default, and any externally re-reducible evidence handoff is owner-opt-in behind an affirmative privacy ruling; see <code>docs/specs/c027/rpt-001_report_vertical_slice.md</code> §0.4 and <code>docs/contracts/publication_privacy.md</code> §Publication boundary.</li></ul>
 <h2 id="current-verification-command">Current Verification Command</h2>
-<pre><code class="language-bash">python3 -m unittest discover -s tests
-</code></pre>
+<pre><code>python3 -m unittest discover -s tests</code></pre>
 <p>Expected result as of 2026-07-08 after P2-013/P2-014 + 2K + C-011: <code>Ran &lt;N&gt; tests</code> (N per <code>RUN_STATE.md</code> Current Verification; <code>, OK (skipped=10)</code> with zero expected failures.</p>
 <p>Useful commands:</p>
-<pre><code class="language-bash"># Phase 1: config + schema verbs
+<pre><code># Phase 1: config + schema verbs
 python3 -m joulewise validate-config configs/examples/mock_local.json
 python3 -m joulewise print-config-schema
 python3 -m joulewise print-output-schema
@@ -311,45 +94,23 @@ python3 -m joulewise print-output-schema
 python3 -m joulewise run configs/examples/mock_local.json --runs-dir runs
 python3 -m joulewise validate-bundle runs/example-mock-local
 python3 -m joulewise reduce runs/example-mock-local   # post-hoc re-reduction (D-028)
-python3 -m joulewise report runs --output report   # needs the [analysis] extra
-</code></pre>
+python3 -m joulewise report runs --output report   # needs the [analysis] extra</code></pre>
 <h2 id="run-report-protocol">Run Report Protocol</h2>
 <p>Every big run must leave a human-readable handoff note. The report should cover:</p>
-<ul>
-<li>Planning reflection performed at the start of the run.</li>
-<li>What changed.</li>
-<li>What commands were run.</li>
-<li>What passed or failed.</li>
-<li>What local workspace state needs care.</li>
-<li>What the next agent should do first.</li>
-<li>New or updated decision-log entries and risk-register statuses.</li>
-</ul>
-<p>The root <code>RUN_STATE.md</code> is the current handoff. Dated reports live in
-<code>docs/run_reports/</code>.</p>
-<p>Every new phase also needs an exit checklist or equivalent section that states
-the evidence required to close that phase. See
-<code>docs/planning_reflection_protocol.md</code> for the reusable format.</p>
+<ul><li>Planning reflection performed at the start of the run.</li><li>What changed.</li><li>What commands were run.</li><li>What passed or failed.</li><li>What local workspace state needs care.</li><li>What the next agent should do first.</li><li>New or updated decision-log entries and risk-register statuses.</li></ul>
+<p>The root <code>RUN_STATE.md</code> is the current handoff. Dated reports live in <code>docs/run_reports/</code>.</p>
+<p>Every new phase also needs an exit checklist or equivalent section that states the evidence required to close that phase. See <code>docs/planning_reflection_protocol.md</code> for the reusable format.</p>
 <h2 id="task-queue-protocol">Task Queue Protocol</h2>
-<p>Random or newly discovered work should be ranked in <code>TASK_QUEUE.md</code> before it is
-executed. The queue ranks tasks against:</p>
-<ul>
-<li>Current repo state.</li>
-<li>Recent commits.</li>
-<li>Recent run reports.</li>
-<li>Current phase exit gates.</li>
-<li>Safety risk and implementation dependency order.</li>
-</ul>
-<p>If a task is executed immediately, the run report should state why it outranked
-the current top queued task.</p>
-
-
+<p>Random or newly discovered work should be ranked in <code>TASK_QUEUE.md</code> before it is executed. The queue ranks tasks against:</p>
+<ul><li>Current repo state.</li><li>Recent commits.</li><li>Recent run reports.</li><li>Current phase exit gates.</li><li>Safety risk and implementation dependency order.</li></ul>
+<p>If a task is executed immediately, the run report should state why it outranked the current top queued task.</p>
   </div>
 </div>
 </main>
 <footer class="site">
   <div class="inner">
     <span>JouleWise · github.com/mpmdw/JouleWise</span>
-    <span>AGENT_PLAN.md · commit a7d1319 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
+    <span>AGENT_PLAN.md · commit 978e4c6 · regenerate: <span class="mono">python3 scripts/build_site.py</span></span>
   </div>
 </footer>
 </body>
