@@ -133,6 +133,8 @@ jobs:
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npm --prefix site_capsule ci --ignore-scripts --no-audit --no-fund
+      - name: Verify emitted TypeScript with pinned esbuild
+        run: python -m unittest -v tests.test_pack_capsule -k test_real_server_decoder_roundtrips_emitted_shard_and_rejects_corruption
       - name: Exercise non-secret publication chain in a clean temporary snapshot
         env:
           JOULEWISE_MARKED_BIN: ${{ github.workspace }}/node_modules/.bin/marked

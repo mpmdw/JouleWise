@@ -38,14 +38,17 @@ npm --prefix site_capsule exec -- lakebed deploy  # updates the existing deployI
 ```
 
 The root lockfile pins Marked 18.0.6 and the capsule lockfile pins Lakebed
-0.0.29 (including all transitive packages). The pack step uses only that local
-Lakebed executable to build and measure the real validator artifact, then fails
-before deploy if it exceeds 90% of the 1 MiB cap. If the pinned executable is
-not installed, it uses the deterministic conservative estimator and labels
-that mode `estimator-only advisory`; ambient PATH and `npx` caches do not alter
-the canonical result. For a controlled preinstalled package, the explicit
-`JOULEWISE_MARKED_BIN` and `JOULEWISE_LAKEBED_BIN` overrides are accepted only
-when their adjacent package metadata reports the exact pinned version.
+0.0.29 (including all transitive packages). The pack step discovers Lakebed in
+this order: explicit `JOULEWISE_LAKEBED_BIN`, the lockfile-local
+`site_capsule/node_modules/.bin/lakebed`, then `lakebed` on the OS `PATH`.
+Every candidate is accepted only when adjacent package metadata reports the
+exact pinned version. Measured mode builds the real validator artifact and
+fails before deploy if it exceeds 90% of the 1 MiB cap. If no executable is
+available, the deterministic conservative estimator remains advisory and the
+packer emits both a human-readable mode line and a structured
+`joulewise-lakebed-discovery/v1` warning on stderr; it never enters advisory
+mode silently. `JOULEWISE_MARKED_BIN` follows the same exact-version rule for a
+controlled preinstalled Marked package.
 
 `lakebed.json` pins the `deployId`, so `deploy` updates the same URL. The
 deploy is **claimed/owned** (needed for outbound `fetch` to GitHub); an

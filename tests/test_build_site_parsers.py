@@ -305,6 +305,7 @@ Text.
                 build_site.build(no_marked=False)
 
             pack_stdout = io.StringIO()
+            pack_stderr = io.StringIO()
             content.mkdir(parents=True)
             (content / "styles.ts").write_text("legacy", encoding="utf-8")
             with (
@@ -317,6 +318,7 @@ Text.
                     return_value=None,
                 ),
                 contextlib.redirect_stdout(pack_stdout),
+                contextlib.redirect_stderr(pack_stderr),
             ):
                 pages = pack_capsule.pack_pages()
                 total = pack_capsule.build(no_fonts=True)
@@ -418,6 +420,19 @@ Text.
                     readme_html,
                 )
             self.assertIn("postcondition mode: estimator-only advisory", pack_stdout.getvalue())
+            notices = [
+                json.loads(line)
+                for line in pack_stderr.getvalue().splitlines()
+                if line.strip()
+            ]
+            self.assertTrue(notices)
+            self.assertTrue(
+                all(
+                    notice["code"] == "lakebed_executable_unavailable"
+                    and notice["mode"] == "estimator_only_advisory"
+                    for notice in notices
+                )
+            )
             estimated_artifact = pack_capsule.estimate_lakebed_artifact_size(total)
             self.assertLessEqual(
                 estimated_artifact,
