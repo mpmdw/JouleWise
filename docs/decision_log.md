@@ -95,6 +95,7 @@ be re-derived by a future agent gets an entry here.
 | D-070 | Architectural-axes extension agenda (AXI): scope, claim posture, batch-axis rulings | accepted |
 | D-071 | G10 memory-fit rule ratified (axi-sd-memory-fit-shape-v1); device-list review opened | accepted |
 | D-072 | Standing self-merge-with-full-gate authority (gh merges included) | accepted |
+| D-073 | D-016 device-list amendment: Mac + 3080 Ti primary fleet, 12 GiB cap | accepted |
 
 ---
 
@@ -3790,3 +3791,21 @@ commits moving HEAD under long parallel leases; every diff verified
 and landed) and the recurring session-open directory-normalization
 artifact (5th instance; TOOL-01 carries the defect). Recorded per the
 same adjudicated class as the 2026-07-15 approvals above.
+
+## D-073: D-016 device-list amendment — Mac + 3080 Ti primary fleet, 12 GiB cap
+
+Date: 2026-07-16. Owner: Ed (ruled on the D-071 brief,
+`docs/process_traces/2026-07-16-device-list-brief/brief.md`). The
+primary cross-target fleet is the 128 GB M3 Max Mac and the 3080 Ti
+(12 GiB) rig; the G10 capacity cap re-floors from 8 GiB to **12 GiB**
+(3080 Ti class sets the floor). Jetson hardware is retained as
+OPTIONAL, non-cap-setting replication — the edge/8 GiB cell can be
+added later as a replication row without re-deciding this. The split
+study's two nodes are the Mac and the 3080 Ti rig. Big models remain
+open via the Mac-only subsystem (D-071 clause 3). Follow-ons ruled by
+Ed same session: (a) conditional primary-model repin remains open with
+a WIDENED candidate search under the new cap (Ed: "is there really
+nothing better than Qwen3-1.7B? Gemma 4B or something?") — 3-4B-class
+models now fit comfortably; (b) dense/MoE pair re-search under the
+12 GiB cap (OLMo dense arm failed G4 as published — see the OLMo
+verification record in the same trace directory).
