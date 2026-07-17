@@ -1,0 +1,22 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "p2-015-00_neg8_start-order-v1",
+  "plan_id": "p2-015-window-a-m3max-qwen25-1p5b-v1",
+  "calibration_plan_sha256": "e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+  "ordering_note": "Fixed first position; scientific condition matches the end reference.",
+  "planned_n_bundles": 1,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "p2015-neg8-reference-start.json",
+      "run_id": "p2015-neg8-reference-start",
+      "model_tag": "qwen25-1p5b-mlx",
+      "rep": 1,
+      "workload": "df-rq-mid",
+      "role": "neg8_daily_reference",
+      "block_index": 1,
+      "position_in_block": 1,
+      "sentinel_position": "start"
+    }
+  ]
+}

@@ -1,0 +1,2155 @@
+{
+  "schema_version": "joulewise.detection_floor_calibration_plan.v1",
+  "plan_id": "p2-015-window-a-m3max-qwen25-1p5b-v1",
+  "calibration_scope": "window_a",
+  "freeze_status": "frozen_before_measurement",
+  "fixed_n": 10,
+  "stack_scope": {
+    "hardware_target": "macbook_m3_max",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "model_name": "Qwen2.5-1.5B-Instruct-4bit",
+    "model_revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+    "model_source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+    "quantization": "int4",
+    "sampling": {
+      "power_hz": 10.0,
+      "idle_seconds": 30.0,
+      "warmup_seconds": 5.0
+    },
+    "suite_manifest_ref": "configs/suite_manifests/jw_sentinel_v1_qwen25_15b.json",
+    "suite_manifest_sha256": "0316283dde8afd5fc0dea66b56037a1aea34b42d415aec57af4831a119af8471"
+  },
+  "replacement_rule": {
+    "policy": "technical_invalid_same_slot_only",
+    "predeclared_before_data": true,
+    "outcome_dependent_top_up": "forbidden_and_demotes_contrast_to_exploratory"
+  },
+  "execution_modes": {
+    "expanded_window_a": {
+      "selected_for_this_frozen_plan": true,
+      "ordered_subcampaign_ids": [
+        "00_neg8_start",
+        "01_request_absolute_core",
+        "02_phase_absolute",
+        "03_request_abba",
+        "04_phase_prefill_abba",
+        "05_phase_decode_abba",
+        "06_suite_absolute",
+        "07_suite_abba",
+        "08_optional_long_request_absolute",
+        "09_optional_short_prefill_abba",
+        "11_neg8_end"
+      ],
+      "planned_bundles": 282
+    },
+    "core_claim_subset_if_lead_rejects_optional_cost_before_command_00": {
+      "selected_for_this_frozen_plan": false,
+      "ordered_subcampaign_ids": [
+        "00_neg8_start",
+        "01_request_absolute_core",
+        "02_phase_absolute",
+        "03_request_abba",
+        "04_phase_prefill_abba",
+        "05_phase_decode_abba",
+        "06_suite_absolute",
+        "07_suite_abba",
+        "11_neg8_end"
+      ],
+      "planned_bundles": 222,
+      "claim_caps": [
+        "No direct AP-2 long-prompt or long-decode request floor rows.",
+        "No short-prefill comparative L2/L3 floor row."
+      ]
+    }
+  },
+  "cells": [
+    {
+      "cell_id": "df-rq-mid-absolute",
+      "df_rows": [
+        "DF-RQ-GROSS-MID",
+        "DF-RQ-IDLE-MID"
+      ],
+      "kind": "absolute",
+      "use_role": "primary_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "request",
+      "metric_selectors": [
+        "gross_energy_j",
+        "energy_request_j",
+        "idle_subtracted_energy_j"
+      ],
+      "condition_family_id": "df-rq-mid",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "p2015-df-rq-mid-abs-r01",
+        "p2015-df-rq-mid-abs-r02",
+        "p2015-df-rq-mid-abs-r03",
+        "p2015-df-rq-mid-abs-r04",
+        "p2015-df-rq-mid-abs-r05",
+        "p2015-df-rq-mid-abs-r06",
+        "p2015-df-rq-mid-abs-r07",
+        "p2015-df-rq-mid-abs-r08",
+        "p2015-df-rq-mid-abs-r09",
+        "p2015-df-rq-mid-abs-r10"
+      ]
+    },
+    {
+      "cell_id": "df-rq-short-absolute",
+      "df_rows": [
+        "DF-RQ-GROSS-SHORT",
+        "DF-RQ-IDLE-SHORT"
+      ],
+      "kind": "absolute",
+      "use_role": "primary_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "request",
+      "metric_selectors": [
+        "gross_energy_j",
+        "energy_request_j",
+        "idle_subtracted_energy_j"
+      ],
+      "condition_family_id": "df-rq-short",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "p2015-df-rq-short-abs-r01",
+        "p2015-df-rq-short-abs-r02",
+        "p2015-df-rq-short-abs-r03",
+        "p2015-df-rq-short-abs-r04",
+        "p2015-df-rq-short-abs-r05",
+        "p2015-df-rq-short-abs-r06",
+        "p2015-df-rq-short-abs-r07",
+        "p2015-df-rq-short-abs-r08",
+        "p2015-df-rq-short-abs-r09",
+        "p2015-df-rq-short-abs-r10"
+      ]
+    },
+    {
+      "cell_id": "df-ph-prefill-absolute",
+      "df_rows": [
+        "DF-PH-PREFILL"
+      ],
+      "kind": "absolute",
+      "use_role": "primary_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.prefill"
+      ],
+      "condition_family_id": "df-ph-prefill",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "p2015-df-ph-prefill-abs-r01",
+        "p2015-df-ph-prefill-abs-r02",
+        "p2015-df-ph-prefill-abs-r03",
+        "p2015-df-ph-prefill-abs-r04",
+        "p2015-df-ph-prefill-abs-r05",
+        "p2015-df-ph-prefill-abs-r06",
+        "p2015-df-ph-prefill-abs-r07",
+        "p2015-df-ph-prefill-abs-r08",
+        "p2015-df-ph-prefill-abs-r09",
+        "p2015-df-ph-prefill-abs-r10"
+      ]
+    },
+    {
+      "cell_id": "df-ph-decode-absolute",
+      "df_rows": [
+        "DF-PH-DECODE"
+      ],
+      "kind": "absolute",
+      "use_role": "primary_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "df-ph-decode",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "p2015-df-ph-decode-abs-r01",
+        "p2015-df-ph-decode-abs-r02",
+        "p2015-df-ph-decode-abs-r03",
+        "p2015-df-ph-decode-abs-r04",
+        "p2015-df-ph-decode-abs-r05",
+        "p2015-df-ph-decode-abs-r06",
+        "p2015-df-ph-decode-abs-r07",
+        "p2015-df-ph-decode-abs-r08",
+        "p2015-df-ph-decode-abs-r09",
+        "p2015-df-ph-decode-abs-r10"
+      ]
+    },
+    {
+      "cell_id": "df-ph-short-prefill-absolute",
+      "df_rows": [
+        "DF-PH-SHORT-PREFILL"
+      ],
+      "kind": "absolute",
+      "use_role": "identifiability_and_floor_if_eligible",
+      "minimum_claim_n": 10,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.prefill"
+      ],
+      "condition_family_id": "df-ph-short-prefill",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "p2015-df-ph-short-prefill-abs-r01",
+        "p2015-df-ph-short-prefill-abs-r02",
+        "p2015-df-ph-short-prefill-abs-r03",
+        "p2015-df-ph-short-prefill-abs-r04",
+        "p2015-df-ph-short-prefill-abs-r05",
+        "p2015-df-ph-short-prefill-abs-r06",
+        "p2015-df-ph-short-prefill-abs-r07",
+        "p2015-df-ph-short-prefill-abs-r08",
+        "p2015-df-ph-short-prefill-abs-r09",
+        "p2015-df-ph-short-prefill-abs-r10"
+      ]
+    },
+    {
+      "cell_id": "df-cmp-abba-rq",
+      "df_rows": [
+        "DF-CMP-ABBA-RQ"
+      ],
+      "kind": "comparative_abba",
+      "use_role": "primary_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "request",
+      "metric_selectors": [
+        "gross_energy_j",
+        "energy_request_j"
+      ],
+      "condition_family_id": "df-rq-mid",
+      "cluster_reducer": "single",
+      "ordered_blocks": [
+        {
+          "block_id": "df-cmp-abba-rq-b01",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-rq-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-rq-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-rq-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-rq-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-rq-b02",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-rq-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-rq-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-rq-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-rq-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-rq-b03",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-rq-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-rq-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-rq-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-rq-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-rq-b04",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-rq-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-rq-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-rq-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-rq-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-rq-b05",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-rq-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-rq-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-rq-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-rq-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-rq-b06",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-rq-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-rq-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-rq-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-rq-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-rq-b07",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-rq-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-rq-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-rq-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-rq-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-rq-b08",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-rq-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-rq-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-rq-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-rq-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-rq-b09",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-rq-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-rq-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-rq-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-rq-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-rq-b10",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-rq-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-rq-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-rq-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-rq-b10-a2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cell_id": "df-cmp-abba-ph-prefill",
+      "df_rows": [
+        "DF-CMP-ABBA-PH"
+      ],
+      "kind": "comparative_abba",
+      "use_role": "primary_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.prefill"
+      ],
+      "condition_family_id": "df-ph-prefill",
+      "cluster_reducer": "single",
+      "ordered_blocks": [
+        {
+          "block_id": "df-cmp-abba-ph-prefill-b01",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-prefill-b02",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-prefill-b03",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-prefill-b04",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-prefill-b05",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-prefill-b06",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-prefill-b07",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-prefill-b08",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-prefill-b09",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-prefill-b10",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-prefill-b10-a2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cell_id": "df-cmp-abba-ph-decode",
+      "df_rows": [
+        "DF-CMP-ABBA-PH"
+      ],
+      "kind": "comparative_abba",
+      "use_role": "primary_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.decode"
+      ],
+      "condition_family_id": "df-ph-decode",
+      "cluster_reducer": "single",
+      "ordered_blocks": [
+        {
+          "block_id": "df-cmp-abba-ph-decode-b01",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b02",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b03",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b04",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b05",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b06",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b07",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b08",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b09",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-decode-b10",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-decode-b10-a2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cell_id": "df-su-sentinel-absolute",
+      "df_rows": [
+        "DF-SU-ITEM",
+        "DF-SU-LEVEL"
+      ],
+      "kind": "absolute",
+      "use_role": "primary_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "item_and_level",
+      "metric_selectors": [
+        "suite_metrics.items[*].gross_energy_j",
+        "suite_metrics.levels[*].gross_energy_j"
+      ],
+      "condition_family_id": "df-su-sentinel",
+      "cluster_reducer": "mean",
+      "ordered_bundle_ids": [
+        "p2015-df-su-sentinel-abs-r01",
+        "p2015-df-su-sentinel-abs-r02",
+        "p2015-df-su-sentinel-abs-r03",
+        "p2015-df-su-sentinel-abs-r04",
+        "p2015-df-su-sentinel-abs-r05",
+        "p2015-df-su-sentinel-abs-r06",
+        "p2015-df-su-sentinel-abs-r07",
+        "p2015-df-su-sentinel-abs-r08",
+        "p2015-df-su-sentinel-abs-r09",
+        "p2015-df-su-sentinel-abs-r10"
+      ]
+    },
+    {
+      "cell_id": "df-cmp-abba-su",
+      "df_rows": [
+        "DF-CMP-ABBA-SU"
+      ],
+      "kind": "comparative_abba",
+      "use_role": "primary_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "item_and_level",
+      "metric_selectors": [
+        "suite_metrics.items[*].gross_energy_j",
+        "suite_metrics.levels[*].gross_energy_j"
+      ],
+      "condition_family_id": "df-su-sentinel",
+      "cluster_reducer": "mean",
+      "ordered_blocks": [
+        {
+          "block_id": "df-cmp-abba-su-b01",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-su-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-su-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-su-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-su-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-su-b02",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-su-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-su-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-su-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-su-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-su-b03",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-su-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-su-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-su-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-su-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-su-b04",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-su-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-su-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-su-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-su-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-su-b05",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-su-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-su-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-su-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-su-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-su-b06",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-su-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-su-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-su-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-su-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-su-b07",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-su-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-su-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-su-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-su-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-su-b08",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-su-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-su-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-su-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-su-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-su-b09",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-su-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-su-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-su-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-su-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-su-b10",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-su-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-su-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-su-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-su-b10-a2"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cell_id": "df-rq-long-prompt-absolute",
+      "df_rows": [
+        "DF-RQ-GROSS-LONG-PROMPT",
+        "DF-RQ-IDLE-LONG-PROMPT"
+      ],
+      "kind": "absolute",
+      "use_role": "optional_direct_coverage",
+      "minimum_claim_n": 10,
+      "window_class": "request",
+      "metric_selectors": [
+        "gross_energy_j",
+        "energy_request_j",
+        "idle_subtracted_energy_j"
+      ],
+      "condition_family_id": "df-rq-long-prompt",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "p2015-df-rq-long-prompt-abs-r01",
+        "p2015-df-rq-long-prompt-abs-r02",
+        "p2015-df-rq-long-prompt-abs-r03",
+        "p2015-df-rq-long-prompt-abs-r04",
+        "p2015-df-rq-long-prompt-abs-r05",
+        "p2015-df-rq-long-prompt-abs-r06",
+        "p2015-df-rq-long-prompt-abs-r07",
+        "p2015-df-rq-long-prompt-abs-r08",
+        "p2015-df-rq-long-prompt-abs-r09",
+        "p2015-df-rq-long-prompt-abs-r10"
+      ]
+    },
+    {
+      "cell_id": "df-rq-long-decode-absolute",
+      "df_rows": [
+        "DF-RQ-GROSS-LONG-DECODE",
+        "DF-RQ-IDLE-LONG-DECODE"
+      ],
+      "kind": "absolute",
+      "use_role": "optional_direct_coverage",
+      "minimum_claim_n": 10,
+      "window_class": "request",
+      "metric_selectors": [
+        "gross_energy_j",
+        "energy_request_j",
+        "idle_subtracted_energy_j"
+      ],
+      "condition_family_id": "df-rq-long-decode",
+      "cluster_reducer": "single",
+      "ordered_bundle_ids": [
+        "p2015-df-rq-long-decode-abs-r01",
+        "p2015-df-rq-long-decode-abs-r02",
+        "p2015-df-rq-long-decode-abs-r03",
+        "p2015-df-rq-long-decode-abs-r04",
+        "p2015-df-rq-long-decode-abs-r05",
+        "p2015-df-rq-long-decode-abs-r06",
+        "p2015-df-rq-long-decode-abs-r07",
+        "p2015-df-rq-long-decode-abs-r08",
+        "p2015-df-rq-long-decode-abs-r09",
+        "p2015-df-rq-long-decode-abs-r10"
+      ]
+    },
+    {
+      "cell_id": "df-cmp-abba-ph-short-prefill",
+      "df_rows": [
+        "DF-CMP-ABBA-PH"
+      ],
+      "kind": "comparative_abba",
+      "use_role": "optional_short_prefill_comparative_claim_gate",
+      "minimum_claim_n": 10,
+      "window_class": "phase",
+      "metric_selectors": [
+        "phase_energy_j.prefill"
+      ],
+      "condition_family_id": "df-ph-short-prefill",
+      "cluster_reducer": "single",
+      "ordered_blocks": [
+        {
+          "block_id": "df-cmp-abba-ph-short-prefill-b01",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b01-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b01-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b01-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b01-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-short-prefill-b02",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b02-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b02-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b02-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b02-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-short-prefill-b03",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b03-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b03-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b03-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b03-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-short-prefill-b04",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b04-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b04-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b04-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b04-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-short-prefill-b05",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b05-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b05-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b05-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b05-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-short-prefill-b06",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b06-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b06-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b06-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b06-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-short-prefill-b07",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b07-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b07-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b07-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b07-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-short-prefill-b08",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b08-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b08-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b08-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b08-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-short-prefill-b09",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b09-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b09-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b09-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b09-a2"
+            }
+          ]
+        },
+        {
+          "block_id": "df-cmp-abba-ph-short-prefill-b10",
+          "executed_labels": [
+            "A",
+            "B",
+            "B",
+            "A"
+          ],
+          "members": [
+            {
+              "position": "A1",
+              "plan_label": "A",
+              "plan_sequence_index": 1,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b10-a1"
+            },
+            {
+              "position": "B1",
+              "plan_label": "B",
+              "plan_sequence_index": 2,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b10-b1"
+            },
+            {
+              "position": "B2",
+              "plan_label": "B",
+              "plan_sequence_index": 3,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b10-b2"
+            },
+            {
+              "position": "A2",
+              "plan_label": "A",
+              "plan_sequence_index": 4,
+              "bundle_id": "p2015-df-cmp-abba-ph-short-prefill-b10-a2"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "neg8_daily_reference": {
+    "condition_family_id": "df-rq-mid",
+    "start_bundle_id": "p2015-neg8-reference-start",
+    "end_bundle_id": "p2015-neg8-reference-end",
+    "session_id_is_blocking_factor": true
+  },
+  "unavailable_cells": [
+    {
+      "cell_id": "df-telem-onoff-current-hardware",
+      "df_rows": [
+        "DF-TELEM-ONOFF"
+      ],
+      "status": "not_runnable_from_existing_machinery",
+      "reason": "BenchmarkConfig has no extra-sampler field and the powermetrics adapter uses a process-global fixed sampler set without tasks.",
+      "floor_output": "unknown"
+    }
+  ],
+  "runs_dir": "runs/p2_015_floors_window_a",
+  "order_manifest": "order_manifest.json",
+  "campaign_log": "runs/p2_015_floors_window_a/campaign_log.jsonl"
+}

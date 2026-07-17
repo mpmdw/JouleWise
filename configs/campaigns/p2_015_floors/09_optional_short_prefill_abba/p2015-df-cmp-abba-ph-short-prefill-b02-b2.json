@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1",
+  "run_id": "p2015-df-cmp-abba-ph-short-prefill-b02-b2",
+  "model": {
+    "name": "Qwen2.5-1.5B-Instruct-4bit",
+    "family": "qwen2.5",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+    "revision": "8b403126fc14f14cfc99bb4cfa72ecbc129ea677",
+    "weight_format": "mlx",
+    "context_window": 32768
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "P2-015 Window-A floor calibration on the current M3 Max; normal powermetrics sampler set only."
+  },
+  "workload_profile": {
+    "name": "df_ph_short_prefill",
+    "repetitions": 1,
+    "warmup_runs": 1,
+    "prompt_tokens": 128,
+    "output_tokens": 64
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "tags": [
+      "phase2",
+      "p2-015",
+      "window-a",
+      "floor-calibration",
+      "df-condition=df-ph-short-prefill",
+      "calibration-plan-sha256=e529a0624b7618edaade511dd610ae0837f31de299dde642a055974c382681ab",
+      "rep2",
+      "calibration-abba-block-id=df-cmp-abba-ph-short-prefill-b02",
+      "calibration-abba-label=B",
+      "calibration-abba-sequence-index=3"
+    ]
+  }
+}
