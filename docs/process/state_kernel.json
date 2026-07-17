@@ -367,11 +367,14 @@
           "target": "SITE-CAPACITY-RIGHTSIZING-DECIDED"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "SITE-02 landed 2026-07-16 (PR #68 merged 2778ed2; loud Lakebed discovery D1 + emitted-TypeScript node regression D2; D2 verified executed in release-chain CI log)",
+            "path": "docs/run_reports/2026-07-14-audit-resume-axi.md"
+          },
           "kind": "task",
           "required": "SITE-02 lands before remaining site right-sizing",
           "scope": "close",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "SITE-02"
         }
@@ -2359,88 +2362,6 @@
       "priority": "p3_research_expansion",
       "rank": 21,
       "status": "blocked",
-      "stop_card": null
-    },
-    "SITE-02": {
-      "acceptance": {
-        "evidence": [
-          "Executable discovery and loud measured/advisory mode selection have regressions",
-          "Node decode regression executes the emitted TypeScript",
-          "Measured mode is provably selected on a clean clone with Lakebed available"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/SITE-02/acceptance",
-          "label": "SITE-02 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Both SITE-01 D1/D2 follow-ups close with regressions, including clean-clone proof that Lakebed selects measured mode."
-      },
-      "authority": {
-        "label": "SITE-01 delta-audit D1/D2 deferrals and PR #63 dispositions",
-        "path": "docs/run_reports/2026-07-13-restart-merge-deploy.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "SITE-01 delta-audit D1/D2 deferrals and PR #63 dispositions",
-            "path": "docs/run_reports/2026-07-13-restart-merge-deploy.md"
-          },
-          "rule": "Do not silently enter advisory estimator mode when a Lakebed executable is available"
-        },
-        {
-          "authority": {
-            "label": "SITE-01 delta-audit D1/D2 deferrals and PR #63 dispositions",
-            "path": "docs/run_reports/2026-07-13-restart-merge-deploy.md"
-          },
-          "rule": "Execute emitted TypeScript in the node decode regression instead of a rewritten JavaScript mirror"
-        }
-      ],
-      "flags": [],
-      "goal": "Close SITE-01 follow-ups D1/D2: prevent pack_capsule executable discovery from silently entering advisory estimator mode off this machine through explicit environment and OS-path discovery plus a loud mode print, and make the node decode test execute the emitted TypeScript with tsx or ts-node when available instead of a rewritten JavaScript mirror.",
-      "id": "SITE-02",
-      "lane": "agent",
-      "priority": "p4_polish",
-      "rank": 20,
-      "status": "queued",
-      "stop_card": null
-    },
-    "SPLIT-AP": {
-      "acceptance": {
-        "evidence": [
-          "One primary estimand and its service-state assumption are frozen",
-          "Both monolithic references are predeclared with joint adjusted contrast intervals and split wins only if both are beaten",
-          "Missing composite and transfer floor cells are named as execution prerequisites"
-        ],
-        "pointer": {
-          "label": "SPLIT-AP pre-registration amendments",
-          "path": "docs/specs/c027/split-ap_ap-edit_amendments.md"
-        },
-        "summary": "The split pack and analysis plan are amended before split data, with the non-primary basis retained only as a named sensitivity analysis."
-      },
-      "authority": {
-        "label": "C-027 NEG-7 and RIG-5",
-        "path": "docs/reviews/2026-07-09-c027-whole-project-review.md"
-      },
-      "dependencies": [],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "SPLIT-AP execution prerequisites",
-            "path": "docs/specs/c027/split-ap_ap-edit_amendments.md"
-          },
-          "rule": "Do not execute the split campaign before this freeze and its named composite and transfer floor prerequisites land"
-        }
-      ],
-      "flags": [],
-      "goal": "Freeze the split pre-registration: one primary estimand and service-state assumption covering gross versus idle-subtracted charged states per NEG-7, both monolithic references predeclared with joint adjusted contrast intervals and split wins only if both are beaten per RIG-5, and missing composite and transfer floor cells named as prerequisites.",
-      "id": "SPLIT-AP",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 9,
-      "status": "queued",
       "stop_card": null
     },
     "TOOL-01": {

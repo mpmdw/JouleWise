@@ -24,7 +24,7 @@ EXPECTED_IDS = {
     # [AGENT]
     "P2-035", "P2-036", "P3-000", "P2-022", "P2-023",
     "P2-024", "P3-001b", "P2-004", "P2-005", "P2-016",
-    "P2-047A", "P2-048", "P2-050", "SITE-02", "SPLIT-AP", "TOOL-01",
+    "P2-047A", "P2-048", "P2-050", "TOOL-01",
     "CI-003", "DOC-010",
     "DOC-008", "DOC-008-INTAKE", "DOC-008-REFLECTION", "DOC-008-STATUS",
     # audit close-out promotions (2026-07-15): deferred fix-wave orders
@@ -40,7 +40,7 @@ EXPECTED_IDS = {
 }
 
 TERMINAL_IDS = {"P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
-                "AXI-SA"}
+                "AXI-SA", "SITE-02", "SPLIT-AP"}
 
 
 def load_kernel():
@@ -165,9 +165,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_50(self):
+    def test_exact_live_id_set_48(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 50)
+        self.assertEqual(len(self.tasks), 48)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -368,7 +368,10 @@ class TestRefreshedStateFidelity(unittest.TestCase):
 
     def test_pre_demotion_task_record_parity(self):
         self._assert_pre_demotion_task_record_parity(self.tasks)
-        for task_id in ("SITE-02", "SPLIT-AP", "P2-050", "TOOL-01"):
+        # SITE-02 and SPLIT-AP completed 2026-07-16 (PRs #68/#69) and left
+        # the live kernel; the parity negative check keeps the still-live
+        # recovered rows.
+        for task_id in ("P2-050", "TOOL-01"):
             with self.subTest(negative_removed_task_id=task_id):
                 mutated = copy.deepcopy(self.tasks)
                 mutated.pop(task_id)
@@ -376,9 +379,6 @@ class TestRefreshedStateFidelity(unittest.TestCase):
                     self._assert_pre_demotion_task_record_parity(mutated)
 
     def test_recovered_task_semantics(self):
-        self.assertEqual(self.tasks["SITE-02"]["priority"], "p4_polish")
-        self.assertEqual(self.tasks["SPLIT-AP"]["priority"], "p2_next_slice")
-        self.assertEqual(self.tasks["SPLIT-AP"]["rank"], 9)
         self.assertEqual(
             self.tasks["P2-050"]["priority"], "p3_hardening_candidates"
         )
@@ -387,7 +387,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             self.tasks["TOOL-01"]["status_note"],
             "lead personal tooling, non-repo",
         )
-        for task_id in ("SITE-02", "SPLIT-AP", "P2-050", "TOOL-01"):
+        for task_id in ("P2-050", "TOOL-01"):
             self.assertEqual(self.tasks[task_id]["lane"], "agent")
             self.assertEqual(self.tasks[task_id]["status"], "queued")
             self.assertEqual(self.tasks[task_id]["dependencies"], [])

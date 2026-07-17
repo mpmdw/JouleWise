@@ -7,10 +7,12 @@ and a fresh final-head review; kernel row completed, AXI-SB/AXI-SC
 now READY in the agent lane. Ed has the Mac — Window A (P2-038
 shakedown closure with Ed + powermetrics → P2-015-SMOKE → P2-015
 floors → baselines) is software-unblocked and owns the quiet-Mac
-lane. In-flight this session: SPLIT-AP freeze (impl/split-ap) and
-SITE-02 D1/D2 closure (impl/site-02), both in final review; AXI-SD
-web-verification memo captured for the D-016 decision package
-(D-016 remains Ed's). Session record:
+lane. Also landed this session: SPLIT-AP freeze (PR #69 `9db4546`)
+and SITE-02 D1/D2 closure (PR #68 `2778ed2`); post-merge integration
+review found zero cross-stream defects, merged-main suite 1630 OK
+(lead-corroborated). AXI-SB spike in flight (impl/axi-sb; live probes
+are lead-only). AXI-SD web-verification memo captured for the D-016
+decision package (D-016 remains Ed's). Session record:
 `docs/run_reports/2026-07-14-audit-resume-axi.md` (addenda) until
 this session's report lands.)
 

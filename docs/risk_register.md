@@ -300,6 +300,15 @@ Conventions:
   backed up, restored to a temp dir, `validate-bundle` green on the
   restored copy. Swapping in the final destination is a one-argument
   change (or edit the script default) plus one fresh restore test.
+- **Protocol upgraded (2026-07-10/11, P0-003 closed; addendum 2026-07-16
+  closing a summary-row/body drift found by the resumption audit).** The
+  interim same-disk destination above is superseded: the external
+  destination is iCloud Drive, live with a fresh backup + restore test
+  passed (evidence: `docs/run_reports/2026-07-11-c028-continuation.md`
+  §11, "The P0-003 iCloud measurement-corpus backup and restore gate is
+  satisfied"). The 2026-07-06 entry above is retained as history.
+  Standing caveat: iCloud eviction — re-verify the destination is
+  materialized (fresh restore test) before each measurement window.
 - Fallback: re-run affected experiments from their configs (the config
   hash separates old/new data cleanly per D-005/D-010); report any
   unrecoverable gap honestly in the exclusion log.
