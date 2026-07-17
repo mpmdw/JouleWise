@@ -24,7 +24,7 @@
   "must_suppress_task_ids": [
     "AXI-SB-ADAPTER",
     "P1-008",
-    "P2-015-SMOKE",
+    "P2-015",
     "P2-004"
   ]
 }

@@ -1314,11 +1314,14 @@
           "target": "P0-003"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "P2-015-SMOKE closed 2026-07-17: production-shaped campaign shakedown passed (production_uncertainty_v1, canonical merged-main run pinned in detection_floor.md); extra-sampler overhead layer honestly deferred with DF-TELEM (required only before enabling extra samplers)",
+            "path": "docs/phase_2/detection_floor.md"
+          },
           "kind": "task",
           "required": "sampler-overhead smoke + C-019 shakedown recorded",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "P2-015-SMOKE"
         },
@@ -1370,76 +1373,7 @@
       "lane": "quiet_mac",
       "priority": "p2_next_slice",
       "rank": 1,
-      "status": "blocked",
-      "stop_card": null
-    },
-    "P2-015-SMOKE": {
-      "acceptance": {
-        "evidence": [
-          "Ordering Preconditions rows satisfied",
-          "Noted in Window-A run report before floor cells"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/P2-015-SMOKE/acceptance",
-          "label": "P2-015-SMOKE acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Both preconditions recorded per detection_floor Ordering Preconditions; results noted in the Window-A run report before P2-015 floor cells."
-      },
-      "authority": {
-        "label": "Detection floor Ordering Preconditions",
-        "path": "docs/phase_2/detection_floor.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "R-016 mitigated: off-machine backup and restore proof",
-            "path": "docs/risk_register.md"
-          },
-          "kind": "task",
-          "required": "external backup destination live before irreplaceable Window-A evidence accumulates",
-          "scope": "retain_evidence",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P0-003"
-        },
-        {
-          "evidence": {
-            "label": "P2-038 live tail closed 2026-07-17: production_uncertainty_v1 PASSED on merged main (runs/window_a_shakedown_final; eligible, empty reasons, strict pre+post, backup 0) after drain v1/v2 fixes PR #72/#74; command+record pinned in docs/phase_2/detection_floor.md",
-            "path": "docs/phase_2/detection_floor.md"
-          },
-          "kind": "task",
-          "required": "production uncertainty evidence path lands",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-038"
-        },
-        {
-          "evidence": {
-            "label": "P2-043 merged doctor preflight contract",
-            "path": "docs/contracts/doctor_preflight.md"
-          },
-          "kind": "task",
-          "required": "read-only doctor passes campaign mode with warnings acknowledged",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P2-043"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [
-        "lead_only",
-        "pre_window_a_gate"
-      ],
-      "goal": "Pre-Window-A tasks-sampler overhead smoke plus production-shaped campaign shakedown through doctor, strict validation, reducer 0.4.2, strict revalidation, campaign verdict split, and approved backup.",
-      "id": "P2-015-SMOKE",
-      "lane": "quiet_mac",
-      "priority": "p2_next_slice",
-      "rank": 0,
-      "status": "queued",
+      "status": "partial",
       "stop_card": null
     },
     "P2-016": {

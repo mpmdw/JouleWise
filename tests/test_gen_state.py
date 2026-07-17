@@ -34,14 +34,14 @@ EXPECTED_IDS = {
     # AXI-SB-ADAPTER minted 2026-07-16 on the AXI-SB supported verdict
     "AXI-SB-ADAPTER", "AXI-SD", "AXI-SE",
     # [QUIET-MAC]
-    "P2-015-SMOKE", "P2-015", "P2-006", "P2-010", "P2-019", "P2-020",
+    "P2-015", "P2-006", "P2-010", "P2-019", "P2-020",
     "P2-012", "P2-046B", "P2-047B",
     # [ED-EXTERNAL]
     "P1-008", "P2-027", "P1-001", "P1-003", "P1-004", "P1-006",
 }
 
 TERMINAL_IDS = {"P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
-                "AXI-SA", "AXI-SB", "AXI-SC", "P2-038", "SITE-02", "SPLIT-AP"}
+                "AXI-SA", "AXI-SB", "AXI-SC", "P2-038", "P2-015-SMOKE", "SITE-02", "SPLIT-AP"}
 
 
 def load_kernel():
@@ -166,9 +166,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_46(self):
+    def test_exact_live_id_set_45(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 46)
+        self.assertEqual(len(self.tasks), 45)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -194,7 +194,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             self.assertIsNone(task["stop_card"])
         self.assertEqual(self.kernel["active_global_gates"], [])
         selected = gen_state.selectable_task_ids(self.kernel)
-        self.assertTrue({"P1-008", "P2-015-SMOKE"} <= selected)
+        self.assertTrue({"P1-008", "P2-015"} <= selected)
 
     def test_axi_work_program_sequence_authority_and_window_fences(self):
         # AXI-S0 (2026-07-15), AXI-SA and AXI-SB (2026-07-16) completed and
@@ -242,7 +242,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
     def test_p2_015_dependency_set(self):
         self.assertEqual(
             self._hard_start_targets("P2-015"),
-            {"P2-015-SMOKE"},
+            set(),
         )
         all_targets = {d["target"] for d in self.tasks["P2-015"]["dependencies"]}
         self.assertEqual(
@@ -297,19 +297,16 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertEqual(min(task["rank"] for task in external), 1)
         self.assertEqual(self.tasks["P1-008"]["rank"], 1)
 
-    def test_quiet_mac_all_lead_only_and_smoke_is_lane_head(self):
+    def test_quiet_mac_all_lead_only_and_p2_015_is_partial_lane_head(self):
         quiet = [t for t in self.tasks.values() if t["lane"] == "quiet_mac"]
-        self.assertEqual(len(quiet), 9)
+        self.assertEqual(len(quiet), 8)
         for task in quiet:
             self.assertIn("lead_only", task["flags"])
         self.assertEqual(
-            self.tasks["P2-015-SMOKE"]["rank"],
+            self.tasks["P2-015"]["rank"],
             min(task["rank"] for task in quiet),
         )
-        self.assertEqual(self.tasks["P2-015-SMOKE"]["status"], "queued")
-        self.assertLess(
-            self.tasks["P2-015-SMOKE"]["rank"], self.tasks["P2-015"]["rank"]
-        )
+        self.assertEqual(self.tasks["P2-015"]["status"], "partial")
 
     def test_new_hardening_followups(self):
         self.assertEqual(self._hard_start_targets("P2-046B"), set())

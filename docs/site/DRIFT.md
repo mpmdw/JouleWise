@@ -1,19 +1,15 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-16, resumption + no-hardware batch session (PRs #67/#68/#69
-merged: AXI-SA burst-decode contract, SITE-02 D1/D2 closure, SPLIT-AP freeze;
-AXI-SB static-batch verdict `supported` with the Mac C5-2.2 leg mint staged on `impl/axi-sb` (pending merge); kernel/queue
-closures; run report `2026-07-16-resumption-nohw-batch.md`). Automation
-informs; Ed deploys.
+Refreshed: 2026-07-17, Window-A floor publication + advisor-brief/top-doc
+refresh. Automation informs; Ed deploys.
 
-Additional 2026-07-16 staleness on top of everything below: the generated
-`run_state`, `task_queue` / `roadmap`, `record`, `research`, `risk_register`,
-`council_log`, and `latest_run_report` pages now also predate today's AXI-SA/
-SITE-02/SPLIT-AP landings, the AXI-SB `supported` verdict (+ its staged C5-2.2 Mac-leg mint, pending
-merge), the R-016 body addendum, and this session's run report. SITE-02 also
-changed `scripts/pack_capsule.py` discovery behavior (loud refusal, never
-silent estimator fallback) — Ed's next manual deploy exercises the new
-discovery path; the deploy command below is unchanged.
+Additional 2026-07-17 staleness on top of everything below: the deployed site
+predates P2-038's merged-main production-shaped pass, the Window-A floor corpus
+(222 distinct strict-valid, collection-usable but claim-evidence-flagged
+bundles), the independently verified request/phase/suite floor table, the
+AXI-SC `unsupported_for_joulewise` verdict, and the shipped advisor brief at
+`docs/advisor_briefs/2026-07-17-window-a-brief.html`. It also predates the
+current `README.md`, `PROJECT_STATUS.md`, and draft overnight run report.
 
 Live capsule state (last deploy 2026-07-13, `7d3ea57`-era snapshot at
 854,349 B): STALE against this branch.
@@ -33,8 +29,17 @@ Stale sections needing regeneration at Ed's next manual deploy:
   gross-headline / named-boundary rule and the D-069 terminology split.
 - The generated `project_status`, `status`, and `readme` pages do not yet
   contain the D-067 gross-headline / named-boundary wording, the D-069
-  harness-versus-benchmark split, or the D-070 five-axis Q4 stress-test
-  agenda now present in their source documents.
+  harness-versus-benchmark split, the D-070 five-axis Q4 stress-test agenda,
+  P2-038 closure, or the published Window-A floor/caveat summary now present in
+  their source documents.
+- The generated `results` and `latest_run_report` pages do not include the
+  verified floor values or their evidence ceiling: strict-valid and
+  collection-usable does not mean claim-ready; P2-037 adjudication remains
+  pending, short prefill is smoke-only, optional long-request floors were not
+  run, and ABBA tails carry drift/ordering caveats.
+- The current capsule has no page for the shipped Window-A advisor brief. Ed's
+  next manual publication decision must either add it deliberately or leave it
+  repository-only; this drift report does not prescribe a new site route.
 - The generated `research` page does not yet reflect the D-067
   C-023-IDLE-STATIONARITY framing note or the aligned C5-1.1/static-batching
   bank text. Generated library/provenance surfaces likewise predate these

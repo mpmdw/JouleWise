@@ -10,12 +10,13 @@ are provided for anyone who wants the full evidence trail.
   `RUN_STATE.md` and `TASK_QUEUE.md`; the canonical suite command and CI own
   the current verification result. This page deliberately does not duplicate
   volatile commit, pull-request, queue, or test-count facts.
-- Repository state: the comprehensive audit is closed on `main`.
-  This week's landed state also includes the AXI-SA burst-decode contract
-  SITE-02 D1/D2, the SPLIT-AP Part I pre-registration freeze, and the AXI-SB
-  `supported` static-batch verdict plus its Mac C5-2.2 leg. The AXI-SB live
-  probes are runtime-feasibility evidence, not an energy measurement or
-  claim-bearing campaign. The dated update ledger carries the merge pointers.
+- Repository state: the comprehensive audit is closed on `main`. P2-038 is
+  closed by a merged-main production-shaped pass, and Window A is open. Its
+  floor campaign produced 222 distinct strict-valid, collection-usable bundles;
+  the verified floor extraction and advisor brief are published in the
+  repository. Every bundle is also claim-evidence-flagged, so strict validity
+  is not claim readiness and P2-037 claim adjudication remains pending. The
+  dated update ledger carries the merge pointers.
 - Project phase: see the phase exit checklists for exact completion state;
   live eligibility and next work come from the generated state kernel, not
   this reader-facing summary.
@@ -27,20 +28,53 @@ are provided for anyone who wants the full evidence trail.
 
 ## Current Repository View — 30-second read
 
-**The comprehensive audit is closed, and this week's resumption work is on
-`main`.** AXI-SA now supplies the request-scoped burst-decode contract used by
-the architectural-axis work. SITE-02's loud discovery path and emitted-code
-regression are closed, while SPLIT-AP freezes its Part I pre-registration.
-AXI-SB's lead-run Metal probes support native static batching at B=2 and B=4
-with request-scoped observability, so the Mac C5-2.2 leg is minted; this is
-live functionality evidence, not an energy measurement, and it consumed no
-quiet-Mac window.
+**Window A is open and its first floor set is published.** P2-038 closed after
+the production-shaped runner path passed on merged `main`; the retained failed
+shakedowns had already caught a missing telemetry bracket, idle-window
+contamination, and an anchor-lag error before the floor corpus began. The
+campaign then yielded 222 distinct bundles, all strict-valid and
+collection-usable. Independent extraction and verification confirmed the floor
+table below, and the shipped advisor brief presents the same evidence.
 
-Window A is software-unblocked but still requires Ed and a quiet Mac, in this
-order: P2-038 live closure, P2-015-SMOKE, P2-015 floors, then baselines. The
-agent-lane heads are AXI-SB-ADAPTER, AXI-SC, and AXI-SD. Remote protocol pins
-remain PROVISIONAL, and the generated state kernel remains the selection
-authority.
+This is calibration evidence, not a promoted research result: all 222 bundles
+are claim-evidence-flagged, short prefill is not resolvable, the optional
+long-request block was not run, and comparative tails show drift/ordering
+structure. P2-037 claim adjudication remains pending before any floor-backed
+L2/L3 claim. AXI-SB remains `supported` for native static-batch runtime
+feasibility with request-scoped observability; AXI-SC is
+`unsupported_for_joulewise` on the pinned runtime because the required
+speculative-decode/MTP observability or execution surface is absent. Neither
+verdict is an energy result. Remote protocol pins remain PROVISIONAL, and the
+generated state kernel remains the work-selection authority.
+
+### Published Window-A floor summary
+
+Every energy value below is a false-effect guard floor in joules on the **Apple
+M3 Max / powermetrics SoC-rail boundary (CPU + GPU + ANE)**. Gross is the D-067
+headline basis; idle-subtracted values are labeled within-device secondary
+views. Absolute rows use repeated identical conditions; comparative rows use
+same-condition ABBA blocks. Each primary row uses `n=10` strict-valid bundles
+or ABBA blocks.
+
+| window / basis | absolute floor | comparative floor | computed `floor_gate_j` / disposition |
+|---|---:|---:|---:|
+| mid request, gross — M3 Max / powermetrics SoC rails | 0.527 J | 0.909 J | 0.909 J |
+| mid request, idle-subtracted — M3 Max / powermetrics SoC rails | 0.537 J | 0.894 J | 0.894 J; within-device secondary |
+| short request, gross — M3 Max / powermetrics SoC rails | 0.052 J | — | absolute floor only |
+| short request, idle-subtracted — M3 Max / powermetrics SoC rails | 0.059 J | — | absolute floor only; within-device secondary |
+| prefill phase, gross — M3 Max / powermetrics SoC rails | 1.477 J | 1.739 J | 1.739 J |
+| decode phase, gross — M3 Max / powermetrics SoC rails | 0.786 J | 1.027 J | 1.027 J |
+| short-prefill stress, gross — M3 Max / powermetrics SoC rails | 0.027 J | — | smoke-only; `not_resolvable_sample_count` |
+| suite item, gross — M3 Max / powermetrics SoC rails | 0.333 J | 4.923 J | 4.923 J; drift review required |
+| suite level, gross — M3 Max / powermetrics SoC rails | 1.664 J | 24.619 J | 24.619 J; drift review required |
+
+The start/end NEG-8 reference pair is an `n=2` drift diagnostic, not a campaign
+floor. Its gross request energy moved by 7.659 J on the Apple M3 Max /
+powermetrics SoC-rail boundary; the idle-subtracted within-device secondary
+view moved by 6.608 J on the same boundary. The verified extraction is
+`docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json`; the
+shipped reader deliverable is
+`docs/advisor_briefs/2026-07-17-window-a-brief.html`.
 
 ## Previous Update (as of 2026-07-09, C-027 whole-project council review) — 30-second read
 
@@ -158,6 +192,7 @@ implementing the statistical-uncertainty protocol) queued.
 
 | date | label | one-line outcome | run-report link |
 |---|---|---|---|
+| 2026-07-17 | Window A floors + advisor brief | PRs #72/#74 closed the bounded powermetrics drain defects and P2-038 passed on merged main; PR #73 filed the AXI-SC negative applicability verdict; 222 distinct strict-valid floor bundles were extracted and independently verified, with claim-readiness caveats retained; the advisor brief shipped. | `docs/run_reports/2026-07-17-window-a-floors.md` (DRAFT-FOR-LEAD) |
 | 2026-07-16 | audit close + no-hardware resumption batch | PR #66 closed the comprehensive audit; PRs #67-#70 landed AXI-SA, SITE-02 D1/D2, the SPLIT-AP Part I freeze, and the AXI-SB `supported` verdict with its Mac C5-2.2 leg. Window A is software-unblocked but still needs Ed + quiet Mac; no new energy measurement is claimed. | `docs/run_reports/2026-07-16-resumption-nohw-batch.md` |
 | 2026-07-10/11 | C-028 hardening and integration arc | PRs #41-#58 merged; analysis trio complete; reducer lattice through 0.4.2; P0-003 restore proof and every Window-A software gate satisfied; PR #59 open as a bounded follow-up; no new live evidence claimed. | `docs/run_reports/2026-07-11-c028-continuation.md` |
 | 2026-07-06 | third update / first real energy | Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements. **P2-003, gross energy — M3 Max / powermetrics SoC rails:** ~47.2 J per 512-token request. **P2-003, idle-subtracted energy — M3 Max / powermetrics SoC rails:** ~79-90 mJ per generated output token; the originally reported range used the prompt+output denominator and was corrected 2026-07-09 (C-027). TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz; short prefill energy is below the current detection capability and is not a quantitative result (D-055). | `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md` |
@@ -256,9 +291,9 @@ batching remains a post-capstone extension.
 | Background / related work | Phase 4 Stage 4.6, `docs/phase_4/related_work_draft.md` | drafted (11 verified sources) | background-chapter assembly and the Phase 4 exit pass |
 | Measurement methodology | `docs/contracts/measurement_methodology.md` | complete | Phase 4 ratification may amend statistical details against observed variance |
 | Harness / instrument | `joulewise/` | complete; pre-campaign software review cleared; C-028 closed | live execution eligibility comes from the state kernel; quiet-machine work also requires Ed and the clean hardware lane |
-| Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | software-unblocked; quiet-Mac execution remains | P2-038 live closure → P2-015-SMOKE → P2-015 floors → the 2M baseline corpus; needs Ed + quiet Mac |
+| Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | Window A open; production shakedown closed and first floors published; quiet-Mac execution remains | P2-037 claim adjudication and the live state kernel govern the next baseline step; needs Ed + quiet Mac |
 | Split-inference study | Phase 3 | planned | needs KV-feasibility spikes plus a real pairing, or the synthetic-transfer + analytical-composition floor |
-| Results / limitations + claims audit | Phase 4 Stages 4.3-4.5 | analysis path implemented | P2-042/P2-041/P2-037 analysis trio is merged; Window-A data do not yet exist |
+| Results / limitations + claims audit | Phase 4 Stages 4.3-4.5 | analysis path implemented; Window-A calibration data exist | the floor corpus is strict-valid but claim-evidence-flagged; P2-037 adjudication must preserve the published caveats before any claim promotion |
 
 Complete so far (all verifiable in the repository):
 
@@ -344,12 +379,15 @@ work; P0-003's backup gate is satisfied, and the grading rubric/calendar
    remains harness-shaped and valuable under any scope.
 
 Closed since the last revision: the comprehensive audit; AXI-SA's burst-decode
-contract; SITE-02 D1/D2; the SPLIT-AP Part I pre-registration freeze; and
-AXI-SB's `supported` static-batch verdict with its Mac C5-2.2 leg.
-Window A's software gates are
-satisfied, so execution is software-unblocked. Its execution timing is governed by the live work-selection state
-in `RUN_STATE.md`'s generated state-kernel region; the remaining fixed chain
-is P2-038 → P2-015-SMOKE → P2-015 → baselines and still requires Ed plus a
+contract; SITE-02 D1/D2; the SPLIT-AP Part I pre-registration freeze;
+AXI-SB's `supported` static-batch verdict with its Mac C5-2.2 leg; P2-038's
+production-shaped live gate; and AXI-SC's `unsupported_for_joulewise` pinned-
+runtime verdict. Window A's software gates are
+satisfied, its first floor corpus is published, and the window remains open.
+The floors are calibration thresholds rather than claim promotion: P2-037
+adjudication remains pending because strict-valid collection and claim
+readiness are separate gates; execution timing is governed by the live work-selection state
+in `RUN_STATE.md`'s generated state-kernel region and still requires Ed plus a
 quiet Mac.
 
 ## Architecture
