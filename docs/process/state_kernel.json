@@ -453,76 +453,6 @@
       "status": "queued",
       "stop_card": null
     },
-    "AXI-SC": {
-      "acceptance": {
-        "evidence": [
-          "The mlx-lm live runtime spike records generation support separately from claim-instrumentable support, including whether proposal and acceptance counters and request-scoped evidence are available",
-          "The vLLM speculative-decode leg is fixture-first and explicitly PROVISIONAL until live NVIDIA contact, with no fixture-derived live claim",
-          "Native-MTP and external draft-model findings remain separate contrast families, and the native-MTP candidate survey feeds D-016 rather than silently selecting runtime scope"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/AXI-SC/acceptance",
-          "label": "AXI-SC acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "The Mac and vLLM speculative-decode spikes distinguish runtime generation from claim instrumentation, keep NVIDIA evidence PROVISIONAL, separate MTP from draft-model contrasts, and feed candidate evidence to D-016."
-      },
-      "authority": {
-        "anchor": "4-work-program-post-audit-clearance-streams",
-        "label": "AXI handoff work program S-C",
-        "path": "docs/axi-handoff.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "AXI-SA landed 2026-07-16 (burst-decode contract stages 0-7; PR #67 merged as 7593259 after CI portability fix 0914374; CI green 5/5; canonical 1626 OK lead-run at d916bff)",
-            "path": "docs/run_reports/2026-07-14-audit-resume-axi.md"
-          },
-          "kind": "task",
-          "required": "AXI-SA burst and request semantics land before speculative runtime spikes consume them",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "AXI-SA"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Binding AXI xhigh consult",
-            "path": "docs/process_traces/2026-07-15-axi-xhigh-consult/response.md"
-          },
-          "rule": "Distinguish runtime generation support from claim-instrumentable support and never pool native-MTP with external draft-model arms"
-        },
-        {
-          "authority": {
-            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
-            "label": "D-070 fixture-first claim posture",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Keep the vLLM leg PROVISIONAL until live NVIDIA contact and make no live claim from fixture-first evidence"
-        },
-        {
-          "authority": {
-            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
-            "label": "D-070 Window A ownership",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Window A retains every quiet-Mac measurement slot; AXI-SC is agent-lane runtime feasibility work and performs no energy campaign or claim-bearing measurement"
-        }
-      ],
-      "flags": [
-        "provisional_until_live"
-      ],
-      "goal": "Run speculative-decode runtime spikes against AXI-SA: a live mlx-lm capability leg and a vLLM fixture-first PROVISIONAL leg, recording runtime-generation support separately from claim-instrumentable counter and event support; keep native MTP and external drafts separate, and route the MTP candidate survey into D-016.",
-      "id": "AXI-SC",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 5,
-      "status": "queued",
-      "stop_card": null
-    },
     "AXI-SD": {
       "acceptance": {
         "evidence": [
@@ -1393,11 +1323,14 @@
           "target": "P2-015-SMOKE"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "P2-038 live tail closed 2026-07-17: production_uncertainty_v1 PASSED on merged main (runs/window_a_shakedown_final; eligible, empty reasons, strict pre+post, backup 0) after drain v1/v2 fixes PR #72/#74; command+record pinned in docs/phase_2/detection_floor.md",
+            "path": "docs/phase_2/detection_floor.md"
+          },
           "kind": "task",
           "required": "production uncertainty evidence path lands",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "P2-038"
         },
@@ -1471,11 +1404,14 @@
           "target": "P0-003"
         },
         {
-          "evidence": null,
+          "evidence": {
+            "label": "P2-038 live tail closed 2026-07-17: production_uncertainty_v1 PASSED on merged main (runs/window_a_shakedown_final; eligible, empty reasons, strict pre+post, backup 0) after drain v1/v2 fixes PR #72/#74; command+record pinned in docs/phase_2/detection_floor.md",
+            "path": "docs/phase_2/detection_floor.md"
+          },
           "kind": "task",
           "required": "production uncertainty evidence path lands",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "P2-038"
         },
@@ -1503,7 +1439,7 @@
       "lane": "quiet_mac",
       "priority": "p2_next_slice",
       "rank": 0,
-      "status": "blocked",
+      "status": "queued",
       "stop_card": null
     },
     "P2-016": {
@@ -1974,54 +1910,6 @@
       "status_note": "SHELF per C-026 meeting; FLORES language-set decision (D-046/B6) may share the session.",
       "stop_card": null
     },
-    "P2-038": {
-      "acceptance": {
-        "evidence": [
-          "True MLX plus /usr/bin/powermetrics campaign shakedown",
-          "Strict then reduce then strict request gate passes without synthetic metadata",
-          "Approved off-machine backup succeeds"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/P2-038/acceptance",
-          "label": "P2-038 acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "On a lead-controlled quiet Mac, a true MLX plus /usr/bin/powermetrics shakedown passes strict, reducer-0.4.2 re-reduction, production uncertainty gates, campaign claim-readiness plumbing, and approved backup."
-      },
-      "authority": {
-        "label": "Adjudicated P2-038 production-uncertainty spec",
-        "path": "docs/specs/c027/p2-038_production_uncertainty_evidence.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "R-016 mitigated: off-machine backup and restore proof",
-            "path": "docs/risk_register.md"
-          },
-          "kind": "task",
-          "required": "approved off-machine backup destination and restore proof exist",
-          "scope": "retain_evidence",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "P0-003"
-        }
-      ],
-      "fallback": null,
-      "fences": [],
-      "flags": [
-        "lead_only",
-        "pre_window_a_gate",
-        "provisional_until_live"
-      ],
-      "goal": "Close the production uncertainty live tail: execute the merged clock-anchor, marker-phase, idle-drift, and idle-guard path on true MLX plus /usr/bin/powermetrics and retain the backed-up shakedown evidence.",
-      "id": "P2-038",
-      "lane": "quiet_mac",
-      "priority": "p2_next_slice",
-      "rank": 7,
-      "status": "partial",
-      "status_note": "PR #48 merged the software path and accepted-finding fixes; only the lead-controlled quiet-machine live closure remains.",
-      "stop_card": null
-    },
     "P2-046B": {
       "acceptance": {
         "evidence": [
@@ -2042,11 +1930,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "P2-038 live tail closed 2026-07-17: production_uncertainty_v1 PASSED on merged main (runs/window_a_shakedown_final; eligible, empty reasons, strict pre+post, backup 0) after drain v1/v2 fixes PR #72/#74; command+record pinned in docs/phase_2/detection_floor.md",
+            "path": "docs/phase_2/detection_floor.md"
+          },
           "kind": "task",
           "required": "P2-038 live production path closes first",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "P2-038"
         },
@@ -2082,7 +1973,7 @@
       "lane": "quiet_mac",
       "priority": "p1_phase_gate",
       "rank": 8,
-      "status": "blocked",
+      "status": "queued",
       "status_note": "Part A merged in PR #50; Part B is quiet-machine physical execution.",
       "stop_card": null
     },
@@ -2395,5 +2286,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-07-16"
+  "updated": "2026-07-17"
 }

@@ -1,20 +1,16 @@
 # JouleWise Run State
 
-Last updated: 2026-07-16 (AXI-SA LANDED: PR #67 merged as `7593259`
-under Ed's in-session merge delegation after a CI portability fix
-(`0914374`, full-history checkout for the golden-provenance replay)
-and a fresh final-head review; kernel row completed, AXI-SB/AXI-SC
-now READY in the agent lane. Ed has the Mac — Window A (P2-038
-shakedown closure with Ed + powermetrics → P2-015-SMOKE → P2-015
-floors → baselines) is software-unblocked and owns the quiet-Mac
-lane. Also landed this session: SPLIT-AP freeze (PR #69 `9db4546`),
-SITE-02 D1/D2 closure (PR #68 `2778ed2`), and AXI-SB (PR #70): verdict
-`supported` from lead-run live probes, Mac C5-2.2 leg minted, follow-on
-row AXI-SB-ADAPTER minted at agent rank 4. Post-merge integration
-review (3 streams) found zero cross-stream defects; merged-main suite
-1630 OK (lead-corroborated). AXI-SD web-verification memo captured for
-the D-016 decision package (D-016 remains Ed's). Session record:
-`docs/run_reports/2026-07-16-resumption-nohw-batch.md`.)
+Last updated: 2026-07-17 (WINDOW A OPEN — P2-038 LIVE TAIL CLOSED:
+production_uncertainty_v1 PASSED on merged main (drain fixes PR #72/#74
+after two live-bundle triage rounds; canonical record
+runs/window_a_shakedown_final, pinned in detection_floor.md). AXI-SC
+landed (PR #73): structured negative verdict, spec-decode Mac leg not
+minted on pinned mlx-lm; DSpark/DFlash identified with MLX
+implementations (extension-axes evaluation persisted). P2-015-SMOKE is
+the quiet-Mac head, then P2-015 floors; overnight measurement program
+in progress for Ed's advisor meeting. Session record:
+`docs/run_reports/2026-07-16-resumption-nohw-batch.md` (+ tonight's
+report to follow).)
 
 ## Start Here For Every Big Run
 
@@ -81,7 +77,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-16). Latest report: [Resumption + no-hardware batch: PRs #67/#68/#69 merged, AXI-SB supported verdict, kernel closures](docs/run_reports/2026-07-16-resumption-nohw-batch.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-17). Latest report: [Resumption + no-hardware batch: PRs #67/#68/#69 merged, AXI-SB supported verdict, kernel closures](docs/run_reports/2026-07-16-resumption-nohw-batch.md).
 
 ### [ED-EXTERNAL]
 
@@ -89,7 +85,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [QUIET-MAC]
 
-- READY — Q7 `P2-038`: Close the production uncertainty live tail: execute the merged clock-anchor, marker-phase, idle-drift, and idle-guard path on true MLX plus /usr/bin/powermetrics and retain the backed-up shakedown evidence.
+- READY — Q0 `P2-015-SMOKE`: Pre-Window-A tasks-sampler overhead smoke plus production-shaped campaign shakedown through doctor, strict validation, reducer 0.4.2, strict revalidation, campaign verdict split, and approved backup.
 
 ### [AGENT]
 

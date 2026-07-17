@@ -38,6 +38,29 @@ P2-015 execution is ordered after both preconditions below:
    fails, extra samplers stay off and any telemetry-perturbation floor for the
    extra sampler is `unknown`.
 
+Precondition 1 is **SATISFIED (2026-07-17)**. On merged main, the lead ran:
+
+```sh
+caffeinate -is .venv/bin/python scripts/run_campaign.py \
+  configs/campaigns/p2_015_smoke/production_shakedown \
+  --runs-dir runs/window_a_shakedown_final \
+  --backup "<P0-003 iCloud wrapper>" \
+  --shakedown-gate production_uncertainty_v1
+```
+
+The lead first issued `pmset displaysleepnow`; this display-sleep environment
+pin kept the idle-window sentinels clean while `caffeinate -is` prevented idle
+system sleep without forcing the display awake. The resulting
+`runs/window_a_shakedown_final` gate record was `passed` with
+`request_eligible: true`, reasons `[]`, strict validation before and after the
+reducer-0.4.2 pass, and backup exit 0. PR #72 and PR #74 supplied the two drain
+fixes exercised by the passing run. This is plumbing evidence only and does
+not establish a detection floor or claim readiness.
+
+Precondition 2 remains required only before enabling extra samplers. It does
+not invalidate the completed C-019 production shakedown and must not be
+misread as a prerequisite for runs that keep extra samplers disabled.
+
 ### Floor Artifact Semantics
 
 The calibration manifest produces one row per
