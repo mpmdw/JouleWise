@@ -30,8 +30,9 @@ EXPECTED_IDS = {
     # audit close-out promotions (2026-07-15): deferred fix-wave orders
     "AUD-WO-033", "AUD-WO-034", "AUD-WO-035", "AUD-WO-036",
     "AUD-WO-037", "AUD-WO-038", "AUD-WO-039", "AUD-FOLLOWUPS",
-    # AXI extension agenda (D-070 + binding xhigh sequencing amendments)
-    "AXI-SB", "AXI-SC", "AXI-SD", "AXI-SE",
+    # AXI extension agenda (D-070 + binding xhigh sequencing amendments);
+    # AXI-SB-ADAPTER minted 2026-07-16 on the AXI-SB supported verdict
+    "AXI-SB-ADAPTER", "AXI-SC", "AXI-SD", "AXI-SE",
     # [QUIET-MAC]
     "P2-015-SMOKE", "P2-015", "P2-006", "P2-010", "P2-019", "P2-020",
     "P2-012", "P2-038", "P2-046B", "P2-047B",
@@ -40,7 +41,7 @@ EXPECTED_IDS = {
 }
 
 TERMINAL_IDS = {"P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
-                "AXI-SA", "SITE-02", "SPLIT-AP"}
+                "AXI-SA", "AXI-SB", "SITE-02", "SPLIT-AP"}
 
 
 def load_kernel():
@@ -196,15 +197,24 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertTrue({"P1-008", "P2-038"} <= selected)
 
     def test_axi_work_program_sequence_authority_and_window_fences(self):
-        # AXI-S0 completed 2026-07-15 and AXI-SA completed 2026-07-16
-        # (both left the live kernel; the Completed table owns their
-        # records); the remaining program keeps its relative order.
-        axi_ids = ("AXI-SB", "AXI-SC", "AXI-SD", "AXI-SE")
+        # AXI-S0 (2026-07-15), AXI-SA and AXI-SB (2026-07-16) completed and
+        # left the live kernel; the Completed table owns their records.
+        # AXI-SB-ADAPTER was minted on the SB supported verdict and takes
+        # rank 4 with the verdict document as its authority (checked below
+        # separately from the handoff-authority program rows).
+        axi_ids = ("AXI-SC", "AXI-SD", "AXI-SE")
         self.assertEqual(
             {tid: self.tasks[tid]["rank"] for tid in axi_ids},
-            {"AXI-SB": 4,
-             "AXI-SC": 5, "AXI-SD": 6, "AXI-SE": 7},
+            {"AXI-SC": 5, "AXI-SD": 6, "AXI-SE": 7},
         )
+        adapter = self.tasks["AXI-SB-ADAPTER"]
+        self.assertEqual(adapter["rank"], 4)
+        self.assertEqual(adapter["status"], "queued")
+        self.assertEqual(adapter["lane"], "agent")
+        self.assertEqual(adapter["authority"]["path"],
+                         "docs/specs/axi/sb_static_batch_verdict.md")
+        self.assertTrue(any("Window A retains every quiet-Mac measurement slot"
+                            in fence["rule"] for fence in adapter["fences"]))
         expected_authority_paths = {
             "docs/axi-handoff.md",
             "docs/decision_log.md",
@@ -219,15 +229,12 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             self.assertTrue(any("Window A retains every quiet-Mac measurement slot"
                                 in fence["rule"] for fence in task["fences"]))
 
-        self.assertEqual(self.tasks["AXI-SB"]["status"], "queued")
         self.assertEqual(self.tasks["AXI-SC"]["status"], "queued")
         self.assertEqual(self.tasks["AXI-SD"]["status"], "queued")
-        for tid in ("AXI-SB", "AXI-SC"):
-            sa_dep = next(d for d in self.tasks[tid]["dependencies"]
-                          if d["target"] == "AXI-SA")
-            self.assertEqual(sa_dep["state"], "satisfied")
-            self.assertIn("PR #67", sa_dep["evidence"]["label"])
-        self.assertEqual(self._hard_start_targets("AXI-SB"), set())
+        sa_dep = next(d for d in self.tasks["AXI-SC"]["dependencies"]
+                      if d["target"] == "AXI-SA")
+        self.assertEqual(sa_dep["state"], "satisfied")
+        self.assertIn("PR #67", sa_dep["evidence"]["label"])
         self.assertEqual(self._hard_start_targets("AXI-SC"), set())
         self.assertEqual(self._hard_start_targets("AXI-SE"), {"P2-015"})
         self.assertIn("provisional_until_live", self.tasks["AXI-SC"]["flags"])

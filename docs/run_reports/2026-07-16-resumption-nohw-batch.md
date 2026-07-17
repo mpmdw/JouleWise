@@ -185,3 +185,19 @@ subagent tokens + ~17 codex-run sessions) + 1 Fable web agent (94k). Every
 fix round that ran got a delta re-audit; the doctrine paid for itself once
 (R1) and the final-head rule once (CI-log D2 verification was lead-gate, but
 MR1 came from the bench-edit fresh pass).
+
+## Addendum (same session): AXI-SB LANDED — PR #70 merged
+
+The anti-gaming lens verified the live evidence genuine and found a
+harness trust-chain blocker (controller trusted the child's verdict);
+fix round → delta re-audit caught TWO new bypasses in the fix itself
+(derivation unanchored to requested B; terminal runtime UIDs unchecked
+— NINTH fix-rounds-introduce-defects datum) → closed-set micro-round →
+lead termination: post-hardening live re-probe derived `supported` at
+stage `controller_evidence_validation` on real Metal; worktree suite
+green; CI green 5/5; merged (self-merge per Ed's delegation). Kernel:
+AXI-SB completed; AXI-SB-ADAPTER minted at agent rank 4 (batch_size
+knob + per-sequence AXI-SA events; authority = the verdict doc). The
+"staged" Mac C5-2.2 leg mint wording earlier in this report is now
+effective on main. Agent-lane heads after this session: AXI-SB-ADAPTER
+(4), AXI-SC (5), AXI-SD (6).

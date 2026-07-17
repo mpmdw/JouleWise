@@ -399,47 +399,33 @@
       "status_note": "Partial page trim landed 2026-07-15 by redirecting the duplicative capsule task-queue mirror while preserving its routes; remaining payload work is open. D-043 supersession closure falls due at landing through the dated D-051 amendment identified by PA-2.",
       "stop_card": null
     },
-    "AXI-SB": {
+    "AXI-SB-ADAPTER": {
       "acceptance": {
         "evidence": [
-          "The pinned mlx-lm spike records a STRUCTURED verdict: supported only for true B greater than 1 execution with per-request output IDs and counts, stop reasons, timestamps, and request-scoped event hooks",
-          "Any missing execution support or observability yields unsupported_for_joulewise with a reason such as event_observability, while memory-fit range is recorded separately from runtime-support semantics",
-          "The Mac C5-2.2 batching registry leg is minted only after full JouleWise support; otherwise the dated negative finding leaves the leg absent"
+          "A batch-capable Mac adapter exposes a batch_size configuration knob and emits per-sequence request-scoped token events conforming to the landed AXI-SA event contract, validated by strict bundle validation on a mock or live smoke bundle",
+          "Realized batch size is recorded alongside configured batch size, and structured memory-fit failures are captured as data rather than crashes",
+          "No energy claim, campaign scheduling, or quiet-Mac consumption occurs in this row; AP-BATCH execution remains separately floor-gated per AXI-SE"
         ],
         "pointer": {
-          "json_pointer": "/tasks/AXI-SB/acceptance",
-          "label": "AXI-SB acceptance",
+          "json_pointer": "/tasks/AXI-SB-ADAPTER/acceptance",
+          "label": "AXI-SB-ADAPTER acceptance",
           "path": "docs/process/state_kernel.json"
         },
-        "summary": "The mlx-lm static-batch spike returns a structured JouleWise-support verdict that requires genuine B greater than 1 execution and complete per-request observability, and mints the Mac registry leg only on full support."
+        "summary": "The follow-on static-batch adapter turns the AXI-SB supported verdict into an instrumented batch_size-configurable Mac runtime path emitting per-sequence AXI-SA events, with memory-fit failures structured and zero claim or quiet-Mac consumption."
       },
       "authority": {
-        "anchor": "4-work-program-post-audit-clearance-streams",
-        "label": "AXI handoff work program S-B",
-        "path": "docs/axi-handoff.md"
+        "label": "AXI-SB verdict document (supported; mint-on-supported follow-on)",
+        "path": "docs/specs/axi/sb_static_batch_verdict.md"
       },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "AXI-SA landed 2026-07-16 (burst-decode contract stages 0-7; PR #67 merged as 7593259 after CI portability fix 0914374; CI green 5/5; canonical 1626 OK lead-run at d916bff)",
-            "path": "docs/run_reports/2026-07-14-audit-resume-axi.md"
-          },
-          "kind": "task",
-          "required": "AXI-SA request and event semantics land before the static-batch support verdict",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "AXI-SA"
-        }
-      ],
+      "dependencies": [],
       "fallback": null,
       "fences": [
         {
           "authority": {
-            "label": "Binding AXI xhigh consult",
-            "path": "docs/process_traces/2026-07-15-axi-xhigh-consult/response.md"
+            "label": "AXI-SB verdict document classification and scope",
+            "path": "docs/specs/axi/sb_static_batch_verdict.md"
           },
-          "rule": "Do not classify a Python loop over singleton calls or batch execution without request observability as supported; emit unsupported_for_joulewise with a structured reason"
+          "rule": "Build on the verified BatchGenerator path with per-request observability; a Python loop over singleton calls is not a batch adapter"
         },
         {
           "authority": {
@@ -447,7 +433,7 @@
             "label": "D-070 static-batch scope",
             "path": "docs/decision_log.md"
           },
-          "rule": "Keep continuous batching deferred and do not infer coalescing, scheduler-optimum, or offered-load claims from the static-batch spike"
+          "rule": "Keep continuous batching deferred and do not infer coalescing, scheduler-optimum, or offered-load claims from static-batch work"
         },
         {
           "authority": {
@@ -455,12 +441,12 @@
             "label": "D-070 Window A ownership",
             "path": "docs/decision_log.md"
           },
-          "rule": "Window A retains every quiet-Mac measurement slot; AXI-SB is an agent-lane feasibility spike and performs no energy campaign or claim-bearing measurement"
+          "rule": "Window A retains every quiet-Mac measurement slot; adapter implementation and mock or smoke validation are agent-lane work and consume no quiet-Mac campaign time"
         }
       ],
       "flags": [],
-      "goal": "Time-box the pinned mlx-lm static-batch feasibility spike and record a STRUCTURED verdict: supported requires true B greater than 1 execution plus request-scoped output IDs and counts, stop reasons, timestamps, and event hooks; otherwise record unsupported_for_joulewise with reason, keep memory fit separate, and mint the Mac C5-2.2 leg only on full support.",
-      "id": "AXI-SB",
+      "goal": "Implement the static-batch Mac adapter follow-on minted by the AXI-SB supported verdict: batch_size configuration knob, per-sequence request-scoped token events per the AXI-SA contract, realized-vs-configured batch recording, and structured memory-fit outcomes, with strict-valid mock or smoke bundles and no energy claims.",
+      "id": "AXI-SB-ADAPTER",
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 4,

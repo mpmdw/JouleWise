@@ -7,12 +7,13 @@ and a fresh final-head review; kernel row completed, AXI-SB/AXI-SC
 now READY in the agent lane. Ed has the Mac — Window A (P2-038
 shakedown closure with Ed + powermetrics → P2-015-SMOKE → P2-015
 floors → baselines) is software-unblocked and owns the quiet-Mac
-lane. Also landed this session: SPLIT-AP freeze (PR #69 `9db4546`)
-and SITE-02 D1/D2 closure (PR #68 `2778ed2`); post-merge integration
-review found zero cross-stream defects, merged-main suite 1630 OK
-(lead-corroborated). AXI-SB spike in flight (impl/axi-sb; live probes
-are lead-only). AXI-SD web-verification memo captured for the D-016
-decision package (D-016 remains Ed's). Session record:
+lane. Also landed this session: SPLIT-AP freeze (PR #69 `9db4546`),
+SITE-02 D1/D2 closure (PR #68 `2778ed2`), and AXI-SB (PR #70): verdict
+`supported` from lead-run live probes, Mac C5-2.2 leg minted, follow-on
+row AXI-SB-ADAPTER minted at agent rank 4. Post-merge integration
+review (3 streams) found zero cross-stream defects; merged-main suite
+1630 OK (lead-corroborated). AXI-SD web-verification memo captured for
+the D-016 decision package (D-016 remains Ed's). Session record:
 `docs/run_reports/2026-07-16-resumption-nohw-batch.md`.)
 
 ## Start Here For Every Big Run
@@ -92,7 +93,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- READY — A4 `AXI-SB`: Time-box the pinned mlx-lm static-batch feasibility spike and record a STRUCTURED verdict: supported requires true B greater than 1 execution plus request-scoped output IDs and counts, stop reasons, timestamps, and event hooks; otherwise record unsupported_for_joulewise with reason, keep memory fit separate, and mint the Mac C5-2.2 leg only on full support.
+- READY — A4 `AXI-SB-ADAPTER`: Implement the static-batch Mac adapter follow-on minted by the AXI-SB supported verdict: batch_size configuration knob, per-sequence request-scoped token events per the AXI-SA contract, realized-vs-configured batch recording, and structured memory-fit outcomes, with strict-valid mock or smoke bundles and no energy claims.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 

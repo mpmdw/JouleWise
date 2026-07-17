@@ -1,7 +1,7 @@
 {
  "active_global_gates": [],
  "expected_selectable_task_ids": [
-  "AXI-SB",
+  "AXI-SB-ADAPTER",
   "P1-008",
   "P2-038"
  ]
