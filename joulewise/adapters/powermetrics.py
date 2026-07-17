@@ -56,6 +56,7 @@ READINESS_TIMEOUT_S = 15.0
 READINESS_POLL_S = 0.05
 POST_MARKER_DRAIN_MARGIN_S = 0.25
 POST_MARKER_DRAIN_POLL_S = 0.05
+MAX_POST_MARKER_ANCHOR_LAG_S = 5.0
 IDLE_GPU_IDLE_RATIO_THRESHOLD = 0.80
 IDLE_GPU_LOW_IDLE_FRACTION_THRESHOLD = 0.40
 IDLE_GPU_FREQ_MEAN_MHZ_THRESHOLD = 800.0
@@ -374,14 +375,23 @@ class PowermetricsTelemetryAdapter:
         sampling_started: ClockStamp,
         sampling_stopped: ClockStamp,
     ) -> float | None:
-        """Bound sampler wind-down by a right-edge sample or two missed intervals."""
+        """Bound sampler wind-down by a trace-domain right-edge sample."""
 
         process = self._process
         capture_path = self._capture_path
         if process is None or capture_path is None:
             return None
-        timeout_s = 2.0 / config.sampling.power_hz + POST_MARKER_DRAIN_MARGIN_S
-        deadline = self._drain_monotonic() + timeout_s
+        drain_started_s = self._drain_monotonic()
+        anchor_lag_s = self._measured_anchor_lag_s(
+            sampling_started=sampling_started,
+            sampling_stopped=sampling_stopped,
+        )
+        timeout_s = (
+            anchor_lag_s
+            + 2.0 / config.sampling.power_hz
+            + POST_MARKER_DRAIN_MARGIN_S
+        )
+        deadline = drain_started_s + timeout_s
         while self._drain_monotonic() < deadline and process.poll() is None:
             brackets_stop = self._capture_brackets_stop(
                 capture_path,
@@ -399,6 +409,78 @@ class PowermetricsTelemetryAdapter:
             # remain marker-bounded and exclude support after that timestamp.
             self._drain_sleep(min(POST_MARKER_DRAIN_POLL_S, remaining_s))
         return None
+
+    def _measured_anchor_lag_s(
+        self,
+        *,
+        sampling_started: ClockStamp,
+        sampling_stopped: ClockStamp,
+    ) -> float:
+        """Return the provisional midpoint-anchor lag used by trace timestamps."""
+
+        pre_spawn = self._pre_spawn_stamp
+        first_parse = self._first_parse_stamp
+        if pre_spawn is None or first_parse is None:
+            return 0.0
+        stamps = (
+            pre_spawn,
+            first_parse,
+            sampling_started,
+            sampling_stopped,
+            # Match the provisional drain anchor: the authoritative post-parse
+            # stamp does not exist until after sampler termination.
+            sampling_stopped,
+        )
+        values = (
+            value
+            for stamp in stamps
+            for value in (
+                stamp.epoch_s,
+                stamp.monotonic_before_s,
+                stamp.monotonic_after_s,
+                stamp.wall_resolution_s,
+                stamp.monotonic_resolution_s,
+            )
+        )
+        if not all(math.isfinite(value) for value in values):
+            return 0.0
+        if any(
+            stamp.monotonic_before_s > stamp.monotonic_after_s
+            or stamp.wall_resolution_s < 0.0
+            or stamp.monotonic_resolution_s < 0.0
+            for stamp in stamps
+        ):
+            return 0.0
+
+        offset_lowers_s: list[float] = []
+        offset_uppers_s: list[float] = []
+        for stamp in stamps:
+            resolution_s = max(
+                stamp.wall_resolution_s,
+                stamp.monotonic_resolution_s,
+            )
+            offset_lowers_s.append(
+                stamp.epoch_s - stamp.monotonic_after_s - resolution_s
+            )
+            offset_uppers_s.append(
+                stamp.epoch_s - stamp.monotonic_before_s + resolution_s
+            )
+        first_endpoint_lower_s = (
+            pre_spawn.monotonic_before_s + min(offset_lowers_s)
+        )
+        first_endpoint_upper_s = (
+            first_parse.monotonic_after_s + max(offset_uppers_s)
+        )
+        derived_lag_s = max(
+            0.0,
+            (first_endpoint_upper_s - first_endpoint_lower_s) / 2.0,
+        )
+        if (
+            not math.isfinite(derived_lag_s)
+            or derived_lag_s > MAX_POST_MARKER_ANCHOR_LAG_S
+        ):
+            return MAX_POST_MARKER_ANCHOR_LAG_S
+        return derived_lag_s
 
     def _capture_brackets_stop(
         self,
@@ -457,13 +539,22 @@ class PowermetricsTelemetryAdapter:
             return False
         if point_anchor_s is None:
             return False
+        # Project the wall-stamped stop marker into the reconstructed trace's
+        # relative timestamp domain. Comparing wall drain duration directly
+        # would stop early by the startup midpoint-anchor lag.
+        projected_stop_endpoint_s = sampling_stopped.epoch_s - point_anchor_s
+        if (
+            not math.isfinite(projected_stop_endpoint_s)
+            or projected_stop_endpoint_s <= 0.0
+        ):
+            return False
         relative_endpoint_s = 0.0
         for index, record in enumerate(native_records):
             if self._drain_monotonic() >= deadline:
                 return False
             if index > 0:
                 relative_endpoint_s += record.elapsed_ns / 1_000_000_000.0
-            if point_anchor_s + relative_endpoint_s >= sampling_stopped.epoch_s:
+            if relative_endpoint_s >= projected_stop_endpoint_s:
                 return True
         return False
 

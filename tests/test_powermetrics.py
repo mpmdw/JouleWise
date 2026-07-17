@@ -7,7 +7,8 @@ import plistlib
 import subprocess
 import tempfile
 import unittest
-from datetime import timezone
+from copy import deepcopy
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -15,6 +16,7 @@ from unittest.mock import patch
 from joulewise.bundle import BundleError, write_raw_artifact as write_bundle_raw_artifact
 from joulewise.adapters import resolve_telemetry
 from joulewise.adapters.powermetrics import (
+    MAX_POST_MARKER_ANCHOR_LAG_S,
     RAIL_MANIFEST,
     RICH_IDLE_NAME,
     RICH_TELEMETRY_NAME,
@@ -826,6 +828,265 @@ class PowermetricsAdapterTests(unittest.TestCase):
         self.assertLess(expected_endpoints[-2], sampling_stopped.epoch_s)
         self.assertGreaterEqual(expected_endpoints[-1], sampling_stopped.epoch_s)
 
+    def test_evidence_stop_captures_r4_timestamp_domain_bracket(self) -> None:
+        sampling_started_epoch_s = 1_784_277_539.8827362
+        window_duration_s = 5.95499587059021
+        missing_support_s = 0.034621477127075195
+        anchor_lag_s = 0.5188790559768677
+        next_interval_ns = 113_498_166
+        point_anchor_s = sampling_started_epoch_s - anchor_lag_s
+        sampling_stopped_epoch_s = sampling_started_epoch_s + window_duration_s
+        initial_cumulative_ns = round(
+            (
+                sampling_stopped_epoch_s
+                - missing_support_s
+                - point_anchor_s
+            )
+            * 1_000_000_000.0
+        )
+        interval_count = 57
+        base_interval_ns, remainder = divmod(
+            initial_cumulative_ns,
+            interval_count,
+        )
+        elapsed_ns = [next_interval_ns]
+        elapsed_ns.extend(
+            base_interval_ns + (1 if index < remainder else 0)
+            for index in range(interval_count)
+        )
+        elapsed_ns.append(next_interval_ns)
+
+        template = fixture_documents()[0]
+        documents = []
+        relative_endpoint_s = 0.0
+        for index, duration_ns in enumerate(elapsed_ns):
+            if index > 0:
+                relative_endpoint_s += duration_ns / 1_000_000_000.0
+            document = deepcopy(template)
+            document["elapsed_ns"] = duration_ns
+            document["timestamp"] = datetime.fromtimestamp(
+                math.floor(point_anchor_s + relative_endpoint_s),
+                timezone.utc,
+            )
+            documents.append(document)
+
+        config = make_config(sampling={"power_hz": 10.0, "idle_seconds": 5.0})
+        clock = FakeClock(start=sampling_started_epoch_s - 2.0 * anchor_lag_s)
+        operational_now = [0.0]
+        instances = []
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
+            return completed(command)
+
+        class R4LagPopen:
+            def __init__(self, command, **kwargs):
+                instances.append(self)
+                self.path = Path(command[command.index("-o") + 1])
+                self.path.write_bytes(documents_to_stream(documents[:-1]))
+                self.returncode = None
+                self.terminated = False
+                self.appended = False
+                clock.sleep(2.0 * anchor_lag_s)
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.terminated = True
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        def fake_sleep(seconds):
+            operational_now[0] += seconds
+            process = instances[0]
+            if operational_now[0] >= 0.60 and not process.appended:
+                process.path.write_bytes(documents_to_stream(documents))
+                process.appended = True
+
+        adapter = PowermetricsTelemetryAdapter(
+            clock,
+            drain_monotonic=lambda: operational_now[0],
+            drain_sleep=fake_sleep,
+        )
+        with (
+            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+            patch("joulewise.adapters.powermetrics.subprocess.Popen", R4LagPopen),
+        ):
+            self.assertTrue(adapter.start_sampling(config).ok)
+            sampling_started = clock.stamp()
+            clock.sleep(window_duration_s)
+            sampling_stopped = clock.stamp()
+            result = adapter.stop_sampling_with_evidence(
+                config,
+                None,
+                sampling_started=sampling_started,
+                sampling_stopped=sampling_stopped,
+            )
+
+        initial_records = parse_powermetrics_records(
+            documents_to_stream(documents[:-1]),
+            first_record_endpoint_s=point_anchor_s,
+        )
+        initial_support_end_s = initial_records[-1].timestamp_s
+        final_support_end_s = result.samples[-1].interval_end_s
+        self.assertAlmostEqual(
+            sampling_stopped.epoch_s - initial_support_end_s,
+            missing_support_s,
+            places=6,
+        )
+        self.assertGreater(operational_now[0], 0.45)
+        self.assertLess(
+            operational_now[0],
+            anchor_lag_s + 2.0 / config.sampling.power_hz + 0.25,
+        )
+        self.assertTrue(instances[0].appended)
+        self.assertTrue(instances[0].terminated)
+        self.assertIsNotNone(final_support_end_s)
+        self.assertGreaterEqual(final_support_end_s, sampling_stopped.epoch_s)
+
+    def test_evidence_stop_budget_includes_measured_anchor_lag(self) -> None:
+        anchor_lag_s = 0.5188790559768677
+        config = make_config(sampling={"power_hz": 10.0, "idle_seconds": 5.0})
+        operational_now = [0.0]
+
+        class RunningProcess:
+            def poll(self):
+                return None
+
+        def fake_sleep(seconds):
+            operational_now[0] += seconds
+
+        adapter = PowermetricsTelemetryAdapter(
+            FakeClock(),
+            drain_monotonic=lambda: operational_now[0],
+            drain_sleep=fake_sleep,
+        )
+        adapter._process = RunningProcess()
+        adapter._pre_spawn_stamp = ClockStamp(0.0, 0.0, 0.0, 0.0, 0.0)
+        adapter._first_parse_stamp = ClockStamp(
+            2.0 * anchor_lag_s,
+            2.0 * anchor_lag_s,
+            2.0 * anchor_lag_s,
+            0.0,
+            0.0,
+        )
+        sampling_started = adapter._first_parse_stamp
+        sampling_stopped = ClockStamp(6.0, 6.0, 6.0, 0.0, 0.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter._capture_path = Path(tmp) / "capture.plist"
+            with patch.object(adapter, "_capture_brackets_stop", return_value=False):
+                result = adapter._drain_until_stop_bracket(
+                    config,
+                    sampling_started=sampling_started,
+                    sampling_stopped=sampling_stopped,
+                )
+
+        self.assertIsNone(result)
+        self.assertAlmostEqual(
+            operational_now[0],
+            anchor_lag_s + 2.0 / config.sampling.power_hz + 0.25,
+            places=12,
+        )
+
+    def test_evidence_stop_rejects_backward_projected_stop_endpoint(self) -> None:
+        config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
+        operational_now = [0.0]
+
+        class RunningProcess:
+            def poll(self):
+                return None
+
+        def fake_sleep(seconds):
+            operational_now[0] += seconds
+
+        adapter = PowermetricsTelemetryAdapter(
+            FakeClock(),
+            drain_monotonic=lambda: operational_now[0],
+            drain_sleep=fake_sleep,
+        )
+        adapter._process = RunningProcess()
+        sampling_started = ClockStamp(80.0, 80.0, 80.0, 0.0, 0.0)
+        sampling_stopped = ClockStamp(87.0, 87.0, 87.0, 0.0, 0.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter._capture_path = Path(tmp) / "capture.plist"
+            adapter._capture_path.write_bytes(
+                documents_to_stream(fixture_documents()[:1])
+            )
+            with patch(
+                "joulewise.adapters.powermetrics.derive_powermetrics_clock_evidence",
+                return_value=({}, 90.0),
+            ):
+                result = adapter._drain_until_stop_bracket(
+                    config,
+                    sampling_started=sampling_started,
+                    sampling_stopped=sampling_stopped,
+                )
+
+        self.assertIsNone(result)
+        self.assertAlmostEqual(
+            operational_now[0],
+            2.0 / config.sampling.power_hz + 0.25,
+            places=12,
+        )
+
+    def test_evidence_stop_caps_nonfinite_or_absurd_derived_anchor_lag(self) -> None:
+        config = make_config(sampling={"power_hz": 10.0, "idle_seconds": 5.0})
+        finite_huge = (
+            ClockStamp(0.0, 0.0, 0.0, 0.0, 0.0),
+            ClockStamp(2_000_000.0, 2_000_000.0, 2_000_000.0, 0.0, 0.0),
+            ClockStamp(6_000_000.0, 6_000_000.0, 6_000_000.0, 0.0, 0.0),
+        )
+        finite_overflow = (
+            ClockStamp(0.0, 0.0, 0.0, 0.0, 0.0),
+            ClockStamp(1e308, -1e308, -1e308, 0.0, 0.0),
+            ClockStamp(0.0, 0.0, 0.0, 0.0, 0.0),
+        )
+
+        class RunningProcess:
+            def poll(self):
+                return None
+
+        for expected_uncapped_lag_s, stamps in (
+            (1_000_000.0, finite_huge),
+            (math.inf, finite_overflow),
+        ):
+            with self.subTest(derived_lag_s=expected_uncapped_lag_s):
+                operational_now = [0.0]
+                adapter = PowermetricsTelemetryAdapter(
+                    FakeClock(),
+                    drain_monotonic=lambda: operational_now[0],
+                    drain_sleep=lambda seconds: operational_now.__setitem__(
+                        0, operational_now[0] + seconds
+                    ),
+                )
+                adapter._process = RunningProcess()
+                adapter._pre_spawn_stamp, adapter._first_parse_stamp, stopped = stamps
+                with tempfile.TemporaryDirectory() as tmp:
+                    adapter._capture_path = Path(tmp) / "missing-capture.plist"
+                    measured_lag_s = adapter._measured_anchor_lag_s(
+                        sampling_started=adapter._first_parse_stamp,
+                        sampling_stopped=stopped,
+                    )
+                    result = adapter._drain_until_stop_bracket(
+                        config,
+                        sampling_started=adapter._first_parse_stamp,
+                        sampling_stopped=stopped,
+                    )
+
+                self.assertEqual(measured_lag_s, MAX_POST_MARKER_ANCHOR_LAG_S)
+                self.assertIsNone(result)
+                self.assertAlmostEqual(
+                    operational_now[0],
+                    MAX_POST_MARKER_ANCHOR_LAG_S
+                    + 2.0 / config.sampling.power_hz
+                    + 0.25,
+                    places=12,
+                )
+
     def test_evidence_stop_freezes_prefix_against_final_authoritative_anchor(self) -> None:
         documents = fixture_documents()
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
@@ -1097,6 +1358,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         documents = fixture_documents()
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
         clock = FakeClock(start=100.0)
+        anchor_lag_s = 0.5188790559768677
         operational_now = [0.0]
         instances = []
 
@@ -1112,6 +1374,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 )
                 self.returncode = None
                 self.terminated = False
+                clock.sleep(2.0 * anchor_lag_s)
 
             def poll(self):
                 return self.returncode
@@ -1139,16 +1402,22 @@ class PowermetricsAdapterTests(unittest.TestCase):
             self.assertTrue(adapter.start_sampling(config).ok)
             sampling_started = clock.stamp()
             clock.sleep(2.0)
+            sampling_stopped = clock.stamp()
             result = adapter.stop_sampling_with_evidence(
                 config,
                 None,
                 sampling_started=sampling_started,
-                sampling_stopped=clock.stamp(),
+                sampling_stopped=sampling_stopped,
             )
 
         self.assertTrue(instances[0].terminated)
         self.assertEqual(len(result.samples), len(RAIL_MANIFEST))
-        self.assertAlmostEqual(operational_now[0], 1.25, places=12)
+        self.assertAlmostEqual(
+            operational_now[0],
+            anchor_lag_s + 2.0 / config.sampling.power_hz + 0.25,
+            places=12,
+        )
+        self.assertLess(result.samples[-1].interval_end_s, sampling_stopped.epoch_s)
 
     def test_evidence_stop_preserves_current_in_window_timestamp_construction(self) -> None:
         documents = fixture_documents()
