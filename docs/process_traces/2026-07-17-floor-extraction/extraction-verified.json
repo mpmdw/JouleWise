@@ -1,0 +1,432 @@
+{
+  "summary": "Extract + verify floor numbers from bundles, derive floor table, verify report claims",
+  "agentCount": 8,
+  "logs": [],
+  "result": {
+    "extractions": [
+      {
+        "family": "DF-RQ (P2-015 Window-A request-window detection floors: blocks 01_request_absolute_core + 03_request_abba, backend powermetrics, model qwen25-1p5b-mlx, runs/p2_015_floors_window_a)",
+        "rows": [
+          {
+            "metric": "gross_energy_j",
+            "window_class": "gross_request_mid (DF-RQ-GROSS-MID, absolute)",
+            "n": 10,
+            "mean_j": 24.059338091463328,
+            "spread_j": 0.22220492360263064,
+            "floor_abs_j": 0.5271968352054998,
+            "evidence": "bundles p2015-df-rq-mid-abs-r01..r10 (summary_metrics.json gross_energy_j; values 23.908876, 24.155403, 23.805449, 23.882473, 24.580382, 24.033377, 24.150785, 24.141835, 24.046562, 23.888240); campaign_log.jsonl block 01_request_absolute_core, all strict_valid=true. max|r_i|=0.521044 (r05); t-prediction term 0.527197 dominates."
+          },
+          {
+            "metric": "energy_request_j (== idle_subtracted_energy_j, bit-identical)",
+            "window_class": "idle_subtracted_request_mid (DF-RQ-IDLE-MID, absolute)",
+            "n": 10,
+            "mean_j": 23.930085,
+            "spread_j": 0.225326,
+            "floor_abs_j": 0.536632,
+            "evidence": "same bundles p2015-df-rq-mid-abs-r01..r10; max|r_i|=0.536632 dominates (t-prediction term 0.534601)."
+          },
+          {
+            "metric": "gross_energy_j",
+            "window_class": "gross_request_short (DF-RQ-GROSS-SHORT, absolute)",
+            "n": 10,
+            "mean_j": 0.250592,
+            "spread_j": 0.022121,
+            "floor_abs_j": 0.052484,
+            "evidence": "bundles p2015-df-rq-short-abs-r01..r10 (values 0.2416, 0.2595, 0.2810, 0.2617, 0.2259, 0.2387, 0.2524, 0.2142, 0.2839, 0.2471); campaign_log.jsonl block 01_request_absolute_core, all strict_valid=true. t-prediction term dominates (max|r_i|=0.036368)."
+          },
+          {
+            "metric": "energy_request_j (== idle_subtracted_energy_j, bit-identical)",
+            "window_class": "idle_subtracted_request_short (DF-RQ-IDLE-SHORT, absolute)",
+            "n": 10,
+            "mean_j": 0.215553,
+            "spread_j": 0.024817,
+            "floor_abs_j": 0.058879,
+            "evidence": "same bundles p2015-df-rq-short-abs-r01..r10; t-prediction term dominates (max|r_i|=0.038635)."
+          },
+          {
+            "metric": "gross_energy_j",
+            "window_class": "gross_request_mid ABBA (DF-CMP-ABBA-RQ, comparative floor_cmp_j)",
+            "n": 10,
+            "spread_j": 0.365937,
+            "abba_delta_j": 0.041026,
+            "floor_abs_j": 0.909237,
+            "evidence": "10 complete A/B/B/A blocks p2015-df-cmp-abba-rq-b01..b10 (-a1/-b1/-b2/-a2), 40 bundles, campaign_log.jsonl block 03_request_abba, all strict_valid=true. Per-block deltas (mean(A)-mean(B)): b01 0.1104, b02 0.1155, b03 0.0519, b04 0.0821, b05 0.3906, b06 0.0175, b07 0.4571, b08 -0.6397, b09 0.3600, b10 -0.5352. max|delta|=0.639689 (b08); |mean|+t-term = 0.909237 dominates."
+          },
+          {
+            "metric": "energy_request_j (== idle_subtracted_energy_j, bit-identical)",
+            "window_class": "idle_subtracted_request_mid ABBA (DF-CMP-ABBA-RQ, comparative floor_cmp_j)",
+            "n": 10,
+            "spread_j": 0.358694,
+            "abba_delta_j": 0.043188,
+            "floor_abs_j": 0.894215,
+            "evidence": "same 10 ABBA blocks p2015-df-cmp-abba-rq-b01..b10. Per-block deltas: b01 0.0642, b02 0.1382, b03 0.0759, b04 0.0814, b05 0.3833, b06 0.0766, b07 0.4558, b08 -0.6167, b09 0.3193, b10 -0.5461. max|delta|=0.616704 (b08); |mean|+t-term = 0.894215 dominates."
+          }
+        ],
+        "notes": "DERIVATION (docs/phase_2/detection_floor.md §Estimator rule, lines 91-97). Absolute cells: r_i = E_i - mean(E) over strict-valid bundles; floor_abs_j = max(max_i|r_i|, t_{0.975,df=9} * s_r * sqrt(1 + 1/10)) with t_{0.975,9} = 2.2621571628 (table value; scipy unavailable), sqrt(1.1) = 1.0488...; spread_j reported is s_r (sample stddev of residuals = sample stddev of E). Comparative (ABBA) cells: delta_i = (A1+A2)/2 - (B1+B2)/2 within each block; floor_cmp_j = max(max_i|delta_i|, |mean(delta)| + t_{0.975,9} * s_delta * sqrt(1.1)); abba_delta_j reported is mean(delta) across the 10 blocks, spread_j is s_delta. n counts strict-valid bundles (absolute) or strict-valid ABBA blocks (comparative), per the doc's single n definition. n = 10 in every cell, so the 5<=n<10 small-sample guard factor does NOT apply. The output schema has only floor_abs_j, so the two ABBA rows carry floor_cmp_j in that field (labeled in window_class). All values computed from per-bundle summary_metrics.json, cross-checked against campaign_log.jsonl member records, and the mid-gross cell replayed by independent hand arithmetic (exact match).\n\nANOMALIES / CAVEATS: (1) The task said 'per shape cell mid/long' but the campaign executed mid/short: block 08_optional_long_request_absolute has ZERO rows in campaign_log.jsonl — no long-prompt/long-decode request floors exist; short is the second shape actually run, and is what is reported. (2) energy_request_j == idle_subtracted_energy_j exactly (0.0 difference) in all 60 bundles — one idle-subtracted metric under two names; rows are merged accordingly. Gross-vs-idle-sub mid gap (24.0593 - 23.9301 = 0.1293 J) is consistent with idle_mean ~0.119 W times window duration. (3) Claim-readiness anomaly: every one of the 60 bundles has claim_evidence_classification 'flagged', and window_evidence_precheck.gross_request / idle_subtracted_request is eligible=false on ALL 60 — reason clock_bound_exceeds_quarter_window on all (clock_anchor_bound_s ~1.089 s vs 0.25 x window duration ~1.33 s mid / ~0.36 s short), plus cadence_ratio_below_threshold on all 10 short bundles (cadence_ratio ~3.19 < required 4.0). Per §Claim-Gate Thresholds these floors are computable but the underlying request windows currently fail the L2/L3 evidence precheck; P2-037/P2-039 adjudication needed before these floors gate claims. (4) DF-CMP-ABBA-RQ floor_cmp (0.909 J gross) exceeds the absolute floor (0.527 J) — expected per §Comparative Floors; driven by sign-flipping late blocks b07-b10 (deltas +0.457, -0.640, +0.360, -0.535), which look like a drift/ordering pattern in the session tail. (5) All 60 bundles strict_valid=true, status succeeded, collection usable; ABBA block membership complete 4/4 in all 10 blocks. (6) Process note: the codex MCP tool surface was not available in this session (ToolSearch returned no codex tools), so the extraction was done at the lead bench with deterministic scripts instead of a delegated Sol session; every reported number was read directly from bundle artifacts and the headline cell was independently re-derived by hand."
+      },
+      {
+        "family": "DF-PH (phase-window detection floors, P2-015 Window A, blocks 02_phase_absolute / 04_phase_prefill_abba / 05_phase_decode_abba; backend powermetrics, model qwen25-1p5b-mlx)",
+        "rows": [
+          {
+            "metric": "phase_energy_j.prefill",
+            "window_class": "phase (prefill), absolute repeat — DF-PH-PREFILL",
+            "n": 10,
+            "floor_abs_j": 1.476788,
+            "mean_j": 40.452004,
+            "spread_j": 0.622442,
+            "evidence": "Bundles p2015-df-ph-prefill-abs-r01..r10 (summary_metrics.json phase_energy_j.prefill: 40.1342, 40.7501, 41.1601, 39.7499, 39.4762, 39.8629, 41.3216, 40.4823, 40.8807, 40.7020 J); all strict_valid in campaign_log.jsonl; phase_identifiability.prefill = identifiable on all 10; max|r_i| = 0.975832 J, t-prediction term 1.476788 J dominates."
+          },
+          {
+            "metric": "phase_energy_j.decode",
+            "window_class": "phase (decode), absolute repeat — DF-PH-DECODE",
+            "n": 10,
+            "floor_abs_j": 0.786337,
+            "mean_j": 39.807358,
+            "spread_j": 0.331428,
+            "evidence": "Bundles p2015-df-ph-decode-abs-r01..r10 (phase_energy_j.decode: 39.7148, 39.5766, 39.7739, 39.6350, 39.6961, 40.2310, 39.6758, 40.5796, 39.6110, 39.5797 J); all strict_valid; phase_identifiability.decode = identifiable on all 10; max|r_i| = 0.772287 J, t-prediction term 0.786337 J dominates."
+          },
+          {
+            "metric": "phase_energy_j.prefill",
+            "window_class": "phase (short-prefill stress), absolute repeat — DF-PH-SHORT-PREFILL; NOT claim-eligible (identifiability verdict: not_resolvable_sample_count)",
+            "n": 10,
+            "floor_abs_j": 0.026694,
+            "mean_j": 0.08093,
+            "spread_j": 0.011251,
+            "evidence": "Bundles p2015-df-ph-short-prefill-abs-r01..r10 (phase_energy_j.prefill: 0.0689, 0.0816, 0.0796, 0.0645, 0.0993, 0.0774, 0.0814, 0.0791, 0.0999, 0.0778 J); all strict_valid but measurement_quality.phase_identifiability.prefill = not_resolvable_sample_count on all 10 and all carry cadence_ratio_below_threshold; per DF-PH-SHORT-PREFILL cell spec the deliverable is the identifiability verdict — floor value is smoke evidence only."
+          },
+          {
+            "metric": "phase_energy_j.prefill",
+            "window_class": "phase (prefill), comparative ABBA — DF-CMP-ABBA-PH prefill profile; value is floor_cmp_j",
+            "n": 10,
+            "floor_abs_j": 1.73894,
+            "abba_delta_j": -0.251011,
+            "spread_j": 0.627138,
+            "evidence": "10 ABBA blocks p2015-df-cmp-abba-ph-prefill-b01..b10 (4 bundles each, order a1/b1/b2/a2 confirmed via executed_order.position_in_block); within-block deltas (B-mean minus A-mean): -0.5919, 0.0178, -0.1388, -0.4941, -1.3135, 0.3812, 0.8167, -0.7615, -0.6299, 0.2038 J; max|delta| = 1.313466 J, |mean|+t-term = 1.738940 J dominates; all 40 bundles strict_valid. Note: b01-b05 members appear twice in campaign_log.jsonl (lines 96-112 executed by campaign p31329; lines 113-129 status=skipped re-listing by resumed campaign p33508) — single execution each."
+          },
+          {
+            "metric": "phase_energy_j.decode",
+            "window_class": "phase (decode), comparative ABBA — DF-CMP-ABBA-PH decode profile; value is floor_cmp_j",
+            "n": 10,
+            "floor_abs_j": 1.026892,
+            "abba_delta_j": -0.05219,
+            "spread_j": 0.410821,
+            "evidence": "10 ABBA blocks p2015-df-cmp-abba-ph-decode-b01..b10; within-block deltas: -0.0262, 0.2618, 0.5077, 0.1456, -0.7332, 0.0335, 0.0287, -0.0735, -0.7974, 0.1312 J; max|delta| = 0.797411 J, |mean|+t-term = 1.026892 J dominates; all 40 bundles strict_valid. Caveat: blocks b06-b10 (all members) plus b03 (a1/b1/b2) and b05 (a2/b2) carry idle_window_suspect + drift_term_unknown flags, and b06-b10 carry cadence_ratio_below_threshold; the two largest |delta| blocks (b09, b05) are flagged, so this comparative floor is plausibly drift-inflated (conservative)."
+          }
+        ],
+        "notes": "DERIVATION (docs/phase_2/detection_floor.md, false-effect guard floor; n=10 everywhere so no small-sample guard factor): absolute cells use r_i = E_i - mean(E) over strict-valid bundles, floor_abs_j = max(max_i|r_i|, t_{0.975,df=9} * s_r * sqrt(1+1/n)), t_{0.975,9} = 2.2621571628; comparative cells use within-block delta_i = (B1+B2)/2 - (A1+A2)/2 over strict-valid ABBA blocks, floor_cmp_j = max(max_i|delta_i|, |mean(delta)| + t_{0.975,9} * s_delta * sqrt(1+1/n)). The t-prediction term dominated in every cell. SCHEMA MAPPING: for the two DF-CMP-ABBA-PH rows the required floor_abs_j field carries floor_cmp_j (the schema has no separate comparative-floor field); abba_delta_j = mean(delta); spread_j = sample stddev of residuals (absolute rows) or of block deltas (ABBA rows); n counts bundles (absolute) or ABBA blocks (comparative) per the doc's n definition. RESULTING GATES (floor_gate_j = max(floor_abs_j, floor_cmp_j)): prefill 1.738940 J (comparative dominates), decode 1.026892 J (comparative dominates). ANOMALIES: (1) campaign_log.jsonl lists prefill ABBA b01-b05 members twice — executed once 14:00-15:13Z by campaign-20260717T135859310239Z-p31329 (log lines 96-112, status ok), then re-listed status=skipped/exit_code=null at 15:14Z by resumed campaign-20260717T151358798725Z-p33508 (lines 113-129); no double measurement, dedup applied. (2) DF-PH-SHORT-PREFILL is not identifiable (not_resolvable_sample_count on all 10 bundles) — its floor row is smoke evidence only and cannot support L2/L3, matching the cell's designed identifiability-verdict output. (3) Late-campaign decode-ABBA drift regime: idle_window_suspect + drift_term_unknown on all of b06-b10 plus parts of b03/b05, cadence_ratio_below_threshold on b06-b10; both largest-|delta| blocks are flagged, so the decode comparative floor may be drift-inflated (kept, conservative, since all bundles are strict_valid — the doc explicitly allows floor_cmp_j to exceed floor_abs_j under drift/ordering effects). (4) Every DF-PH bundle carries claim-evidence flags cadence_ratio_unrecorded, clock_bound_exceeds_quarter_window, insufficient_in_window_samples — claim-evidence classification 'flagged' throughout; strict_valid inclusion criterion still met for all 110 DF-PH bundles (30 absolute + 80 ABBA), each status=succeeded. Values in Joules, rounded to 6 decimals from full-precision summary_metrics.json fields. Sources: /Users/edr/code/JouleWise/runs/p2_015_floors_window_a/campaign_log.jsonl and per-bundle summary_metrics.json; cell semantics from /Users/edr/code/JouleWise/docs/phase_2/detection_floor.md; block naming from /Users/edr/code/JouleWise/configs/campaigns/p2_015_floors/{02_phase_absolute,04_phase_prefill_abba,05_phase_decode_abba}."
+      },
+      {
+        "family": "DF-SU (P2-015 Window-A suite-window floors: blocks 06 suite_absolute + 07 suite_abba; backend powermetrics, model qwen25-1p5b-mlx, suite sentinel/common_512_256)",
+        "rows": [
+          {
+            "metric": "suite_metrics.items[*].gross_energy_j (per-bundle mean of 5 same-shape items)",
+            "window_class": "item",
+            "n": 10,
+            "floor_abs_j": 0.3327740272368623,
+            "mean_j": 38.56139118692326,
+            "spread_j": 0.1402686055008585,
+            "evidence": "DF-SU-ITEM absolute, block 06: bundles p2015-df-su-sentinel-abs-r01..r10 (all strict_valid, collection usable per campaign_log.jsonl). Per-bundle item means (J): r01 38.562347297104886, r02 38.68845197604952, r03 38.802526360270306, r04 38.68743870793547, r05 38.525845197216796, r06 38.4915762660944, r07 38.339348691258856, r08 38.57502016166181, r09 38.5567431845252, r10 38.38461402711535. max|residual|=0.24113517334704682 (r03); t=2.262 (df=9); prediction=0.3327740272368623; guard=1.0."
+          },
+          {
+            "metric": "suite_metrics.levels[*].gross_energy_j",
+            "window_class": "level",
+            "n": 10,
+            "floor_abs_j": 1.663965590809514,
+            "mean_j": 192.84543688967793,
+            "spread_j": 0.7013832628774583,
+            "evidence": "DF-SU-LEVEL absolute, block 06: same bundles p2015-df-su-sentinel-abs-r01..r10, level group sentinel/common_512_256 (item_count 5, status_counts {succeeded:5} in every bundle). Per-bundle level energies (J): 192.8529709240842, 193.47974791947652, 194.0508481682124, 193.47505391002727, 192.6697046530094, 192.4959778041904, 191.73444500740027, 192.9134553099401, 192.82166160920383, 191.9605035912347. max|residual|=1.2054112785344842 (r03); t=2.262; prediction=1.663965590809514; guard=1.0."
+          },
+          {
+            "metric": "suite item gross energy, comparative (floor_cmp_j; value in floor_abs_j field per output schema)",
+            "window_class": "item",
+            "n": 10,
+            "floor_abs_j": 4.922864976245446,
+            "mean_j": -0.7840701869770814,
+            "spread_j": 1.744556143294421,
+            "abba_delta_j": -0.7840701869770814,
+            "evidence": "DF-CMP-ABBA-SU item, block 07: 10 strict-valid ABBA blocks p2015-df-cmp-abba-su-b01..b10, members a1,b1,b2,a2 (order confirmed by configs/campaigns/p2_015_floors/07_suite_abba/order_manifest.json), delta=(B1+B2-A1-A2)/2 on per-bundle item means. Block deltas (J): b01 -3.916527289435269, b02 -4.256121661885338, b03 -0.04732143307370862, b04 0.1577721053443213, b05 0.12398517921444707, b06 0.08638548236985244, b07 0.06885489095230213, b08 0.07361660093105371, b09 -0.15632556559465272, b10 0.02497982140617694. max|delta|=4.256121661885338 (b02); prediction=|mean|+t*s*sqrt(1.1)=4.922864976245446; guard=1.0."
+          },
+          {
+            "metric": "suite level gross energy, comparative (floor_cmp_j; value in floor_abs_j field per output schema)",
+            "window_class": "level",
+            "n": 10,
+            "floor_abs_j": 24.618735151141273,
+            "mean_j": -3.920760552217966,
+            "spread_j": 8.724467043867778,
+            "abba_delta_j": -3.920760552217966,
+            "evidence": "DF-CMP-ABBA-SU level, block 07: same 10 ABBA blocks on levels[0].energy_gross_j. Block deltas (J): b01 -19.585749632478212, b02 -21.28465431521451, b03 -0.23496864024805575, b04 0.7897651692446743, b05 0.6202739115123705, b06 0.4324547561726604, b07 0.3445078831440185, b08 0.3685157412028133, b09 -0.782173355401028, b10 0.12442295988560659. max|delta|=21.28465431521451 (b02); prediction=24.618735151141273; guard=1.0."
+          }
+        ],
+        "notes": "DERIVATION (frozen D-054 estimator, computed by calling joulewise/detection_floor.py functions directly — absolute_false_effect_floor, comparative_false_effect_floor, abba_delta; nothing hand-derived or estimated): absolute floor = guard(n) * max(max_i|r_i|, t_{0.975,df=n-1} * s_r * sqrt(1+1/n)) with r_i = E_i - mean(E) over strict-valid bundles; comparative floor = guard(n) * max(max_i|delta_i|, |mean(delta)| + t * s_delta * sqrt(1+1/n)) over ABBA block deltas delta = (B1+B2-A1-A2)/2 (member order a1,b1,b2,a2); guard(n)=1.0 at n=10; t_0.975(df=9)=2.262. n counts strict-valid bundles (abs) / ABBA blocks (cmp), never items: item windows are bundle-clustered via the per-bundle mean of the 5 same-shape items (5 distinct item_ids repeated across all 50 bundles, every item emitted_tokens=256, stop_reason=requested_tokens_emitted, status=succeeded, identifiability=identifiable — verified). SCHEMA MAPPING: rows 3-4 are floor_cmp_j values carried in the required floor_abs_j field; mean_j/abba_delta_j on those rows is the signed mean block delta; spread_j is always the sample stddev of residuals (abs) or deltas (cmp). Resulting floor_gate_j = max(floor_abs_j, floor_cmp_j): item 4.922864976245446 J, level 24.618735151141273 J. ANOMALIES: (1) Energy regime shift in block 07 — the 6 consecutive members b01-b1 through b02-b2 ran ~23% low (item means 29.6-31.0 J, levels 148-155 J vs ~38.5/~193 J elsewhere), then recovered from b02-a2 onward; this single excursion produces the two dominant deltas (b01, b02) and drives floor_cmp ~15x above floor_abs. Contract-anticipated direction (detection_floor.md allows floor_cmp > floor_abs from ordering/cooldown/controller effects) but the magnitude warrants lead review before these comparative floors gate suite L2/L3 claims; b03-b10-only sensitivity (not a floor, diagnostic): deltas within +/-0.16 J item / +/-0.79 J level. (2) Cooldown cap_hit on members p2015-df-cmp-abba-su-b01-b2, b03-a1, b09-b1 (all other members recovered; b01-a1 first_run_exempt with model_load_boundary=true) — detection_floor.md says cap-hit cells need the drift term cleared before L2/L3 use. (3) Pervasive claim_evidence_flags on all 50 bundles: cadence_ratio_below_threshold 50/50, cadence_ratio_unrecorded 50/50, clock_bound_exceeds_quarter_window 50/50, insufficient_in_window_samples 50/50, drift_term_unknown 44/50, idle_window_suspect 43/50 — bundles are strict_valid and collection=usable, but item/level windows are claim-evidence-flagged, consistent with fast sub-windows on this stack. PROCESS: MCP codex tool was not exposed in this session, so the Sol run went through the audited CLI fallback (scripts/codex-bridge new, gpt-5.6-sol, effort high, WRITE_SCOPE [], BRIDGE_TASK_V1 header; audit trail under /Users/edr/code/JouleWise/.codex-bridge/, prompt at the scratchpad su-floor-extract-prompt.txt). The Sol session had not returned its envelope at reporting time; all numbers above are the lead's own direct replay from runs/p2_015_floors_window_a/*/summary_metrics.json + campaign_log.jsonl and are deterministic — Sol's return, when it lands in .codex-bridge/last-message.md, should be adjudicated against these values but is corroborative, not load-bearing. git status remained clean (read-only)."
+      },
+      {
+        "family": "NEG-8 daily reference cell (fixed df-rq-mid workload, qwen25-1p5b-mlx, powermetrics): start-vs-end reference drift, blocks 00/11",
+        "rows": [
+          {
+            "metric": "gross_energy_j",
+            "window_class": "gross_request",
+            "n": 2,
+            "floor_abs_j": 84.2777,
+            "mean_j": 28.335085,
+            "spread_j": 5.415657,
+            "abba_delta_j": 7.658896109487,
+            "evidence": "bundles p2015-neg8-reference-start (24.5056367081213 J, campaign_log.jsonl line 1, ts 2026-07-17T10:32:44Z) and p2015-neg8-reference-end (32.16453281760836 J, line 247, ts 2026-07-17T19:57:00Z); summary_metrics.json gross_energy_j in each bundle dir under runs/p2_015_floors_window_a/"
+          },
+          {
+            "metric": "idle_subtracted_energy_j (== energy_request_j)",
+            "window_class": "idle_subtracted_request",
+            "n": 2,
+            "floor_abs_j": 72.7142,
+            "mean_j": 27.642276,
+            "spread_j": 4.67259,
+            "abba_delta_j": 6.608039712094,
+            "evidence": "start 24.338255720827686 J vs end 30.94629543292191 J from summary_metrics.json of p2015-neg8-reference-start/-end; end-bundle idle baseline is suspect (idle_window_suspect=true, idle power_w_mean 0.8095 W sd 0.5832 vs start 0.1241 W sd 0.0835; gpu_idle_ratio_mean 0.515 vs 0.987)"
+          },
+          {
+            "metric": "phase_energy_j.decode",
+            "window_class": "phase",
+            "n": 2,
+            "floor_abs_j": 59.6628,
+            "mean_j": 18.218038,
+            "spread_j": 3.83391,
+            "abba_delta_j": 5.421967175815,
+            "evidence": "start 15.5070539366889 J vs end 20.92902111250377 J (summary_metrics.json phase_energy_j.decode, both NEG-8 bundles); decode_latency_s 1.0019 vs 1.1309, throughput 255.51 vs 226.37 tok/s at identical 256 output tokens"
+          },
+          {
+            "metric": "phase_energy_j.prefill",
+            "window_class": "phase",
+            "n": 2,
+            "floor_abs_j": 24.5915,
+            "mean_j": 10.102462,
+            "spread_j": 1.580239,
+            "abba_delta_j": 2.234794895203,
+            "evidence": "start 8.985064110429287 J vs end 11.2198590056324 J (summary_metrics.json phase_energy_j.prefill, p2015-neg8-reference-start/-end)"
+          },
+          {
+            "metric": "energy_token_j",
+            "window_class": "request_normalized_per_token",
+            "n": 2,
+            "floor_abs_j": 0.0568,
+            "mean_j": 0.021596,
+            "spread_j": 0.00365,
+            "abba_delta_j": 0.005162531025,
+            "evidence": "start 0.019014262281896628 vs end 0.024176793306970243 J/token (summary_metrics.json); token count identical across both bundles: energy_request_j/energy_token_j = 1280.0 exactly in both, 256 output tokens (energy_output_token_j = 5x energy_token_j)"
+          }
+        ],
+        "notes": "DERIVATIONS. abba_delta_j here is NOT an ABBA contrast: it carries the signed start-to-end reference drift, delta = E_end - E_start (both bundles are identical single-run configs; config.json diff shows only run_id differs — exact scientific condition match confirmed). mean_j = (E_start+E_end)/2; spread_j = sample sd of the two residuals = |delta|/sqrt(2). floor_abs_j follows the detection_floor.md absolute-cell estimator at n=2: max(max|r_i|, t_{0.975,df=1} * s_r * sqrt(1+1/2)) = max(|delta|/2, 12.7062*(|delta|/sqrt2)*sqrt(1.5)) = 11.0038*|delta|. At n=2 this is dominated by t=12.706 and is a drift-anchor diagnostic, NOT a campaign floor; the load-bearing numbers are the deltas. Runs are 9.4 h apart (10:32:44Z vs 19:57:00Z, 2026-07-17). ANOMALIES. (1) Reference drift is large: +31.25% gross, +27.15% idle-subtracted, +34.96% decode-phase, at identical config and identical token counts — end run was slower (window 1.3489 s -> 1.5049 s) and hotter-idling. (2) End bundle idle baseline contaminated: idle_window_suspect=true, idle mean 0.8095 W (sd 0.5832) vs start 0.1241 W (sd 0.0835), gpu_idle_ratio_mean 0.515 vs 0.987 — the gross (+31%) drift is idle-independent and still large, so drift is real, not only baseline artifact. (3) Both NEG-8 bundles have energy_uncertainty_status=not_estimable and window_evidence_precheck gross_request eligible=false (in_window_sample_count 13/15, clock_anchor_bound_s 1.1407/1.1982 s > window/4 of 1.3489/1.5049 s windows, observed sampling ~8.8 Hz). CAMPAIGN QUALITY SWEEP. Tasking said 248 bundles; ACTUAL: campaign_log.jsonl has 248 LINES = 239 run rows + 9 campaign_verdict records, covering 222 distinct bundle dirs; 17 run_ids (df-cmp-abba-ph-prefill b01-a1..b05-a1) appear twice because campaign-20260717T135859Z was interrupted after 17 runs and resumed as campaign-20260717T151358Z, which logged them status=skipped; final verdict for that command is 40 usable. All 222 bundles: strict_valid=true, status succeeded, collection_classification=usable; all 9 campaign_verdict rows verdict=usable with 0 failed/missing/WAIVED (waiver count = 0). However ALL 222/222 bundles carry claim_evidence_classification=flagged (so listing ids individually is the full bundle roster). Per-flag totals (from the 9 final campaign_verdict rows; union-over-all-rows gives identical counts): cadence_ratio_unrecorded 222, clock_bound_exceeds_quarter_window 222, insufficient_in_window_samples 222 (universal trio); cadence_ratio_below_threshold 92; drift_term_unknown 70; idle_window_suspect 69. Flag-set combos: 126 bundles = universal trio only (incl. p2015-neg8-reference-start, rq-mid-abs r01-r10, ph-decode-abs, ph-prefill-abs, abba-rq, most abba-ph-prefill, early abba-ph-decode blocks); 26 = trio + cadence_ratio_below_threshold (rq-short-abs r01-r10, ph-short-prefill-abs r01-r10, abba-su b01/b02 partial); 65 = 6-flag set adding drift_term_unknown + idle_window_suspect (su-sentinel-abs r01-r10, abba-su b03-b10, abba-ph-decode b06-b10 and parts of b03/b05); 4 = trio + drift_term_unknown + idle_window_suspect without below_threshold (abba-ph-decode b03-a1/b03-b2/b05-b2, p2015-neg8-reference-end); 1 = trio + below_threshold + drift_term_unknown (abba-su-b02-a2). Implication: the campaign is collection-complete with zero waivers, but NO bundle currently qualifies as unflagged claim evidence — the universal trio looks systemic (short windows ~1.3-1.5 s vs ~8.8 Hz effective in-window cadence and clock-anchor bound > window/4), a campaign-level condition P2-037/claim gating must adjudicate. Sources: /Users/edr/code/JouleWise/runs/p2_015_floors_window_a/campaign_log.jsonl (flags identical in run rows and verdict rows), per-bundle summary_metrics.json, docs/phase_2/detection_floor.md (estimator), docs/stream_logs/2026-07-17-p2015-floors-prep.md (block 00/11 definitions)."
+      }
+    ],
+    "verifications": [
+      {
+        "family": "DF-RQ (P2-015 Window-A request-window detection floors: blocks 01_request_absolute_core + 03_request_abba, backend powermetrics, model qwen25-1p5b-mlx, runs/p2_015_floors_window_a)",
+        "verdict": "confirmed",
+        "details": "Independent bench replay (fresh script reading only raw bundle artifacts; codex MCP surface unavailable in this session too, matching the extraction's process note). (1) Derivation formula matches docs/phase_2/detection_floor.md §Estimator rule exactly: floor_abs_j = max(max_i|r_i|, t_{0.975,df=9} * s_r * sqrt(1+1/10)); floor_cmp_j = max(max_i|delta_i|, |mean(delta)| + t_{0.975,9} * s_delta * sqrt(1.1)); t_{0.975,9}=2.2621571628 is the correct table value; n=10 everywhere so the 5<=n<10 guard factor correctly does not apply; n definition (strict-valid bundles / ABBA blocks) matches the doc. (2) Three named spot rows re-derived from the named bundles' summary_metrics.json, exact to 6 decimals: DF-RQ-GROSS-MID mean 24.059338, s 0.222205, max|r| 0.521044, floor 0.527197 (t-term dominant, as claimed); DF-RQ-GROSS-SHORT mean 0.250592, s 0.022121, max|r| 0.036368, floor 0.052484 (t-term dominant); DF-CMP-ABBA-RQ gross mean_delta 0.041026, s_delta 0.365937, max|delta| 0.639689 (b08), floor_cmp 0.909237 (|mean|+t-term dominant). All ten raw values and all ten per-block deltas match the evidence strings. The remaining three rows also replayed exactly (0.536632 with max|r| dominant as claimed; 0.058879; 0.894215 with max|delta| 0.616704 at b08). (3) Cross-checks confirmed: 60/60 bundles strict_valid=true, status succeeded, collection usable in campaign_log.jsonl member records; 20 bundles under block 01_request_absolute_core and 40 under 03_request_abba; block 08_optional_long_request_absolute has ZERO log rows (anomaly 1 real — mid/short, not mid/long); energy_request_j == idle_subtracted_energy_j bit-identical in all 60 (anomaly 2 real; mid gross-vs-idle-sub gap 0.129253 J matches); claim_evidence_classification=flagged on 60/60 with gross_request and idle_subtracted_request eligible=false on all 60 for clock_bound_exceeds_quarter_window (clock_anchor_bound_s ~1.0889 s) plus cadence_ratio_below_threshold on the 10 short bundles (~3.19 < 4.0) — anomaly 3 real; ABBA membership complete 4/4 in all 10 blocks. Minor phrasing nit only: anomaly 3's '0.25 x window duration ~1.33 s mid / ~0.36 s short' lists full window durations (observed 1.344 s / 0.365 s), not the quarter-window thresholds (~0.336 s / ~0.091 s); the substance of the flag is correct. No numeric discrepancies found; extraction is fit to cite, with the extraction's own caveat standing that these request windows fail the L2/L3 evidence precheck pending P2-037/P2-039 adjudication. Replay script: /private/tmp/claude-501/-Users-edr-code-JouleWise/bed4bf7f-6ed5-4914-83fa-40cb7132e5a6/scratchpad/replay_df_rq_floors.py"
+      },
+      {
+        "family": "DF-PH (phase-window detection floors, P2-015 Window A, blocks 02_phase_absolute / 04_phase_prefill_abba / 05_phase_decode_abba; backend powermetrics, model qwen25-1p5b-mlx)",
+        "verdict": "confirmed",
+        "details": "Independently re-derived ALL FIVE rows (exceeding the 3 requested) from per-bundle summary_metrics.json under /Users/edr/code/JouleWise/runs/p2_015_floors_window_a/ and checked the formula against /Users/edr/code/JouleWise/docs/phase_2/detection_floor.md.\n\nFORMULA CHECK (doc lines 88-104): matches the extraction exactly — absolute: floor_abs_j = max(max_i|r_i|, t_{0.975,df=n-1} * s_r * sqrt(1+1/n)); comparative: floor_cmp_j = max(max_i|delta_i|, |mean(delta)| + t_{0.975,df=n-1} * s_delta * sqrt(1+1/n)); small-sample guard applies only for 5<=n<10, so correctly omitted at n=10; t_{0.975,9}=2.2621571628 is correct.\n\nSPOT RE-DERIVATIONS (all exact to 6 decimals):\n1. DF-PH-PREFILL abs: mean 40.452004, s_r 0.622442, max|r| 0.975832, t-term 1.476788 dominates -> floor 1.476788. Match.\n2. DF-PH-DECODE abs: mean 39.807358, s_r 0.331428, max|r| 0.772287, t-term 0.786337 dominates -> floor 0.786337. Match.\n3. DF-PH-SHORT-PREFILL: floor 0.026694, mean 0.080930, spread 0.011251; phase_identifiability.prefill = not_resolvable_sample_count on all 10 bundles; doc line 137 confirms the cell deliverable is \"identifiability verdict plus floor if eligible\", supporting the smoke-evidence-only classification. Match.\n4. DF-CMP-ABBA-PH prefill: block deltas match all 10; mean -0.251011, s 0.627138, max|delta| 1.313466, |mean|+t-term 1.738940 dominates -> floor_cmp 1.738940. Match.\n5. DF-CMP-ABBA-PH decode: deltas match all 10; mean -0.052190, s 0.410821, max|delta| 0.797411, |mean|+t-term 1.026892 dominates -> floor_cmp 1.026892. Match.\nGates follow: prefill 1.738940 (comparative dominates), decode 1.026892 (comparative dominates). Confirmed.\n\nSUPPORTING CLAIMS VERIFIED against campaign_log.jsonl: all 110 executed DF-PH member bundles have strict_valid=true, status ok; claim_evidence_classification \"flagged\" on all 110 with cadence_ratio_unrecorded / clock_bound_exceeds_quarter_window / insufficient_in_window_samples universal (anomaly 4 confirmed). ABBA order a1/b1/b2/a2 confirmed via executed_order.position_in_block 1-4 in log rows (note: it lives in the log rows, not in bundle summary_metrics.json). Duplicate-listing anomaly confirmed in substance: log lines 96-112 executed ok (campaign ...p31329), lines 113-129 status=skipped/exit_code=null re-listing at 15:14Z (resumed campaign ...p33508); single execution each; dedup was correctly applied (bundle dirs are single). idle_window_suspect + drift_term_unknown carrier count is 25, consistent with claimed membership (decode b06-b10 all, b03 a1/b1/b2, b05 a2/b2; b05 spot-checked in bundle files).\n\nMINOR IMPRECISIONS (prose only, no value affected): (a) \"b01-b05 members appear twice\" overstates — exactly 17 run_ids are duplicated: all four members of b01-b04 plus b05-a1 only; b05 b1/b2/a2 appear once (the cited 17-line ranges are correct and internally consistent). (b) The duplicated rows executed 14:00:01-14:39:59Z, not \"14:00-15:13Z\" (15:13 is plausibly the p31329 campaign's overall span). (c) cadence_ratio_below_threshold on decode ABBA is carried by 22 bundles, not just b06-b10's 20 — also b03-b1 and b05-a2; both are inside blocks the extraction already caveats as flagged, so the conservative-caveat direction is unchanged.\n\nVerdict: confirmed. All floor values, means, spreads, deltas, n's, identifiability verdicts, schema-mapping notes, and gate computations reproduce exactly from primary evidence."
+      },
+      {
+        "family": "DF-SU (P2-015 Window-A suite-window floors: blocks 06 suite_absolute + 07 suite_abba; backend powermetrics, model qwen25-1p5b-mlx, suite sentinel/common_512_256)",
+        "verdict": "confirmed",
+        "details": "Independently re-derived all four rows (superset of the requested 3 spot rows) directly from the named bundles' summary_metrics.json under /Users/edr/code/JouleWise/runs/p2_015_floors_window_a/, using the frozen D-054 estimator functions in joulewise/detection_floor.py. Every reported number reproduces digit-for-digit: DF-SU-ITEM abs floor 0.3327740272368623 J (mean 38.56139118692326, s 0.1402686055008585, max|r| 0.24113517334704682 at r03); DF-SU-LEVEL abs floor 1.663965590809514 J (mean 192.84543688967793, s 0.7013832628774583, max|r| 1.2054112785344842 at r03); DF-CMP-ABBA-SU item floor_cmp 4.922864976245446 J (mean delta -0.7840701869770814, s 1.744556143294421, max|d| 4.256121661885338 at b02); DF-CMP-ABBA-SU level floor_cmp 24.618735151141273 J (mean delta -3.920760552217966, s 8.724467043867778, max|d| 21.28465431521451 at b02). All 10 per-bundle item means, 10 level energies, and 20 block deltas listed in the evidence strings match the raw bundles exactly. Derivation formula matches docs/phase_2/detection_floor.md estimator rule: absolute max(max|r_i|, t_{0.975,df=9}*s_r*sqrt(1+1/n)); comparative max(max|d_i|, |mean d|+t*s_d*sqrt(1+1/n)) with un-recentered deltas; abba_delta=(B1+B2-A1-A2)/2; guard(n)=1.0 at n=10; n counts strict-valid bundles/ABBA blocks with item windows bundle-clustered via the per-bundle mean of the 5 same-shape items (doc lines 79-97). floor_gate_j = max(abs,cmp) = 4.922864976245446 J item / 24.618735151141273 J level, as stated. Process claims verified from campaign_log.jsonl: 50/50 members strict_valid and collection usable; claim_evidence_flag counts match exactly (cadence_ratio_below_threshold 50/50, cadence_ratio_unrecorded 50/50, clock_bound_exceeds_quarter_window 50/50, insufficient_in_window_samples 50/50, drift_term_unknown 44/50, idle_window_suspect 43/50); cooldown cap_hit on exactly b01-b2, b03-a1, b09-b1; b01-a1 first_run_exempt with model_load_boundary=true. ABBA member order a1,b1,b2,a2 confirmed in configs/campaigns/p2_015_floors/07_suite_abba/order_manifest.json and identical to the executed campaign-log order. Anomaly (1) is real in the data: six consecutive members b01-b1 through b02-b2 ran ~23% low (item means 29.63-30.99 J, levels 148.2-155.0 J vs ~38.5/~193 J elsewhere), recovering at b02-a2; this drives the two dominant deltas and the ~15x cmp-vs-abs gap, and per detection_floor.md (comparative floors may exceed absolute; cap-hit cells need the drift term cleared) lead review before these comparative floors gate suite L2/L3 claims is the correct disposition. Sole cosmetic note: bundles store the field as energy_gross_j while the extraction labels it gross_energy_j per the contract doc's cell table — same quantity, no substantive discrepancy."
+      },
+      {
+        "family": "NEG-8 daily reference cell (fixed df-rq-mid workload, qwen25-1p5b-mlx, powermetrics): start-vs-end reference drift, blocks 00/11",
+        "verdict": "confirmed",
+        "details": "Independently re-derived from primary evidence; extraction is CONFIRMED. Exceeded the 3-row minimum: all 5 rows re-derived exactly, plus the campaign-sweep counts.\n\nSPOT ROWS (re-derived from /Users/edr/code/JouleWise/runs/p2_015_floors_window_a/p2015-neg8-reference-{start,end}/summary_metrics.json):\n1. gross_energy_j: start 24.5056367081213, end 32.16453281760836 — both match bundle files byte-for-byte. delta=7.65889610948706, mean=28.335085, s_r=|delta|/sqrt2=5.415657, floor=84.277697 -> all match claimed 7.658896109487/28.335085/5.415657/84.2777.\n2. idle_subtracted_energy_j: 24.338255720827686 vs 30.94629543292191; delta=6.608039712094, mean=27.642276, s_r=4.672590, floor=72.714182 -> matches 72.7142. End-bundle idle contamination confirmed: idle_window_suspect=true, power_w_mean 0.8095139843 (sd 0.5831667535) vs start 0.1240864688 (sd 0.0835058465), gpu_idle_ratio_mean 0.5153535 vs 0.9873086.\n3. energy_token_j: 0.019014262281896628 vs 0.024176793306970243; delta=0.005162531025, floor=0.056808 -> matches 0.0568. Token-identity checks hold exactly: energy_request_j/energy_token_j = 1280.0 in BOTH bundles; energy_output_token_j = 5x energy_token_j in both.\n(Also verified decode 59.662763~59.6628 and prefill 24.591451~24.5915; decode_latency 1.0019/1.1309, throughput 255.5071/226.3724 match.)\n\nFORMULA vs docs/phase_2/detection_floor.md (Estimator rule, ~line 93): floor_abs_j = max(max_i|r_i|, t_{0.975,n-1} * s_r * sqrt(1+1/n)). At n=2 with residuals +/-delta/2 this reduces exactly to max(|delta|/2, 12.706205*(|delta|/sqrt2)*sqrt(1.5)), t-term dominant -> multiplier 11.00390*|delta|. Extraction's derivation is correct. Minor nit only: the notes quote the scalar as \"11.0038\"; the precise value is 11.00390 (12.706204736*sqrt(0.75)) — all published floor_abs_j values were computed with the correct precise multiplier, so no numeric impact. The \"n=2 is a drift-anchor diagnostic, NOT a campaign floor\" caveat is doctrinally correct: detection_floor.md rules cells with n<5 smoke evidence only.\n\nEVIDENCE ANCHORS CONFIRMED: campaign_log.jsonl line 1 = p2015-neg8-reference-start ts 2026-07-17T10:32:44.747032Z; line 247 = p2015-neg8-reference-end ts 2026-07-17T19:57:00.787415Z (9.40 h apart). config.json diff between the two bundles shows ONLY run_id differs (exact condition match confirmed). Drift percentages recomputed: +31.254% gross, +27.151% idle-sub, +34.965% decode. Precheck anomalies confirmed in both bundles: energy_uncertainty_status=not_estimable, gross_request eligible=false, in_window_sample_count 13/15, clock_anchor_bound_s 1.1406987/1.1981561 s vs windows 1.3489060/1.5048997 s, observed sampling 8.791/8.847 Hz.\n\nCAMPAIGN SWEEP INDEPENDENTLY REPRODUCED: 248 log lines = 239 run rows + 9 campaign_verdict rows; 222 distinct bundle ids (222 dirs on disk); exactly 17 duplicated run_ids (abba-ph-prefill b01-a1..b05-a1), duplicates logged status=skipped (222 ok + 17 skipped); the resumed prefill command's final verdict lists 40 usable. All 9 verdicts: failed=[], missing=[], waived=[] (usable counts 1+20+30+40+40+40+10+40+1=222). All 222 members: collection_classification=usable, claim_evidence_classification=flagged. Flag totals match exactly: cadence_ratio_unrecorded 222, clock_bound_exceeds_quarter_window 222, insufficient_in_window_samples 222, cadence_ratio_below_threshold 92, drift_term_unknown 70, idle_window_suspect 69. Combo partition matches exactly: 126 trio-only / 65 six-flag / 26 trio+below / 4 trio+drift+idle / 1 trio+below+drift; reference-start is in the trio-only set and reference-end in the 4-bundle trio+drift+idle set, as claimed. The extraction's correction of the tasking's \"248 bundles\" to 222 distinct bundles is right.\n\nNo fabricated or estimated numbers found; every checked figure traces to summary_metrics.json or campaign_log.jsonl. The systemic universal-trio observation (short ~1.3-1.5 s windows vs ~8.8 Hz cadence, clock bound > window/4) is supported by the bundle prechecks and does look campaign-level for P2-037 adjudication."
+      }
+    ]
+  },
+  "workflowProgress": [
+    {
+      "type": "workflow_phase",
+      "index": 1,
+      "title": "Extract"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 2,
+      "title": "Verify"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 1,
+      "label": "extract:request",
+      "phaseIndex": 1,
+      "phaseTitle": "Extract",
+      "agentId": "a4968ae1c133de2db",
+      "agentType": "codex",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784318284316,
+      "queuedAt": 1784318270152,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "DF-RQ (P2-015 Window-A request-window detection floors: blo…",
+      "promptPreview": "Sol read-only session (codex route, effort HIGH), cwd /Users/edr/code/JouleWise. The P2-015 Window-A floor campaign completed tonight: 248 strict-valid bundles under runs/p2_015_floors_window_a/ (campaign_log.jsonl has per-bundle rows; each bundle dir has summary_metrics.json). Floor semantics: docs/phase_2/detection_floor.md (DF row families, floor = residual same-condition scatter per backend x …",
+      "lastProgressAt": 1784318474486,
+      "tokens": 58945,
+      "toolCalls": 12,
+      "durationMs": 190170,
+      "resultPreview": "{\"family\":\"DF-RQ (P2-015 Window-A request-window detection floors: blocks 01_request_absolute_core + 03_request_abba, backend powermetrics, model qwen25-1p5b-mlx, runs/p2_015_floors_window_a)\",\"rows\":[{\"metric\":\"gross_energy_j\",\"window_class\":\"gross_request_mid (DF-RQ-GROSS-MID, absolute)\",\"n\":10,\"mean_j\":24.059338091463328,\"spread_j\":0.22220492360263064,\"floor_abs_j\":0.5271968352054998,\"evidence\"…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 2,
+      "label": "extract:phase",
+      "phaseIndex": 1,
+      "phaseTitle": "Extract",
+      "agentId": "a67590f411413af87",
+      "agentType": "codex",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784318282487,
+      "queuedAt": 1784318270152,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "DF-PH (phase-window detection floors, P2-015 Window A, bloc…",
+      "promptPreview": "Sol read-only session (codex route, effort HIGH), cwd /Users/edr/code/JouleWise. The P2-015 Window-A floor campaign completed tonight: 248 strict-valid bundles under runs/p2_015_floors_window_a/ (campaign_log.jsonl has per-bundle rows; each bundle dir has summary_metrics.json). Floor semantics: docs/phase_2/detection_floor.md (DF row families, floor = residual same-condition scatter per backend x …",
+      "lastProgressAt": 1784318453031,
+      "tokens": 59694,
+      "toolCalls": 14,
+      "durationMs": 170543,
+      "resultPreview": "{\"family\":\"DF-PH (phase-window detection floors, P2-015 Window A, blocks 02_phase_absolute / 04_phase_prefill_abba / 05_phase_decode_abba; backend powermetrics, model qwen25-1p5b-mlx)\",\"rows\":[{\"metric\":\"phase_energy_j.prefill\",\"window_class\":\"phase (prefill), absolute repeat — DF-PH-PREFILL\",\"n\":10,\"floor_abs_j\":1.476788,\"mean_j\":40.452004,\"spread_j\":0.622442,\"evidence\":\"Bundles p2015-df-ph-prefi…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 3,
+      "label": "extract:suite",
+      "phaseIndex": 1,
+      "phaseTitle": "Extract",
+      "agentId": "a511024e7cef3d120",
+      "agentType": "codex",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784318281017,
+      "queuedAt": 1784318270152,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "DF-SU (P2-015 Window-A suite-window floors: blocks 06 suite…",
+      "promptPreview": "Sol read-only session (codex route, effort HIGH), cwd /Users/edr/code/JouleWise. The P2-015 Window-A floor campaign completed tonight: 248 strict-valid bundles under runs/p2_015_floors_window_a/ (campaign_log.jsonl has per-bundle rows; each bundle dir has summary_metrics.json). Floor semantics: docs/phase_2/detection_floor.md (DF row families, floor = residual same-condition scatter per backend x …",
+      "lastProgressAt": 1784318655475,
+      "tokens": 99221,
+      "toolCalls": 31,
+      "durationMs": 374458,
+      "resultPreview": "{\"family\":\"DF-SU (P2-015 Window-A suite-window floors: blocks 06 suite_absolute + 07 suite_abba; backend powermetrics, model qwen25-1p5b-mlx, suite sentinel/common_512_256)\",\"rows\":[{\"metric\":\"suite_metrics.items[*].gross_energy_j (per-bundle mean of 5 same-shape items)\",\"window_class\":\"item\",\"n\":10,\"floor_abs_j\":0.3327740272368623,\"mean_j\":38.56139118692326,\"spread_j\":0.1402686055008585,\"evidence…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 4,
+      "label": "extract:neg8-quality",
+      "phaseIndex": 1,
+      "phaseTitle": "Extract",
+      "agentId": "ad3e2cd3e949e14aa",
+      "agentType": "codex",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784318283915,
+      "queuedAt": 1784318270152,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "NEG-8 daily reference cell (fixed df-rq-mid workload, qwen2…",
+      "promptPreview": "Sol read-only session (codex route, effort HIGH), cwd /Users/edr/code/JouleWise. The P2-015 Window-A floor campaign completed tonight: 248 strict-valid bundles under runs/p2_015_floors_window_a/ (campaign_log.jsonl has per-bundle rows; each bundle dir has summary_metrics.json). Floor semantics: docs/phase_2/detection_floor.md (DF row families, floor = residual same-condition scatter per backend x …",
+      "lastProgressAt": 1784318553551,
+      "tokens": 60776,
+      "toolCalls": 20,
+      "durationMs": 269634,
+      "resultPreview": "{\"family\":\"NEG-8 daily reference cell (fixed df-rq-mid workload, qwen25-1p5b-mlx, powermetrics): start-vs-end reference drift, blocks 00/11\",\"rows\":[{\"metric\":\"gross_energy_j\",\"window_class\":\"gross_request\",\"n\":2,\"floor_abs_j\":84.2777,\"mean_j\":28.335085,\"spread_j\":5.415657,\"abba_delta_j\":7.658896109487,\"evidence\":\"bundles p2015-neg8-reference-start (24.5056367081213 J, campaign_log.jsonl line 1, t…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 5,
+      "label": "verify:DF-RQ (P2-015 Wind",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a41db4a4da4655592",
+      "agentType": "codex",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784318667064,
+      "queuedAt": 1784318657588,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "DF-RQ (P2-015 Window-A request-window detection floors: blo…",
+      "promptPreview": "Sol read-only session (codex route, effort HIGH), cwd /Users/edr/code/JouleWise. The P2-015 Window-A floor campaign completed tonight: 248 strict-valid bundles under runs/p2_015_floors_window_a/ (campaign_log.jsonl has per-bundle rows; each bundle dir has summary_metrics.json). Floor semantics: docs/phase_2/detection_floor.md (DF row families, floor = residual same-condition scatter per backend x …",
+      "lastProgressAt": 1784318861744,
+      "tokens": 52875,
+      "toolCalls": 14,
+      "durationMs": 194680,
+      "resultPreview": "{\"family\":\"DF-RQ (P2-015 Window-A request-window detection floors: blocks 01_request_absolute_core + 03_request_abba, backend powermetrics, model qwen25-1p5b-mlx, runs/p2_015_floors_window_a)\",\"verdict\":\"confirmed\",\"details\":\"Independent bench replay (fresh script reading only raw bundle artifacts; codex MCP surface unavailable in this session too, matching the extraction's process note). (1) Deri…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 6,
+      "label": "verify:DF-PH (phase-windo",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "ab39b31f1bfd9b364",
+      "agentType": "codex",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784318667840,
+      "queuedAt": 1784318657589,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "DF-PH (phase-window detection floors, P2-015 Window A, bloc…",
+      "promptPreview": "Sol read-only session (codex route, effort HIGH), cwd /Users/edr/code/JouleWise. The P2-015 Window-A floor campaign completed tonight: 248 strict-valid bundles under runs/p2_015_floors_window_a/ (campaign_log.jsonl has per-bundle rows; each bundle dir has summary_metrics.json). Floor semantics: docs/phase_2/detection_floor.md (DF row families, floor = residual same-condition scatter per backend x …",
+      "lastProgressAt": 1784318873138,
+      "tokens": 47025,
+      "toolCalls": 16,
+      "durationMs": 205298,
+      "resultPreview": "{\"family\":\"DF-PH (phase-window detection floors, P2-015 Window A, blocks 02_phase_absolute / 04_phase_prefill_abba / 05_phase_decode_abba; backend powermetrics, model qwen25-1p5b-mlx)\",\"verdict\":\"confirmed\",\"details\":\"Independently re-derived ALL FIVE rows (exceeding the 3 requested) from per-bundle summary_metrics.json under /Users/edr/code/JouleWise/runs/p2_015_floors_window_a/ and checked the f…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 7,
+      "label": "verify:DF-SU (P2-015 Wind",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a2ea830b2c5f4d1cc",
+      "agentType": "codex",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784318674425,
+      "queuedAt": 1784318657589,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "DF-SU (P2-015 Window-A suite-window floors: blocks 06 suite…",
+      "promptPreview": "Sol read-only session (codex route, effort HIGH), cwd /Users/edr/code/JouleWise. The P2-015 Window-A floor campaign completed tonight: 248 strict-valid bundles under runs/p2_015_floors_window_a/ (campaign_log.jsonl has per-bundle rows; each bundle dir has summary_metrics.json). Floor semantics: docs/phase_2/detection_floor.md (DF row families, floor = residual same-condition scatter per backend x …",
+      "lastProgressAt": 1784318842724,
+      "tokens": 54018,
+      "toolCalls": 17,
+      "durationMs": 168299,
+      "resultPreview": "{\"family\":\"DF-SU (P2-015 Window-A suite-window floors: blocks 06 suite_absolute + 07 suite_abba; backend powermetrics, model qwen25-1p5b-mlx, suite sentinel/common_512_256)\",\"verdict\":\"confirmed\",\"details\":\"Independently re-derived all four rows (superset of the requested 3 spot rows) directly from the named bundles' summary_metrics.json under /Users/edr/code/JouleWise/runs/p2_015_floors_window_a/…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 8,
+      "label": "verify:NEG-8 daily refere",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "a1ff4c26095b79948",
+      "agentType": "codex",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1784318664389,
+      "queuedAt": 1784318657590,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "NEG-8 daily reference cell (fixed df-rq-mid workload, qwen2…",
+      "promptPreview": "Sol read-only session (codex route, effort HIGH), cwd /Users/edr/code/JouleWise. The P2-015 Window-A floor campaign completed tonight: 248 strict-valid bundles under runs/p2_015_floors_window_a/ (campaign_log.jsonl has per-bundle rows; each bundle dir has summary_metrics.json). Floor semantics: docs/phase_2/detection_floor.md (DF row families, floor = residual same-condition scatter per backend x …",
+      "lastProgressAt": 1784318860554,
+      "tokens": 50396,
+      "toolCalls": 18,
+      "durationMs": 196164,
+      "resultPreview": "{\"family\":\"NEG-8 daily reference cell (fixed df-rq-mid workload, qwen25-1p5b-mlx, powermetrics): start-vs-end reference drift, blocks 00/11\",\"verdict\":\"confirmed\",\"details\":\"Independently re-derived from primary evidence; extraction is CONFIRMED. Exceeded the 3-row minimum: all 5 rows re-derived exactly, plus the campaign-sweep counts.\\n\\nSPOT ROWS (re-derived from /Users/edr/code/JouleWise/runs/p…"
+    }
+  ],
+  "totalTokens": 482950,
+  "totalToolCalls": 142
+}
