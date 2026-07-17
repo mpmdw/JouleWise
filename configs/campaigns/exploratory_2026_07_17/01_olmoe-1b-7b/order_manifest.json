@@ -1,0 +1,18 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "exploratory-20260717-01-olmoe-1b-7b-order-v1",
+  "ordering_note": "Sequential sub-block 1 of 3; complete all three experiment-runner repetitions before starting sub-block 2.",
+  "planned_n_bundles": 3,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "exploratory-20260717-olmoe-1b-7b.json",
+      "run_id": "exploratory-20260717-olmoe-1b-7b",
+      "model_tag": "olmoe-1b-7b",
+      "workload": "jw_mixed_v1_sentinel",
+      "role": "exploratory_l1_legacy_observation",
+      "block_index": 1,
+      "position_in_block": 1
+    }
+  ]
+}

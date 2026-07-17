@@ -1,0 +1,18 @@
+{
+  "schema_version": "joulewise.order_manifest.v1",
+  "manifest_id": "exploratory-20260717-03-qwen35-122b-order-v1",
+  "ordering_note": "Sequential sub-block 3 of 3; start only after sub-block 2 completes and keep all three experiment-runner repetitions contiguous.",
+  "planned_n_bundles": 3,
+  "executed_order": [
+    {
+      "index": 1,
+      "config": "exploratory-20260717-qwen35-122b.json",
+      "run_id": "exploratory-20260717-qwen35-122b",
+      "model_tag": "qwen35-122b",
+      "workload": "jw_mixed_v1_sentinel",
+      "role": "exploratory_l1_legacy_observation",
+      "block_index": 3,
+      "position_in_block": 1
+    }
+  ]
+}

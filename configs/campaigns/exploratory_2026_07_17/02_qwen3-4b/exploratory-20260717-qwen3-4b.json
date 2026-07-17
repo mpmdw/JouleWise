@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.1",
+  "run_id": "exploratory-20260717-qwen3-4b",
+  "model": {
+    "name": "Qwen3-4B-4bit",
+    "family": "qwen3",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen3-4B-4bit",
+    "revision": "4dcb3d101c2a062e5c1d4bb173588c54ea6c4d25",
+    "weight_format": "mlx",
+    "context_window": 40960
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4,
+    "group_size": 64
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "Ed-directed exploratory production block for the D-074 candidate. Schema 0.1 has no chat-template or thinking-mode knob; the ids-native raw-token suite path bypasses the chat template and avoids thinking mode."
+  },
+  "workload_profile": {
+    "name": "exploratory_qwen3_jw_mixed_sentinel",
+    "repetitions": 3,
+    "suite_manifest_ref": "configs/campaigns/exploratory_2026_07_17/suite_manifests/jw_sentinel_v1_qwen3-4b.json",
+    "suite_manifest_sha256": "44bd171683d28457f65eef892f42e5d82b51ec7653574478d665ebcae367346f",
+    "warmup_runs": 1
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "notes": "EXPLORATORY/L1-legacy only; strict-valid production-bundle target with no claim framing. Raw-token prompt path avoids thinking mode.",
+    "tags": [
+      "exploratory",
+      "l1-legacy",
+      "no-claim",
+      "axis-static-batching",
+      "axis-speculative-decoding-mtp",
+      "axis-moe-vs-dense",
+      "axis-quantization",
+      "axis-reasoning-length-variance",
+      "qwen3-4b"
+    ]
+  }
+}

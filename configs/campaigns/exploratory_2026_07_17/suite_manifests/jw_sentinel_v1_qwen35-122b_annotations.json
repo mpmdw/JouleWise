@@ -1,0 +1,214 @@
+{
+  "items": {
+    "06852c7be50050bee6a629da01ac1b21b41e7ef2d9fc93d9612ea53a95dd6527": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "bos_present": false,
+      "chars_per_token": 1.642578125,
+      "coarse_units": 3,
+      "condition_id": "multilingual",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 54,
+      "generator_id": "jw.sentinel.multilingual",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "mixed_profiles": {
+          "source": "pinned",
+          "value": [
+            "ru-Cyrillic",
+            "zh-CJK",
+            "hi-Devanagari",
+            "ar-Arabic"
+          ]
+        }
+      },
+      "prompt_source": "token_ids",
+      "realized_token_count": 512,
+      "seed": 16099354725718292643,
+      "text_sha256": null,
+      "token_accounting": "encode_add_special_false",
+      "token_ids_sha256": "0a71dcda6922aaece7057b2f378d7e8e30664c982bacb2e49485c74044324bee",
+      "tokenizer_id": "tokfiles_d63dd468fe17f22b9a3bcd71c4edc0b692533b0ae2d889e00dd104651b9bf3ec"
+    },
+    "18f2538d8ffd3215b246d9dd4f84035d2db7644a4888b016ce77756aff1fda56": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "bos_present": false,
+      "coarse_units": 26,
+      "condition_id": "code_like",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 33,
+      "generator_id": "jw.sentinel.code_like",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "indent": {
+          "source": "pinned",
+          "value": "    "
+        },
+        "n_complete_functions": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        },
+        "n_imports": {
+          "range": [
+            2,
+            3
+          ],
+          "source": "drbg",
+          "value": 2
+        }
+      },
+      "prompt_source": "token_ids",
+      "realized_token_count": 512,
+      "seed": 4474587088673762757,
+      "text_sha256": null,
+      "token_accounting": "encode_add_special_false",
+      "token_ids_sha256": "bf870eadc19ddd21c256fa3a1bd6fdc6338893bc805c13cb072b42a91a2bc436",
+      "tokenizer_id": "tokfiles_d63dd468fe17f22b9a3bcd71c4edc0b692533b0ae2d889e00dd104651b9bf3ec"
+    },
+    "1ab14b9d11233168c4f8d0ef1af2d72f3e8c4c8b126dbe559fb95b8d7d10a81b": {
+      "bank_hash": "9bda5d6bef86ce02d1970eb0e246b86ea0029075b98a2b72049e95d991ad06c7",
+      "bos_present": false,
+      "coarse_units": 24,
+      "condition_id": "natural_prose",
+      "drbg": "sha256-ctr-v1",
+      "elastic_fill_tokens": 40,
+      "generator_id": "jw.sentinel.natural_prose",
+      "generator_version": "1.0.0",
+      "parameters": {
+        "coarse_headroom": {
+          "source": "pinned",
+          "value": 24
+        },
+        "n_constraints": {
+          "range": [
+            3,
+            5
+          ],
+          "source": "drbg",
+          "value": 4
+        },
+        "persona": {
+          "range": [
+            0,
+            7
+          ],
+          "source": "drbg",
+          "value": "a field supervisor"
+        },
+        "topic": {
+          "grammar": "adjective+domain",
+          "source": "drbg",
+          "value": "the careful harbor pilot crews"
+        }
+      },
+      "prompt_source": "token_ids",
+      "realized_token_count": 512,
+      "seed": 8948238936859759452,
+      "text_sha256": null,
+      "token_accounting": "encode_add_special_false",
+      "token_ids_sha256": "980cac82a56ab5c35400513118fac8c6bc621254e6f4b4874bfca31752317ed3",
+      "tokenizer_id": "tokfiles_d63dd468fe17f22b9a3bcd71c4edc0b692533b0ae2d889e00dd104651b9bf3ec"
+    },
+    "722dd6364618445950082529ec56f30b6364c58e9e0e0b64f04ca66b62287ac1": {
+      "bos_present": false,
+      "condition_id": "random_token",
+      "drbg": "sha256-ctr-v1",
+      "excluded_special_ids": [
+        248044,
+        248046,
+        248053,
+        248054,
+        248056,
+        248057,
+        248070,
+        248071,
+        248076
+      ],
+      "generator_id": "jw.sentinel.random_token",
+      "generator_version": "1.0.0",
+      "prompt_source": "token_ids",
+      "realized_token_count": 512,
+      "seed": 8768038290276450031,
+      "text_sha256": null,
+      "token_ids_sha256": "86bd0a2933130c7ba8c24b2af82b31cbdbea5cdaf055ca110222df5d10efd804",
+      "tokenizer_id": "tokfiles_d63dd468fe17f22b9a3bcd71c4edc0b692533b0ae2d889e00dd104651b9bf3ec"
+    },
+    "dc5f9a6be0f2bafb30c197e11d755f332660c0368da1b39b7d0f40b22515dc13": {
+      "bos_present": false,
+      "condition_id": "repeated_seed",
+      "drbg": "sha256-ctr-v1",
+      "generator_id": "jw.sentinel.repeated_seed",
+      "generator_version": "1.0.0",
+      "prompt_source": "token_ids",
+      "realized_token_count": 512,
+      "seed": 1808300373424650859,
+      "text_sha256": null,
+      "token_ids_sha256": "f0949a29ee1392d463c90de4ac03bafbdc2d3f0536abf26362cdfab032fc2c5e",
+      "tokenizer_id": "tokfiles_d63dd468fe17f22b9a3bcd71c4edc0b692533b0ae2d889e00dd104651b9bf3ec"
+    }
+  },
+  "source_manifest": {
+    "source_id": "jw_mixed_v1:tokfiles_d63dd468fe17f22b9a3bcd71c4edc0b692533b0ae2d889e00dd104651b9bf3ec",
+    "subset_sha256": "9ea62a9688ee254729773d3015094c5e99de5fb0f8689ce7ee1676f009013a36",
+    "tokenizer_files_sha256": "d63dd468fe17f22b9a3bcd71c4edc0b692533b0ae2d889e00dd104651b9bf3ec",
+    "tokenizer_id": "tokfiles_d63dd468fe17f22b9a3bcd71c4edc0b692533b0ae2d889e00dd104651b9bf3ec"
+  },
+  "suite": "jw_mixed_v1_sentinel",
+  "tokenizer": {
+    "files": [
+      {
+        "filename": "added_tokens.json",
+        "status": "absent"
+      },
+      {
+        "filename": "chat_template.jinja",
+        "sha256": "a4aee8afcf2e0711942cf848899be66016f8d14a889ff9ede07bca099c28f715"
+      },
+      {
+        "filename": "chat_template.json",
+        "status": "absent"
+      },
+      {
+        "filename": "merges.txt",
+        "status": "absent"
+      },
+      {
+        "filename": "special_tokens_map.json",
+        "status": "absent"
+      },
+      {
+        "filename": "spiece.model",
+        "status": "absent"
+      },
+      {
+        "filename": "tokenizer.json",
+        "sha256": "87a7830d63fcf43bf241c3c5242e96e62dd3fdc29224ca26fed8ea333db72de4"
+      },
+      {
+        "filename": "tokenizer.model",
+        "status": "absent"
+      },
+      {
+        "filename": "tokenizer_config.json",
+        "sha256": "e98f1901ac6f0adff67b1d540bfa0c36ac1a0cf59eb72ed78146ef89aafa1182"
+      },
+      {
+        "filename": "vocab.json",
+        "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+      }
+    ],
+    "files_sha256": "d63dd468fe17f22b9a3bcd71c4edc0b692533b0ae2d889e00dd104651b9bf3ec",
+    "tokenizer_id": "tokfiles_d63dd468fe17f22b9a3bcd71c4edc0b692533b0ae2d889e00dd104651b9bf3ec"
+  }
+}

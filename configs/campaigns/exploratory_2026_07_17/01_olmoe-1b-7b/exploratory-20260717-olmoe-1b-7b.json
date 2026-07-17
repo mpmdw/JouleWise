@@ -1,0 +1,55 @@
+{
+  "schema_version": "0.1",
+  "run_id": "exploratory-20260717-olmoe-1b-7b",
+  "model": {
+    "name": "OLMoE-1B-7B-0924",
+    "family": "olmoe",
+    "source": "/Users/edr/jw_models/allenai/OLMoE-1B-7B-0924",
+    "revision": "6d84c48581ece794365f2b8e9cfb043c68ade9c5",
+    "weight_format": "safetensors",
+    "context_window": 4096
+  },
+  "quantization": {
+    "name": "bf16",
+    "bits": 16
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "Ed-directed exploratory production block; first OLMoE energy observations only. The local config.json carries the verified rms_norm_eps=1e-05 default patch (SHA-256 a57cfd3b1e587296e4e61e68acd467c3acdf7d70f34f51744c2bf826325b649c)."
+  },
+  "workload_profile": {
+    "name": "exploratory_olmoe_jw_mixed_sentinel",
+    "repetitions": 3,
+    "suite_manifest_ref": "configs/campaigns/exploratory_2026_07_17/suite_manifests/jw_sentinel_v1_olmoe-1b-7b.json",
+    "suite_manifest_sha256": "c36d5927aeef317b5f65d940cacc088a02746f3cf7ed03b110856589bba2805c",
+    "warmup_runs": 1
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "notes": "EXPLORATORY/L1-legacy only; strict-valid production-bundle target with no claim framing.",
+    "tags": [
+      "exploratory",
+      "l1-legacy",
+      "no-claim",
+      "axis-static-batching",
+      "axis-speculative-decoding-mtp",
+      "axis-moe-vs-dense",
+      "axis-quantization",
+      "axis-reasoning-length-variance",
+      "olmoe-1b-7b"
+    ]
+  }
+}

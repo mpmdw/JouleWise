@@ -1,0 +1,56 @@
+{
+  "schema_version": "0.1",
+  "run_id": "exploratory-20260717-qwen35-122b",
+  "model": {
+    "name": "Qwen3.5-122B-A10B-4bit",
+    "family": "qwen3.5",
+    "source": "/Users/edr/jw_models/mlx-community/Qwen3.5-122B-A10B-4bit",
+    "revision": "e9c67b08899964be5fdd069bb1b4bc8907fe68f5",
+    "weight_format": "mlx",
+    "context_window": 262144
+  },
+  "quantization": {
+    "name": "int4",
+    "bits": 4,
+    "group_size": 64
+  },
+  "hardware_target": {
+    "id": "macbook_m3_max",
+    "transport": "local",
+    "runtime_backend": "mlx",
+    "telemetry_backend": "powermetrics",
+    "device_kind": "apple_silicon_unified_memory",
+    "notes": "Ed-directed exploratory production block using the existing FLAGSHIP-001 mirror and revision; observation-only continuation of the strict-valid flagship precedent."
+  },
+  "workload_profile": {
+    "name": "exploratory_qwen35_jw_mixed_sentinel",
+    "repetitions": 3,
+    "suite_manifest_ref": "configs/campaigns/exploratory_2026_07_17/suite_manifests/jw_sentinel_v1_qwen35-122b.json",
+    "suite_manifest_sha256": "76176e3ae0687513f39ca1923e4aa5a7429f3b59373ef3d3dbcf390bea1c42be",
+    "warmup_runs": 1
+  },
+  "interconnect": {
+    "name": "local"
+  },
+  "sampling": {
+    "power_hz": 10.0,
+    "idle_seconds": 30.0,
+    "warmup_seconds": 5.0
+  },
+  "run_metadata": {
+    "project": "capstone-joulewise",
+    "operator": "lead",
+    "notes": "EXPLORATORY/L1-legacy only; strict-valid production-bundle target with no claim framing.",
+    "tags": [
+      "exploratory",
+      "l1-legacy",
+      "no-claim",
+      "axis-static-batching",
+      "axis-speculative-decoding-mtp",
+      "axis-moe-vs-dense",
+      "axis-quantization",
+      "axis-reasoning-length-variance",
+      "qwen35-122b"
+    ]
+  }
+}
