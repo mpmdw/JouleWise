@@ -31,7 +31,7 @@ from joulewise.adapters.powermetrics import (
     samples_from_records,
     sudoers_line,
 )
-from joulewise.clock import FakeClock
+from joulewise.clock import ClockStamp, FakeClock
 from joulewise.controller import run_benchmark
 from joulewise.interfaces import RunContext, TelemetryAdapter
 from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus, TelemetryBackend
@@ -825,6 +825,115 @@ class PowermetricsAdapterTests(unittest.TestCase):
         self.assertEqual(endpoints, expected_endpoints)
         self.assertLess(expected_endpoints[-2], sampling_stopped.epoch_s)
         self.assertGreaterEqual(expected_endpoints[-1], sampling_stopped.epoch_s)
+
+    def test_evidence_stop_freezes_prefix_against_final_authoritative_anchor(self) -> None:
+        documents = fixture_documents()
+        config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
+
+        class FinalAnchorShiftClock(FakeClock):
+            def __init__(self) -> None:
+                super().__init__(start=100.0)
+                self.stamp_calls = 0
+
+            def stamp(self) -> ClockStamp:
+                self.stamp_calls += 1
+                stamp = super().stamp()
+                if self.stamp_calls != 5:
+                    return stamp
+                # The authoritative post-termination stamp widens the
+                # wall/monotonic envelope to the left. The provisional stop
+                # stamp anchors record 0 at 100; the final anchor is 99.
+                return ClockStamp(
+                    epoch_s=stamp.epoch_s,
+                    monotonic_before_s=stamp.monotonic_before_s + 2.0,
+                    monotonic_after_s=stamp.monotonic_after_s + 2.0,
+                    wall_resolution_s=stamp.wall_resolution_s,
+                    monotonic_resolution_s=stamp.monotonic_resolution_s,
+                )
+
+        clock = FinalAnchorShiftClock()
+
+        def fake_run(command, **kwargs):
+            Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
+            return completed(command)
+
+        class AnchorShiftPopen:
+            def __init__(self, command, **kwargs):
+                self.path = Path(command[command.index("-o") + 1])
+                self.path.write_bytes(documents_to_stream(documents[:4]))
+                self.returncode = None
+
+            def poll(self):
+                return self.returncode
+
+            def terminate(self):
+                self.path.write_bytes(documents_to_stream(documents))
+                self.returncode = 0
+
+            def communicate(self, timeout=None):
+                self.returncode = 0
+                return b"", b""
+
+        adapter = PowermetricsTelemetryAdapter(
+            clock,
+            drain_sleep=lambda _seconds: (_ for _ in ()).throw(
+                AssertionError("provisional capture already brackets the stop")
+            ),
+        )
+        with (
+            patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
+            patch("joulewise.adapters.powermetrics.subprocess.Popen", AnchorShiftPopen),
+        ):
+            self.assertTrue(adapter.start_sampling(config).ok)
+            sampling_started = clock.stamp()
+            clock.sleep(1.5)
+            sampling_stopped = clock.stamp()
+            result = adapter.stop_sampling_with_evidence(
+                config,
+                None,
+                sampling_started=sampling_started,
+                sampling_stopped=sampling_stopped,
+            )
+
+        endpoints = [
+            result.samples[index].timestamp_s
+            for index in range(0, len(result.samples), len(RAIL_MANIFEST))
+        ]
+        self.assertEqual(clock.stamp_calls, 5)
+        self.assertEqual(len(endpoints), 4)
+        self.assertLess(endpoints[-2], sampling_stopped.epoch_s)
+        self.assertGreaterEqual(endpoints[-1], sampling_stopped.epoch_s)
+
+    def test_final_prefix_extraction_does_not_start_at_deadline_boundary(self) -> None:
+        documents = fixture_documents()[:2]
+        records = parse_powermetrics_records(documents_to_stream(documents))
+        deadline = 1.25
+        operational_times = iter((0.0, 0.0, 0.0, deadline))
+
+        class ExtractionGuard(bytes):
+            def split(self, *args, **kwargs):
+                raise AssertionError("prefix extraction ran at the deadline")
+
+        adapter = PowermetricsTelemetryAdapter(
+            FakeClock(start=100.0),
+            drain_monotonic=lambda: next(operational_times, deadline),
+        )
+        prefix = adapter._freeze_stop_bracketing_prefix(
+            ExtractionGuard(documents_to_stream(documents)),
+            native_records=records,
+            diagnostic=None,
+            point_anchor_s=101.0,
+            sampling_stopped=ClockStamp(
+                epoch_s=102.0,
+                monotonic_before_s=102.0,
+                monotonic_after_s=102.0,
+                wall_resolution_s=0.0,
+                monotonic_resolution_s=0.0,
+            ),
+            deadline=deadline,
+        )
+
+        self.assertIsNone(prefix)
 
     def test_evidence_stop_releases_process_when_drain_polling_raises(self) -> None:
         documents = fixture_documents()
