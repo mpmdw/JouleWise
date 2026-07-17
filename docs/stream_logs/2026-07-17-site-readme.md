@@ -98,6 +98,29 @@ site/capsule machinery intact, and verify without deployment.
 - Authority: D-068 plus the runner's explicit “NO deploy” instruction and
   exhaustive write scope.
 
+### SR-010 — CI budget repair addendum
+
+- Trigger: PR #75 CI reported a 923,140-byte conservative Lakebed estimate,
+  above the 920,000-byte routine-growth headroom guard. The guard was preserved;
+  right-sizing it remains an AUD-WO-039 decision.
+- Change: preserve every section, prose block, control, and verdict while
+  collapsing authored-fragment whitespace, minifying inline JavaScript,
+  centralizing the Learn-only CSS in `site_sections.css`, minifying generated
+  CSS without changing declarations, and reducing the toy SVG trace from 161
+  to 97 generated points.
+- Comparable local before/after: 239,923 -> 235,882 packed-content bytes and
+  918,140 -> 905,568 conservative estimated-artifact bytes, a 4,041-byte packed
+  and 12,572-byte estimated reduction. The local pre-change estimate was 5,000
+  bytes below the reported CI baseline because the pre-existing generated-site
+  workspace differed; the clean temporary-clone post-change estimate is
+  905,568 bytes (17,572 bytes below the reported CI blocker value).
+- Runtime side gate: first-request decode decreased from 31,918 to 30,607
+  bytes, retaining 1,393 bytes below its separate 32,000-byte limit.
+- Replay: `python3 scripts/build_site.py`, then
+  `python3 scripts/pack_capsule.py` in an isolated clean temporary clone with
+  this scoped diff applied. The working tree's generated `docs/site/**` files
+  remained untouched because they are outside the exhaustive write scope.
+
 ## Evidence pointers
 
 - Source page model and provenance: `scripts/build_site.py`

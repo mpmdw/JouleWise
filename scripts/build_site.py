@@ -990,7 +990,10 @@ def render_site_source_fragment(name: str, replacements: dict[str, str]) -> str:
     unresolved = re.findall(r"@@[A-Z0-9_]+@@", rendered)
     if unresolved:
         fail("site source", source, f"replacements for {', '.join(sorted(set(unresolved)))}")
-    return rendered
+    # Authored fragments contain no whitespace-sensitive pre/textarea blocks.
+    # Collapse formatting whitespace after substitution so prose and behavior
+    # remain identical without charging the capsule for source indentation.
+    return re.sub(r"\s+", " ", rendered).strip()
 
 
 def floor_replacements(floors: FloorSummary) -> dict[str, str]:
@@ -1070,12 +1073,18 @@ def update_site_styles() -> None:
     if not path.is_file():
         fail("site stylesheet", "docs/site/style.css", "existing base stylesheet")
     source = "docs/site_src/site_sections.css"
-    addition = read_source(source).strip()
+    addition = read_source(source)
+    addition = re.sub(r"/\*.*?\*/", "", addition, flags=re.DOTALL)
+    addition = re.sub(r"\s+", " ", addition)
+    addition = re.sub(r"\s*([{}:;,>])\s*", r"\1", addition).strip()
     start = "/* BEGIN GENERATED: docs/site_src/site_sections.css */"
     end = "/* END GENERATED: docs/site_src/site_sections.css */"
     current = path.read_text(encoding="utf-8")
     block_re = re.compile(rf"\n?{re.escape(start)}.*?{re.escape(end)}\n?", re.DOTALL)
     current = block_re.sub("\n", current).rstrip()
+    current = re.sub(r"/\*.*?\*/", "", current, flags=re.DOTALL)
+    current = re.sub(r"\s+", " ", current)
+    current = re.sub(r"\s*([{}:;,>])\s*", r"\1", current).strip()
     path.write_text(f"{current}\n\n{start}\n{addition}\n{end}\n", encoding="utf-8")
     print("built style.css site-source section")
 
