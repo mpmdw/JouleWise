@@ -97,6 +97,7 @@ be re-derived by a future agent gets an entry here.
 | D-072 | Standing self-merge-with-full-gate authority (gh merges included) | accepted |
 | D-073 | D-016 device-list amendment: Mac + 3080 Ti primary fleet, 12 GiB cap | accepted |
 | D-074 | Conditional Qwen3-4B primary repin + OLMo-1B conversion spike authorized | accepted |
+| D-075 | Extension-axis intake: ranked fold-in without new thesis proliferation | accepted |
 
 ---
 
@@ -3827,3 +3828,63 @@ rejected for the gated custom license + multimodal MLX seam.
 authorized; success revives the matched OLMoE pair, failure files the
 dated negative finding and the pair defers (Option C) without
 re-litigation. Both execute next session as agent-lane work.
+
+## D-075: Extension-axis intake — ranked fold-in without new thesis proliferation
+
+- Date: 2026-07-17
+- Status: accepted (Ed-directed intake via the 2026-07-17 evaluation)
+- Phase: Phase 2+ research program
+
+Context: Ed directed a six-axis evaluation and ratified the resulting roadmap
+at `docs/process_traces/2026-07-17-extension-axes/roadmap-synthesis.md`.
+D-055 keeps C5 deliberation in the bank and the registry as the canonical live
+index; D-070 keeps these axes as stress tests of Q4, caps candidate
+commitments at L2, and reserves commitment authority to Ed. The disposition
+ledger is `docs/stream_logs/2026-07-17-axes-foldin.md`.
+
+Decision:
+
+1. Admit C5-2.5c as the primary speculative-decoding Q4 break-even rider,
+   C5-2.5b as its proposal-work secondary, and C5-2.5d as a mandatory
+   contamination control. Preserve C5-2.5a in the deliberative bank as a
+   deferred candidate rider only; it is not a standalone campaign commitment
+   before a prospective cross-mechanism design is affordable. All four retain
+   the evaluation's exact ceilings and forbidden upgrades, and
+   C-023-OUTPUT-IDENTITY is binding.
+2. Admit C5-2.11 as the on-device MLX quantized-KV candidate and attach it to
+   C5-2.4, C5-1.12, and C-023-QUALITY-EQUIV-QUANT. Preserve C5-2.12,
+   C5-2.13, and C5-2.14 only as candidate riders on the existing
+   context/KV-growth, prompt-cache/replay, and Q4/AP-1 homes.
+3. Admit one new canonical RQ row, RQ-AXI-HYBRID-PAIR, at an L2 named-pair
+   ceiling. Attach the attention/context-slope and module-attribution
+   refinements to existing rows. Record kernel/backend provenance as
+   amendments to C5-1.8, C5-2.7, and C5-3.3, not new theses.
+4. Keep the roadmap's do-not-fold set out of the canonical row set. Its
+   negative dispositions and all unresolved feasibility questions remain in
+   the stream ledger, including explicit **NEEDS-WEB** markers. Intake does
+   not convert an unresolved runtime, model-pair, adapter, or device-fit
+   question into a capstone commitment.
+
+Options considered:
+
+1. Mint every evaluated suggestion as an independent live question. Rejected:
+   it duplicates existing homes, imports unidentifiable mechanism claims, and
+   violates D-070's single-Q4-thesis posture.
+2. Admit only the top three ranked items. Rejected: the lower-cost controls,
+   riders, and provenance amendments prevent predictable attribution errors
+   without creating independent theses.
+3. Apply the roadmap's ranked fold-in and explicit exclusions. Chosen by Ed.
+
+Considerations: this is research-agenda intake, not campaign scheduling or
+evidence promotion. Every admitted candidate/rider remains floor-gated,
+earliest-phase tagged, capped at L2 unless an already-existing parent row's
+separate machinery says otherwise, and subject to its named forbidden
+upgrade. The published corpus remains claim-evidence-flagged; no fixture,
+runtime feasibility result, or registry entry is live energy evidence.
+D-070 remains the authority for Ed's axis commitments and quiet-Mac ordering.
+
+Revisit triggers: a relevant **NEEDS-WEB** feasibility finding lands; a named
+runtime/pair becomes unsupported; P2-015 floors make a predeclared effect
+undetectable; or Ed changes the D-070 commitment set. Revisit by amending the
+owning row and this decision's ledger, never by silently promoting an excluded
+candidate.

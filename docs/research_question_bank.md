@@ -676,6 +676,16 @@ cheap.
   rather than wounded by it. Who cares: runtime maintainers, local-LLM
   users, model publishers choosing release formats.
 
+  **2026-07-17 kernel-provenance rider (D-075).** Status: **candidate**;
+  earliest phase: **NV**. On the 3080 Ti, same model artifact where format
+  permits: llama.cpp-CUDA vs vLLM (TensorRT-LLM gated on Ampere-support
+  verification) — how much energy variance tracks kernel-library identity vs
+  runtime scheduler? Ceiling: **L2 stack-vs-stack**. Forbidden upgrade: **no
+  `belongs to the kernel layer` language when artifacts/formats differ; no
+  runtime-agnostic kernel claims**. This is an amendment to C5-1.8, not a new
+  C5-1.13 thesis. Evidence: [2026-07-17 extension-axis
+  evaluation](process_traces/2026-07-17-extension-axes/).
+
 - **C5-1.9 MoE-vs-dense energy per correct answer, quarantined (needs
   P2-010).** Under the controlled-envelope ladder, do MoE and dense
   models at similar quality bands differ in energy per correct answer?
@@ -857,6 +867,53 @@ meter decision (R-007), P1-004 network topology (1GbE / 2.5GbE / optional
   accepted-token denominator is the trap the harness's token accounting
   defuses. Who cares: speculative-decoding researchers, runtime teams.
 
+  **2026-07-17 DSpark/DFlash candidate riders (D-075).** These remain
+  riders on C5-2.5, not four independent theses; every effect is floor-gated
+  and `C-023-OUTPUT-IDENTITY` is binding. Evidence for all four:
+  [2026-07-17 extension-axis
+  evaluation](process_traces/2026-07-17-extension-axes/).
+
+  - **C5-2.5a — cross-method contrast.** Status: **candidate (deferred
+    rider)**; earliest phase: **NS**. At matched target model, quantization,
+    prompt roster, and output equivalence, do a fixed-K block-diffusion
+    drafter (DFlash) and a variable-K confidence-scheduled drafter (DSpark)
+    differ in gross request energy and gross J/committed-output-token on the
+    same MLX stack? Ceiling: **L2**. Forbidden upgrade: **No cross-method
+    efficiency generalization beyond the measured target/runtime/tokenizer
+    pair; accepted-draft J/token stays a mechanism diagnostic, never the
+    on/off efficiency denominator (token_normalization.md D-037 rider).** It
+    stays out of the committed standalone set until a prospective
+    cross-mechanism design is affordable.
+
+  - **C5-2.5b — proposal-work secondary.** Status: **candidate**; earliest
+    phase: **PF**. Is proposal length an energy knob: holding drafter and
+    target fixed, does gross J/committed-output-token vary systematically
+    with realized mean proposed-K (DFlash block-size sweep 8/16 vs DSpark's
+    dynamic schedule), i.e. does per-round proposed work enter the Q4
+    coefficients? Ceiling: **L2**. Forbidden upgrade: **No claim that
+    K-scheduling saves energy in general; result scoped to one
+    runtime/target/boundary, and realized per-round tokens_proposed must be
+    runtime-observed, never inferred from the configured cap.**
+
+  - **C5-2.5c — primary Q4 break-even rider.** Status: **candidate**;
+    earliest phase: **PF**. Drafter-overhead economics: at what aggregate
+    acceptance rate does spec-on gross energy break even with spec-off for
+    each drafter class (block-diffusion vs semi-autoregressive vs native MTP
+    if a supported runtime lands), at matched output? Ceiling: **L2**.
+    Forbidden upgrade: **No serving-system or cross-hardware generalization
+    from one pair; the MTP arm is contingent on an AXI-SC supported verdict
+    and is a separate frozen family (FAM-AXI-SPEC-NATIVE-MTP), never pooled
+    with draft_model arms.**
+
+  - **C5-2.5d — mandatory contamination control.** Status: **candidate**;
+    earliest phase: **PF**. Hybrid-lookup contamination bound: how much does
+    mlx-dspark's drafter-free n-gram lookup path (on by default) shift
+    measured gross energy and acceptance accounting vs `--no-lookup-drafts`,
+    quantified as an attribution-contamination diagnostic? Ceiling: **L2
+    (diagnostic/methods row)**. Forbidden upgrade: **No mechanism-yield or
+    efficiency claim from mixed-origin rounds; the row exists to justify the
+    mode pin, not to rank lookup vs drafter.**
+
 - **C5-2.6 Energy-optimal request coalescing under a latency bound.**
   Replayed arrival traces × coalescing windows → joules/request vs
   p95 latency Pareto. Gate: P1-006. Who cares: edge gateways, serving
@@ -869,6 +926,17 @@ meter decision (R-007), P1-004 network topology (1GbE / 2.5GbE / optional
   borrow window. Threat: boundary heterogeneity — ranking claims are
   per-boundary until wall-calibrated (C5-2.9). Who cares: hardware
   reviewers, edge procurement.
+
+  **2026-07-17 kernel-provenance rider (D-075).** Status: **candidate**;
+  earliest phase: **NV**. When the runtime is held constant (same llama.cpp
+  build/model/quant) across M3 Max Metal and 3080 Ti CUDA, does recorded
+  kernel-layer identity (attention kernel, BLAS backend, graph mode) explain
+  residual energy structure beyond device? Ceiling: **L2 within each
+  measurement boundary; per-boundary only until wall-calibrated (C5-2.9)**.
+  Forbidden upgrade: **no cross-vendor kernel-API efficiency ranking; no
+  cross-device winner across heterogeneous boundaries**. Evidence:
+  [2026-07-17 extension-axis
+  evaluation](process_traces/2026-07-17-extension-axes/).
 
 - **C5-2.8 Placement-policy optimality from Q4 coefficients.** Can
   fitted fixed+marginal coefficients + measured transfer costs choose
@@ -895,6 +963,51 @@ meter decision (R-007), P1-004 network topology (1GbE / 2.5GbE / optional
   correction. Who cares: every downstream consumer of cross-target
   numbers; measurement-methodology reviewers.
 
+- **C5-2.11 On-device quantized-KV energy.** Status: **candidate**;
+  earliest phase: **PF**. Does quantized KV cache (`kv_bits` 8/4, mlx-lm)
+  reduce gross request energy for long-context decode on-device, or only
+  memory footprint? Ceiling: **L2, per-boundary, MLX-scoped; un-gated variant
+  of C5-2.4 (no transfer leg, runnable on the D-073 fleet now)**. Forbidden
+  upgrade: **No byte-saving-equals-energy-saving claim (inherits C5-2.4's
+  ban); no cross-runtime generalization from MLX alone; no quality-neutrality
+  claim without C-023-style output-equivalence evidence**. Attachments:
+  C5-2.4, C5-1.12, and C-023-QUALITY-EQUIV-QUANT. Evidence: [2026-07-17
+  extension-axis evaluation](process_traces/2026-07-17-extension-axes/).
+
+- **C5-2.12 Bounded-window KV marginal-slope rider.** Status:
+  **candidate**; earliest phase: **PF**. Does a bounded evicting window
+  (`RotatingKVCache` via `max_kv_size`) flatten the marginal J/token slope
+  over long generations versus an unbounded step-growing `KVCache`? Ceiling:
+  **L2 in chunked windows only (RQ-KV-GROWTH discipline: token cadence
+  outruns power sampling)**. Forbidden upgrade: **No per-token joule claims
+  below the cadence/sampling floor; no output-equivalence assumption —
+  eviction changes generations, so contrasts are work-matched, never
+  output-matched**. This is an amendment under C5-1.2/RQ-KV-GROWTH, not an
+  independent thesis. Evidence: [2026-07-17 extension-axis
+  evaluation](process_traces/2026-07-17-extension-axes/).
+
+- **C5-2.13 Serialized prompt-cache crossover rider.** Status:
+  **candidate**; earliest phase: **PF**. Is save+load+replay of a serialized
+  prompt cache energy-cheaper than re-prefill at prompt length N on the same
+  machine, and where is the crossover? Ceiling: **L2 same-machine,
+  same-stack (promotes answered-L1 RQ-MLX-KV-REPLAY to an energy claim)**.
+  Forbidden upgrade: **No cross-machine or cross-stack portability claim
+  (RQ-MLX-KV-REPLAY's existing ban); no generalization beyond the measured
+  prompt-length ladder**. This is an amendment under RQ-CACHE-PREFIX and
+  RQ-MLX-KV-REPLAY, not an independent thesis. Evidence: [2026-07-17
+  extension-axis evaluation](process_traces/2026-07-17-extension-axes/).
+
+- **C5-2.14 Q4 cache-policy coefficient rider.** Status: **candidate**;
+  earliest phase: **PF**. Do KV-cache-policy contrasts move the fitted Q4
+  coefficients in the predicted direction (marginal per-token term down
+  under quantized KV, fixed term unchanged)? Ceiling: **L2; L3 only through
+  Q4/AP-1's existing holdout machinery (D-070 clause 5)**. The candidate
+  rider itself remains capped at L2. Forbidden upgrade: **No new-thesis
+  framing — this is a Q4 stress test, not a KV-energy model; no
+  coefficient-direction claim below P2-015 detection floors**. Evidence:
+  [2026-07-17 extension-axis
+  evaluation](process_traces/2026-07-17-extension-axes/).
+
 ## TIER 3 — requiring new acquisitions (hardware class + rough cost tier)
 
 - **C5-3.1 Machine-to-machine variance / generalizability floor.** A
@@ -916,6 +1029,17 @@ meter decision (R-007), P1-004 network topology (1GbE / 2.5GbE / optional
   active-param-scaling structures hold beyond Apple's stack? Requires
   one new telemetry adapter per platform (the adapter contract is the
   deliverable that makes this tractable).
+
+  **2026-07-17 backend-provenance rider (D-075).** Status: **candidate**;
+  earliest phase: **PC**. Record kernel/backend build provenance
+  (CUDA/Metal/HIP target, kernel library ids) in all bundles now so a
+  post-capstone AMD/ROCm replication leg is comparable without re-running the
+  NVIDIA/Mac corpus. Candidate-rider ceiling: **L1 feasibility**; the parent
+  row's separate L4 replication posture is not an intake upgrade. Forbidden
+  upgrade: **no NVIDIA-vs-AMD efficiency claim from single
+  units or heterogeneous boundaries; no cross-ISA claim before a
+  platform-specific adapter study**. Evidence: [2026-07-17 extension-axis
+  evaluation](process_traces/2026-07-17-extension-axes/).
 
 - **C5-3.4 Phone-class edge inference.** One flagship phone
   (~$800-1200) + llama.cpp/MLX-swift: the actual battery-constrained
