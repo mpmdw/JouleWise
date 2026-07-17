@@ -96,6 +96,7 @@ be re-derived by a future agent gets an entry here.
 | D-071 | G10 memory-fit rule ratified (axi-sd-memory-fit-shape-v1); device-list review opened | accepted |
 | D-072 | Standing self-merge-with-full-gate authority (gh merges included) | accepted |
 | D-073 | D-016 device-list amendment: Mac + 3080 Ti primary fleet, 12 GiB cap | accepted |
+| D-074 | Conditional Qwen3-4B primary repin + OLMo-1B conversion spike authorized | accepted |
 
 ---
 
@@ -3809,3 +3810,20 @@ nothing better than Qwen3-1.7B? Gemma 4B or something?") — 3-4B-class
 models now fit comfortably; (b) dense/MoE pair re-search under the
 12 GiB cap (OLMo dense arm failed G4 as published — see the OLMo
 verification record in the same trace directory).
+
+## D-074: Conditional Qwen3-4B primary repin + OLMo-1B conversion spike authorized
+
+Date: 2026-07-16. Owner: Ed (ruled on the 12 GiB model search,
+`docs/process_traces/2026-07-16-device-list-brief/model-search-12gib.md`).
+(1) Qwen3-4B becomes the D-016 primary CONDITIONALLY: the repin lands
+only when the evidence gates pass (immutable source/license,
+MLX-Q4/GGUF-Q4/CUDA artifact receipts, three-runtime generation,
+G10 at the 12 GiB cap, KV receipts, thinking-mode policy pinned);
+any gate failure retains Qwen2.5-1.5B. New evidence era on success:
+manifests + quant ladder regenerate from one frozen source revision;
+Qwen2.5 results preserved as legacy. Runner-up Qwen3-1.7B; Gemma-3-4B
+rejected for the gated custom license + multimodal MLX seam.
+(2) The time-boxed OLMo-1B original-format→MLX conversion spike is
+authorized; success revives the matched OLMoE pair, failure files the
+dated negative finding and the pair defers (Option C) without
+re-litigation. Both execute next session as agent-lane work.
