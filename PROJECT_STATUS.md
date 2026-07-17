@@ -10,10 +10,12 @@ are provided for anyone who wants the full evidence trail.
   `RUN_STATE.md` and `TASK_QUEUE.md`; the canonical suite command and CI own
   the current verification result. This page deliberately does not duplicate
   volatile commit, pull-request, queue, or test-count facts.
-- Repository state: the comprehensive-audit fix wave is integrated on this
-  landing branch. The Mac harness, evidence path, analysis path, packaging,
-  publication-privacy checks, and release dry-run are implemented. Those are
-  software capabilities, not new quiet-Mac or remote-hardware evidence.
+- Repository state: the comprehensive audit is closed on `main`.
+  This week's landed state also includes the AXI-SA burst-decode contract
+  SITE-02 D1/D2, the SPLIT-AP Part I pre-registration freeze, and the AXI-SB
+  `supported` static-batch verdict plus its Mac C5-2.2 leg. The AXI-SB live
+  probes are runtime-feasibility evidence, not an energy measurement or
+  claim-bearing campaign. The dated update ledger carries the merge pointers.
 - Project phase: see the phase exit checklists for exact completion state;
   live eligibility and next work come from the generated state kernel, not
   this reader-facing summary.
@@ -25,17 +27,20 @@ are provided for anyone who wants the full evidence trail.
 
 ## Current Repository View — 30-second read
 
-**The audit landing integrates the reader-visible software and process fixes;
-it does not create new scientific evidence.** The analysis trio is complete:
-the manifest freezes comparisons, the verdict layer separates collection
-usability from claim readiness, and the contrast engine executes predeclared
-claim rules. The reducer retains explicit legacy compatibility arms and the
-governed current metrics. Doctor preflight, packaging CI, fail-closed
-publication privacy, release-chain checks, and load-transition preparation are
-also implemented. The verified off-machine backup/restore remains the data
-preservation evidence. Remote protocol pins remain PROVISIONAL, and all live
-work must be selected through the state kernel rather than inferred from this
-summary.
+**The comprehensive audit is closed, and this week's resumption work is on
+`main`.** AXI-SA now supplies the request-scoped burst-decode contract used by
+the architectural-axis work. SITE-02's loud discovery path and emitted-code
+regression are closed, while SPLIT-AP freezes its Part I pre-registration.
+AXI-SB's lead-run Metal probes support native static batching at B=2 and B=4
+with request-scoped observability, so the Mac C5-2.2 leg is minted; this is
+live functionality evidence, not an energy measurement, and it consumed no
+quiet-Mac window.
+
+Window A is software-unblocked but still requires Ed and a quiet Mac, in this
+order: P2-038 live closure, P2-015-SMOKE, P2-015 floors, then baselines. The
+agent-lane heads are AXI-SB-ADAPTER, AXI-SC, and AXI-SD. Remote protocol pins
+remain PROVISIONAL, and the generated state kernel remains the selection
+authority.
 
 ## Previous Update (as of 2026-07-09, C-027 whole-project council review) — 30-second read
 
@@ -153,6 +158,7 @@ implementing the statistical-uncertainty protocol) queued.
 
 | date | label | one-line outcome | run-report link |
 |---|---|---|---|
+| 2026-07-16 | audit close + no-hardware resumption batch | PR #66 closed the comprehensive audit; PRs #67-#70 landed AXI-SA, SITE-02 D1/D2, the SPLIT-AP Part I freeze, and the AXI-SB `supported` verdict with its Mac C5-2.2 leg. Window A is software-unblocked but still needs Ed + quiet Mac; no new energy measurement is claimed. | `docs/run_reports/2026-07-16-resumption-nohw-batch.md` |
 | 2026-07-10/11 | C-028 hardening and integration arc | PRs #41-#58 merged; analysis trio complete; reducer lattice through 0.4.2; P0-003 restore proof and every Window-A software gate satisfied; PR #59 open as a bounded follow-up; no new live evidence claimed. | `docs/run_reports/2026-07-11-c028-continuation.md` |
 | 2026-07-06 | third update / first real energy | Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements. **P2-003, gross energy — M3 Max / powermetrics SoC rails:** ~47.2 J per 512-token request. **P2-003, idle-subtracted energy — M3 Max / powermetrics SoC rails:** ~79-90 mJ per generated output token; the originally reported range used the prompt+output denominator and was corrected 2026-07-09 (C-027). TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz; short prefill energy is below the current detection capability and is not a quantitative result (D-055). | `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md` |
 | 2026-07-06 | third update / powermetrics telemetry | The powermetrics telemetry adapter and privileged sampling path were brought up, preserving raw plists and exposing the real sampling-rate constraints. | `docs/run_reports/2026-07-06-slice-2h-powermetrics.md` |
@@ -250,7 +256,7 @@ batching remains a post-capstone extension.
 | Background / related work | Phase 4 Stage 4.6, `docs/phase_4/related_work_draft.md` | drafted (11 verified sources) | background-chapter assembly and the Phase 4 exit pass |
 | Measurement methodology | `docs/contracts/measurement_methodology.md` | complete | Phase 4 ratification may amend statistical details against observed variance |
 | Harness / instrument | `joulewise/` | complete; pre-campaign software review cleared; C-028 closed | live execution eligibility comes from the state kernel; quiet-machine work also requires Ed and the clean hardware lane |
-| Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | unblocked after P2-013/P2-014 | needs the 2M baseline corpus |
+| Apple-Silicon characterization / homogeneous baselines | Phase 2 Slice 2M, `docs/phase_2/baseline_results.md` | software-unblocked; quiet-Mac execution remains | P2-038 live closure → P2-015-SMOKE → P2-015 floors → the 2M baseline corpus; needs Ed + quiet Mac |
 | Split-inference study | Phase 3 | planned | needs KV-feasibility spikes plus a real pairing, or the synthetic-transfer + analytical-composition floor |
 | Results / limitations + claims audit | Phase 4 Stages 4.3-4.5 | analysis path implemented | P2-042/P2-041/P2-037 analysis trio is merged; Window-A data do not yet exist |
 
@@ -337,13 +343,14 @@ work; P0-003's backup gate is satisfied, and the grading rubric/calendar
    finalizes model selection; deliberately deprioritized while all work
    remains harness-shaped and valuable under any scope.
 
-Closed since the last revision: C-028; the full analysis trio; P0-003's
-off-machine backup and restore proof; the NV-5 localhost software gate (3/3
-lead-run); and both historic test-flake classes. The Mac privileged-telemetry
-gate had already closed on 2026-07-06. Window A's software gates are
-satisfied; its execution timing is governed by the live work-selection state
-in `RUN_STATE.md`'s generated state-kernel region, alongside the quiet-machine
-and Ed requirements.
+Closed since the last revision: the comprehensive audit; AXI-SA's burst-decode
+contract; SITE-02 D1/D2; the SPLIT-AP Part I pre-registration freeze; and
+AXI-SB's `supported` static-batch verdict with its Mac C5-2.2 leg.
+Window A's software gates are
+satisfied, so execution is software-unblocked. Its execution timing is governed by the live work-selection state
+in `RUN_STATE.md`'s generated state-kernel region; the remaining fixed chain
+is P2-038 → P2-015-SMOKE → P2-015 → baselines and still requires Ed plus a
+quiet Mac.
 
 ## Architecture
 
