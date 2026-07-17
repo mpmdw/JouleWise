@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Bridge v1.1 merged (PR #65): co-work lane + session wrappers; steady state for audit gate",
-    "path": "docs/run_reports/2026-07-13-bridge-v11.md"
+    "label": "Audit fix-wave resume + AXI intake/spec/implementation arc (S-0, SA/SD/SE specs, AXI-SA landed via PR #67)",
+    "path": "docs/run_reports/2026-07-14-audit-resume-axi.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -396,74 +396,6 @@
       "status_note": "Partial page trim landed 2026-07-15 by redirecting the duplicative capsule task-queue mirror while preserving its routes; remaining payload work is open. D-043 supersession closure falls due at landing through the dated D-051 amendment identified by PA-2.",
       "stop_card": null
     },
-    "AXI-SA": {
-      "acceptance": {
-        "evidence": [
-          "A new bundle event-semantics version freezes one emission per request per scheduler tick; tokens_proposed as submitted candidate positions; tokens_accepted as unchanged committed proposals; emitted_count as accepted plus target-origin tokens; acceptance_rate as aggregate accepted over aggregate proposed with specified null rules; speculation.mode identity; and legacy token events and reducer-0.4.2 dispatch unchanged",
-          "A sibling analysis-manifest version leaves AP-2 v1 byte-identical and freezes the minimal AP-SPEC gross numerator, committed-output and accepted-draft denominators, null rules, pairing, floor selector, and cross-bundle C-023 identity-gate states before any spec bundle",
-          "Schema, reducer, reader, validator, and strict validation cover request-local ordinals, a terminal outcome for every admitted request, request-indexed output identities and counts and stop reasons, configured and realized batch sizes, unioned group phase windows, and burst-safe metrics before a mock spec adapter is added last; the mock produces strict-valid bundles and supports zero live claims"
-        ],
-        "pointer": {
-          "json_pointer": "/tasks/AXI-SA/acceptance",
-          "label": "AXI-SA acceptance",
-          "path": "docs/process/state_kernel.json"
-        },
-        "summary": "Versioned burst and request semantics, counter and speculation identity contracts, sibling manifest semantics, and the minimal AP-SPEC denominator and output-identity gate land before the final mock bundle, without changing legacy identities or making live claims."
-      },
-      "authority": {
-        "anchor": "4-work-program-post-audit-clearance-streams",
-        "label": "AXI handoff work program S-A",
-        "path": "docs/axi-handoff.md"
-      },
-      "dependencies": [
-        {
-          "evidence": {
-            "label": "AXI-S0 landed 2026-07-15 (advisor-doc alignment; checker FAIL 4 majors -> fix -> delta PASS)",
-            "path": "docs/run_reports/2026-07-14-audit-resume-axi.md"
-          },
-          "kind": "task",
-          "required": "advisor-facing AXI-S0 alignment lands before the contract-bearing S-A stream starts",
-          "scope": "start",
-          "state": "satisfied",
-          "strength": "hard",
-          "target": "AXI-S0"
-        }
-      ],
-      "fallback": null,
-      "fences": [
-        {
-          "authority": {
-            "label": "Binding AXI xhigh consult",
-            "path": "docs/process_traces/2026-07-15-axi-xhigh-consult/response.md"
-          },
-          "rule": "Implement a sibling versioned manifest and event contract before the mock adapter; keep AP-2 v1 byte-identical and existing token and inter-token metric identities unchanged"
-        },
-        {
-          "authority": {
-            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
-            "label": "D-070 request-scoped batch contract",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Keep request identity in event metadata, pair lifecycle by request, avoid per-request attribution of overlapping energy without a model, and preserve continuous-ready schema semantics"
-        },
-        {
-          "authority": {
-            "anchor": "d-070-architectural-axes-extension-agenda-axi-scope-claim-posture-batch-axis-rulings",
-            "label": "D-070 Window A ownership",
-            "path": "docs/decision_log.md"
-          },
-          "rule": "Window A retains every quiet-Mac measurement slot; AXI-SA is agent-lane contract and fixture work, and no mock evidence may be presented as live validation"
-        }
-      ],
-      "flags": [],
-      "goal": "Freeze and implement the burst-decode metric-semantics contract: versioned request-scoped emission events, proposal and acceptance counters, speculation.mode and draft or native-MTP identity, request lifecycle and outputs, burst-safe reducer metrics, and legacy compatibility; put a sibling manifest plus minimal AP-SPEC denominator and C-023 identity gate in front, align D-067 token normalization, then add the mock spec adapter last with zero live claims.",
-      "id": "AXI-SA",
-      "lane": "agent",
-      "priority": "p2_next_slice",
-      "rank": 3,
-      "status": "queued",
-      "stop_card": null
-    },
     "AXI-SB": {
       "acceptance": {
         "evidence": [
@@ -485,11 +417,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "AXI-SA landed 2026-07-16 (burst-decode contract stages 0-7; PR #67 merged as 7593259 after CI portability fix 0914374; CI green 5/5; canonical 1626 OK lead-run at d916bff)",
+            "path": "docs/run_reports/2026-07-14-audit-resume-axi.md"
+          },
           "kind": "task",
           "required": "AXI-SA request and event semantics land before the static-batch support verdict",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "AXI-SA"
         }
@@ -526,7 +461,7 @@
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 4,
-      "status": "blocked",
+      "status": "queued",
       "stop_card": null
     },
     "AXI-SC": {
@@ -550,11 +485,14 @@
       },
       "dependencies": [
         {
-          "evidence": null,
+          "evidence": {
+            "label": "AXI-SA landed 2026-07-16 (burst-decode contract stages 0-7; PR #67 merged as 7593259 after CI portability fix 0914374; CI green 5/5; canonical 1626 OK lead-run at d916bff)",
+            "path": "docs/run_reports/2026-07-14-audit-resume-axi.md"
+          },
           "kind": "task",
           "required": "AXI-SA burst and request semantics land before speculative runtime spikes consume them",
           "scope": "start",
-          "state": "pending",
+          "state": "satisfied",
           "strength": "hard",
           "target": "AXI-SA"
         }
@@ -593,7 +531,7 @@
       "lane": "agent",
       "priority": "p2_next_slice",
       "rank": 5,
-      "status": "blocked",
+      "status": "queued",
       "stop_card": null
     },
     "AXI-SD": {
@@ -2550,5 +2488,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-07-15"
+  "updated": "2026-07-16"
 }

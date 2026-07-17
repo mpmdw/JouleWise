@@ -31,7 +31,7 @@ EXPECTED_IDS = {
     "AUD-WO-033", "AUD-WO-034", "AUD-WO-035", "AUD-WO-036",
     "AUD-WO-037", "AUD-WO-038", "AUD-WO-039", "AUD-FOLLOWUPS",
     # AXI extension agenda (D-070 + binding xhigh sequencing amendments)
-    "AXI-SA", "AXI-SB", "AXI-SC", "AXI-SD", "AXI-SE",
+    "AXI-SB", "AXI-SC", "AXI-SD", "AXI-SE",
     # [QUIET-MAC]
     "P2-015-SMOKE", "P2-015", "P2-006", "P2-010", "P2-019", "P2-020",
     "P2-012", "P2-038", "P2-046B", "P2-047B",
@@ -39,7 +39,8 @@ EXPECTED_IDS = {
     "P1-008", "P2-027", "P1-001", "P1-003", "P1-004", "P1-006",
 }
 
-TERMINAL_IDS = {"P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034"}
+TERMINAL_IDS = {"P2-015-PREP", "P2-029", "P2-030", "P2-031", "P2-032", "P2-034",
+                "AXI-SA"}
 
 
 def load_kernel():
@@ -164,9 +165,9 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.kernel = load_kernel()
         self.tasks = self.kernel["tasks"]
 
-    def test_exact_live_id_set_51(self):
+    def test_exact_live_id_set_50(self):
         self.assertEqual(set(self.tasks), EXPECTED_IDS)
-        self.assertEqual(len(self.tasks), 51)
+        self.assertEqual(len(self.tasks), 50)
 
     def test_schema_v3_work_selection_authority_notice(self):
         self.assertEqual(self.kernel["schema_version"], 3)
@@ -195,12 +196,13 @@ class TestRefreshedStateFidelity(unittest.TestCase):
         self.assertTrue({"P1-008", "P2-038"} <= selected)
 
     def test_axi_work_program_sequence_authority_and_window_fences(self):
-        # AXI-S0 completed 2026-07-15 (left the live kernel; Completed table
-        # owns its record); the remaining program keeps its relative order.
-        axi_ids = ("AXI-SA", "AXI-SB", "AXI-SC", "AXI-SD", "AXI-SE")
+        # AXI-S0 completed 2026-07-15 and AXI-SA completed 2026-07-16
+        # (both left the live kernel; the Completed table owns their
+        # records); the remaining program keeps its relative order.
+        axi_ids = ("AXI-SB", "AXI-SC", "AXI-SD", "AXI-SE")
         self.assertEqual(
             {tid: self.tasks[tid]["rank"] for tid in axi_ids},
-            {"AXI-SA": 3, "AXI-SB": 4,
+            {"AXI-SB": 4,
              "AXI-SC": 5, "AXI-SD": 6, "AXI-SE": 7},
         )
         expected_authority_paths = {
@@ -217,13 +219,16 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             self.assertTrue(any("Window A retains every quiet-Mac measurement slot"
                                 in fence["rule"] for fence in task["fences"]))
 
-        self.assertEqual(self.tasks["AXI-SA"]["status"], "queued")
+        self.assertEqual(self.tasks["AXI-SB"]["status"], "queued")
+        self.assertEqual(self.tasks["AXI-SC"]["status"], "queued")
         self.assertEqual(self.tasks["AXI-SD"]["status"], "queued")
-        sa_dep = self.tasks["AXI-SA"]["dependencies"][0]
-        self.assertEqual((sa_dep["target"], sa_dep["state"]), ("AXI-S0", "satisfied"))
-        self.assertEqual(self._hard_start_targets("AXI-SA"), set())
-        self.assertEqual(self._hard_start_targets("AXI-SB"), {"AXI-SA"})
-        self.assertEqual(self._hard_start_targets("AXI-SC"), {"AXI-SA"})
+        for tid in ("AXI-SB", "AXI-SC"):
+            sa_dep = next(d for d in self.tasks[tid]["dependencies"]
+                          if d["target"] == "AXI-SA")
+            self.assertEqual(sa_dep["state"], "satisfied")
+            self.assertIn("PR #67", sa_dep["evidence"]["label"])
+        self.assertEqual(self._hard_start_targets("AXI-SB"), set())
+        self.assertEqual(self._hard_start_targets("AXI-SC"), set())
         self.assertEqual(self._hard_start_targets("AXI-SE"), {"P2-015"})
         self.assertIn("provisional_until_live", self.tasks["AXI-SC"]["flags"])
 

@@ -1,16 +1,18 @@
 # JouleWise Run State
 
-Last updated: 2026-07-15 (COMPREHENSIVE AUDIT CLOSED: Ed merged the
-adoption PR #66 (`e377f93`) and the gate was removed from the kernel
-the same session — the generated region below now shows READY lane
-heads again. All 34 non-deferred work orders landed; D-043 closure,
-ULTRA triage (report §8.5), §7/§8/§9 synthesis, critic gaps closed,
-AUD-* promotions all on main. Canonical suite 1532 OK at the merge.
-The 2026-07-13 checkpoint is HISTORY. Session record:
-`docs/run_reports/2026-07-14-audit-resume-axi.md`. NEXT: the AXI arc
-(D-066..D-070; xhigh consult recorded under process_traces) — S-0
-advisor-doc alignment first, then S-A; Window A ordering unchanged and
-outranks AXI in the quiet-Mac lane.)
+Last updated: 2026-07-16 (AXI-SA LANDED: PR #67 merged as `7593259`
+under Ed's in-session merge delegation after a CI portability fix
+(`0914374`, full-history checkout for the golden-provenance replay)
+and a fresh final-head review; kernel row completed, AXI-SB/AXI-SC
+now READY in the agent lane. Ed has the Mac — Window A (P2-038
+shakedown closure with Ed + powermetrics → P2-015-SMOKE → P2-015
+floors → baselines) is software-unblocked and owns the quiet-Mac
+lane. In-flight this session: SPLIT-AP freeze (impl/split-ap) and
+SITE-02 D1/D2 closure (impl/site-02), both in final review; AXI-SD
+web-verification memo captured for the D-016 decision package
+(D-016 remains Ed's). Session record:
+`docs/run_reports/2026-07-14-audit-resume-axi.md` (addenda) until
+this session's report lands.)
 
 ## Start Here For Every Big Run
 
@@ -77,7 +79,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-15). Latest report: [Bridge v1.1 merged (PR #65): co-work lane + session wrappers; steady state for audit gate](docs/run_reports/2026-07-13-bridge-v11.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-16). Latest report: [Audit fix-wave resume + AXI intake/spec/implementation arc (S-0, SA/SD/SE specs, AXI-SA landed via PR #67)](docs/run_reports/2026-07-14-audit-resume-axi.md).
 
 ### [ED-EXTERNAL]
 
@@ -89,7 +91,7 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 ### [AGENT]
 
-- READY — A3 `AXI-SA`: Freeze and implement the burst-decode metric-semantics contract: versioned request-scoped emission events, proposal and acceptance counters, speculation.mode and draft or native-MTP identity, request lifecycle and outputs, burst-safe reducer metrics, and legacy compatibility; put a sibling manifest plus minimal AP-SPEC denominator and C-023 identity gate in front, align D-067 token normalization, then add the mock spec adapter last with zero live claims.
+- READY — A4 `AXI-SB`: Time-box the pinned mlx-lm static-batch feasibility spike and record a STRUCTURED verdict: supported requires true B greater than 1 execution plus request-scoped output IDs and counts, stop reasons, timestamps, and event hooks; otherwise record unsupported_for_joulewise with reason, keep memory fit separate, and mint the Mac C5-2.2 leg only on full support.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
