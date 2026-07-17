@@ -16,12 +16,16 @@ The harness is designed around three stable ideas:
 
 **Status:** research prototype. The Mac (Apple M3 Max) measurement harness has
 cleared its pre-campaign software review, the analysis path is implemented,
-and the comprehensive-audit fix wave is integrated on this landing branch.
+and the comprehensive audit is closed on `main`. The post-audit landings also
+include the AXI-SA burst-decode contract, SITE-02 D1/D2, the SPLIT-AP Part I
+pre-registration freeze, and the AXI-SB `supported` static-batch verdict with
+its Mac C5-2.2 leg; `PROJECT_STATUS.md` carries the dated merge pointers.
 This summary does not select work: the generated state-kernel regions in
 `RUN_STATE.md` and `TASK_QUEUE.md` own the live gate and next-task state.
 Quiet-machine execution still requires the lead-controlled hardware lane with
-Ed; no audit or software landing is new measurement evidence. The verified
-end-user quickstart remains a Phase 5 deliverable.
+Ed. The AXI-SB live probes are runtime-feasibility evidence, not an energy
+measurement or claim-bearing campaign. The verified end-user quickstart
+remains a Phase 5 deliverable.
 
 ## Current State
 
@@ -65,6 +69,11 @@ after Window A. See the fuller
 [Q4 architectural stress-test agenda](PROJECT_STATUS.md#summary)
 in `PROJECT_STATUS.md`.
 
+Window A is software-unblocked but still requires Ed and a quiet Mac. Its
+fixed order is P2-038 live closure → P2-015-SMOKE → P2-015 floors → baselines.
+Outside that quiet-machine lane, the current agent heads are AXI-SB-ADAPTER,
+AXI-SC, and AXI-SD.
+
 Remaining backends plug into the same adapter interfaces: the fixture-first
 2K NVIDIA stack (SSH transport, node worker, nvidia-smi + vLLM adapters)
 includes NV-GATE-2 software hardening: per-backend raw-lineage verifier
@@ -82,6 +91,12 @@ remain explicit; landed software is not being presented as new live evidence.
 P0-003 closed with an iCloud Drive backup and a fresh restore that was
 strict-valid and byte-identical. No new live NVIDIA or quiet-Mac measurement
 is claimed here.
+
+The post-audit landings add request-scoped AXI-SA burst/decode semantics,
+freeze SPLIT-AP Part I before outcomes, close SITE-02's discovery and
+emitted-code regression work, and establish AXI-SB's `supported` verdict from
+lead-run B=2/B=4 Metal probes. The probes establish runtime feasibility and
+request observability only; they add no energy result.
 
 The repository currently contains:
 
