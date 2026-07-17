@@ -1,0 +1,246 @@
+<section class="learn-hero">
+  <div class="kicker">Interactive field guide · programming knowledge assumed · measurement science taught here</div>
+  <p class="readme-eyebrow">From watts to warranted claims.</p>
+  <h1>How do you measure<br>a machine thinking?</h1>
+  <p class="lede">You already know how programs execute. This guide adds the
+  uncomfortable part: deciding which physical signal belongs to the program,
+  how much noise the instrument adds, and what the evidence actually permits
+  you to say.</p>
+  <nav class="chapter-nav" aria-label="Guide chapters">
+    <a href="#hard">The hard part</a><a href="#units">Watts &amp; joules</a>
+    <a href="#sampling">Sampling</a><a href="#bundles">Bundles</a>
+    <a href="#floor">Detection floors</a><a href="#found">Findings</a>
+    <a href="#next">Next</a>
+  </nav>
+  <div class="provenance-plate">@@METHODOLOGY_STAMP@@ @@TEMPLATE_STAMP@@</div>
+</section>
+
+<section class="learn-chapter" id="hard">
+  <div class="chapter-number">01</div>
+  <div class="chapter-copy">
+    <div class="kicker">Why this is hard</div>
+    <h2>The model does not come with an energy return value.</h2>
+    <p class="chapter-lede">A profiler can tell you which function consumed CPU
+    time. Energy is a physical quantity observed through a separate instrument.
+    You have to align two clocks, define a boundary, and decide what else was
+    happening while the model ran.</p>
+    <div class="concept-grid">
+      <article><span>Boundary</span><h3>Which power?</h3><p>SoC rails omit parts of the
+      whole machine. Wall power includes more than the chip. Neither is
+      automatically wrong; an unlabeled boundary is.</p></article>
+      <article><span>Attribution</span><h3>Which interval?</h3><p>Load the model too late
+      or stop sampling too early and the number answers a different question
+      than the experiment config asked.</p></article>
+      <article><span>Workload</span><h3>Which work?</h3><p>Prompt length, generated
+      tokens, batching, caching, stop behavior, and content can all change the
+      physical execution.</p></article>
+      <article><span>Noise</span><h3>Which difference?</h3><p>Background activity,
+      thermal state, sampling cadence, clock error, and run order can manufacture
+      a small “effect.”</p></article>
+    </div>
+    <aside class="learn-aside"><strong>The measurement-science move:</strong>
+    replace “I got a number” with “I defined a quantity, captured the evidence,
+    bounded what could imitate it, and stated the claim ceiling.”</aside>
+  </div>
+</section>
+
+<section class="learn-chapter" id="units">
+  <div class="chapter-number">02</div>
+  <div class="chapter-copy">
+    <div class="kicker">Watts, joules, and idle</div>
+    <h2>Power is a rate. Energy is the area.</h2>
+    <p class="chapter-lede">A watt is one joule per second. If power changes over
+    time, energy is the integral under the power trace. That identity is a unit
+    definition—not a JouleWise measurement result.</p>
+    <div class="equation-stack">
+      <div><span>instantaneous power</span><strong>P(t)</strong><small>watts = joules / second</small></div>
+      <div><span>gross measured energy</span><strong>E = ∫ P(t) dt</strong><small>headline basis within the named boundary</small></div>
+      <div><span>idle-subtracted energy</span><strong>E<sub>secondary</sub> = ∫ (P(t) − P<sub>idle</sub>) dt</strong><small>within-device secondary view only</small></div>
+    </div>
+    <p>Idle is not “free energy to erase.” It is an observed baseline under a
+    stated condition. Subtracting it can help describe activity above baseline
+    on one device, but it can distort comparisons: a high-idle device gets a
+    larger subtraction. JouleWise therefore uses <strong>gross energy for every
+    cross-device, cross-configuration, and split-vs-monolithic headline</strong>.
+    Phase energy is gross-only.</p>
+    <div class="provenance-plate">@@METHODOLOGY_STAMP@@</div>
+  </div>
+</section>
+
+<section class="learn-chapter" id="sampling">
+  <div class="chapter-number">03</div>
+  <div class="chapter-copy">
+    <div class="kicker">How powermetrics sampling works</div>
+    <h2>You never see the continuous curve.</h2>
+    <p class="chapter-lede"><code>powermetrics</code> reports discrete samples from
+    named Apple power rails. JouleWise aligns those samples with runtime events
+    and integrates between explicit measured-window boundaries. Move the toy
+    controls below: the underlying program is unchanged, but the estimated
+    area changes when the window or sample pattern changes.</p>
+
+    <div class="interactive-card" data-trace-lab>
+      <div class="interactive-head"><div><span class="card-label">Toy trace · illustrative, not project evidence</span><h3>Drag the window and sample controls.</h3></div><span class="status-chip amber">local-only SVG + JS</span></div>
+      <svg class="power-lab" viewBox="0 0 720 290" role="img" aria-labelledby="traceTitle traceDesc">
+        <title id="traceTitle">Interactive toy power trace</title>
+        <desc id="traceDesc">A toy idle, prefill, decode, and cooldown power curve with adjustable integration window and sample points.</desc>
+        <g class="lab-grid"><line x1="56" y1="35" x2="56" y2="246"/><line x1="56" y1="246" x2="694" y2="246"/><line x1="56" y1="176" x2="694" y2="176"/><line x1="56" y1="106" x2="694" y2="106"/><line x1="56" y1="36" x2="694" y2="36"/></g>
+        <text class="lab-axis" x="12" y="42">power</text><text class="lab-axis" x="649" y="276">time →</text>
+        <rect class="lab-window" data-window x="180" y="36" width="390" height="210"/>
+        <path class="lab-area" data-trace-area d=""/><path class="lab-line" data-trace-line d=""/>
+        <g data-samples></g>
+        <line class="lab-handle" data-start-line x1="180" y1="30" x2="180" y2="252"/>
+        <line class="lab-handle" data-end-line x1="570" y1="30" x2="570" y2="252"/>
+        <text class="lab-label" x="82" y="226">idle</text><text class="lab-label" x="243" y="62">prefill</text><text class="lab-label" x="405" y="105">decode</text><text class="lab-label" x="600" y="226">cooldown</text>
+      </svg>
+      <div class="lab-controls">
+        <label>window start <input data-start type="range" min="5" max="70" value="22"><output data-start-out>22%</output></label>
+        <label>window end <input data-end type="range" min="30" max="98" value="82"><output data-end-out>82%</output></label>
+        <label>sample spacing <input data-spacing type="range" min="3" max="16" value="7"><output data-spacing-out>7%</output></label>
+        <label>sample phase <input data-phase type="range" min="0" max="100" value="28"><output data-phase-out>28%</output></label>
+      </div>
+      <div class="lab-readouts" aria-live="polite">
+        <div><span>Toy gross energy · illustrative gross basis</span><strong data-gross-out>—</strong></div>
+        <div><span>Toy idle-subtracted energy · illustrative within-device secondary</span><strong data-idle-out>—</strong></div>
+        <div><span>Samples inside measured window</span><strong data-count-out>—</strong></div>
+      </div>
+      <p class="interactive-note">The orange curve is an invented signal. Cyan
+      dots are discrete samples; the shaded band is the measured window. Real
+      JouleWise bundles retain the trace and event markers so the integration can
+      be replayed rather than trusted.</p>
+    </div>
+  </div>
+</section>
+
+<section class="learn-chapter" id="bundles">
+  <div class="chapter-number">04</div>
+  <div class="chapter-copy">
+    <div class="kicker">Strict validation and bundles</div>
+    <h2>A bundle is a proof packet, not a CSV export.</h2>
+    <p class="chapter-lede">The run directory is deliberately boring: normalized
+    configuration, metadata, timestamped events, raw power evidence, logs,
+    model outputs, and summary metrics. The interesting part is what strict
+    validation does with it.</p>
+    <div class="bundle-diagram" role="img" aria-label="Run bundle artifacts flow through strict validation to a bounded claim">
+      <div class="bundle-box"><span>run bundle</span><code>config.json</code><code>metadata.json</code><code>events.jsonl</code><code>raw telemetry</code><code>outputs + logs</code><code>summary metrics</code></div>
+      <div class="bundle-arrow">replay →</div>
+      <div class="bundle-box validator-box"><span>strict validator</span><p>parse raw evidence</p><p>re-derive windows</p><p>recompute energy</p><p>check provenance</p><p>fail on mismatch</p></div>
+      <div class="bundle-arrow">gate →</div>
+      <div class="bundle-box claim-box"><span>claim ceiling</span><p>L0: auditability</p><p>L1: descriptive</p><p>L2+: only after floor, uncertainty, plan, and evidence gates</p></div>
+    </div>
+    <p><strong>Strict-valid does not mean scientifically conclusive.</strong> It
+    means the recorded artifact is internally valid under the strict contract.
+    A bundle can be strict-valid and still carry flags that prevent a
+    comparison claim. That distinction matters in the newest floor data.</p>
+    <div class="provenance-plate">@@CLAIMS_STAMP@@</div>
+  </div>
+</section>
+
+<section class="learn-chapter" id="floor">
+  <div class="chapter-number">05</div>
+  <div class="chapter-copy">
+    <div class="kicker">Detection floors</div>
+    <h2>How small is too small to resolve?</h2>
+    <p class="chapter-lede">Repeat the same condition and the measured energy
+    moves anyway. The false-effect guard floor summarizes how large that
+    repeat scatter—or an ABBA comparison artifact—can look. An effect below the
+    applicable floor is <strong>not resolvable</strong>, not proven absent.</p>
+
+    <div class="interactive-card floor-lab" data-floor-lab>
+      <div class="interactive-head"><div><span class="card-label">Effect-versus-floor gate</span><h3>Try to clear a real verified floor.</h3></div><span class="status-chip">calibration logic</span></div>
+      <label class="floor-select">Choose the applicable gate
+        <select data-floor-select>
+          <option value="@@FLOOR_REQUEST_GROSS_ABS@@" data-basis="gross request · absolute repeat">Gross mid-request absolute · @@FLOOR_REQUEST_GROSS_ABS@@ J</option>
+          <option value="@@FLOOR_REQUEST_GROSS_CMP@@" data-basis="gross request · comparative ABBA">Gross mid-request comparative · @@FLOOR_REQUEST_GROSS_CMP@@ J</option>
+          <option value="@@FLOOR_REQUEST_IDLE_ABS@@" data-basis="idle-subtracted request · within-device secondary">Idle-subtracted mid-request absolute · @@FLOOR_REQUEST_IDLE_ABS@@ J</option>
+          <option value="@@FLOOR_REQUEST_IDLE_CMP@@" data-basis="idle-subtracted request · within-device secondary comparative">Idle-subtracted mid-request comparative · @@FLOOR_REQUEST_IDLE_CMP@@ J</option>
+          <option value="@@FLOOR_PHASE_PREFILL_GATE@@" data-basis="gross prefill phase · governing gate">Gross prefill phase gate · @@FLOOR_PHASE_PREFILL_GATE@@ J</option>
+          <option value="@@FLOOR_PHASE_DECODE_GATE@@" data-basis="gross decode phase · governing gate">Gross decode phase gate · @@FLOOR_PHASE_DECODE_GATE@@ J</option>
+          <option value="@@FLOOR_SUITE_ITEM_GATE@@" data-basis="gross suite-item · governing gate">Gross suite-item gate · @@FLOOR_SUITE_ITEM_GATE@@ J</option>
+          <option value="@@FLOOR_SUITE_LEVEL_GATE@@" data-basis="gross suite-level · governing gate">Gross suite-level gate · @@FLOOR_SUITE_LEVEL_GATE@@ J</option>
+        </select>
+      </label>
+      <label class="effect-control">Hypothetical observed effect
+        <input data-effect type="range" min="0" max="30" value="0.70" step="0.01">
+        <output data-effect-out>0.70 J</output>
+      </label>
+      <div class="floor-track" aria-hidden="true"><span data-floor-mark></span><i data-effect-mark></i></div>
+      <div class="floor-verdict" data-floor-verdict aria-live="polite"></div>
+      <p class="interactive-note">Clearing this numeric gate is necessary, not
+      sufficient. It does not clear clock, sampling, uncertainty, contamination,
+      multiplicity, correctness, or pre-registered analysis-plan gates.</p>
+    </div>
+    <div class="provenance-plate">@@FLOOR_SPEC_STAMP@@</div>
+  </div>
+</section>
+
+<section class="learn-chapter" id="found">
+  <div class="chapter-number">06</div>
+  <div class="chapter-copy">
+    <div class="kicker">What the project has found so far</div>
+    <h2>Real floors, plus an important warning.</h2>
+    <p class="chapter-lede">The verified Window-A extraction reports the
+    following false-effect guard floors. Comparative values use ABBA blocks;
+    “gate” is the larger applicable absolute/comparative value. Every energy
+    number states its D-067 basis.</p>
+    <div class="table-scroll">
+      <table class="ledger measurement-table learn-floor-table">
+        <thead><tr><th>window</th><th>energy basis</th><th>verified floor</th><th>how to read it</th></tr></thead>
+        <tbody>
+          <tr><td>mid request · absolute</td><td>gross · headline</td><td>@@FLOOR_REQUEST_GROSS_ABS@@ J</td><td>repeat-scatter floor</td></tr>
+          <tr><td>mid request · comparative</td><td>gross · headline</td><td>@@FLOOR_REQUEST_GROSS_CMP@@ J</td><td>ABBA comparison floor</td></tr>
+          <tr><td>mid request · absolute</td><td>idle-subtracted · within-device secondary</td><td>@@FLOOR_REQUEST_IDLE_ABS@@ J</td><td>repeat-scatter floor</td></tr>
+          <tr><td>mid request · comparative</td><td>idle-subtracted · within-device secondary</td><td>@@FLOOR_REQUEST_IDLE_CMP@@ J</td><td>ABBA comparison floor</td></tr>
+          <tr><td>prefill phase</td><td>gross · phase basis</td><td>@@FLOOR_PHASE_PREFILL_GATE@@ J</td><td>governing gate</td></tr>
+          <tr><td>decode phase</td><td>gross · phase basis</td><td>@@FLOOR_PHASE_DECODE_GATE@@ J</td><td>governing gate</td></tr>
+          <tr><td>suite item</td><td>gross · headline</td><td>@@FLOOR_SUITE_ITEM_GATE@@ J</td><td>governing gate</td></tr>
+          <tr><td>suite level</td><td>gross · headline</td><td>@@FLOOR_SUITE_LEVEL_GATE@@ J</td><td>governing gate</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <aside class="evidence-warning"><strong>The warning is part of the result.</strong>
+    The floor collection is strict-valid and collection-usable, yet every
+    contributing bundle is claim-evidence flagged. Universal clock-bound and
+    in-window-sample flags, plus drift/cooldown concerns in several comparative
+    cells, mean these values are calibration evidence pending adjudication—not
+    a license for an L2/L3 comparison claim.</aside>
+    <p class="source-path">Cited artifact:
+      <a href="https://github.com/mpmdw/JouleWise/blob/main/docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json"><code>docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json</code></a>
+    </p>
+    <div class="provenance-plate">@@FLOOR_STAMP@@</div>
+  </div>
+</section>
+
+<section class="learn-chapter" id="next">
+  <div class="chapter-number">07</div>
+  <div class="chapter-copy">
+    <div class="kicker">What comes next</div>
+    <h2>Turn calibration into governed comparisons.</h2>
+    <div class="next-grid">
+      <article><span>Adjudicate</span><h3>Resolve the evidence flags.</h3><p>Decide
+      whether clock-bound, cadence, drift, and cooldown evidence allows these
+      floors to govern later claims or requires a revised capture.</p></article>
+      <article><span>Baseline</span><h3>Run the controlled Mac campaign.</h3><p>Use
+      counterbalanced order, fixed workloads, strict-valid bundles, and the
+      applicable floor gates before interpreting model differences.</p></article>
+      <article><span>Stress</span><h3>Test the energy model.</h3><p>Batching,
+      speculative decoding, MoE versus dense execution, quantization, and
+      reasoning length probe where the fixed-plus-marginal model holds or
+      breaks.</p></article>
+      <article><span>Extend</span><h3>Add hardware without changing honesty.</h3><p>Remote
+      NVIDIA and Orin paths remain provisional until live contact. Cross-device
+      headlines stay gross-first and boundary-labeled.</p></article>
+    </div>
+    <div class="research-questions">
+      <h3>The research arc</h3>
+      <p><strong>Q1:</strong> when can split inference reduce total gross energy?
+      <strong>Q2:</strong> how does interconnect bandwidth move that crossover?
+      <strong>Q3:</strong> what is the energy–latency trade? <strong>Q4:</strong>
+      what fixed-plus-marginal model describes each target? <strong>Q5:</strong>
+      where do efficiency rankings flip? <strong>Q6:</strong> how sensitive are
+      conclusions to the measurement boundary?</p>
+    </div>
+    <div class="readme-actions"><a href="status.html">Read current status</a><a href="roadmap.html">Inspect the governed queue</a><a href="results.html">Open the measurement ledger</a></div>
+  </div>
+</section>
+
+<script>var svgNS="http://www.w3.org/2000/svg",traceLab=document.querySelector("[data-trace-lab]");if(traceLab){let u=function(e){return e<.2?4.8+.25*Math.sin(e*70):e<.31?7+118*(e-.2)+2*Math.sin(e*55):e<.69?13.7+1.2*Math.sin(e*48)+.5*Math.sin(e*117):e<.82?13.2-62*(e-.69):4.9+.22*Math.sin(e*64)},r=function(e){return x0+(x1-x0)*e},i=function(e){return yBottom-e/22*(yBottom-yTop)},d=function(){var e=Number(startInput.value)/100,a=Number(endInput.value)/100;a-e<.08&&(document.activeElement===startInput?e=a-.08:a=e+.08,startInput.value=String(Math.round(e*100)),endInput.value=String(Math.round(a*100)));var v=Number(spacingInput.value)/100,F=Number(phaseInput.value)/100*v,c=r(e),f=r(a),h=traceLab.querySelector("[data-window]");h.setAttribute("x",c.toFixed(1)),h.setAttribute("width",(f-c).toFixed(1)),traceLab.querySelector("[data-start-line]").setAttribute("x1",c.toFixed(1)),traceLab.querySelector("[data-start-line]").setAttribute("x2",c.toFixed(1)),traceLab.querySelector("[data-end-line]").setAttribute("x1",f.toFixed(1)),traceLab.querySelector("[data-end-line]").setAttribute("x2",f.toFixed(1));var y=traceLab.querySelector("[data-samples]");y.textContent="";for(var o=[],n=F;n<=1.0001;n+=v){var s=document.createElementNS(svgNS,"circle"),S=u(n);s.setAttribute("cx",r(n).toFixed(1)),s.setAttribute("cy",i(S).toFixed(1)),s.setAttribute("r",n>=e&&n<=a?"4.2":"2.7"),s.setAttribute("class",n>=e&&n<=a?"lab-sample in-window":"lab-sample"),y.appendChild(s),n>=e&&n<=a&&o.push([n,S])}for(var b=0,x=0,q=4.8,l=1;l<o.length;l+=1){var g=(o[l][0]-o[l-1][0])*10;b+=g*(o[l][1]+o[l-1][1])/2,x+=g*(Math.max(0,o[l][1]-q)+Math.max(0,o[l-1][1]-q))/2}traceLab.querySelector("[data-start-out]").textContent=Math.round(e*100)+"%",traceLab.querySelector("[data-end-out]").textContent=Math.round(a*100)+"%",traceLab.querySelector("[data-spacing-out]").textContent=Math.round(v*100)+"%",traceLab.querySelector("[data-phase-out]").textContent=phaseInput.value+"%",traceLab.querySelector("[data-gross-out]").textContent=o.length>1?b.toFixed(2)+" toy J":"too few samples",traceLab.querySelector("[data-idle-out]").textContent=o.length>1?x.toFixed(2)+" toy J":"too few samples",traceLab.querySelector("[data-count-out]").textContent=String(o.length)};for(var powerAt=u,xFor=r,yFor=i,renderTrace=d,startInput=traceLab.querySelector("[data-start]"),endInput=traceLab.querySelector("[data-end]"),spacingInput=traceLab.querySelector("[data-spacing]"),phaseInput=traceLab.querySelector("[data-phase]"),x0=56,x1=694,yBottom=246,yTop=36,lineParts=[],areaParts=["M "+r(0)+" "+yBottom],point=0;point<=96;point+=1){var t=point/96,command=point===0?"M":"L";lineParts.push(command+" "+r(t).toFixed(1)+" "+i(u(t)).toFixed(1)),areaParts.push("L "+r(t).toFixed(1)+" "+i(u(t)).toFixed(1))}areaParts.push("L "+r(1)+" "+yBottom+" Z"),traceLab.querySelector("[data-trace-line]").setAttribute("d",lineParts.join(" ")),traceLab.querySelector("[data-trace-area]").setAttribute("d",areaParts.join(" ")),[startInput,endInput,spacingInput,phaseInput].forEach(function(e){e.addEventListener("input",d)}),d()}var floorLab=document.querySelector("[data-floor-lab]");if(floorLab){let u=function(){var r=floorSelect.options[floorSelect.selectedIndex],i=Number(r.value),d=Number(effectInput.value),e=d>=i;floorLab.querySelector("[data-effect-out]").textContent=d.toFixed(2)+" J",floorLab.querySelector("[data-floor-mark]").style.left=Math.min(100,i/30*100)+"%",floorLab.querySelector("[data-effect-mark]").style.left=Math.min(100,d/30*100)+"%";var a=floorLab.querySelector("[data-floor-verdict]");a.className="floor-verdict "+(e?"clears":"below"),a.innerHTML=e?"<strong>Above this numeric floor.</strong><span>"+d.toFixed(2)+" J clears "+i.toFixed(6)+" J on the "+r.dataset.basis+" gate. Other claim gates still apply.</span>":"<strong>Not resolvable at this gate.</strong><span>"+d.toFixed(2)+" J is below "+i.toFixed(6)+" J on the "+r.dataset.basis+" gate. This does not prove zero effect.</span>"};var renderFloor=u,floorSelect=floorLab.querySelector("[data-floor-select]"),effectInput=floorLab.querySelector("[data-effect]");floorSelect.addEventListener("change",u),effectInput.addEventListener("input",u),u()}</script>
