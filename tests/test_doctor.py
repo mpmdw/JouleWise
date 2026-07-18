@@ -182,6 +182,15 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("low power mode is enabled", quiet["warnings"])
         self.assertIn("power source is Battery Power", quiet["warnings"])
         self.assertEqual(quiet["environment_probe_errors"], {"uptime": "parse"})
+        # D-077: doctor consumes the shared environment-policy evaluator
+        # advisorily — the evaluation is attached, but a failing evaluation
+        # must not escalate quiet_machine beyond its hardcoded "warn".
+        self.assertEqual(checks["quiet_machine"]["status"], "warn")
+        evaluation = quiet["environment_policy_evaluation"]
+        self.assertIsInstance(evaluation, dict)
+        self.assertFalse(evaluation["eligible"])
+        failing = [f for f in evaluation["findings"] if f["status"] != "pass"]
+        self.assertTrue(failing)
 
     def test_human_and_json_rendering_are_byte_stable_and_ordered(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
