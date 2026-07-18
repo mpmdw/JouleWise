@@ -291,7 +291,10 @@ Per decisions D-005 and D-014:
   policy), while thermal pressure is Nominal. A below-reference mean therefore
   counts as recovery. An optional calibrated absolute ceiling is an
   additional upper cap and never an OR escape. The wait has a 5-minute cap;
-  hitting it is recorded in the following repetition's measurement quality.
+  the cap is evaluated before release on every iteration, so recovery criteria
+  first met at or after the deadline remain a `cap_hit` (with the late criteria
+  recorded in the trace) and are recorded in the following repetition's
+  measurement quality.
 - The preceding baseline is eligible as a cooldown reference only when
   `idle_window_suspect == false`, all critical environment probes passed, and
   policy/environment provenance is present. An ineligible or unknown

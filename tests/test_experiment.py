@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -631,6 +632,39 @@ class CooldownGateUnitTests(unittest.TestCase):
         self.assertLess(note["window_coverage_s"], note["required_coverage_s"])
         self.assertFalse(note["coverage_complete"])
 
+    def test_cap_precedes_recovery_when_final_capture_finishes_late(self) -> None:
+        class SlowCaptureTelemetry(_StubTelemetry):
+            def measure_idle(self, config, context=None):
+                self._clock.sleep(2.1)
+                return IdleBaseline(
+                    power_w_mean=5.0,
+                    power_w_stddev=0.0,
+                    duration_s=2.0,
+                    sample_count=2,
+                    telemetry_backend=TelemetryBackend.POWERMETRICS,
+                    idle_window_suspect=False,
+                )
+
+        clock = FakeClock()
+        note = cooldown_gate(
+            SlowCaptureTelemetry(clock),
+            self._reference(5.0),
+            self._config(),
+            clock,
+            policy=CooldownPolicy(
+                subwindow_s=2.0,
+                sustained_window_s=10.0,
+                cap_s=10.0,
+            ),
+        )
+
+        self.assertEqual(note["result"], "cap_hit")
+        self.assertAlmostEqual(note["waited_s"], 10.5)
+        self.assertTrue(note["window_complete"])
+        trace = note["_trace"]
+        self.assertTrue(trace[-1]["release_criteria_met_late"])
+        self.assertFalse(trace[-1]["release"])
+
     def test_recovers_after_rolling_window_crosses_into_tolerance(self) -> None:
         # Drive the rolling-30 s-mean high-to-low RECOVERY transition: the first
         # two sub-windows read 7.5 W (50% above the 5.0 W reference, outside the
@@ -882,6 +916,162 @@ class CooldownThroughExperimentTests(unittest.TestCase):
         self.assertEqual(
             r2_metadata["environment_admission"]["decision"], "abort"
         )
+
+    def test_prepare_end_capture_rejects_power_flip_during_prepare(self) -> None:
+        from joulewise.schemas import CampaignPolicy
+
+        policy_path = REPO_ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+        policy = CampaignPolicy.from_mapping(json.loads(policy_path.read_text()))
+        clean = {
+            "power_source": "AC Power",
+            "power": {"external_connected": True},
+            "low_power_mode": False,
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "thermal_pressure": "nominal",
+            "capture_scope": "run",
+            "settle_s": 0.0,
+        }
+        state = {"power_source": "AC Power"}
+
+        class PowerFlippingRuntime:
+            def __init__(self, inner):
+                self._inner = inner
+                self.name = inner.name
+
+            def prepare(self, config, context=None):
+                result = self._inner.prepare(config, context)
+                state["power_source"] = "Battery Power"
+                return result
+
+            def warmup(self, config, context=None):
+                return self._inner.warmup(config, context)
+
+            def run_workload(self, config, context=None):
+                return self._inner.run_workload(config, context)
+
+            def cleanup(self, config, context=None):
+                return self._inner.cleanup(config, context)
+
+        class PowerFlippingRegistry(_StubRegistry):
+            def resolve_runtime(self, config, clock):
+                runtime, failure = super().resolve_runtime(config, clock)
+                return PowerFlippingRuntime(runtime), failure
+
+        evaluation = evaluate_environment_policy(clean, policy.environment_guard)
+        binding = {"sha256": "a" * 64}
+        preflight = {
+            "evaluation": evaluation,
+            "override": None,
+            "policy_sha256": "a" * 64,
+        }
+
+        def capture_after_prepare(_clock, **_kwargs):
+            return {**clean, "power_source": state["power_source"]}
+
+        with (
+            patch(
+                "joulewise.controller._campaign_policy_from_environment",
+                return_value=(policy, binding, preflight),
+            ),
+            patch(
+                "joulewise.controller._capture_environment",
+                side_effect=capture_after_prepare,
+            ) as capture,
+        ):
+            _manifest, members = run_experiment(
+                make_config("exp-prepare-power-flip", repetitions=1),
+                self.runs_root,
+                FakeClock(),
+                registry=PowerFlippingRegistry(lambda clk: _StubTelemetry(clk)),
+            )
+
+        self.assertEqual(capture.call_count, 1)
+        self.assertEqual(members[0][1].status, RunStatus.FAILED)
+        metadata = json.loads((members[0][0] / "metadata.json").read_text())
+        self.assertEqual(metadata["environment"]["power_source"], "Battery Power")
+        self.assertEqual(metadata["environment_admission"]["decision"], "abort")
+
+    def test_explicit_campaign_anchor_survives_ineligible_r1_and_gates_r2(self) -> None:
+        from joulewise.schemas import CampaignPolicy
+
+        policy_path = REPO_ROOT / "configs" / "campaign_policies" / "quiet_mac_exploratory.json"
+        policy = CampaignPolicy.from_mapping(json.loads(policy_path.read_text()))
+        clean = {
+            "power_source": "AC Power",
+            "power": {"external_connected": True},
+            "low_power_mode": False,
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "thermal_pressure": "nominal",
+            "capture_scope": "run",
+            "settle_s": 0.0,
+        }
+        evaluation = evaluate_environment_policy(clean, policy.environment_guard)
+        binding = {"sha256": "a" * 64}
+        preflight = {
+            "evaluation": evaluation,
+            "override": None,
+            "policy_sha256": "a" * 64,
+        }
+        anchor = {
+            "schema_version": "joulewise.cooldown_anchor.v1",
+            "source_kind": "neg8_reference_start",
+            "bundle_id": "neg8-anchor",
+            "policy_sha256": "a" * 64,
+            "environment_snapshot_sha256": "b" * 64,
+            "immutable_after_freeze": True,
+            "baseline": {
+                "power_w_mean": 5.0,
+                "power_w_stddev": 0.0,
+                "duration_s": 30.0,
+                "sample_count": 30,
+                "telemetry_backend": "powermetrics",
+                "idle_window_suspect": False,
+            },
+        }
+        original_anchor = json.loads(json.dumps(anchor))
+
+        class SuspectLifecycleTelemetry(_StubTelemetry):
+            def measure_idle(self, config, context=None):
+                baseline = super().measure_idle(config, context)
+                if config.sampling.idle_seconds != policy.cooldown.subwindow_s:
+                    return replace(baseline, idle_window_suspect=True)
+                return baseline
+
+        with (
+            patch(
+                "joulewise.controller._campaign_policy_from_environment",
+                return_value=(policy, binding, preflight),
+            ),
+            patch(
+                "joulewise.controller._capture_environment",
+                return_value=clean,
+            ),
+        ):
+            config_data = _example_config_data()
+            config_data["run_id"] = "exp-campaign-anchor"
+            config_data["hardware_target"]["telemetry_backend"] = "powermetrics"
+            config_data["workload_profile"]["repetitions"] = 2
+            manifest_path, members = run_experiment(
+                BenchmarkConfig.from_mapping(config_data),
+                self.runs_root,
+                FakeClock(),
+                registry=_StubRegistry(lambda clk: SuspectLifecycleTelemetry(clk)),
+                frozen_cooldown_anchor=anchor,
+            )
+
+        manifest = json.loads(manifest_path.read_text())
+        self.assertEqual(len(members), 2)
+        self.assertEqual(manifest["cooldown_anchor"], original_anchor)
+        self.assertEqual(manifest["cooldown"][0]["result"], "recovered")
+        self.assertEqual(
+            manifest["cooldown"][0]["reference_selection"],
+            "frozen_clean_anchor",
+        )
+        self.assertFalse(manifest["cooldown"][0]["reference_eligibility"]["eligible"])
+        self.assertEqual(manifest["cooldown"][0]["reference_power_w"], 5.0)
+        self.assertEqual(anchor, original_anchor)
 
     def test_cooldown_trace_write_error_is_manifest_metadata_not_campaign_failure(self) -> None:
         data = _example_config_data()

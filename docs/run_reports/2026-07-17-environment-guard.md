@@ -134,3 +134,33 @@ on the final scoped diff:
 - the explicit 14-test F1–F11 regression selection — pass in 1.767 seconds;
 - `bash -n scripts/quiet_mac_prep.sh` — pass; and
 - Python compile plus scoped `git diff --check` — pass.
+
+## Fix round 2 — 2026-07-18
+
+Resolved the four delta re-audit findings without running a quiet-Mac
+measurement:
+
+- governed admission now evaluates the prepare-end environment snapshot, so a
+  power-source change during preparation fails closed under the abort policy;
+- the cooldown cap is evaluated before recovery on every iteration, with
+  release criteria first met at or after the deadline retained as `cap_hit`
+  and recorded as late in the trace;
+- the campaign's frozen clean anchor is passed explicitly through the CLI into
+  the child experiment, deep-copied there, and used when a preceding
+  repetition baseline is ineligible; and
+- canonical analysis reads per-physical-repetition cooldown rows when present,
+  verifies the first-run exemption against the true `config__r1` bundle, and
+  retains the top-level row for single-repetition and legacy compatibility.
+
+Final verification on the scoped diff:
+
+- `python3 -m unittest discover -s tests` — 1,722 tests in 367.585 seconds,
+  pass (`skipped=13`);
+- the explicit four-test N1–N4 regression selection — pass in 0.485 seconds;
+- the additional in-process N3 immutable-anchor fallback regression — pass as
+  part of the full suite; and
+- Python compile, scoped `git diff --check`, and bridge scope-lease validation
+  — pass.
+
+No commit, push, merge, generated-site refresh, or quiet-Mac execution was
+performed. Lead retains final diff review and merge custody.

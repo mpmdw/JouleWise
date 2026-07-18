@@ -810,9 +810,27 @@ def _resolve_analysis_reference(manifest_dir: Path, reference: str) -> Path:
     return manifest_dir / path
 
 
-def command_for(config_path: Path, runs_dir: Path, cli_cmd: str | None) -> list[str]:
+def command_for(
+    config_path: Path,
+    runs_dir: Path,
+    cli_cmd: str | None,
+    *,
+    frozen_cooldown_anchor: dict[str, Any] | None = None,
+) -> list[str]:
     prefix = shlex.split(cli_cmd) if cli_cmd else [sys.executable, "-m", "joulewise"]
-    return prefix + ["run", str(config_path), "--runs-dir", str(runs_dir)]
+    command = prefix + ["run", str(config_path), "--runs-dir", str(runs_dir)]
+    if frozen_cooldown_anchor is not None:
+        command.extend(
+            [
+                "--frozen-cooldown-anchor-json",
+                json.dumps(
+                    frozen_cooldown_anchor,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            ]
+        )
+    return command
 
 
 def shell_quote(command: list[str]) -> str:
@@ -4036,7 +4054,14 @@ def run_campaign(args: argparse.Namespace) -> int:
             elif order_warning is not None:
                 order_extra = {"block_order_warning": order_warning}
             state = existing_state(info, runs_dir)
-            command = command_for(config_path, runs_dir, args.cli_cmd)
+            command = command_for(
+                config_path,
+                runs_dir,
+                args.cli_cmd,
+                frozen_cooldown_anchor=(
+                    frozen_cooldown_anchor if info.repetitions > 1 else None
+                ),
+            )
 
             if args.dry_run:
                 counts["dry_run"] += 1

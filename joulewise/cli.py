@@ -248,8 +248,23 @@ def _cmd_run(args: argparse.Namespace) -> int:
     """
     config = BenchmarkConfig.from_mapping(_load_config(Path(args.config)))
     clock = _select_clock(config)
+    frozen_cooldown_anchor = None
+    if args.frozen_cooldown_anchor_json is not None:
+        frozen_cooldown_anchor = json.loads(args.frozen_cooldown_anchor_json)
+        if not isinstance(frozen_cooldown_anchor, dict):
+            raise SchemaError("--frozen-cooldown-anchor-json must encode a JSON object")
     if config.workload_profile.repetitions > 1:
-        manifest_path, members = run_experiment(config, Path(args.runs_dir), clock)
+        experiment_kwargs = (
+            {"frozen_cooldown_anchor": frozen_cooldown_anchor}
+            if frozen_cooldown_anchor is not None
+            else {}
+        )
+        manifest_path, members = run_experiment(
+            config,
+            Path(args.runs_dir),
+            clock,
+            **experiment_kwargs,
+        )
         for bundle_path, summary in members:
             print(_bundle_line(bundle_path, summary))
         print(f"experiment: {manifest_path} members={len(members)}")
@@ -257,6 +272,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
             summary.status == RunStatus.SUCCEEDED for _, summary in members
         )
         return 0 if all_succeeded else 3
+    if frozen_cooldown_anchor is not None:
+        raise SchemaError(
+            "--frozen-cooldown-anchor-json requires workload_profile.repetitions > 1"
+        )
     bundle_path, summary = run_benchmark(config, Path(args.runs_dir), clock)
     print(_bundle_line(bundle_path, summary))
     return 0 if summary.status == RunStatus.SUCCEEDED else 3
@@ -1796,6 +1815,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--runs-dir",
         default="runs",
         help="directory the run bundle is written under (default: runs/)",
+    )
+    run.add_argument(
+        "--frozen-cooldown-anchor-json",
+        help=(
+            "campaign-owned immutable cooldown anchor JSON passed explicitly "
+            "to a multi-repetition experiment"
+        ),
     )
     run.set_defaults(func=_cmd_run)
 

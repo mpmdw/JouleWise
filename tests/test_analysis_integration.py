@@ -22,11 +22,14 @@ from joulewise.analysis_manifest import calculate_manifest_id
 from joulewise.analysis_engine.multiplicity import holm_adjust
 from joulewise.analysis_engine.estimators import StochasticVarianceTerm
 from joulewise.analysis_engine.inputs import (
+    BundleEvidence,
     FloorEvidenceBinding,
+    _campaign_cooldown_evidence,
     floor_binding_reason_codes,
     floor_request_for_evidence,
     floor_stack_identity,
     load_analysis_inputs,
+    window_evidence_precheck,
 )
 from joulewise.cli import main, validate_bundle
 from joulewise.detection_floor import (
@@ -362,6 +365,109 @@ class AnalysisIntegrationTests(unittest.TestCase):
                 for contrast in refuted["contrasts"]
             )
         )
+
+    def test_physical_repetition_rows_supply_each_canonical_cooldown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            runs = Path(tmp) / "runs"
+            campaign_dir = runs / "campaign_manifests"
+            raw_dir = campaign_dir / "raw"
+            raw_dir.mkdir(parents=True)
+            trace = b'{"rolling_mean_power_w":5.0,"timestamp_s":10.0}\n'
+            trace_path = raw_dir / "config-r2.jsonl"
+            trace_path.write_bytes(trace)
+            descriptor = {
+                "path": "raw/config-r2.jsonl",
+                "sha256": hashlib.sha256(trace).hexdigest(),
+                "records": 1,
+            }
+            session_id = "physical-repetition-campaign"
+            first_run_id = "config__r1"
+            second_run_id = "config__r2"
+            first_cooldown = {
+                "result": "first_run_exempt",
+                "session_id": session_id,
+                "following_run_id": first_run_id,
+            }
+            second_cooldown = {
+                "result": "recovered",
+                "session_id": session_id,
+                "following_run_id": second_run_id,
+                "raw_artifact": descriptor,
+            }
+            (campaign_dir / "physical.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "joulewise.campaign_provenance.v1",
+                        "session_id": session_id,
+                        "analysis_manifest_id": "physical-manifest",
+                        "first_physical_run_id": first_run_id,
+                        "members": [
+                            {
+                                "run_id": "config",
+                                "bundle_ids": [first_run_id, second_run_id],
+                                "execution": "invoked",
+                                # Compatibility summary must not fan out over
+                                # the physical rows below.
+                                "preceding_campaign_cooldown": first_cooldown,
+                                "physical_members": [
+                                    {
+                                        "bundle_id": first_run_id,
+                                        "preceding_campaign_cooldown": first_cooldown,
+                                    },
+                                    {
+                                        "bundle_id": second_run_id,
+                                        "preceding_campaign_cooldown": second_cooldown,
+                                    },
+                                ],
+                            }
+                        ],
+                        "cooldown_gates": [second_cooldown],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            cooldowns = _campaign_cooldown_evidence(
+                runs, "physical-manifest"
+            )
+
+            self.assertEqual(cooldowns[first_run_id]["result"], "first_run_exempt")
+            self.assertTrue(cooldowns[first_run_id]["verified"])
+            self.assertEqual(cooldowns[second_run_id]["result"], "recovered")
+            self.assertTrue(cooldowns[second_run_id]["verified"])
+            self.assertEqual(cooldowns[second_run_id]["raw_artifact"], descriptor)
+            for bundle_id in (first_run_id, second_run_id):
+                evidence = BundleEvidence(
+                    entry={},
+                    bundle_id=bundle_id,
+                    relative_path=bundle_id,
+                    path=runs / bundle_id,
+                    summary={
+                        "window_evidence_precheck": {
+                            "gross_request": {"eligible": True, "reasons": []}
+                        },
+                        "measurement_quality": {"cooldown_cap_hit": False},
+                    },
+                    metadata={},
+                    raw_config={},
+                    strict_problems=(),
+                    base_reason_codes=(),
+                    config_sha256=None,
+                    summary_sha256=None,
+                    replacement_classification="registered",
+                    inclusion_status="included",
+                    campaign_cooldown=cooldowns[bundle_id],
+                )
+                precheck = window_evidence_precheck(
+                    evidence,
+                    {"name": "gross_energy_j", "metric_tag": "gross_request"},
+                )
+                self.assertNotIn(
+                    "campaign_cooldown_evidence_missing", precheck["reasons"]
+                )
 
     def test_artifact_is_path_relocation_deterministic(self):
         expected = analyze_claims(

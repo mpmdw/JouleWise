@@ -736,6 +736,87 @@ class RunCampaignTests(unittest.TestCase):
         self.assertEqual(binding.policy.profile.value, "production")
         self.assertEqual(binding.policy.idle_admission.on_fail.value, "abort")
 
+    def test_frozen_campaign_anchor_is_explicit_child_experiment_argument(self) -> None:
+        from joulewise import cli as cli_module
+        from joulewise.clock import FakeClock
+
+        anchor = {
+            "schema_version": "joulewise.cooldown_anchor.v1",
+            "source_kind": "neg8_reference_start",
+            "bundle_id": "neg8-anchor",
+            "policy_sha256": "a" * 64,
+            "environment_snapshot_sha256": "b" * 64,
+            "immutable_after_freeze": True,
+            "baseline": {
+                "power_w_mean": 5.0,
+                "power_w_stddev": 0.0,
+                "duration_s": 30.0,
+                "sample_count": 30,
+                "telemetry_backend": "powermetrics",
+                "idle_window_suspect": False,
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_dir = root / "configs"
+            runs_dir = root / "runs"
+            config_dir.mkdir()
+            config_path = write_config(
+                config_dir, "multi.json", "multi", repetitions=2
+            )
+            with (
+                patch(
+                    "run_campaign_module.prior_campaign_cooldown_anchor",
+                    return_value=anchor,
+                ),
+                patch(
+                    "run_campaign_module.command_for",
+                    wraps=run_campaign_module.command_for,
+                ) as parent_command,
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(io.StringIO()),
+            ):
+                parent_code = run_campaign_module.main(
+                    [
+                        str(config_dir),
+                        "--runs-dir",
+                        str(runs_dir),
+                        "--dry-run",
+                        "--campaign-policy",
+                        str(TEST_CAMPAIGN_POLICY),
+                    ]
+                )
+
+            self.assertEqual(parent_code, 0)
+            self.assertEqual(
+                parent_command.call_args.kwargs["frozen_cooldown_anchor"], anchor
+            )
+            command = run_campaign_module.command_for(
+                config_path,
+                runs_dir,
+                None,
+                frozen_cooldown_anchor=anchor,
+            )
+            self.assertIn("--frozen-cooldown-anchor-json", command)
+            anchor_index = command.index("--frozen-cooldown-anchor-json") + 1
+            self.assertEqual(json.loads(command[anchor_index]), anchor)
+
+            with (
+                patch("joulewise.cli._select_clock", return_value=FakeClock()),
+                patch(
+                    "joulewise.cli.run_experiment",
+                    return_value=(runs_dir / "experiments" / "multi.json", []),
+                ) as child_experiment,
+                redirect_stdout(io.StringIO()),
+                redirect_stderr(io.StringIO()),
+            ):
+                child_code = cli_module.main(command[3:])
+
+            self.assertEqual(child_code, 0)
+            self.assertEqual(
+                child_experiment.call_args.kwargs["frozen_cooldown_anchor"], anchor
+            )
+
     def test_environment_preflight_fails_closed_and_override_binds_exact_snapshot(self) -> None:
         binding = run_campaign_module.load_campaign_policy(
             str(ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json")

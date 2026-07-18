@@ -56,6 +56,7 @@ import json
 import os
 import traceback
 from collections.abc import Callable
+from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
 from enum import Enum
 from pathlib import Path
@@ -2091,11 +2092,13 @@ def cooldown_gate(
         power_recovered = (
             rolling_mean is not None and rolling_mean <= effective_upper_w
         )
-        release = bool(
+        release_criteria_met = bool(
             window_complete
             and power_recovered
             and (thermal_nominal or not selected.require_thermal_nominal)
         )
+        cap_hit = waited_s >= selected.cap_s
+        release_criteria_met_late = cap_hit and release_criteria_met
         trace.append(
             {
                 "timestamp_s": now_s,
@@ -2112,7 +2115,8 @@ def cooldown_gate(
                 "effective_upper_w": effective_upper_w,
                 "thermal_pressure": thermal_pressure,
                 "thermal_nominal": thermal_nominal,
-                "release": release,
+                "release": release_criteria_met and not cap_hit,
+                "release_criteria_met_late": release_criteria_met_late,
                 "baseline": _jsonable(asdict(baseline)),
             }
         )
@@ -2156,15 +2160,15 @@ def cooldown_gate(
                 ),
             },
         }
-        if release:
+        if cap_hit:
             return {
-                "result": "recovered",
+                "result": "cap_hit",
                 **common,
                 "_trace": trace,
             }
-        if waited_s >= selected.cap_s:
+        if release_criteria_met:
             return {
-                "result": "cap_hit",
+                "result": "recovered",
                 **common,
                 "_trace": trace,
             }
@@ -2296,6 +2300,7 @@ def run_experiment(
     runs_root: Path,
     clock: Clock,
     registry: AdapterRegistry | None = None,
+    frozen_cooldown_anchor: dict[str, Any] | None = None,
 ) -> tuple[Path, list[tuple[Path, SummaryMetrics]]]:
     """Run ``repetitions`` measured runs and group them by an experiment manifest.
 
@@ -2308,7 +2313,9 @@ def run_experiment(
     experiment leaves a valid manifest of exactly the members that finished.
     Between live reps the D-014 cooldown gate runs (skipped for mock telemetry,
     which has no thermal reality to wait for); a cap hit is recorded against the
-    following rep's ``measurement_quality``.
+    following rep's ``measurement_quality``. A campaign-owned clean anchor may
+    be supplied explicitly; the experiment takes an immutable child copy and
+    never replaces it from repetition outcomes.
     """
     if registry is None:
         registry = joulewise.adapters
@@ -2339,26 +2346,29 @@ def run_experiment(
         "condition_order": [],
         "cooldown": [],
     }
+    frozen_anchor = deepcopy(frozen_cooldown_anchor)
+    if frozen_anchor is not None:
+        manifest["cooldown_anchor"] = frozen_anchor
 
     results: list[tuple[Path, SummaryMetrics]] = []
     manifest_path: Path | None = None
     # Pending cap-hit recorded against the NEXT rep's run_benchmark.
     next_extra_metadata: dict[str, Any] | None = None
     previous_member_end_s: float | None = None
-    frozen_cooldown_anchor: dict[str, Any] | None = None
 
     for rep in range(1, repetitions + 1):
         member_config = replace(config, run_id=f"{experiment_id}__r{rep}")
         member_extra_metadata = dict(next_extra_metadata or {})
         member_extra_metadata["preceding_member_end_s"] = previous_member_end_s
-        member_environment = environment_snapshot
-        if campaign_policy is not None:
-            member_environment = _capture_environment(
-                clock,
-                capture_scope="run",
-                captured_for_rep=rep,
-                settle_s=PRE_IDLE_SETTLE_S,
-            )
+        # Governed admission owns the prepare-end capture. Passing the unset
+        # sentinel lets _stage_prepare recapture after runtime.prepare(), so a
+        # critical transition during preparation cannot be admitted from stale
+        # pre-prepare evidence.
+        member_environment = (
+            environment_snapshot
+            if campaign_policy is None
+            else _ENVIRONMENT_UNSET
+        )
         bundle_path, summary = run_benchmark(
             member_config,
             runs_root,
@@ -2397,11 +2407,11 @@ def run_experiment(
         reference_eligibility = _experiment_cooldown_reference_eligibility(
             bundle_path, summary
         )
-        if frozen_cooldown_anchor is None and reference_eligibility["eligible"]:
-            frozen_cooldown_anchor = _experiment_cooldown_anchor(
+        if frozen_anchor is None and reference_eligibility["eligible"]:
+            frozen_anchor = _experiment_cooldown_anchor(
                 bundle_path, summary, reference_eligibility
             )
-            manifest["cooldown_anchor"] = frozen_cooldown_anchor
+            manifest["cooldown_anchor"] = frozen_anchor
             manifest_path = write_experiment_manifest(runs_root, manifest)
 
         if rep < repetitions:
@@ -2414,7 +2424,7 @@ def run_experiment(
                 registry,
                 clock,
                 campaign_policy=campaign_policy,
-                frozen_anchor=frozen_cooldown_anchor,
+                frozen_anchor=frozen_anchor,
             )
             manifest["cooldown"].append(note)
             manifest_path = write_experiment_manifest(runs_root, manifest)
