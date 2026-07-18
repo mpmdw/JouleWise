@@ -168,13 +168,15 @@ const RESERVED_PATHS = new Set(["/", "/index.html"]);
 
 for (const [path, route] of Object.entries(SITE.routes)) {
   const handler = async () => {
-    const shared = await loadShared();
     const pages = await loadShard(route.shard);
     const html = pages[path];
     if (typeof html !== "string") {
       throw new Error("packed page is missing");
     }
-    return text(pageWithFreshness(html, shared.freshness), {
+    const responseHtml = route.verbatim
+      ? html
+      : pageWithFreshness(html, (await loadShared()).freshness);
+    return text(responseHtml, {
       headers: { "Content-Type": "text/html; charset=utf-8" },
     });
   };

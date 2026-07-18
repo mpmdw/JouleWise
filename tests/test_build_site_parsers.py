@@ -315,7 +315,12 @@ Text.
                 mock.patch.object(
                     pack_capsule,
                     "discover_lakebed_executable",
-                    return_value=None,
+                    return_value=Path("/fixture/lakebed"),
+                ),
+                mock.patch.object(
+                    pack_capsule,
+                    "measure_lakebed_artifact",
+                    return_value=(960_030, pack_capsule.LAKEBED_VERSION),
                 ),
                 contextlib.redirect_stdout(pack_stdout),
                 contextlib.redirect_stderr(pack_stderr),
@@ -323,7 +328,9 @@ Text.
                 pages = pack_capsule.pack_pages()
                 total = pack_capsule.build(no_fonts=True)
                 packed_site, _ = pack_capsule.encode_site(pages, pack_capsule.stylesheet(no_fonts=True))
-                with mock.patch.object(pack_capsule, "LAKEBED_TARGET_ARTIFACT_BYTES", 0):
+                with mock.patch.object(
+                    pack_capsule, "LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES", 0
+                ):
                     with self.assertRaises(pack_capsule.CapsulePackError):
                         pack_capsule.build(no_fonts=True)
                 with mock.patch.object(pack_capsule, "MAX_FIRST_REQUEST_DECODE_BYTES", 0):
@@ -339,7 +346,7 @@ Text.
                 decoded_pages.update(decoded)
                 decoded_shards.append(decoded)
             expected_names = {
-                "adapter_contracts.html", "agent_plan.html", "claims_ladder.html",
+                "adapter_contracts.html", "advisor_brief.html", "agent_plan.html", "claims_ladder.html",
                 "council_log.html", "decision_log.html", "index.html",
                 "latest_run_report.html", "library.html", "measurement_methodology.html",
                 "milestones.html", "orchestration.html", "process.html",
@@ -348,6 +355,25 @@ Text.
                 "status.html", "task_queue.html",
             }
             self.assertEqual({path.name for path in site.glob("*.html")}, expected_names)
+            brief_output = (site / build_site.ADVISOR_BRIEF_OUTPUT).read_text(
+                encoding="utf-8"
+            )
+            provenance, separator, copied_brief = brief_output.partition("\n")
+            self.assertEqual(separator, "\n")
+            self.assertIn("JouleWise verbatim provenance:", provenance)
+            self.assertIn(build_site.ADVISOR_BRIEF_SOURCE, provenance)
+            self.assertEqual(
+                copied_brief,
+                (build_site.ROOT / build_site.ADVISOR_BRIEF_SOURCE).read_text(
+                    encoding="utf-8"
+                ),
+            )
+            for page_path in site.glob("*.html"):
+                if page_path.name == build_site.ADVISOR_BRIEF_OUTPUT:
+                    continue
+                shell_html = page_path.read_text(encoding="utf-8")
+                self.assertIn('href="advisor_brief.html"', shell_html)
+                self.assertIn('href="project_status.html"', shell_html)
             self.assertEqual(
                 pack_capsule.CAPSULE_PAGE_REDIRECTS,
                 {"task_queue.html": "roadmap.html"},
@@ -360,6 +386,9 @@ Text.
             self.assertEqual(set(packed_site["routes"]), expected_canonical)
             for path, route in packed_site["routes"].items():
                 self.assertIn(path, decoded_shards[route["shard"]])
+                self.assertEqual(
+                    route["verbatim"], path == "/advisor_brief.html"
+                )
             for name in capsule_names:
                 aliases = pack_capsule.page_aliases(site / name)
                 aliases.extend(
@@ -380,8 +409,8 @@ Text.
                 ["/critique"],
             )
             expected_sources = {}
-            for page_path in site.glob("*.html"):
-                for stamp in pack_capsule.extract_stamps(page_path.name, page_path.read_text(encoding="utf-8")):
+            for entry in pages.values():
+                for stamp in entry["sources"]:
                     expected_sources[stamp["source"]] = stamp["commit"]
             self.assertEqual(
                 packed_site["sources"],
@@ -390,13 +419,18 @@ Text.
             self.assertEqual(set(decoded_pages), expected_canonical)
             for path, entry in pages.items():
                 self.assertEqual(decoded_pages[path], entry["html"])
-                response_html = decoded_pages[path].replace(
-                    "</body>", shared["freshness"] + "\n</body>", 1
-                )
-                self.assertEqual(
-                    response_html,
-                    pack_capsule.inject_freshness(entry["html"], Path(path).name or "index.html"),
-                )
+                if entry["verbatim"]:
+                    self.assertEqual(decoded_pages[path], entry["html"])
+                else:
+                    response_html = decoded_pages[path].replace(
+                        "</body>", shared["freshness"] + "\n</body>", 1
+                    )
+                    self.assertEqual(
+                        response_html,
+                        pack_capsule.inject_freshness(
+                            entry["html"], Path(path).name or "index.html"
+                        ),
+                    )
             self.assertIn("built docs/site", build_stdout.getvalue())
             if force_offline_renderer:
                 self.assertIn("offline fallback markdown renderer", build_stderr.getvalue())
@@ -419,29 +453,19 @@ Text.
                     '<pre><code class="language-bash">python3 -m unittest discover -s tests',
                     readme_html,
                 )
-            self.assertIn("postcondition mode: estimator-only advisory", pack_stdout.getvalue())
-            notices = [
-                json.loads(line)
-                for line in pack_stderr.getvalue().splitlines()
-                if line.strip()
-            ]
-            self.assertTrue(notices)
-            self.assertTrue(
-                all(
-                    notice["code"] == "lakebed_executable_unavailable"
-                    and notice["mode"] == "estimator_only_advisory"
-                    for notice in notices
-                )
-            )
+            self.assertIn("postcondition mode: measured", pack_stdout.getvalue())
+            self.assertNotIn("estimator-only advisory", pack_stdout.getvalue())
+            self.assertEqual(pack_stderr.getvalue(), "")
             estimated_artifact = pack_capsule.estimate_lakebed_artifact_size(total)
-            self.assertLessEqual(
+            # AUD-WO-039 / D-076-pending: measured mode is authoritative; the
+            # conservative estimator is a fallback-only guard and is expected
+            # to overshoot this production-shaped input.
+            self.assertGreater(
                 estimated_artifact,
-                pack_capsule.LAKEBED_TARGET_ARTIFACT_BYTES,
+                pack_capsule.LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES,
             )
             self.assertLessEqual(
-                estimated_artifact,
-                920_000,
-                "production capsule must retain integration headroom for routine doc growth",
+                960_030, pack_capsule.LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES
             )
             self.assertTrue((content / "pages.ts").is_file())
             self.assertTrue((content / "buildinfo.ts").is_file())

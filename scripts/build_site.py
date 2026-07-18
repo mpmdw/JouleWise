@@ -23,6 +23,8 @@ from typing import Iterable
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "site"
 FLOOR_EXTRACTION_SOURCE = "docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json"
+ADVISOR_BRIEF_SOURCE = "docs/advisor_briefs/2026-07-17-window-a-brief.html"
+ADVISOR_BRIEF_OUTPUT = "advisor_brief.html"
 MARKED_VERSION = "18.0.6"
 MARKED_LOCAL_EXECUTABLE = ROOT / "node_modules" / ".bin" / "marked"
 
@@ -153,7 +155,9 @@ HAND_PAGES = {
 NAV_ORDER = [
     ("index.html", "Project"),
     ("research.html", "Learn"),
-    ("status.html", "Status"),
+    (ADVISOR_BRIEF_OUTPUT, "Advisor Brief"),
+    ("project_status.html", "Status"),
+    ("status.html", "Live Status"),
     ("roadmap.html", "Roadmap"),
     ("process.html", "Process"),
     ("record.html", "Record"),
@@ -1295,7 +1299,7 @@ def render_status_page(
   window.setInterval(update, 60000);
 }}());
 </script>"""
-    return page_shell("Status", "Status", body, page_footer([stamps["PROJECT_STATUS.md"], stamps["RUN_STATE.md"], stamps["TASK_QUEUE.md"], stamps["docs/risk_register.md"]]))
+    return page_shell("Status", "Live Status", body, page_footer([stamps["PROJECT_STATUS.md"], stamps["RUN_STATE.md"], stamps["TASK_QUEUE.md"], stamps["docs/risk_register.md"]]))
 
 
 def lane_slug(lane: str) -> str:
@@ -1552,7 +1556,21 @@ def render_doc_page(doc: DocPage, no_marked: bool, stamp: SourceStamp) -> str:
     {body}
   </div>
 </div>"""
-    return page_shell(doc.title, "Sources", page_body, page_footer([stamp]))
+    active = "Status" if doc.source == "PROJECT_STATUS.md" else "Sources"
+    return page_shell(doc.title, active, page_body, page_footer([stamp]))
+
+
+def render_advisor_brief_copy(stamp: SourceStamp) -> str:
+    """Copy the self-contained advisor brief without rebuilding its markup.
+
+    The non-rendering comment records provenance for the packer's explicit
+    verbatim-page model. The source file follows byte-for-byte after it.
+    """
+    provenance = (
+        f"<!-- JouleWise verbatim provenance: {stamp.label}; "
+        "source bytes after this line are copied verbatim. -->\n"
+    )
+    return provenance + read_source(stamp.source)
 
 
 def render_library(docs: list[DocPage], stamps: dict[str, SourceStamp]) -> str:
@@ -1592,8 +1610,31 @@ def update_hand_page_nav() -> None:
 
 
 def write(path: Path, content: str) -> None:
+    if path.suffix == ".html" and path.name != ADVISOR_BRIEF_OUTPUT:
+        content = compact_generated_html(content)
     path.write_text(content, encoding="utf-8")
     print(f"built {path.name}")
+
+
+def compact_generated_html(content: str) -> str:
+    """Collapse formatting whitespace while preserving authored code blocks.
+
+    HTML renders ordinary whitespace runs equivalently. Script, style, pre,
+    textarea, and code blocks stay byte-identical so this never rewrites
+    authored behavior or preformatted document content.
+    """
+    protected = re.compile(
+        r"<(pre|script|style|textarea|code)\b.*?</\1\s*>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    parts: list[str] = []
+    cursor = 0
+    for match in protected.finditer(content):
+        parts.append(re.sub(r"\s+", " ", content[cursor:match.start()]))
+        parts.append(match.group(0))
+        cursor = match.end()
+    parts.append(re.sub(r"\s+", " ", content[cursor:]))
+    return "".join(parts).strip() + "\n"
 
 
 def write_build_manifest(no_marked: bool) -> None:
@@ -1637,6 +1678,7 @@ def build(no_marked: bool = False) -> None:
     docs = doc_pages(report_source)
     stamps = {doc.source: git_source_stamp(doc.source) for doc in docs}
     for source in [
+        ADVISOR_BRIEF_SOURCE,
         "PROJECT_STATUS.md",
         "RUN_STATE.md",
         "TASK_QUEUE.md",
@@ -1665,6 +1707,7 @@ def build(no_marked: bool = False) -> None:
     write(OUT / "status.html", render_status_page(phases, verification, bundle_count, now, sessions, queue, risks, stamps, report_source))
     write(OUT / "roadmap.html", render_roadmap_page(queue, completed, do_not_do, stamps["TASK_QUEUE.md"]))
     write(OUT / "record.html", render_record_page(sessions, report_md, report_source, decisions, councils, stamps))
+    write(OUT / ADVISOR_BRIEF_OUTPUT, render_advisor_brief_copy(stamps[ADVISOR_BRIEF_SOURCE]))
     for doc in docs:
         write(OUT / doc.out_name, render_doc_page(doc, no_marked, stamps[doc.source]))
     write(OUT / "library.html", render_library(docs, stamps))

@@ -1,0 +1,1297 @@
+<!-- JouleWise verbatim provenance: docs/advisor_briefs/2026-07-17-window-a-brief.html · commit 2618e19; source bytes after this line are copied verbatim. -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>JouleWise · Window A advisor brief · 2026-07-17</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --page: #f9f9f7;
+      --surface: #fcfcfb;
+      --surface-raised: #ffffff;
+      --ink: #0b0b0b;
+      --ink-2: #52514e;
+      --muted: #898781;
+      --grid: #e1e0d9;
+      --axis: #c3c2b7;
+      --border: rgba(11, 11, 11, 0.10);
+      --series-1: #2a78d6;
+      --series-2: #008300;
+      --seq-100: #cde2fb;
+      --seq-250: #86b6ef;
+      --seq-400: #3987e5;
+      --seq-550: #1c5cab;
+      --good: #0ca30c;
+      --warning: #fab219;
+      --serious: #ec835a;
+      --critical: #d03b3b;
+      --focus: #52514e;
+      --max: 1180px;
+      --radius: 18px;
+      --shadow: 0 18px 60px rgba(11, 11, 11, 0.07);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --page: #0d0d0d;
+        --surface: #1a1a19;
+        --surface-raised: #20201f;
+        --ink: #ffffff;
+        --ink-2: #c3c2b7;
+        --muted: #898781;
+        --grid: #2c2c2a;
+        --axis: #383835;
+        --border: rgba(255, 255, 255, 0.10);
+        --series-1: #3987e5;
+        --series-2: #008300;
+        --seq-100: #104281;
+        --seq-250: #184f95;
+        --seq-400: #3987e5;
+        --seq-550: #86b6ef;
+        --focus: #c3c2b7;
+        --shadow: 0 18px 60px rgba(0, 0, 0, 0.32);
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--page);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--page);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.56;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; }
+    button, input { font: inherit; }
+    button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--focus) 72%, transparent);
+      outline-offset: 3px;
+    }
+
+    .page {
+      width: min(100% - 32px, var(--max));
+      margin: 0 auto;
+      padding: 28px 0 64px;
+    }
+
+    .topline {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 2px 2px 18px;
+      color: var(--ink-2);
+      font-size: 0.86rem;
+      letter-spacing: 0.02em;
+    }
+
+    strong, .brand { color: var(--ink); font-weight: 500; }
+
+    .meeting-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+    }
+
+    .meeting-tag::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--good);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 15%, transparent);
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.75fr);
+      gap: 36px;
+      padding: clamp(30px, 5vw, 58px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      right: -96px;
+      top: -118px;
+      background: color-mix(in srgb, var(--axis) 45%, transparent);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--ink-2);
+      font-size: 0.76rem;
+      font-weight: 500;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    h1, h2, h3, p { margin-top: 0; }
+
+    h1 {
+      max-width: 850px;
+      margin-bottom: 18px;
+      font-size: clamp(2.55rem, 6vw, 5.7rem);
+      line-height: 0.98;
+      letter-spacing: -0.055em;
+      font-weight: 500;
+    }
+
+    h2 {
+      margin-bottom: 12px;
+      font-size: clamp(1.7rem, 3vw, 2.65rem);
+      line-height: 1.08;
+      letter-spacing: -0.035em;
+    }
+
+    h3 {
+      margin-bottom: 8px;
+      font-size: 1.02rem;
+      line-height: 1.3;
+    }
+
+    .deck {
+      max-width: 760px;
+      margin-bottom: 0;
+      color: var(--ink-2);
+      font-size: clamp(1.04rem, 1.7vw, 1.27rem);
+    }
+
+    .hero-aside {
+      align-self: end;
+      padding-left: 22px;
+      border-left: 1px solid var(--axis);
+    }
+
+    .hero-aside strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 1.16rem;
+    }
+
+    .hero-aside p:last-child { margin-bottom: 0; }
+
+    .accounting-note {
+      margin: 20px 0 0;
+      padding: 12px 14px;
+      border-left: 3px solid var(--warning);
+      color: var(--ink-2);
+      background: color-mix(in srgb, var(--warning) 9%, transparent);
+      font-size: 0.9rem;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      margin-top: 24px;
+      background: var(--axis);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .stat {
+      min-height: 128px;
+      padding: 20px;
+      background: var(--surface);
+    }
+
+    .stat-label {
+      display: block;
+      color: var(--ink-2);
+      font-size: 0.79rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    .stat-value {
+      display: block;
+      margin: 7px 0 3px;
+      font-size: clamp(1.7rem, 3.4vw, 3rem);
+      line-height: 1;
+      letter-spacing: -0.045em;
+    }
+
+    .stat-context { color: var(--ink-2); font-size: 0.84rem; }
+
+    .section {
+      padding: clamp(56px, 8vw, 96px) 4px;
+      border-bottom: 1px solid var(--grid);
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: 86px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+      margin-bottom: 30px;
+    }
+
+    .section-number {
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.08em;
+    }
+
+    .section-intro {
+      max-width: 770px;
+      margin-bottom: 0;
+      color: var(--ink-2);
+      font-size: 1.04rem;
+    }
+
+    .chart-block {
+      padding: 26px 0 30px;
+      border-top: 1px solid var(--grid);
+    }
+
+    .chart-block:first-of-type { border-top: 0; padding-top: 0; }
+
+    .chart-title-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: baseline;
+      margin-bottom: 12px;
+    }
+
+    .chart-note {
+      max-width: 600px;
+      margin: 0;
+      color: var(--ink-2);
+      font-size: 0.88rem;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      margin: 0 0 10px;
+      color: var(--ink-2);
+      font-size: 0.82rem;
+    }
+
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+    .swatch { width: 15px; height: 7px; border-radius: 1px; }
+    .swatch.abs { background: var(--series-1); }
+    .swatch.cmp { background: var(--series-2); }
+    .swatch.gross { background: var(--series-1); border-radius: 50%; width: 9px; height: 9px; }
+    .swatch.idle { background: var(--series-2); border-radius: 50%; width: 9px; height: 9px; }
+
+    .chart-host {
+      width: 100%;
+      overflow: hidden;
+    }
+
+    .chart-host svg {
+      display: block;
+      width: 100%;
+      height: auto;
+      color: var(--ink);
+      overflow: visible;
+    }
+
+    .chart-host .gridline { stroke: var(--grid); stroke-width: 1; }
+    .chart-host .axisline { stroke: var(--axis); stroke-width: 1; }
+    .chart-host .tick,
+    .chart-host .category,
+    .chart-host .value-label,
+    .chart-host .annotation {
+      fill: var(--ink-2);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    .chart-host .tick { font-size: 11px; }
+    .chart-host .category { font-size: 12px; }
+    .chart-host .value-label { fill: var(--ink); font-size: 11px; font-weight: 500; }
+    .chart-host .annotation { font-size: 11px; }
+    .chart-host .series-1 { fill: var(--series-1); stroke: var(--series-1); }
+    .chart-host .series-2 { fill: var(--series-2); stroke: var(--series-2); }
+    .chart-host .mark { cursor: help; }
+    .chart-host .mark:hover { filter: brightness(1.08); }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 20px;
+      border-top: 1px solid var(--grid);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.87rem;
+    }
+
+    th, td {
+      padding: 10px 9px;
+      border-bottom: 1px solid var(--grid);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--ink-2);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.065em;
+      white-space: nowrap;
+    }
+
+    td.num, th.num {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    td.family { color: var(--ink-2); white-space: nowrap; }
+
+    .datum {
+      appearance: none;
+      border: 0;
+      border-bottom: 1px dotted var(--muted);
+      padding: 0;
+      color: inherit;
+      background: transparent;
+      cursor: help;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .not-eligible { color: var(--ink-2); font-style: italic; }
+
+    .callout-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 28px;
+    }
+
+    .callout {
+      padding: 18px 18px 18px 20px;
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--warning);
+      border-radius: 10px;
+      background: var(--surface);
+    }
+
+    .callout.serious { border-left-color: var(--serious); }
+    .callout.good { border-left-color: var(--good); }
+    .callout h3 { display: flex; align-items: center; gap: 8px; }
+    .callout p:last-child { margin-bottom: 0; color: var(--ink-2); }
+    .callout .icon { color: var(--ink); }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 34px;
+    }
+
+    .story-list {
+      display: grid;
+      gap: 1px;
+      background: var(--grid);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .story {
+      padding: 19px 20px;
+      background: var(--surface);
+    }
+    .story p:last-child { margin-bottom: 0; color: var(--ink-2); }
+
+    .timeline-wrap { overflow-x: auto; padding: 12px 0 6px; }
+
+    .timeline {
+      min-width: 980px;
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      position: relative;
+      padding-top: 22px;
+    }
+
+    .timeline::before {
+      content: "";
+      position: absolute;
+      left: 5%;
+      right: 5%;
+      top: 28px;
+      height: 2px;
+      background: linear-gradient(90deg, var(--seq-250), var(--seq-550));
+    }
+
+    .milestone {
+      position: relative;
+      padding: 27px 7px 0;
+      color: var(--ink-2);
+      font-size: 0.76rem;
+      line-height: 1.35;
+      text-align: center;
+    }
+
+    .milestone::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 0;
+      width: 12px;
+      height: 12px;
+      border: 3px solid var(--surface);
+      border-radius: 50%;
+      transform: translateX(-50%);
+      background: var(--seq-400);
+      box-shadow: 0 0 0 1px var(--seq-400);
+    }
+
+    .milestone.window::before { background: var(--good); box-shadow: 0 0 0 1px var(--good); }
+    .milestone strong { display: block; color: var(--ink); font-size: 0.84rem; }
+
+    .status-board {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 1px;
+      margin: 28px 0;
+      background: var(--grid);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .status-item { padding: 20px; background: var(--surface); }
+
+    .status-chip {
+      --status: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-bottom: 12px;
+      padding: 4px 9px;
+      border: 1px solid color-mix(in srgb, var(--status) 62%, var(--border));
+      border-radius: 999px;
+      color: var(--ink);
+      background: color-mix(in srgb, var(--status) 10%, transparent);
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.045em;
+      text-transform: uppercase;
+    }
+
+    .status-chip.supported { --status: var(--good); }
+    .status-chip.negative { --status: var(--critical); }
+    .status-chip.planned { --status: var(--warning); }
+    .status-chip .icon { color: var(--status); font-size: 0.95rem; }
+    .status-item p:last-child { margin-bottom: 0; color: var(--ink-2); font-size: 0.9rem; }
+
+    .decision-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .decision {
+      padding: 14px 15px;
+      border-top: 2px solid var(--axis);
+      color: var(--ink-2);
+      font-size: 0.84rem;
+    }
+    .decision strong { display: block; color: var(--ink); margin-bottom: 3px; }
+
+    details.section-disclosure {
+      margin: 26px 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    details.section-disclosure > summary {
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      padding: 22px 24px;
+      cursor: pointer;
+      list-style: none;
+    }
+
+    details.section-disclosure > summary::-webkit-details-marker { display: none; }
+    details.section-disclosure > summary::after { content: "+"; color: var(--ink-2); font-size: 1.4rem; }
+    details.section-disclosure[open] > summary::after { content: "−"; }
+    details.section-disclosure > summary strong { font-size: 1.28rem; }
+    details.section-disclosure > summary .section-number { align-self: center; }
+
+    .disclosure-body {
+      padding: 0 24px 28px 98px;
+      border-top: 1px solid var(--grid);
+    }
+
+    .question-list, .answer-list, .next-list, .checklist { margin: 22px 0 0; padding: 0; list-style: none; }
+    .question-list { counter-reset: questions; }
+    .question-list li {
+      counter-increment: questions;
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 10px;
+      padding: 15px 0;
+      border-bottom: 1px solid var(--grid);
+    }
+    .question-list li::before {
+      content: counter(questions, decimal-leading-zero);
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .answer-list li {
+      display: grid;
+      grid-template-columns: minmax(170px, 0.33fr) minmax(0, 1fr);
+      gap: 20px;
+      padding: 15px 0;
+      border-bottom: 1px solid var(--grid);
+    }
+    .answer-list strong { color: var(--ink); }
+    .answer-list span { color: var(--ink-2); }
+
+    .next-list { counter-reset: next; }
+    .next-list li {
+      counter-increment: next;
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 14px;
+      padding: 17px 0;
+      border-bottom: 1px solid var(--grid);
+    }
+    .next-list li::before {
+      content: counter(next);
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--axis);
+      border-radius: 50%;
+      color: var(--ink-2);
+      font-size: 0.84rem;
+    }
+
+    .checklist li { padding: 10px 0; border-bottom: 1px solid var(--grid); }
+    .check-row { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+    .check-row input { width: 19px; height: 19px; margin-top: 3px; accent-color: var(--ink-2); }
+
+    .evidence-notes {
+      margin: 26px 0 0;
+      padding-left: 24px;
+      color: var(--ink-2);
+      font-size: 0.82rem;
+    }
+    .evidence-notes li { margin-bottom: 7px; }
+
+    code {
+      color: var(--ink);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.9em;
+      overflow-wrap: anywhere;
+    }
+
+    footer {
+      padding: 42px 4px 0;
+      color: var(--ink-2);
+      font-size: 0.82rem;
+    }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 0.6fr 1.4fr;
+      gap: 30px;
+      padding-top: 22px;
+      border-top: 1px solid var(--grid);
+    }
+    .honesty-line {
+      grid-column: 1 / -1;
+      padding: 12px 14px;
+      border-left: 3px solid var(--warning);
+      color: var(--ink);
+      background: color-mix(in srgb, var(--warning) 9%, transparent);
+    }
+
+    #tooltip {
+      position: fixed;
+      z-index: 999;
+      max-width: min(360px, calc(100vw - 24px));
+      padding: 9px 11px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--ink);
+      background: var(--surface-raised);
+      box-shadow: var(--shadow);
+      font-size: 0.77rem;
+      line-height: 1.4;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(5px);
+      transition: opacity 120ms ease, transform 120ms ease;
+    }
+    #tooltip.show { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 860px) {
+      .hero { grid-template-columns: 1fr; }
+      .hero-aside { padding: 18px 0 0; border-left: 0; border-top: 1px solid var(--axis); }
+      .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .section-head { grid-template-columns: 54px minmax(0, 1fr); }
+      .two-col, .callout-grid { grid-template-columns: 1fr; }
+      .status-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .decision-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .chart-title-row { align-items: flex-start; flex-direction: column; gap: 4px; }
+      .disclosure-body { padding-left: 24px; }
+    }
+
+    @media (max-width: 560px) {
+      .page { width: min(100% - 20px, var(--max)); padding-top: 14px; }
+      .topline { align-items: flex-start; flex-direction: column; gap: 4px; }
+      .hero { padding: 28px 22px; border-radius: 20px; }
+      h1 { font-size: clamp(2.35rem, 15vw, 4rem); }
+      .stats { grid-template-columns: 1fr; }
+      .stat { min-height: auto; }
+      .section { padding: 58px 0; }
+      .section-head { grid-template-columns: 1fr; gap: 4px; }
+      .status-board, .decision-strip { grid-template-columns: 1fr; }
+      details.section-disclosure > summary { grid-template-columns: 40px minmax(0, 1fr) auto; padding: 19px 16px; gap: 9px; }
+      .disclosure-body { padding: 0 16px 22px; }
+      .answer-list li { grid-template-columns: 1fr; gap: 6px; }
+      .footer-grid { grid-template-columns: 1fr; }
+      .honesty-line { grid-column: auto; }
+      .chart-host { overflow-x: auto; }
+      .chart-host svg { width: 760px; max-width: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      #tooltip { transition: none; }
+    }
+
+    @media (forced-colors: active) {
+      .swatch, .milestone::before, .meeting-tag::before { forced-color-adjust: none; }
+      .chart-host .series-1 { fill: CanvasText; stroke: CanvasText; }
+      .chart-host .series-2 { fill: transparent; stroke: CanvasText; stroke-width: 2; }
+    }
+
+    @media print {
+      :root {
+        color-scheme: light;
+        --page: #ffffff;
+        --surface: #ffffff;
+        --surface-raised: #ffffff;
+        --ink: #000000;
+        --ink-2: #333333;
+        --muted: #666666;
+        --grid: #d8d8d8;
+        --axis: #aaaaaa;
+        --border: rgba(0, 0, 0, 0.18);
+        --shadow: none;
+      }
+      @page { size: letter; margin: 0.48in; }
+      html, body { background: #fff !important; }
+      body { font-size: 10.5pt; }
+      .page { width: 100%; padding: 0; }
+      .topline { padding-top: 0; }
+      .hero { padding: 24px; border-radius: 0; box-shadow: none; break-inside: avoid; }
+      .hero::after { display: none; }
+      h1 { font-size: 34pt; }
+      h2 { font-size: 22pt; }
+      .section { padding: 30px 0; }
+      .stats, .callout, .status-board, .story-list, details.section-disclosure { break-inside: avoid; box-shadow: none; }
+      .chart-block { break-inside: avoid; }
+      .table-wrap, .timeline-wrap { overflow: visible; }
+      .timeline { min-width: 0; }
+      details.section-disclosure > summary::after { display: none; }
+      details.section-disclosure > .disclosure-body { display: block !important; }
+      .datum { border-bottom: 0; }
+      #tooltip { display: none !important; }
+      .chart-host .series-1 { fill: #2a78d6; stroke: #2a78d6; }
+      .chart-host .series-2 { fill: var(--print-fill, #008300); stroke: #008300; stroke-width: 1.5; }
+      footer { break-before: auto; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <div class="topline">
+        <div><span class="brand">JouleWise</span> · advisor brief</div>
+        <div class="meeting-tag">Dr. Rivoire · 3:45 PM · 17 Jul 2026</div>
+      </div>
+
+      <div class="hero">
+        <div>
+          <p class="eyebrow">Window A · verified extraction</p>
+          <h1>222 distinct strict-valid floor bundles</h1>
+          <p class="deck">Window A is open. The production uncertainty path passed live, and detection floors now exist for request, phase, item, and suite-level windows on the M3 Max / powermetrics boundary.</p>
+          <p class="accounting-note"><strong>Verified accounting correction:</strong> the campaign has <button class="datum" data-tip="Source: runs/p2_015_floors_window_a/campaign_log.jsonl; NEG-8 verification family">248 campaign-log lines</button>, comprising <button class="datum" data-tip="Bundle roster: all distinct directories under runs/p2_015_floors_window_a; NEG-8 verification family">222 distinct bundle directories</button>, <button class="datum" data-tip="Run IDs: p2015-df-cmp-abba-ph-prefill-b01-a1 through b05-a1; 17 resumed rows are status=skipped">17 resumed skips</button>, and <button class="datum" data-tip="Campaign records: the 9 campaign_verdict rows in runs/p2_015_floors_window_a/campaign_log.jsonl">9 verdict records</button>. Every distinct bundle is strict-valid and collection-usable; every one is also claim-evidence-flagged.</p>
+        </div>
+        <aside class="hero-aside">
+          <p class="eyebrow">The instrument / benchmark split</p>
+          <strong>Harness measures. Benchmark freezes.</strong>
+          <p>JouleWise is the strict-validation energy-measurement harness. The benchmark is the frozen workload suite, run rules, and strict validator layered on it. Gross energy is the headline basis; idle-subtracted energy remains a labeled within-device secondary view and never ranks configurations.</p>
+        </aside>
+      </div>
+
+      <div class="stats" aria-label="Headline detection floors">
+        <div class="stat">
+          <span class="stat-label">Request · absolute</span>
+          <button class="datum stat-value" data-tip="Bundles p2015-df-rq-mid-abs-r01..r10 · gross_energy_j · n=10">0.527 J</button>
+          <span class="stat-context">mid gross request</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Request · comparative</span>
+          <button class="datum stat-value" data-tip="Bundles p2015-df-cmp-abba-rq-b01..b10 · gross request ABBA · 10 complete blocks">0.909 J</button>
+          <span class="stat-context">gross ABBA floor</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Phase gate · prefill</span>
+          <button class="datum stat-value" data-tip="Absolute: p2015-df-ph-prefill-abs-r01..r10; comparative: p2015-df-cmp-abba-ph-prefill-b01..b10">1.739 J</button>
+          <span class="stat-context">comparative dominates</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Phase gate · decode</span>
+          <button class="datum stat-value" data-tip="Absolute: p2015-df-ph-decode-abs-r01..r10; comparative: p2015-df-cmp-abba-ph-decode-b01..b10">1.027 J</button>
+          <span class="stat-context">comparative dominates</span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="section" id="headline">
+        <div class="section-head">
+          <div class="section-number">01 / 07</div>
+          <div>
+            <h2>Headline</h2>
+            <p class="section-intro">Tonight’s result is machinery, not a victory-lap claim: production uncertainty passed, the floor estimator ran on strict-valid evidence, and the resulting claim gates are explicit. The request-window precheck still needs P2-037/P2-039 adjudication.</p>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="story-list">
+            <article class="story">
+              <h3>Production path passed live</h3>
+              <p>Clock-anchor, marker-phase, and idle-drift checks were bounded after the trace-boundary drain fixes in PRs #72 and #74.</p>
+            </article>
+            <article class="story">
+              <h3>Gross-first is enforced</h3>
+              <p>D-067 now governs every reader surface: report both bases where eligible; headline gross; never use idle-subtracted energy to rank devices or configurations.</p>
+            </article>
+          </div>
+          <div class="story-list">
+            <article class="story">
+              <h3>A floor is a refusal rule</h3>
+              <p>Any observed effect below its applicable <code>floor_gate_j</code> is not promoted to a claim. Comparative floors can correctly exceed absolute floors under ordering or drift.</p>
+            </article>
+            <article class="story">
+              <h3>Strict-valid ≠ claim-ready</h3>
+              <p>Strict validation admits the evidence to the floor estimator. The separate request-window evidence precheck controls whether those floors may gate L2/L3 claims.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="floors">
+        <div class="section-head">
+          <div class="section-number">02 / 07</div>
+          <div>
+            <h2>Floor results</h2>
+            <p class="section-intro">Absolute repeat scatter and same-condition ABBA deltas are shown together. The grouped chart uses one log-J axis so the small request floors remain legible beside the suite-level diagnostics.</p>
+          </div>
+        </div>
+
+        <div class="chart-block">
+          <div class="chart-title-row">
+            <h3>Detection-floor table · grouped bars</h3>
+            <p class="chart-note">Log scale begins at 0.02 J; a missing bar means that comparative cell was not run. Suite comparative values are retained but caveated below.</p>
+          </div>
+          <div class="legend" aria-label="Floor series legend">
+            <span class="legend-item"><span class="swatch abs"></span>Absolute floor</span>
+            <span class="legend-item"><span class="swatch cmp"></span>Comparative ABBA floor</span>
+          </div>
+          <div id="floor-chart" class="chart-host"></div>
+        </div>
+
+        <div class="chart-block">
+          <div class="chart-title-row">
+            <h3>Request ABBA delta strip</h3>
+            <p class="chart-note">One horizontal ΔJ axis; each row is a complete A/B/B/A block. The sign-flipping tail is the point, not visual noise.</p>
+          </div>
+          <div class="legend" aria-label="ABBA series legend">
+            <span class="legend-item"><span class="swatch gross"></span>Gross request</span>
+            <span class="legend-item"><span class="swatch idle"></span>Idle-subtracted request</span>
+          </div>
+          <div id="abba-chart" class="chart-host"></div>
+        </div>
+
+        <div class="chart-block">
+          <div class="chart-title-row">
+            <h3>Phase comparison</h3>
+            <p class="chart-note">Both phase claim gates are set by their comparative floor, not their absolute repeat floor.</p>
+          </div>
+          <div class="legend" aria-label="Phase floor series legend">
+            <span class="legend-item"><span class="swatch abs"></span>Absolute floor</span>
+            <span class="legend-item"><span class="swatch cmp"></span>Comparative floor</span>
+          </div>
+          <div id="phase-chart" class="chart-host"></div>
+        </div>
+
+        <div class="table-wrap">
+          <table aria-label="Verified Window A floor table">
+            <thead>
+              <tr><th>Family</th><th>Cell</th><th>Kind</th><th class="num">n</th><th class="num">Mean / Δ J</th><th class="num">Floor J</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="family">DF-RQ</td><td>Gross request · mid</td><td>absolute</td><td class="num"><button class="datum" data-tip="Bundles p2015-df-rq-mid-abs-r01..r10">10</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-rq-mid-abs-r01..r10 · mean gross_energy_j">24.059</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-rq-mid-abs-r01..r10">0.527</button></td></tr>
+              <tr><td class="family">DF-RQ</td><td>Idle-sub request · mid</td><td>absolute</td><td class="num"><button class="datum" data-tip="Bundles p2015-df-rq-mid-abs-r01..r10">10</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-rq-mid-abs-r01..r10 · mean energy_request_j">23.930</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-rq-mid-abs-r01..r10">0.537</button></td></tr>
+              <tr><td class="family">DF-RQ</td><td>Gross request · short</td><td>absolute</td><td class="num"><button class="datum" data-tip="Bundles p2015-df-rq-short-abs-r01..r10">10</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-rq-short-abs-r01..r10 · mean gross_energy_j">0.251</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-rq-short-abs-r01..r10">0.052</button></td></tr>
+              <tr><td class="family">DF-RQ</td><td>Idle-sub request · short</td><td>absolute</td><td class="num"><button class="datum" data-tip="Bundles p2015-df-rq-short-abs-r01..r10">10</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-rq-short-abs-r01..r10 · mean energy_request_j">0.216</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-rq-short-abs-r01..r10">0.059</button></td></tr>
+              <tr><td class="family">DF-RQ</td><td>Gross request · mid</td><td>ABBA</td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-rq-b01..b10 · 4 members each">10</button></td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-rq-b01..b10 · mean(A)-mean(B)">+0.041</button></td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-rq-b01..b10">0.909</button></td></tr>
+              <tr><td class="family">DF-RQ</td><td>Idle-sub request · mid</td><td>ABBA</td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-rq-b01..b10 · 4 members each">10</button></td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-rq-b01..b10 · mean(A)-mean(B)">+0.043</button></td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-rq-b01..b10">0.894</button></td></tr>
+              <tr><td class="family">DF-PH</td><td>Prefill</td><td>absolute</td><td class="num"><button class="datum" data-tip="Bundles p2015-df-ph-prefill-abs-r01..r10">10</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-ph-prefill-abs-r01..r10 · phase_energy_j.prefill">40.452</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-ph-prefill-abs-r01..r10">1.477</button></td></tr>
+              <tr><td class="family">DF-PH</td><td>Decode</td><td>absolute</td><td class="num"><button class="datum" data-tip="Bundles p2015-df-ph-decode-abs-r01..r10">10</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-ph-decode-abs-r01..r10 · phase_energy_j.decode">39.807</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-ph-decode-abs-r01..r10">0.786</button></td></tr>
+              <tr><td class="family">DF-PH</td><td>Short prefill <span class="not-eligible">(smoke only)</span></td><td>absolute</td><td class="num"><button class="datum" data-tip="Bundles p2015-df-ph-short-prefill-abs-r01..r10 · all not_resolvable_sample_count">10</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-ph-short-prefill-abs-r01..r10">0.081</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-ph-short-prefill-abs-r01..r10 · not claim-eligible">0.027</button></td></tr>
+              <tr><td class="family">DF-PH</td><td>Prefill</td><td>ABBA</td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-ph-prefill-b01..b10 · 4 members each">10</button></td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-ph-prefill-b01..b10 · mean(B)-mean(A)">−0.251</button></td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-ph-prefill-b01..b10">1.739</button></td></tr>
+              <tr><td class="family">DF-PH</td><td>Decode</td><td>ABBA</td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-ph-decode-b01..b10 · 4 members each">10</button></td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-ph-decode-b01..b10 · mean(B)-mean(A)">−0.052</button></td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-ph-decode-b01..b10">1.027</button></td></tr>
+              <tr><td class="family">DF-SU</td><td>Item mean</td><td>absolute</td><td class="num"><button class="datum" data-tip="Bundles p2015-df-su-sentinel-abs-r01..r10 · 5 same-shape items clustered per bundle">10</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-su-sentinel-abs-r01..r10">38.561</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-su-sentinel-abs-r01..r10">0.333</button></td></tr>
+              <tr><td class="family">DF-SU</td><td>Suite level</td><td>absolute</td><td class="num"><button class="datum" data-tip="Bundles p2015-df-su-sentinel-abs-r01..r10 · sentinel/common_512_256">10</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-su-sentinel-abs-r01..r10">192.845</button></td><td class="num"><button class="datum" data-tip="Bundles p2015-df-su-sentinel-abs-r01..r10">1.664</button></td></tr>
+              <tr><td class="family">DF-SU</td><td>Item mean</td><td>ABBA</td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-su-b01..b10 · 4 members each">10</button></td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-su-b01..b10 · mean(B)-mean(A)">−0.784</button></td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-su-b01..b10 · regime shift in b01/b02">4.923</button></td></tr>
+              <tr><td class="family">DF-SU</td><td>Suite level</td><td>ABBA</td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-su-b01..b10 · 4 members each">10</button></td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-su-b01..b10 · mean(B)-mean(A)">−3.921</button></td><td class="num"><button class="datum" data-tip="Blocks p2015-df-cmp-abba-su-b01..b10 · regime shift in b01/b02">24.619</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout-grid" aria-label="Mandatory evidence caveats">
+          <article class="callout serious">
+            <h3><span class="icon" aria-hidden="true">!</span> Request-window precheck pending</h3>
+            <p>All <button class="datum" data-tip="Bundle roster: all 222 distinct directories in runs/p2_015_floors_window_a">222/222 distinct bundles</button> are claim-evidence-flagged. The universal trio is <code>cadence_ratio_unrecorded</code>, <code>clock_bound_exceeds_quarter_window</code>, and <code>insufficient_in_window_samples</code>. Floors are computable, but request-window L2/L3 use waits for P2-037/P2-039 adjudication.</p>
+          </article>
+          <article class="callout">
+            <h3><span class="icon" aria-hidden="true">○</span> Optional long-request block unrun</h3>
+            <p><code>08_optional_long_request_absolute</code> has <button class="datum" data-tip="Campaign log: block 08_optional_long_request_absolute has zero run rows">0 rows</button>. The campaign produced mid/short request floors, not mid/long floors; no long-prompt or long-decode request floor is implied.</p>
+          </article>
+          <article class="callout serious">
+            <h3><span class="icon" aria-hidden="true">↔</span> ABBA and suite drift are retained</h3>
+            <p>Request blocks b07–b10 flip sign; phase-decode b06–b10 carry late drift flags. In the suite family, six consecutive members in b01/b02 ran about <button class="datum" data-tip="Bundles p2015-df-cmp-abba-su-b01-b1 through b02-b2">23% low</button>, driving comparative floors to roughly <button class="datum" data-tip="Blocks p2015-df-cmp-abba-su-b01..b10; item 4.922865 vs 0.332774, level 24.618735 vs 1.663966">15× absolute</button>. These conservative values need lead review before suite L2/L3 use.</p>
+          </article>
+          <article class="callout serious">
+            <h3><span class="icon" aria-hidden="true">↑</span> NEG-8 end-cell drift is large</h3>
+            <p>Start→end gross drift was <button class="datum" data-tip="Bundles p2015-neg8-reference-start (24.505637 J) and p2015-neg8-reference-end (32.164533 J)">+7.659 J / +31.25%</button>; idle-sub drift was <button class="datum" data-tip="Bundles p2015-neg8-reference-start (24.338256 J) and p2015-neg8-reference-end (30.946295 J)">+6.608 J / +27.15%</button>. The end idle baseline is suspect. With n=2, NEG-8 is a drift-anchor diagnostic, not a campaign floor.</p>
+          </article>
+          <article class="callout good">
+            <h3><span class="icon" aria-hidden="true">✓</span> Independent verification: confirmed</h3>
+            <p>Fresh replays confirmed all four families—DF-RQ, DF-PH, DF-SU, and NEG-8—with no numeric discrepancies. Verifiers preserved the precheck, identifiability, duplicate-log, suite-regime, and n=2 caveats; their minor findings were prose precision only.</p>
+          </article>
+          <article class="callout">
+            <h3><span class="icon" aria-hidden="true">≠</span> Short prefill is not claim-eligible</h3>
+            <p>All <button class="datum" data-tip="Bundles p2015-df-ph-short-prefill-abs-r01..r10">10/10 short-prefill bundles</button> report <code>not_resolvable_sample_count</code>. Its <button class="datum" data-tip="Bundles p2015-df-ph-short-prefill-abs-r01..r10 · smoke evidence only">0.026694 J</button> estimate is smoke evidence only.</p>
+          </article>
+        </div>
+
+        <div class="chart-block">
+          <h3>Instrument-catch stories</h3>
+          <div class="story-list">
+            <article class="story"><strong>Idle sentinel:</strong> caught aerial-wallpaper contamination rather than quietly accepting a biased baseline.</article>
+            <article class="story"><strong>Clock/trace gate:</strong> caught trace-boundary bracketing at <button class="datum" data-tip="P2-038 production uncertainty trace-boundary finding; repaired by anchor-lag drain in PRs #72 and #74">34.6 ms</button>; the anchor-lag drain fixes closed it.</article>
+            <article class="story"><strong>Bundle-count verification:</strong> caught a resumable-runner stale-lock/log-accounting wart and corrected the preliminary “248 bundles” shorthand to 222 distinct bundles.</article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="state">
+        <div class="section-head">
+          <div class="section-number">03 / 07</div>
+          <div>
+            <h2>Project current state</h2>
+            <p class="section-intro">The audit and AXI contract arc are landed; Window A is open; static batching is supported; pinned-runtime speculative decode closed as an honest negative.</p>
+          </div>
+        </div>
+
+        <div class="chart-block">
+          <div class="chart-title-row">
+            <h3>Landing band · PRs #66–#74 → Window A</h3>
+            <p class="chart-note">A single progress axis; labels identify the landed change, not elapsed duration.</p>
+          </div>
+          <div class="timeline-wrap" aria-label="Project timeline band">
+            <div class="timeline">
+              <div class="milestone" data-tip="Merge e377f93 · comprehensive audit integration"><strong>#66</strong>Audit closed</div>
+              <div class="milestone" data-tip="Merge 7593259 · AXI-SA burst-decode contract"><strong>#67</strong>AXI-SA</div>
+              <div class="milestone" data-tip="Merge 2778ed2 · SITE-02 D1/D2"><strong>#68</strong>SITE-02</div>
+              <div class="milestone" data-tip="Merge 9db4546 · SPLIT-AP Part I"><strong>#69</strong>SPLIT-AP</div>
+              <div class="milestone" data-tip="Merge 6f56bbe · AXI-SB supported"><strong>#70</strong>Batch supported</div>
+              <div class="milestone" data-tip="Merge 15727dd · advisor-facing refresh"><strong>#71</strong>Advisor refresh</div>
+              <div class="milestone" data-tip="Merge 2f03086 · P2-038 drain"><strong>#72</strong>Drain I</div>
+              <div class="milestone" data-tip="Merge bb2b428 · AXI-SC negative verdict"><strong>#73</strong>Spec negative</div>
+              <div class="milestone" data-tip="Merge 1515e5b · P2-038 drain2"><strong>#74</strong>Drain II</div>
+              <div class="milestone window" data-tip="RUN_STATE header + verified floor extraction"><strong>Window A</strong>Open</div>
+            </div>
+          </div>
+        </div>
+
+        <h3>Mechanism-axis status</h3>
+        <div class="status-board">
+          <article class="status-item">
+            <span class="status-chip supported"><span class="icon" aria-hidden="true">✓</span>Supported</span>
+            <h3>Static batching</h3>
+            <p>Pinned mlx-lm ran true static batches at <button class="datum" data-tip="Probe bundle: docs/process_traces/2026-07-16-axi-sb-live-probes/axi-sb-b2.jsonl">B=2</button> and <button class="datum" data-tip="Probe bundle: docs/process_traces/2026-07-16-axi-sb-live-probes/axi-sb-b4.jsonl">B=4</button> with per-request observability; the Mac C5-2.2 leg is minted and the adapter row is queued. No energy claim follows from the feasibility probe.</p>
+          </article>
+          <article class="status-item">
+            <span class="status-chip negative"><span class="icon" aria-hidden="true">×</span>Negative</span>
+            <h3>Pinned mlx-lm spec decode</h3>
+            <p>External draft generates, but the pinned API lacks complete per-round observability; native MTP has no executable generation surface. Verdict: <code>unsupported_for_joulewise</code>; no Mac energy leg minted.</p>
+          </article>
+          <article class="status-item">
+            <span class="status-chip planned"><span class="icon" aria-hidden="true">◌</span>Planned</span>
+            <h3>DSpark / DFlash</h3>
+            <p>The vendored MLX path implements both mechanisms. It needs a dedicated environment because its MLX requirement is newer than the pinned harness runtime; C5-2.5a–d draft rows preserve matched output, realized-K, break-even, and lookup-contamination questions.</p>
+          </article>
+          <article class="status-item">
+            <span class="status-chip negative"><span class="icon" aria-hidden="true">×</span>Negative</span>
+            <h3>Native MTP today</h3>
+            <p>Pinned mlx-lm strips MTP weights for the evaluated architectures. Contract coverage exists, but the reachable Mac runtime does not execute the heads; keep it gated behind runtime and counter evidence.</p>
+          </article>
+          <article class="status-item">
+            <span class="status-chip planned"><span class="icon" aria-hidden="true">◌</span>Planned</span>
+            <h3>Quantization ladder</h3>
+            <p>Planned as a Q4 stress test under exact artifact, quality-equivalence, and floor gates—not as “fewer bytes means less energy.”</p>
+          </article>
+          <article class="status-item">
+            <span class="status-chip planned"><span class="icon" aria-hidden="true">◌</span>Planned</span>
+            <h3>MoE vs dense</h3>
+            <p>OLMoE loading is verified; the active-matched dense arm needs the authorized conversion spike. Success revives the pair; failure files a dated negative and defers it.</p>
+          </article>
+        </div>
+
+        <div class="two-col">
+          <article>
+            <h3>Fleet and model posture</h3>
+            <p>The primary cross-target fleet is the <button class="datum" data-tip="Source: docs/decision_log.md D-073">128 GB M3 Max</button> plus the <button class="datum" data-tip="Source: docs/decision_log.md D-073">3080 Ti at a 12 GiB cap</button>; Jetson remains optional, non-cap-setting replication. Qwen3-4B is a conditional primary repin only after its receipts, runtime generation, memory, KV, and thinking-policy gates pass.</p>
+          </article>
+          <article>
+            <h3>Verification posture</h3>
+            <p>The latest campaign-preparation canonical suite recorded <button class="datum" data-tip="Source: docs/stream_logs/2026-07-17-p2015-floors-prep.md · canonical discovery">1,679 tests, OK (16 skipped)</button>. The floor-extraction verification then independently replayed all four numeric families from bundle artifacts.</p>
+          </article>
+        </div>
+
+        <h3>Decision spine · D-066 through D-074</h3>
+        <div class="decision-strip">
+          <div class="decision"><strong>D-066</strong>Scoped AXI spec-freeze override; process and claim ceilings remain.</div>
+          <div class="decision"><strong>D-067</strong>Gross headline; idle-sub is a labeled within-device secondary view.</div>
+          <div class="decision"><strong>D-068</strong>Site deployment is Ed-manual; automation reports drift.</div>
+          <div class="decision"><strong>D-069</strong>Advisor-doc alignment sanctioned; harness and benchmark terms split.</div>
+          <div class="decision"><strong>D-070</strong>Five AXI stress-test axes; static batching only for capstone; floor-gated.</div>
+          <div class="decision"><strong>D-071</strong>G10 probe shape and reserve rule ratified; fleet review opened.</div>
+          <div class="decision"><strong>D-072</strong>Standing self-merge authority only with the complete review gate.</div>
+          <div class="decision"><strong>D-073</strong>Mac + 3080 Ti primary fleet; 12 GiB cap; Jetson optional.</div>
+          <div class="decision"><strong>D-074</strong>Conditional Qwen3-4B repin and time-boxed OLMo dense conversion authorized.</div>
+        </div>
+      </section>
+
+      <details class="section-disclosure" open id="questions">
+        <summary><span class="section-number">04 / 07</span><strong>Questions for Dr. Rivoire</strong></summary>
+        <div class="disclosure-body">
+          <ol class="question-list">
+            <li><span><strong>Matched MoE pair:</strong> Is the OLMo/OLMoE active-matched contrast—<button class="datum" data-tip="Source: docs/process_traces/2026-07-16-axi-sd-web-verification/memo.md · OLMo active-parameter match">0.16% active-parameter mismatch</button>—worth the dense-arm conversion work, or should the MoE axis defer? What would make the pair scientifically persuasive by JouleSort standards?</span></li>
+            <li><span><strong>Floor aggregation:</strong> Is <code>floor_gate = max(residual scatter, guard)</code> the right refusal threshold, or would you pin another aggregation?</span></li>
+            <li><span><strong>Dual-basis wording:</strong> Do you endorse “gross energy for headlines and ranking; idle-subtracted only as a labeled within-device view” for the split study?</span></li>
+            <li><span><strong>Limited quiet-Mac budget:</strong> Given request gates of <button class="datum" data-tip="Gross request: p2015-df-rq-mid-abs-r01..r10 and p2015-df-cmp-abba-rq-b01..b10">0.527 / 0.909 J</button> and phase gates of <button class="datum" data-tip="Prefill/decode absolute and ABBA bundle families">1.739 / 1.027 J</button>, how would you rank batching, spec decode, MoE, quantization, and reasoning variance?</span></li>
+            <li><span><strong>Acceptance bar:</strong> What are the minimum figures, live-demo expectation, and reproducibility threshold for the capstone evaluation—and what dates should drive the phase map?</span></li>
+            <li><span><strong>External re-reduction:</strong> Would you or a colleague run the documented one-command re-reduction as the uninvolved party?</span></li>
+          </ol>
+        </div>
+      </details>
+
+      <details class="section-disclosure" open id="qa">
+        <summary><span class="section-number">05 / 07</span><strong>Anticipated questions · prepared replies</strong></summary>
+        <div class="disclosure-body">
+          <ul class="answer-list">
+            <li><strong>“Why gross headline?”</strong><span>Idle subtraction can penalize energy-proportional devices and reward high-idle ones. D-067 keeps both bases but makes gross the only ranking basis.</span></li>
+            <li><strong>“Is idle stationary?”</strong><span>Not assumed. C-023-IDLE-STATIONARITY remains live; NEG-8 start/end cells and pre/post idle envelopes expose drift; the sentinel refuses contaminated idle windows.</span></li>
+            <li><strong>“Sampler perturbation?”</strong><span>DF-TELEM-ON/OFF is designed, but the extra-sampler current-hardware layer was honestly unavailable tonight. External-meter validation awaits wall/PD hardware; no null is claimed without equivalence margins.</span></li>
+            <li><strong>“Clock alignment?”</strong><span>The harness records spawn-ready wall/monotonic envelopes and bounds the anchor against the window. The 34.6 ms trace-boundary catch led to the anchor-lag drain fixes.</span></li>
+            <li><strong>“Batch=1 is pathological.”</strong><span>Agreed. Static batching is live-verified supported with per-request evidence; <button class="datum" data-tip="Probe bundles: docs/process_traces/2026-07-16-axi-sb-live-probes/axi-sb-b2.jsonl and axi-sb-b4.jsonl">B=2 and B=4</button> probes passed, and AP-BATCH models E(B)=fixed+B·marginal under floor gates.</span></li>
+            <li><strong>“n and uncertainty?”</strong><span>Core floor cells use <button class="datum" data-tip="Bundle families in the verified extraction: all absolute and comparative campaign-floor cells use n=10">n=10 bundles or complete ABBA blocks</button>, cross-repetition rules, and HAC variance in reducer 0.4.1+. Fixed-n/demotion prevents outcome-driven growth.</span></li>
+            <li><strong>“Reproducibility?”</strong><span>Strict validation, hash-pinned artifacts, immutable raw evidence, a publication privacy pack, and deterministic re-reduction are in place. The independent external re-reduction is still pending.</span></li>
+          </ul>
+        </div>
+      </details>
+
+      <section class="section" id="next">
+        <div class="section-head">
+          <div class="section-number">06 / 07</div>
+          <div>
+            <h2>Next steps</h2>
+            <p class="section-intro">Ranked to convert tonight’s calibration into defensible experiments without spending quiet-machine time on underpowered axes.</p>
+          </div>
+        </div>
+        <ol class="next-list">
+          <li><div><strong>Formalize the floor artifact and adjudicate claim use.</strong><br>Close the request-window P2-037/P2-039 precheck question and run predeclared AP effect-size checks against the applicable floors.</div></li>
+          <li><div><strong>Run the feasibility-verified exploratory matrix.</strong><br>OLMoE first-MoE energy; Qwen3-4B candidate numbers; 122B-class Mac-only big-dense; DSpark/DFlash spec-on/off in a dedicated environment using the C5-2.5a–d rows.</div></li>
+          <li><div><strong>Pass or fail the Qwen3-4B repin gates.</strong><br>Immutable source/license, matched MLX/GGUF/CUDA receipts, three-runtime generation, G10, KV, and thinking-mode policy—then the 2M baseline campaign.</div></li>
+          <li><div><strong>Bring up the 3080 Ti leg under NV-GATE discipline.</strong><br>Keep fixture-first evidence PROVISIONAL until live hardware contact; do not generalize across measurement boundaries.</div></li>
+          <li><div><strong>Fold in the extension-axes roadmap.</strong><br>Use the persisted evaluations to decide which hybrid/SSM, KV-policy, and mechanism rows enter the registry. Commitments remain Ed-owned.</div></li>
+        </ol>
+      </section>
+
+      <section class="section" id="demo">
+        <div class="section-head">
+          <div class="section-number">07 / 07</div>
+          <div>
+            <h2>Demo plan</h2>
+            <p class="section-intro">A short proof that the harness can both produce evidence and refuse it.</p>
+          </div>
+        </div>
+        <ul class="checklist">
+          <li><label class="check-row"><input type="checkbox"><span><strong>Run one tiny production bundle on the Mac.</strong> Non-quiet demo only; about two minutes; no campaign claim.</span></label></li>
+          <li><label class="check-row"><input type="checkbox"><span><strong>Strict-validate, reduce, strict-validate.</strong> Show the evidence chain rather than only the final number.</span></label></li>
+          <li><label class="check-row"><input type="checkbox"><span><strong>Show a refusal.</strong> Present a doctored bundle and let the gate reject it.</span></label></li>
+          <li><label class="check-row"><input type="checkbox"><span><strong>Show the floor and drift charts.</strong> Use the request ABBA tail and NEG-8 end cell to explain why conservative gates exist.</span></label></li>
+          <li><label class="check-row"><input type="checkbox"><span><strong>Show live batching evidence.</strong> Open the AXI-SB B=2/B=4 JSONL and point to per-request IDs, tokens, timestamps, and phase hooks.</span></label></li>
+          <li><label class="check-row"><input type="checkbox"><span><strong>Show the current site only if Ed deployed it.</strong> D-068 keeps deployment manual.</span></label></li>
+          <li><label class="check-row"><input type="checkbox"><span><strong>Hand over this brief and the bundle-pack verification one-liner.</strong></span></label></li>
+        </ul>
+      </section>
+
+      <ol class="evidence-notes" aria-label="Evidence footnotes">
+        <li><strong>Floor extraction:</strong> <code>docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json</code>. Numeric chart/table values are rounded only for display; hover any underlined datum or chart mark for its bundle family.</li>
+        <li><strong>Request evidence:</strong> <code>p2015-df-rq-mid-abs-r01..r10</code>, <code>p2015-df-rq-short-abs-r01..r10</code>, and <code>p2015-df-cmp-abba-rq-b01..b10</code>.</li>
+        <li><strong>Phase evidence:</strong> <code>p2015-df-ph-{prefill,decode,short-prefill}-abs-r01..r10</code> and <code>p2015-df-cmp-abba-ph-{prefill,decode}-b01..b10</code>.</li>
+        <li><strong>Suite evidence:</strong> <code>p2015-df-su-sentinel-abs-r01..r10</code> and <code>p2015-df-cmp-abba-su-b01..b10</code>.</li>
+        <li><strong>NEG-8:</strong> <code>p2015-neg8-reference-start</code> and <code>p2015-neg8-reference-end</code>; n=2 diagnostic only.</li>
+        <li><strong>Mechanism feasibility:</strong> <code>docs/specs/axi/sb_static_batch_verdict.md</code>, <code>docs/specs/axi/sc_spec_decode_verdict.md</code>, and <code>docs/process_traces/2026-07-17-extension-axes/</code>.</li>
+      </ol>
+    </main>
+
+    <section id="late-addendum" style="border:1px solid rgba(128,128,128,.35);border-radius:10px;padding:1rem 1.25rem;margin:2rem 0">
+      <h2 style="margin-top:0">Late addendum — measured after this brief was assembled (same day)</h2>
+      <p><strong>Exploratory cross-model block</strong> (strict-valid production bundles, n=3 each, identical 5-item suite, 2,560 prompt + 1,280 generated tokens per bundle, gross basis first per D-067; <em>EXPLORATORY — unmatched models, no claim framing</em>):</p>
+      <table><thead><tr><th>Model</th><th>Gross suite energy (mean of 3)</th><th>Spread</th></tr></thead>
+      <tbody>
+      <tr><td>OLMoE-1B-7B (MoE, 1B active)</td><td>≈ 229.0 J</td><td>~2%</td></tr>
+      <tr><td>Qwen3-4B-4bit (dense)</td><td>≈ 362.8 J</td><td>~0.04%</td></tr>
+      <tr><td>Qwen3.5-122B-A10B-4bit (large MoE)</td><td>≈ 1072.3 J</td><td>~1%</td></tr>
+      </tbody></table>
+      <p>The OLMoE-vs-Qwen3-4B gap (≈134 J) is far above every published request/suite floor — a real, resolvable contrast, though model pairing is unmatched (the D-016 matched-pair question is exactly what makes it rigorous later). Evidence: <code>runs/exploratory_2026_07_17/</code>, verified extraction in <code>docs/process_traces/2026-07-17-exploratory-block/results.md</code>.</p>
+      <p><strong>DSpark &amp; DFlash run natively on this Mac</strong> (vendored MLX implementation, lead-run smokes): both expose per-round proposal/acceptance observability — the exact surface pinned mlx-lm lacks (AXI-SC negative verdict). Notably, plain greedy outpaced both at this small-target scale (113 vs ~40–46 tok/s) — drafter-overhead economics (new row C5-2.5c) now needs <em>energy</em>, not throughput, to adjudicate. Evidence: <code>docs/process_traces/2026-07-17-dspark-dflash-smoke/</code>.</p>
+    </section>
+    <footer>
+      <div class="footer-grid">
+        <div><strong>Generated</strong><br>2026-07-17</div>
+        <div><strong>Evidence pointers</strong><br><code>runs/p2_015_floors_window_a</code><br><code>docs/process_traces/2026-07-17-floor-extraction</code><br><code>docs/process_traces/2026-07-17-extension-axes</code></div>
+        <div class="honesty-line"><strong>Honesty line:</strong> all floors computed from strict-valid bundles; request-window claim precheck pending P2-037 adjudication. Verified accounting is 248 campaign-log lines and 222 distinct bundle directories—not 248 distinct bundles.</div>
+      </div>
+    </footer>
+  </div>
+
+  <div id="tooltip" role="tooltip" aria-hidden="true"></div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const NS = "http://www.w3.org/2000/svg";
+      const tooltip = document.getElementById("tooltip");
+      const svgEl = (name, attrs = {}, text = "") => {
+        const node = document.createElementNS(NS, name);
+        for (const [key, value] of Object.entries(attrs)) node.setAttribute(key, value);
+        if (text) node.textContent = text;
+        return node;
+      };
+
+      const tipText = target => target.getAttribute("data-tip") || target.getAttribute("aria-label") || "";
+      const showTip = (target, x, y) => {
+        const text = tipText(target);
+        if (!text) return;
+        tooltip.textContent = text;
+        tooltip.classList.add("show");
+        tooltip.setAttribute("aria-hidden", "false");
+        const box = tooltip.getBoundingClientRect();
+        const left = Math.max(12, Math.min(window.innerWidth - box.width - 12, x + 12));
+        const top = Math.max(12, Math.min(window.innerHeight - box.height - 12, y + 14));
+        tooltip.style.left = left + "px";
+        tooltip.style.top = top + "px";
+      };
+      const hideTip = () => {
+        tooltip.classList.remove("show");
+        tooltip.setAttribute("aria-hidden", "true");
+      };
+
+      document.addEventListener("pointerover", event => {
+        const target = event.target.closest("[data-tip]");
+        if (target) showTip(target, event.clientX, event.clientY);
+      });
+      document.addEventListener("pointermove", event => {
+        const target = event.target.closest("[data-tip]");
+        if (target && tooltip.classList.contains("show")) showTip(target, event.clientX, event.clientY);
+      });
+      document.addEventListener("pointerout", event => {
+        if (event.target.closest("[data-tip]")) hideTip();
+      });
+      document.addEventListener("focusin", event => {
+        const target = event.target.closest("[data-tip]");
+        if (target) {
+          const box = target.getBoundingClientRect();
+          showTip(target, box.left + box.width / 2, box.bottom);
+        }
+      });
+      document.addEventListener("focusout", event => {
+        if (event.target.closest("[data-tip]")) hideTip();
+      });
+
+      const addPattern = (svg, id) => {
+        const defs = svgEl("defs");
+        const pattern = svgEl("pattern", { id, width: "6", height: "6", patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" });
+        pattern.appendChild(svgEl("rect", { width: "6", height: "6", fill: "transparent" }));
+        pattern.appendChild(svgEl("line", { x1: "0", y1: "0", x2: "0", y2: "6", stroke: "currentColor", "stroke-width": "2" }));
+        defs.appendChild(pattern);
+        svg.appendChild(defs);
+        svg.style.setProperty("--print-fill", `url(#${id})`);
+      };
+
+      const floorData = [
+        { label: "request mid · gross", abs: 0.527197, cmp: 0.909237, absSrc: "p2015-df-rq-mid-abs-r01..r10", cmpSrc: "p2015-df-cmp-abba-rq-b01..b10" },
+        { label: "request mid · idle-sub", abs: 0.536632, cmp: 0.894215, absSrc: "p2015-df-rq-mid-abs-r01..r10", cmpSrc: "p2015-df-cmp-abba-rq-b01..b10" },
+        { label: "request short · gross", abs: 0.052484, absSrc: "p2015-df-rq-short-abs-r01..r10" },
+        { label: "request short · idle-sub", abs: 0.058879, absSrc: "p2015-df-rq-short-abs-r01..r10" },
+        { label: "phase · prefill", abs: 1.476788, cmp: 1.738940, absSrc: "p2015-df-ph-prefill-abs-r01..r10", cmpSrc: "p2015-df-cmp-abba-ph-prefill-b01..b10" },
+        { label: "phase · decode", abs: 0.786337, cmp: 1.026892, absSrc: "p2015-df-ph-decode-abs-r01..r10", cmpSrc: "p2015-df-cmp-abba-ph-decode-b01..b10" },
+        { label: "short prefill · smoke", abs: 0.026694, absSrc: "p2015-df-ph-short-prefill-abs-r01..r10 · not claim-eligible" },
+        { label: "suite · item", abs: 0.332774, cmp: 4.922865, absSrc: "p2015-df-su-sentinel-abs-r01..r10", cmpSrc: "p2015-df-cmp-abba-su-b01..b10 · b01/b02 regime shift" },
+        { label: "suite · level", abs: 1.663966, cmp: 24.618735, absSrc: "p2015-df-su-sentinel-abs-r01..r10", cmpSrc: "p2015-df-cmp-abba-su-b01..b10 · b01/b02 regime shift" }
+      ];
+
+      function renderFloorChart() {
+        const host = document.getElementById("floor-chart");
+        const width = 1000, left = 220, right = 72, top = 42, row = 49, bottom = 40;
+        const height = top + floorData.length * row + bottom;
+        const min = 0.02, max = 32;
+        const x = value => left + (Math.log10(value) - Math.log10(min)) / (Math.log10(max) - Math.log10(min)) * (width - left - right);
+        const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, role: "img", "aria-labelledby": "floor-title floor-desc" });
+        svg.appendChild(svgEl("title", { id: "floor-title" }, "Window A absolute and comparative detection floors"));
+        svg.appendChild(svgEl("desc", { id: "floor-desc" }, "Horizontal grouped bars on one logarithmic Joule axis. Suite comparative floors are the largest and are caveated as drift-sensitive."));
+        addPattern(svg, "floor-print-lines");
+        const ticks = [0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20];
+        ticks.forEach(value => {
+          const px = x(value);
+          svg.appendChild(svgEl("line", { x1: px, x2: px, y1: top - 12, y2: height - bottom + 2, class: "gridline" }));
+          svg.appendChild(svgEl("text", { x: px, y: 19, class: "tick", "text-anchor": "middle" }, `${value}`));
+        });
+        svg.appendChild(svgEl("text", { x: width - right + 4, y: 38, class: "tick", "text-anchor": "end" }, "floor · J (log scale)"));
+        floorData.forEach((item, index) => {
+          const y = top + index * row;
+          svg.appendChild(svgEl("text", { x: left - 12, y: y + 19, class: "category", "text-anchor": "end" }, item.label));
+          [["abs", 7, "series-1"], ["cmp", 20, "series-2"]].forEach(([key, offset, klass]) => {
+            if (item[key] == null) return;
+            const end = x(item[key]);
+            const mark = svgEl("rect", { x: left, y: y + offset, width: Math.max(2, end - left), height: 11, rx: 1, class: `${klass} mark`, "data-tip": `${key === "abs" ? "Absolute" : "Comparative"} floor ${item[key].toFixed(6)} J · bundles ${item[key + "Src"]}` });
+            svg.appendChild(mark);
+            const labelX = Math.min(width - right + 4, end + 6);
+            svg.appendChild(svgEl("text", { x: labelX, y: y + offset + 9, class: "value-label" }, item[key] < 10 ? item[key].toFixed(3) : item[key].toFixed(2)));
+          });
+        });
+        svg.appendChild(svgEl("line", { x1: left, x2: width - right, y1: height - bottom + 2, y2: height - bottom + 2, class: "axisline" }));
+        host.replaceChildren(svg);
+      }
+
+      const grossDelta = [0.1104, 0.1155, 0.0519, 0.0821, 0.3906, 0.0175, 0.4571, -0.6397, 0.3600, -0.5352];
+      const idleDelta = [0.0642, 0.1382, 0.0759, 0.0814, 0.3833, 0.0766, 0.4558, -0.6167, 0.3193, -0.5461];
+
+      function renderAbbaChart() {
+        const host = document.getElementById("abba-chart");
+        const width = 1000, left = 82, right = 72, top = 42, row = 31, bottom = 46;
+        const height = top + 10 * row + bottom;
+        const min = -0.7, max = 0.55;
+        const x = value => left + (value - min) / (max - min) * (width - left - right);
+        const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, role: "img", "aria-labelledby": "abba-title abba-desc" });
+        svg.appendChild(svgEl("title", { id: "abba-title" }, "Per-block request ABBA deltas"));
+        svg.appendChild(svgEl("desc", { id: "abba-desc" }, "Gross and idle-subtracted request deltas for blocks b01 through b10. Blocks b07 through b10 alternate positive and negative."));
+        addPattern(svg, "abba-print-lines");
+        [-0.6, -0.3, 0, 0.3].forEach(value => {
+          const px = x(value);
+          svg.appendChild(svgEl("line", { x1: px, x2: px, y1: top - 13, y2: height - bottom, class: value === 0 ? "axisline" : "gridline" }));
+          svg.appendChild(svgEl("text", { x: px, y: 20, class: "tick", "text-anchor": "middle" }, `${value > 0 ? "+" : ""}${value.toFixed(1)}`));
+        });
+        svg.appendChild(svgEl("text", { x: width - right, y: 20, class: "tick", "text-anchor": "end" }, "ΔJ · mean(A) − mean(B)"));
+        grossDelta.forEach((value, index) => {
+          const y = top + index * row + 10;
+          const block = `b${String(index + 1).padStart(2, "0")}`;
+          svg.appendChild(svgEl("text", { x: left - 14, y: y + 4, class: "category", "text-anchor": "end" }, block));
+          svg.appendChild(svgEl("line", { x1: x(Math.min(value, idleDelta[index])), x2: x(Math.max(value, idleDelta[index])), y1: y, y2: y, class: "axisline" }));
+          const g = svgEl("circle", { cx: x(value), cy: y - 4, r: 4.5, class: "series-1 mark", "data-tip": `${block} gross Δ ${value.toFixed(4)} J · p2015-df-cmp-abba-rq-${block}-{a1,b1,b2,a2}` });
+          const i = svgEl("circle", { cx: x(idleDelta[index]), cy: y + 5, r: 4.5, class: "series-2 mark", "data-tip": `${block} idle-sub Δ ${idleDelta[index].toFixed(4)} J · p2015-df-cmp-abba-rq-${block}-{a1,b1,b2,a2}` });
+          svg.appendChild(g);
+          svg.appendChild(i);
+          if (index >= 6) svg.appendChild(svgEl("text", { x: width - right + 8, y: y + 4, class: "annotation" }, value >= 0 ? "tail +" : "tail −"));
+        });
+        host.replaceChildren(svg);
+      }
+
+      function renderPhaseChart() {
+        const data = [
+          { label: "Prefill", abs: 1.476788, cmp: 1.738940, absSrc: "p2015-df-ph-prefill-abs-r01..r10", cmpSrc: "p2015-df-cmp-abba-ph-prefill-b01..b10" },
+          { label: "Decode", abs: 0.786337, cmp: 1.026892, absSrc: "p2015-df-ph-decode-abs-r01..r10", cmpSrc: "p2015-df-cmp-abba-ph-decode-b01..b10" }
+        ];
+        const host = document.getElementById("phase-chart");
+        const width = 1000, left = 150, right = 90, top = 40, row = 72, bottom = 40;
+        const height = top + data.length * row + bottom;
+        const x = value => left + value / 2 * (width - left - right);
+        const svg = svgEl("svg", { viewBox: `0 0 ${width} ${height}`, role: "img", "aria-labelledby": "phase-title phase-desc" });
+        svg.appendChild(svgEl("title", { id: "phase-title" }, "Absolute and comparative phase floors"));
+        svg.appendChild(svgEl("desc", { id: "phase-desc" }, "Prefill and decode absolute versus comparative detection floors on one Joule axis."));
+        addPattern(svg, "phase-print-lines");
+        [0, 0.5, 1, 1.5, 2].forEach(value => {
+          const px = x(value);
+          svg.appendChild(svgEl("line", { x1: px, x2: px, y1: top - 12, y2: height - bottom, class: value === 0 ? "axisline" : "gridline" }));
+          svg.appendChild(svgEl("text", { x: px, y: 20, class: "tick", "text-anchor": "middle" }, value.toFixed(1)));
+        });
+        svg.appendChild(svgEl("text", { x: width - right, y: 20, class: "tick", "text-anchor": "end" }, "floor · J"));
+        data.forEach((item, index) => {
+          const y = top + index * row;
+          svg.appendChild(svgEl("text", { x: left - 16, y: y + 31, class: "category", "text-anchor": "end" }, item.label));
+          [["abs", 9, "series-1"], ["cmp", 25, "series-2"]].forEach(([key, offset, klass]) => {
+            const end = x(item[key]);
+            svg.appendChild(svgEl("rect", { x: left, y: y + offset, width: end - left, height: 14, rx: 1, class: `${klass} mark`, "data-tip": `${item.label} ${key === "abs" ? "absolute" : "comparative"} ${item[key].toFixed(6)} J · ${item[key + "Src"]}` }));
+            svg.appendChild(svgEl("text", { x: end + 8, y: y + offset + 11, class: "value-label" }, item[key].toFixed(3)));
+          });
+        });
+        host.replaceChildren(svg);
+      }
+
+      renderFloorChart();
+      renderAbbaChart();
+      renderPhaseChart();
+
+      window.addEventListener("beforeprint", () => {
+        document.querySelectorAll("details.section-disclosure").forEach(detail => detail.open = true);
+      });
+    })();
+  </script>
+</body>
+</html>

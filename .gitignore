@@ -25,3 +25,4 @@ report/
 
 # RPT-001 assembled report output (regenerable)
 /build/
+site_capsule/node_modules/

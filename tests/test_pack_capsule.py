@@ -148,6 +148,59 @@ class PackCapsuleTests(unittest.TestCase):
     def test_standalone_critique_page_can_have_no_stamp(self):
         self.assertEqual(pack_capsule.extract_stamps("project_critique_review.html", "<html></html>"), [])
 
+    def test_verbatim_page_is_explicit_and_preserved_byte_for_byte(self):
+        source = pack_capsule.VERBATIM_SITE_PAGES["advisor_brief.html"]
+        original = (
+            f"<!-- JouleWise verbatim provenance: {source} · commit abc1234; "
+            "source bytes after this line are copied verbatim. -->\n"
+            '<!doctype html><html><head><style>body{color:#111}</style></head>'
+            '<body><a href="index.html">Keep relative link</a></body></html>'
+        )
+        with TemporaryDirectory() as temp_dir:
+            page_path = Path(temp_dir) / "advisor_brief.html"
+            page_path.write_text(original, encoding="utf-8")
+            spec = pack_capsule.PageSpec(
+                path=page_path,
+                page_name=page_path.name,
+                aliases=["/advisor_brief.html", "/advisor_brief"],
+                require_stylesheet=False,
+                mode=pack_capsule.PageMode.VERBATIM,
+                provenance_source=source,
+            )
+            entry = pack_capsule.pack_page(spec)
+
+        self.assertTrue(entry["verbatim"])
+        self.assertEqual(entry["html"], original)
+        self.assertEqual(entry["sources"], [{"source": source, "commit": "abc1234"}])
+        self.assertIn('href="index.html"', entry["html"])
+
+    def test_verbatim_page_rejects_missing_or_wrong_provenance(self):
+        with TemporaryDirectory() as temp_dir:
+            page_path = Path(temp_dir) / "advisor_brief.html"
+            page_path.write_text("<!doctype html><body></body>", encoding="utf-8")
+            spec = pack_capsule.PageSpec(
+                path=page_path,
+                page_name=page_path.name,
+                aliases=["/advisor_brief.html"],
+                require_stylesheet=False,
+                mode=pack_capsule.PageMode.VERBATIM,
+                provenance_source="docs/advisor_briefs/expected.html",
+            )
+            with self.assertRaisesRegex(
+                pack_capsule.CapsulePackError, "expected leading verbatim provenance stamp"
+            ):
+                pack_capsule.pack_page(spec)
+            page_path.write_text(
+                "<!-- JouleWise verbatim provenance: docs/advisor_briefs/wrong.html "
+                "· commit abc1234; source bytes after this line are copied verbatim. -->\n"
+                "<!doctype html><body></body>",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(
+                pack_capsule.CapsulePackError, "does not match configured source"
+            ):
+                pack_capsule.pack_page(spec)
+
     def test_generated_page_without_stamp_fails_closed(self):
         with self.assertRaises(pack_capsule.CapsulePackError):
             pack_capsule.extract_stamps("status.html", "<html></html>")
@@ -255,6 +308,7 @@ class PackCapsuleTests(unittest.TestCase):
         self.assertEqual(decoded_pages, {"/process-fetch.html": original})
         self.assertEqual(shared["style"], css)
         self.assertEqual(shared["freshness"], pack_capsule.FRESHNESS_STYLE + "\n" + pack_capsule.FRESHNESS_SCRIPT)
+        self.assertFalse(site["routes"]["/process-fetch.html"]["verbatim"])
         reconstructed = decoded_pages["/process-fetch.html"].replace(
             "</body>", shared["freshness"] + "\n</body>", 1
         )
@@ -472,9 +526,16 @@ console.log(JSON.stringify({
             pack_capsule.shared_sources(pages)
 
     def test_lakebed_estimate_enforces_exact_conservative_boundary(self):
+        # AUD-WO-039 / D-076-pending: this conservative guard is exclusively
+        # the fallback when an exact-version measured build is unavailable.
         self.assertLessEqual(
-            pack_capsule.LAKEBED_TARGET_ARTIFACT_BYTES,
+            pack_capsule.LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES,
             int(pack_capsule.LAKEBED_ARTIFACT_CAP_BYTES * 0.9),
+        )
+        self.assertEqual(
+            pack_capsule.LAKEBED_ARTIFACT_CAP_BYTES
+            - pack_capsule.LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES,
+            48_576,
         )
         self.assertGreaterEqual(
             pack_capsule.LAKEBED_BASE_WRAPPER_BUDGET_BYTES,
@@ -486,12 +547,79 @@ console.log(JSON.stringify({
         )
         maximum_content = 0
         for candidate in range(200_000, 300_000):
-            if pack_capsule.estimate_lakebed_artifact_size(candidate) <= pack_capsule.LAKEBED_TARGET_ARTIFACT_BYTES:
+            if (
+                pack_capsule.estimate_lakebed_artifact_size(candidate)
+                <= pack_capsule.LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES
+            ):
                 maximum_content = candidate
         estimate = pack_capsule.enforce_lakebed_budget(maximum_content)
-        self.assertLessEqual(estimate, pack_capsule.LAKEBED_TARGET_ARTIFACT_BYTES)
+        self.assertLessEqual(
+            estimate, pack_capsule.LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES
+        )
         with self.assertRaisesRegex(pack_capsule.CapsulePackError, "at least 10% margin"):
             pack_capsule.enforce_lakebed_budget(maximum_content + 1)
+
+    def test_measured_mode_accepts_identical_input_that_estimator_overshoots(self):
+        # Ed's AUD-WO-039 right-sizing ruling (D-076-pending) makes the exact
+        # measurement authoritative in measured mode. On the identical
+        # production input: estimator 1,001,328 B vs measured 960,030 B (~4.3%).
+        content_size = 266_664
+        self.assertEqual(
+            pack_capsule.estimate_lakebed_artifact_size(content_size), 1_001_328
+        )
+        stdout = io.StringIO()
+        with (
+            mock.patch.object(
+                pack_capsule,
+                "discover_lakebed_executable",
+                return_value=Path("/fixture/lakebed"),
+            ),
+            mock.patch.object(
+                pack_capsule,
+                "measure_lakebed_artifact",
+                return_value=(960_030, pack_capsule.LAKEBED_VERSION),
+            ),
+            contextlib.redirect_stdout(stdout),
+        ):
+            observed = pack_capsule.enforce_lakebed_artifact_postcondition(content_size)
+
+        self.assertEqual(observed, 960_030)
+        self.assertIn("postcondition mode: measured", stdout.getvalue())
+        self.assertNotIn("estimator-only advisory", stdout.getvalue())
+
+    def test_measured_budget_and_hard_cap_are_loud_postconditions(self):
+        executable = Path("/fixture/lakebed")
+        with mock.patch.object(
+            pack_capsule, "discover_lakebed_executable", return_value=executable
+        ):
+            with (
+                mock.patch.object(
+                    pack_capsule,
+                    "measure_lakebed_artifact",
+                    return_value=(
+                        pack_capsule.LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES + 1,
+                        pack_capsule.LAKEBED_VERSION,
+                    ),
+                ),
+                contextlib.redirect_stdout(io.StringIO()),
+                self.assertRaisesRegex(
+                    pack_capsule.CapsulePackError, "exceeds measured-artifact"
+                ),
+            ):
+                pack_capsule.enforce_lakebed_artifact_postcondition(200_000)
+            with (
+                mock.patch.object(
+                    pack_capsule,
+                    "measure_lakebed_artifact",
+                    return_value=(
+                        pack_capsule.LAKEBED_ARTIFACT_CAP_BYTES + 1,
+                        pack_capsule.LAKEBED_VERSION,
+                    ),
+                ),
+                contextlib.redirect_stdout(io.StringIO()),
+                self.assertRaisesRegex(pack_capsule.CapsulePackError, "over the 1 MiB cap"),
+            ):
+                pack_capsule.enforce_lakebed_artifact_postcondition(200_000)
 
     def test_estimator_only_postcondition_is_clearly_advisory(self):
         stdout = io.StringIO()
@@ -698,22 +826,31 @@ console.log(JSON.stringify({
                 ignore=shutil.ignore_patterns(".lakebed"),
             )
             content = capsule / "server" / "content"
+            pages = {
+                "/known.html": {
+                    "html": "<!doctype html><html><body>known</body></html>",
+                    "sources": [],
+                    "aliases": [],
+                    "verbatim": False,
+                }
+            }
             with (
                 mock.patch.object(pack_capsule, "CAPSULE", capsule),
                 mock.patch.object(pack_capsule, "CAPSULE_CONTENT", content),
+                mock.patch.object(pack_capsule, "pack_pages", return_value=pages),
+                mock.patch.object(pack_capsule, "stylesheet", return_value="body{}"),
                 contextlib.redirect_stdout(io.StringIO()),
             ):
                 total = pack_capsule.build(no_fonts=True, enforce_budget=False)
 
-            # Reconstruct the reviewed lens's freshly-rendered content size.
-            # The tracked docs/site snapshot is slightly smaller, while the
-            # omitted server/index.ts payload is identical in either case.
+            # Hold generated-content size below the estimate-only fallback
+            # guard, then add a large unestimated server module payload.
             lens_content_size = 246_302
             self.assertLess(total, lens_content_size)
             padding_size = lens_content_size - total
             pages_path = content / "pages.ts"
             pages_source = pages_path.read_text(encoding="utf-8")
-            shared_prefix = '  shared: ("'
+            shared_prefix = '  shared: "'
             self.assertEqual(pages_source.count(shared_prefix), 1)
             pages_path.write_text(
                 pages_source.replace(
@@ -729,7 +866,9 @@ console.log(JSON.stringify({
             self.assertEqual(total, lens_content_size)
             estimate = pack_capsule.estimate_lakebed_artifact_size(total)
             self.assertEqual(estimate, 937_984)
-            self.assertLessEqual(estimate, pack_capsule.LAKEBED_TARGET_ARTIFACT_BYTES)
+            self.assertLessEqual(
+                estimate, pack_capsule.LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES
+            )
             index_path = capsule / "server" / "index.ts"
             with index_path.open("a", encoding="utf-8") as stream:
                 stream.write("\n//" + "x" * (105_000 - 3))
@@ -816,7 +955,9 @@ console.log(JSON.stringify({
             measured, version = pack_capsule.measure_lakebed_artifact(executable, capsule)
 
         self.assertEqual(version, pack_capsule.LAKEBED_VERSION)
-        self.assertLessEqual(measured, pack_capsule.LAKEBED_TARGET_ARTIFACT_BYTES)
+        self.assertLessEqual(
+            measured, pack_capsule.LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES
+        )
 
     def test_build_info_records_identity_and_explicit_reproducibility_inputs(self):
         with TemporaryDirectory() as temp_dir:
@@ -1039,6 +1180,7 @@ console.log(JSON.stringify({
         self.assertIn("async function loadShard", server)
         self.assertIn("function pageWithFreshness", server)
         self.assertIn("loadShard(route.shard)", server)
+        self.assertIn("const responseHtml = route.verbatim", server)
         for token in ("process", "fetch", "globalThis", "self"):
             self.assertNotIn(token, server)
         self.assertIsNone(pack_capsule.UNBOUNDED_FOR_RE.search(server))

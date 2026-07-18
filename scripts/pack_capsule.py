@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 
@@ -37,7 +38,12 @@ INTERNAL_HREF_REWRITES = {
 CAPSULE_PAGE_REDIRECTS = {"task_queue.html": "roadmap.html"}
 RESERVED_PATHS = {"/", "/index.html"}
 LAKEBED_ARTIFACT_CAP_BYTES = 1_048_576
-LAKEBED_TARGET_ARTIFACT_BYTES = 943_718
+# Ed's 2026-07-17 AUD-WO-039 right-sizing ruling separates the real-artifact
+# budget from the conservative estimator. The 1 MiB Lakebed cap is invariant;
+# measured mode may use the in-capsule brief while retaining 48,576 bytes of
+# margin. The older conservative budget remains a fallback-only guard.
+LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES = 1_000_000
+LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES = 943_718
 MARKED_VERSION = "18.0.6"
 LAKEBED_VERSION = "0.0.29"
 LAKEBED_LOCAL_EXECUTABLE = CAPSULE / "node_modules" / ".bin" / "lakebed"
@@ -58,6 +64,11 @@ UNBOUNDED_FOR_RE = re.compile(r"\bfor\s*\(\s*;")
 LEGACY_DATABASE_API_RE = re.compile(r"\.(?:where|all)\s*\(")
 
 
+class PageMode(Enum):
+    GENERATED = "generated"
+    VERBATIM = "verbatim"
+
+
 @dataclass(frozen=True)
 class PageSpec:
     path: Path
@@ -65,6 +76,17 @@ class PageSpec:
     aliases: list[str]
     require_stylesheet: bool = True
     allow_no_stamps: bool = False
+    mode: PageMode = PageMode.GENERATED
+    provenance_source: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.mode is PageMode.VERBATIM and not self.provenance_source:
+            raise ValueError("verbatim pages require provenance_source")
+
+
+VERBATIM_SITE_PAGES = {
+    "advisor_brief.html": "docs/advisor_briefs/2026-07-17-window-a-brief.html",
+}
 
 
 STANDALONE_PAGES = [
@@ -280,6 +302,32 @@ def extract_stamps(page_name: str, html: str) -> list[dict[str, str]]:
     return stamps
 
 
+def extract_verbatim_stamp(spec: PageSpec, html: str) -> list[dict[str, str]]:
+    marker_re = re.compile(
+        r"\A<!-- JouleWise verbatim provenance: (?P<label>.+?); "
+        r"source bytes after this line are copied verbatim\. -->\n"
+    )
+    match = marker_re.match(html)
+    if not match:
+        raise CapsulePackError(
+            f"{spec.page_name}: expected leading verbatim provenance stamp"
+        )
+    stamp_re = re.compile(
+        r"^(?P<source>.+?) · commit (?P<commit>[0-9a-fA-F]+|untracked)"
+        r"(?: \+ uncommitted)?$"
+    )
+    stamp = stamp_re.match(html_lib.unescape(match.group("label")))
+    if not stamp:
+        raise CapsulePackError(f"{spec.page_name}: malformed verbatim provenance stamp")
+    source = stamp.group("source")
+    if source != spec.provenance_source:
+        raise CapsulePackError(
+            f"{spec.page_name}: verbatim provenance source {source!r} does not match "
+            f"configured source {spec.provenance_source!r}"
+        )
+    return [{"source": source, "commit": stamp.group("commit")}]
+
+
 def page_allows_no_stamps(page_name: str) -> bool:
     return page_name in KNOWN_HAND_PAGES or any(
         spec.page_name == page_name and spec.allow_no_stamps for spec in STANDALONE_PAGES
@@ -432,6 +480,13 @@ def site_page_specs() -> list[PageSpec]:
             path=page_path,
             page_name=page_path.name,
             aliases=[*page_aliases(page_path), *redirected_aliases.get(page_path.name, [])],
+            require_stylesheet=page_path.name not in VERBATIM_SITE_PAGES,
+            mode=(
+                PageMode.VERBATIM
+                if page_path.name in VERBATIM_SITE_PAGES
+                else PageMode.GENERATED
+            ),
+            provenance_source=VERBATIM_SITE_PAGES.get(page_path.name),
         )
         for page_path in html_paths
         if page_path.name not in CAPSULE_PAGE_REDIRECTS
@@ -450,13 +505,16 @@ def site_page_specs() -> list[PageSpec]:
 
 def pack_page(spec: PageSpec) -> dict[str, object]:
     raw = read_text(spec.path)
+    if spec.mode is PageMode.VERBATIM:
+        stamps = extract_verbatim_stamp(spec, raw)
+        return {"html": raw, "sources": stamps, "verbatim": True}
     stamps = extract_stamps(spec.page_name, raw)
     packed = rewrite_internal_hrefs(raw)
     if spec.require_stylesheet:
         packed = rewrite_stylesheet_link(packed, spec.page_name)
     if "</body>" not in packed:
         raise CapsulePackError(f"{spec.page_name}: expected </body>")
-    return {"html": packed, "sources": stamps}
+    return {"html": packed, "sources": stamps, "verbatim": False}
 
 
 def pack_pages() -> dict[str, dict[str, object]]:
@@ -581,6 +639,7 @@ def encode_site(
             routes[path] = {
                 "shard": index,
                 "aliases": list(pages[path].get("aliases", [])),
+                "verbatim": bool(pages[path].get("verbatim", False)),
             }
     shared, shared_stats = encode_json_archive(
         {
@@ -607,7 +666,7 @@ def emit_site(pages: dict[str, dict[str, object]], css: str, out_path: Path) -> 
     site, stats = encode_site(pages, css)
     lines = [
         "export type PageSource = { source: string; commit: string };",
-        "export type PackedRoute = { shard: number; aliases: string[] };",
+        "export type PackedRoute = { shard: number; aliases: string[]; verbatim: boolean };",
         "export type PackedSite = { shared: string; shards: string[]; routes: Record<string, PackedRoute>; sources: PageSource[] };",
         "export const PACKED_SITE: PackedSite = {",
         f"  shared: {chunk_ts_string(str(site['shared']))},",
@@ -642,10 +701,11 @@ def estimate_lakebed_artifact_size(content_size: int) -> int:
 
 def enforce_lakebed_budget(content_size: int) -> int:
     estimate = estimate_lakebed_artifact_size(content_size)
-    if estimate > LAKEBED_TARGET_ARTIFACT_BYTES:
+    if estimate > LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES:
         raise CapsulePackError(
             "estimated Lakebed artifact "
-            f"{estimate} bytes exceeds conservative {LAKEBED_TARGET_ARTIFACT_BYTES}-byte budget "
+            f"{estimate} bytes exceeds conservative estimate-only "
+            f"{LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES}-byte budget "
             f"(1 MiB cap with at least 10% margin; packed content {content_size} bytes)"
         )
     return estimate
@@ -823,7 +883,8 @@ def enforce_lakebed_artifact_postcondition(
         estimate = estimate_lakebed_artifact_size(content_size)
         print(
             f"advisory estimated Lakebed artifact: {estimate} bytes "
-            f"(budget {LAKEBED_TARGET_ARTIFACT_BYTES}; cap {LAKEBED_ARTIFACT_CAP_BYTES})"
+            f"(estimate-only budget {LAKEBED_ESTIMATE_FALLBACK_BUDGET_BYTES}; "
+            f"cap {LAKEBED_ARTIFACT_CAP_BYTES})"
         )
         return enforce_lakebed_budget(content_size)
 
@@ -831,18 +892,25 @@ def enforce_lakebed_artifact_postcondition(
     measured, version = measure_lakebed_artifact(executable, capsule_dir)
     print(
         f"measured Lakebed validator artifact: {measured} bytes "
-        f"(budget {LAKEBED_TARGET_ARTIFACT_BYTES}; cap {LAKEBED_ARTIFACT_CAP_BYTES}; "
+        f"(measured budget {LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES}; "
+        f"cap {LAKEBED_ARTIFACT_CAP_BYTES}; "
         f"Lakebed {version})"
     )
-    if measured > LAKEBED_TARGET_ARTIFACT_BYTES:
+    if measured > LAKEBED_ARTIFACT_CAP_BYTES:
+        raise CapsulePackError(
+            "measured Lakebed validator artifact "
+            f"{measured} bytes is over the 1 MiB cap by "
+            f"{measured - LAKEBED_ARTIFACT_CAP_BYTES} bytes "
+            f"(packed content {content_size} bytes)"
+        )
+    if measured > LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES:
         cap_detail = (
-            f"{measured - LAKEBED_ARTIFACT_CAP_BYTES} bytes over the 1 MiB cap"
-            if measured > LAKEBED_ARTIFACT_CAP_BYTES
-            else f"{LAKEBED_ARTIFACT_CAP_BYTES - measured} bytes below the 1 MiB cap"
+            f"{LAKEBED_ARTIFACT_CAP_BYTES - measured} bytes below the 1 MiB cap"
         )
         raise CapsulePackError(
             "measured Lakebed validator artifact "
-            f"{measured} bytes exceeds conservative {LAKEBED_TARGET_ARTIFACT_BYTES}-byte budget "
+            f"{measured} bytes exceeds measured-artifact "
+            f"{LAKEBED_MEASURED_ARTIFACT_BUDGET_BYTES}-byte budget "
             f"({cap_detail}; packed content {content_size} bytes)"
         )
     return measured
