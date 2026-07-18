@@ -1242,6 +1242,44 @@ class HappyPathTests(ControllerTestCase):
         self.assertIs(admission["critical_environment_passed"], True)
         self.assertIs(admission["reference_provenance_present"], True)
 
+    def test_post_capture_guard_observation_aborts_awake_display(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        clean = {
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "screensaver_module": "Ventura",
+            "screensaver_delay_s": 1200,
+            "hid_idle_s": 5.0,
+            "errors": {},
+        }
+        awake = {**clean, "display_power_state": "any_awake"}
+        with patch(
+            "joulewise.controller.collect_environment_guard_observation",
+            side_effect=[clean, awake],
+        ):
+            bundle_path, summary = run_benchmark(
+                make_config("controller-post-capture-awake"),
+                self.runs_root,
+                DeterministicClock(),
+                registry=AdmissionIdleRegistry([False]),
+                environment_snapshot=snapshot,
+                campaign_policy=policy,
+                campaign_policy_binding=binding,
+                campaign_environment_preflight=preflight,
+            )
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        admission = metadata["environment_admission"]
+        self.assertEqual(admission["decision"], "abort")
+        self.assertIn("display became or remained awake", admission["failure"])
+        self.assertEqual(
+            [row["phase"] for row in admission["guard_observations"]],
+            ["before_attempt_1", "after_attempt_1"],
+        )
+
     def test_environment_override_makes_member_universally_claim_ineligible(self) -> None:
         policy, binding, preflight, snapshot = campaign_policy_fixture(
             exploratory=False

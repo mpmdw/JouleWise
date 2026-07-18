@@ -690,6 +690,7 @@ class _Execution:
 
         self._baseline = self._measure_idle_admission_attempt(1, attempts)
         if admission is not None and admission.enabled:
+            self._enforce_post_capture_admission_guard(1)
             if self._baseline.idle_window_suspect is not False:
                 observation = self._admission_guard_observation("before_attempt_2")
                 environment_reason = self._admission_environment_failure(observation)
@@ -704,6 +705,7 @@ class _Execution:
                         environment_reason,
                     )
                 self._baseline = self._measure_idle_admission_attempt(2, attempts)
+                self._enforce_post_capture_admission_guard(2)
             assert self._environment_admission is not None
             if self._baseline.idle_window_suspect is False:
                 self._environment_admission["decision"] = "admitted"
@@ -723,6 +725,16 @@ class _Execution:
                 self._environment_admission.update(
                     {
                         "decision": "flagged",
+                        "claim_reason": "environment_admission_failed",
+                    }
+                )
+            if self._extra_metadata.get("environment_admission_failed") is True:
+                self._environment_admission.update(
+                    {
+                        "decision": "flagged",
+                        "failure": (
+                            "cooldown reference admission failed before this repetition"
+                        ),
                         "claim_reason": "environment_admission_failed",
                     }
                 )
@@ -784,6 +796,19 @@ class _Execution:
                 observation
             )
         return observation
+
+    def _enforce_post_capture_admission_guard(self, attempt: int) -> None:
+        observation = self._admission_guard_observation(f"after_attempt_{attempt}")
+        environment_reason = self._admission_environment_failure(observation)
+        if environment_reason is None:
+            return
+        assert self._environment_admission is not None
+        self._environment_admission.update(
+            {"decision": "abort", "failure": environment_reason}
+        )
+        raise _StageFailure(
+            "idle_baseline", FailureReason.UNKNOWN_ERROR, environment_reason
+        )
 
     @staticmethod
     def _admission_environment_failure(
@@ -1980,10 +2005,12 @@ def cooldown_gate(
     """Hold for a complete sustained cooldown-v2 recovery window.
 
     Sub-window means are weighted by their evidenced durations over the most
-    recent complete sustained window. Recovery is one-sided: values below the
-    reference count as recovered. Thermal pressure must be nominal at release,
-    and an optional calibrated absolute ceiling is an additional upper cap,
-    never an alternative escape.
+    recent complete sustained window.  Release requires both a complete
+    wall-clock span and the policy's minimum evidence coverage, so small probe
+    gaps neither prevent recovery nor masquerade as a complete window.
+    Recovery is one-sided: values below the reference count as recovered.
+    Thermal pressure must be nominal at release, and an optional calibrated
+    absolute ceiling is an additional upper cap, never an alternative escape.
 
     All blocking is via ``telemetry.measure_idle`` (which sleeps on the clock),
     so a ``FakeClock`` makes the gate instant and exact in tests.
@@ -2002,7 +2029,7 @@ def cooldown_gate(
         sampling=replace(config.sampling, idle_seconds=selected.subwindow_s),
     )
     start_s = clock.now()
-    readings: list[tuple[float, float, float]] = []
+    readings: list[tuple[float, float, float, float]] = []
     trace: list[dict[str, Any]] = []
     while True:
         subwindow_start_s = clock.now()
@@ -2015,16 +2042,32 @@ def cooldown_gate(
         # Do not let a backend-reported duration reach backward across the
         # actual start of this bounded capture.
         evidence_start_s = max(evidence_start_s, subwindow_start_s)
-        readings.append((evidence_start_s, now_s, baseline.power_w_mean))
+        readings.append(
+            (subwindow_start_s, evidence_start_s, now_s, baseline.power_w_mean)
+        )
         cutoff = now_s - selected.sustained_window_s
-        readings = [reading for reading in readings if reading[1] > cutoff]
+        readings = [reading for reading in readings if reading[2] > cutoff]
         weighted_sum = 0.0
         coverage_s = 0.0
-        for evidence_start, evidence_end, value in readings:
-            overlap_s = max(0.0, evidence_end - max(evidence_start, cutoff))
+        retained_start_s: float | None = None
+        for capture_start, evidence_start, evidence_end, value in readings:
+            clipped_start = max(evidence_start, cutoff)
+            overlap_s = max(0.0, evidence_end - clipped_start)
             weighted_sum += overlap_s * value
             coverage_s += overlap_s
+            if overlap_s > 0.0:
+                retained_capture_start = max(capture_start, cutoff)
+                retained_start_s = (
+                    retained_capture_start
+                    if retained_start_s is None
+                    else min(retained_start_s, retained_capture_start)
+                )
         rolling_mean = weighted_sum / coverage_s if coverage_s > 0.0 else None
+        window_span_s = (
+            max(0.0, now_s - retained_start_s)
+            if retained_start_s is not None
+            else 0.0
+        )
         waited_s = now_s - start_s
         try:
             thermal = telemetry.thermal_state(sub_config)
@@ -2039,7 +2082,12 @@ def cooldown_gate(
         effective_upper_w = reference_upper_w
         if selected.absolute_ceiling_w is not None:
             effective_upper_w = min(effective_upper_w, selected.absolute_ceiling_w)
-        window_complete = coverage_s + 1e-9 >= selected.sustained_window_s
+        required_coverage_s = (
+            selected.coverage_fraction * selected.sustained_window_s
+        )
+        span_complete = window_span_s + 1e-9 >= selected.sustained_window_s
+        coverage_complete = coverage_s + 1e-9 >= required_coverage_s
+        window_complete = span_complete and coverage_complete
         power_recovered = (
             rolling_mean is not None and rolling_mean <= effective_upper_w
         )
@@ -2053,7 +2101,11 @@ def cooldown_gate(
                 "timestamp_s": now_s,
                 "waited_s": waited_s,
                 "rolling_mean_power_w": rolling_mean,
+                "window_span_s": window_span_s,
                 "window_coverage_s": coverage_s,
+                "required_coverage_s": required_coverage_s,
+                "span_complete": span_complete,
+                "coverage_complete": coverage_complete,
                 "window_complete": window_complete,
                 "reference_upper_w": reference_upper_w,
                 "absolute_ceiling_w": selected.absolute_ceiling_w,
@@ -2069,6 +2121,7 @@ def cooldown_gate(
             "thresholds": {
                 "subwindow_s": selected.subwindow_s,
                 "sustained_window_s": selected.sustained_window_s,
+                "coverage_fraction": selected.coverage_fraction,
                 "tolerance_fraction": selected.tolerance_fraction,
                 "cap_s": selected.cap_s,
                 "absolute_ceiling_w": selected.absolute_ceiling_w,
@@ -2082,7 +2135,11 @@ def cooldown_gate(
             "effective_upper_w": effective_upper_w,
             "decision_rolling_mean_power_w": rolling_mean,
             "window_required_s": selected.sustained_window_s,
+            "window_span_s": window_span_s,
             "window_coverage_s": coverage_s,
+            "required_coverage_s": required_coverage_s,
+            "span_complete": span_complete,
+            "coverage_complete": coverage_complete,
             "window_complete": window_complete,
             "thermal_pressure": thermal_pressure,
             "thermal_nominal": thermal_nominal,
@@ -2090,7 +2147,8 @@ def cooldown_gate(
                 "power": "duration_weighted_rolling_mean <= effective_upper_w",
                 "reference_bound": "reference_power_w * (1 + tolerance_fraction)",
                 "absolute_ceiling_role": "additional_upper_cap",
-                "window": "complete_sustained_duration",
+                "window": "complete_sustained_span_and_minimum_coverage",
+                "coverage": "window_coverage_s >= coverage_fraction * sustained_window_s",
                 "thermal": (
                     "nominal_required"
                     if selected.require_thermal_nominal
@@ -2254,7 +2312,7 @@ def run_experiment(
     """
     if registry is None:
         registry = joulewise.adapters
-    campaign_policy, _policy_binding, _preflight = _campaign_policy_from_environment()
+    campaign_policy, policy_binding, preflight = _campaign_policy_from_environment()
 
     experiment_id = (
         sanitize_id_component(config.run_id)
@@ -2268,7 +2326,9 @@ def run_experiment(
     created_at_s = clock.now()
     condition_name = config.workload_profile.name
     repetitions = config.workload_profile.repetitions
-    environment_snapshot = _environment_for_experiment(clock)
+    environment_snapshot = (
+        _environment_for_experiment(clock) if campaign_policy is None else None
+    )
 
     manifest: dict[str, Any] = {
         "experiment_id": experiment_id,
@@ -2285,18 +2345,30 @@ def run_experiment(
     # Pending cap-hit recorded against the NEXT rep's run_benchmark.
     next_extra_metadata: dict[str, Any] | None = None
     previous_member_end_s: float | None = None
+    frozen_cooldown_anchor: dict[str, Any] | None = None
 
     for rep in range(1, repetitions + 1):
         member_config = replace(config, run_id=f"{experiment_id}__r{rep}")
         member_extra_metadata = dict(next_extra_metadata or {})
         member_extra_metadata["preceding_member_end_s"] = previous_member_end_s
+        member_environment = environment_snapshot
+        if campaign_policy is not None:
+            member_environment = _capture_environment(
+                clock,
+                capture_scope="run",
+                captured_for_rep=rep,
+                settle_s=PRE_IDLE_SETTLE_S,
+            )
         bundle_path, summary = run_benchmark(
             member_config,
             runs_root,
             clock,
             registry=registry,
             extra_metadata=member_extra_metadata,
-            environment_snapshot=environment_snapshot,
+            environment_snapshot=member_environment,
+            campaign_policy=campaign_policy,
+            campaign_policy_binding=policy_binding,
+            campaign_environment_preflight=preflight,
         )
         previous_member_end_s = clock.now()
         next_extra_metadata = None
@@ -2322,6 +2394,16 @@ def run_experiment(
         manifest.pop("aggregate_error", None)
         manifest_path = write_experiment_manifest(runs_root, manifest)
 
+        reference_eligibility = _experiment_cooldown_reference_eligibility(
+            bundle_path, summary
+        )
+        if frozen_cooldown_anchor is None and reference_eligibility["eligible"]:
+            frozen_cooldown_anchor = _experiment_cooldown_anchor(
+                bundle_path, summary, reference_eligibility
+            )
+            manifest["cooldown_anchor"] = frozen_cooldown_anchor
+            manifest_path = write_experiment_manifest(runs_root, manifest)
+
         if rep < repetitions:
             note, cap_hit = _cooldown_between_reps(
                 config,
@@ -2332,11 +2414,20 @@ def run_experiment(
                 registry,
                 clock,
                 campaign_policy=campaign_policy,
+                frozen_anchor=frozen_cooldown_anchor,
             )
             manifest["cooldown"].append(note)
             manifest_path = write_experiment_manifest(runs_root, manifest)
             if cap_hit:
                 next_extra_metadata = {"cooldown_cap_hit": True}
+            if note.get("fail_closed_action") == "flag":
+                next_extra_metadata = dict(next_extra_metadata or {})
+                next_extra_metadata["environment_admission_failed"] = True
+            elif note.get("fail_closed_action") == "abort":
+                raise RuntimeError(
+                    "cooldown v2 failed closed: "
+                    + str(note.get("reason", "eligible reference unavailable"))
+                )
 
     assert manifest_path is not None  # repetitions >= 1 by schema
     return manifest_path, results
@@ -2351,6 +2442,7 @@ def _cooldown_between_reps(
     registry: AdapterRegistry,
     clock: Clock,
     campaign_policy: CampaignPolicy | None = None,
+    frozen_anchor: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], bool]:
     """Run the D-014 gate after a completed rep; return ``(note, cap_hit)``.
 
@@ -2362,7 +2454,40 @@ def _cooldown_between_reps(
     if config.hardware_target.telemetry_backend == TelemetryBackend.MOCK:
         note.update({"result": "skipped", "reason": "mock telemetry"})
         return note, False
-    if summary.idle_baseline is None:
+    reference_baseline = summary.idle_baseline
+    if campaign_policy is not None and campaign_policy.idle_admission.enabled:
+        bundle_path = Path(runs_root) / after_member
+        eligibility = _experiment_cooldown_reference_eligibility(
+            bundle_path, summary
+        )
+        note["reference_eligibility"] = eligibility
+        note["anchor_provenance"] = frozen_anchor
+        if eligibility["eligible"]:
+            note["reference_selection"] = "preceding_eligible_baseline"
+        else:
+            anchor_baseline = _idle_baseline_from_anchor(frozen_anchor)
+            if anchor_baseline is not None:
+                reference_baseline = anchor_baseline
+                note["reference_selection"] = "frozen_clean_anchor"
+            else:
+                action = campaign_policy.idle_admission.on_fail
+                note.update(
+                    {
+                        "result": "unknown",
+                        "reason": (
+                            "preceding baseline is ineligible and no frozen clean "
+                            "cooldown anchor is available"
+                        ),
+                        "reference_selection": "none",
+                        "fail_closed_action": action.value,
+                    }
+                )
+                return note, False
+    elif reference_baseline is None:
+        note.update({"result": "skipped", "reason": "no idle baseline from previous rep"})
+        return note, False
+
+    if reference_baseline is None:
         note.update({"result": "skipped", "reason": "no idle baseline from previous rep"})
         return note, False
 
@@ -2383,7 +2508,7 @@ def _cooldown_between_reps(
     try:
         gate = cooldown_gate(
             telemetry,
-            summary.idle_baseline,
+            reference_baseline,
             config,
             clock,
             run_id=cooldown_run_id,
@@ -2409,6 +2534,119 @@ def _cooldown_between_reps(
         if error is not None:
             note["raw_artifact_error"] = error
     return note, gate["result"] == "cap_hit"
+
+
+def _experiment_cooldown_reference_eligibility(
+    bundle_path: Path,
+    summary: SummaryMetrics | SummaryMetricsV060,
+) -> dict[str, Any]:
+    """Fail closed when an experiment repetition is proposed as a reference."""
+
+    reasons: list[str] = []
+    baseline = summary.idle_baseline
+    if baseline is None:
+        reasons.append("idle_baseline_unavailable")
+    elif baseline.idle_window_suspect is not False:
+        reasons.append("idle_window_not_clean")
+    try:
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        metadata = None
+    admission = (
+        metadata.get("environment_admission") if isinstance(metadata, dict) else None
+    )
+    policy_binding = (
+        metadata.get("campaign_policy") if isinstance(metadata, dict) else None
+    )
+    if not isinstance(admission, dict):
+        reasons.append("environment_admission_provenance_missing")
+    else:
+        if admission.get("critical_environment_passed") is not True:
+            reasons.append("critical_environment_not_passed")
+        if admission.get("decision") != "admitted":
+            reasons.append("idle_admission_not_passed")
+        if admission.get("reference_provenance_present") is not True:
+            reasons.append("reference_provenance_incomplete")
+    if (
+        not isinstance(policy_binding, dict)
+        or not isinstance(policy_binding.get("sha256"), str)
+        or not policy_binding.get("sha256")
+    ):
+        reasons.append("campaign_policy_provenance_missing")
+    return {
+        "bundle_id": bundle_path.name,
+        "eligible": baseline is not None and not reasons,
+        "reasons": sorted(reasons),
+        "idle_window_suspect": (
+            baseline.idle_window_suspect if baseline is not None else None
+        ),
+        "critical_environment_passed": (
+            admission.get("critical_environment_passed")
+            if isinstance(admission, dict)
+            else None
+        ),
+        "provenance_present": bool(
+            isinstance(admission, dict)
+            and admission.get("reference_provenance_present") is True
+            and isinstance(policy_binding, dict)
+            and policy_binding.get("sha256")
+        ),
+    }
+
+
+def _experiment_cooldown_anchor(
+    bundle_path: Path,
+    summary: SummaryMetrics | SummaryMetricsV060,
+    eligibility: dict[str, Any],
+) -> dict[str, Any]:
+    baseline = summary.idle_baseline
+    assert baseline is not None
+    try:
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        metadata = {}
+    admission = metadata.get("environment_admission", {})
+    per_run = (
+        admission.get("per_run_environment_evaluation", {})
+        if isinstance(admission, dict)
+        else {}
+    )
+    return {
+        "schema_version": "joulewise.cooldown_anchor.v1",
+        "source_kind": "first_admission_passing_baseline",
+        "bundle_id": bundle_path.name,
+        "baseline": _jsonable(asdict(baseline)),
+        "eligibility": eligibility,
+        "environment_snapshot_sha256": (
+            per_run.get("snapshot_sha256") if isinstance(per_run, dict) else None
+        ),
+        "immutable_after_freeze": True,
+    }
+
+
+def _idle_baseline_from_anchor(
+    anchor: dict[str, Any] | None,
+) -> IdleBaseline | None:
+    if not isinstance(anchor, dict) or anchor.get("immutable_after_freeze") is not True:
+        return None
+    raw = anchor.get("baseline")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return IdleBaseline(
+            power_w_mean=float(raw["power_w_mean"]),
+            power_w_stddev=float(raw["power_w_stddev"]),
+            duration_s=float(raw["duration_s"]),
+            sample_count=int(raw["sample_count"]),
+            telemetry_backend=TelemetryBackend(raw["telemetry_backend"]),
+            gpu_idle_ratio_mean=raw.get("gpu_idle_ratio_mean"),
+            gpu_idle_ratio_min=raw.get("gpu_idle_ratio_min"),
+            gpu_freq_mhz_mean=raw.get("gpu_freq_mhz_mean"),
+            gpu_freq_hz_mean=raw.get("gpu_freq_hz_mean"),
+            idle_window_suspect=raw.get("idle_window_suspect"),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def _member_gap_note(bundle_path: Path) -> dict[str, Any]:

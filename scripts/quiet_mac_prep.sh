@@ -84,9 +84,9 @@ if pmset displaysleepnow; then
   sleep 2
   SYSTEMSTATE=$(pmset -g systemstate 2>/dev/null || true)
   echo "$SYSTEMSTATE"
-  if echo "$SYSTEMSTATE" | grep -E "Current System Capabilities:.*Graphics" >/dev/null; then
+  if echo "$SYSTEMSTATE" | grep -E "Current System Capabilities( are)?:.*Graphics" >/dev/null; then
     echo "FAIL: display verification still reports Graphics capability (any display awake)."
-  elif echo "$SYSTEMSTATE" | grep -E "Current System Capabilities:" >/dev/null; then
+  elif echo "$SYSTEMSTATE" | grep -E "Current System Capabilities( are)?:" >/dev/null; then
     echo "OK: display verification reports all online displays asleep."
   else
     echo "FAIL: unrecognized pmset systemstate output; display state is unknown."

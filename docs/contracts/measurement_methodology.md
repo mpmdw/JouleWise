@@ -282,8 +282,11 @@ Per decisions D-005 and D-014:
 
 - Each repetition is an independent run bundle; an experiment manifest
   groups members and records the executed order.
-- Between live repetitions, cooldown v2 holds until a complete sustained
-  30-second duration-weighted idle-power window satisfies the one-sided rule
+- Between live repetitions, cooldown v2 holds until the retained evidence has
+  both a complete 30-second wall-clock span and at least
+  `coverage_fraction * sustained_window_s` of captured coverage
+  (`coverage_fraction = 0.8` by default), and its duration-weighted idle-power
+  mean satisfies the one-sided rule
   `rolling_mean <= reference * (1 + tolerance)` (10% by the production
   policy), while thermal pressure is Nominal. A below-reference mean therefore
   counts as recovery. An optional calibrated absolute ceiling is an
@@ -297,8 +300,9 @@ Per decisions D-005 and D-014:
   source and hashes are recorded and it is never updated from later outcomes.
   With neither an eligible reference nor an anchor the gate fails closed.
   The following member records policy version, eligibility decision, anchor
-  provenance, thresholds, sustained-window coverage, thermal result, and the
-  exact release criterion under `preceding_campaign_cooldown`. Historical
+  provenance, thresholds (including `coverage_fraction`), wall-clock span,
+  required and observed coverage, thermal result, and the exact release
+  criterion under `preceding_campaign_cooldown`. Historical
   recovered rows retain their recorded meaning and are not reinterpreted.
 - Conditions are interleaved round-robin where model-reload cost permits;
   where blocks are operationally forced, the order is recorded so drift

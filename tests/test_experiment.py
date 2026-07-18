@@ -29,14 +29,17 @@ from joulewise.controller import (
     COOLDOWN_SUBWINDOW_S,
     _member_gap_note,
     cooldown_gate,
+    _cooldown_between_reps,
     run_experiment,
 )
+from joulewise.environment import evaluate_environment_policy
 from joulewise.interfaces import AdapterResult, PowerSample, ThermalState
 from joulewise.schemas import (
     BenchmarkConfig,
     CooldownPolicy,
     IdleBaseline,
     RunStatus,
+    SummaryMetrics,
     TelemetryBackend,
 )
 
@@ -210,6 +213,7 @@ class _StubTelemetry:
             duration_s=duration_s,
             sample_count=max(2, int(duration_s * config.sampling.power_hz)),
             telemetry_backend=TelemetryBackend.POWERMETRICS,
+            idle_window_suspect=False,
         )
 
     def start_sampling(self, config: BenchmarkConfig, context=None) -> AdapterResult:
@@ -574,6 +578,59 @@ class CooldownGateUnitTests(unittest.TestCase):
         self.assertEqual(note["thresholds"]["sustained_window_s"], 30.0)
         self.assertEqual(note["thresholds"]["subwindow_s"], 5.0)
 
+    def test_real_clock_shaped_probe_gaps_release_at_coverage_threshold(self) -> None:
+        class GappedTelemetry(_StubTelemetry):
+            def measure_idle(self, config, context=None):
+                self._clock.sleep(config.sampling.idle_seconds)
+                return IdleBaseline(
+                    power_w_mean=5.0,
+                    power_w_stddev=0.0,
+                    duration_s=config.sampling.idle_seconds - (0.005 / 6.0),
+                    sample_count=5,
+                    telemetry_backend=TelemetryBackend.POWERMETRICS,
+                    idle_window_suspect=False,
+                )
+
+        clock = FakeClock()
+        note = cooldown_gate(
+            GappedTelemetry(clock),
+            self._reference(5.0),
+            self._config(),
+            clock,
+        )
+        self.assertEqual(note["result"], "recovered")
+        self.assertAlmostEqual(note["window_coverage_s"], 29.995, places=6)
+        self.assertGreaterEqual(note["window_span_s"], 30.0)
+        self.assertEqual(note["thresholds"]["coverage_fraction"], 0.8)
+        self.assertTrue(note["coverage_complete"])
+
+    def test_genuine_evidence_hole_below_coverage_fraction_does_not_release(self) -> None:
+        class SparseTelemetry(_StubTelemetry):
+            def measure_idle(self, config, context=None):
+                self._clock.sleep(config.sampling.idle_seconds)
+                return IdleBaseline(
+                    power_w_mean=5.0,
+                    power_w_stddev=0.0,
+                    duration_s=3.0,
+                    sample_count=3,
+                    telemetry_backend=TelemetryBackend.POWERMETRICS,
+                    idle_window_suspect=False,
+                )
+
+        clock = FakeClock()
+        policy = CooldownPolicy(cap_s=30.0)
+        note = cooldown_gate(
+            SparseTelemetry(clock),
+            self._reference(5.0),
+            self._config(),
+            clock,
+            policy=policy,
+        )
+        self.assertEqual(note["result"], "cap_hit")
+        self.assertGreaterEqual(note["window_span_s"], 30.0)
+        self.assertLess(note["window_coverage_s"], note["required_coverage_s"])
+        self.assertFalse(note["coverage_complete"])
+
     def test_recovers_after_rolling_window_crosses_into_tolerance(self) -> None:
         # Drive the rolling-30 s-mean high-to-low RECOVERY transition: the first
         # two sub-windows read 7.5 W (50% above the 5.0 W reference, outside the
@@ -712,6 +769,119 @@ class CooldownThroughExperimentTests(unittest.TestCase):
             [float(value) for value in range(5, 301, 5)],
         )
         self.assertEqual(trace_records[-1]["rolling_mean_power_w"], 7.5)
+
+    def test_flagged_contaminated_previous_rep_uses_frozen_clean_anchor(self) -> None:
+        data = _example_config_data()
+        data["run_id"] = "exp-flagged-reference"
+        data["hardware_target"]["telemetry_backend"] = "powermetrics"
+        config = BenchmarkConfig.from_mapping(data)
+        policy_path = REPO_ROOT / "configs" / "campaign_policies" / "quiet_mac_exploratory.json"
+        from joulewise.schemas import CampaignPolicy
+
+        policy = CampaignPolicy.from_mapping(json.loads(policy_path.read_text()))
+        summary = SummaryMetrics(
+            status=RunStatus.SUCCEEDED,
+            idle_baseline=IdleBaseline(
+                power_w_mean=9.0,
+                power_w_stddev=0.0,
+                duration_s=30.0,
+                sample_count=30,
+                telemetry_backend=TelemetryBackend.POWERMETRICS,
+                idle_window_suspect=True,
+            ),
+        )
+        bundle = self.runs_root / "exp-flagged-reference__r1"
+        bundle.mkdir(parents=True)
+        (bundle / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "campaign_policy": {"sha256": "a" * 64},
+                    "environment_admission": {
+                        "critical_environment_passed": True,
+                        "decision": "flagged",
+                        "reference_provenance_present": True,
+                    },
+                }
+            )
+        )
+        anchor_baseline = {
+            "power_w_mean": 5.0,
+            "power_w_stddev": 0.0,
+            "duration_s": 30.0,
+            "sample_count": 30,
+            "telemetry_backend": "powermetrics",
+            "idle_window_suspect": False,
+        }
+        registry = _StubRegistry(lambda clk: _StubTelemetry(clk, idle_mean=5.0))
+        note, _cap_hit = _cooldown_between_reps(
+            config,
+            self.runs_root,
+            "exp-flagged-reference",
+            bundle.name,
+            summary,
+            registry,
+            FakeClock(),
+            campaign_policy=policy,
+            frozen_anchor={
+                "schema_version": "joulewise.cooldown_anchor.v1",
+                "baseline": anchor_baseline,
+                "immutable_after_freeze": True,
+            },
+        )
+        self.assertEqual(note["reference_selection"], "frozen_clean_anchor")
+        self.assertFalse(note["reference_eligibility"]["eligible"])
+        self.assertEqual(note["reference_power_w"], 5.0)
+
+    def test_campaign_policy_recaptures_each_rep_and_battery_flip_aborts_r2(self) -> None:
+        from joulewise.schemas import CampaignPolicy
+
+        policy_path = REPO_ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+        policy = CampaignPolicy.from_mapping(json.loads(policy_path.read_text()))
+        clean = {
+            "power_source": "AC Power",
+            "power": {"external_connected": True},
+            "low_power_mode": False,
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "thermal_pressure": "nominal",
+            "capture_scope": "run",
+            "settle_s": 0.0,
+        }
+        battery = {**clean, "power_source": "Battery Power"}
+        evaluation = evaluate_environment_policy(clean, policy.environment_guard)
+        binding = {"sha256": "a" * 64}
+        preflight = {
+            "evaluation": evaluation,
+            "override": None,
+            "policy_sha256": "a" * 64,
+        }
+        config = make_config("exp-power-flip", repetitions=2)
+        with (
+            patch(
+                "joulewise.controller._campaign_policy_from_environment",
+                return_value=(policy, binding, preflight),
+            ),
+            patch(
+                "joulewise.controller._capture_environment",
+                side_effect=[clean, battery],
+            ) as capture,
+        ):
+            _manifest, members = run_experiment(
+                config,
+                self.runs_root,
+                FakeClock(),
+                registry=_StubRegistry(lambda clk: _StubTelemetry(clk)),
+            )
+        self.assertEqual(capture.call_count, 2)
+        self.assertEqual(members[0][1].status, RunStatus.SUCCEEDED)
+        self.assertEqual(members[1][1].status, RunStatus.FAILED)
+        r2_metadata = json.loads(
+            (members[1][0] / "metadata.json").read_text()
+        )
+        self.assertEqual(r2_metadata["environment"]["power_source"], "Battery Power")
+        self.assertEqual(
+            r2_metadata["environment_admission"]["decision"], "abort"
+        )
 
     def test_cooldown_trace_write_error_is_manifest_metadata_not_campaign_failure(self) -> None:
         data = _example_config_data()

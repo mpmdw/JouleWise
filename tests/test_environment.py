@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import importlib.metadata
+import shlex
 import subprocess
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from joulewise.environment import (
@@ -119,6 +121,21 @@ def successful_fake_run(command, **kwargs):
 
 
 class EnvironmentSnapshotTests(unittest.TestCase):
+    def test_quiet_mac_shell_accepts_live_capabilities_are_spelling(self) -> None:
+        pattern = r"Current System Capabilities( are)?:.*Graphics"
+        script = (
+            Path(__file__).resolve().parents[1] / "scripts" / "quiet_mac_prep.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(pattern, script)
+        result = subprocess.run(
+            ["bash", "-c", f"grep -E {shlex.quote(pattern)} >/dev/null"],
+            input="Current System Capabilities are: CPU Graphics Audio Network\n",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0)
+
     def test_shared_policy_evaluator_fails_closed_but_never_gates_load_average(self) -> None:
         snapshot = {
             "power_source": "AC Power",
@@ -174,6 +191,32 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["screensaver_delay_s"], 1200)
         self.assertGreater(snapshot["hid_idle_s"], 1200)
         self.assertIs(snapshot["screensaver_engaged"], True)
+
+    def test_missing_screensaver_defaults_domain_uses_macos_default(self) -> None:
+        def fake_run(command, **kwargs):
+            if tuple(command) == (
+                "defaults",
+                "-currentHost",
+                "read",
+                "com.apple.screensaver",
+            ):
+                return subprocess.CompletedProcess(
+                    command,
+                    1,
+                    stdout="",
+                    stderr=(
+                        "Domain com.apple.screensaver does not exist\n"
+                    ),
+                )
+            return successful_fake_run(command, **kwargs)
+
+        with patch("joulewise.environment.subprocess.run", side_effect=fake_run):
+            snapshot = collect_environment_snapshot()
+
+        self.assertNotIn("screensaver_defaults", snapshot["errors"])
+        self.assertEqual(snapshot["screensaver_delay_s"], 1200)
+        self.assertIsNone(snapshot["screensaver_module"])
+        self.assertIs(snapshot["screensaver_engaged"], False)
 
     def test_collect_environment_snapshot_records_present_and_absent_package_versions(self) -> None:
         def fake_version(distribution: str) -> str:

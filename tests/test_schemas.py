@@ -182,6 +182,7 @@ class BenchmarkConfigTests(unittest.TestCase):
         self.assertEqual([policy.profile.value for policy in policies], ["production", "exploratory"])
         self.assertEqual(policies[0].idle_admission.on_fail.value, "abort")
         self.assertEqual(policies[1].idle_admission.on_fail.value, "flag")
+        self.assertEqual(policies[0].cooldown.coverage_fraction, 0.8)
         normalized_after = json.dumps(config.to_dict(), indent=2, sort_keys=True) + "\n"
         self.assertEqual(normalized_after, normalized_before)
         self.assertEqual(
@@ -189,6 +190,13 @@ class BenchmarkConfigTests(unittest.TestCase):
             PINNED_CONFIG_SHA256["mock_local.json"],
         )
         self.assertNotIn("campaign_policy", config.to_dict())
+
+    def test_cooldown_coverage_fraction_is_bounded(self) -> None:
+        path = ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+        payload = json.loads(path.read_text())
+        payload["cooldown"]["coverage_fraction"] = 1.01
+        with self.assertRaisesRegex(SchemaError, "coverage_fraction must be <= 1.0"):
+            CampaignPolicy.from_mapping(payload)
 
     def test_example_configs_validate(self) -> None:
         for path in sorted((ROOT / "configs" / "examples").glob("*.json")):

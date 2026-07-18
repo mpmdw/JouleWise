@@ -98,3 +98,39 @@ The pre-existing `docs/site/*.html` modifications and untracked
 `node_modules/` tree were not touched. No commit, push, merge, generated-site
 refresh, or quiet-Mac execution was performed. Lead owns final diff review,
 the live validation gate, and commit/merge custody.
+
+## Fix round 1 — 2026-07-18
+
+Resolved the eleven accepted execution-review findings without running a
+quiet-Mac measurement:
+
+- cooldown completeness now combines a full retained wall-clock span with an
+  explicit minimum evidence-coverage fraction (default 0.8), recording span,
+  required/observed coverage, thresholds, and both conjuncts in gate evidence;
+- controller repetitions now enforce reference eligibility, frozen-clean
+  anchor fallback, policy-specific no-anchor behavior, a full per-repetition
+  environment recapture, and a post-capture guard observation after every idle
+  attempt;
+- campaign provenance now assigns the true first-run exemption only to the
+  first physical bundle, promotes each later repetition's actual controller
+  gate evidence, freezes the first eligible evaluation in execution order, and
+  gives multi-entry AXI campaigns the same between-entry cooldown ceremony;
+- rejected or malformed environment preflights append a terminal
+  `joulewise.campaign_verdict.v2` row before exit;
+- canonical analysis preserves `environment_admission_failed` and
+  `environment_override`; the shell preparation parser accepts the live
+  `Capabilities are:` spelling; and an absent screensaver defaults domain uses
+  the macOS 1200-second default without overriding the independent engagement
+  probe.
+
+Regression coverage is defect-shaped for every finding, including the
+29.995/30-second probe-gap reproduction, a below-threshold genuine evidence
+hole, physical r2/r3 exemption isolation, first-eligible anchor freezing,
+Battery transition abort, and terminal preflight verdict custody. Verification
+on the final scoped diff:
+
+- `python3 -m unittest discover -s tests` — 1,717 tests in 344.030 seconds,
+  pass (`skipped=13`);
+- the explicit 14-test F1–F11 regression selection — pass in 1.767 seconds;
+- `bash -n scripts/quiet_mac_prep.sh` — pass; and
+- Python compile plus scoped `git diff --check` — pass.

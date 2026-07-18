@@ -453,6 +453,7 @@ class CooldownPolicy:
     policy_version: str = "cooldown-v2"
     subwindow_s: float = 5.0
     sustained_window_s: float = 30.0
+    coverage_fraction: float = 0.8
     tolerance_fraction: float = 0.10
     cap_s: float = 300.0
     absolute_ceiling_w: float | None = None
@@ -469,6 +470,7 @@ class CooldownPolicy:
                     "policy_version",
                     "subwindow_s",
                     "sustained_window_s",
+                    "coverage_fraction",
                     "tolerance_fraction",
                     "cap_s",
                     "absolute_ceiling_w",
@@ -490,6 +492,11 @@ class CooldownPolicy:
             "cooldown.sustained_window_s",
             minimum=0.001,
         )
+        coverage_fraction = _optional_float(
+            data.get("coverage_fraction", 0.8),
+            "cooldown.coverage_fraction",
+            minimum=0.0,
+        )
         tolerance_fraction = _optional_float(
             data.get("tolerance_fraction", 0.10),
             "cooldown.tolerance_fraction",
@@ -505,14 +512,18 @@ class CooldownPolicy:
         )
         assert subwindow_s is not None
         assert sustained_window_s is not None
+        assert coverage_fraction is not None
         assert tolerance_fraction is not None
         assert cap_s is not None
         if sustained_window_s > cap_s:
             raise SchemaError("cooldown.sustained_window_s must be <= cooldown.cap_s")
+        if coverage_fraction > 1.0:
+            raise SchemaError("cooldown.coverage_fraction must be <= 1.0")
         return cls(
             policy_version=policy_version,
             subwindow_s=subwindow_s,
             sustained_window_s=sustained_window_s,
+            coverage_fraction=coverage_fraction,
             tolerance_fraction=tolerance_fraction,
             cap_s=cap_s,
             absolute_ceiling_w=absolute_ceiling_w,

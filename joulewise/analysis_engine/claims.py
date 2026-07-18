@@ -37,6 +37,8 @@ REDUCER_REASON_CODES = frozenset(
         "drift_term_unknown",
         "idle_baseline_unrecorded",
         "cooldown_cap_hit",
+        "environment_admission_failed",
+        "environment_override",
     }
 )
 

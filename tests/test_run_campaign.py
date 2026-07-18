@@ -52,6 +52,7 @@ def run_campaign(
     shakedown_gate: bool = False,
     ack_config_warnings: bool = False,
     campaign_policy: Path | None = TEST_CAMPAIGN_POLICY,
+    environment_override: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = [sys.executable, str(SCRIPT), str(config_dir), "--runs-dir", str(runs_dir)]
     if log_path is not None:
@@ -66,6 +67,8 @@ def run_campaign(
         command.append("--ack-config-warnings")
     if campaign_policy is not None:
         command.extend(["--campaign-policy", str(campaign_policy)])
+    if environment_override is not None:
+        command.extend(["--environment-override", str(environment_override)])
     if waivers is not None:
         command.extend(["--waivers", str(waivers)])
     if cli_cmd is not None:
@@ -789,6 +792,95 @@ class RunCampaignTests(unittest.TestCase):
         self.assertEqual(overridden["override"]["classification"], "override")
         self.assertFalse(overridden["override"]["claim_eligible"])
 
+    def test_rejected_environment_preflight_appends_terminal_verdict(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_dir = root / "configs"
+            runs_dir = root / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "one.json", "one")
+            args = run_campaign_module.parse_args(
+                [
+                    str(config_dir),
+                    "--runs-dir",
+                    str(runs_dir),
+                    "--campaign-policy",
+                    str(
+                        ROOT
+                        / "configs"
+                        / "campaign_policies"
+                        / "quiet_mac_p2_production.json"
+                    ),
+                ]
+            )
+            rejected = {
+                "power_source": "AC Power",
+                "power": {"external_connected": True},
+                "low_power_mode": False,
+                "display_power_state": "any_awake",
+                "screensaver_engaged": False,
+                "thermal_pressure": "nominal",
+            }
+            with patch(
+                "run_campaign_module.collect_environment_snapshot",
+                return_value=rejected,
+            ):
+                result = run_campaign_module.run_campaign(args)
+
+            self.assertEqual(result, 1)
+            rows = read_all_jsonl(runs_dir / "campaign_log.jsonl")
+            self.assertEqual(rows[-1]["schema_version"], "joulewise.campaign_verdict.v2")
+            self.assertEqual(rows[-1]["record_type"], "campaign_verdict")
+            self.assertEqual(rows[-1]["collection"]["verdict"], "invalid")
+            self.assertIn(
+                "environment preflight rejected",
+                rows[-1]["collection"]["reasons"][0],
+            )
+
+    def test_malformed_environment_override_appends_terminal_verdict(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_dir = root / "configs"
+            runs_dir = root / "runs"
+            config_dir.mkdir()
+            write_config(config_dir, "one.json", "one")
+            override = root / "override.json"
+            override.write_text("{not-json\n", encoding="utf-8")
+            args = run_campaign_module.parse_args(
+                [
+                    str(config_dir),
+                    "--runs-dir",
+                    str(runs_dir),
+                    "--campaign-policy",
+                    str(
+                        ROOT
+                        / "configs"
+                        / "campaign_policies"
+                        / "quiet_mac_p2_production.json"
+                    ),
+                    "--environment-override",
+                    str(override),
+                ]
+            )
+            clean = {
+                "power_source": "AC Power",
+                "power": {"external_connected": True},
+                "low_power_mode": False,
+                "display_power_state": "all_asleep",
+                "screensaver_engaged": False,
+                "thermal_pressure": "nominal",
+            }
+            with patch(
+                "run_campaign_module.collect_environment_snapshot",
+                return_value=clean,
+            ):
+                result = run_campaign_module.run_campaign(args)
+
+            self.assertEqual(result, 2)
+            verdict = read_all_jsonl(runs_dir / "campaign_log.jsonl")[-1]
+            self.assertEqual(verdict["record_type"], "campaign_verdict")
+            self.assertEqual(verdict["collection"]["verdict"], "invalid")
+
     def test_arm_quiet_mode_counts_down_sleeps_display_and_reprobes(self) -> None:
         binding = run_campaign_module.load_campaign_policy(
             str(ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json")
@@ -951,6 +1043,167 @@ class RunCampaignTests(unittest.TestCase):
             note["anchor_provenance"]["bundle_id"],
             "p2015-neg8-reference-start",
         )
+
+    def test_physical_repetitions_receive_distinct_cooldown_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config_dir = root / "configs"
+            runs_dir = root / "runs"
+            config_dir.mkdir()
+            config_path = write_config(
+                config_dir, "three.json", "three", repetitions=3
+            )
+            write_experiment(
+                runs_dir, "three", 3, config_path=config_path
+            )
+            manifest_path = runs_dir / "experiments" / "three.json"
+            manifest = json.loads(manifest_path.read_text())
+            manifest["cooldown"] = [
+                {"after_member": "three__r1", "result": "recovered"},
+                {"after_member": "three__r2", "result": "cap_hit"},
+            ]
+            manifest_path.write_text(json.dumps(manifest) + "\n")
+            info = run_campaign_module.load_config_info(config_path)
+            self.assertIsInstance(info, run_campaign_module.ConfigInfo)
+            binding = run_campaign_module.load_campaign_policy(
+                str(TEST_CAMPAIGN_POLICY)
+            )
+            provenance_path, _provenance = run_campaign_module.new_campaign_provenance(
+                config_dir, runs_dir, None, binding
+            )
+            first = {
+                **run_campaign_module._cooldown_policy_decision_surface(
+                    binding.policy.cooldown
+                ),
+                "result": "first_run_exempt",
+                "session_id": "session",
+                "following_run_id": "three__r1",
+            }
+            evidence = run_campaign_module._physical_cooldown_evidence_for_config(
+                info,
+                runs_dir,
+                first,
+                provenance_path,
+                binding.policy.cooldown,
+            )
+
+        self.assertEqual(evidence["three__r1"]["result"], "first_run_exempt")
+        self.assertEqual(evidence["three__r2"]["result"], "recovered")
+        self.assertEqual(evidence["three__r3"]["result"], "cap_hit")
+        self.assertNotEqual(evidence["three__r2"], evidence["three__r1"])
+        self.assertNotEqual(evidence["three__r3"], evidence["three__r1"])
+
+    def test_axi_multi_entry_campaign_records_gate_before_entry_two(self) -> None:
+        state = run_campaign_module.load_analysis_manifest(
+            ROOT / "tests" / "fixtures" / "axi_ap_spec"
+        )
+        self.assertIsNotNone(state)
+        binding = run_campaign_module.load_campaign_policy(
+            str(TEST_CAMPAIGN_POLICY)
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_dir = Path(tmp) / "runs"
+            result = run_campaign_module.run_axi_spec_campaign(
+                run_campaign_module.argparse.Namespace(
+                    dry_run=False,
+                    cli_cmd=None,
+                    arm_quiet_mode=False,
+                    arm_countdown_s=0,
+                    environment_override=None,
+                ),
+                state,
+                runs_dir=runs_dir,
+                policy_binding=binding,
+            )
+            manifests = list((runs_dir / "campaign_manifests").glob("*.json"))
+            self.assertEqual(len(manifests), 1)
+            provenance = json.loads(manifests[0].read_text())
+
+        self.assertEqual(result, 0)
+        self.assertGreaterEqual(len(provenance["members"]), 2)
+        first = provenance["members"][0]["physical_members"][0]
+        second = provenance["members"][1]["physical_members"][0]
+        self.assertEqual(
+            first["preceding_campaign_cooldown"]["result"],
+            "first_run_exempt",
+        )
+        self.assertNotEqual(
+            second["preceding_campaign_cooldown"]["result"],
+            "first_run_exempt",
+        )
+        self.assertEqual(len(provenance["cooldown_gates"]), 3)
+
+    def test_anchor_freezes_first_eligible_repetition_in_execution_order(self) -> None:
+        binding = run_campaign_module.load_campaign_policy(
+            str(
+                ROOT
+                / "configs"
+                / "campaign_policies"
+                / "quiet_mac_p2_production.json"
+            )
+        )
+        info = run_campaign_module.ConfigInfo(
+            path=BASE_CONFIG,
+            run_id="multi",
+            raw_run_id="multi",
+            repetitions=3,
+        )
+        clean_baseline = {
+            "power_w_mean": 5.0,
+            "power_w_stddev": 0.0,
+            "duration_s": 30.0,
+            "sample_count": 30,
+            "telemetry_backend": "powermetrics",
+            "idle_window_suspect": False,
+        }
+        clean_metadata = {
+            "campaign_policy": {"sha256": binding.sha256},
+            "environment_admission": {
+                "critical_environment_passed": True,
+                "decision": "admitted",
+                "reference_provenance_present": True,
+                "per_run_environment_evaluation": {
+                    "snapshot_sha256": "a" * 64
+                },
+            },
+        }
+        r1 = run_campaign_module.MemberEvaluation(
+            bundle_id="multi__r1",
+            bundle_path=Path("multi__r1"),
+            config_name="multi.json",
+            status="succeeded",
+            strict_valid=True,
+            summary={"idle_baseline": clean_baseline},
+            metadata=clean_metadata,
+        )
+        r3 = run_campaign_module.MemberEvaluation(
+            bundle_id="multi__r3",
+            bundle_path=Path("multi__r3"),
+            config_name="multi.json",
+            status="succeeded",
+            strict_valid=True,
+            summary={
+                "idle_baseline": {
+                    **clean_baseline,
+                    "idle_window_suspect": True,
+                }
+            },
+            metadata={
+                **clean_metadata,
+                "environment_admission": {
+                    **clean_metadata["environment_admission"],
+                    "decision": "flagged",
+                },
+            },
+        )
+        anchor = run_campaign_module._first_eligible_cooldown_anchor(
+            [r1, r3],
+            info,
+            binding,
+            source_kind="first_admission_passing_baseline",
+        )
+        self.assertIsNotNone(anchor)
+        self.assertEqual(anchor["bundle_id"], "multi__r1")
 
     def test_environment_admission_claim_reason_is_not_cleared_by_waiver(self) -> None:
         summary = {
@@ -2440,7 +2693,7 @@ class RunCampaignTests(unittest.TestCase):
             self.assertIsNone(first_cooldown["thermal_nominal"])
             self.assertEqual(
                 first_cooldown["release_criterion"]["window"],
-                "complete_sustained_duration",
+                "complete_sustained_span_and_minimum_coverage",
             )
             second = members[second_run_id]["preceding_campaign_cooldown"]
             self.assertEqual(second["result"], "unknown")
@@ -3950,7 +4203,7 @@ class RunCampaignTests(unittest.TestCase):
             manifests = list((runs_dir / "campaign_manifests").glob("*.json"))
             self.assertEqual(len(manifests), 1)
             provenance = json.loads(manifests[0].read_text(encoding="utf-8"))
-            self.assertEqual(provenance["first_physical_run_id"], "fresh")
+            self.assertEqual(provenance["first_physical_run_id"], "fresh__r1")
             fresh = next(
                 member
                 for member in provenance["members"]

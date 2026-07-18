@@ -3998,3 +3998,19 @@ Revisit when: live quiet-window validation contradicts the defensive
 `pmset -g systemstate` display parser; calibrated platform data justifies an
 absolute ceiling; or a new platform cannot expose an equivalent critical
 probe without privilege.
+
+Fix-round amendment (2026-07-18): review found that summing sub-window
+durations as the completeness test made small inter-probe gaps reject an
+otherwise complete wall-clock window. Cooldown v2 now requires both a retained
+wall-clock span of at least `sustained_window_s` and captured coverage of at
+least `coverage_fraction * sustained_window_s`, with `coverage_fraction`
+defaulting to 0.8 and recorded in thresholds, trace rows, and release evidence.
+The same fix round made the existing frozen-reference rule operational for
+controller repetitions, attached cooldown evidence to each physical
+repetition (and each AXI entry), froze the first eligible repetition in
+execution order, re-probed the full governed environment per repetition, and
+added a guard observation after every idle capture. Environment-preflight
+early exits now retain a terminal campaign verdict; missing screensaver
+defaults domains use the macOS 20-minute default; and the two D-077 claim
+barriers are registered in the canonical reducer vocabulary. These are
+defect corrections to the accepted policy, not new policy alternatives.

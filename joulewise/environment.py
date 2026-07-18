@@ -504,6 +504,16 @@ def _run(command: list[str], timeout_s: float) -> tuple[str | None, str | None]:
         return None, "timeout"
     except Exception:  # noqa: BLE001 - snapshot collection must never raise
         return None, "failed"
+    if (
+        completed.returncode != 0
+        and command
+        == ["defaults", "-currentHost", "read", "com.apple.screensaver"]
+        and "does not exist" in f"{completed.stdout}\n{completed.stderr}".lower()
+    ):
+        # A missing per-host screensaver domain is the normal macOS-default
+        # state, not a failed probe.  Parsing an empty domain applies the
+        # platform's 20-minute default while leaving engagement to HID evidence.
+        return "{}", None
     if completed.returncode != 0:
         return None, f"returncode_{completed.returncode}"
     return completed.stdout, None

@@ -19,7 +19,7 @@ from joulewise.analysis_engine.estimators import (
     PairedObservation,
     estimate_paired_blocks,
 )
-from joulewise.analysis_engine.claims import evaluate_claim
+from joulewise.analysis_engine.claims import REDUCER_REASON_CODES, evaluate_claim
 from joulewise.analysis_engine.inputs import (
     BundleEvidence,
     FloorRequest,
@@ -251,6 +251,12 @@ def minimal_artifact():
 
 
 class ClaimOutcomeTests(unittest.TestCase):
+    def test_environment_barrier_reasons_are_canonical_reducer_codes(self):
+        self.assertTrue(
+            {"environment_admission_failed", "environment_override"}
+            <= REDUCER_REASON_CODES
+        )
+
     def test_all_five_outcomes_and_strict_floor_boundary(self):
         self.assertEqual(evaluation()["outcome"], "direction_supported")
         self.assertEqual(
