@@ -44,10 +44,12 @@ runs/<run_id>/
   power_trace.csv
   rich_telemetry.jsonl
   rich_telemetry_idle.jsonl
+  rich_telemetry_idle_attempt_2.jsonl  (idle-admission retry only)
   summary_metrics.json
   raw/
     (backend-native artifacts, e.g. powermetrics.plist,
-     powermetrics_idle.plist, nvidia_smi.csv)
+     powermetrics_idle.plist,
+     powermetrics_idle_attempt_2.plist, nvidia_smi.csv)
   logs/
     controller.log
     runtime.log
@@ -155,6 +157,32 @@ reserved for split runs. Rationale and alternatives: decision D-001 in
   affected fields null, or set explicit probe statuses such as
   `display.status: "probe_unavailable"` and `clock_sync.status:
   "unavailable"`.
+- `metadata.environment` may additionally include the nullable, sudo-free
+  guard fields `display_power_state` (`all_asleep`, `any_awake`, or
+  `unknown` across all online displays), `screensaver_engaged`,
+  `screensaver_module`, `screensaver_delay_s` (the configured delay), and
+  `hid_idle_s` (the current HID-idle duration). Probe failures leave the
+  affected value null/unknown and add an error; they never invent a clean
+  state. The display observation is parsed defensively from
+  `pmset -g systemstate`, screensaver configuration from
+  `defaults -currentHost read com.apple.screensaver` (missing `idleTime`
+  means the macOS 1200-second default), and HID idle from
+  `ioreg -c IOHIDSystem`. New governed runs also carry a lightweight
+  `metadata.environment.post_run_observation` with the same guard fields so
+  an awake-display or screensaver transition during the member is visible.
+- Governed campaign bundles may include top-level additive
+  `metadata.campaign_policy`, `metadata.campaign_environment_preflight`, and
+  `metadata.environment_admission` objects. `campaign_policy` records the
+  strict sidecar's schema, policy ID/version/profile, source path, and exact
+  source-byte SHA-256. `campaign_environment_preflight` records the enforced
+  snapshot and pure-policy findings, their digests, optional transient arming
+  and re-probe evidence, and an exact-bound override when one was required.
+  `environment_admission` records the per-run evaluation, critical-probe and
+  provenance status, guard observations, every idle attempt, the final
+  decision, and the optional unwaivable claim reason. These fields are absent
+  for legacy direct runs without a campaign policy; no new section enters
+  normalized `config.json`, so historical config serialization and hashes are
+  unchanged.
 - `metadata.environment.python_packages` records present-or-absent package
   version evidence for `mlx`, `mlx-lm`, and `transformers` as additive
   records shaped like `{"present": bool, "version": string|null}`.
@@ -209,6 +237,14 @@ non-gating diagnostic in `metadata.device.parse_diagnostics[]` with the raw
 artifact path, capture stage, dropped frame index, byte count, SHA-256, and
 parse error. Midstream corrupt frames and zero-complete-frame captures remain
 parse failures.
+
+When campaign policy enables idle admission, the first idle capture retains
+the compatibility paths `raw/powermetrics_idle.plist` and
+`rich_telemetry_idle.jsonl`. The one permitted retry uses the distinct paths
+`raw/powermetrics_idle_attempt_2.plist` and
+`rich_telemetry_idle_attempt_2.jsonl`. Both attempts remain evidence; the
+admission record names their ordered baseline results and never overwrites the
+first raw artifact.
 
 `rich_telemetry.jsonl` and `rich_telemetry_idle.jsonl` are optional,
 additive, derived powermetrics artifacts: one JSON object per plist document
@@ -585,7 +621,10 @@ Stable P2-029 `window_evidence_precheck.reasons` values include
 `insufficient_in_window_samples`, `cadence_ratio_unrecorded`,
 `cadence_ratio_below_threshold`, `clock_bound_unrecorded`,
 `clock_bound_exceeds_quarter_window`, `interpolation_bound_unrecorded`,
-`drift_term_unknown`, and `cooldown_cap_hit`.
+`drift_term_unknown`, and `cooldown_cap_hit`. D-077 adds the universal,
+unwaivable reasons `environment_admission_failed` and
+`environment_override`; either excludes gross request/batch-group energy,
+idle-subtracted request energy, and throughput claims.
 Reducer 0.3.0 adds `nonpositive_window_duration` and
 `idle_baseline_unrecorded`; the latter applies only to idle-subtracted gates.
 `cadence_ratio_unrecorded` is also the documented fail-closed fallback when
@@ -662,12 +701,33 @@ records the sub-window idle baseline and rolling cooldown mean.
 invocation at `runs/campaign_manifests/<session_id>.json` with schema
 `joulewise.campaign_provenance.v1`. For independent matrix configs, the
 campaign runner owns the D-014 gate between physical member invocations. The
-gate uses the preceding member's recorded idle baseline and the same rolling
-30-second/10-percent/300-second recovery rule as the experiment controller.
+manifest records the selected campaign-policy sidecar and byte SHA-256, the
+post-lock environment preflight, any exact-bound override, and the frozen
+cooldown anchor and strategy. Campaign execution defaults to
+`configs/campaign_policies/quiet_mac_p2_production.json`; direct
+`joulewise run` without a sidecar retains legacy flag-only environment
+behavior. The gate uses cooldown v2: a complete
+duration-weighted 30-second window must satisfy the one-sided upper bound
+`rolling_mean <= reference * 1.10`, Nominal thermal pressure must pass, and
+the total wait remains capped at 300 seconds. An optional calibrated absolute
+ceiling is an additional upper cap, never an alternative route to release.
 Its tri-state result is attached to the following member. Only the first
-physical run in a recorded session may carry `first_run_exempt`; a fixed sleep,
-mock-telemetry skip, adapter failure, absent baseline, or absent evidence is
-`unknown`, not recovery.
+physical run in a recorded session may carry `first_run_exempt`; a fixed
+sleep, mock-telemetry skip, adapter failure, absent eligible reference/anchor,
+or absent evidence is `unknown`, not recovery.
+
+A preceding member is reference-eligible only when its idle baseline has
+`idle_window_suspect == false`, its critical environment checks passed, and
+its environment and policy provenance are complete. An ineligible or unknown
+preceding reference falls back to the campaign's immutable clean anchor: the
+NEG-8 reference start when present, otherwise the first admission-passing
+baseline. Once frozen, that anchor is never replaced by a later outcome. If
+neither an eligible preceding reference nor a frozen anchor exists, the
+campaign fails closed before the next member. The following member's
+`preceding_campaign_cooldown` records policy version, reference eligibility,
+anchor provenance, thresholds, duration coverage, thermal result, and the
+exact release criterion. Historical rows already recorded as `recovered` are
+read under their recorded semantics and are not reinterpreted as v2 evidence.
 
 Every measured `recovered` or `cap_hit` gate references an immutable JSONL
 trace under `runs/campaign_manifests/raw/` with relative path, SHA-256, and

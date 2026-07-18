@@ -2,14 +2,144 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import subprocess
 import time
-import json
+from dataclasses import asdict, dataclass
 from importlib import metadata as importlib_metadata
-from typing import Any
+from typing import Any, Mapping
+
+from joulewise.schemas import EnvironmentGuardPolicy
 
 COMMAND_TIMEOUT_S = 3.0
+DEFAULT_SCREENSAVER_DELAY_S = 20 * 60
+
+
+@dataclass(frozen=True)
+class EnvironmentFinding:
+    """One deterministic environment-policy predicate result."""
+
+    code: str
+    field: str
+    status: str
+    actual: Any
+    required: Any
+    critical: bool = True
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+def _canonical_sha256(value: Any) -> str:
+    payload = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def evaluate_environment_policy(
+    snapshot: Mapping[str, Any],
+    policy: EnvironmentGuardPolicy | None = None,
+) -> dict[str, Any]:
+    """Purely evaluate one captured snapshot against the quiet-host policy.
+
+    Doctor and the campaign runner share this evaluator.  The former renders
+    the result as advisory evidence; the latter enforces ``eligible``.  Load
+    average is copied as evidence only and is deliberately absent from the
+    finding predicates.
+    """
+
+    selected = policy if policy is not None else EnvironmentGuardPolicy()
+    power = snapshot.get("power")
+    external_connected = (
+        power.get("external_connected") if isinstance(power, Mapping) else None
+    )
+    checks = (
+        (
+            selected.require_ac_power,
+            "power_source_not_ac",
+            "power_source",
+            snapshot.get("power_source"),
+            "AC Power",
+        ),
+        (
+            selected.require_external_connected,
+            "external_power_not_connected",
+            "power.external_connected",
+            external_connected,
+            True,
+        ),
+        (
+            selected.require_low_power_mode_off,
+            "low_power_mode_enabled",
+            "low_power_mode",
+            snapshot.get("low_power_mode"),
+            False,
+        ),
+        (
+            selected.require_displays_asleep,
+            "display_not_all_asleep",
+            "display_power_state",
+            snapshot.get("display_power_state"),
+            "all_asleep",
+        ),
+        (
+            selected.require_screensaver_disengaged,
+            "screensaver_engaged",
+            "screensaver_engaged",
+            snapshot.get("screensaver_engaged"),
+            False,
+        ),
+        (
+            selected.require_thermal_nominal,
+            "thermal_not_nominal",
+            "thermal_pressure",
+            snapshot.get("thermal_pressure"),
+            "nominal",
+        ),
+    )
+    findings: list[EnvironmentFinding] = []
+    for enabled, code, field, actual, required in checks:
+        if not enabled:
+            continue
+        comparable_actual = actual.lower() if isinstance(actual, str) else actual
+        comparable_required = required.lower() if isinstance(required, str) else required
+        if actual is None:
+            status = "unknown"
+        elif comparable_actual == comparable_required:
+            status = "pass"
+        else:
+            status = "fail"
+        findings.append(
+            EnvironmentFinding(
+                code=code,
+                field=field,
+                status=status,
+                actual=actual,
+                required=required,
+            )
+        )
+    serialized_findings = [finding.to_dict() for finding in findings]
+    blocked = any(finding.status == "fail" for finding in findings) or (
+        selected.critical_unknown_fail_closed
+        and any(finding.status == "unknown" for finding in findings)
+    )
+    snapshot_value = dict(snapshot)
+    return {
+        "schema_version": "joulewise.environment_evaluation.v1",
+        "eligible": not blocked,
+        "findings": serialized_findings,
+        "snapshot_sha256": _canonical_sha256(snapshot_value),
+        "findings_sha256": _canonical_sha256(serialized_findings),
+        "load_average_evidence": {
+            "load_average_1m": snapshot.get("load_average_1m"),
+            "load_average_5m": snapshot.get("load_average_5m"),
+            "load_average_15m": snapshot.get("load_average_15m"),
+            "admission_gate": False,
+        },
+    }
 
 
 def probe_thermal_pressure(
@@ -48,6 +178,13 @@ def empty_environment_snapshot() -> dict[str, Any]:
         "battery_state": None,
         "low_power_mode": None,
         "display_sleep_prevented": None,
+        "display_power_state": None,
+        "screensaver_engaged": None,
+        "screensaver_module": None,
+        "screensaver_delay_s": None,
+        "hid_idle_s": None,
+        "thermal_pressure": None,
+        "thermal_probe_reason": None,
         "memory_free_percent": None,
         "memory_pressure_percent": None,
         "memory": {
@@ -195,6 +332,31 @@ def collect_environment_snapshot(timeout_s: float = COMMAND_TIMEOUT_S) -> dict[s
     _apply_command(
         snapshot,
         errors,
+        "pmset_systemstate",
+        ["pmset", "-g", "systemstate"],
+        _parse_pmset_systemstate,
+        timeout_s,
+    )
+    _apply_command(
+        snapshot,
+        errors,
+        "screensaver_defaults",
+        ["defaults", "-currentHost", "read", "com.apple.screensaver"],
+        _parse_screensaver_defaults,
+        timeout_s,
+    )
+    _apply_command(
+        snapshot,
+        errors,
+        "ioreg_hid_idle",
+        ["ioreg", "-c", "IOHIDSystem"],
+        _parse_ioreg_hid_idle,
+        timeout_s,
+    )
+    _derive_screensaver_engagement(snapshot)
+    _apply_command(
+        snapshot,
+        errors,
         "ioreg_framebuffer_pipes",
         ["ioreg", "-r", "-c", "IOMobileFramebuffer"],
         _parse_ioreg_framebuffer_pipes,
@@ -217,6 +379,11 @@ def collect_environment_snapshot(timeout_s: float = COMMAND_TIMEOUT_S) -> dict[s
         timeout_s,
     )
     _probe_clock_sync(snapshot, errors, timeout_s)
+    thermal_pressure, thermal_reason = probe_thermal_pressure(timeout_s)
+    snapshot["thermal_pressure"] = thermal_pressure
+    snapshot["thermal_probe_reason"] = thermal_reason
+    if thermal_pressure is None:
+        errors["pmset_therm"] = thermal_reason or "failed"
     _apply_command(
         snapshot,
         errors,
@@ -244,6 +411,52 @@ def collect_environment_snapshot(timeout_s: float = COMMAND_TIMEOUT_S) -> dict[s
 
     snapshot["errors"] = errors
     return snapshot
+
+
+def collect_environment_guard_observation(
+    timeout_s: float = COMMAND_TIMEOUT_S,
+) -> dict[str, Any]:
+    """Capture the lightweight display/screensaver transition surface.
+
+    This post-run observation intentionally omits the expensive full host
+    inventory while preserving null-on-failure semantics for every probe.
+    """
+
+    observation = {
+        "display_power_state": None,
+        "screensaver_engaged": None,
+        "screensaver_module": None,
+        "screensaver_delay_s": None,
+        "hid_idle_s": None,
+        "errors": {},
+    }
+    errors: dict[str, str] = observation["errors"]
+    _apply_command(
+        observation,
+        errors,
+        "pmset_systemstate",
+        ["pmset", "-g", "systemstate"],
+        _parse_pmset_systemstate,
+        timeout_s,
+    )
+    _apply_command(
+        observation,
+        errors,
+        "screensaver_defaults",
+        ["defaults", "-currentHost", "read", "com.apple.screensaver"],
+        _parse_screensaver_defaults,
+        timeout_s,
+    )
+    _apply_command(
+        observation,
+        errors,
+        "ioreg_hid_idle",
+        ["ioreg", "-c", "IOHIDSystem"],
+        _parse_ioreg_hid_idle,
+        timeout_s,
+    )
+    _derive_screensaver_engagement(observation)
+    return observation
 
 
 def _package_version_record(distribution: str) -> dict[str, str | bool | None]:
@@ -326,6 +539,66 @@ def _parse_pmset_assertions(snapshot: dict[str, Any], text: str) -> None:
     )
     if match:
         snapshot["display_sleep_prevented"] = match.group(1) == "1"
+
+
+def _parse_pmset_systemstate(snapshot: dict[str, Any], text: str) -> None:
+    match = re.search(
+        r"Current\s+System\s+Capabilities\s*(?:are)?\s*:\s*([^\n]*)",
+        text,
+        re.IGNORECASE,
+    )
+    if not match:
+        raise ValueError("current system capabilities not found")
+    capabilities = {part.lower() for part in re.findall(r"[A-Za-z]+", match.group(1))}
+    if "graphics" in capabilities:
+        snapshot["display_power_state"] = "any_awake"
+        return
+    display = snapshot.get("display")
+    online_count = (
+        display.get("active_displays") if isinstance(display, dict) else None
+    )
+    # A recognized systemstate record establishes that no display is awake.
+    # When the full inventory is available, require at least one online display
+    # so an empty/unrecognized profiler result cannot masquerade as asleep.
+    if isinstance(display, dict) and online_count in {None, 0}:
+        snapshot["display_power_state"] = "unknown"
+    else:
+        snapshot["display_power_state"] = "all_asleep"
+
+
+def _parse_screensaver_defaults(snapshot: dict[str, Any], text: str) -> None:
+    normalized = text.strip()
+    if not normalized:
+        raise ValueError("screensaver defaults output is empty")
+    module = re.search(r"moduleName\s*=\s*[\"']?([^;\n\"']+)", text)
+    delay = re.search(r"(?:^|[;\n{])\s*idleTime\s*=\s*(\d+)\s*;?", text)
+    snapshot["screensaver_module"] = module.group(1).strip() if module else None
+    snapshot["screensaver_delay_s"] = (
+        int(delay.group(1)) if delay else DEFAULT_SCREENSAVER_DELAY_S
+    )
+
+
+def _parse_ioreg_hid_idle(snapshot: dict[str, Any], text: str) -> None:
+    match = re.search(r'"HIDIdleTime"\s*=\s*(\d+)', text)
+    if not match:
+        raise ValueError("HIDIdleTime not found")
+    snapshot["hid_idle_s"] = int(match.group(1)) / 1_000_000_000.0
+
+
+def _derive_screensaver_engagement(snapshot: dict[str, Any]) -> None:
+    delay = snapshot.get("screensaver_delay_s")
+    hid_idle = snapshot.get("hid_idle_s")
+    if delay == 0:
+        snapshot["screensaver_engaged"] = False
+    elif (
+        isinstance(delay, int | float)
+        and not isinstance(delay, bool)
+        and isinstance(hid_idle, int | float)
+        and not isinstance(hid_idle, bool)
+    ):
+        snapshot["screensaver_engaged"] = float(hid_idle) >= float(delay)
+    else:
+        snapshot["screensaver_engaged"] = None
 
 
 def _parse_memory_pressure(snapshot: dict[str, Any], text: str) -> None:

@@ -1,0 +1,29 @@
+{
+  "cooldown": {
+    "absolute_ceiling_w": null,
+    "cap_s": 300.0,
+    "policy_version": "cooldown-v2",
+    "require_thermal_nominal": true,
+    "subwindow_s": 5.0,
+    "sustained_window_s": 30.0,
+    "tolerance_fraction": 0.1
+  },
+  "environment_guard": {
+    "critical_unknown_fail_closed": true,
+    "require_ac_power": true,
+    "require_displays_asleep": true,
+    "require_external_connected": true,
+    "require_low_power_mode_off": true,
+    "require_screensaver_disengaged": true,
+    "require_thermal_nominal": true
+  },
+  "idle_admission": {
+    "enabled": true,
+    "on_fail": "abort",
+    "retry_attempts": 1
+  },
+  "policy_id": "quiet-mac-p2-production",
+  "policy_version": "environment-guard-cooldown-v2",
+  "profile": "production",
+  "schema_version": "joulewise.campaign_policy.v1"
+}

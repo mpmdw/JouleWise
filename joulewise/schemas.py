@@ -206,6 +206,20 @@ class PromptTokenEvidencePolicy(str, Enum):
     EXEMPT_AFFINE_GENERATED_TEXT = "exempt_affine_generated_text"
 
 
+class CampaignPolicyProfile(str, Enum):
+    """Claim posture selected by a hash-bound campaign policy sidecar."""
+
+    PRODUCTION = "production"
+    EXPLORATORY = "exploratory"
+
+
+class AdmissionFailureAction(str, Enum):
+    """Controller action after the bounded idle-admission retry is exhausted."""
+
+    ABORT = "abort"
+    FLAG = "flag"
+
+
 class EnergyEvidence(str, Enum):
     """Admission state for request-energy evidence in a succeeded summary."""
 
@@ -343,6 +357,245 @@ def _optional_enum_value(
 
 def _string_enum_schema(enum_type: type[Enum]) -> dict[str, Any]:
     return {"type": "string", "enum": [item.value for item in enum_type]}
+
+
+def _require_bool(value: Any, field_name: str) -> bool:
+    if not isinstance(value, bool):
+        raise SchemaError(f"{field_name} must be a boolean")
+    return value
+
+
+def _require_exact_keys(
+    data: dict[str, Any], field_name: str, keys: frozenset[str]
+) -> None:
+    unknown = sorted(set(data) - keys)
+    if unknown:
+        raise SchemaError(
+            f"{field_name} has unknown key(s): {', '.join(unknown)}"
+        )
+
+
+@dataclass(frozen=True)
+class EnvironmentGuardPolicy:
+    """Critical, sudo-free host predicates enforced before a campaign."""
+
+    require_ac_power: bool = True
+    require_external_connected: bool = True
+    require_low_power_mode_off: bool = True
+    require_displays_asleep: bool = True
+    require_screensaver_disengaged: bool = True
+    require_thermal_nominal: bool = True
+    critical_unknown_fail_closed: bool = True
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any]) -> "EnvironmentGuardPolicy":
+        data = _require_mapping(data, "environment_guard")
+        keys = frozenset(
+            {
+                "require_ac_power",
+                "require_external_connected",
+                "require_low_power_mode_off",
+                "require_displays_asleep",
+                "require_screensaver_disengaged",
+                "require_thermal_nominal",
+                "critical_unknown_fail_closed",
+            }
+        )
+        _require_exact_keys(data, "environment_guard", keys)
+        values = {
+            key: _require_bool(data.get(key, True), f"environment_guard.{key}")
+            for key in keys
+        }
+        return cls(**values)
+
+
+@dataclass(frozen=True)
+class IdleAdmissionPolicy:
+    """Per-run idle-baseline admission policy owned by the campaign sidecar."""
+
+    enabled: bool = True
+    retry_attempts: int = 1
+    on_fail: AdmissionFailureAction = AdmissionFailureAction.ABORT
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any]) -> "IdleAdmissionPolicy":
+        data = _require_mapping(data, "idle_admission")
+        _require_exact_keys(
+            data,
+            "idle_admission",
+            frozenset({"enabled", "retry_attempts", "on_fail"}),
+        )
+        retry_attempts = data.get("retry_attempts", 1)
+        if (
+            isinstance(retry_attempts, bool)
+            or not isinstance(retry_attempts, int)
+            or retry_attempts != 1
+        ):
+            raise SchemaError(
+                "idle_admission.retry_attempts must be exactly 1 "
+                "(one fully-evidenced retry)"
+            )
+        return cls(
+            enabled=_require_bool(data.get("enabled", True), "idle_admission.enabled"),
+            retry_attempts=retry_attempts,
+            on_fail=_enum_value(
+                AdmissionFailureAction,
+                data.get("on_fail", AdmissionFailureAction.ABORT.value),
+                "idle_admission.on_fail",
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class CooldownPolicy:
+    """Sustained, one-sided cooldown-v2 release policy."""
+
+    policy_version: str = "cooldown-v2"
+    subwindow_s: float = 5.0
+    sustained_window_s: float = 30.0
+    tolerance_fraction: float = 0.10
+    cap_s: float = 300.0
+    absolute_ceiling_w: float | None = None
+    require_thermal_nominal: bool = True
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any]) -> "CooldownPolicy":
+        data = _require_mapping(data, "cooldown")
+        _require_exact_keys(
+            data,
+            "cooldown",
+            frozenset(
+                {
+                    "policy_version",
+                    "subwindow_s",
+                    "sustained_window_s",
+                    "tolerance_fraction",
+                    "cap_s",
+                    "absolute_ceiling_w",
+                    "require_thermal_nominal",
+                }
+            ),
+        )
+        policy_version = _require_string(
+            data.get("policy_version", "cooldown-v2"),
+            "cooldown.policy_version",
+        )
+        if policy_version != "cooldown-v2":
+            raise SchemaError("cooldown.policy_version must be 'cooldown-v2'")
+        subwindow_s = _optional_float(
+            data.get("subwindow_s", 5.0), "cooldown.subwindow_s", minimum=0.001
+        )
+        sustained_window_s = _optional_float(
+            data.get("sustained_window_s", 30.0),
+            "cooldown.sustained_window_s",
+            minimum=0.001,
+        )
+        tolerance_fraction = _optional_float(
+            data.get("tolerance_fraction", 0.10),
+            "cooldown.tolerance_fraction",
+            minimum=0.0,
+        )
+        cap_s = _optional_float(
+            data.get("cap_s", 300.0), "cooldown.cap_s", minimum=0.001
+        )
+        absolute_ceiling_w = _optional_float(
+            data.get("absolute_ceiling_w"),
+            "cooldown.absolute_ceiling_w",
+            minimum=0.0,
+        )
+        assert subwindow_s is not None
+        assert sustained_window_s is not None
+        assert tolerance_fraction is not None
+        assert cap_s is not None
+        if sustained_window_s > cap_s:
+            raise SchemaError("cooldown.sustained_window_s must be <= cooldown.cap_s")
+        return cls(
+            policy_version=policy_version,
+            subwindow_s=subwindow_s,
+            sustained_window_s=sustained_window_s,
+            tolerance_fraction=tolerance_fraction,
+            cap_s=cap_s,
+            absolute_ceiling_w=absolute_ceiling_w,
+            require_thermal_nominal=_require_bool(
+                data.get("require_thermal_nominal", True),
+                "cooldown.require_thermal_nominal",
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class CampaignPolicy:
+    """Typed policy loaded from a separately hashed campaign sidecar.
+
+    The policy is intentionally not a :class:`BenchmarkConfig` section.  Its
+    byte hash is campaign provenance, while normalized benchmark config bytes
+    retain their historical D-001/D-022 identity when no policy is supplied.
+    """
+
+    schema_version: str
+    policy_id: str
+    policy_version: str
+    profile: CampaignPolicyProfile
+    environment_guard: EnvironmentGuardPolicy
+    idle_admission: IdleAdmissionPolicy
+    cooldown: CooldownPolicy
+
+    @classmethod
+    def from_mapping(cls, data: dict[str, Any]) -> "CampaignPolicy":
+        data = _require_mapping(data, "campaign policy")
+        _require_exact_keys(
+            data,
+            "campaign policy",
+            frozenset(
+                {
+                    "schema_version",
+                    "policy_id",
+                    "policy_version",
+                    "profile",
+                    "environment_guard",
+                    "idle_admission",
+                    "cooldown",
+                }
+            ),
+        )
+        schema_version = _require_string(
+            data.get("schema_version"), "campaign_policy.schema_version"
+        )
+        if schema_version != "joulewise.campaign_policy.v1":
+            raise SchemaError(
+                "campaign_policy.schema_version must be "
+                "'joulewise.campaign_policy.v1'"
+            )
+        profile = _enum_value(
+            CampaignPolicyProfile,
+            data.get("profile"),
+            "campaign_policy.profile",
+        )
+        admission = IdleAdmissionPolicy.from_mapping(data.get("idle_admission"))
+        if (
+            admission.on_fail == AdmissionFailureAction.FLAG
+            and profile != CampaignPolicyProfile.EXPLORATORY
+        ):
+            raise SchemaError(
+                "idle_admission.on_fail='flag' is permitted only for an "
+                "exploratory campaign policy"
+            )
+        return cls(
+            schema_version=schema_version,
+            policy_id=_require_string(data.get("policy_id"), "campaign_policy.policy_id"),
+            policy_version=_require_string(
+                data.get("policy_version"), "campaign_policy.policy_version"
+            ),
+            profile=profile,
+            environment_guard=EnvironmentGuardPolicy.from_mapping(
+                data.get("environment_guard")
+            ),
+            idle_admission=admission,
+            cooldown=CooldownPolicy.from_mapping(data.get("cooldown")),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return _enum_to_value(asdict(self))
 
 
 @dataclass(frozen=True)

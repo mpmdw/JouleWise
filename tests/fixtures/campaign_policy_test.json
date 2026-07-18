@@ -1,0 +1,29 @@
+{
+  "cooldown": {
+    "absolute_ceiling_w": null,
+    "cap_s": 30.0,
+    "policy_version": "cooldown-v2",
+    "require_thermal_nominal": false,
+    "subwindow_s": 1.0,
+    "sustained_window_s": 2.0,
+    "tolerance_fraction": 0.1
+  },
+  "environment_guard": {
+    "critical_unknown_fail_closed": true,
+    "require_ac_power": false,
+    "require_displays_asleep": false,
+    "require_external_connected": false,
+    "require_low_power_mode_off": false,
+    "require_screensaver_disengaged": false,
+    "require_thermal_nominal": false
+  },
+  "idle_admission": {
+    "enabled": false,
+    "on_fail": "abort",
+    "retry_attempts": 1
+  },
+  "policy_id": "test-no-host-probes",
+  "policy_version": "environment-guard-cooldown-v2-test",
+  "profile": "exploratory",
+  "schema_version": "joulewise.campaign_policy.v1"
+}

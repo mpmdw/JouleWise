@@ -99,6 +99,7 @@ be re-derived by a future agent gets an entry here.
 | D-074 | Conditional Qwen3-4B primary repin + OLMo-1B conversion spike authorized | accepted |
 | D-075 | Extension-axis intake: ranked fold-in without new thesis proliferation | accepted |
 | D-076 | Site capacity right-sizing (AUD-WO-039 review): measured-first budgets | accepted |
+| D-077 | Environment guard, idle admission, and cooldown v2 | accepted |
 
 ---
 
@@ -3903,3 +3904,97 @@ input). WO-039 preservation boundary held: no advisor-facing page,
 navigation, provenance, or deep link trimmed. Current measured artifact
 961,210 B. Revisit trigger: measured artifact within 24 KB of the hard
 cap forces the next right-sizing review before any addition.
+
+## D-077: Environment guard, idle admission, and cooldown v2
+
+- Date: 2026-07-17
+- Status: accepted
+- Phase: 2 / measurement
+
+Context: a Ventura video screensaver compositing on an awake display was
+identified as a material, repeatable contaminant. The affected windows showed
+about 50% GPU duty and were already detected by the existing
+`idle_window_suspect` thresholds. The campaign preflight, per-run admission,
+and D-014 cooldown nevertheless lacked one shared environment policy, exact
+override custody, and a sustained-window implementation. In particular, the
+old cooldown could release after one 5-second sub-window even though the
+contract called for a rolling 30-second recovery window.
+
+Options considered:
+
+1. Treat doctor output as a quietness certificate and continue to rely on
+   operator judgment between members. Rejected: a point-in-time advisory
+   cannot certify the later measured window and cannot enforce fixed-n
+   admission.
+2. Change persistent display/screensaver preferences or allow contaminated
+   members to be skipped or waived. Rejected: campaign preparation must not
+   mutate host policy, and outcome-dependent skipping/waiving would break the
+   fixed-n design and conceal the contamination.
+3. Use a hash-bound campaign-policy sidecar, an enforcing campaign preflight,
+   per-run idle admission with one evidence-bearing retry, and cooldown v2
+   with frozen clean-anchor fallback. Chosen.
+
+Decision:
+
+- A shared pure evaluator owns environment findings. Doctor consumes it only
+  advisorily. `run_campaign.py` consumes it enforcingly after taking the
+  campaign lock and before member 1. Critical unknowns fail closed. Load
+  average is recorded as evidence but is never a member-admission gate.
+- The production quiet-Mac policy requires AC power with an externally
+  connected source, low-power mode off, all online displays asleep, the
+  screensaver disengaged, and Nominal thermal pressure. Quiet-mode arming is
+  explicit and transient: countdown, `pmset displaysleepnow`, then a complete
+  re-probe. Persistent settings are never changed.
+- An environment override must name the exact snapshot and findings digests
+  it acknowledges. It is recorded as an override, never a waiver, and makes
+  every resulting member universally claim-ineligible.
+- Per-run idle admission reuses the validated
+  `idle_window_suspect == false` threshold. It permits exactly one fully
+  evidenced retry with distinct raw artifacts. Persistent awake-display,
+  screensaver, or unknown critical state aborts immediately. Production
+  aborts after retry; the exploratory-only `flag` path completes the fixed-n
+  member but stamps the unwaivable `environment_admission_failed` reason on
+  gross-energy, idle-subtracted-energy, and throughput claims. There is no
+  skip action.
+- Cooldown v2 amends D-014: recovery requires a complete, duration-weighted,
+  sustained 30-second evidence window; the one-sided rule is
+  `rolling_mean <= reference * (1 + tolerance)`, so a below-reference window
+  is recovered. Nominal thermal state is conjunctive. A calibrated absolute
+  ceiling, when configured, is only an additional upper cap. A preceding
+  baseline is reference-eligible only when its idle window is clean, critical
+  environment checks passed, and policy/environment provenance is present.
+  Otherwise the campaign uses one frozen clean anchor (NEG-8 reference start
+  when present, else the first admission-passing baseline), records its
+  provenance, never updates it from later outcomes, and fails closed when no
+  eligible reference or anchor exists. Historical recovered rows are not
+  reinterpreted.
+- The policy owner is a strictly typed, byte-hashed sidecar under
+  `configs/campaign_policies/`; policy version and SHA-256 are copied into each
+  governed bundle. Campaign execution defaults to the production sidecar.
+  Direct `joulewise run` without a sidecar retains legacy non-enforcing
+  behavior. All bundle/config additions are nullable or omission-serialized;
+  legacy normalized config bytes and hashes are unchanged.
+- This amends D-057's stable claim-reason vocabulary by adding
+  `environment_admission_failed` and `environment_override`. Both are
+  universal and unwaivable for gross-energy, idle-subtracted-energy, and
+  throughput claims.
+
+Considerations: environment admission is measurement-apparatus integrity, not
+post-hoc data cleaning. Duration weighting prevents irregular sub-window
+cadence from manufacturing coverage. Frozen-anchor provenance prevents a
+contaminated or outcome-selected member from quietly becoming the campaign's
+new recovery reference. The doctor remains useful as an early advisor without
+claiming more than its snapshot can prove.
+
+Consequences: campaign and bundle contracts gain policy/preflight/admission
+provenance, environment snapshots gain nullable display/screensaver/HID
+fields plus a post-run observation, and D-014's recovery wording is governed
+by cooldown v2 for new evidence. This decision is separate from AUD-WO-033,
+which remains behavior-preserving; D-077 intentionally changes future
+measurement admission and cooldown behavior and does not reinterpret sealed
+historical bundles.
+
+Revisit when: live quiet-window validation contradicts the defensive
+`pmset -g systemstate` display parser; calibrated platform data justifies an
+absolute ceiling; or a new platform cannot expose an equivalent critical
+probe without privilege.

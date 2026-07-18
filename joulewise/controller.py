@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import traceback
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
@@ -70,7 +71,12 @@ from joulewise.bundle import (
     write_experiment_manifest,
 )
 from joulewise.clock import Clock, ClockStamp, FakeClock
-from joulewise.environment import collect_environment_snapshot, empty_environment_snapshot
+from joulewise.environment import (
+    collect_environment_guard_observation,
+    collect_environment_snapshot,
+    empty_environment_snapshot,
+    evaluate_environment_policy,
+)
 from joulewise.interfaces import (
     AttemptIdentity,
     AdapterFailure,
@@ -98,7 +104,10 @@ from joulewise.axi_decode_config import (
     sha256_bytes as axi_sha256_bytes,
 )
 from joulewise.schemas import (
+    AdmissionFailureAction,
     BenchmarkConfig,
+    CampaignPolicy,
+    CooldownPolicy,
     FailureReason,
     IdleBaseline,
     MeasurementQuality,
@@ -136,6 +145,9 @@ COOLDOWN_ROLLING_WINDOW_S = 30.0
 COOLDOWN_TOLERANCE = 0.10
 COOLDOWN_CAP_S = 300.0
 PRE_IDLE_SETTLE_S = 2.0
+CAMPAIGN_POLICY_PATH_ENV = "JOULEWISE_CAMPAIGN_POLICY_PATH"
+CAMPAIGN_POLICY_SHA256_ENV = "JOULEWISE_CAMPAIGN_POLICY_SHA256"
+CAMPAIGN_PREFLIGHT_JSON_ENV = "JOULEWISE_CAMPAIGN_PREFLIGHT_JSON"
 
 #: FailureReason -> RunStatus mapping owned by the controller (D-012).
 #: ``unsupported`` is a finding (structural incompatibility of the
@@ -215,6 +227,9 @@ def run_benchmark(
     reducer: Reducer | None = None,
     extra_metadata: dict[str, Any] | None = None,
     environment_snapshot: dict[str, Any] | None | object = _ENVIRONMENT_UNSET,
+    campaign_policy: CampaignPolicy | None = None,
+    campaign_policy_binding: dict[str, Any] | None = None,
+    campaign_environment_preflight: dict[str, Any] | None = None,
 ) -> tuple[Path, SummaryMetrics | SummaryMetricsV060]:
     """Run one benchmark and return ``(bundle path, summary)``.
 
@@ -233,6 +248,12 @@ def run_benchmark(
     which the reducer copies into the run's ``measurement_quality``.
     """
     config.validate()
+    if campaign_policy is None:
+        (
+            campaign_policy,
+            campaign_policy_binding,
+            campaign_environment_preflight,
+        ) = _campaign_policy_from_environment()
     config, suite_preparation, suite_preparation_failure = (
         _prepare_suite_manifest_for_new_bundle(config)
     )
@@ -249,7 +270,55 @@ def run_benchmark(
         environment_snapshot,
         suite_preparation,
         suite_preparation_failure,
+        campaign_policy,
+        campaign_policy_binding,
+        campaign_environment_preflight,
     ).execute()
+
+
+def _campaign_policy_from_environment() -> tuple[
+    CampaignPolicy | None,
+    dict[str, Any] | None,
+    dict[str, Any] | None,
+]:
+    """Load and authenticate the optional campaign-only process binding."""
+
+    path_text = os.environ.get(CAMPAIGN_POLICY_PATH_ENV)
+    expected_sha = os.environ.get(CAMPAIGN_POLICY_SHA256_ENV)
+    preflight_text = os.environ.get(CAMPAIGN_PREFLIGHT_JSON_ENV)
+    if path_text is None and expected_sha is None and preflight_text is None:
+        return None, None, None
+    if not path_text or not expected_sha:
+        raise ValueError(
+            "campaign policy environment binding requires both path and sha256"
+        )
+    raw = Path(path_text).read_bytes()
+    actual_sha = hashlib.sha256(raw).hexdigest()
+    normalized_expected = expected_sha.removeprefix("sha256:")
+    if normalized_expected != actual_sha:
+        raise ValueError(
+            "campaign policy hash mismatch: "
+            f"expected {normalized_expected}, observed {actual_sha}"
+        )
+    payload = json.loads(raw)
+    policy = CampaignPolicy.from_mapping(payload)
+    preflight: dict[str, Any] | None = None
+    if preflight_text is not None:
+        parsed = json.loads(preflight_text)
+        if not isinstance(parsed, dict):
+            raise ValueError("campaign environment preflight must be a JSON object")
+        preflight = parsed
+        if preflight.get("policy_sha256") != actual_sha:
+            raise ValueError("campaign preflight is not bound to the selected policy hash")
+    binding = {
+        "schema_version": policy.schema_version,
+        "policy_id": policy.policy_id,
+        "policy_version": policy.policy_version,
+        "profile": policy.profile.value,
+        "sha256": actual_sha,
+        "source": path_text,
+    }
+    return policy, binding, preflight
 
 
 class _StageFailure(Exception):
@@ -367,6 +436,9 @@ class _Execution:
         environment_snapshot: dict[str, Any] | None | object = _ENVIRONMENT_UNSET,
         suite_preparation: _PreparedSuiteManifest | None = None,
         suite_preparation_failure: _StageFailure | None = None,
+        campaign_policy: CampaignPolicy | None = None,
+        campaign_policy_binding: dict[str, Any] | None = None,
+        campaign_environment_preflight: dict[str, Any] | None = None,
     ) -> None:
         self._config = config
         self._writer = writer
@@ -377,6 +449,16 @@ class _Execution:
         self._environment_snapshot = environment_snapshot
         self._suite_preparation = suite_preparation
         self._suite_preparation_failure = suite_preparation_failure
+        self._campaign_policy = campaign_policy
+        self._campaign_policy_binding = (
+            dict(campaign_policy_binding) if campaign_policy_binding else None
+        )
+        self._campaign_environment_preflight = (
+            dict(campaign_environment_preflight)
+            if campaign_environment_preflight
+            else None
+        )
+        self._environment_admission: dict[str, Any] | None = None
         # D-024: one immutable context, constructed after bundle creation,
         # passed to every adapter lifecycle call. Context is data (paths and
         # identity), never the writer.
@@ -545,9 +627,105 @@ class _Execution:
         self._settle_before_idle()
         idle_start_s = self._clock.now()
         self._stamp_preceding_gap(idle_start_s)
-        self._baseline = self._telemetry.measure_idle(self._config, self._context)
-        self._capture_adapter_alignments()
-        self._capture_adapter_metadata()
+        admission = (
+            self._campaign_policy.idle_admission
+            if self._campaign_policy is not None
+            else None
+        )
+        attempts: list[dict[str, Any]] = []
+        if admission is not None and admission.enabled:
+            per_run_evaluation = evaluate_environment_policy(
+                self._environment if isinstance(self._environment, dict) else {},
+                self._campaign_policy.environment_guard,
+            )
+            preflight_evaluation = (
+                self._campaign_environment_preflight.get("evaluation")
+                if isinstance(self._campaign_environment_preflight, dict)
+                else None
+            )
+            override = (
+                self._campaign_environment_preflight.get("override")
+                if isinstance(self._campaign_environment_preflight, dict)
+                else None
+            )
+            critical_environment_passed = bool(
+                per_run_evaluation.get("eligible") is True
+                and isinstance(preflight_evaluation, dict)
+                and preflight_evaluation.get("eligible") is True
+                and override is None
+            )
+            self._environment_admission = {
+                "schema_version": "joulewise.environment_admission.v1",
+                "policy_version": self._campaign_policy.policy_version,
+                "on_fail": admission.on_fail.value,
+                "attempts": attempts,
+                "per_run_environment_evaluation": per_run_evaluation,
+                "critical_environment_passed": critical_environment_passed,
+                "reference_provenance_present": bool(
+                    self._campaign_policy_binding
+                    and per_run_evaluation.get("snapshot_sha256")
+                    and isinstance(preflight_evaluation, dict)
+                    and preflight_evaluation.get("snapshot_sha256")
+                ),
+                "decision": None,
+                "claim_reason": None,
+            }
+            observation = self._admission_guard_observation("before_attempt_1")
+            environment_reason = self._admission_environment_failure(observation)
+            if environment_reason is not None:
+                self._environment_admission.update(
+                    {"decision": "abort", "failure": environment_reason}
+                )
+                raise _StageFailure(
+                    "idle_baseline", FailureReason.UNKNOWN_ERROR, environment_reason
+                )
+            if per_run_evaluation.get("eligible") is not True and override is None:
+                reason = "critical per-run environment policy did not pass"
+                self._environment_admission.update(
+                    {"decision": "abort", "failure": reason}
+                )
+                raise _StageFailure(
+                    "idle_baseline", FailureReason.UNKNOWN_ERROR, reason
+                )
+
+        self._baseline = self._measure_idle_admission_attempt(1, attempts)
+        if admission is not None and admission.enabled:
+            if self._baseline.idle_window_suspect is not False:
+                observation = self._admission_guard_observation("before_attempt_2")
+                environment_reason = self._admission_environment_failure(observation)
+                if environment_reason is not None:
+                    assert self._environment_admission is not None
+                    self._environment_admission.update(
+                        {"decision": "abort", "failure": environment_reason}
+                    )
+                    raise _StageFailure(
+                        "idle_baseline",
+                        FailureReason.UNKNOWN_ERROR,
+                        environment_reason,
+                    )
+                self._baseline = self._measure_idle_admission_attempt(2, attempts)
+            assert self._environment_admission is not None
+            if self._baseline.idle_window_suspect is False:
+                self._environment_admission["decision"] = "admitted"
+            elif admission.on_fail == AdmissionFailureAction.ABORT:
+                reason = "idle environment admission failed after one retry"
+                self._environment_admission.update(
+                    {
+                        "decision": "abort",
+                        "failure": reason,
+                        "claim_reason": "environment_admission_failed",
+                    }
+                )
+                raise _StageFailure(
+                    "idle_baseline", FailureReason.UNKNOWN_ERROR, reason
+                )
+            else:
+                self._environment_admission.update(
+                    {
+                        "decision": "flagged",
+                        "claim_reason": "environment_admission_failed",
+                    }
+                )
         self._log(
             self._telemetry_log,
             f"idle baseline: mean {self._baseline.power_w_mean} W over "
@@ -558,8 +736,70 @@ class _Execution:
             {
                 "power_w_mean": self._baseline.power_w_mean,
                 "duration_s": self._baseline.duration_s,
+                "admission_attempts": len(attempts) if attempts else None,
+                "admission_decision": (
+                    self._environment_admission.get("decision")
+                    if self._environment_admission is not None
+                    else None
+                ),
             },
         )
+
+    def _measure_idle_admission_attempt(
+        self, attempt: int, attempts: list[dict[str, Any]]
+    ) -> IdleBaseline:
+        assert self._telemetry is not None
+        baseline = self._telemetry.measure_idle(self._config, self._context)
+        self._capture_adapter_alignments()
+        self._capture_adapter_metadata()
+        if self._campaign_policy is not None:
+            attempts.append(
+                {
+                    "attempt": attempt,
+                    "baseline": _jsonable(asdict(baseline)),
+                    "admitted": baseline.idle_window_suspect is False,
+                }
+            )
+        return baseline
+
+    def _admission_guard_observation(self, phase: str) -> dict[str, Any]:
+        if isinstance(self._clock, FakeClock):
+            source = self._environment if isinstance(self._environment, dict) else {}
+            observation = {
+                "display_power_state": source.get("display_power_state"),
+                "screensaver_engaged": source.get("screensaver_engaged"),
+                "screensaver_module": source.get("screensaver_module"),
+                "screensaver_delay_s": source.get("screensaver_delay_s"),
+                "hid_idle_s": source.get("hid_idle_s"),
+                "errors": {},
+                "capture_skipped": True,
+                "skip_reason": "fake_clock",
+            }
+        else:
+            observation = collect_environment_guard_observation()
+            observation["capture_skipped"] = False
+        observation["phase"] = phase
+        if self._environment_admission is not None:
+            self._environment_admission.setdefault("guard_observations", []).append(
+                observation
+            )
+        return observation
+
+    @staticmethod
+    def _admission_environment_failure(
+        observation: dict[str, Any],
+    ) -> str | None:
+        display_state = observation.get("display_power_state")
+        screensaver = observation.get("screensaver_engaged")
+        if display_state == "any_awake":
+            return "display became or remained awake during idle admission"
+        if screensaver is True:
+            return "screensaver became or remained engaged during idle admission"
+        if display_state not in {"all_asleep"}:
+            return "display power state is unknown during idle admission"
+        if screensaver is not False:
+            return "screensaver engagement state is unknown during idle admission"
+        return None
 
     def _stage_warmup(self) -> None:
         self._begin_stage("warmup")
@@ -785,6 +1025,7 @@ class _Execution:
                 )
             elif result.metadata:
                 metadata.update(_jsonable(result.metadata))
+        self._capture_post_run_environment_observation()
         self._complete_stage("cleanup", metadata)
 
     def _stage_reduce(self) -> SummaryMetrics:
@@ -1397,6 +1638,14 @@ class _Execution:
             extra["connection"] = self._connection_metadata
         if self._environment is not None:
             extra["environment"] = self._environment
+        if self._campaign_policy_binding is not None:
+            extra["campaign_policy"] = self._campaign_policy_binding
+        if self._campaign_environment_preflight is not None:
+            extra["campaign_environment_preflight"] = (
+                self._campaign_environment_preflight
+            )
+        if self._environment_admission is not None:
+            extra["environment_admission"] = self._environment_admission
         adapters: dict[str, Any] = {}
         if self._runtime is not None:
             adapters["runtime"] = {
@@ -1525,6 +1774,28 @@ class _Execution:
             captured_for_rep=None,
             settle_s=None,
         )
+
+    def _capture_post_run_environment_observation(self) -> None:
+        if not isinstance(self._environment, dict):
+            return
+        if isinstance(self._clock, FakeClock):
+            self._environment["post_run_observation"] = {
+                "capture_skipped": True,
+                "skip_reason": "fake_clock",
+                "captured_at_s": None,
+            }
+            return
+        started_at_s = self._clock.now()
+        observation = collect_environment_guard_observation()
+        captured_at_s = self._clock.now()
+        observation.update(
+            {
+                "capture_skipped": False,
+                "captured_at_s": captured_at_s,
+                "capture_duration_s": captured_at_s - started_at_s,
+            }
+        )
+        self._environment["post_run_observation"] = observation
 
     def _settle_before_idle(self) -> None:
         if not isinstance(self._environment, dict):
@@ -1704,17 +1975,15 @@ def cooldown_gate(
     config: BenchmarkConfig,
     clock: Clock,
     run_id: str | None = None,
+    policy: CooldownPolicy | None = None,
 ) -> dict[str, Any]:
-    """Hold until idle power recovers to within 10% of ``reference_baseline``.
+    """Hold for a complete sustained cooldown-v2 recovery window.
 
-    D-014's idle-power recovery gate: repeatedly measure short (~5 s) idle
-    sub-windows via ``telemetry.measure_idle`` on a sampling config trimmed to
-    ``COOLDOWN_SUBWINDOW_S``, keep a rolling mean over the last 30 s of
-    sub-window readings, and return once that rolling mean is within 10% of the
-    reference baseline's mean. A 300 s cap from the injected ``clock`` bounds
-    the wait. Returns ``{"result": "recovered" | "cap_hit", "waited_s": float}``
-    (the caller adds ``after_member``). On ``cap_hit`` the caller records
-    ``cooldown_cap_hit=True`` against the NEXT rep's ``run_benchmark``.
+    Sub-window means are weighted by their evidenced durations over the most
+    recent complete sustained window. Recovery is one-sided: values below the
+    reference count as recovered. Thermal pressure must be nominal at release,
+    and an optional calibrated absolute ceiling is an additional upper cap,
+    never an alternative escape.
 
     All blocking is via ``telemetry.measure_idle`` (which sleeps on the clock),
     so a ``FakeClock`` makes the gate instant and exact in tests.
@@ -1725,60 +1994,127 @@ def cooldown_gate(
     experiments. When given, ``run_id`` is stamped onto the sub-window config
     so those adapters see a cooldown-scoped id instead of failing.
     """
+    selected = policy if policy is not None else CooldownPolicy()
     reference = reference_baseline.power_w_mean
     sub_config = replace(
         config,
         run_id=run_id if run_id is not None else config.run_id,
-        sampling=replace(config.sampling, idle_seconds=COOLDOWN_SUBWINDOW_S),
+        sampling=replace(config.sampling, idle_seconds=selected.subwindow_s),
     )
     start_s = clock.now()
-    # Each reading carries (timestamp_s, mean) so the rolling mean spans only
-    # the most recent COOLDOWN_ROLLING_WINDOW_S of readings.
-    readings: list[tuple[float, float]] = []
+    readings: list[tuple[float, float, float]] = []
     trace: list[dict[str, Any]] = []
     while True:
+        subwindow_start_s = clock.now()
         baseline = telemetry.measure_idle(sub_config)
         now_s = clock.now()
-        readings.append((now_s, baseline.power_w_mean))
-        cutoff = now_s - COOLDOWN_ROLLING_WINDOW_S
-        readings = [reading for reading in readings if reading[0] >= cutoff]
-        rolling_mean = sum(value for _, value in readings) / len(readings)
+        duration_s = baseline.duration_s
+        if not isinstance(duration_s, int | float) or duration_s <= 0.0:
+            duration_s = max(0.0, now_s - subwindow_start_s)
+        evidence_start_s = now_s - float(duration_s)
+        # Do not let a backend-reported duration reach backward across the
+        # actual start of this bounded capture.
+        evidence_start_s = max(evidence_start_s, subwindow_start_s)
+        readings.append((evidence_start_s, now_s, baseline.power_w_mean))
+        cutoff = now_s - selected.sustained_window_s
+        readings = [reading for reading in readings if reading[1] > cutoff]
+        weighted_sum = 0.0
+        coverage_s = 0.0
+        for evidence_start, evidence_end, value in readings:
+            overlap_s = max(0.0, evidence_end - max(evidence_start, cutoff))
+            weighted_sum += overlap_s * value
+            coverage_s += overlap_s
+        rolling_mean = weighted_sum / coverage_s if coverage_s > 0.0 else None
         waited_s = now_s - start_s
+        try:
+            thermal = telemetry.thermal_state(sub_config)
+            thermal_pressure = thermal.thermal_pressure
+        except Exception:  # noqa: BLE001 - unknown thermal fails the conjunctive gate
+            thermal_pressure = None
+        thermal_nominal = (
+            isinstance(thermal_pressure, str)
+            and thermal_pressure.lower() in {"nominal", "normal"}
+        )
+        reference_upper_w = reference * (1.0 + selected.tolerance_fraction)
+        effective_upper_w = reference_upper_w
+        if selected.absolute_ceiling_w is not None:
+            effective_upper_w = min(effective_upper_w, selected.absolute_ceiling_w)
+        window_complete = coverage_s + 1e-9 >= selected.sustained_window_s
+        power_recovered = (
+            rolling_mean is not None and rolling_mean <= effective_upper_w
+        )
+        release = bool(
+            window_complete
+            and power_recovered
+            and (thermal_nominal or not selected.require_thermal_nominal)
+        )
         trace.append(
             {
                 "timestamp_s": now_s,
                 "waited_s": waited_s,
                 "rolling_mean_power_w": rolling_mean,
+                "window_coverage_s": coverage_s,
+                "window_complete": window_complete,
+                "reference_upper_w": reference_upper_w,
+                "absolute_ceiling_w": selected.absolute_ceiling_w,
+                "effective_upper_w": effective_upper_w,
+                "thermal_pressure": thermal_pressure,
+                "thermal_nominal": thermal_nominal,
+                "release": release,
                 "baseline": _jsonable(asdict(baseline)),
             }
         )
-        if _within_tolerance(rolling_mean, reference, COOLDOWN_TOLERANCE):
+        common = {
+            "policy_version": selected.policy_version,
+            "thresholds": {
+                "subwindow_s": selected.subwindow_s,
+                "sustained_window_s": selected.sustained_window_s,
+                "tolerance_fraction": selected.tolerance_fraction,
+                "cap_s": selected.cap_s,
+                "absolute_ceiling_w": selected.absolute_ceiling_w,
+                "require_thermal_nominal": selected.require_thermal_nominal,
+            },
+            "waited_s": waited_s,
+            "reference_power_w": reference,
+            "tolerance_fraction": selected.tolerance_fraction,
+            "absolute_ceiling_w": selected.absolute_ceiling_w,
+            "reference_upper_w": reference_upper_w,
+            "effective_upper_w": effective_upper_w,
+            "decision_rolling_mean_power_w": rolling_mean,
+            "window_required_s": selected.sustained_window_s,
+            "window_coverage_s": coverage_s,
+            "window_complete": window_complete,
+            "thermal_pressure": thermal_pressure,
+            "thermal_nominal": thermal_nominal,
+            "release_criterion": {
+                "power": "duration_weighted_rolling_mean <= effective_upper_w",
+                "reference_bound": "reference_power_w * (1 + tolerance_fraction)",
+                "absolute_ceiling_role": "additional_upper_cap",
+                "window": "complete_sustained_duration",
+                "thermal": (
+                    "nominal_required"
+                    if selected.require_thermal_nominal
+                    else "not_required"
+                ),
+            },
+        }
+        if release:
             return {
                 "result": "recovered",
-                "waited_s": waited_s,
-                "reference_power_w": reference,
-                "tolerance_fraction": COOLDOWN_TOLERANCE,
-                "decision_rolling_mean_power_w": rolling_mean,
+                **common,
                 "_trace": trace,
             }
-        if waited_s >= COOLDOWN_CAP_S:
+        if waited_s >= selected.cap_s:
             return {
                 "result": "cap_hit",
-                "waited_s": waited_s,
-                "reference_power_w": reference,
-                "tolerance_fraction": COOLDOWN_TOLERANCE,
-                "decision_rolling_mean_power_w": rolling_mean,
+                **common,
                 "_trace": trace,
             }
 
 
 def _within_tolerance(value: float, reference: float, tolerance: float) -> bool:
-    """True when ``value`` is within ``tolerance`` (fraction) of ``reference``.
-
-    When the reference is exactly zero the tolerance band collapses to an exact
-    match (a degenerate baseline that cannot meaningfully define a 10% band).
-    """
-    return abs(value - reference) <= tolerance * abs(reference)
+    """Compatibility helper for cooldown-v2's one-sided recovery bound."""
+    return value <= reference * (1.0 + tolerance)
 
 
 def _adapter_clock_alignments(adapter: Any) -> list[dict[str, Any]]:
@@ -1918,6 +2254,7 @@ def run_experiment(
     """
     if registry is None:
         registry = joulewise.adapters
+    campaign_policy, _policy_binding, _preflight = _campaign_policy_from_environment()
 
     experiment_id = (
         sanitize_id_component(config.run_id)
@@ -1987,7 +2324,14 @@ def run_experiment(
 
         if rep < repetitions:
             note, cap_hit = _cooldown_between_reps(
-                config, runs_root, experiment_id, bundle_path.name, summary, registry, clock
+                config,
+                runs_root,
+                experiment_id,
+                bundle_path.name,
+                summary,
+                registry,
+                clock,
+                campaign_policy=campaign_policy,
             )
             manifest["cooldown"].append(note)
             manifest_path = write_experiment_manifest(runs_root, manifest)
@@ -2006,6 +2350,7 @@ def _cooldown_between_reps(
     summary: SummaryMetrics,
     registry: AdapterRegistry,
     clock: Clock,
+    campaign_policy: CampaignPolicy | None = None,
 ) -> tuple[dict[str, Any], bool]:
     """Run the D-014 gate after a completed rep; return ``(note, cap_hit)``.
 
@@ -2037,7 +2382,12 @@ def _cooldown_between_reps(
     note["cooldown_run_id"] = cooldown_run_id
     try:
         gate = cooldown_gate(
-            telemetry, summary.idle_baseline, config, clock, run_id=cooldown_run_id
+            telemetry,
+            summary.idle_baseline,
+            config,
+            clock,
+            run_id=cooldown_run_id,
+            policy=(campaign_policy.cooldown if campaign_policy is not None else None),
         )
     except AdapterFailure as failure:
         note.update(

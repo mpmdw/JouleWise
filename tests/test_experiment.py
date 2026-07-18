@@ -34,6 +34,7 @@ from joulewise.controller import (
 from joulewise.interfaces import AdapterResult, PowerSample, ThermalState
 from joulewise.schemas import (
     BenchmarkConfig,
+    CooldownPolicy,
     IdleBaseline,
     RunStatus,
     TelemetryBackend,
@@ -88,6 +89,14 @@ def fake_environment_run(command, **kwargs):
         ("pmset", "-g", "batt"): "Now drawing from 'AC Power'\n -InternalBattery-0 100%; charged; 0:00 remaining\n",
         ("pmset", "-g"): " lowpowermode 0\n",
         ("pmset", "-g", "assertions"): "   PreventUserIdleDisplaySleep    0\n",
+        ("pmset", "-g", "systemstate"): (
+            "Current System Capabilities: Audio Network\n"
+        ),
+        ("pmset", "-g", "therm"): "No thermal warning level has been recorded\n",
+        ("defaults", "-currentHost", "read", "com.apple.screensaver"): (
+            "{ moduleDict = { moduleName = Ventura; }; idleTime = 1200; }\n"
+        ),
+        ("ioreg", "-c", "IOHIDSystem"): '"HIDIdleTime" = 5000000000\n',
         ("memory_pressure", "-Q"): "System-wide memory free percentage: 42.0%\n",
         ("vm_stat",): (
             "Mach Virtual Memory Statistics: (page size of 4096 bytes)\n"
@@ -160,6 +169,7 @@ class _StubTelemetry:
         idle_mean: float = 5.0,
         cooldown_mean: float | None = None,
         cooldown_means: list[float] | None = None,
+        thermal_pressure: str | None = "Nominal",
     ) -> None:
         self._clock = clock
         self._idle_mean = idle_mean
@@ -172,6 +182,7 @@ class _StubTelemetry:
         # rolling-window high-to-low RECOVERY transition.
         self._cooldown_means = list(cooldown_means) if cooldown_means else None
         self._cooldown_index = 0
+        self._thermal_pressure = thermal_pressure
         self._start: float | None = None
 
     def _next_cooldown_mean(self) -> float:
@@ -216,7 +227,11 @@ class _StubTelemetry:
         return samples
 
     def thermal_state(self, config: BenchmarkConfig, context=None) -> ThermalState:
-        return ThermalState(timestamp_s=self._clock.now(), temperature_c=42.0)
+        return ThermalState(
+            timestamp_s=self._clock.now(),
+            temperature_c=42.0,
+            thermal_pressure=self._thermal_pressure,
+        )
 
 
 class _StubRegistry:
@@ -371,7 +386,9 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
         environment_calls = [
             call for call in run.call_args_list if call.args[0][0] != "git"
         ]
-        self.assertEqual(len(environment_calls), 14 * 4)
+        # Four full snapshots (experiment fallback + three prepare-end) plus
+        # one three-command post-run guard observation per member.
+        self.assertEqual(len(environment_calls), 18 * 4 + 3 * 3)
         environments = [
             json.loads((bundle / "metadata.json").read_text())["environment"]
             for bundle, _summary in members
@@ -550,9 +567,12 @@ class CooldownGateUnitTests(unittest.TestCase):
         telemetry = _StubTelemetry(clock, idle_mean=5.2)  # ~4% above 5.0
         note = cooldown_gate(telemetry, self._reference(5.0), config, clock)
         self.assertEqual(note["result"], "recovered")
-        # Recovers on the very first sub-window (~5 s), well under the cap.
-        self.assertLessEqual(note["waited_s"], 10.0)
-        self.assertGreater(note["waited_s"], 0.0)
+        # Cooldown v2 refuses the old single-5 s-subwindow release defect.
+        self.assertGreaterEqual(note["waited_s"], 30.0)
+        self.assertGreaterEqual(note["window_coverage_s"], 30.0)
+        self.assertTrue(note["window_complete"])
+        self.assertEqual(note["thresholds"]["sustained_window_s"], 30.0)
+        self.assertEqual(note["thresholds"]["subwindow_s"], 5.0)
 
     def test_recovers_after_rolling_window_crosses_into_tolerance(self) -> None:
         # Drive the rolling-30 s-mean high-to-low RECOVERY transition: the first
@@ -573,6 +593,16 @@ class CooldownGateUnitTests(unittest.TestCase):
         self.assertGreater(note["waited_s"], COOLDOWN_SUBWINDOW_S)
         self.assertLess(note["waited_s"], COOLDOWN_CAP_S)
 
+    def test_below_reference_counts_as_recovered_after_complete_window(self) -> None:
+        clock = FakeClock()
+        config = self._config()
+        telemetry = _StubTelemetry(clock, idle_mean=3.0)
+        note = cooldown_gate(telemetry, self._reference(5.0), config, clock)
+        self.assertEqual(note["result"], "recovered")
+        self.assertLess(note["decision_rolling_mean_power_w"], 5.0)
+        self.assertEqual(note["policy_version"], "cooldown-v2")
+        self.assertTrue(note["thermal_nominal"])
+
     def test_cap_hit_when_readings_pinned_high(self) -> None:
         clock = FakeClock()
         config = self._config()
@@ -582,6 +612,36 @@ class CooldownGateUnitTests(unittest.TestCase):
         # The cap is honored: we wait at least the cap, and not unboundedly.
         self.assertGreaterEqual(note["waited_s"], COOLDOWN_CAP_S)
         self.assertLessEqual(note["waited_s"], COOLDOWN_CAP_S + 10.0)
+
+    def test_absolute_ceiling_is_an_upper_cap_not_an_or_escape(self) -> None:
+        clock = FakeClock()
+        config = self._config()
+        telemetry = _StubTelemetry(clock, idle_mean=5.0)
+        policy = CooldownPolicy(cap_s=30.0, absolute_ceiling_w=4.5)
+        note = cooldown_gate(
+            telemetry, self._reference(5.0), config, clock, policy=policy
+        )
+        self.assertEqual(note["result"], "cap_hit")
+        self.assertEqual(note["reference_upper_w"], 5.5)
+        self.assertEqual(note["effective_upper_w"], 4.5)
+        self.assertEqual(
+            note["release_criterion"]["absolute_ceiling_role"],
+            "additional_upper_cap",
+        )
+
+    def test_non_nominal_thermal_state_prevents_release(self) -> None:
+        clock = FakeClock()
+        config = self._config()
+        telemetry = _StubTelemetry(
+            clock, idle_mean=3.0, thermal_pressure="Elevated"
+        )
+        policy = CooldownPolicy(cap_s=30.0)
+        note = cooldown_gate(
+            telemetry, self._reference(5.0), config, clock, policy=policy
+        )
+        self.assertEqual(note["result"], "cap_hit")
+        self.assertTrue(note["window_complete"])
+        self.assertFalse(note["thermal_nominal"])
 
 
 class CooldownThroughExperimentTests(unittest.TestCase):

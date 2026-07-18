@@ -35,6 +35,45 @@ preflight observations, not substitutes for per-bundle provenance or live
 measurement gates. In particular, doctor never starts powermetrics and never
 certifies that a machine is quiet.
 
+### Environment guard and per-run admission (D-077)
+
+Campaigns select a strictly typed policy sidecar. `run_campaign.py` defaults
+to `configs/campaign_policies/quiet_mac_p2_production.json`, records the policy
+version and exact source-byte SHA-256 in campaign provenance and every member
+bundle, acquires the campaign lock, and only then performs the enforcing
+environment preflight before member 1. The production quiet-Mac guard requires
+AC power and an externally connected power source, low-power mode off, all
+online displays asleep, the screensaver disengaged, and Nominal thermal
+pressure. Unknown critical probes fail closed. Load averages are recorded as
+preflight evidence only and never gate a member.
+
+Default operation is verify-only. `--arm-quiet-mode` is an explicit transient
+operation: the runner displays a countdown, requests `pmset displaysleepnow`,
+and repeats the complete environment probe before deciding admission. It does
+not write display-sleep, screensaver, or other persistent host settings. An
+operator override is accepted only when its JSON binds the exact failed
+snapshot and findings SHA-256 values and records a reason, approver, and
+timestamp. It is stored as an `override`, not a waiver, and universally bars
+all resulting members from gross-energy, idle-subtracted-energy, and
+throughput claims.
+
+At each governed member's idle-baseline stage, the controller captures the
+same critical environment evidence and verifies that the display remains
+asleep and the screensaver remains disengaged. Awake, engaged, or unknown
+state aborts immediately. The first idle baseline is admitted only when the
+existing powermetrics GPU-idle-quality classification records
+`idle_window_suspect == false`. One and only one complete retry is allowed;
+both attempts preserve distinct raw artifacts and provenance. A persistent
+failure either aborts (production) or records the exploratory-only,
+unwaivable `environment_admission_failed` claim barrier (`on_fail: flag`).
+There is no skip disposition in a fixed-n campaign. A lightweight post-run
+display/screensaver/HID observation makes within-member transitions visible.
+
+The sidecar is deliberately separate from `BenchmarkConfig`. Direct
+`joulewise run` without a sidecar retains legacy flag-only/non-enforcing
+behavior, and omission of the additive policy/admission metadata preserves
+legacy normalized config serialization and hashes.
+
 ### Per-bundle source provenance
 
 `RunBundleWriter.create` captures the harness source state before it creates
@@ -243,12 +282,24 @@ Per decisions D-005 and D-014:
 
 - Each repetition is an independent run bundle; an experiment manifest
   groups members and records the executed order.
-- Between live repetitions, a cooldown gate holds until a rolling 30 s
-  idle-power mean returns to within 10% of the run's recorded idle
-  baseline, with a 5-minute cap; hitting the cap is recorded in the next
-  repetition's measurement quality. The gate uses the power meter itself
-  (the instrument we always have) rather than temperature sensors (which
-  vary by target).
+- Between live repetitions, cooldown v2 holds until a complete sustained
+  30-second duration-weighted idle-power window satisfies the one-sided rule
+  `rolling_mean <= reference * (1 + tolerance)` (10% by the production
+  policy), while thermal pressure is Nominal. A below-reference mean therefore
+  counts as recovery. An optional calibrated absolute ceiling is an
+  additional upper cap and never an OR escape. The wait has a 5-minute cap;
+  hitting it is recorded in the following repetition's measurement quality.
+- The preceding baseline is eligible as a cooldown reference only when
+  `idle_window_suspect == false`, all critical environment probes passed, and
+  policy/environment provenance is present. An ineligible or unknown
+  reference falls back to one frozen clean anchor: the NEG-8 reference start
+  when present, otherwise the first admission-passing baseline. The anchor's
+  source and hashes are recorded and it is never updated from later outcomes.
+  With neither an eligible reference nor an anchor the gate fails closed.
+  The following member records policy version, eligibility decision, anchor
+  provenance, thresholds, sustained-window coverage, thermal result, and the
+  exact release criterion under `preceding_campaign_cooldown`. Historical
+  recovered rows retain their recorded meaning and are not reinterpreted.
 - Conditions are interleaved round-robin where model-reload cost permits;
   where blocks are operationally forced, the order is recorded so drift
   correlation can be audited (Phase 4 Stage 4.5 does this audit).
