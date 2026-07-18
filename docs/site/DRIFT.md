@@ -1,7 +1,12 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-17. Automation informs; Ed alone regenerates and deploys
-the site.
+Refreshed: 2026-07-18 (DEPLOY-READY AGAIN: PR #76 merged — Advisor Brief
+and Project Status are top-nav tabs on every page (one central advisor
+location); verbatim-page packer support; D-076 measured-first capacity
+budgets (measured artifact 961,210 B / budget 1,000,000 / cap 1 MiB).
+Ed's three-step publishes it: git pull; build_site + pack_capsule;
+npx lakebed deploy. This deploy also carries the exploratory results
+context already folded into top docs. Automation informs; Ed deploys.)
 
 ## Deployed baseline
 

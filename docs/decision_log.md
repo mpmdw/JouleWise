@@ -98,6 +98,7 @@ be re-derived by a future agent gets an entry here.
 | D-073 | D-016 device-list amendment: Mac + 3080 Ti primary fleet, 12 GiB cap | accepted |
 | D-074 | Conditional Qwen3-4B primary repin + OLMo-1B conversion spike authorized | accepted |
 | D-075 | Extension-axis intake: ranked fold-in without new thesis proliferation | accepted |
+| D-076 | Site capacity right-sizing (AUD-WO-039 review): measured-first budgets | accepted |
 
 ---
 
@@ -3888,3 +3889,17 @@ runtime/pair becomes unsupported; P2-015 floors make a predeclared effect
 undetectable; or Ed changes the D-070 commitment set. Revisit by amending the
 owning row and this decision's ledger, never by silently promoting an excluded
 candidate.
+
+## D-076: Site capacity right-sizing (AUD-WO-039 review) — measured-first budgets
+
+Date: 2026-07-17/18. Owner: lead under Ed's "host the brief" directive
+(the capacity decision event AUD-WO-039 fenced on). Ruling, encoded in
+tests with PR #76: the 1 MiB Lakebed hard cap is inviolate; the
+measured-artifact budget is 1,000,000 B (measured mode via the pinned
+validator, SITE-02 loud-discovery discipline); the 943,718 B
+conservative-estimate guard remains ONLY as fallback when measured mode
+is unavailable (estimator overshoot documented ~4.3% on identical
+input). WO-039 preservation boundary held: no advisor-facing page,
+navigation, provenance, or deep link trimmed. Current measured artifact
+961,210 B. Revisit trigger: measured artifact within 24 KB of the hard
+cap forces the next right-sizing review before any addition.
