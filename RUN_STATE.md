@@ -92,7 +92,41 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
-## Superseded stop card (C-028)
+## CHECKPOINT 2026-07-17 (late session): env-guard branch open, review pending
+
+Window A floors contamination diagnosed from primary data: macOS Ventura
+*video* screensaver on an awake display contaminated 43/50 suite-calibration
+bundles (~+30% energy, −11% throughput; engage at HID-idle +20 min, dismiss on
+unlock — pmset assertion log corroborated to the second). The six "low"
+su-ABBA runs (18:16–18:36 UTC) are the only CLEAN suite runs; comparative
+suite floors (4.923 J item / 24.62 J suite) are transition artifacts. The
+professor's power-source hypothesis is refuted (AC/140 W/100% throughout).
+Details: memory note + `docs/run_reports/2026-07-17-environment-guard.md`.
+
+Branch `impl/env-guard-cooldown` (pushed, commit e2813ee) holds the D-077
+response: environment-guard preflight (+`--arm-quiet-mode`), per-run idle
+admission gate, cooldown v2, unwaivable `environment_admission_failed` claim
+barrier, policy sidecars, contract/doc updates. Design consult (Sol xhigh,
+thread 019f7356-32d3) adjudicated and encoded; implementation by Sol xhigh
+(thread 019f7362-6627, resumed via codex-bridge after an MCP transport
+timeout); session-close scope check SCOPE_OK; full suite green lead-side
+(OK, 12 skips). Lead bench fix included: `pmset -g systemstate` parser now
+accepts the live "Capabilities are:" form (was null → fail-closed on real
+hardware); fixtures pinned to verbatim live output.
+
+RESUME (in order):
+1. Relaunch the adversarial review round (was stopped mid-run at checkpoint):
+   fresh read-only Sol xhigh, execution lens, over `git diff main...impl/env-guard-cooldown`
+   (prompt shape in `.codex-bridge/` prompt snapshots); lead holds the
+   contract lens (done for cooldown_gate/claim-barrier/anchor hunks).
+2. Triage findings → fix rounds (defect-shaped regressions) → DELTA RE-AUDIT.
+3. Live-validate flagged probes during next quiet-window prep:
+   `pmset -g systemstate` display-asleep form + screensaver-engaged probe
+   while a screensaver is actually running (run report flags
+   `live_validation_provisional`).
+4. PR per operation-loop §5 gate shape; then re-run suite ABBA calibration
+   under the new guard ([QUIET-MAC], needs Ed) — floors D-076 figures for
+   suite comparative cells must be recomputed/caveated pending re-run.
 
 Status: **CLEARED 2026-07-11.** Every clearance criterion met: all
 checkpoint-#4 resume items executed (P2-044 fix+merge #55; P2-037
