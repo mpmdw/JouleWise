@@ -1088,6 +1088,18 @@
       </ol>
     </main>
 
+    <section id="late-addendum" style="border:1px solid rgba(128,128,128,.35);border-radius:10px;padding:1rem 1.25rem;margin:2rem 0">
+      <h2 style="margin-top:0">Late addendum — measured after this brief was assembled (same day)</h2>
+      <p><strong>Exploratory cross-model block</strong> (strict-valid production bundles, n=3 each, identical 5-item suite, 2,560 prompt + 1,280 generated tokens per bundle, gross basis first per D-067; <em>EXPLORATORY — unmatched models, no claim framing</em>):</p>
+      <table><thead><tr><th>Model</th><th>Gross suite energy (mean of 3)</th><th>Spread</th></tr></thead>
+      <tbody>
+      <tr><td>OLMoE-1B-7B (MoE, 1B active)</td><td>≈ 229.0 J</td><td>~2%</td></tr>
+      <tr><td>Qwen3-4B-4bit (dense)</td><td>≈ 362.8 J</td><td>~0.04%</td></tr>
+      <tr><td>Qwen3.5-122B-A10B-4bit (large MoE)</td><td>≈ 1072.3 J</td><td>~1%</td></tr>
+      </tbody></table>
+      <p>The OLMoE-vs-Qwen3-4B gap (≈134 J) is far above every published request/suite floor — a real, resolvable contrast, though model pairing is unmatched (the D-016 matched-pair question is exactly what makes it rigorous later). Evidence: <code>runs/exploratory_2026_07_17/</code>, verified extraction in <code>docs/process_traces/2026-07-17-exploratory-block/results.md</code>.</p>
+      <p><strong>DSpark &amp; DFlash run natively on this Mac</strong> (vendored MLX implementation, lead-run smokes): both expose per-round proposal/acceptance observability — the exact surface pinned mlx-lm lacks (AXI-SC negative verdict). Notably, plain greedy outpaced both at this small-target scale (113 vs ~40–46 tok/s) — drafter-overhead economics (new row C5-2.5c) now needs <em>energy</em>, not throughput, to adjudicate. Evidence: <code>docs/process_traces/2026-07-17-dspark-dflash-smoke/</code>.</p>
+    </section>
     <footer>
       <div class="footer-grid">
         <div><strong>Generated</strong><br>2026-07-17</div>
