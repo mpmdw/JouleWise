@@ -88,8 +88,9 @@ from 5 of 10 planned ABBA blocks (~22× tighter, same estimator, than
 the caveated figure); long-decode **83.9 mJ/output-token**,
 matching the 07-17 decode cell to ~0.1%. Gates: claim-ineligible on
 source provenance (dirty collection tree) pending a clean re-run, then
-verified extraction + P2-037. Details: `docs/advisor_briefs/2026-07-19-recalibration-update.html`
-(self-contained page) + the 2026-07-19 run report.
+verified extraction + P2-037. Details:
+`docs/advisor_briefs/2026-07-19-recalibration-update.html` + the
+2026-07-19 run report.
 
 ### Exploratory follow-on — not a promoted claim
 
