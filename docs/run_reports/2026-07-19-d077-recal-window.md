@@ -120,3 +120,26 @@ zero admission failures after the probe fixes.
 - Probe-fix commit lands as branch + PR (in flight this session).
 - Optional blocks 08/09/10 and the remaining floors cells stay queued.
 - `displaysleep` restore + the codex-run-v3 stale test 61 remain Ed-side.
+
+## Exploratory lead-side readout (NOT the verified extraction)
+
+Computed directly from bundle summaries by the lead; claim-evidence flags
+and P2-037 adjudication still gate anything published.
+
+- Suite gross: 147.959 ± 0.388 J (absolute cells, n=10, CV 0.26%);
+  ABBA members 147.921 ± 0.436 J (n=20) — mutually consistent. The
+  contaminated 07-17 cells sat ~+30% above this band.
+- Suite ABBA null contrasts (same-condition A−B): b01 +0.182, b02 −0.416,
+  b03 +0.069, b04 −0.122, b05 −0.059 J; mean |Δ| 0.169 J, max 0.416 J
+  (~0.1–0.3% of a ~148 J suite). Single-block suite comparative MDE ≈
+  0.3%; supersedes the artifact 24.62 J caveated figure pending verified
+  extraction.
+- Long-request (first evidence): long-decode 83.91 ± 0.65 mJ/output-token
+  vs the published 99.19 ± 1.36 short-request rail (≈ −15%: prefill
+  amortization quantified); long-prompt 630.26 ± 14.94 mJ/output-token
+  (output-token denominator on prompt-heavy work).
+- NEG-8 brackets: 23.0–23.8 J gross, idle 0.065–0.082 W across both
+  windows; mild in-window suite trend b01→b05 ≈ +0.4% (absorbed by
+  ABBA/brackets; note for extraction).
+- Short-prefill cells: 0.259 ± 0.034 J with |Δ| 0.021–0.092 J → 8–35%
+  relative floors; tiny-cell comparative claims need many repeats.
