@@ -86,6 +86,7 @@ class PageSpec:
 
 VERBATIM_SITE_PAGES = {
     "advisor_brief.html": "docs/advisor_briefs/2026-07-17-window-a-brief.html",
+    "advisor_update.html": "docs/advisor_briefs/2026-07-19-recalibration-update.html",
 }
 
 
