@@ -1,12 +1,27 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-18 (DEPLOY-READY AGAIN: PR #76 merged — Advisor Brief
-and Project Status are top-nav tabs on every page (one central advisor
-location); verbatim-page packer support; D-076 measured-first capacity
-budgets (measured artifact 961,210 B / budget 1,000,000 / cap 1 MiB).
+Refreshed: 2026-07-19b (DEPLOY-READY, review-corrected: a three-lens Sol
+review corrected two over-promoted claims (floor statistic, -15%
+comparison) and surfaced the source-provenance claim gate before
+publication; the Status page and baked latest run report carry the
+corrected numbers. The planned "Recal Update" tab was REMOVED pre-merge:
+the verbatim page costs ~33 KB against ~7 KB of D-076 capsule headroom
+(991,722 / 1,000,000 measured as shipped) — the update brief ships as a
+self-contained repo artifact docs/advisor_briefs/
+2026-07-19-recalibration-update.html instead, and the A42 capacity
+right-sizing decision is now formally due. Original note follows,
+superseded where it mentions the tab.)
+
+Prior refresh: 2026-07-19 (Ed-requested regeneration carrying the
+2026-07-19 re-calibration update — new "Recal Update" top-nav tab
+(advisor_update.html, verbatim advisor brief supplement), PROJECT_STATUS
+re-calibration section + ledger rows, run_state/latest-report refresh.
+All values in the update are labeled preliminary lead-side readout;
+verified extraction + P2-037 gate promotion. Site parser/capacity tests
+green (project_status.html trimmed to fit its 30,000-byte shard budget —
+page is AT capacity; A42 right-sizing decision is nearing due).
 Ed's three-step publishes it: git pull; build_site + pack_capsule;
-npx lakebed deploy. This deploy also carries the exploratory results
-context already folded into top docs. Automation informs; Ed deploys.)
+npx lakebed deploy. Automation informs; Ed deploys.)
 
 ## Deployed baseline
 
