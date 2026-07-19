@@ -1,7 +1,15 @@
 # JouleWise Run State
 
-Last updated: 2026-07-19 (early). NEXT SESSION: the post-D-077 suite
-RE-CALIBRATION WINDOW IS COMPLETE — 32/32 strict-valid bundles in
+Last updated: 2026-07-19 (mid-day). NEXT SESSION: three re-calibration
+windows are COMPLETE (see below; third window: su-ABBA b06-b10 from
+clean main in runs_recal3_20260719, 22/22 strict-valid AND 22/22
+claim_eligible=true — first claim-eligible guard corpus; all 10 planned
+su-ABBA blocks now measured, 5 of them claim-eligible). PR #78 MERGED
+(b52abf3): probe fixes + three-lens-review-corrected advisor surfaces
+(floor restated as frozen-estimator ~1.13 J / ~0.77%; the -15% claim
+withdrawn; provenance gate documented). NEXT: verified extraction over
+all three corpora + P2-037; optional clean b01-b05 re-run window. The
+first window's record — 32/32 strict-valid bundles in
 `runs_recal_20260718/` (NEG-8 start/end brackets, all five su-ABBA
 comparative blocks, full suite-absolute block), collected under the
 production environment-guard policy with per-run admission evidence

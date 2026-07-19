@@ -187,3 +187,23 @@ gitignored) or a recorded contract-compliant resolution.
   (no cross-invocation cooldown record; each following member still ran
   its ~36 s admission baseline); a 140 W→100 W→140 W adapter-wattage
   discontinuity spans nine members with admission predicates intact.
+
+## Clean-provenance completion window (2026-07-19, post-merge)
+
+After PR #78 merged (probe fixes + review-corrected front-facing surfaces),
+a third bracketed window ran from clean committed main (`b52abf3`) with the
+runs root gitignored: NEG-8 start 1/1 → su-ABBA blocks b06–b10 20/20 →
+NEG-8 end 1/1, in `runs_recal3_20260719/` (~44 min; one prior NEG-8
+admission abort quarantined under `rejected_attempt1/` — the operator was
+still at the machine, HID idle 1.7 s; the guard refused, third live catch).
+**22/22 strict-valid and 22/22 `source_provenance.claim_eligible=true`** —
+the first claim-eligible corpus collected under the D-077 guard. Backup
+exit 0 (24 artifact dirs incl. quarantine).
+
+Suite-ABBA accounting: all 10 planned blocks are now measured — b01–b05 in
+the claim-INELIGIBLE 2026-07-18 corpus, b06–b10 claim-eligible here.
+Claim-bearing comparative analysis therefore has n=5 eligible blocks (same
+1.5× small-n guard) unless the extraction/P2-037 adjudicates the mixed
+corpus or a future window re-runs b01–b05 clean. The calibration plan's
+remaining unexecuted piece is DF-TELEM block 10 (hardware honestly
+unavailable).
