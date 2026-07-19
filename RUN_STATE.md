@@ -1,12 +1,17 @@
 # JouleWise Run State
 
-Last updated: 2026-07-18 (late). NEXT SESSION: the D-077 adversarial arc
-is COMPLETE and landed as PR #77 (`impl/env-guard-cooldown` at
-`ad0920b`, fix rounds 3-8; see the 2026-07-18 D-077 checkpoint below).
-Start by checking PR #77 CI + Ed's merge decision; after merge, the
-[QUIET-MAC] resume items are the display-asleep probe capture during
-quiet-window prep and the suite ABBA re-calibration under the new guard
-(D-076 comparative floor cells stay caveated until re-run).
+Last updated: 2026-07-19 (early). NEXT SESSION: the post-D-077 suite
+RE-CALIBRATION WINDOW IS COMPLETE — 32/32 strict-valid bundles in
+`runs_recal_20260718/` (NEG-8 start/end brackets, all five su-ABBA
+comparative blocks, full suite-absolute block), collected under the
+production environment-guard policy with per-run admission evidence
+(record: `docs/run_reports/2026-07-19-d077-recal-window.md`). PR #77
+(D-077 fix rounds) is MERGED; PR #78 (macOS 26 environment-probe fixes,
+live-validated by the campaign itself) awaits Ed's merge. NEXT WORK:
+(1) floor re-extraction from the recal corpus (supersedes the caveated
+07-17 suite cells; P2-015 analysis), (2) PR #78 merge + suite-test
+profiler patch/cache follow-up, (3) [AGENT] A4 AXI-SB-ADAPTER remains
+the agent-lane head. Ed-side: `sudo pmset -c displaysleep 10`.
 
 Prior arc (2026-07-17, SESSION ARC COMPLETE: Window A floors
 published (222 strict-valid bundles; P2-015 partial pending P2-039
