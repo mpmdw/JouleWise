@@ -40,6 +40,7 @@ from joulewise.schemas import (
     CooldownPolicy,
     IdleBaseline,
     RunStatus,
+    SchemaError,
     SummaryMetrics,
     TelemetryBackend,
 )
@@ -65,6 +66,193 @@ def make_config(run_id: str, repetitions: int, **overrides: Any) -> BenchmarkCon
     for key, value in overrides.items():
         data[key] = value
     return BenchmarkConfig.from_mapping(data)
+
+
+def valid_cooldown_anchor(policy_sha256: str = "a" * 64) -> dict[str, Any]:
+    return {
+        "schema_version": "joulewise.cooldown_anchor.v1",
+        "source_kind": "neg8_reference_start",
+        "bundle_id": "neg8-anchor",
+        "policy_sha256": policy_sha256,
+        "environment_snapshot_sha256": "b" * 64,
+        "immutable_after_freeze": True,
+        "eligibility": {
+            "eligible": True,
+            "provenance_present": True,
+        },
+        "baseline": {
+            "power_w_mean": 5.0,
+            "power_w_stddev": 0.0,
+            "duration_s": 30.0,
+            "sample_count": 30,
+            "telemetry_backend": "powermetrics",
+            "idle_window_suspect": False,
+        },
+    }
+
+
+class FloatRuntime:
+    def __float__(self) -> float:
+        raise RuntimeError("hostile float conversion")
+
+
+class EqRuntime:
+    def __eq__(self, other: object) -> bool:
+        raise RuntimeError("hostile equality comparison")
+
+
+class CooldownAnchorBoundaryTests(unittest.TestCase):
+    def test_policy_bound_empty_hash_match_is_rejected(self) -> None:
+        from joulewise.cooldown_anchor import cooldown_anchor_eligibility
+
+        anchor = valid_cooldown_anchor("")
+
+        verdict = cooldown_anchor_eligibility(anchor, "")
+
+        self.assertFalse(verdict["eligible"])
+        self.assertIn("anchor_policy_hash_invalid", verdict["reasons"])
+        self.assertIn("expected_policy_hash_invalid", verdict["reasons"])
+
+    def test_policy_bound_uppercase_hash_cannot_bypass_independent_rejection(
+        self,
+    ) -> None:
+        from joulewise.cooldown_anchor import cooldown_anchor_eligibility
+
+        uppercase_digest = "A" * 64
+        anchor = valid_cooldown_anchor(uppercase_digest)
+
+        independent = cooldown_anchor_eligibility(anchor)
+        bound = cooldown_anchor_eligibility(anchor, uppercase_digest)
+
+        self.assertFalse(independent["eligible"])
+        self.assertFalse(bound["eligible"])
+        self.assertIn("anchor_policy_hash_invalid", independent["reasons"])
+        self.assertIn("anchor_policy_hash_invalid", bound["reasons"])
+        self.assertIn("expected_policy_hash_invalid", bound["reasons"])
+
+    def test_canonical_lowercase_policy_hash_remains_eligible(self) -> None:
+        from joulewise.cooldown_anchor import cooldown_anchor_eligibility
+
+        digest = "a" * 64
+        anchor = valid_cooldown_anchor(digest)
+
+        self.assertEqual(
+            cooldown_anchor_eligibility(anchor),
+            {"eligible": True, "reasons": []},
+        )
+        self.assertEqual(
+            cooldown_anchor_eligibility(anchor, digest),
+            {"eligible": True, "reasons": []},
+        )
+
+    def test_idle_baseline_parser_requires_explicit_frozen_anchor(self) -> None:
+        from joulewise.cooldown_anchor import idle_baseline_from_anchor
+
+        for frozen_value in (False, None):
+            with self.subTest(frozen_value=frozen_value):
+                anchor = valid_cooldown_anchor()
+                if frozen_value is None:
+                    anchor.pop("immutable_after_freeze")
+                else:
+                    anchor["immutable_after_freeze"] = frozen_value
+                self.assertIsNone(idle_baseline_from_anchor(anchor))
+
+        self.assertIsNotNone(idle_baseline_from_anchor(valid_cooldown_anchor()))
+
+    def test_nonphysical_anchor_baselines_are_rejected_without_exceptions(self) -> None:
+        from joulewise.cooldown_anchor import (
+            cooldown_anchor_eligibility,
+            idle_baseline_from_anchor,
+        )
+
+        cases = (
+            ("positive infinity", "power_w_mean", float("inf")),
+            ("negative infinity", "power_w_mean", float("-inf")),
+            ("nan", "power_w_mean", float("nan")),
+            ("overflowing float literal", "power_w_mean", float("1e400")),
+            ("overflowing integer", "power_w_mean", 10**400),
+            ("negative mean power", "power_w_mean", -0.1),
+            ("negative power deviation", "power_w_stddev", -0.1),
+            ("negative duration", "duration_s", -0.1),
+            ("non-finite optional float", "gpu_freq_mhz_mean", float("inf")),
+            ("zero sample count", "sample_count", 0),
+            ("boolean sample count", "sample_count", True),
+            ("non-integer sample count", "sample_count", 3.5),
+        )
+
+        for label, field, value in cases:
+            with self.subTest(label=label):
+                anchor = valid_cooldown_anchor()
+                anchor["baseline"][field] = value
+
+                self.assertIsNone(idle_baseline_from_anchor(anchor))
+                self.assertEqual(
+                    cooldown_anchor_eligibility(anchor),
+                    {"eligible": False, "reasons": ["anchor_baseline_invalid"]},
+                )
+
+    def test_realistic_finite_anchor_baseline_remains_eligible(self) -> None:
+        from joulewise.cooldown_anchor import (
+            cooldown_anchor_eligibility,
+            idle_baseline_from_anchor,
+        )
+
+        anchor = valid_cooldown_anchor()
+        anchor["baseline"].update(
+            {
+                "power_w_mean": 5.25,
+                "power_w_stddev": 0.125,
+                "duration_s": 30.0,
+                "sample_count": 30,
+                "gpu_idle_ratio_mean": 0.98,
+                "gpu_idle_ratio_min": 0.95,
+                "gpu_freq_mhz_mean": 326.0,
+                "gpu_freq_hz_mean": 326.0,
+            }
+        )
+
+        baseline = idle_baseline_from_anchor(anchor)
+
+        self.assertIsNotNone(baseline)
+        self.assertEqual(baseline.power_w_mean, 5.25)
+        self.assertEqual(
+            cooldown_anchor_eligibility(anchor),
+            {"eligible": True, "reasons": []},
+        )
+
+    def test_hostile_anchor_baseline_hooks_fail_closed_without_exception(
+        self,
+    ) -> None:
+        from joulewise.cooldown_anchor import (
+            cooldown_anchor_eligibility,
+            idle_baseline_from_anchor,
+        )
+
+        cases = (
+            ("float conversion", "power_w_mean", FloatRuntime()),
+            ("enum equality", "telemetry_backend", EqRuntime()),
+        )
+
+        for label, field, value in cases:
+            with self.subTest(label=label):
+                anchor = valid_cooldown_anchor()
+                anchor["baseline"][field] = value
+
+                self.assertIsNone(idle_baseline_from_anchor(anchor))
+                self.assertEqual(
+                    cooldown_anchor_eligibility(anchor),
+                    {"eligible": False, "reasons": ["anchor_baseline_invalid"]},
+                )
+
+    def test_validator_internal_helper_failure_propagates(self) -> None:
+        from joulewise.cooldown_anchor import cooldown_anchor_eligibility
+
+        with patch(
+            "joulewise.cooldown_anchor._physical_float",
+            side_effect=RuntimeError("validator implementation bug"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "validator implementation bug"):
+                cooldown_anchor_eligibility(valid_cooldown_anchor())
 
 
 class DeterministicClock:
@@ -1014,22 +1202,7 @@ class CooldownThroughExperimentTests(unittest.TestCase):
             "override": None,
             "policy_sha256": "a" * 64,
         }
-        anchor = {
-            "schema_version": "joulewise.cooldown_anchor.v1",
-            "source_kind": "neg8_reference_start",
-            "bundle_id": "neg8-anchor",
-            "policy_sha256": "a" * 64,
-            "environment_snapshot_sha256": "b" * 64,
-            "immutable_after_freeze": True,
-            "baseline": {
-                "power_w_mean": 5.0,
-                "power_w_stddev": 0.0,
-                "duration_s": 30.0,
-                "sample_count": 30,
-                "telemetry_backend": "powermetrics",
-                "idle_window_suspect": False,
-            },
-        }
+        anchor = valid_cooldown_anchor()
         original_anchor = json.loads(json.dumps(anchor))
 
         class SuspectLifecycleTelemetry(_StubTelemetry):
@@ -1072,6 +1245,95 @@ class CooldownThroughExperimentTests(unittest.TestCase):
         self.assertFalse(manifest["cooldown"][0]["reference_eligibility"]["eligible"])
         self.assertEqual(manifest["cooldown"][0]["reference_power_w"], 5.0)
         self.assertEqual(anchor, original_anchor)
+
+    def test_wrong_policy_anchor_is_evidenced_and_rejected_before_r1(self) -> None:
+        from joulewise.schemas import CampaignPolicy
+
+        policy_path = (
+            REPO_ROOT
+            / "configs"
+            / "campaign_policies"
+            / "quiet_mac_p2_production.json"
+        )
+        policy = CampaignPolicy.from_mapping(json.loads(policy_path.read_text()))
+        config = make_config("exp-wrong-anchor-policy", repetitions=2)
+        anchor = valid_cooldown_anchor("b" * 64)
+        config_path = self.runs_root.parent / "wrong-anchor-policy.json"
+        config_path.write_text(json.dumps(config.to_dict()))
+
+        with patch(
+            "joulewise.controller._campaign_policy_from_environment",
+            return_value=(policy, {"sha256": "a" * 64}, None),
+        ):
+            code, stdout, stderr = _run_cli(
+                [
+                    "run",
+                    str(config_path),
+                    "--runs-dir",
+                    str(self.runs_root),
+                    "--frozen-cooldown-anchor-json",
+                    json.dumps(anchor),
+                ]
+            )
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("anchor_policy_hash_mismatch", stderr)
+
+        manifest_path = (
+            self.runs_root / "experiments" / "exp-wrong-anchor-policy.json"
+        )
+        manifest = json.loads(manifest_path.read_text())
+        self.assertEqual(manifest["members"], [])
+        verdict = manifest["terminal_verdict"]
+        self.assertEqual(
+            verdict["schema_version"],
+            "joulewise.cooldown_anchor_verdict.v1",
+        )
+        self.assertEqual(verdict["record_type"], "cooldown_anchor_verdict")
+        self.assertEqual(verdict["decision"], "fail_closed")
+        self.assertEqual(verdict["boundary"], "controller_policy_binding")
+        self.assertEqual(
+            verdict["anchor_eligibility"]["reasons"],
+            ["anchor_policy_hash_mismatch"],
+        )
+        self.assertFalse((self.runs_root / "exp-wrong-anchor-policy__r1").exists())
+
+    def test_empty_policy_binding_cannot_admit_matching_empty_anchor(self) -> None:
+        from joulewise.schemas import CampaignPolicy
+
+        policy_path = (
+            REPO_ROOT
+            / "configs"
+            / "campaign_policies"
+            / "quiet_mac_p2_production.json"
+        )
+        policy = CampaignPolicy.from_mapping(json.loads(policy_path.read_text()))
+        config = make_config("exp-empty-anchor-policy", repetitions=2)
+
+        with patch(
+            "joulewise.controller._campaign_policy_from_environment",
+            return_value=(policy, {"sha256": ""}, None),
+        ):
+            with self.assertRaisesRegex(
+                SchemaError,
+                "anchor_policy_hash_invalid, expected_policy_hash_invalid",
+            ):
+                run_experiment(
+                    config,
+                    self.runs_root,
+                    FakeClock(),
+                    frozen_cooldown_anchor=valid_cooldown_anchor(""),
+                )
+
+        verdict_path = (
+            self.runs_root / "experiments" / "exp-empty-anchor-policy.json"
+        )
+        verdict_artifact = json.loads(verdict_path.read_text())
+        self.assertEqual(
+            verdict_artifact["terminal_verdict"]["anchor_eligibility"]["reasons"],
+            ["anchor_policy_hash_invalid", "expected_policy_hash_invalid"],
+        )
+        self.assertFalse((self.runs_root / "exp-empty-anchor-policy__r1").exists())
 
     def test_cooldown_trace_write_error_is_manifest_metadata_not_campaign_failure(self) -> None:
         data = _example_config_data()
@@ -1155,6 +1417,220 @@ class CliExperimentDispatchTests(unittest.TestCase):
         self.assertTrue(manifest_path.is_file())
         self.assertEqual(
             manifest_path, self.runs_dir / "experiments" / "cli-exp.json"
+        )
+        manifest = json.loads(manifest_path.read_text())
+        self.assertNotIn("cooldown_anchor", manifest)
+        self.assertNotIn("terminal_verdict", manifest)
+
+    def test_cli_rejects_malformed_anchor_shapes_before_experiment(self) -> None:
+        config_path = self._write_config("cli-anchor-rejected", repetitions=2)
+        valid = valid_cooldown_anchor()
+        cases: list[tuple[str, dict[str, Any], str]] = []
+
+        def changed(**updates: Any) -> dict[str, Any]:
+            anchor = json.loads(json.dumps(valid))
+            anchor.update(updates)
+            return anchor
+
+        cases.extend(
+            [
+                (
+                    "wrong schema",
+                    changed(schema_version="wrong"),
+                    "anchor_schema_invalid",
+                ),
+                (
+                    "frozen false",
+                    changed(immutable_after_freeze=False),
+                    "anchor_not_frozen",
+                ),
+                (
+                    "missing policy",
+                    changed(policy_sha256=None),
+                    "anchor_policy_hash_invalid",
+                ),
+                (
+                    "missing eligibility",
+                    changed(eligibility=None),
+                    "anchor_reference_eligibility_missing",
+                ),
+                (
+                    "missing environment",
+                    changed(environment_snapshot_sha256=None),
+                    "anchor_environment_provenance_missing",
+                ),
+            ]
+        )
+        for field, expected_reason in (
+            ("schema_version", "anchor_schema_invalid"),
+            ("immutable_after_freeze", "anchor_not_frozen"),
+        ):
+            anchor = json.loads(json.dumps(valid))
+            anchor.pop(field)
+            cases.append((f"missing {field}", anchor, expected_reason))
+        incomplete_provenance = json.loads(json.dumps(valid))
+        incomplete_provenance["eligibility"].pop("provenance_present")
+        cases.append(
+            (
+                "incomplete eligibility provenance",
+                incomplete_provenance,
+                "anchor_reference_provenance_incomplete",
+            )
+        )
+        ineligible = json.loads(json.dumps(valid))
+        ineligible["eligibility"]["eligible"] = False
+        cases.append(
+            (
+                "ineligible reference",
+                ineligible,
+                "anchor_reference_eligibility_missing",
+            )
+        )
+        unclean = json.loads(json.dumps(valid))
+        unclean["baseline"]["idle_window_suspect"] = True
+        cases.append(("unclean baseline", unclean, "anchor_idle_window_not_clean"))
+        unparseable = json.loads(json.dumps(valid))
+        unparseable["baseline"].pop("power_w_mean")
+        cases.append(("unparseable baseline", unparseable, "anchor_baseline_invalid"))
+        for label, value in (
+            ("positive infinity baseline", float("inf")),
+            ("negative infinity baseline", float("-inf")),
+            ("nan baseline", float("nan")),
+            ("overflowing float baseline", float("1e400")),
+            ("overflowing integer baseline", 10**400),
+            ("negative power baseline", -0.1),
+        ):
+            nonphysical = json.loads(json.dumps(valid))
+            nonphysical["baseline"]["power_w_mean"] = value
+            cases.append((label, nonphysical, "anchor_baseline_invalid"))
+
+        for label, anchor, expected_reason in cases:
+            with self.subTest(label=label):
+                code, stdout, stderr = _run_cli(
+                    [
+                        "run",
+                        str(config_path),
+                        "--runs-dir",
+                        str(self.runs_dir),
+                        "--frozen-cooldown-anchor-json",
+                        json.dumps(anchor),
+                    ]
+                )
+                self.assertEqual(code, 2)
+                self.assertEqual(stdout, "")
+                self.assertIn("rejected fail-closed", stderr)
+                self.assertIn(expected_reason, stderr)
+                verdict_path = Path(stderr.rsplit("; verdict=", 1)[1].strip())
+                verdict_artifact = json.loads(verdict_path.read_text())
+                verdict = verdict_artifact["terminal_verdict"]
+                self.assertEqual(verdict["decision"], "fail_closed")
+                self.assertEqual(verdict["boundary"], "cli_accept")
+                self.assertIn(
+                    expected_reason,
+                    verdict["anchor_eligibility"]["reasons"],
+                )
+                self.assertEqual(verdict_artifact["members"], [])
+                self.assertFalse(
+                    (self.runs_dir / "cli-anchor-rejected__r1").exists()
+                )
+
+    def test_cli_decoded_non_object_anchor_writes_terminal_verdict(self) -> None:
+        config_path = self._write_config("cli-list-anchor-rejected", repetitions=2)
+
+        code, stdout, stderr = _run_cli(
+            [
+                "run",
+                str(config_path),
+                "--runs-dir",
+                str(self.runs_dir),
+                "--frozen-cooldown-anchor-json",
+                "[]",
+            ]
+        )
+
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("anchor_missing", stderr)
+        verdict_path = Path(stderr.rsplit("; verdict=", 1)[1].strip())
+        verdict_artifact = json.loads(verdict_path.read_text())
+        self.assertEqual(verdict_artifact["members"], [])
+        self.assertEqual(
+            verdict_artifact["terminal_verdict"]["anchor_eligibility"],
+            {"eligible": False, "reasons": ["anchor_missing"]},
+        )
+        self.assertEqual(verdict_artifact["terminal_verdict"]["rejected_anchor"], [])
+
+    def test_cli_undecodable_anchor_json_has_clear_error_without_verdict(self) -> None:
+        config_path = self._write_config("cli-undecodable-anchor", repetitions=2)
+
+        code, stdout, stderr = _run_cli(
+            [
+                "run",
+                str(config_path),
+                "--runs-dir",
+                str(self.runs_dir),
+                "--frozen-cooldown-anchor-json",
+                "[",
+            ]
+        )
+
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn(
+            "--frozen-cooldown-anchor-json is not valid JSON",
+            stderr,
+        )
+        self.assertNotIn("verdict=", stderr)
+        self.assertFalse((self.runs_dir / "experiments").exists())
+
+    def test_rejected_rerun_preserves_completed_manifest_and_writes_artifact(
+        self,
+    ) -> None:
+        config_path = self._write_config("cli-anchor-collision", repetitions=2)
+        first_code, _first_stdout, first_stderr = _run_cli(
+            ["run", str(config_path), "--runs-dir", str(self.runs_dir)]
+        )
+        self.assertEqual(first_code, 0, first_stderr)
+        manifest_path = (
+            self.runs_dir / "experiments" / "cli-anchor-collision.json"
+        )
+        original_manifest = json.loads(manifest_path.read_text())
+        original_bytes = manifest_path.read_bytes()
+        self.assertEqual(len(original_manifest["members"]), 2)
+
+        malformed_anchor = valid_cooldown_anchor()
+        malformed_anchor["schema_version"] = "wrong"
+        code, stdout, stderr = _run_cli(
+            [
+                "run",
+                str(config_path),
+                "--runs-dir",
+                str(self.runs_dir),
+                "--frozen-cooldown-anchor-json",
+                json.dumps(malformed_anchor),
+            ]
+        )
+
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("anchor_schema_invalid", stderr)
+        self.assertEqual(manifest_path.read_bytes(), original_bytes)
+        verdict_path = Path(stderr.rsplit("; verdict=", 1)[1].strip())
+        self.assertNotEqual(verdict_path, manifest_path)
+        self.assertEqual(
+            verdict_path.parent,
+            self.runs_dir / "experiments" / "rejections",
+        )
+        self.assertTrue(
+            verdict_path.name.startswith(
+                "cli-anchor-collision__cooldown_anchor_rejection"
+            )
+        )
+        verdict_artifact = json.loads(verdict_path.read_text())
+        self.assertEqual(verdict_artifact["experiment_id"], "cli-anchor-collision")
+        self.assertEqual(
+            verdict_artifact["terminal_verdict"]["decision"],
+            "fail_closed",
         )
 
 

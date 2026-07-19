@@ -747,6 +747,10 @@ class RunCampaignTests(unittest.TestCase):
             "policy_sha256": "a" * 64,
             "environment_snapshot_sha256": "b" * 64,
             "immutable_after_freeze": True,
+            "eligibility": {
+                "eligible": True,
+                "provenance_present": True,
+            },
             "baseline": {
                 "power_w_mean": 5.0,
                 "power_w_stddev": 0.0,
@@ -816,6 +820,44 @@ class RunCampaignTests(unittest.TestCase):
             self.assertEqual(
                 child_experiment.call_args.kwargs["frozen_cooldown_anchor"], anchor
             )
+
+    def test_parent_anchor_validator_has_canonical_child_parity(self) -> None:
+        from joulewise.cooldown_anchor import cooldown_anchor_eligibility
+
+        policy_sha256 = "a" * 64
+        anchor = {
+            "schema_version": "joulewise.cooldown_anchor.v1",
+            "source_kind": "neg8_reference_start",
+            "bundle_id": "neg8-anchor",
+            "policy_sha256": policy_sha256,
+            "environment_snapshot_sha256": "b" * 64,
+            "immutable_after_freeze": True,
+            "eligibility": {
+                "eligible": True,
+                "provenance_present": True,
+            },
+            "baseline": {
+                "power_w_mean": 5.0,
+                "power_w_stddev": 0.0,
+                "duration_s": 30.0,
+                "sample_count": 30,
+                "telemetry_backend": "powermetrics",
+                "idle_window_suspect": False,
+            },
+        }
+        malformed = json.loads(json.dumps(anchor))
+        malformed["policy_sha256"] = "c" * 64
+        malformed["eligibility"].pop("provenance_present")
+        malformed["baseline"]["idle_window_suspect"] = True
+
+        for candidate in (anchor, malformed):
+            with self.subTest(eligible=candidate is anchor):
+                self.assertEqual(
+                    run_campaign_module._cooldown_anchor_eligibility(
+                        candidate, policy_sha256
+                    ),
+                    cooldown_anchor_eligibility(candidate, policy_sha256),
+                )
 
     def test_environment_preflight_fails_closed_and_override_binds_exact_snapshot(self) -> None:
         binding = run_campaign_module.load_campaign_policy(

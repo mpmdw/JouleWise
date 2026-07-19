@@ -25,21 +25,25 @@ All timestamps come from the injected :class:`joulewise.clock.Clock`
 from __future__ import annotations
 
 import csv
+import fcntl
 import hashlib
 import json
 import math
 import os
 import platform
+import secrets
 import stat
 import subprocess
 import tempfile
 import time
+from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import joulewise
 from joulewise.clock import Clock
+from joulewise.cooldown_anchor import COOLDOWN_ANCHOR_VERDICT_SCHEMA_VERSION
 from joulewise.interfaces import PowerSample, RunContext, RuntimeEvent
 from joulewise.schemas import BenchmarkConfig, SummaryMetrics
 
@@ -58,6 +62,7 @@ _RESERVED_TOP_LEVEL_ARTIFACTS = {
     "summary_metrics.json",
 }
 _METADATA_QUARANTINE_KEY = "serialization_quarantine"
+_EXPERIMENT_CUSTODY_LOCK_NAME = ".custody.lock"
 
 SOURCE_PROVENANCE_SCHEMA = "joulewise.source_provenance.v1"
 SOURCE_DIFF_IDENTITY_ALGORITHM = "sha256"
@@ -240,12 +245,144 @@ def generate_run_id(config: BenchmarkConfig, clock: Clock) -> str:
     return f"{ts}__{target}__{workload}__{suffix}"
 
 
+def _is_cooldown_anchor_rejection(artifact: Any) -> bool:
+    """Recognize the one terminal-verdict schema that has rejection custody."""
+
+    if not isinstance(artifact, dict):
+        return False
+    terminal_verdict = artifact.get("terminal_verdict")
+    return (
+        isinstance(terminal_verdict, dict)
+        and terminal_verdict.get("schema_version")
+        == COOLDOWN_ANCHOR_VERDICT_SCHEMA_VERSION
+    )
+
+
+def _existing_cooldown_anchor_rejection_payload(path: Path) -> bytes | None:
+    """Return exact canonical bytes for a rejection, failing closed otherwise.
+
+    Absence and a readable ordinary manifest both return ``None``. An existing
+    path whose bytes cannot be read or parsed cannot be classified safely, so
+    manifest publication must stop rather than replace unknown custody.
+    """
+
+    try:
+        payload = path.read_bytes()
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise BundleError(
+            f"cannot classify existing experiment artifact {path}: unreadable"
+        ) from exc
+    try:
+        artifact = json.loads(payload)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise BundleError(
+            f"cannot classify existing experiment artifact {path}: "
+            "unparsable JSON"
+        ) from exc
+    return payload if _is_cooldown_anchor_rejection(artifact) else None
+
+
+@contextmanager
+def _experiment_custody_lock(experiments_dir: Path) -> Iterator[None]:
+    """Serialize canonical inspection and claims across experiment writers."""
+
+    lock_path = experiments_dir / _EXPERIMENT_CUSTODY_LOCK_NAME
+    fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
+
+def _stage_json_claim(path: Path, payload: str | bytes) -> str:
+    """Write and fsync one complete no-replace claim temporary file."""
+
+    while True:
+        tmp_name = str(
+            path.parent / f".{path.name}.{secrets.token_hex(16)}.tmp"
+        )
+        try:
+            fd = os.open(
+                tmp_name,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                0o666,
+            )
+        except FileExistsError:
+            continue
+        break
+    try:
+        try:
+            if isinstance(payload, bytes):
+                handle = os.fdopen(fd, "wb")
+            else:
+                handle = os.fdopen(fd, "w", encoding="utf-8")
+        except BaseException:
+            # Ownership transfers only when fdopen succeeds.
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            raise
+        with handle:
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except BaseException:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+    return tmp_name
+
+
+def _claim_staged_json(tmp_name: str, path: Path) -> Path:
+    """Atomically claim ``path`` with an already-complete staged inode."""
+
+    os.link(tmp_name, path)
+    return path
+
+
+def _cleanup_staged_json(tmp_name: str | None) -> None:
+    if tmp_name is None:
+        return
+    try:
+        os.unlink(tmp_name)
+    except OSError:
+        pass
+
+
+def _fsync_directory(path: Path) -> None:
+    """Persist directory entries best-effort on supported platforms."""
+
+    try:
+        dir_fd = os.open(str(path), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        try:
+            os.fsync(dir_fd)
+        except OSError:
+            pass
+    finally:
+        os.close(dir_fd)
+
+
 def write_experiment_manifest(runs_root: Path, manifest: dict) -> Path:
     """Write ``runs_root/experiments/<experiment_id>.json`` (D-005).
 
     The manifest must contain an ``experiment_id`` key; the ID is sanitized
     for the filename only. Unlike bundles, manifests are extended
-    incrementally, so overwriting an existing manifest file is allowed.
+    incrementally, so overwriting an existing ordinary manifest file is
+    allowed. A canonical cooldown-anchor rejection is first relocated to the
+    exclusive-create rejection namespace; relocation failure aborts manifest
+    publication without replacing the rejection.
 
     The replacement is atomic (P2-040 FIX-6/ARC-5): the serialized bytes are
     written to a unique temporary file in the same ``experiments/`` directory,
@@ -260,7 +397,7 @@ def write_experiment_manifest(runs_root: Path, manifest: dict) -> Path:
     experiments_dir.mkdir(parents=True, exist_ok=True)
     path = experiments_dir / f"{sanitize_id_component(experiment_id)}.json"
     payload = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
-    fd, tmp_name = tempfile.mkstemp(
+    fd, manifest_tmp_name = tempfile.mkstemp(
         prefix=f".{path.name}.", suffix=".tmp", dir=str(experiments_dir)
     )
     try:
@@ -268,27 +405,127 @@ def write_experiment_manifest(runs_root: Path, manifest: dict) -> Path:
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
-        os.replace(tmp_name, path)
+        safe_id = sanitize_id_component(experiment_id)
+        relocated_path: Path | None = None
+        while True:
+            # Preparing a relocation inode requires the canonical bytes, but
+            # serialization/fsync must stay outside the claim lock. This read
+            # is therefore advisory; the locked read below is authoritative.
+            prepared_payload = _existing_cooldown_anchor_rejection_payload(path)
+            relocation_tmp_name: str | None = None
+            if prepared_payload is not None:
+                rejections_dir = experiments_dir / "rejections"
+                rejections_dir.mkdir(parents=True, exist_ok=True)
+                relocation_tmp_name = _stage_json_claim(
+                    rejections_dir
+                    / f"{safe_id}__cooldown_anchor_rejection.json",
+                    prepared_payload,
+                )
+            retry = False
+            try:
+                with _experiment_custody_lock(experiments_dir):
+                    rejection_payload = (
+                        _existing_cooldown_anchor_rejection_payload(path)
+                    )
+                    if rejection_payload is not None:
+                        if (
+                            relocation_tmp_name is None
+                            or rejection_payload != prepared_payload
+                        ):
+                            # A rejection claimed or changed the path after
+                            # the advisory read. Release, stage its exact bytes,
+                            # and retry without disturbing either artifact.
+                            retry = True
+                        else:
+                            relocated_path = _claim_next_rejection_artifact(
+                                experiments_dir,
+                                safe_id,
+                                relocation_tmp_name,
+                            )
+                    if not retry:
+                        os.replace(manifest_tmp_name, path)
+            finally:
+                _cleanup_staged_json(relocation_tmp_name)
+            if not retry:
+                break
     except BaseException:
-        try:
-            os.unlink(tmp_name)
-        except OSError:
-            pass
+        _cleanup_staged_json(manifest_tmp_name)
         raise
-    # Best-effort directory fsync so the rename itself is durable; platforms
-    # that refuse O_RDONLY directory fds (e.g. Windows) simply skip it.
-    try:
-        dir_fd = os.open(str(experiments_dir), os.O_RDONLY)
-    except OSError:
-        pass
-    else:
-        try:
-            os.fsync(dir_fd)
-        except OSError:
-            pass
-        finally:
-            os.close(dir_fd)
+    _cleanup_staged_json(manifest_tmp_name)
+    if relocated_path is not None:
+        _fsync_directory(relocated_path.parent)
+    _fsync_directory(experiments_dir)
     return path
+
+
+def _claim_next_rejection_artifact(
+    experiments_dir: Path,
+    safe_id: str,
+    tmp_name: str,
+) -> Path:
+    """Claim the next rejection ordinal from an already-fsynced inode."""
+
+    rejections_dir = experiments_dir / "rejections"
+    base_name = f"{safe_id}__cooldown_anchor_rejection"
+    ordinal = 1
+    while True:
+        suffix = "" if ordinal == 1 else f"__{ordinal}"
+        artifact_path = rejections_dir / f"{base_name}{suffix}.json"
+        try:
+            return _claim_staged_json(tmp_name, artifact_path)
+        except FileExistsError:
+            ordinal += 1
+
+
+def write_experiment_rejection_verdict(runs_root: Path, manifest: dict) -> Path:
+    """Persist a rejection without replacing an experiment manifest.
+
+    A first rejection may claim the normal D-005 manifest path. If that path
+    already exists, its custody wins: the rejection is written under
+    ``experiments/rejections`` with a deterministic ordinal suffix selected
+    by exclusive creation. No destination is inspected and then replaced.
+    """
+
+    experiment_id = manifest.get("experiment_id")
+    if not isinstance(experiment_id, str) or not experiment_id:
+        raise BundleError("experiment rejection requires a non-empty 'experiment_id' key")
+    if not _is_cooldown_anchor_rejection(manifest):
+        raise BundleError(
+            "experiment rejection requires a terminal_verdict object with "
+            f"schema_version {COOLDOWN_ANCHOR_VERDICT_SCHEMA_VERSION!r}"
+        )
+
+    experiments_dir = Path(runs_root) / "experiments"
+    experiments_dir.mkdir(parents=True, exist_ok=True)
+    safe_id = sanitize_id_component(experiment_id)
+    payload = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+    manifest_path = experiments_dir / f"{safe_id}.json"
+    rejections_dir = experiments_dir / "rejections"
+    rejections_dir.mkdir(parents=True, exist_ok=True)
+    manifest_tmp_name: str | None = None
+    rejection_tmp_name: str | None = None
+    claimed_path: Path | None = None
+    try:
+        manifest_tmp_name = _stage_json_claim(manifest_path, payload)
+        rejection_tmp_name = _stage_json_claim(
+            rejections_dir / f"{safe_id}__cooldown_anchor_rejection.json",
+            payload,
+        )
+        with _experiment_custody_lock(experiments_dir):
+            try:
+                claimed_path = _claim_staged_json(
+                    manifest_tmp_name, manifest_path
+                )
+            except FileExistsError:
+                claimed_path = _claim_next_rejection_artifact(
+                    experiments_dir, safe_id, rejection_tmp_name
+                )
+    finally:
+        _cleanup_staged_json(manifest_tmp_name)
+        _cleanup_staged_json(rejection_tmp_name)
+    assert claimed_path is not None
+    _fsync_directory(claimed_path.parent)
+    return claimed_path
 
 
 def _validated_raw_path(raw_dir: Path, name: str) -> Path:

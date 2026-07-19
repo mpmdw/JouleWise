@@ -70,8 +70,14 @@ from joulewise.bundle import (
     generate_run_id,
     sanitize_id_component,
     write_experiment_manifest,
+    write_experiment_rejection_verdict,
 )
 from joulewise.clock import Clock, ClockStamp, FakeClock
+from joulewise.cooldown_anchor import (
+    COOLDOWN_ANCHOR_VERDICT_SCHEMA_VERSION,
+    cooldown_anchor_eligibility,
+    idle_baseline_from_anchor,
+)
 from joulewise.environment import (
     collect_environment_guard_observation,
     collect_environment_snapshot,
@@ -114,6 +120,7 @@ from joulewise.schemas import (
     MeasurementQuality,
     RunStatus,
     SamplingConfig,
+    SchemaError,
     SummaryMetrics,
     SummaryMetricsV060,
     TelemetryBackend,
@@ -132,6 +139,7 @@ __all__ = [
     "Reducer",
     "cooldown_gate",
     "finalize_dispatch_receipt",
+    "record_cooldown_anchor_rejection",
     "run_benchmark",
     "run_experiment",
 ]
@@ -2348,6 +2356,33 @@ def run_experiment(
     }
     frozen_anchor = deepcopy(frozen_cooldown_anchor)
     if frozen_anchor is not None:
+        expected_policy_sha256 = None
+        if campaign_policy is not None:
+            expected_policy_sha256 = (
+                policy_binding.get("sha256")
+                if isinstance(policy_binding, dict)
+                and isinstance(policy_binding.get("sha256"), str)
+                else ""
+            )
+        anchor_eligibility = cooldown_anchor_eligibility(
+            frozen_anchor,
+            expected_policy_sha256,
+        )
+        if not anchor_eligibility["eligible"]:
+            verdict_path = _write_cooldown_anchor_rejection(
+                runs_root,
+                manifest,
+                frozen_anchor,
+                anchor_eligibility,
+                boundary="controller_policy_binding",
+                policy_sha256=expected_policy_sha256,
+                observed_at_s=clock.now(),
+            )
+            raise SchemaError(
+                "frozen cooldown anchor rejected fail-closed: "
+                + ", ".join(anchor_eligibility["reasons"])
+                + f"; verdict={verdict_path}"
+            )
         manifest["cooldown_anchor"] = frozen_anchor
 
     results: list[tuple[Path, SummaryMetrics]] = []
@@ -2408,11 +2443,28 @@ def run_experiment(
             bundle_path, summary
         )
         if frozen_anchor is None and reference_eligibility["eligible"]:
-            frozen_anchor = _experiment_cooldown_anchor(
-                bundle_path, summary, reference_eligibility
+            candidate_anchor = _experiment_cooldown_anchor(
+                bundle_path,
+                summary,
+                reference_eligibility,
+                policy_sha256=(
+                    policy_binding.get("sha256")
+                    if isinstance(policy_binding, dict)
+                    else None
+                ),
             )
-            manifest["cooldown_anchor"] = frozen_anchor
-            manifest_path = write_experiment_manifest(runs_root, manifest)
+            candidate_eligibility = cooldown_anchor_eligibility(
+                candidate_anchor,
+                (
+                    policy_binding.get("sha256")
+                    if isinstance(policy_binding, dict)
+                    else None
+                ),
+            )
+            if candidate_eligibility["eligible"]:
+                frozen_anchor = candidate_anchor
+                manifest["cooldown_anchor"] = frozen_anchor
+                manifest_path = write_experiment_manifest(runs_root, manifest)
 
         if rep < repetitions:
             note, cap_hit = _cooldown_between_reps(
@@ -2608,6 +2660,8 @@ def _experiment_cooldown_anchor(
     bundle_path: Path,
     summary: SummaryMetrics | SummaryMetricsV060,
     eligibility: dict[str, Any],
+    *,
+    policy_sha256: str | None,
 ) -> dict[str, Any]:
     baseline = summary.idle_baseline
     assert baseline is not None
@@ -2625,6 +2679,7 @@ def _experiment_cooldown_anchor(
         "schema_version": "joulewise.cooldown_anchor.v1",
         "source_kind": "first_admission_passing_baseline",
         "bundle_id": bundle_path.name,
+        "policy_sha256": policy_sha256,
         "baseline": _jsonable(asdict(baseline)),
         "eligibility": eligibility,
         "environment_snapshot_sha256": (
@@ -2637,26 +2692,70 @@ def _experiment_cooldown_anchor(
 def _idle_baseline_from_anchor(
     anchor: dict[str, Any] | None,
 ) -> IdleBaseline | None:
-    if not isinstance(anchor, dict) or anchor.get("immutable_after_freeze") is not True:
-        return None
-    raw = anchor.get("baseline")
-    if not isinstance(raw, dict):
-        return None
-    try:
-        return IdleBaseline(
-            power_w_mean=float(raw["power_w_mean"]),
-            power_w_stddev=float(raw["power_w_stddev"]),
-            duration_s=float(raw["duration_s"]),
-            sample_count=int(raw["sample_count"]),
-            telemetry_backend=TelemetryBackend(raw["telemetry_backend"]),
-            gpu_idle_ratio_mean=raw.get("gpu_idle_ratio_mean"),
-            gpu_idle_ratio_min=raw.get("gpu_idle_ratio_min"),
-            gpu_freq_mhz_mean=raw.get("gpu_freq_mhz_mean"),
-            gpu_freq_hz_mean=raw.get("gpu_freq_hz_mean"),
-            idle_window_suspect=raw.get("idle_window_suspect"),
-        )
-    except (KeyError, TypeError, ValueError):
-        return None
+    return idle_baseline_from_anchor(anchor)
+
+
+def _write_cooldown_anchor_rejection(
+    runs_root: Path,
+    manifest: dict[str, Any],
+    anchor: Any,
+    eligibility: dict[str, Any],
+    *,
+    boundary: str,
+    policy_sha256: str | None,
+    observed_at_s: float,
+) -> Path:
+    """Persist the terminal D-077 verdict before rejecting child execution."""
+
+    manifest["terminal_verdict"] = {
+        "schema_version": COOLDOWN_ANCHOR_VERDICT_SCHEMA_VERSION,
+        "record_type": "cooldown_anchor_verdict",
+        "status": "rejected",
+        "decision": "fail_closed",
+        "reason": "invalid_frozen_cooldown_anchor",
+        "boundary": boundary,
+        "observed_at_s": observed_at_s,
+        "policy_sha256": policy_sha256,
+        "anchor_eligibility": eligibility,
+        "rejected_anchor": deepcopy(anchor),
+    }
+    return write_experiment_rejection_verdict(runs_root, manifest)
+
+
+def record_cooldown_anchor_rejection(
+    config: BenchmarkConfig,
+    runs_root: Path,
+    clock: Clock,
+    anchor: Any,
+    eligibility: dict[str, Any],
+    *,
+    boundary: str,
+) -> Path:
+    """Record a CLI-boundary anchor rejection without starting a member."""
+
+    experiment_id = (
+        sanitize_id_component(config.run_id)
+        if config.run_id is not None
+        else generate_run_id(config, clock)
+    )
+    manifest: dict[str, Any] = {
+        "experiment_id": experiment_id,
+        "config_sha256": _config_sha256(config),
+        "created_at_s": clock.now(),
+        "members": [],
+        "member_gaps": [],
+        "condition_order": [],
+        "cooldown": [],
+    }
+    return _write_cooldown_anchor_rejection(
+        runs_root,
+        manifest,
+        anchor,
+        eligibility,
+        boundary=boundary,
+        policy_sha256=None,
+        observed_at_s=clock.now(),
+    )
 
 
 def _member_gap_note(bundle_path: Path) -> dict[str, Any]:

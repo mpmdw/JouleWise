@@ -66,6 +66,7 @@ from joulewise.controller import (  # noqa: E402
     CAMPAIGN_POLICY_SHA256_ENV,
     CAMPAIGN_PREFLIGHT_JSON_ENV,
 )
+from joulewise.cooldown_anchor import cooldown_anchor_eligibility  # noqa: E402
 from joulewise.doctor import SCHEMA_VERSION as DOCTOR_SCHEMA_VERSION  # noqa: E402
 from joulewise.doctor import config_warning_gate  # noqa: E402
 from joulewise.environment import (  # noqa: E402
@@ -2330,38 +2331,7 @@ def _cooldown_anchor_eligibility(
     anchor: dict[str, Any] | None,
     policy_sha256: str,
 ) -> dict[str, Any]:
-    reasons: list[str] = []
-    if not isinstance(anchor, dict):
-        reasons.append("anchor_missing")
-        return {"eligible": False, "reasons": reasons}
-    if anchor.get("schema_version") != "joulewise.cooldown_anchor.v1":
-        reasons.append("anchor_schema_invalid")
-    if anchor.get("immutable_after_freeze") is not True:
-        reasons.append("anchor_not_frozen")
-    if anchor.get("policy_sha256") != policy_sha256:
-        reasons.append("anchor_policy_hash_mismatch")
-    if anchor.get("source_kind") not in {
-        "neg8_reference_start",
-        "first_admission_passing_baseline",
-    }:
-        reasons.append("anchor_source_kind_invalid")
-    if not isinstance(anchor.get("bundle_id"), str) or not anchor["bundle_id"]:
-        reasons.append("anchor_bundle_id_missing")
-    if not isinstance(anchor.get("environment_snapshot_sha256"), str):
-        reasons.append("anchor_environment_provenance_missing")
-    eligibility = anchor.get("eligibility")
-    if not isinstance(eligibility, dict) or eligibility.get("eligible") is not True:
-        reasons.append("anchor_reference_eligibility_missing")
-    elif eligibility.get("provenance_present") is not True:
-        reasons.append("anchor_reference_provenance_incomplete")
-    baseline = _idle_baseline_from_summary(
-        {"idle_baseline": anchor.get("baseline")}
-    )
-    if baseline is None:
-        reasons.append("anchor_baseline_invalid")
-    elif baseline.idle_window_suspect is not False:
-        reasons.append("anchor_idle_window_not_clean")
-    return {"eligible": not reasons, "reasons": sorted(reasons)}
+    return cooldown_anchor_eligibility(anchor, policy_sha256)
 
 
 def prior_campaign_cooldown_anchor(

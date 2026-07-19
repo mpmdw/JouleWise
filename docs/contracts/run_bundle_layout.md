@@ -688,6 +688,48 @@ executed order, executed condition order (for the Phase 4 drift audit),
 created timestamp, per-member gap notes (`member_gaps`), and cooldown-gate
 notes. Member bundle IDs are `<experiment_id>__r<N>` (decision D-010).
 
+Terminal experiment rejections are custody evidence, not ordinary completed
+experiment manifests. When the canonical
+`runs/experiments/<experiment_id>.json` path is absent, the first rejection
+may claim it only through an atomic exclusive create. A rejection collision
+instead claims the first available path in this namespace:
+
+```text
+runs/experiments/rejections/
+  <experiment_id>__cooldown_anchor_rejection.json
+  <experiment_id>__cooldown_anchor_rejection__<ordinal>.json
+```
+
+The unsuffixed rejection is ordinal 1 and explicit suffixes begin at `__2`.
+Every claim is crash-atomic: the complete JSON is written and fsynced in a
+same-directory temporary file before an atomic no-replace destination claim,
+so the destination is either absent or complete and valid, never a truncated
+partial payload. Both manifest and rejection writers serialize the complete
+canonical inspect/claim section with an exclusive advisory `fcntl.flock` on
+`runs/experiments/.custody.lock`. Payload serialization and temporary-file
+fsync happen before the lock; the lock remains held across canonical
+classification, rejection ordinal claim or relocation, and the completed
+link/replace. `.custody.lock` is persistent writer infrastructure, not
+evidence or an artifact, is outside the experiment artifact namespace, and
+must be excluded from artifact enumeration (its dotfile name also avoids
+`*.json` readers).
+
+If a later successful invocation publishes a manifest for the same experiment
+ID, the manifest writer recognizes a canonical rejection only by its
+`terminal_verdict` object carrying schema version
+`joulewise.cooldown_anchor_verdict.v1`. Before replacing that canonical path,
+it must copy the rejection payload intact to the next available ordinal in
+`experiments/rejections/` through the same exclusive-create machinery. Only a
+successful relocation permits the atomic manifest replacement; any relocation
+read, write, or claim failure aborts publication and leaves the canonical
+rejection unmodified. An existing canonical path that cannot be read or parsed
+as JSON is unclassifiable custody: manifest publication fails closed and must
+not alter its bytes. A readable ordinary existing manifest retains the
+incremental extension and atomic-replace semantics. Rejection verdicts are
+terminal evidence artifacts for the failed invocation; files under
+`experiments/rejections/` are not experiment manifests and are not inputs to
+the analysis engine.
+
 Cooldown gates between live repetitions are outside every measured member
 window and are excluded from member summaries and strict re-reduction. When
 sub-window readings are preserved, the cooldown note references an

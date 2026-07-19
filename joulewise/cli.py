@@ -41,7 +41,12 @@ from joulewise.bundle_read import (
     axi_v2_validation_problems,
 )
 from joulewise.clock import Clock, FakeClock, SystemClock
-from joulewise.controller import run_benchmark, run_experiment
+from joulewise.controller import (
+    record_cooldown_anchor_rejection,
+    run_benchmark,
+    run_experiment,
+)
+from joulewise.cooldown_anchor import cooldown_anchor_eligibility
 from joulewise.doctor import doctor_report, exit_code as doctor_exit_code
 from joulewise.doctor import render_human as render_doctor_human
 from joulewise.doctor import render_json as render_doctor_json
@@ -250,9 +255,33 @@ def _cmd_run(args: argparse.Namespace) -> int:
     clock = _select_clock(config)
     frozen_cooldown_anchor = None
     if args.frozen_cooldown_anchor_json is not None:
-        frozen_cooldown_anchor = json.loads(args.frozen_cooldown_anchor_json)
-        if not isinstance(frozen_cooldown_anchor, dict):
-            raise SchemaError("--frozen-cooldown-anchor-json must encode a JSON object")
+        try:
+            frozen_cooldown_anchor = json.loads(args.frozen_cooldown_anchor_json)
+        except json.JSONDecodeError as exc:
+            raise SchemaError(
+                "--frozen-cooldown-anchor-json is not valid JSON: "
+                f"{exc.msg} at line {exc.lineno} column {exc.colno}"
+            ) from exc
+        anchor_eligibility = cooldown_anchor_eligibility(frozen_cooldown_anchor)
+        if not anchor_eligibility["eligible"]:
+            verdict_path = None
+            if config.workload_profile.repetitions > 1:
+                verdict_path = record_cooldown_anchor_rejection(
+                    config,
+                    Path(args.runs_dir),
+                    clock,
+                    frozen_cooldown_anchor,
+                    anchor_eligibility,
+                    boundary="cli_accept",
+                )
+            verdict_note = (
+                f"; verdict={verdict_path}" if verdict_path is not None else ""
+            )
+            raise SchemaError(
+                "--frozen-cooldown-anchor-json rejected fail-closed: "
+                + ", ".join(anchor_eligibility["reasons"])
+                + verdict_note
+            )
     if config.workload_profile.repetitions > 1:
         experiment_kwargs = (
             {"frozen_cooldown_anchor": frozen_cooldown_anchor}
