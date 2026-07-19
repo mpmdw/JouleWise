@@ -114,32 +114,76 @@ zero admission failures after the probe fixes.
 
 ## Open follow-ups
 
-- Comparative/absolute floor re-extraction from this corpus (P2-015
-  analysis; supersedes the caveated 07-17 suite cells) — next session or
-  delegated extraction job.
-- Probe-fix commit lands as branch + PR (in flight this session).
-- Optional blocks 08/09/10 and the remaining floors cells stay queued.
+- Clean-provenance re-run path for claim eligibility (next window from
+  clean committed main, runs roots gitignored) or a recorded resolution;
+  then verified extraction + P2-037 adjudication.
+- su-ABBA blocks b06–b10 complete the planned n=10 comparative cell.
+- Block 10 (DF-TELEM on/off) remains honestly unavailable; blocks 08/09
+  completed in tranche 3 (contradicting earlier text in this list —
+  fixed per review).
 - `displaysleep` restore + the codex-run-v3 stale test 61 remain Ed-side.
 
 ## Exploratory lead-side readout (NOT the verified extraction)
 
-Computed directly from bundle summaries by the lead; claim-evidence flags
-and P2-037 adjudication still gate anything published.
+Computed from bundle summaries by the lead, then audited by three
+independent Sol review lenses (recomputation / environment integrity /
+claims faithfulness — reports in the session scratchpad; every raw value
+below reproduced independently). CORRECTED per that review; the original
+readout over-promoted two derived claims, recorded below for the audit
+trail.
+
+**Provenance gate (P1, found in review): all 94 bundles carry
+`source_provenance.claim_eligible=false`** (`source_changed_during_run` +
+dirty tree: the probe fixes were being written during tranches 1–2 and the
+untracked runs roots dirtied tranche 3). Per the methodology this is a
+HARD exclusion from claim-bearing use — verified extraction and P2-037
+are NOT the only remaining gates. The corpus stands as calibration /
+instrument evidence; claim-bearing promotion needs a clean-provenance
+re-run (next window runs from clean committed main with the runs roots
+gitignored) or a recorded contract-compliant resolution.
 
 - Suite gross: 147.959 ± 0.388 J (absolute cells, n=10, CV 0.26%);
-  ABBA members 147.921 ± 0.436 J (n=20) — mutually consistent. The
+  ABBA members 147.921 ± 0.436 J (n=20 members in 5 matched blocks).
+  Sample means differ by 0.026%; formal equivalence untested. The
   contaminated 07-17 cells sat ~+30% above this band.
-- Suite ABBA null contrasts (same-condition A−B): b01 +0.182, b02 −0.416,
-  b03 +0.069, b04 −0.122, b05 −0.059 J; mean |Δ| 0.169 J, max 0.416 J
-  (~0.1–0.3% of a ~148 J suite). Single-block suite comparative MDE ≈
-  0.3%; supersedes the artifact 24.62 J caveated figure pending verified
-  extraction.
-- Long-request (first evidence): long-decode 83.91 ± 0.65 mJ/output-token
-  vs the published 99.19 ± 1.36 short-request rail (≈ −15%: prefill
-  amortization quantified); long-prompt 630.26 ± 14.94 mJ/output-token
-  (output-token denominator on prompt-heavy work).
+- Suite ABBA null contrasts (same-condition A−B, raw descriptive): b01
+  +0.182, b02 −0.416, b03 +0.069, b04 −0.122, b05 −0.059 J; mean |Δ|
+  0.169 J, max 0.416 J (blockwise 0.04–0.28% of the ~148 J suite).
+  Applying the FROZEN D-054 estimator to the five suite-level deltas
+  gives a provisional comparative floor of ≈ 1.13–1.14 J (~0.77%; two
+  independent recomputations spread 1.125–1.138 J on estimator detail —
+  the verified extraction settles it; n=5 of 10 planned blocks, 1.5×
+  small-n guard). Honest comparison to the caveated 07-17 figure:
+  same-estimator ratio ≈ 21.6–21.9×; the 24.619 J figure was dominated
+  by the two screensaver-transition blocks (deltas −19.6 and −21.3 J).
+  CORRECTION: the original readout called the raw 0.416 J max a "~0.3%
+  single-block MDE, ~60× tighter" — that mixed a raw maximum with the
+  registered guard statistic and is retracted.
+- Long-request block 08 (first execution of the optional block; the
+  equivalent decode shape existed as the 07-17 phase-decode cell):
+  long-decode 83.91 ± 0.65 mJ/output-token (idle-subtracted numerator)
+  vs the directly comparable 07-17 `df-ph-decode-abs` cell at
+  84.00 ± 0.70 — cross-window agreement ≈ 0.1% across the guard
+  intervention. Long-prompt 630.26 ± 14.94 mJ/output-token
+  (output-token denominator on prompt-heavy work). CORRECTION: the
+  original "≈ −15% vs the 99.19 rail, prefill amortization quantified"
+  claim is retracted — 99.19 is a below-protocol n=3 value from the
+  07-07 D-014 verification run, misattributed and non-comparable.
 - NEG-8 brackets: 23.0–23.8 J gross, idle 0.065–0.082 W across both
-  windows; mild in-window suite trend b01→b05 ≈ +0.4% (absorbed by
-  ABBA/brackets; note for extraction).
-- Short-prefill cells: 0.259 ± 0.034 J with |Δ| 0.021–0.092 J → 8–35%
-  relative floors; tiny-cell comparative claims need many repeats.
+  windows; the b01→b05 block-mean trend is +0.47% — ABBA mitigates local
+  ordering drift and the brackets diagnose window drift, but neither
+  removes this cross-block trend; noted for the extraction.
+- Short-prefill cells: 0.259 ± 0.034 J; ten null blocks with mean |Δ|
+  0.0207 J and max 0.0916 J (block range 0.0032–0.0916 J; up to ~35% of
+  the member mean) — tiny-cell comparative claims need many repeats.
+- Environment integrity (lens B): all 94 members satisfy every D-077
+  admission predicate (policy sha bound corpus-wide; display asleep, AC,
+  thermal nominal, GPU-idle clean; 85 recovered cooldowns, 0 cap hits).
+  Qualification: three baselines show CPU-side excursions the GPU-idle
+  classifier does not gate (max spike 2.88 W; plausibly lead-session
+  background activity between chains) — so "zero contaminated members"
+  is claimed only at the level of the policy predicates, not literally.
+  Protocol notes: seven staged-chain boundaries reset `first_run_exempt`
+  (no cross-invocation cooldown record; each following member still ran
+  its ~36 s admission baseline); a 140 W→100 W→140 W adapter-wattage
+  discontinuity spans nine members with admission predicates intact.

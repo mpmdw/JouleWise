@@ -749,13 +749,13 @@
         <div>
           <p class="eyebrow">Window A · re-calibration under the environment guard · PRELIMINARY</p>
           <h1>The suite floor, re-measured clean</h1>
-          <p class="deck">The 07-17 suite-cell inflation was root-caused to a macOS video screensaver engaging on an awake idle display — not the power source. An environment-guard admission system was built, adversarially reviewed through eight fix/audit rounds, merged, and then used to re-measure the suite cells in two bracketed quiet windows: <button class="datum" data-tip="Corpora: runs_recal_20260718 (32 bundles) + runs_recal2_20260719 (62 bundles); validate-bundle --strict, lead-run">94 strict-valid bundles</button> with zero contaminated members admitted.</p>
-          <p class="accounting-note"><strong>Evidence class:</strong> every value on this page is a preliminary lead-side readout computed from bundle summaries. The verified extraction and P2-037 claim adjudication still gate promotion into the published floor table. The 2026-07-17 verified brief remains the published baseline.</p>
+          <p class="deck">The 07-17 suite-cell inflation was root-caused to a macOS video screensaver engaging on an awake idle display — not the power source. An environment-guard admission system was built, adversarially reviewed through eight fix/audit rounds, merged, and then used to re-measure the suite cells in two bracketed quiet windows: <button class="datum" data-tip="Corpora: runs_recal_20260718 (32 bundles) + runs_recal2_20260719 (62 bundles); validate-bundle --strict, lead-run">94 strict-valid bundles</button>, every member satisfying all D-077 admission predicates (three baselines show CPU-side excursions the GPU-idle classifier does not gate — recorded, not hidden).</p>
+          <p class="accounting-note"><strong>Evidence class:</strong> every value on this page is a preliminary lead-side readout computed from bundle summaries. Three gates stand before promotion into the published floor table: the corpus is presently <strong>claim-ineligible on source provenance</strong> (the measurement tree carried uncommitted changes during collection — a hard exclusion under the methodology) pending a clean-provenance re-run or recorded resolution; then verified extraction; then P2-037 claim adjudication. This page was audited by three independent review lenses before publication, and two originally over-promoted claims were corrected (noted below). The 2026-07-17 verified brief remains the published baseline.</p>
         </div>
         <aside class="hero-aside">
           <p class="eyebrow">The guard earned its keep</p>
           <strong>Fail-closed, twice, on real hardware.</strong>
-          <p>Per-run idle admission aborted one member the instant the operator returned and the display woke mid-capture, and refused every member while its own display probe was defective on macOS 26.5 — three probe defects were found, fixed, and live-validated inside the window. No contaminated measurement was admitted at any point.</p>
+          <p>Per-run idle admission aborted one member the instant the operator returned and the display woke mid-capture, and refused every member while its own display probe was defective on macOS 26.5 — three probe defects were found, fixed, and live-validated inside the window. No member was admitted in violation of the D-077 policy predicates at any point.</p>
         </aside>
       </div>
 
@@ -767,18 +767,18 @@
         </div>
         <div class="stat">
           <span class="stat-label">Suite · null contrast</span>
-          <button class="datum stat-value" data-tip="Five same-condition ABBA blocks b01–b05; worst |A−B| 0.416 J, mean 0.169 J on a ~148 J suite">≈ 0.3%</button>
-          <span class="stat-context">single-block detection floor</span>
+          <button class="datum stat-value" data-tip="Frozen D-054 estimator over the five suite-level ABBA deltas; n=5 of 10 planned blocks, 1.5x small-n guard; raw worst |A−B| 0.416 J">≈ 0.77%</button>
+          <span class="stat-context">provisional comparative floor</span>
         </div>
         <div class="stat">
           <span class="stat-label">Long decode · per token</span>
           <button class="datum stat-value" data-tip="p2015-df-rq-long-decode-abs-r01..r10 · energy_output_token_j · n=10">83.9 mJ</button>
-          <span class="stat-context">−15% vs short-request rail</span>
+          <span class="stat-context">matches 07-17 decode cell to ~0.1%</span>
         </div>
         <div class="stat">
           <span class="stat-label">Corpus</span>
           <button class="datum stat-value" data-tip="32/32 tranche 1–2 + 62/62 tranche 3, strict validator, lead-run; both corpora backed up">94 / 94</button>
-          <span class="stat-context">strict-valid, zero contaminated</span>
+          <span class="stat-context">strict-valid, predicates satisfied</span>
         </div>
       </div>
     </header>
@@ -791,7 +791,7 @@
 
       <section>
         <h2>The re-measured suite, and its detection floor</h2>
-        <p>Thirty independent suite executions across two cell types agree to under 0.1%:</p>
+        <p>Thirty suite executions across two cell types (twenty of them arranged in five matched ABBA blocks) yield sample means differing by 0.026%; formal equivalence has not been tested:</p>
         <table>
           <thead><tr><th>cell type</th><th>n</th><th>gross suite energy — M3 Max / powermetrics SoC rails</th><th>CV</th></tr></thead>
           <tbody>
@@ -810,12 +810,12 @@
             <tr><td>b05</td><td>−0.059 J</td><td>−0.04%</td></tr>
           </tbody>
         </table>
-        <p>Mean |Δ| is <button class="datum" data-tip="Computed over the five block-level A−B contrasts">0.169 J</button>, worst case <button class="datum" data-tip="Block b02">0.416 J</button> on a ~148 J suite — a single ABBA block resolves suite-level effects of roughly 0.3%. The caveated 17 Jul comparative suite figure of 24.619 J is thereby confirmed to be a screensaver-transition artifact, roughly 60× above the instrument's clean floor; the two suite rows in the published table are expected to be superseded once the verified extraction runs on this corpus.</p>
+        <p>As raw descriptive statistics, mean |Δ| is <button class="datum" data-tip="Computed over the five block-level A−B contrasts on top-level gross energy">0.169 J</button> and the worst case <button class="datum" data-tip="Block b02">0.416 J</button> on a ~148 J suite (blockwise 0.04–0.28%). The registered floor statistic is the frozen D-054 estimator, not a raw maximum: applied to the five new suite-level deltas it gives a <strong>provisional comparative floor of ≈ 1.13 J (~0.77%)</strong> — with only 5 of the 10 planned blocks measured and the 1.5× small-n guard applied (two independent recomputations spread 1.125–1.138 J on estimator detail; the verified extraction settles it). On the same estimator, that is ≈ 22× tighter than the caveated 17 Jul figure of 24.619 J, which was dominated by its two screensaver-transition blocks (deltas −19.6 and −21.3 J). An earlier draft of this page called the raw 0.416 J maximum a “~0.3% detection floor, ~60× tighter”; that mixed statistics and is corrected here.</p>
       </section>
 
       <section>
-        <h2>First long-request evidence</h2>
-        <p>The optional long-request block, documented as unrun in the 17 Jul brief, is now measured (n=10 each):</p>
+        <h2>Long-request block measured; decode energy reproduces across windows</h2>
+        <p>Optional block 08, documented as unrun in the 17 Jul brief, is now executed (n=10 each; the equivalent decode shape already existed as the 17 Jul phase-decode cell):</p>
         <table>
           <thead><tr><th>request shape</th><th>gross energy</th><th>per generated output token</th></tr></thead>
           <tbody>
@@ -823,12 +823,12 @@
             <tr><td>long prompt</td><td><button class="datum" data-tip="p2015-df-rq-long-prompt-abs-r01..r10 · gross_energy_j">40.446 ± 0.957 J</button></td><td><button class="datum" data-tip="energy_output_token_j · n=10; the output-token denominator penalizes prompt-heavy work by construction">630.26 ± 14.94 mJ</button></td></tr>
           </tbody>
         </table>
-        <p>Against the published short-request rail of <button class="datum" data-tip="P2-038 production-uncertainty pass, 17 Jul brief">99.19 ± 1.36 mJ/output-token</button>, decode-heavy long requests are about <strong>15% cheaper per output token</strong> — prefill amortization, quantified on real hardware. Short-prefill ABBA cells (0.259 ± 0.034 J; ten complete null blocks, |Δ| 0.021–0.092 J) show 8–35% relative floors: tiny-cell comparative claims need large repetition counts by design, and small effects should be claimed at suite level.</p>
+        <p>The strongest statement this cell supports today is reproducibility: the directly comparable 17 Jul cell <button class="datum" data-tip="p2015-df-ph-decode-abs-r01..r10 (07-17 corpus): same model revision, prompt/output shape, sampling, and scientific config">df-ph-decode-abs</button> measured <strong>84.00 ± 0.70 mJ/output-token</strong>, agreeing with the re-run’s 83.91 ± 0.65 to about 0.1% across the environment-guard intervention (both on the idle-subtracted numerator). An earlier draft compared against a 99.19 mJ/token “short-request rail” and claimed −15% prefill amortization; that baseline is a below-protocol n=3 value from the 07-07 verification run, misattributed and non-comparable — the claim is withdrawn. Short-prefill ABBA cells (0.259 ± 0.034 J; ten null blocks, mean |Δ| 0.021 J, max 0.092 J) show block-relative values up to ~35%: tiny-cell comparative claims need large repetition counts by design, and small effects should be claimed at suite level.</p>
       </section>
 
       <section>
         <h2>Environment stability and caveats</h2>
-        <p>NEG-8 reference brackets stayed within 23.0–23.8 J gross and 0.065–0.082 W idle across both windows; a mild ≈ +0.4% in-window suite trend (b01 → b05) is visible and absorbed by the ABBA/bracket design, and is noted for the extraction. Members carry the standard short-window claim-evidence flags familiar from the 17 Jul corpus. Evidence trail: run report <code>docs/run_reports/2026-07-19-d077-recal-window.md</code>; corpora <code>runs_recal_20260718/</code> and <code>runs_recal2_20260719/</code> with external backups; the environment-probe fixes are PR #78 with live-pinned regressions.</p>
+        <p>NEG-8 reference brackets stayed within 23.0–23.8 J gross and 0.065–0.082 W idle across both windows; a +0.47% in-window suite trend (b01 → b05) is visible; ABBA mitigates local ordering drift and the brackets diagnose window drift, but neither removes this cross-block trend — it is noted for the extraction. Members carry the standard short-window claim-evidence flags familiar from the 17 Jul corpus. Evidence trail: run report <code>docs/run_reports/2026-07-19-d077-recal-window.md</code>; corpora <code>runs_recal_20260718/</code> and <code>runs_recal2_20260719/</code> with external backups; the environment-probe fixes are PR #78 with live-pinned regressions.</p>
       </section>
     </main>
 

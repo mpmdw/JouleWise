@@ -1,6 +1,12 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-19 (DEPLOY-READY: Ed-requested regeneration carrying the
+Refreshed: 2026-07-19b (DEPLOY-READY, review-corrected: a three-lens Sol
+review corrected two over-promoted claims (floor statistic, -15%
+comparison) and surfaced the source-provenance claim gate before
+publication; the update brief and status page now carry the corrected,
+fully-labeled numbers. Original note follows.)
+
+Prior refresh: 2026-07-19 (Ed-requested regeneration carrying the
 2026-07-19 re-calibration update — new "Recal Update" top-nav tab
 (advisor_update.html, verbatim advisor brief supplement), PROJECT_STATUS
 re-calibration section + ledger rows, run_state/latest-report refresh.

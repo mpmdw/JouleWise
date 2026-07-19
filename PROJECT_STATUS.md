@@ -41,10 +41,9 @@ table below, and the shipped advisor brief presents the same evidence.
 This is calibration evidence, not a promoted research result: all 222 bundles
 are claim-evidence-flagged, short prefill is not resolvable, and comparative
 tails show drift/ordering structure. P2-037 claim adjudication remains
-pending before any floor-backed L2/L3 claim. A 2026-07-19 re-calibration
-under the merged D-077 environment guard has since re-measured the suite
-cells clean — preliminary readout in the dated section below and the
-advisor update brief. AXI-SB remains `supported` for native static-batch runtime
+pending before any floor-backed L2/L3 claim. A 2026-07-19 re-calibration under
+the D-077 guard has re-measured the suite cells clean — preliminary
+readout in the dated section below and the advisor update brief. AXI-SB remains `supported` for native static-batch runtime
 feasibility with request-scoped observability; AXI-SC is
 `unsupported_for_joulewise` on the pinned runtime because the required
 speculative-decode/MTP observability or execution surface is absent. Neither
@@ -73,25 +72,23 @@ or ABBA blocks.
 | suite level, gross — M3 Max / powermetrics SoC rails | 1.664 J | 24.619 J | 24.619 J; drift review required |
 
 The start/end NEG-8 reference pair is an `n=2` drift diagnostic, not a campaign
-floor. Its gross request energy moved by 7.659 J on the Apple M3 Max /
-powermetrics SoC-rail boundary; the idle-subtracted within-device secondary
-view moved by 6.608 J on the same boundary. The verified extraction is
-`docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json`; the
-shipped reader deliverable is
-`docs/advisor_briefs/2026-07-17-window-a-brief.html`.
+floor. Its gross request energy moved by 7.659 J; the idle-subtracted
+within-device secondary view moved by 6.608 J (same boundary). Verified extraction:
+`docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json`;
+reader deliverable: `docs/advisor_briefs/2026-07-17-window-a-brief.html`.
 
 ### 2026-07-19 re-calibration under the environment guard — PRELIMINARY
 
 The caveated suite rows were re-measured in two bracketed windows under
-the merged D-077 guard: **94 strict-valid bundles, zero contaminated
-members admitted**. Preliminary lead-side readout (verified extraction
-+ P2-037 gate promotion):
-suite gross **147.96 ± 0.39 J** clean (contaminated cells sat ~+30%
-above); comparative detection floor **≈ 0.3%** from five ABBA null
-contrasts (~60× tighter than the caveated artifact figure); first
-long-request evidence with long-decode at **83.9 mJ/output-token**
-(≈ −15% vs the short-request rail). Full numbers:
-the advisor update brief tab and the 2026-07-19 run report above.
+the D-077 guard: **94 strict-valid bundles**, all admission predicates
+satisfied. Reviewed readout: suite gross **147.96 ± 0.39 J**
+clean (contaminated cells were ~+30%);
+frozen-estimator provisional comparative floor **≈ 1.13 J (~0.77%)**
+from 5 of 10 planned ABBA blocks (~22× tighter, same estimator, than
+the caveated figure); long-decode **83.9 mJ/output-token**,
+matching the 07-17 decode cell to ~0.1%. Gates: claim-ineligible on
+source provenance (dirty collection tree) pending a clean re-run, then
+verified extraction + P2-037. Details: advisor update brief tab + 2026-07-19 run report.
 
 ### Exploratory follow-on — not a promoted claim
 
@@ -239,10 +236,10 @@ implementing the statistical-uncertainty protocol) queued.
 
 | date | label | one-line outcome | run-report link |
 |---|---|---|---|
-| 2026-07-19 | Suite re-calibration under the environment guard (preliminary) | Two bracketed windows: 94 strict-valid bundles, zero contaminated admissions; suite re-measured 147.96 ± 0.39 J with a ~0.3% comparative floor; first long-request evidence; preliminary pending verified extraction + P2-037. | `docs/run_reports/2026-07-19-d077-recal-window.md` |
-| 2026-07-18 | Contamination diagnosis + environment-guard hardening (D-077) | Suite-cell inflation attributed to the macOS video screensaver on an awake idle display (43/50 bundles; power-source hypothesis refuted); suite comparative cells caveated pending re-run; the D-077 guard (preflight, per-run idle admission, cooldown v2, unwaivable claim barrier, fail-closed anchor custody) was built and taken through an eight-round adversarial arc. | `docs/run_reports/2026-07-17-environment-guard.md`; `docs/run_reports/2026-07-18-d077-fix-rounds.md` |
-| 2026-07-17 | exploratory block + D-075 re-wrap | Nine retained OLMoE/Qwen bundles were re-validated and extracted as explicitly unmatched, claim-evidence-flagged exploratory observations; DSpark/DFlash smokes and D-075's ranked extension-axis intake were folded in without promoting evidence or adding independent theses; Ed's completed manual site deployment was recorded as the new drift baseline. | `docs/run_reports/2026-07-17-window-a-floors.md` (final re-wrap addendum; lead gate pending) |
-| 2026-07-17 | Window A floors + advisor brief | PRs #72/#74 closed the bounded powermetrics drain defects and P2-038 passed on merged main; PR #73 filed the AXI-SC negative applicability verdict; 222 distinct strict-valid floor bundles were extracted and independently verified, with claim-readiness caveats retained; the advisor brief shipped. | `docs/run_reports/2026-07-17-window-a-floors.md` (LEAD-ACCEPTED) |
+| 2026-07-19 | Suite re-calibration under the guard (preliminary, review-corrected) | 94 strict-valid bundles; suite 147.96 ± 0.39 J clean; provisional comparative floor ≈ 1.13 J (~0.77%, 5/10 blocks); claim-ineligible on provenance pending clean re-run; three-lens review corrected two over-promoted claims. | `docs/run_reports/2026-07-19-d077-recal-window.md` |
+| 2026-07-18 | Contamination diagnosis + environment-guard hardening (D-077) | Suite-cell inflation attributed to the macOS video screensaver on an awake idle display (43/50 bundles; power-source hypothesis refuted); suite comparative cells caveated pending re-run; the D-077 guard (preflight, idle admission, cooldown v2, claim barrier, anchor custody) was built and taken through an eight-round adversarial arc. | `docs/run_reports/2026-07-17-environment-guard.md`; `docs/run_reports/2026-07-18-d077-fix-rounds.md` |
+| 2026-07-17 | exploratory block + D-075 re-wrap | Nine retained OLMoE/Qwen bundles re-validated and extracted as unmatched, claim-evidence-flagged exploratory observations; DSpark/DFlash smokes and D-075's ranked extension-axis intake folded in without promoting evidence; Ed's manual site deployment recorded as the new drift baseline. | `docs/run_reports/2026-07-17-window-a-floors.md` (final re-wrap addendum; lead gate pending) |
+| 2026-07-17 | Window A floors + advisor brief | PRs #72/#74 closed the bounded powermetrics drain defects and P2-038 passed on merged main; PR #73 filed the AXI-SC negative verdict; 222 strict-valid floor bundles extracted and independently verified, claim-readiness caveats retained; advisor brief shipped. | `docs/run_reports/2026-07-17-window-a-floors.md` (LEAD-ACCEPTED) |
 | 2026-07-16 | audit close + no-hardware resumption batch | PR #66 closed the comprehensive audit; PRs #67-#70 landed AXI-SA, SITE-02 D1/D2, the SPLIT-AP Part I freeze, and the AXI-SB `supported` verdict with its Mac C5-2.2 leg. Window A is software-unblocked but still needs Ed + quiet Mac; no new energy measurement is claimed. | `docs/run_reports/2026-07-16-resumption-nohw-batch.md` |
 | 2026-07-10/11 | C-028 hardening and integration arc | PRs #41-#58 merged; analysis trio complete; reducer lattice through 0.4.2; P0-003 restore proof and every Window-A software gate satisfied; PR #59 open as a bounded follow-up; no new live evidence claimed. | `docs/run_reports/2026-07-11-c028-continuation.md` |
 | 2026-07-06 | third update / first real energy | Mac slices 2G/2H/2I landed and produced strict-valid M3 Max measurements. **P2-003, gross energy — M3 Max / powermetrics SoC rails:** ~47.2 J per 512-token request. **P2-003, idle-subtracted energy — M3 Max / powermetrics SoC rails:** ~79-90 mJ per generated output token; the originally reported range used the prompt+output denominator and was corrected 2026-07-09 (C-027). TTFT ~94 ms, 257 tok/s, gross CV 1.4%, powermetrics observed at ~8.8-8.9 Hz; short prefill energy is below the current detection capability and is not a quantitative result (D-055). | `docs/run_reports/2026-07-06-slice-2i-first-real-energy.md` |

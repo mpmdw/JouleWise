@@ -27,3 +27,4 @@ report/
 /build/
 site_capsule/node_modules/
 /node_modules/
+/runs_recal*/
