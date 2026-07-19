@@ -23,22 +23,27 @@ Choose before launch and always pass the choice explicitly:
 When uncertain between `high` and `xhigh`, start `high`; escalate a fresh or
 continued session only when the task actually exhibits an xhigh trigger.
 
-## Primary MCP path
+## Transport selection
 
 All wire rules live in `docs/contracts/bridge_protocol.md`
 (`bridge-protocol/v1.1`) — the ONE home. This section is the operating
 sequence, not the contract.
 
 1. Read root `AGENTS.md`; run Mission M0 for substantial work.
-2. Choose the transport using contract §4. Use the audited CLI path when the
-   contract requires durable evidence.
+2. Choose the transport using contract §4. For background or delegated work,
+   prefer `scripts/codex-bridge`: on Ed's configured desktop it sends the real
+   Sol turn to an app-owned bridge task, so the native Codex pet sees the task
+   as running, while retaining the audited CLI files. Use MCP for quick direct
+   interaction when native pet visibility is not required.
 3. Build the applicable contract §1 header. For writes, open the session with
    `scripts/bridge session-open` and use its returned header fragment.
-4. Call project MCP `codex` with the Git-root `cwd`, model `gpt-5.6-sol`,
-   config
+4. For the preferred background route, set `CODEX_REASONING_EFFORT` to the
+   selected tier and call `scripts/codex-bridge new` or
+   `scripts/codex-bridge review`. For MCP, call project tool `codex` with the
+   Git-root `cwd`, model `gpt-5.6-sol`, config
    `{"model_reasoning_effort":"<selected-effort>","mcp_servers":{"claude":{"enabled":false}}}`,
    `on-request` approvals, and the narrowest sandbox. Put the contract's origin
-   and hop headers in developer instructions.
+   and hop headers in developer instructions or the bridge prompt.
 5. Validate the return under contract §2. Handle early returns and routing
    changes under §§3-4 on the thread required by §5.
 6. After writes, run `scripts/bridge session-close` as specified by contract
@@ -68,6 +73,20 @@ effort, genre, and exhaustive write scope. If unavailable, set
 `CODEX_REASONING_EFFORT` to the selected tier and use `scripts/codex-bridge`.
 
 ## Session observability + recovery (WO-027)
+
+The native Codex pet does not consume the external observer JSONL. It follows
+running local conversations owned by the Codex desktop app. On Ed's configured
+machine, `.codex-bridge/app-host-thread-id` selects a dedicated app-owned task;
+`scripts/codex-bridge` uses `scripts/codex-app-bridge.mjs` to start the real Sol
+turn there. The script serializes calls on that host task, captures the final
+answer from its rollout, and interrupts the app turn if the wrapper is
+terminated. `CODEX_APP_BRIDGE=off` explicitly selects the standalone CLI
+fallback. Do not claim native pet visibility for standalone `codex exec` or
+MCP sessions.
+
+The observer JSONL remains a separate audit/diagnostic surface. The script
+publishes `RUNNING` and terminal `FINISHED` events, but those records do not
+drive pet behavior.
 
 Live visibility and discovery for bridge-launched sessions use the
 `.codex-bridge/` audit trail (this replaced the deleted `scripts/codex-watch`;

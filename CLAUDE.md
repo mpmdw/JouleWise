@@ -1,17 +1,14 @@
 # Claude Code Notes
 
-This repository has a project-local bridge to a full Codex session, plus an
-audited CLI fallback.
+This repository has a project-local Codex MCP server plus an audited script
+bridge. On Ed's configured desktop, the script bridge is also the native
+pet-visible background route.
 
 ## Primary Path: Codex MCP
 
-The tracked `.mcp.json` starts `codex mcp-server`. Claude Code exposes its two
-entry points as the `codex` tool (start a session) and `codex-reply` (continue
-the returned thread). The first tool accepts the working directory, sandbox,
-approval policy, model, developer instructions, and arbitrary Codex config
-overrides. The small MCP surface is a session launcher: the resulting Codex
-session can use the skills, plugins, MCP tools, browser/image tools, goals, and
-other capabilities available in that installed Codex runtime.
+The tracked `.mcp.json` starts `codex mcp-server`. Claude Code exposes the
+server's two entry points as the `codex` tool (start a session) and
+`codex-reply` (continue the returned thread).
 
 Select effort only as specified by `.claude/skills/codex/SKILL.md` §Effort
 selection.
@@ -30,18 +27,6 @@ scripts/check-codex-mcp.mjs
 The ONE home for bridge wire policy is `docs/contracts/bridge_protocol.md`
 (`bridge-protocol/v1.1`). The launch sequence lives in
 `.claude/skills/codex/SKILL.md`.
-
-For every new call:
-
-- Set `cwd` to this repository root explicitly.
-- Use `read-only` for analysis/review and `workspace-write` only when edits are
-  requested. Use `on-request` approvals.
-- Tell Codex to follow root `AGENTS.md`. For substantial JouleWise work, the
-  prompt must name the requested output and the relevant Mission M0 context.
-- Keep the returned thread id and use `codex-reply` for follow-ups instead of
-  silently starting over.
-- Inspect Codex's diff and run the appropriate lead verification before
-  reporting success.
 
 The enforcement boundaries remain local because prompt text is part of their
 enforcement:
@@ -70,10 +55,12 @@ peer advice.
 
 Use `scripts/codex-bridge` when a substantial delegated run needs D-050's
 prompt/response/log hashes and invocation manifest, or when a CLI-native review
-is preferable. It supports `new`, `resume --last` or a session id, and
-`review`, runs at the repository root, mirrors the final response to
-`.codex-bridge/last-message.md`, and writes the durable local audit trail under
-`.codex-bridge/`.
+is preferable. This is the preferred route for background calls that must be
+visible in the native Codex pet. When the ignored local
+`.codex-bridge/app-host-thread-id` is present, `new` and `review` send the real
+turn to that app-owned task and return its final answer through the ordinary
+audit trail. External observer JSONL is diagnostic only; it does not drive the
+pet. Set `CODEX_APP_BRIDGE=off` only to require standalone `codex exec`.
 
 The current orchestration wrapper is `~/.local/bin/codex-run-v3` (personal
 tooling, not tracked here). It supplies the audited report and D-064 evidence

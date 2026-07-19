@@ -741,6 +741,9 @@ Tracked implementation:
 - `scripts/bridge`: session wrappers, leases, baseline manifests, scope checks,
   and thread registry
 - `.codex-bridge/receipts/`: immutable local session-open receipts
+- `scripts/codex-bridge` + `scripts/codex-app-bridge.mjs`: audited
+  Claude-to-Sol script route and optional desktop-owned turn transport; the
+  latter is what gives the native pet real running-conversation state
 - `scripts/claude-bridge-mcp.mjs`: guarded reverse consult
 - `.mcp.json`: Claude-to-Codex server configuration
 - `.codex/config.toml`: Codex-to-Fable server registration

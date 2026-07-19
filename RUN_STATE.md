@@ -1,6 +1,13 @@
 # JouleWise Run State
 
-Last updated: 2026-07-17 (SESSION ARC COMPLETE: Window A floors
+Last updated: 2026-07-18. NEXT SESSION: start here, then execute the
+RESUME list in the 2026-07-17 checkpoint below — relaunch the D-077
+adversarial review over branch `impl/env-guard-cooldown`. The D-077
+review packet is `git diff main...6d80039` (later commits on the branch
+are the separately-reviewed 2026-07-18 bridge/bookkeeping work, not
+D-077 scope).
+
+Prior arc (2026-07-17, SESSION ARC COMPLETE: Window A floors
 published (222 strict-valid bundles; P2-015 partial pending P2-039
 artifact + P2-037 adjudication); advisor brief delivered
 (docs/advisor_briefs/); Ed DEPLOYED the README-first site + Learn
@@ -91,6 +98,32 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 - READY — A4 `AXI-SB-ADAPTER`: Implement the static-batch Mac adapter follow-on minted by the AXI-SB supported verdict: batch_size configuration knob, per-sequence request-scoped token events per the AXI-SA contract, realized-vs-configured batch recording, and structured memory-fit outcomes, with strict-valid mock or smoke bundles and no energy claims.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
+
+## CHECKPOINT 2026-07-18: Claude script bridge runs in the pet's app task
+
+The actual Claude Code fallback route is `scripts/codex-bridge`, not the MCP
+server for recent audited work. The wrapper now sends `new` and `review` turns
+through a dedicated app-owned Codex desktop task when the local host id is
+configured. This is the same local-conversation state the native pet consumes;
+the prior observer-only diagnosis was incorrect because the pet never reads
+`~/.codex/claude-spawned/index.jsonl`. A live Sol/high smoke appeared in the
+Codex app as thread `019f77a6-3612-7332-9f5e-be9fbde56be5`, turn
+`019f77a9-2827-7de1-accf-ac2eda21927e`, and returned
+`JOULEWISE_NATIVE_PET_BRIDGE_OK` through the script. Adaptive effort remains
+unchanged: `high` fallback/default, `xhigh` only on named hard-task triggers,
+and `ultra` only for sessions that must spawn subagents. Full record:
+`docs/run_reports/2026-07-18-claude-codex-pet-observer.md`.
+
+Committed 2026-07-18 on `impl/env-guard-cooldown` (after the D-077
+packet boundary `6d80039`) with a lead execution review at the bench:
+IPC socket ownership/permission checks, PID-checked host-task lock,
+interrupt-on-terminate, no-network sandbox policy, and one-hop rule all
+verified in `scripts/codex-app-bridge.mjs`; real-socket fake-router
+tests plus observer lifecycle tests included; canonical suite green
+lead-side (`Ran 1722 tests`, `OK (skipped=12)`). The same commit
+carries the doctor-driven CLAUDE.md trims (global + repo; content
+deduplicated into `.claude/skills/codex/SKILL.md`, which is the
+operating home) and stamp-only `docs/site/*.html` provenance refresh.
 
 ## CHECKPOINT 2026-07-17 (late session): env-guard branch open, review pending
 
@@ -197,6 +230,8 @@ work-selection authority. Use the generated region above for selection.
 Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the C-028 block above.
 
+- 2026-07-18 Claude Code script bridge + native pet integration:
+  `docs/run_reports/2026-07-18-claude-codex-pet-observer.md`
 - 2026-07-13 Bridge v1: bridge-protocol/v1 contract + scripts/bridge tooling
   (PR #64; co-designed with Sol over the bridge itself):
   `docs/run_reports/2026-07-13-bridge-v1.md`
