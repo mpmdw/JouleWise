@@ -1,11 +1,12 @@
 # JouleWise Run State
 
-Last updated: 2026-07-18. NEXT SESSION: start here, then execute the
-RESUME list in the 2026-07-17 checkpoint below — relaunch the D-077
-adversarial review over branch `impl/env-guard-cooldown`. The D-077
-review packet is `git diff main...6d80039` (later commits on the branch
-are the separately-reviewed 2026-07-18 bridge/bookkeeping work, not
-D-077 scope).
+Last updated: 2026-07-18 (late). NEXT SESSION: the D-077 adversarial arc
+is COMPLETE and landed as PR #77 (`impl/env-guard-cooldown` at
+`ad0920b`, fix rounds 3-8; see the 2026-07-18 D-077 checkpoint below).
+Start by checking PR #77 CI + Ed's merge decision; after merge, the
+[QUIET-MAC] resume items are the display-asleep probe capture during
+quiet-window prep and the suite ABBA re-calibration under the new guard
+(D-076 comparative floor cells stay caveated until re-run).
 
 Prior arc (2026-07-17, SESSION ARC COMPLETE: Window A floors
 published (222 strict-valid bundles; P2-015 partial pending P2-039
@@ -83,7 +84,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-17). Latest report: [Window A: shakedown+floors+brief, exploratory block (OLMoE/Qwen3-4B/122B), D-075 intake, site deployed](docs/run_reports/2026-07-17-window-a-floors.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-18). Latest report: [D-077 fix rounds 3-8: anchor-boundary hardening, adversarial arc closed, PR #77 open](docs/run_reports/2026-07-18-d077-fix-rounds.md).
 
 ### [ED-EXTERNAL]
 
@@ -98,6 +99,30 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 - READY — A4 `AXI-SB-ADAPTER`: Implement the static-batch Mac adapter follow-on minted by the AXI-SB supported verdict: batch_size configuration knob, per-sequence request-scoped token events per the AXI-SA contract, realized-vs-configured batch recording, and structured memory-fit outcomes, with strict-valid mock or smoke bundles and no energy claims.
 
 <!-- END GENERATED: state-kernel run-state-intake -->
+
+## CHECKPOINT 2026-07-18 (late): D-077 adversarial arc complete, PR #77 open
+
+The RESUME list from the 2026-07-17 checkpoint is fully executed. The
+relaunched execution-lens review, fix rounds 1-2, and their delta
+re-audits had already run earlier on 2026-07-18 (commits `1aebf14`,
+`6d80039`); this session closed the surviving P1 (child accepted any
+JSON object as the frozen cooldown anchor) plus every finding from four
+further delta re-audits, as fix rounds 3-8 in commit `ad0920b`:
+canonical anchor validator (`joulewise/cooldown_anchor.py`) enforced
+fail-closed at parent/CLI/controller boundaries; collision-safe,
+crash-atomic, flock-serialized rejection-verdict custody
+(`experiments/rejections/`); physical-domain baseline validation (the
+`inf`-anchor fail-open gate is closed); discriminating process-race
+regression. Suite green lead-side at every round boundary, final
+`Ran 1746 tests`, `OK (skipped=12)`. Awake-half live probe validation
+passed on real hardware (zero probe errors); the Ventura screensaver is
+now disabled on the machine (`idleTime = 0`). PR #77 carries the gate
+narrative; merge is Ed's call. Full record:
+`docs/run_reports/2026-07-18-d077-fix-rounds.md`. Tooling: codex-run-v3
+xhigh review-genre sessions ended with null final messages 4x
+(bridge-resume recovered each; personal-tooling defect, recorded in the
+run report and the global codex-delegation skill field notes, not the
+repo queue).
 
 ## CHECKPOINT 2026-07-18: Claude script bridge runs in the pet's app task
 
