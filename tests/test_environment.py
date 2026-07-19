@@ -771,5 +771,178 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["errors"], {})
 
 
+class DisplayAsleepDerivationTests(unittest.TestCase):
+    """macOS 26 keeps Graphics in systemstate through display-only sleep.
+
+    Live-validated 2026-07-18 (macOS 26.5, Mac15,9): with the display
+    verifiably asleep, `pmset -g systemstate` still lists Graphics while
+    system_profiler reports `spdisplays_asleep: spdisplays_yes`. Complete
+    per-display asleep evidence must win; partial or absent evidence stays
+    fail-closed as any_awake.
+    """
+
+    LIVE_SYSTEMSTATE = (
+        "Current System Capabilities are: CPU Graphics Audio Network \n"
+        "Current Power State: 4\n"
+    )
+
+    def _derive(self, ndrvs: list[dict]) -> str:
+        from joulewise.environment import (
+            _parse_pmset_systemstate,
+            _parse_system_profiler_displays,
+            empty_environment_snapshot,
+        )
+        import json as _json
+
+        snapshot = empty_environment_snapshot()
+        profiler = {"SPDisplaysDataType": [{"spdisplays_ndrvs": ndrvs}]}
+        _parse_system_profiler_displays(snapshot, _json.dumps(profiler))
+        _parse_pmset_systemstate(snapshot, self.LIVE_SYSTEMSTATE)
+        return snapshot["display_power_state"]
+
+    @staticmethod
+    def _display(asleep: str | None) -> dict:
+        entry = {
+            "_name": "Color LCD",
+            "spdisplays_online": "spdisplays_yes",
+            "spdisplays_connection_type": "spdisplays_internal",
+        }
+        if asleep is not None:
+            entry["spdisplays_asleep"] = asleep
+        return entry
+
+    def test_live_asleep_display_wins_over_graphics_capability(self) -> None:
+        state = self._derive([self._display("spdisplays_yes")])
+        self.assertEqual(state, "all_asleep")
+
+    def test_awake_display_stays_any_awake(self) -> None:
+        state = self._derive([self._display("spdisplays_no")])
+        self.assertEqual(state, "any_awake")
+
+    def test_absent_asleep_key_fails_closed_any_awake(self) -> None:
+        state = self._derive([self._display(None)])
+        self.assertEqual(state, "any_awake")
+
+    def test_mixed_displays_one_awake_fails_closed(self) -> None:
+        state = self._derive(
+            [self._display("spdisplays_yes"), self._display("spdisplays_no")]
+        )
+        self.assertEqual(state, "any_awake")
+
+    def test_partial_evidence_fails_closed(self) -> None:
+        state = self._derive(
+            [self._display("spdisplays_yes"), self._display(None)]
+        )
+        self.assertEqual(state, "any_awake")
+
+    def test_guard_observation_sees_asleep_display(self) -> None:
+        """The lightweight guard observation must carry display inventory.
+
+        Live-observed 2026-07-18: without it, every idle admission aborted
+        with 'display became or remained awake' on macOS 26.5 because
+        systemstate alone always lists Graphics.
+        """
+        import json as _json
+        from joulewise.environment import collect_environment_guard_observation
+
+        profiler = _json.dumps(
+            {
+                "SPDisplaysDataType": [
+                    {"spdisplays_ndrvs": [self._display("spdisplays_yes")]}
+                ]
+            }
+        )
+
+        def fake_run(command, **kwargs):
+            class Completed:
+                returncode = 0
+                stderr = ""
+
+                def __init__(self, stdout):
+                    self.stdout = stdout
+
+            if command[:2] == ["system_profiler", "SPDisplaysDataType"]:
+                return Completed(profiler)
+            if command == ["pmset", "-g", "systemstate"]:
+                return Completed(self.LIVE_SYSTEMSTATE)
+            if command[:2] == ["defaults", "-currentHost"]:
+                return Completed("{\n    idleTime = 0;\n}\n")
+            if command[:2] == ["ioreg", "-c"]:
+                return Completed('"HIDIdleTime" = 242818958916\n')
+            raise AssertionError(command)
+
+        with patch("joulewise.environment.subprocess.run", side_effect=fake_run):
+            observation = collect_environment_guard_observation()
+
+        self.assertEqual(observation["display_power_state"], "all_asleep")
+        self.assertEqual(observation["errors"], {})
+
+    def test_guard_observation_profiler_failure_fails_closed(self) -> None:
+        from joulewise.environment import collect_environment_guard_observation
+
+        def fake_run(command, **kwargs):
+            class Completed:
+                returncode = 0
+                stderr = ""
+
+                def __init__(self, stdout, returncode=0):
+                    self.stdout = stdout
+                    self.returncode = returncode
+
+            if command[:2] == ["system_profiler", "SPDisplaysDataType"]:
+                return Completed("", returncode=1)
+            if command == ["pmset", "-g", "systemstate"]:
+                return Completed(self.LIVE_SYSTEMSTATE)
+            if command[:2] == ["defaults", "-currentHost"]:
+                return Completed("{\n    idleTime = 0;\n}\n")
+            if command[:2] == ["ioreg", "-c"]:
+                return Completed('"HIDIdleTime" = 242818958916\n')
+            raise AssertionError(command)
+
+        with patch("joulewise.environment.subprocess.run", side_effect=fake_run):
+            observation = collect_environment_guard_observation()
+
+        self.assertEqual(observation["display_power_state"], "any_awake")
+
+
+class PmsetPowerModeParsingTests(unittest.TestCase):
+    """The tri-state `powermode` key must feed low_power_mode (D-077 gap).
+
+    A live 2026-07-18 preflight on macOS 26.5 (Mac15,9) failed closed with
+    low_power_mode=None because `pmset -g` no longer emits `lowpowermode`;
+    the machine reports `powermode 0`. Fixture lines are verbatim live forms.
+    """
+
+    def _parse(self, text: str) -> dict:
+        from joulewise.environment import _parse_pmset
+
+        snapshot = {"low_power_mode": None}
+        _parse_pmset(snapshot, text)
+        return snapshot
+
+    def test_live_powermode_zero_is_not_low_power(self) -> None:
+        text = (
+            "System-wide power settings:\n"
+            " Sleep On Power Button 1\n"
+            " powernap             1\n"
+            " sleep                0 (sleep prevented by caffeinate, powerd)\n"
+            " powermode            0\n"
+        )
+        self.assertIs(self._parse(text)["low_power_mode"], False)
+
+    def test_powermode_one_is_low_power(self) -> None:
+        self.assertIs(self._parse(" powermode            1\n")["low_power_mode"], True)
+
+    def test_powermode_two_high_power_is_not_low_power(self) -> None:
+        self.assertIs(self._parse(" powermode            2\n")["low_power_mode"], False)
+
+    def test_absent_both_keys_stays_unknown(self) -> None:
+        self.assertIsNone(self._parse(" powernap             1\n")["low_power_mode"])
+
+    def test_lowpowermode_key_takes_precedence(self) -> None:
+        text = " lowpowermode         1\n powermode            0\n"
+        self.assertIs(self._parse(text)["low_power_mode"], True)
+
+
 if __name__ == "__main__":
     unittest.main()

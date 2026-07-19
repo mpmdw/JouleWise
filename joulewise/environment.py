@@ -428,9 +428,32 @@ def collect_environment_guard_observation(
         "screensaver_module": None,
         "screensaver_delay_s": None,
         "hid_idle_s": None,
+        "display": {
+            "status": None,
+            "probe": None,
+            "reason": None,
+            "active_displays": None,
+            "built_in_display_count": None,
+            "external_display_count": None,
+            "asleep_evidence_count": None,
+            "asleep_display_count": None,
+        },
         "errors": {},
     }
     errors: dict[str, str] = observation["errors"]
+    # The display inventory is required here despite its cost: macOS 26+
+    # systemstate keeps Graphics through display-only sleep, so without
+    # per-display asleep evidence this observation would read any_awake
+    # forever (live-observed 2026-07-18: every admission aborted). The
+    # probe runs between captures, never inside a measured window.
+    _apply_command(
+        observation,
+        errors,
+        "system_profiler_spdisplays",
+        ["system_profiler", "SPDisplaysDataType", "-json"],
+        _parse_system_profiler_displays,
+        timeout_s,
+    )
     _apply_command(
         observation,
         errors,
@@ -538,6 +561,13 @@ def _parse_pmset(snapshot: dict[str, Any], text: str) -> None:
     match = re.search(r"^\s*lowpowermode\s+([01])\s*$", text, re.MULTILINE)
     if match:
         snapshot["low_power_mode"] = match.group(1) == "1"
+        return
+    # Newer macOS reports the tri-state energy mode as `powermode`
+    # (0 automatic, 1 low power, 2 high power); only 1 is low power.
+    # Live-validated 2026-07-18 on macOS 26.5 (Mac15,9): `powermode 0`.
+    match = re.search(r"^\s*powermode\s+([012])\s*$", text, re.MULTILINE)
+    if match:
+        snapshot["low_power_mode"] = match.group(1) == "1"
 
 
 def _parse_pmset_assertions(snapshot: dict[str, Any], text: str) -> None:
@@ -561,7 +591,15 @@ def _parse_pmset_systemstate(snapshot: dict[str, Any], text: str) -> None:
         raise ValueError("current system capabilities not found")
     capabilities = {part.lower() for part in re.findall(r"[A-Za-z]+", match.group(1))}
     if "graphics" in capabilities:
-        snapshot["display_power_state"] = "any_awake"
+        # macOS 26+ keeps Graphics in systemstate through a display-only
+        # sleep (live-validated 2026-07-18 on macOS 26.5 / Mac15,9), so the
+        # capability alone cannot prove a display is awake. Authoritative
+        # per-display profiler asleep evidence wins when complete; anything
+        # partial or absent stays fail-closed as any_awake.
+        if _all_online_displays_asleep(snapshot.get("display")) is True:
+            snapshot["display_power_state"] = "all_asleep"
+        else:
+            snapshot["display_power_state"] = "any_awake"
         return
     display = snapshot.get("display")
     online_count = (
@@ -687,6 +725,14 @@ def _parse_system_profiler_displays(snapshot: dict[str, Any], text: str) -> None
             displays.extend(_online_display_entries(gpu))
     built_in = sum(1 for display in displays if _is_built_in_display(display))
     active = len(displays)
+    asleep_evidence = sum(
+        1 for display in displays if "spdisplays_asleep" in display
+    )
+    asleep = sum(
+        1
+        for display in displays
+        if display.get("spdisplays_asleep") == "spdisplays_yes"
+    )
     display = snapshot["display"]
     display["status"] = "ok"
     display["probe"] = "system_profiler_spdisplays"
@@ -694,6 +740,23 @@ def _parse_system_profiler_displays(snapshot: dict[str, Any], text: str) -> None
     display["active_displays"] = active
     display["built_in_display_count"] = built_in
     display["external_display_count"] = max(0, active - built_in)
+    display["asleep_evidence_count"] = asleep_evidence
+    display["asleep_display_count"] = asleep
+
+
+def _all_online_displays_asleep(display: Any) -> bool | None:
+    """True only when every online display carries explicit asleep evidence."""
+
+    if not isinstance(display, dict):
+        return None
+    active = display.get("active_displays")
+    evidence = display.get("asleep_evidence_count")
+    asleep = display.get("asleep_display_count")
+    if not isinstance(active, int) or active <= 0:
+        return None
+    if evidence != active:
+        return None
+    return asleep == active
 
 
 def _online_display_entries(value: Any) -> list[dict[str, Any]]:

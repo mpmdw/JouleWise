@@ -1070,7 +1070,10 @@ class HappyPathTests(ControllerTestCase):
         environment_calls = [
             call for call in run.call_args_list if call.args[0][0] != "git"
         ]
-        self.assertEqual(len(environment_calls), 21)
+        # 22 = full snapshot probes + the guard observation's display
+        # inventory (added 2026-07-18: macOS 26 systemstate cannot prove
+        # display sleep without per-display profiler evidence).
+        self.assertEqual(len(environment_calls), 22)
         self.assertEqual(environment["power_source"], "AC Power")
         self.assertEqual(environment["memory_free_percent"], 42.0)
         self.assertEqual(environment["memory"]["pageins"], 2000)

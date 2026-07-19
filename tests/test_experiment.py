@@ -580,8 +580,10 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
             call for call in run.call_args_list if call.args[0][0] != "git"
         ]
         # Four full snapshots (experiment fallback + three prepare-end) plus
-        # one three-command post-run guard observation per member.
-        self.assertEqual(len(environment_calls), 18 * 4 + 3 * 3)
+        # one four-command post-run guard observation per member (the
+        # observation gained the display inventory 2026-07-18: macOS 26
+        # systemstate cannot prove display sleep without it).
+        self.assertEqual(len(environment_calls), 18 * 4 + 4 * 3)
         environments = [
             json.loads((bundle / "metadata.json").read_text())["environment"]
             for bundle, _summary in members
