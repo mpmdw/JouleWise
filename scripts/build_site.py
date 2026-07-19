@@ -25,8 +25,6 @@ OUT = ROOT / "docs" / "site"
 FLOOR_EXTRACTION_SOURCE = "docs/process_traces/2026-07-17-floor-extraction/extraction-verified.json"
 ADVISOR_BRIEF_SOURCE = "docs/advisor_briefs/2026-07-17-window-a-brief.html"
 ADVISOR_BRIEF_OUTPUT = "advisor_brief.html"
-ADVISOR_UPDATE_SOURCE = "docs/advisor_briefs/2026-07-19-recalibration-update.html"
-ADVISOR_UPDATE_OUTPUT = "advisor_update.html"
 MARKED_VERSION = "18.0.6"
 MARKED_LOCAL_EXECUTABLE = ROOT / "node_modules" / ".bin" / "marked"
 
@@ -158,7 +156,6 @@ NAV_ORDER = [
     ("index.html", "Project"),
     ("research.html", "Learn"),
     (ADVISOR_BRIEF_OUTPUT, "Advisor Brief"),
-    (ADVISOR_UPDATE_OUTPUT, "Recal Update"),
     ("project_status.html", "Status"),
     ("status.html", "Live Status"),
     ("roadmap.html", "Roadmap"),
@@ -1613,10 +1610,7 @@ def update_hand_page_nav() -> None:
 
 
 def write(path: Path, content: str) -> None:
-    if path.suffix == ".html" and path.name not in (
-        ADVISOR_BRIEF_OUTPUT,
-        ADVISOR_UPDATE_OUTPUT,
-    ):
+    if path.suffix == ".html" and path.name != ADVISOR_BRIEF_OUTPUT:
         content = compact_generated_html(content)
     path.write_text(content, encoding="utf-8")
     print(f"built {path.name}")
@@ -1685,7 +1679,6 @@ def build(no_marked: bool = False) -> None:
     stamps = {doc.source: git_source_stamp(doc.source) for doc in docs}
     for source in [
         ADVISOR_BRIEF_SOURCE,
-        ADVISOR_UPDATE_SOURCE,
         "PROJECT_STATUS.md",
         "RUN_STATE.md",
         "TASK_QUEUE.md",
@@ -1715,7 +1708,6 @@ def build(no_marked: bool = False) -> None:
     write(OUT / "roadmap.html", render_roadmap_page(queue, completed, do_not_do, stamps["TASK_QUEUE.md"]))
     write(OUT / "record.html", render_record_page(sessions, report_md, report_source, decisions, councils, stamps))
     write(OUT / ADVISOR_BRIEF_OUTPUT, render_advisor_brief_copy(stamps[ADVISOR_BRIEF_SOURCE]))
-    write(OUT / ADVISOR_UPDATE_OUTPUT, render_advisor_brief_copy(stamps[ADVISOR_UPDATE_SOURCE]))
     for doc in docs:
         write(OUT / doc.out_name, render_doc_page(doc, no_marked, stamps[doc.source]))
     write(OUT / "library.html", render_library(docs, stamps))

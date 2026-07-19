@@ -3,8 +3,14 @@
 Refreshed: 2026-07-19b (DEPLOY-READY, review-corrected: a three-lens Sol
 review corrected two over-promoted claims (floor statistic, -15%
 comparison) and surfaced the source-provenance claim gate before
-publication; the update brief and status page now carry the corrected,
-fully-labeled numbers. Original note follows.)
+publication; the Status page and baked latest run report carry the
+corrected numbers. The planned "Recal Update" tab was REMOVED pre-merge:
+the verbatim page costs ~33 KB against ~7 KB of D-076 capsule headroom
+(991,722 / 1,000,000 measured as shipped) — the update brief ships as a
+self-contained repo artifact docs/advisor_briefs/
+2026-07-19-recalibration-update.html instead, and the A42 capacity
+right-sizing decision is now formally due. Original note follows,
+superseded where it mentions the tab.)
 
 Prior refresh: 2026-07-19 (Ed-requested regeneration carrying the
 2026-07-19 re-calibration update — new "Recal Update" top-nav tab

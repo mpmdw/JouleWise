@@ -346,7 +346,7 @@ Text.
                 decoded_pages.update(decoded)
                 decoded_shards.append(decoded)
             expected_names = {
-                "adapter_contracts.html", "advisor_brief.html", "advisor_update.html", "agent_plan.html", "claims_ladder.html",
+                "adapter_contracts.html", "advisor_brief.html", "agent_plan.html", "claims_ladder.html",
                 "council_log.html", "decision_log.html", "index.html",
                 "latest_run_report.html", "library.html", "measurement_methodology.html",
                 "milestones.html", "orchestration.html", "process.html",
@@ -369,10 +369,7 @@ Text.
                 ),
             )
             for page_path in site.glob("*.html"):
-                if page_path.name in (
-                    build_site.ADVISOR_BRIEF_OUTPUT,
-                    build_site.ADVISOR_UPDATE_OUTPUT,
-                ):
+                if page_path.name == build_site.ADVISOR_BRIEF_OUTPUT:
                     continue
                 shell_html = page_path.read_text(encoding="utf-8")
                 self.assertIn('href="advisor_brief.html"', shell_html)
@@ -390,8 +387,7 @@ Text.
             for path, route in packed_site["routes"].items():
                 self.assertIn(path, decoded_shards[route["shard"]])
                 self.assertEqual(
-                    route["verbatim"],
-                    path in ("/advisor_brief.html", "/advisor_update.html"),
+                    route["verbatim"], path == "/advisor_brief.html"
                 )
             for name in capsule_names:
                 aliases = pack_capsule.page_aliases(site / name)
