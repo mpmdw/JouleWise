@@ -911,29 +911,14 @@ def _campaign_cooldown_evidence(
         session_id = raw.get("session_id")
         first_run_id = raw.get("first_physical_run_id")
         accepted_first_exemption = False
-        for member in raw["members"]:
-            if not isinstance(member, Mapping) or member.get("execution") != "invoked":
-                continue
-            member_run_id = member.get("run_id")
-            bundle_ids = member.get("bundle_ids")
-            cooldown = member.get("preceding_campaign_cooldown")
-            if (
-                not isinstance(member_run_id, str)
-                or not member_run_id
-                or not isinstance(bundle_ids, list)
-                or not bundle_ids
-                or any(not isinstance(bundle_id, str) or not bundle_id for bundle_id in bundle_ids)
-                or not isinstance(cooldown, Mapping)
-            ):
-                continue
-            ids_match_member = all(
-                bundle_id == member_run_id
-                or (
-                    bundle_id.startswith(f"{member_run_id}__r")
-                    and bundle_id[len(f"{member_run_id}__r") :].isdigit()
-                )
-                for bundle_id in bundle_ids
-            )
+
+        def normalize_cooldown(
+            cooldown: Mapping[str, Any],
+            *,
+            following_run_id: str,
+            id_matches_member: bool,
+        ) -> Mapping[str, Any]:
+            nonlocal accepted_first_exemption
             result = cooldown.get("result")
             verified = False
             raw_artifact: Mapping[str, Any] | None = None
@@ -943,9 +928,9 @@ def _campaign_cooldown_evidence(
                     and isinstance(session_id, str)
                     and session_id
                     and cooldown.get("session_id") == session_id
-                    and first_run_id == member_run_id
-                    and cooldown.get("following_run_id") == first_run_id
-                    and ids_match_member
+                    and first_run_id == following_run_id
+                    and cooldown.get("following_run_id") == following_run_id
+                    and id_matches_member
                 )
                 accepted_first_exemption = accepted_first_exemption or verified
             elif result in {"recovered", "cap_hit"}:
@@ -955,16 +940,73 @@ def _campaign_cooldown_evidence(
                     and isinstance(session_id, str)
                     and session_id
                     and cooldown.get("session_id") == session_id
-                    and cooldown.get("following_run_id") == member_run_id
-                    and ids_match_member
+                    and cooldown.get("following_run_id") == following_run_id
+                    and id_matches_member
                 )
-            normalized = {
+            return {
                 "result": result if isinstance(result, str) else "unknown",
                 "verified": verified,
                 "session_id": session_id if isinstance(session_id, str) else None,
                 "manifest": f"campaign_manifests/{path.name}",
                 "raw_artifact": dict(raw_artifact) if raw_artifact is not None else None,
             }
+
+        for member in raw["members"]:
+            if not isinstance(member, Mapping) or member.get("execution") != "invoked":
+                continue
+            member_run_id = member.get("run_id")
+            bundle_ids = member.get("bundle_ids")
+            if (
+                not isinstance(member_run_id, str)
+                or not member_run_id
+                or not isinstance(bundle_ids, list)
+                or not bundle_ids
+                or any(not isinstance(bundle_id, str) or not bundle_id for bundle_id in bundle_ids)
+            ):
+                continue
+            physical_members = member.get("physical_members")
+            if isinstance(physical_members, list):
+                for physical in physical_members:
+                    if not isinstance(physical, Mapping):
+                        continue
+                    bundle_id = physical.get("bundle_id")
+                    cooldown = physical.get("preceding_campaign_cooldown")
+                    if (
+                        not isinstance(bundle_id, str)
+                        or bundle_id not in bundle_ids
+                        or not isinstance(cooldown, Mapping)
+                    ):
+                        continue
+                    id_matches_member = bundle_id == member_run_id or (
+                        bundle_id.startswith(f"{member_run_id}__r")
+                        and bundle_id[len(f"{member_run_id}__r") :].isdigit()
+                    )
+                    normalized = normalize_cooldown(
+                        cooldown,
+                        following_run_id=bundle_id,
+                        id_matches_member=id_matches_member,
+                    )
+                    candidates.setdefault(bundle_id, []).append(normalized)
+                continue
+
+            # Single-repetition rows and provenance written before the
+            # physical_members extension retain their top-level evidence.
+            cooldown = member.get("preceding_campaign_cooldown")
+            if not isinstance(cooldown, Mapping):
+                continue
+            ids_match_member = all(
+                bundle_id == member_run_id
+                or (
+                    bundle_id.startswith(f"{member_run_id}__r")
+                    and bundle_id[len(f"{member_run_id}__r") :].isdigit()
+                )
+                for bundle_id in bundle_ids
+            )
+            normalized = normalize_cooldown(
+                cooldown,
+                following_run_id=member_run_id,
+                id_matches_member=ids_match_member,
+            )
             for bundle_id in bundle_ids:
                 candidates.setdefault(bundle_id, []).append(normalized)
 

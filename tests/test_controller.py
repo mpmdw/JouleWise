@@ -21,8 +21,10 @@ from joulewise.controller import (
     run_experiment,
 )
 from joulewise.interfaces import AdapterResult
+from joulewise.environment import evaluate_environment_policy
 from joulewise.schemas import (
     BenchmarkConfig,
+    CampaignPolicy,
     FailureReason,
     RunStatus,
     SummaryMetrics,
@@ -38,6 +40,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
 SUITE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_suite_local.json"
 SUITE_MANIFEST_PATH = REPO_ROOT / "configs" / "suite_manifests" / "mock_suite_manifest.json"
+PRODUCTION_POLICY_PATH = (
+    REPO_ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+)
+EXPLORATORY_POLICY_PATH = (
+    REPO_ROOT / "configs" / "campaign_policies" / "quiet_mac_exploratory.json"
+)
 
 EVENT_KEYS = {"timestamp_s", "event_type", "phase", "message", "metadata"}
 
@@ -107,6 +115,45 @@ def make_suite_config(run_id: str, *, repetitions: int = 1, sha: str | None = No
     data["workload_profile"]["suite_manifest_sha256"] = sha or suite_manifest_sha256(manifest)
     data["workload_profile"]["repetitions"] = repetitions
     return BenchmarkConfig.from_mapping(data)
+
+
+def campaign_policy_fixture(*, exploratory: bool) -> tuple[
+    CampaignPolicy, dict[str, Any], dict[str, Any], dict[str, Any]
+]:
+    path = EXPLORATORY_POLICY_PATH if exploratory else PRODUCTION_POLICY_PATH
+    policy = CampaignPolicy.from_mapping(json.loads(path.read_text()))
+    snapshot = {
+        "power_source": "AC Power",
+        "power": {"external_connected": True},
+        "low_power_mode": False,
+        "display_power_state": "all_asleep",
+        "screensaver_engaged": False,
+        "screensaver_module": "Ventura",
+        "screensaver_delay_s": 1200,
+        "hid_idle_s": 5.0,
+        "thermal_pressure": "nominal",
+        "load_average_1m": 99.0,
+        "capture_scope": "provided_test_fixture",
+    }
+    evaluation = evaluate_environment_policy(snapshot, policy.environment_guard)
+    policy_sha = "a" * 64
+    binding = {
+        "schema_version": policy.schema_version,
+        "policy_id": policy.policy_id,
+        "policy_version": policy.policy_version,
+        "profile": policy.profile.value,
+        "sha256": policy_sha,
+        "source": str(path),
+    }
+    preflight = {
+        "schema_version": "joulewise.campaign_environment_preflight.v1",
+        "policy_sha256": policy_sha,
+        "snapshot": snapshot,
+        "evaluation": evaluation,
+        "override": None,
+        "admitted": True,
+    }
+    return policy, binding, preflight, snapshot
 
 
 class ExplodingRuntime:
@@ -475,6 +522,48 @@ class SuspectIdleRegistry:
         return adapters.resolve_transport(config)
 
 
+class AdmissionIdleTelemetry(SuspectIdleTelemetry):
+    """Return a pinned suspect sequence while preserving mock lifecycle calls."""
+
+    name = "admission-idle"
+
+    def __init__(self, inner: Any, suspect_sequence: list[bool]) -> None:
+        super().__init__(inner)
+        self._suspect_sequence = list(suspect_sequence)
+        self._attempt = 0
+
+    def measure_idle(self, config: BenchmarkConfig, context=None):
+        baseline = self._inner.measure_idle(config, context)
+        index = min(self._attempt, len(self._suspect_sequence) - 1)
+        self._attempt += 1
+        suspect = self._suspect_sequence[index]
+        return replace(
+            baseline,
+            gpu_idle_ratio_mean=0.4 if suspect else 0.99,
+            gpu_idle_ratio_min=0.0 if suspect else 0.95,
+            gpu_freq_mhz_mean=900.0 if suspect else 300.0,
+            gpu_freq_hz_mean=900.0 if suspect else 300.0,
+            idle_window_suspect=suspect,
+        )
+
+
+class AdmissionIdleRegistry:
+    def __init__(self, suspect_sequence: list[bool]) -> None:
+        self._suspect_sequence = suspect_sequence
+
+    def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
+        return adapters.resolve_runtime(config, clock)
+
+    def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
+        telemetry, failure = adapters.resolve_telemetry(config, clock)
+        if telemetry is not None:
+            telemetry = AdmissionIdleTelemetry(telemetry, self._suspect_sequence)
+        return telemetry, failure
+
+    def resolve_transport(self, config: BenchmarkConfig):
+        return adapters.resolve_transport(config)
+
+
 class MetadataRuntime:
     name = "metadata-runtime"
 
@@ -619,6 +708,12 @@ def fake_environment_run(command, **kwargs):
         ("pmset", "-g", "batt"): "Now drawing from 'AC Power'\n -InternalBattery-0 100%; charged; 0:00 remaining\n",
         ("pmset", "-g"): " lowpowermode 0\n",
         ("pmset", "-g", "assertions"): "   PreventUserIdleDisplaySleep    0\n",
+        ("pmset", "-g", "systemstate"): "Current System Capabilities: Audio Network\n",
+        ("pmset", "-g", "therm"): "No thermal warning level has been recorded\n",
+        ("defaults", "-currentHost", "read", "com.apple.screensaver"): (
+            "{ moduleDict = { moduleName = Ventura; }; idleTime = 1200; }\n"
+        ),
+        ("ioreg", "-c", "IOHIDSystem"): '"HIDIdleTime" = 5000000000\n',
         ("memory_pressure", "-Q"): "System-wide memory free percentage: 42.0%\n",
         ("vm_stat",): (
             "Mach Virtual Memory Statistics: (page size of 4096 bytes)\n"
@@ -975,7 +1070,7 @@ class HappyPathTests(ControllerTestCase):
         environment_calls = [
             call for call in run.call_args_list if call.args[0][0] != "git"
         ]
-        self.assertEqual(len(environment_calls), 14)
+        self.assertEqual(len(environment_calls), 21)
         self.assertEqual(environment["power_source"], "AC Power")
         self.assertEqual(environment["memory_free_percent"], 42.0)
         self.assertEqual(environment["memory"]["pageins"], 2000)
@@ -993,6 +1088,9 @@ class HappyPathTests(ControllerTestCase):
         self.assertIsInstance(environment["captured_at_s"], (int, float))
         self.assertIsInstance(environment["env_capture_duration_s"], (int, float))
         self.assertEqual(environment["settle_s"], 2.0)
+        self.assertEqual(environment["display_power_state"], "all_asleep")
+        self.assertIs(environment["screensaver_engaged"], False)
+        self.assertEqual(environment["post_run_observation"]["display_power_state"], "all_asleep")
 
     def test_idle_baseline_failure_preserves_prepare_end_environment(self) -> None:
         config = make_config("controller-idle-failure-env")
@@ -1063,6 +1161,163 @@ class HappyPathTests(ControllerTestCase):
         written = json.loads((bundle_path / "summary_metrics.json").read_text())
         self.assertEqual(written["status"], "succeeded")
         self.assertIs(written["measurement_quality"]["idle_window_suspect"], True)
+
+    def test_production_admission_retry_then_abort_is_fully_evidenced(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        bundle_path, summary = run_benchmark(
+            make_config("controller-admission-abort"),
+            self.runs_root,
+            self.clock,
+            registry=AdmissionIdleRegistry([True, True]),
+            environment_snapshot=snapshot,
+            campaign_policy=policy,
+            campaign_policy_binding=binding,
+            campaign_environment_preflight=preflight,
+        )
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        admission = metadata["environment_admission"]
+        self.assertEqual(admission["decision"], "abort")
+        self.assertEqual(len(admission["attempts"]), 2)
+        self.assertEqual(
+            [row["admitted"] for row in admission["attempts"]], [False, False]
+        )
+        self.assertEqual(
+            admission["claim_reason"], "environment_admission_failed"
+        )
+
+    def test_exploratory_admission_flag_is_universal_claim_barrier(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=True
+        )
+        bundle_path, summary = run_benchmark(
+            make_config("controller-admission-flag"),
+            self.runs_root,
+            self.clock,
+            registry=AdmissionIdleRegistry([True, True]),
+            environment_snapshot=snapshot,
+            campaign_policy=policy,
+            campaign_policy_binding=binding,
+            campaign_environment_preflight=preflight,
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertEqual(metadata["environment_admission"]["decision"], "flagged")
+        gates = summary.window_evidence_precheck
+        for key in ("gross_request", "idle_subtracted_request", "throughput"):
+            self.assertFalse(gates[key]["eligible"])
+            self.assertIn(
+                "environment_admission_failed", gates[key]["reasons"]
+            )
+        # Load average is preflight evidence only and does not block admission.
+        self.assertEqual(
+            preflight["evaluation"]["load_average_evidence"]["load_average_1m"],
+            99.0,
+        )
+
+    def test_admission_retry_can_recover_on_second_fully_evidenced_window(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        bundle_path, summary = run_benchmark(
+            make_config("controller-admission-retry-pass"),
+            self.runs_root,
+            self.clock,
+            registry=AdmissionIdleRegistry([True, False]),
+            environment_snapshot=snapshot,
+            campaign_policy=policy,
+            campaign_policy_binding=binding,
+            campaign_environment_preflight=preflight,
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        admission = metadata["environment_admission"]
+        self.assertEqual(admission["decision"], "admitted")
+        self.assertEqual(len(admission["attempts"]), 2)
+        self.assertIs(admission["critical_environment_passed"], True)
+        self.assertIs(admission["reference_provenance_present"], True)
+
+    def test_post_capture_guard_observation_aborts_awake_display(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        clean = {
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "screensaver_module": "Ventura",
+            "screensaver_delay_s": 1200,
+            "hid_idle_s": 5.0,
+            "errors": {},
+        }
+        awake = {**clean, "display_power_state": "any_awake"}
+        with patch(
+            "joulewise.controller.collect_environment_guard_observation",
+            side_effect=[clean, awake],
+        ):
+            bundle_path, summary = run_benchmark(
+                make_config("controller-post-capture-awake"),
+                self.runs_root,
+                DeterministicClock(),
+                registry=AdmissionIdleRegistry([False]),
+                environment_snapshot=snapshot,
+                campaign_policy=policy,
+                campaign_policy_binding=binding,
+                campaign_environment_preflight=preflight,
+            )
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        admission = metadata["environment_admission"]
+        self.assertEqual(admission["decision"], "abort")
+        self.assertIn("display became or remained awake", admission["failure"])
+        self.assertEqual(
+            [row["phase"] for row in admission["guard_observations"]],
+            ["before_attempt_1", "after_attempt_1"],
+        )
+
+    def test_environment_override_makes_member_universally_claim_ineligible(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        preflight["override"] = {
+            "schema_version": "joulewise.environment_override.v1",
+            "snapshot_sha256": preflight["evaluation"]["snapshot_sha256"],
+            "findings_sha256": preflight["evaluation"]["findings_sha256"],
+            "reason": "operator accepted exact preflight for exploratory collection",
+            "approver": "fixture-owner",
+            "timestamp": "2026-07-17T00:00:00Z",
+            "classification": "override",
+            "claim_eligible": False,
+        }
+        bundle_path, summary = run_benchmark(
+            make_config("controller-environment-override"),
+            self.runs_root,
+            self.clock,
+            registry=AdmissionIdleRegistry([False]),
+            environment_snapshot=snapshot,
+            campaign_policy=policy,
+            campaign_policy_binding=binding,
+            campaign_environment_preflight=preflight,
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        for key in ("gross_request", "idle_subtracted_request", "throughput"):
+            self.assertIn(
+                "environment_override",
+                summary.window_evidence_precheck[key]["reasons"],
+            )
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertEqual(
+            metadata["campaign_environment_preflight"]["override"][
+                "classification"
+            ],
+            "override",
+        )
 
     def test_new_bundle_writes_summary_and_workload_provenance(self) -> None:
         bundle_path, summary = self.run_happy()

@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
@@ -29,13 +30,18 @@ from joulewise.controller import (
     COOLDOWN_SUBWINDOW_S,
     _member_gap_note,
     cooldown_gate,
+    _cooldown_between_reps,
     run_experiment,
 )
+from joulewise.environment import evaluate_environment_policy
 from joulewise.interfaces import AdapterResult, PowerSample, ThermalState
 from joulewise.schemas import (
     BenchmarkConfig,
+    CooldownPolicy,
     IdleBaseline,
     RunStatus,
+    SchemaError,
+    SummaryMetrics,
     TelemetryBackend,
 )
 
@@ -60,6 +66,193 @@ def make_config(run_id: str, repetitions: int, **overrides: Any) -> BenchmarkCon
     for key, value in overrides.items():
         data[key] = value
     return BenchmarkConfig.from_mapping(data)
+
+
+def valid_cooldown_anchor(policy_sha256: str = "a" * 64) -> dict[str, Any]:
+    return {
+        "schema_version": "joulewise.cooldown_anchor.v1",
+        "source_kind": "neg8_reference_start",
+        "bundle_id": "neg8-anchor",
+        "policy_sha256": policy_sha256,
+        "environment_snapshot_sha256": "b" * 64,
+        "immutable_after_freeze": True,
+        "eligibility": {
+            "eligible": True,
+            "provenance_present": True,
+        },
+        "baseline": {
+            "power_w_mean": 5.0,
+            "power_w_stddev": 0.0,
+            "duration_s": 30.0,
+            "sample_count": 30,
+            "telemetry_backend": "powermetrics",
+            "idle_window_suspect": False,
+        },
+    }
+
+
+class FloatRuntime:
+    def __float__(self) -> float:
+        raise RuntimeError("hostile float conversion")
+
+
+class EqRuntime:
+    def __eq__(self, other: object) -> bool:
+        raise RuntimeError("hostile equality comparison")
+
+
+class CooldownAnchorBoundaryTests(unittest.TestCase):
+    def test_policy_bound_empty_hash_match_is_rejected(self) -> None:
+        from joulewise.cooldown_anchor import cooldown_anchor_eligibility
+
+        anchor = valid_cooldown_anchor("")
+
+        verdict = cooldown_anchor_eligibility(anchor, "")
+
+        self.assertFalse(verdict["eligible"])
+        self.assertIn("anchor_policy_hash_invalid", verdict["reasons"])
+        self.assertIn("expected_policy_hash_invalid", verdict["reasons"])
+
+    def test_policy_bound_uppercase_hash_cannot_bypass_independent_rejection(
+        self,
+    ) -> None:
+        from joulewise.cooldown_anchor import cooldown_anchor_eligibility
+
+        uppercase_digest = "A" * 64
+        anchor = valid_cooldown_anchor(uppercase_digest)
+
+        independent = cooldown_anchor_eligibility(anchor)
+        bound = cooldown_anchor_eligibility(anchor, uppercase_digest)
+
+        self.assertFalse(independent["eligible"])
+        self.assertFalse(bound["eligible"])
+        self.assertIn("anchor_policy_hash_invalid", independent["reasons"])
+        self.assertIn("anchor_policy_hash_invalid", bound["reasons"])
+        self.assertIn("expected_policy_hash_invalid", bound["reasons"])
+
+    def test_canonical_lowercase_policy_hash_remains_eligible(self) -> None:
+        from joulewise.cooldown_anchor import cooldown_anchor_eligibility
+
+        digest = "a" * 64
+        anchor = valid_cooldown_anchor(digest)
+
+        self.assertEqual(
+            cooldown_anchor_eligibility(anchor),
+            {"eligible": True, "reasons": []},
+        )
+        self.assertEqual(
+            cooldown_anchor_eligibility(anchor, digest),
+            {"eligible": True, "reasons": []},
+        )
+
+    def test_idle_baseline_parser_requires_explicit_frozen_anchor(self) -> None:
+        from joulewise.cooldown_anchor import idle_baseline_from_anchor
+
+        for frozen_value in (False, None):
+            with self.subTest(frozen_value=frozen_value):
+                anchor = valid_cooldown_anchor()
+                if frozen_value is None:
+                    anchor.pop("immutable_after_freeze")
+                else:
+                    anchor["immutable_after_freeze"] = frozen_value
+                self.assertIsNone(idle_baseline_from_anchor(anchor))
+
+        self.assertIsNotNone(idle_baseline_from_anchor(valid_cooldown_anchor()))
+
+    def test_nonphysical_anchor_baselines_are_rejected_without_exceptions(self) -> None:
+        from joulewise.cooldown_anchor import (
+            cooldown_anchor_eligibility,
+            idle_baseline_from_anchor,
+        )
+
+        cases = (
+            ("positive infinity", "power_w_mean", float("inf")),
+            ("negative infinity", "power_w_mean", float("-inf")),
+            ("nan", "power_w_mean", float("nan")),
+            ("overflowing float literal", "power_w_mean", float("1e400")),
+            ("overflowing integer", "power_w_mean", 10**400),
+            ("negative mean power", "power_w_mean", -0.1),
+            ("negative power deviation", "power_w_stddev", -0.1),
+            ("negative duration", "duration_s", -0.1),
+            ("non-finite optional float", "gpu_freq_mhz_mean", float("inf")),
+            ("zero sample count", "sample_count", 0),
+            ("boolean sample count", "sample_count", True),
+            ("non-integer sample count", "sample_count", 3.5),
+        )
+
+        for label, field, value in cases:
+            with self.subTest(label=label):
+                anchor = valid_cooldown_anchor()
+                anchor["baseline"][field] = value
+
+                self.assertIsNone(idle_baseline_from_anchor(anchor))
+                self.assertEqual(
+                    cooldown_anchor_eligibility(anchor),
+                    {"eligible": False, "reasons": ["anchor_baseline_invalid"]},
+                )
+
+    def test_realistic_finite_anchor_baseline_remains_eligible(self) -> None:
+        from joulewise.cooldown_anchor import (
+            cooldown_anchor_eligibility,
+            idle_baseline_from_anchor,
+        )
+
+        anchor = valid_cooldown_anchor()
+        anchor["baseline"].update(
+            {
+                "power_w_mean": 5.25,
+                "power_w_stddev": 0.125,
+                "duration_s": 30.0,
+                "sample_count": 30,
+                "gpu_idle_ratio_mean": 0.98,
+                "gpu_idle_ratio_min": 0.95,
+                "gpu_freq_mhz_mean": 326.0,
+                "gpu_freq_hz_mean": 326.0,
+            }
+        )
+
+        baseline = idle_baseline_from_anchor(anchor)
+
+        self.assertIsNotNone(baseline)
+        self.assertEqual(baseline.power_w_mean, 5.25)
+        self.assertEqual(
+            cooldown_anchor_eligibility(anchor),
+            {"eligible": True, "reasons": []},
+        )
+
+    def test_hostile_anchor_baseline_hooks_fail_closed_without_exception(
+        self,
+    ) -> None:
+        from joulewise.cooldown_anchor import (
+            cooldown_anchor_eligibility,
+            idle_baseline_from_anchor,
+        )
+
+        cases = (
+            ("float conversion", "power_w_mean", FloatRuntime()),
+            ("enum equality", "telemetry_backend", EqRuntime()),
+        )
+
+        for label, field, value in cases:
+            with self.subTest(label=label):
+                anchor = valid_cooldown_anchor()
+                anchor["baseline"][field] = value
+
+                self.assertIsNone(idle_baseline_from_anchor(anchor))
+                self.assertEqual(
+                    cooldown_anchor_eligibility(anchor),
+                    {"eligible": False, "reasons": ["anchor_baseline_invalid"]},
+                )
+
+    def test_validator_internal_helper_failure_propagates(self) -> None:
+        from joulewise.cooldown_anchor import cooldown_anchor_eligibility
+
+        with patch(
+            "joulewise.cooldown_anchor._physical_float",
+            side_effect=RuntimeError("validator implementation bug"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "validator implementation bug"):
+                cooldown_anchor_eligibility(valid_cooldown_anchor())
 
 
 class DeterministicClock:
@@ -88,6 +281,14 @@ def fake_environment_run(command, **kwargs):
         ("pmset", "-g", "batt"): "Now drawing from 'AC Power'\n -InternalBattery-0 100%; charged; 0:00 remaining\n",
         ("pmset", "-g"): " lowpowermode 0\n",
         ("pmset", "-g", "assertions"): "   PreventUserIdleDisplaySleep    0\n",
+        ("pmset", "-g", "systemstate"): (
+            "Current System Capabilities: Audio Network\n"
+        ),
+        ("pmset", "-g", "therm"): "No thermal warning level has been recorded\n",
+        ("defaults", "-currentHost", "read", "com.apple.screensaver"): (
+            "{ moduleDict = { moduleName = Ventura; }; idleTime = 1200; }\n"
+        ),
+        ("ioreg", "-c", "IOHIDSystem"): '"HIDIdleTime" = 5000000000\n',
         ("memory_pressure", "-Q"): "System-wide memory free percentage: 42.0%\n",
         ("vm_stat",): (
             "Mach Virtual Memory Statistics: (page size of 4096 bytes)\n"
@@ -160,6 +361,7 @@ class _StubTelemetry:
         idle_mean: float = 5.0,
         cooldown_mean: float | None = None,
         cooldown_means: list[float] | None = None,
+        thermal_pressure: str | None = "Nominal",
     ) -> None:
         self._clock = clock
         self._idle_mean = idle_mean
@@ -172,6 +374,7 @@ class _StubTelemetry:
         # rolling-window high-to-low RECOVERY transition.
         self._cooldown_means = list(cooldown_means) if cooldown_means else None
         self._cooldown_index = 0
+        self._thermal_pressure = thermal_pressure
         self._start: float | None = None
 
     def _next_cooldown_mean(self) -> float:
@@ -199,6 +402,7 @@ class _StubTelemetry:
             duration_s=duration_s,
             sample_count=max(2, int(duration_s * config.sampling.power_hz)),
             telemetry_backend=TelemetryBackend.POWERMETRICS,
+            idle_window_suspect=False,
         )
 
     def start_sampling(self, config: BenchmarkConfig, context=None) -> AdapterResult:
@@ -216,7 +420,11 @@ class _StubTelemetry:
         return samples
 
     def thermal_state(self, config: BenchmarkConfig, context=None) -> ThermalState:
-        return ThermalState(timestamp_s=self._clock.now(), temperature_c=42.0)
+        return ThermalState(
+            timestamp_s=self._clock.now(),
+            temperature_c=42.0,
+            thermal_pressure=self._thermal_pressure,
+        )
 
 
 class _StubRegistry:
@@ -371,7 +579,9 @@ class ThreeRepMockExperimentTests(unittest.TestCase):
         environment_calls = [
             call for call in run.call_args_list if call.args[0][0] != "git"
         ]
-        self.assertEqual(len(environment_calls), 14 * 4)
+        # Four full snapshots (experiment fallback + three prepare-end) plus
+        # one three-command post-run guard observation per member.
+        self.assertEqual(len(environment_calls), 18 * 4 + 3 * 3)
         environments = [
             json.loads((bundle / "metadata.json").read_text())["environment"]
             for bundle, _summary in members
@@ -550,9 +760,98 @@ class CooldownGateUnitTests(unittest.TestCase):
         telemetry = _StubTelemetry(clock, idle_mean=5.2)  # ~4% above 5.0
         note = cooldown_gate(telemetry, self._reference(5.0), config, clock)
         self.assertEqual(note["result"], "recovered")
-        # Recovers on the very first sub-window (~5 s), well under the cap.
-        self.assertLessEqual(note["waited_s"], 10.0)
-        self.assertGreater(note["waited_s"], 0.0)
+        # Cooldown v2 refuses the old single-5 s-subwindow release defect.
+        self.assertGreaterEqual(note["waited_s"], 30.0)
+        self.assertGreaterEqual(note["window_coverage_s"], 30.0)
+        self.assertTrue(note["window_complete"])
+        self.assertEqual(note["thresholds"]["sustained_window_s"], 30.0)
+        self.assertEqual(note["thresholds"]["subwindow_s"], 5.0)
+
+    def test_real_clock_shaped_probe_gaps_release_at_coverage_threshold(self) -> None:
+        class GappedTelemetry(_StubTelemetry):
+            def measure_idle(self, config, context=None):
+                self._clock.sleep(config.sampling.idle_seconds)
+                return IdleBaseline(
+                    power_w_mean=5.0,
+                    power_w_stddev=0.0,
+                    duration_s=config.sampling.idle_seconds - (0.005 / 6.0),
+                    sample_count=5,
+                    telemetry_backend=TelemetryBackend.POWERMETRICS,
+                    idle_window_suspect=False,
+                )
+
+        clock = FakeClock()
+        note = cooldown_gate(
+            GappedTelemetry(clock),
+            self._reference(5.0),
+            self._config(),
+            clock,
+        )
+        self.assertEqual(note["result"], "recovered")
+        self.assertAlmostEqual(note["window_coverage_s"], 29.995, places=6)
+        self.assertGreaterEqual(note["window_span_s"], 30.0)
+        self.assertEqual(note["thresholds"]["coverage_fraction"], 0.8)
+        self.assertTrue(note["coverage_complete"])
+
+    def test_genuine_evidence_hole_below_coverage_fraction_does_not_release(self) -> None:
+        class SparseTelemetry(_StubTelemetry):
+            def measure_idle(self, config, context=None):
+                self._clock.sleep(config.sampling.idle_seconds)
+                return IdleBaseline(
+                    power_w_mean=5.0,
+                    power_w_stddev=0.0,
+                    duration_s=3.0,
+                    sample_count=3,
+                    telemetry_backend=TelemetryBackend.POWERMETRICS,
+                    idle_window_suspect=False,
+                )
+
+        clock = FakeClock()
+        policy = CooldownPolicy(cap_s=30.0)
+        note = cooldown_gate(
+            SparseTelemetry(clock),
+            self._reference(5.0),
+            self._config(),
+            clock,
+            policy=policy,
+        )
+        self.assertEqual(note["result"], "cap_hit")
+        self.assertGreaterEqual(note["window_span_s"], 30.0)
+        self.assertLess(note["window_coverage_s"], note["required_coverage_s"])
+        self.assertFalse(note["coverage_complete"])
+
+    def test_cap_precedes_recovery_when_final_capture_finishes_late(self) -> None:
+        class SlowCaptureTelemetry(_StubTelemetry):
+            def measure_idle(self, config, context=None):
+                self._clock.sleep(2.1)
+                return IdleBaseline(
+                    power_w_mean=5.0,
+                    power_w_stddev=0.0,
+                    duration_s=2.0,
+                    sample_count=2,
+                    telemetry_backend=TelemetryBackend.POWERMETRICS,
+                    idle_window_suspect=False,
+                )
+
+        clock = FakeClock()
+        note = cooldown_gate(
+            SlowCaptureTelemetry(clock),
+            self._reference(5.0),
+            self._config(),
+            clock,
+            policy=CooldownPolicy(
+                subwindow_s=2.0,
+                sustained_window_s=10.0,
+                cap_s=10.0,
+            ),
+        )
+
+        self.assertEqual(note["result"], "cap_hit")
+        self.assertAlmostEqual(note["waited_s"], 10.5)
+        self.assertTrue(note["window_complete"])
+        trace = note["_trace"]
+        self.assertTrue(trace[-1]["release_criteria_met_late"])
+        self.assertFalse(trace[-1]["release"])
 
     def test_recovers_after_rolling_window_crosses_into_tolerance(self) -> None:
         # Drive the rolling-30 s-mean high-to-low RECOVERY transition: the first
@@ -573,6 +872,16 @@ class CooldownGateUnitTests(unittest.TestCase):
         self.assertGreater(note["waited_s"], COOLDOWN_SUBWINDOW_S)
         self.assertLess(note["waited_s"], COOLDOWN_CAP_S)
 
+    def test_below_reference_counts_as_recovered_after_complete_window(self) -> None:
+        clock = FakeClock()
+        config = self._config()
+        telemetry = _StubTelemetry(clock, idle_mean=3.0)
+        note = cooldown_gate(telemetry, self._reference(5.0), config, clock)
+        self.assertEqual(note["result"], "recovered")
+        self.assertLess(note["decision_rolling_mean_power_w"], 5.0)
+        self.assertEqual(note["policy_version"], "cooldown-v2")
+        self.assertTrue(note["thermal_nominal"])
+
     def test_cap_hit_when_readings_pinned_high(self) -> None:
         clock = FakeClock()
         config = self._config()
@@ -582,6 +891,36 @@ class CooldownGateUnitTests(unittest.TestCase):
         # The cap is honored: we wait at least the cap, and not unboundedly.
         self.assertGreaterEqual(note["waited_s"], COOLDOWN_CAP_S)
         self.assertLessEqual(note["waited_s"], COOLDOWN_CAP_S + 10.0)
+
+    def test_absolute_ceiling_is_an_upper_cap_not_an_or_escape(self) -> None:
+        clock = FakeClock()
+        config = self._config()
+        telemetry = _StubTelemetry(clock, idle_mean=5.0)
+        policy = CooldownPolicy(cap_s=30.0, absolute_ceiling_w=4.5)
+        note = cooldown_gate(
+            telemetry, self._reference(5.0), config, clock, policy=policy
+        )
+        self.assertEqual(note["result"], "cap_hit")
+        self.assertEqual(note["reference_upper_w"], 5.5)
+        self.assertEqual(note["effective_upper_w"], 4.5)
+        self.assertEqual(
+            note["release_criterion"]["absolute_ceiling_role"],
+            "additional_upper_cap",
+        )
+
+    def test_non_nominal_thermal_state_prevents_release(self) -> None:
+        clock = FakeClock()
+        config = self._config()
+        telemetry = _StubTelemetry(
+            clock, idle_mean=3.0, thermal_pressure="Elevated"
+        )
+        policy = CooldownPolicy(cap_s=30.0)
+        note = cooldown_gate(
+            telemetry, self._reference(5.0), config, clock, policy=policy
+        )
+        self.assertEqual(note["result"], "cap_hit")
+        self.assertTrue(note["window_complete"])
+        self.assertFalse(note["thermal_nominal"])
 
 
 class CooldownThroughExperimentTests(unittest.TestCase):
@@ -652,6 +991,349 @@ class CooldownThroughExperimentTests(unittest.TestCase):
             [float(value) for value in range(5, 301, 5)],
         )
         self.assertEqual(trace_records[-1]["rolling_mean_power_w"], 7.5)
+
+    def test_flagged_contaminated_previous_rep_uses_frozen_clean_anchor(self) -> None:
+        data = _example_config_data()
+        data["run_id"] = "exp-flagged-reference"
+        data["hardware_target"]["telemetry_backend"] = "powermetrics"
+        config = BenchmarkConfig.from_mapping(data)
+        policy_path = REPO_ROOT / "configs" / "campaign_policies" / "quiet_mac_exploratory.json"
+        from joulewise.schemas import CampaignPolicy
+
+        policy = CampaignPolicy.from_mapping(json.loads(policy_path.read_text()))
+        summary = SummaryMetrics(
+            status=RunStatus.SUCCEEDED,
+            idle_baseline=IdleBaseline(
+                power_w_mean=9.0,
+                power_w_stddev=0.0,
+                duration_s=30.0,
+                sample_count=30,
+                telemetry_backend=TelemetryBackend.POWERMETRICS,
+                idle_window_suspect=True,
+            ),
+        )
+        bundle = self.runs_root / "exp-flagged-reference__r1"
+        bundle.mkdir(parents=True)
+        (bundle / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "campaign_policy": {"sha256": "a" * 64},
+                    "environment_admission": {
+                        "critical_environment_passed": True,
+                        "decision": "flagged",
+                        "reference_provenance_present": True,
+                    },
+                }
+            )
+        )
+        anchor_baseline = {
+            "power_w_mean": 5.0,
+            "power_w_stddev": 0.0,
+            "duration_s": 30.0,
+            "sample_count": 30,
+            "telemetry_backend": "powermetrics",
+            "idle_window_suspect": False,
+        }
+        registry = _StubRegistry(lambda clk: _StubTelemetry(clk, idle_mean=5.0))
+        note, _cap_hit = _cooldown_between_reps(
+            config,
+            self.runs_root,
+            "exp-flagged-reference",
+            bundle.name,
+            summary,
+            registry,
+            FakeClock(),
+            campaign_policy=policy,
+            frozen_anchor={
+                "schema_version": "joulewise.cooldown_anchor.v1",
+                "baseline": anchor_baseline,
+                "immutable_after_freeze": True,
+            },
+        )
+        self.assertEqual(note["reference_selection"], "frozen_clean_anchor")
+        self.assertFalse(note["reference_eligibility"]["eligible"])
+        self.assertEqual(note["reference_power_w"], 5.0)
+
+    def test_campaign_policy_recaptures_each_rep_and_battery_flip_aborts_r2(self) -> None:
+        from joulewise.schemas import CampaignPolicy
+
+        policy_path = REPO_ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+        policy = CampaignPolicy.from_mapping(json.loads(policy_path.read_text()))
+        clean = {
+            "power_source": "AC Power",
+            "power": {"external_connected": True},
+            "low_power_mode": False,
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "thermal_pressure": "nominal",
+            "capture_scope": "run",
+            "settle_s": 0.0,
+        }
+        battery = {**clean, "power_source": "Battery Power"}
+        evaluation = evaluate_environment_policy(clean, policy.environment_guard)
+        binding = {"sha256": "a" * 64}
+        preflight = {
+            "evaluation": evaluation,
+            "override": None,
+            "policy_sha256": "a" * 64,
+        }
+        config = make_config("exp-power-flip", repetitions=2)
+        with (
+            patch(
+                "joulewise.controller._campaign_policy_from_environment",
+                return_value=(policy, binding, preflight),
+            ),
+            patch(
+                "joulewise.controller._capture_environment",
+                side_effect=[clean, battery],
+            ) as capture,
+        ):
+            _manifest, members = run_experiment(
+                config,
+                self.runs_root,
+                FakeClock(),
+                registry=_StubRegistry(lambda clk: _StubTelemetry(clk)),
+            )
+        self.assertEqual(capture.call_count, 2)
+        self.assertEqual(members[0][1].status, RunStatus.SUCCEEDED)
+        self.assertEqual(members[1][1].status, RunStatus.FAILED)
+        r2_metadata = json.loads(
+            (members[1][0] / "metadata.json").read_text()
+        )
+        self.assertEqual(r2_metadata["environment"]["power_source"], "Battery Power")
+        self.assertEqual(
+            r2_metadata["environment_admission"]["decision"], "abort"
+        )
+
+    def test_prepare_end_capture_rejects_power_flip_during_prepare(self) -> None:
+        from joulewise.schemas import CampaignPolicy
+
+        policy_path = REPO_ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+        policy = CampaignPolicy.from_mapping(json.loads(policy_path.read_text()))
+        clean = {
+            "power_source": "AC Power",
+            "power": {"external_connected": True},
+            "low_power_mode": False,
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "thermal_pressure": "nominal",
+            "capture_scope": "run",
+            "settle_s": 0.0,
+        }
+        state = {"power_source": "AC Power"}
+
+        class PowerFlippingRuntime:
+            def __init__(self, inner):
+                self._inner = inner
+                self.name = inner.name
+
+            def prepare(self, config, context=None):
+                result = self._inner.prepare(config, context)
+                state["power_source"] = "Battery Power"
+                return result
+
+            def warmup(self, config, context=None):
+                return self._inner.warmup(config, context)
+
+            def run_workload(self, config, context=None):
+                return self._inner.run_workload(config, context)
+
+            def cleanup(self, config, context=None):
+                return self._inner.cleanup(config, context)
+
+        class PowerFlippingRegistry(_StubRegistry):
+            def resolve_runtime(self, config, clock):
+                runtime, failure = super().resolve_runtime(config, clock)
+                return PowerFlippingRuntime(runtime), failure
+
+        evaluation = evaluate_environment_policy(clean, policy.environment_guard)
+        binding = {"sha256": "a" * 64}
+        preflight = {
+            "evaluation": evaluation,
+            "override": None,
+            "policy_sha256": "a" * 64,
+        }
+
+        def capture_after_prepare(_clock, **_kwargs):
+            return {**clean, "power_source": state["power_source"]}
+
+        with (
+            patch(
+                "joulewise.controller._campaign_policy_from_environment",
+                return_value=(policy, binding, preflight),
+            ),
+            patch(
+                "joulewise.controller._capture_environment",
+                side_effect=capture_after_prepare,
+            ) as capture,
+        ):
+            _manifest, members = run_experiment(
+                make_config("exp-prepare-power-flip", repetitions=1),
+                self.runs_root,
+                FakeClock(),
+                registry=PowerFlippingRegistry(lambda clk: _StubTelemetry(clk)),
+            )
+
+        self.assertEqual(capture.call_count, 1)
+        self.assertEqual(members[0][1].status, RunStatus.FAILED)
+        metadata = json.loads((members[0][0] / "metadata.json").read_text())
+        self.assertEqual(metadata["environment"]["power_source"], "Battery Power")
+        self.assertEqual(metadata["environment_admission"]["decision"], "abort")
+
+    def test_explicit_campaign_anchor_survives_ineligible_r1_and_gates_r2(self) -> None:
+        from joulewise.schemas import CampaignPolicy
+
+        policy_path = REPO_ROOT / "configs" / "campaign_policies" / "quiet_mac_exploratory.json"
+        policy = CampaignPolicy.from_mapping(json.loads(policy_path.read_text()))
+        clean = {
+            "power_source": "AC Power",
+            "power": {"external_connected": True},
+            "low_power_mode": False,
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "thermal_pressure": "nominal",
+            "capture_scope": "run",
+            "settle_s": 0.0,
+        }
+        evaluation = evaluate_environment_policy(clean, policy.environment_guard)
+        binding = {"sha256": "a" * 64}
+        preflight = {
+            "evaluation": evaluation,
+            "override": None,
+            "policy_sha256": "a" * 64,
+        }
+        anchor = valid_cooldown_anchor()
+        original_anchor = json.loads(json.dumps(anchor))
+
+        class SuspectLifecycleTelemetry(_StubTelemetry):
+            def measure_idle(self, config, context=None):
+                baseline = super().measure_idle(config, context)
+                if config.sampling.idle_seconds != policy.cooldown.subwindow_s:
+                    return replace(baseline, idle_window_suspect=True)
+                return baseline
+
+        with (
+            patch(
+                "joulewise.controller._campaign_policy_from_environment",
+                return_value=(policy, binding, preflight),
+            ),
+            patch(
+                "joulewise.controller._capture_environment",
+                return_value=clean,
+            ),
+        ):
+            config_data = _example_config_data()
+            config_data["run_id"] = "exp-campaign-anchor"
+            config_data["hardware_target"]["telemetry_backend"] = "powermetrics"
+            config_data["workload_profile"]["repetitions"] = 2
+            manifest_path, members = run_experiment(
+                BenchmarkConfig.from_mapping(config_data),
+                self.runs_root,
+                FakeClock(),
+                registry=_StubRegistry(lambda clk: SuspectLifecycleTelemetry(clk)),
+                frozen_cooldown_anchor=anchor,
+            )
+
+        manifest = json.loads(manifest_path.read_text())
+        self.assertEqual(len(members), 2)
+        self.assertEqual(manifest["cooldown_anchor"], original_anchor)
+        self.assertEqual(manifest["cooldown"][0]["result"], "recovered")
+        self.assertEqual(
+            manifest["cooldown"][0]["reference_selection"],
+            "frozen_clean_anchor",
+        )
+        self.assertFalse(manifest["cooldown"][0]["reference_eligibility"]["eligible"])
+        self.assertEqual(manifest["cooldown"][0]["reference_power_w"], 5.0)
+        self.assertEqual(anchor, original_anchor)
+
+    def test_wrong_policy_anchor_is_evidenced_and_rejected_before_r1(self) -> None:
+        from joulewise.schemas import CampaignPolicy
+
+        policy_path = (
+            REPO_ROOT
+            / "configs"
+            / "campaign_policies"
+            / "quiet_mac_p2_production.json"
+        )
+        policy = CampaignPolicy.from_mapping(json.loads(policy_path.read_text()))
+        config = make_config("exp-wrong-anchor-policy", repetitions=2)
+        anchor = valid_cooldown_anchor("b" * 64)
+        config_path = self.runs_root.parent / "wrong-anchor-policy.json"
+        config_path.write_text(json.dumps(config.to_dict()))
+
+        with patch(
+            "joulewise.controller._campaign_policy_from_environment",
+            return_value=(policy, {"sha256": "a" * 64}, None),
+        ):
+            code, stdout, stderr = _run_cli(
+                [
+                    "run",
+                    str(config_path),
+                    "--runs-dir",
+                    str(self.runs_root),
+                    "--frozen-cooldown-anchor-json",
+                    json.dumps(anchor),
+                ]
+            )
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("anchor_policy_hash_mismatch", stderr)
+
+        manifest_path = (
+            self.runs_root / "experiments" / "exp-wrong-anchor-policy.json"
+        )
+        manifest = json.loads(manifest_path.read_text())
+        self.assertEqual(manifest["members"], [])
+        verdict = manifest["terminal_verdict"]
+        self.assertEqual(
+            verdict["schema_version"],
+            "joulewise.cooldown_anchor_verdict.v1",
+        )
+        self.assertEqual(verdict["record_type"], "cooldown_anchor_verdict")
+        self.assertEqual(verdict["decision"], "fail_closed")
+        self.assertEqual(verdict["boundary"], "controller_policy_binding")
+        self.assertEqual(
+            verdict["anchor_eligibility"]["reasons"],
+            ["anchor_policy_hash_mismatch"],
+        )
+        self.assertFalse((self.runs_root / "exp-wrong-anchor-policy__r1").exists())
+
+    def test_empty_policy_binding_cannot_admit_matching_empty_anchor(self) -> None:
+        from joulewise.schemas import CampaignPolicy
+
+        policy_path = (
+            REPO_ROOT
+            / "configs"
+            / "campaign_policies"
+            / "quiet_mac_p2_production.json"
+        )
+        policy = CampaignPolicy.from_mapping(json.loads(policy_path.read_text()))
+        config = make_config("exp-empty-anchor-policy", repetitions=2)
+
+        with patch(
+            "joulewise.controller._campaign_policy_from_environment",
+            return_value=(policy, {"sha256": ""}, None),
+        ):
+            with self.assertRaisesRegex(
+                SchemaError,
+                "anchor_policy_hash_invalid, expected_policy_hash_invalid",
+            ):
+                run_experiment(
+                    config,
+                    self.runs_root,
+                    FakeClock(),
+                    frozen_cooldown_anchor=valid_cooldown_anchor(""),
+                )
+
+        verdict_path = (
+            self.runs_root / "experiments" / "exp-empty-anchor-policy.json"
+        )
+        verdict_artifact = json.loads(verdict_path.read_text())
+        self.assertEqual(
+            verdict_artifact["terminal_verdict"]["anchor_eligibility"]["reasons"],
+            ["anchor_policy_hash_invalid", "expected_policy_hash_invalid"],
+        )
+        self.assertFalse((self.runs_root / "exp-empty-anchor-policy__r1").exists())
 
     def test_cooldown_trace_write_error_is_manifest_metadata_not_campaign_failure(self) -> None:
         data = _example_config_data()
@@ -735,6 +1417,220 @@ class CliExperimentDispatchTests(unittest.TestCase):
         self.assertTrue(manifest_path.is_file())
         self.assertEqual(
             manifest_path, self.runs_dir / "experiments" / "cli-exp.json"
+        )
+        manifest = json.loads(manifest_path.read_text())
+        self.assertNotIn("cooldown_anchor", manifest)
+        self.assertNotIn("terminal_verdict", manifest)
+
+    def test_cli_rejects_malformed_anchor_shapes_before_experiment(self) -> None:
+        config_path = self._write_config("cli-anchor-rejected", repetitions=2)
+        valid = valid_cooldown_anchor()
+        cases: list[tuple[str, dict[str, Any], str]] = []
+
+        def changed(**updates: Any) -> dict[str, Any]:
+            anchor = json.loads(json.dumps(valid))
+            anchor.update(updates)
+            return anchor
+
+        cases.extend(
+            [
+                (
+                    "wrong schema",
+                    changed(schema_version="wrong"),
+                    "anchor_schema_invalid",
+                ),
+                (
+                    "frozen false",
+                    changed(immutable_after_freeze=False),
+                    "anchor_not_frozen",
+                ),
+                (
+                    "missing policy",
+                    changed(policy_sha256=None),
+                    "anchor_policy_hash_invalid",
+                ),
+                (
+                    "missing eligibility",
+                    changed(eligibility=None),
+                    "anchor_reference_eligibility_missing",
+                ),
+                (
+                    "missing environment",
+                    changed(environment_snapshot_sha256=None),
+                    "anchor_environment_provenance_missing",
+                ),
+            ]
+        )
+        for field, expected_reason in (
+            ("schema_version", "anchor_schema_invalid"),
+            ("immutable_after_freeze", "anchor_not_frozen"),
+        ):
+            anchor = json.loads(json.dumps(valid))
+            anchor.pop(field)
+            cases.append((f"missing {field}", anchor, expected_reason))
+        incomplete_provenance = json.loads(json.dumps(valid))
+        incomplete_provenance["eligibility"].pop("provenance_present")
+        cases.append(
+            (
+                "incomplete eligibility provenance",
+                incomplete_provenance,
+                "anchor_reference_provenance_incomplete",
+            )
+        )
+        ineligible = json.loads(json.dumps(valid))
+        ineligible["eligibility"]["eligible"] = False
+        cases.append(
+            (
+                "ineligible reference",
+                ineligible,
+                "anchor_reference_eligibility_missing",
+            )
+        )
+        unclean = json.loads(json.dumps(valid))
+        unclean["baseline"]["idle_window_suspect"] = True
+        cases.append(("unclean baseline", unclean, "anchor_idle_window_not_clean"))
+        unparseable = json.loads(json.dumps(valid))
+        unparseable["baseline"].pop("power_w_mean")
+        cases.append(("unparseable baseline", unparseable, "anchor_baseline_invalid"))
+        for label, value in (
+            ("positive infinity baseline", float("inf")),
+            ("negative infinity baseline", float("-inf")),
+            ("nan baseline", float("nan")),
+            ("overflowing float baseline", float("1e400")),
+            ("overflowing integer baseline", 10**400),
+            ("negative power baseline", -0.1),
+        ):
+            nonphysical = json.loads(json.dumps(valid))
+            nonphysical["baseline"]["power_w_mean"] = value
+            cases.append((label, nonphysical, "anchor_baseline_invalid"))
+
+        for label, anchor, expected_reason in cases:
+            with self.subTest(label=label):
+                code, stdout, stderr = _run_cli(
+                    [
+                        "run",
+                        str(config_path),
+                        "--runs-dir",
+                        str(self.runs_dir),
+                        "--frozen-cooldown-anchor-json",
+                        json.dumps(anchor),
+                    ]
+                )
+                self.assertEqual(code, 2)
+                self.assertEqual(stdout, "")
+                self.assertIn("rejected fail-closed", stderr)
+                self.assertIn(expected_reason, stderr)
+                verdict_path = Path(stderr.rsplit("; verdict=", 1)[1].strip())
+                verdict_artifact = json.loads(verdict_path.read_text())
+                verdict = verdict_artifact["terminal_verdict"]
+                self.assertEqual(verdict["decision"], "fail_closed")
+                self.assertEqual(verdict["boundary"], "cli_accept")
+                self.assertIn(
+                    expected_reason,
+                    verdict["anchor_eligibility"]["reasons"],
+                )
+                self.assertEqual(verdict_artifact["members"], [])
+                self.assertFalse(
+                    (self.runs_dir / "cli-anchor-rejected__r1").exists()
+                )
+
+    def test_cli_decoded_non_object_anchor_writes_terminal_verdict(self) -> None:
+        config_path = self._write_config("cli-list-anchor-rejected", repetitions=2)
+
+        code, stdout, stderr = _run_cli(
+            [
+                "run",
+                str(config_path),
+                "--runs-dir",
+                str(self.runs_dir),
+                "--frozen-cooldown-anchor-json",
+                "[]",
+            ]
+        )
+
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("anchor_missing", stderr)
+        verdict_path = Path(stderr.rsplit("; verdict=", 1)[1].strip())
+        verdict_artifact = json.loads(verdict_path.read_text())
+        self.assertEqual(verdict_artifact["members"], [])
+        self.assertEqual(
+            verdict_artifact["terminal_verdict"]["anchor_eligibility"],
+            {"eligible": False, "reasons": ["anchor_missing"]},
+        )
+        self.assertEqual(verdict_artifact["terminal_verdict"]["rejected_anchor"], [])
+
+    def test_cli_undecodable_anchor_json_has_clear_error_without_verdict(self) -> None:
+        config_path = self._write_config("cli-undecodable-anchor", repetitions=2)
+
+        code, stdout, stderr = _run_cli(
+            [
+                "run",
+                str(config_path),
+                "--runs-dir",
+                str(self.runs_dir),
+                "--frozen-cooldown-anchor-json",
+                "[",
+            ]
+        )
+
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn(
+            "--frozen-cooldown-anchor-json is not valid JSON",
+            stderr,
+        )
+        self.assertNotIn("verdict=", stderr)
+        self.assertFalse((self.runs_dir / "experiments").exists())
+
+    def test_rejected_rerun_preserves_completed_manifest_and_writes_artifact(
+        self,
+    ) -> None:
+        config_path = self._write_config("cli-anchor-collision", repetitions=2)
+        first_code, _first_stdout, first_stderr = _run_cli(
+            ["run", str(config_path), "--runs-dir", str(self.runs_dir)]
+        )
+        self.assertEqual(first_code, 0, first_stderr)
+        manifest_path = (
+            self.runs_dir / "experiments" / "cli-anchor-collision.json"
+        )
+        original_manifest = json.loads(manifest_path.read_text())
+        original_bytes = manifest_path.read_bytes()
+        self.assertEqual(len(original_manifest["members"]), 2)
+
+        malformed_anchor = valid_cooldown_anchor()
+        malformed_anchor["schema_version"] = "wrong"
+        code, stdout, stderr = _run_cli(
+            [
+                "run",
+                str(config_path),
+                "--runs-dir",
+                str(self.runs_dir),
+                "--frozen-cooldown-anchor-json",
+                json.dumps(malformed_anchor),
+            ]
+        )
+
+        self.assertEqual(code, 2)
+        self.assertEqual(stdout, "")
+        self.assertIn("anchor_schema_invalid", stderr)
+        self.assertEqual(manifest_path.read_bytes(), original_bytes)
+        verdict_path = Path(stderr.rsplit("; verdict=", 1)[1].strip())
+        self.assertNotEqual(verdict_path, manifest_path)
+        self.assertEqual(
+            verdict_path.parent,
+            self.runs_dir / "experiments" / "rejections",
+        )
+        self.assertTrue(
+            verdict_path.name.startswith(
+                "cli-anchor-collision__cooldown_anchor_rejection"
+            )
+        )
+        verdict_artifact = json.loads(verdict_path.read_text())
+        self.assertEqual(verdict_artifact["experiment_id"], "cli-anchor-collision")
+        self.assertEqual(
+            verdict_artifact["terminal_verdict"]["decision"],
+            "fail_closed",
         )
 
 

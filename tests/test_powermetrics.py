@@ -498,11 +498,20 @@ class PowermetricsAdapterTests(unittest.TestCase):
             )
             with patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run):
                 adapter.measure_idle(config, context)
+                adapter.measure_idle(config, context)
 
             self.assertEqual((root / "raw" / "powermetrics_idle.plist").read_bytes(), fixture)
+            self.assertEqual(
+                (root / "raw" / "powermetrics_idle_attempt_2.plist").read_bytes(),
+                fixture,
+            )
             rich_lines = (root / RICH_IDLE_NAME).read_text().splitlines()
             self.assertEqual(len(rich_lines), 5)
             self.assertEqual(json.loads(rich_lines[0])["index"], 0)
+            retry_rich = (
+                root / "rich_telemetry_idle_attempt_2.jsonl"
+            ).read_text().splitlines()
+            self.assertEqual(len(retry_rich), 5)
 
     def test_measure_idle_rich_write_failure_does_not_break_baseline(self) -> None:
         fixture = FIXTURE.read_bytes()

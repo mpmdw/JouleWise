@@ -31,7 +31,7 @@ import subprocess
 import sys
 import time
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Sequence
@@ -61,8 +61,19 @@ from joulewise.analysis_engine.registry import (  # noqa: E402
     validate_attempt_ledger,
 )
 from joulewise.controller import finalize_dispatch_receipt  # noqa: E402
+from joulewise.controller import (  # noqa: E402
+    CAMPAIGN_POLICY_PATH_ENV,
+    CAMPAIGN_POLICY_SHA256_ENV,
+    CAMPAIGN_PREFLIGHT_JSON_ENV,
+)
+from joulewise.cooldown_anchor import cooldown_anchor_eligibility  # noqa: E402
 from joulewise.doctor import SCHEMA_VERSION as DOCTOR_SCHEMA_VERSION  # noqa: E402
 from joulewise.doctor import config_warning_gate  # noqa: E402
+from joulewise.environment import (  # noqa: E402
+    collect_environment_snapshot,
+    empty_environment_snapshot,
+    evaluate_environment_policy,
+)
 from joulewise.analysis_engine.inputs import (  # noqa: E402
     cleanup_claim_evidence_flags,
     token_provenance_from_artifacts,
@@ -73,6 +84,8 @@ from joulewise.analysis_engine.ratio import (  # noqa: E402
     ratio_evidence_reasons,
 )
 from joulewise.schemas import (  # noqa: E402
+    CampaignPolicy,
+    CooldownPolicy,
     PromptTokenEvidencePolicy,
     RunStatus,
     RuntimeBackend,
@@ -103,6 +116,9 @@ CLAIM_READINESS_NOTE = (
     "This verdict checks analysis inputs only; P2-037 decides claim outcomes."
 )
 ACCEPTED_CAMPAIGN_COOLDOWN_RESULTS = frozenset({"recovered", "first_run_exempt"})
+DEFAULT_CAMPAIGN_POLICY = (
+    ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+)
 KNOWN_NON_PROMPT_SIDECAR_SCHEMAS = frozenset(
     {
         "affine_smoke_annotations.v1",
@@ -146,6 +162,23 @@ class Waiver:
     approver: str
     timestamp: str
     scope: str
+
+
+@dataclass(frozen=True)
+class CampaignPolicyBinding:
+    path: Path
+    policy: CampaignPolicy
+    sha256: str
+
+    def to_metadata(self) -> dict[str, Any]:
+        return {
+            "schema_version": self.policy.schema_version,
+            "policy_id": self.policy.policy_id,
+            "policy_version": self.policy.policy_version,
+            "profile": self.policy.profile.value,
+            "sha256": self.sha256,
+            "source": str(self.path),
+        }
 
 
 @dataclass(frozen=True)
@@ -202,6 +235,7 @@ class MemberEvaluation:
     suite_order_seed: str | None = None
     waiver: Waiver | None = None
     summary: dict[str, Any] | None = field(default=None, repr=False, compare=False)
+    metadata: dict[str, Any] | None = field(default=None, repr=False, compare=False)
     preceding_campaign_cooldown: dict[str, Any] | None = field(
         default=None, repr=False, compare=False
     )
@@ -391,6 +425,35 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Acknowledge doctor-reported ignored config keys and record that fact in the campaign verdict",
     )
     parser.add_argument(
+        "--campaign-policy",
+        default=str(DEFAULT_CAMPAIGN_POLICY),
+        help=(
+            "Hash-bound campaign policy sidecar "
+            f"(default: {DEFAULT_CAMPAIGN_POLICY})"
+        ),
+    )
+    parser.add_argument(
+        "--arm-quiet-mode",
+        action="store_true",
+        help=(
+            "Explicitly count down, request transient display sleep with "
+            "pmset displaysleepnow, then re-probe; persistent settings are unchanged"
+        ),
+    )
+    parser.add_argument(
+        "--arm-countdown-s",
+        type=int,
+        default=5,
+        help="Countdown seconds used only with --arm-quiet-mode (default: 5)",
+    )
+    parser.add_argument(
+        "--environment-override",
+        help=(
+            "JSON acknowledgement bound to the exact preflight snapshot and findings; "
+            "overridden members are universally claim-ineligible"
+        ),
+    )
+    parser.add_argument(
         "--check-prompt-hashes",
         nargs=2,
         metavar=("BUNDLE_DIR", "SIDECAR_JSON"),
@@ -401,7 +464,147 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         parser.error("config_dir is required unless --check-prompt-hashes is used")
     if args.config_dir is not None and args.check_prompt_hashes is not None:
         parser.error("config_dir cannot be combined with --check-prompt-hashes")
+    if args.arm_countdown_s < 0:
+        parser.error("--arm-countdown-s must be >= 0")
     return args
+
+
+def load_campaign_policy(path_text: str) -> CampaignPolicyBinding:
+    path = Path(path_text)
+    raw = path.read_bytes()
+    payload = json.loads(raw)
+    policy = CampaignPolicy.from_mapping(payload)
+    return CampaignPolicyBinding(
+        path=path,
+        policy=policy,
+        sha256=hashlib.sha256(raw).hexdigest(),
+    )
+
+
+def _load_environment_override(
+    path_text: str | None, evaluation: dict[str, Any]
+) -> dict[str, Any] | None:
+    if path_text is None:
+        return None
+    path = Path(path_text)
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("environment override must be a JSON object")
+    required = {
+        "schema_version",
+        "snapshot_sha256",
+        "findings_sha256",
+        "reason",
+        "approver",
+        "timestamp",
+    }
+    if set(raw) != required:
+        raise ValueError(
+            "environment override requires exactly: " + ", ".join(sorted(required))
+        )
+    if raw.get("schema_version") != "joulewise.environment_override.v1":
+        raise ValueError(
+            "environment override schema_version must be "
+            "'joulewise.environment_override.v1'"
+        )
+    for key in ("reason", "approver", "timestamp"):
+        if not isinstance(raw.get(key), str) or not raw[key].strip():
+            raise ValueError(f"environment override {key} must be a non-empty string")
+    for key in ("snapshot_sha256", "findings_sha256"):
+        if raw.get(key) != evaluation.get(key):
+            raise ValueError(
+                f"environment override {key} does not match this exact preflight"
+            )
+    return {
+        **raw,
+        "source": str(path),
+        "classification": "override",
+        "claim_eligible": False,
+    }
+
+
+def campaign_environment_preflight(
+    binding: CampaignPolicyBinding,
+    *,
+    arm_quiet_mode: bool,
+    arm_countdown_s: int,
+    override_path: str | None,
+) -> dict[str, Any]:
+    """Collect and enforce the campaign environment after lock acquisition."""
+
+    guard = binding.policy.environment_guard
+    probe_required = any(
+        (
+            guard.require_ac_power,
+            guard.require_external_connected,
+            guard.require_low_power_mode_off,
+            guard.require_displays_asleep,
+            guard.require_screensaver_disengaged,
+            guard.require_thermal_nominal,
+        )
+    )
+    if probe_required:
+        initial_snapshot = collect_environment_snapshot()
+    else:
+        initial_snapshot = empty_environment_snapshot()
+        initial_snapshot.update(
+            {
+                "capture_skipped": True,
+                "skip_reason": "policy_has_no_required_environment_probes",
+            }
+        )
+    initial_evaluation = evaluate_environment_policy(
+        initial_snapshot, binding.policy.environment_guard
+    )
+    arm_record: dict[str, Any] = {
+        "requested": arm_quiet_mode,
+        "countdown_s": arm_countdown_s if arm_quiet_mode else None,
+        "command": None,
+        "command_returncode": None,
+        "verified_by_reprobe": False,
+    }
+    snapshot = initial_snapshot
+    evaluation = initial_evaluation
+    if arm_quiet_mode:
+        for remaining in range(arm_countdown_s, 0, -1):
+            print(f"Arming quiet mode in {remaining}...")
+            time.sleep(1.0)
+        command = ["pmset", "displaysleepnow"]
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        arm_record.update(
+            {
+                "command": command,
+                "command_returncode": completed.returncode,
+            }
+        )
+        snapshot = collect_environment_snapshot()
+        evaluation = evaluate_environment_policy(
+            snapshot, binding.policy.environment_guard
+        )
+        arm_record["verified_by_reprobe"] = bool(
+            completed.returncode == 0 and evaluation.get("eligible") is True
+        )
+    override = _load_environment_override(override_path, evaluation)
+    if override is not None and evaluation.get("eligible") is True:
+        raise ValueError("environment override is unnecessary for a passing preflight")
+    return {
+        "schema_version": "joulewise.campaign_environment_preflight.v1",
+        "policy_sha256": binding.sha256,
+        "captured_at": utc_timestamp(),
+        "snapshot": snapshot,
+        "evaluation": evaluation,
+        "initial_snapshot_sha256": initial_evaluation["snapshot_sha256"],
+        "initial_findings_sha256": initial_evaluation["findings_sha256"],
+        "arm_quiet_mode": arm_record,
+        "override": override,
+        "enforced": True,
+        "admitted": bool(evaluation.get("eligible") is True or override is not None),
+    }
 
 
 def utc_timestamp() -> str:
@@ -608,9 +811,27 @@ def _resolve_analysis_reference(manifest_dir: Path, reference: str) -> Path:
     return manifest_dir / path
 
 
-def command_for(config_path: Path, runs_dir: Path, cli_cmd: str | None) -> list[str]:
+def command_for(
+    config_path: Path,
+    runs_dir: Path,
+    cli_cmd: str | None,
+    *,
+    frozen_cooldown_anchor: dict[str, Any] | None = None,
+) -> list[str]:
     prefix = shlex.split(cli_cmd) if cli_cmd else [sys.executable, "-m", "joulewise"]
-    return prefix + ["run", str(config_path), "--runs-dir", str(runs_dir)]
+    command = prefix + ["run", str(config_path), "--runs-dir", str(runs_dir)]
+    if frozen_cooldown_anchor is not None:
+        command.extend(
+            [
+                "--frozen-cooldown-anchor-json",
+                json.dumps(
+                    frozen_cooldown_anchor,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+            ]
+        )
+    return command
 
 
 def shell_quote(command: list[str]) -> str:
@@ -1458,6 +1679,7 @@ def evaluate_member(
         suite_order_seed=suite_order_seed,
         waiver=waiver,
         summary=summary,
+        metadata=metadata,
         preceding_campaign_cooldown=cooldown_evidence,
     )
 
@@ -1712,6 +1934,7 @@ def new_campaign_provenance(
     config_dir: Path,
     runs_dir: Path,
     analysis_manifest: AnalysisManifestState | None,
+    policy_binding: CampaignPolicyBinding | None = None,
 ) -> tuple[Path, dict[str, Any]]:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     session_id = f"campaign-{stamp}-p{os.getpid()}"
@@ -1724,6 +1947,11 @@ def new_campaign_provenance(
         "analysis_manifest_id": (
             analysis_manifest.manifest_id if analysis_manifest is not None else None
         ),
+        "campaign_policy": (
+            policy_binding.to_metadata() if policy_binding is not None else None
+        ),
+        "environment_preflight": None,
+        "cooldown_anchor": None,
         "first_physical_run_id": None,
         "members": [],
         "cooldown_gates": [],
@@ -1817,6 +2045,39 @@ def prior_campaign_cooldown_evidence(
                 # evidence origins. Ignoring them prevents a copied exemption
                 # from shadowing its valid originating session on resume.
                 continue
+            physical_members = member.get("physical_members")
+            if isinstance(physical_members, list):
+                for physical in physical_members:
+                    if not isinstance(physical, dict):
+                        continue
+                    bundle_id = physical.get("bundle_id")
+                    cooldown = physical.get("preceding_campaign_cooldown")
+                    if not isinstance(bundle_id, str) or not isinstance(cooldown, dict):
+                        continue
+                    cooldown = dict(cooldown)
+                    if cooldown.get("result") == "first_run_exempt":
+                        valid_exemption = (
+                            not first_exemption_accepted
+                            and isinstance(session_id, str)
+                            and bool(session_id)
+                            and cooldown.get("session_id") == session_id
+                            and bundle_id == first_physical_run_id
+                            and cooldown.get("following_run_id") == bundle_id
+                        )
+                        if valid_exemption:
+                            first_exemption_accepted = True
+                        else:
+                            cooldown.update(
+                                {
+                                    "result": "unknown",
+                                    "reason": (
+                                        "first-run exemption is not unique or does not "
+                                        "match physical-session provenance"
+                                    ),
+                                }
+                            )
+                    evidence[bundle_id] = cooldown
+                continue
             cooldown = member.get("preceding_campaign_cooldown")
             bundle_ids = member.get("bundle_ids")
             if not isinstance(cooldown, dict) or not isinstance(bundle_ids, list):
@@ -1869,6 +2130,68 @@ def prior_campaign_cooldown_evidence(
     return evidence
 
 
+def _physical_cooldown_evidence_for_config(
+    info: ConfigInfo,
+    runs_dir: Path,
+    first_cooldown: dict[str, Any],
+    provenance_path: Path,
+    policy: CooldownPolicy,
+) -> dict[str, dict[str, Any]]:
+    """Map one config invocation's physical repetitions to their own gate."""
+
+    bundle_dirs = expected_member_dirs(info, runs_dir)
+    if not bundle_dirs:
+        return {}
+    evidence = {bundle_dirs[0].name: dict(first_cooldown)}
+    if len(bundle_dirs) == 1:
+        return evidence
+    manifest_path = runs_dir / "experiments" / f"{sanitize_id_component(info.run_id)}.json"
+    manifest, problem = _load_json_object(manifest_path, "experiment manifest")
+    cooldown_rows = manifest.get("cooldown") if isinstance(manifest, dict) else None
+    for index, bundle_dir in enumerate(bundle_dirs[1:], start=1):
+        row = (
+            cooldown_rows[index - 1]
+            if isinstance(cooldown_rows, list)
+            and index - 1 < len(cooldown_rows)
+            and isinstance(cooldown_rows[index - 1], dict)
+            else None
+        )
+        if row is None:
+            evidence[bundle_dir.name] = {
+                **_cooldown_policy_decision_surface(policy),
+                "result": "unknown",
+                "reason": problem or "per-repetition cooldown evidence is missing",
+                "session_id": first_cooldown.get("session_id"),
+                "following_run_id": bundle_dir.name,
+                "recorded_at": utc_timestamp(),
+            }
+            continue
+        note = dict(row)
+        note.setdefault("session_id", first_cooldown.get("session_id"))
+        note["following_run_id"] = bundle_dir.name
+        note.setdefault("recorded_at", utc_timestamp())
+        raw_artifact = note.get("raw_artifact")
+        if isinstance(raw_artifact, str):
+            try:
+                trace_path = manifest_path.parent / raw_artifact
+                trace = [
+                    json.loads(line)
+                    for line in trace_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+                if not trace or not all(isinstance(item, dict) for item in trace):
+                    raise ValueError("cooldown trace is empty or malformed")
+                note["experiment_raw_artifact"] = raw_artifact
+                note["raw_artifact"] = _write_campaign_cooldown_trace(
+                    provenance_path, bundle_dir.name, trace
+                )
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                note.pop("raw_artifact", None)
+                note["raw_artifact_error"] = f"{type(exc).__name__}: {exc}"
+        evidence[bundle_dir.name] = note
+    return evidence
+
+
 def _idle_baseline_from_summary(summary: dict[str, Any] | None):
     if not isinstance(summary, dict):
         return None
@@ -1897,6 +2220,156 @@ def _idle_baseline_from_summary(summary: dict[str, Any] | None):
         )
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def cooldown_reference_eligibility(
+    evaluation: MemberEvaluation,
+) -> dict[str, Any]:
+    """Return fail-closed eligibility for a baseline used by cooldown v2."""
+
+    reasons: list[str] = []
+    baseline = _idle_baseline_from_summary(evaluation.summary)
+    if baseline is None:
+        reasons.append("idle_baseline_unavailable")
+    elif baseline.idle_window_suspect is not False:
+        reasons.append("idle_window_not_clean")
+    metadata = evaluation.metadata
+    admission = metadata.get("environment_admission") if isinstance(metadata, dict) else None
+    policy_binding = metadata.get("campaign_policy") if isinstance(metadata, dict) else None
+    if not isinstance(admission, dict):
+        reasons.append("environment_admission_provenance_missing")
+    else:
+        if admission.get("critical_environment_passed") is not True:
+            reasons.append("critical_environment_not_passed")
+        if admission.get("decision") != "admitted":
+            reasons.append("idle_admission_not_passed")
+        if admission.get("reference_provenance_present") is not True:
+            reasons.append("reference_provenance_incomplete")
+    if (
+        not isinstance(policy_binding, dict)
+        or not isinstance(policy_binding.get("sha256"), str)
+        or not policy_binding.get("sha256")
+    ):
+        reasons.append("campaign_policy_provenance_missing")
+    return {
+        "bundle_id": evaluation.bundle_id,
+        "eligible": baseline is not None and not reasons,
+        "reasons": sorted(reasons),
+        "idle_window_suspect": (
+            baseline.idle_window_suspect if baseline is not None else None
+        ),
+        "critical_environment_passed": (
+            admission.get("critical_environment_passed")
+            if isinstance(admission, dict)
+            else None
+        ),
+        "provenance_present": bool(
+            isinstance(admission, dict)
+            and admission.get("reference_provenance_present") is True
+            and isinstance(policy_binding, dict)
+            and policy_binding.get("sha256")
+        ),
+    }
+
+
+def _anchor_from_evaluation(
+    evaluation: MemberEvaluation,
+    info: ConfigInfo,
+    policy_binding: CampaignPolicyBinding,
+    *,
+    source_kind: str,
+) -> dict[str, Any] | None:
+    eligibility = cooldown_reference_eligibility(evaluation)
+    baseline = _idle_baseline_from_summary(evaluation.summary)
+    if not eligibility["eligible"] or baseline is None:
+        return None
+    admission = evaluation.metadata.get("environment_admission", {})  # type: ignore[union-attr]
+    per_run = admission.get("per_run_environment_evaluation", {})
+    return {
+        "schema_version": "joulewise.cooldown_anchor.v1",
+        "source_kind": source_kind,
+        "bundle_id": evaluation.bundle_id,
+        "run_id": info.run_id,
+        "frozen_at": utc_timestamp(),
+        "policy_sha256": policy_binding.sha256,
+        "baseline": evaluation.summary["idle_baseline"],  # type: ignore[index]
+        "eligibility": eligibility,
+        "environment_snapshot_sha256": (
+            per_run.get("snapshot_sha256") if isinstance(per_run, dict) else None
+        ),
+        "immutable_after_freeze": True,
+    }
+
+
+def _first_eligible_cooldown_anchor(
+    evaluations: Sequence[MemberEvaluation],
+    info: ConfigInfo,
+    policy_binding: CampaignPolicyBinding,
+    *,
+    source_kind: str,
+) -> dict[str, Any] | None:
+    """Freeze the first eligible physical repetition in execution order."""
+
+    for evaluation in evaluations:
+        anchor = _anchor_from_evaluation(
+            evaluation,
+            info,
+            policy_binding,
+            source_kind=source_kind,
+        )
+        if anchor is not None:
+            return anchor
+    return None
+
+
+def _is_neg8_reference_start(info: ConfigInfo) -> bool:
+    normalized = info.run_id.lower().replace("_", "-")
+    return "neg8-reference-start" in normalized
+
+
+def _cooldown_anchor_eligibility(
+    anchor: dict[str, Any] | None,
+    policy_sha256: str,
+) -> dict[str, Any]:
+    return cooldown_anchor_eligibility(anchor, policy_sha256)
+
+
+def prior_campaign_cooldown_anchor(
+    runs_dir: Path,
+    analysis_manifest_id: str | None,
+    policy_sha256: str,
+) -> dict[str, Any] | None:
+    manifest_dir = runs_dir / "campaign_manifests"
+    candidates: list[dict[str, Any]] = []
+    if not manifest_dir.is_dir():
+        return None
+    for path in sorted(manifest_dir.glob("*.json")):
+        raw, problem = _load_json_object(path, "campaign provenance")
+        if problem is not None or raw is None:
+            continue
+        if raw.get("schema_version") != CAMPAIGN_PROVENANCE_SCHEMA:
+            continue
+        if (
+            analysis_manifest_id is not None
+            and raw.get("analysis_manifest_id") != analysis_manifest_id
+        ):
+            continue
+        anchor = raw.get("cooldown_anchor")
+        if (
+            isinstance(anchor, dict)
+            and _cooldown_anchor_eligibility(anchor, policy_sha256)["eligible"]
+        ):
+            candidates.append(dict(anchor))
+    if not candidates:
+        return None
+    return next(
+        (
+            anchor
+            for anchor in candidates
+            if anchor.get("source_kind") == "neg8_reference_start"
+        ),
+        candidates[0],
+    )
 
 
 def _write_campaign_cooldown_trace(
@@ -1928,6 +2401,8 @@ def campaign_cooldown_before_member(
     following_info: ConfigInfo,
     provenance_path: Path,
     session_id: str,
+    policy_binding: CampaignPolicyBinding | None = None,
+    frozen_anchor: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Measure D-014 recovery and attach its tri-state result to the next run."""
     note: dict[str, Any] = {
@@ -1937,7 +2412,44 @@ def campaign_cooldown_before_member(
         "recorded_at": utc_timestamp(),
     }
     baseline = _idle_baseline_from_summary(previous_evaluation.summary)
-    if baseline is None:
+    if policy_binding is not None and policy_binding.policy.idle_admission.enabled:
+        note.update(_cooldown_policy_decision_surface(policy_binding.policy.cooldown))
+        reference_eligibility = cooldown_reference_eligibility(previous_evaluation)
+        anchor_eligibility = _cooldown_anchor_eligibility(
+            frozen_anchor, policy_binding.sha256
+        )
+        note["policy_version"] = policy_binding.policy.cooldown.policy_version
+        note["reference_eligibility"] = reference_eligibility
+        note["anchor_eligibility"] = anchor_eligibility
+        note["anchor_provenance"] = frozen_anchor
+        if reference_eligibility["eligible"]:
+            note["reference_selection"] = "preceding_eligible_baseline"
+        else:
+            anchor_baseline = (
+                frozen_anchor.get("baseline")
+                if isinstance(frozen_anchor, dict)
+                and anchor_eligibility["eligible"]
+                else None
+            )
+            if isinstance(anchor_baseline, dict):
+                baseline = _idle_baseline_from_summary(
+                    {"idle_baseline": anchor_baseline}
+                )
+                note["reference_selection"] = "frozen_clean_anchor"
+            else:
+                baseline = None
+            if baseline is None:
+                note.update(
+                    {
+                        "result": "unknown",
+                        "reason": (
+                            "preceding baseline is ineligible and no eligible frozen "
+                            "clean cooldown anchor is available"
+                        ),
+                    }
+                )
+                return note
+    elif baseline is None:
         note.update({"result": "unknown", "reason": "previous idle baseline unavailable"})
         return note
     try:
@@ -1970,7 +2482,16 @@ def campaign_cooldown_before_member(
         note["cooldown_run_id"] = cooldown_run_id
         try:
             gate = cooldown_gate(
-                telemetry, baseline, config, clock, run_id=cooldown_run_id
+                telemetry,
+                baseline,
+                config,
+                clock,
+                run_id=cooldown_run_id,
+                policy=(
+                    policy_binding.policy.cooldown
+                    if policy_binding is not None
+                    else None
+                ),
             )
         except AdapterFailure as exc:
             note.update(
@@ -1994,6 +2515,50 @@ def campaign_cooldown_before_member(
     return note
 
 
+def _cooldown_policy_decision_surface(policy: CooldownPolicy) -> dict[str, Any]:
+    """Return the v2 fields recorded even when evidence fails before capture."""
+
+    return {
+        "policy_version": policy.policy_version,
+        "thresholds": {
+            "subwindow_s": policy.subwindow_s,
+            "sustained_window_s": policy.sustained_window_s,
+            "coverage_fraction": policy.coverage_fraction,
+            "tolerance_fraction": policy.tolerance_fraction,
+            "cap_s": policy.cap_s,
+            "absolute_ceiling_w": policy.absolute_ceiling_w,
+            "require_thermal_nominal": policy.require_thermal_nominal,
+        },
+        "reference_power_w": None,
+        "decision_rolling_mean_power_w": None,
+        "window_required_s": policy.sustained_window_s,
+        "window_span_s": 0.0,
+        "window_coverage_s": 0.0,
+        "required_coverage_s": (
+            policy.coverage_fraction * policy.sustained_window_s
+        ),
+        "span_complete": False,
+        "coverage_complete": False,
+        "window_complete": False,
+        "thermal_pressure": None,
+        "thermal_nominal": None,
+        "release_criterion": {
+            "power": "duration_weighted_rolling_mean <= effective_upper_w",
+            "reference_bound": "reference_power_w * (1 + tolerance_fraction)",
+            "absolute_ceiling_role": "additional_upper_cap",
+            "window": "complete_sustained_span_and_minimum_coverage",
+            "coverage": (
+                "window_coverage_s >= coverage_fraction * sustained_window_s"
+            ),
+            "thermal": (
+                "nominal_required"
+                if policy.require_thermal_nominal
+                else "not_required"
+            ),
+        },
+    }
+
+
 def record_campaign_member_provenance(
     path: Path,
     manifest: dict[str, Any],
@@ -2003,8 +2568,11 @@ def record_campaign_member_provenance(
     evaluations: list[MemberEvaluation],
     execution: str,
     cooldown: dict[str, Any] | None,
+    cooldowns_by_bundle: dict[str, dict[str, Any]] | None = None,
 ) -> None:
-    recorded_cooldown = cooldown if execution == "invoked" else None
+    recorded_cooldown = (
+        cooldown if execution in {"invoked", "blocked_before_invoke"} else None
+    )
     claim_evidence: list[dict[str, Any]] = []
     for evaluation in evaluations:
         waiver = evaluation.waiver
@@ -2026,8 +2594,7 @@ def record_campaign_member_provenance(
                 ),
             }
         )
-    manifest["members"].append(
-        {
+    member_row = {
             "config": info.path.name,
             "run_id": info.run_id,
             "bundle_ids": bundle_ids,
@@ -2035,12 +2602,25 @@ def record_campaign_member_provenance(
             "preceding_campaign_cooldown": recorded_cooldown,
             "claim_evidence": claim_evidence,
         }
+    if cooldowns_by_bundle is not None:
+        member_row["physical_members"] = [
+            {
+                "bundle_id": bundle_id,
+                "preceding_campaign_cooldown": cooldowns_by_bundle.get(bundle_id),
+            }
+            for bundle_id in bundle_ids
+        ]
+    manifest["members"].append(member_row)
+    gate_candidates = (
+        [cooldowns_by_bundle.get(bundle_id) for bundle_id in bundle_ids]
+        if cooldowns_by_bundle is not None
+        else [recorded_cooldown]
     )
-    if (
-        recorded_cooldown is not None
-        and recorded_cooldown.get("result") != "first_run_exempt"
-    ):
-        manifest["cooldown_gates"].append(recorded_cooldown)
+    manifest["cooldown_gates"].extend(
+        gate
+        for gate in gate_candidates
+        if isinstance(gate, dict) and gate.get("result") != "first_run_exempt"
+    )
     write_campaign_provenance(path, manifest)
 
 
@@ -2488,6 +3068,35 @@ def append_verdict(
     append_log(log_path, row)
 
 
+def append_environment_preflight_verdict(
+    log_path: Path,
+    *,
+    analysis_manifest: AnalysisManifestState | None,
+    campaign_provenance_path: Path | None,
+    preflight: dict[str, Any],
+    environment_guard: dict[str, Any],
+    reason: str,
+) -> None:
+    """Always terminate a rejected environment preflight with a v2 verdict."""
+
+    recorded_preflight = dict(preflight)
+    recorded_preflight["environment_guard"] = environment_guard
+    categories = {"usable": [], "waived": [], "failed": [], "missing": []}
+    append_verdict(
+        log_path,
+        collection_verdict="invalid",
+        collection_reasons=[reason],
+        categories=categories,
+        claim_readiness=claim_readiness_for(analysis_manifest, "invalid", []),
+        analysis_manifest=analysis_manifest,
+        sampling_audit=sampling_audit_for(analysis_manifest),
+        members=[],
+        campaign_provenance_path=campaign_provenance_path,
+        warning=None,
+        preflight=recorded_preflight,
+    )
+
+
 def _write_immutable_bytes(path: Path, value: bytes) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("xb") as handle:
@@ -2647,6 +3256,9 @@ def run_axi_spec_campaign(
     state: AnalysisManifestState,
     *,
     runs_dir: Path,
+    policy_binding: CampaignPolicyBinding | None = None,
+    log_path: Path | None = None,
+    preflight: dict[str, Any] | None = None,
 ) -> int:
     """Dispatch a frozen v2 manifest with immutable per-attempt evidence.
 
@@ -2680,6 +3292,11 @@ def run_axi_spec_campaign(
     rows_dir = evidence_root / "ledger_rows"
     reports_dir = evidence_root / "output_identity_reports"
     if args.dry_run:
+        if policy_binding is not None:
+            print(
+                "Campaign policy: "
+                f"{policy_binding.policy.policy_id} sha256={policy_binding.sha256}"
+            )
         for entry in entries:
             info = config_infos[entry["entry_id"]]
             command = command_for(
@@ -2693,6 +3310,94 @@ def run_axi_spec_campaign(
     lock_path: Path | None = None
     try:
         lock_path = acquire_campaign_lock(runs_dir)
+        child_environment: dict[str, str] | None = None
+        campaign_provenance_path: Path | None = None
+        campaign_provenance: dict[str, Any] | None = None
+        previous_physical_info: ConfigInfo | None = None
+        previous_physical_evaluation: MemberEvaluation | None = None
+        frozen_cooldown_anchor: dict[str, Any] | None = None
+        if policy_binding is not None:
+            campaign_provenance_path, campaign_provenance = new_campaign_provenance(
+                state.path.parent, runs_dir, state, policy_binding
+            )
+            frozen_cooldown_anchor = prior_campaign_cooldown_anchor(
+                runs_dir, state.manifest_id, policy_binding.sha256
+            )
+            campaign_provenance["cooldown_anchor"] = frozen_cooldown_anchor
+            campaign_provenance["cooldown_anchor_strategy"] = (
+                "first_admission_passing"
+            )
+            write_campaign_provenance(
+                campaign_provenance_path, campaign_provenance
+            )
+            try:
+                environment_preflight = campaign_environment_preflight(
+                    policy_binding,
+                    arm_quiet_mode=bool(getattr(args, "arm_quiet_mode", False)),
+                    arm_countdown_s=int(getattr(args, "arm_countdown_s", 5)),
+                    override_path=getattr(args, "environment_override", None),
+                )
+            except Exception as exc:  # noqa: BLE001 - fail before AXI member 1
+                environment_error = {
+                    "status": "error",
+                    "reason": f"{type(exc).__name__}: {exc}",
+                }
+                assert campaign_provenance_path is not None
+                assert campaign_provenance is not None
+                campaign_provenance["environment_preflight"] = environment_error
+                write_campaign_provenance(
+                    campaign_provenance_path, campaign_provenance
+                )
+                if log_path is not None:
+                    append_environment_preflight_verdict(
+                        log_path,
+                        analysis_manifest=state,
+                        campaign_provenance_path=campaign_provenance_path,
+                        preflight=preflight or {},
+                        environment_guard=environment_error,
+                        reason="environment preflight failed before AXI entry 1",
+                    )
+                print(f"error: environment preflight failed: {exc}", file=sys.stderr)
+                return 2
+            assert campaign_provenance_path is not None
+            assert campaign_provenance is not None
+            campaign_provenance["environment_preflight"] = environment_preflight
+            write_campaign_provenance(campaign_provenance_path, campaign_provenance)
+            if not environment_preflight["admitted"]:
+                evaluation = environment_preflight["evaluation"]
+                print(
+                    "ENVIRONMENT PREFLIGHT FAILED: "
+                    + "; ".join(
+                        f"{row['field']}={row['actual']!r} ({row['status']})"
+                        for row in evaluation["findings"]
+                        if row["status"] != "pass"
+                    ),
+                    file=sys.stderr,
+                )
+                print(
+                    "override binding: "
+                    f"snapshot_sha256={evaluation['snapshot_sha256']} "
+                    f"findings_sha256={evaluation['findings_sha256']}",
+                    file=sys.stderr,
+                )
+                if log_path is not None:
+                    append_environment_preflight_verdict(
+                        log_path,
+                        analysis_manifest=state,
+                        campaign_provenance_path=campaign_provenance_path,
+                        preflight=preflight or {},
+                        environment_guard=environment_preflight,
+                        reason="environment preflight rejected before AXI entry 1",
+                    )
+                return 1
+            child_environment = os.environ.copy()
+            child_environment[CAMPAIGN_POLICY_PATH_ENV] = str(policy_binding.path)
+            child_environment[CAMPAIGN_POLICY_SHA256_ENV] = policy_binding.sha256
+            child_environment[CAMPAIGN_PREFLIGHT_JSON_ENV] = json.dumps(
+                environment_preflight,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
         rows = _axi_load_rows(rows_dir)
         by_entry: dict[str, list[dict[str, Any]]] = {
             entry["entry_id"]: [] for entry in entries
@@ -2728,6 +3433,16 @@ def run_axi_spec_campaign(
             )
 
             info = config_infos[entry_id]
+            physical_run_id = (
+                f"{sanitize_id_component(entry_id)}__a{attempt_ordinal}__"
+                f"{sanitize_id_component(info.run_id)}"
+            )
+            physical_info = replace(
+                info,
+                run_id=physical_run_id,
+                raw_run_id=physical_run_id,
+                repetitions=1,
+            )
             attempt_runs_dir = (
                 runs_dir
                 / "axi_attempt_bundles"
@@ -2736,9 +3451,73 @@ def run_axi_spec_campaign(
                 / f"a{attempt_ordinal}"
             )
             command = command_for(info.path, attempt_runs_dir, args.cli_cmd)
+            cooldown_note: dict[str, Any] | None = None
+            if policy_binding is not None:
+                assert campaign_provenance_path is not None
+                assert campaign_provenance is not None
+                if campaign_provenance.get("first_physical_run_id") is None:
+                    cooldown_note = {
+                        **_cooldown_policy_decision_surface(
+                            policy_binding.policy.cooldown
+                        ),
+                        "result": "first_run_exempt",
+                        "session_id": campaign_provenance["session_id"],
+                        "following_run_id": physical_run_id,
+                        "recorded_at": utc_timestamp(),
+                    }
+                    campaign_provenance["first_physical_run_id"] = physical_run_id
+                    write_campaign_provenance(
+                        campaign_provenance_path, campaign_provenance
+                    )
+                elif (
+                    previous_physical_info is not None
+                    and previous_physical_evaluation is not None
+                ):
+                    cooldown_note = campaign_cooldown_before_member(
+                        previous_info=previous_physical_info,
+                        previous_evaluation=previous_physical_evaluation,
+                        following_info=physical_info,
+                        provenance_path=campaign_provenance_path,
+                        session_id=campaign_provenance["session_id"],
+                        policy_binding=policy_binding,
+                        frozen_anchor=frozen_cooldown_anchor,
+                    )
+                else:
+                    cooldown_note = {
+                        **_cooldown_policy_decision_surface(
+                            policy_binding.policy.cooldown
+                        ),
+                        "result": "unknown",
+                        "reason": "previous physical AXI entry evaluation unavailable",
+                        "session_id": campaign_provenance["session_id"],
+                        "following_run_id": physical_run_id,
+                        "recorded_at": utc_timestamp(),
+                    }
+                if (
+                    policy_binding.policy.idle_admission.enabled
+                    and cooldown_note.get("result") == "unknown"
+                ):
+                    record_campaign_member_provenance(
+                        campaign_provenance_path,
+                        campaign_provenance,
+                        info=info,
+                        bundle_ids=[physical_run_id],
+                        evaluations=[],
+                        execution="blocked_before_invoke",
+                        cooldown=cooldown_note,
+                        cooldowns_by_bundle={physical_run_id: cooldown_note},
+                    )
+                    print(
+                        f"failed {entry_id}: cooldown v2 failed closed before "
+                        f"invoke: {cooldown_note.get('reason', 'unknown reference')}",
+                        file=sys.stderr,
+                    )
+                    return 1
             dispatch_error: OSError | None = None
             try:
-                completed = subprocess.run(command, check=False)
+                completed = subprocess.run(
+                    command, check=False, env=child_environment
+                )
                 exit_code: int | None = completed.returncode
             except OSError as exc:
                 dispatch_error = exc
@@ -2819,9 +3598,79 @@ def run_axi_spec_campaign(
             )
             by_entry[entry_id].append(ledger_row)
             if not eligible_for_analysis:
+                if policy_binding is not None:
+                    assert campaign_provenance_path is not None
+                    assert campaign_provenance is not None
+                    failed_evaluations: list[MemberEvaluation] = []
+                    if finalized:
+                        failed_evaluation = evaluate_member(
+                            bundle_path,
+                            info=info,
+                            waivers={},
+                            cooldown_evidence=cooldown_note,
+                        )
+                        failed_evaluations.append(
+                            replace(failed_evaluation, bundle_id=physical_run_id)
+                        )
+                    record_campaign_member_provenance(
+                        campaign_provenance_path,
+                        campaign_provenance,
+                        info=info,
+                        bundle_ids=[physical_run_id],
+                        evaluations=failed_evaluations,
+                        execution="invoked",
+                        cooldown=cooldown_note,
+                        cooldowns_by_bundle=(
+                            {physical_run_id: cooldown_note}
+                            if cooldown_note is not None
+                            else None
+                        ),
+                    )
                 detail = str(dispatch_error) if dispatch_error is not None else reason
                 print(f"failed {entry_id} attempt={attempt_ordinal}: {detail}", file=sys.stderr)
                 return 1
+            if policy_binding is not None:
+                assert campaign_provenance_path is not None
+                assert campaign_provenance is not None
+                evaluation = evaluate_member(
+                    bundle_path,
+                    info=info,
+                    waivers={},
+                    cooldown_evidence=cooldown_note,
+                )
+                evaluation = replace(evaluation, bundle_id=physical_run_id)
+                record_campaign_member_provenance(
+                    campaign_provenance_path,
+                    campaign_provenance,
+                    info=info,
+                    bundle_ids=[physical_run_id],
+                    evaluations=[evaluation],
+                    execution="invoked",
+                    cooldown=cooldown_note,
+                    cooldowns_by_bundle=(
+                        {physical_run_id: cooldown_note}
+                        if cooldown_note is not None
+                        else None
+                    ),
+                )
+                previous_physical_info = info
+                previous_physical_evaluation = evaluation
+                if (
+                    policy_binding.policy.idle_admission.enabled
+                    and frozen_cooldown_anchor is None
+                ):
+                    candidate_anchor = _first_eligible_cooldown_anchor(
+                        [evaluation],
+                        info,
+                        policy_binding,
+                        source_kind="first_admission_passing_baseline",
+                    )
+                    if candidate_anchor is not None:
+                        frozen_cooldown_anchor = candidate_anchor
+                        campaign_provenance["cooldown_anchor"] = candidate_anchor
+                        write_campaign_provenance(
+                            campaign_provenance_path, campaign_provenance
+                        )
             print(f"ok {entry_id} attempt={attempt_ordinal}: bundle={bundle_path}")
 
         rows = _axi_load_rows(rows_dir)
@@ -2892,6 +3741,8 @@ def run_campaign(args: argparse.Namespace) -> int:
     runs_dir = Path(args.runs_dir)
     log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
 
+    policy_binding = load_campaign_policy(args.campaign_policy)
+
     if args.max_failures < 1:
         raise ValueError("--max-failures must be >= 1")
 
@@ -2919,6 +3770,7 @@ def run_campaign(args: argparse.Namespace) -> int:
         "status": doctor_gate["status"],
         "summary": doctor_gate["summary"],
         "config_warning_acknowledgement": doctor_gate["details"]["acknowledgement"],
+        "campaign_policy": policy_binding.to_metadata(),
     }
     for error in doctor_gate["details"]["errors"]:
         print(
@@ -2958,6 +3810,9 @@ def run_campaign(args: argparse.Namespace) -> int:
             args,
             analysis_manifest,
             runs_dir=runs_dir,
+            policy_binding=policy_binding,
+            log_path=log_path,
+            preflight=preflight,
         )
     items = read_config_infos(configs)
     waivers = load_waivers(args.waivers)
@@ -3013,11 +3868,24 @@ def run_campaign(args: argparse.Namespace) -> int:
         runs_dir,
         analysis_manifest.manifest_id if analysis_manifest is not None else None,
     )
+    frozen_cooldown_anchor = prior_campaign_cooldown_anchor(
+        runs_dir,
+        analysis_manifest.manifest_id if analysis_manifest is not None else None,
+        policy_binding.sha256,
+    )
+    neg8_reference_expected = any(
+        isinstance(item, ConfigInfo) and _is_neg8_reference_start(item)
+        for item in items
+    )
     campaign_provenance_path: Path | None = None
     campaign_provenance: dict[str, Any] | None = None
 
     print_quiet_machine_warning()
     if args.dry_run:
+        print(
+            "Campaign policy: "
+            f"{policy_binding.policy.policy_id} sha256={policy_binding.sha256}"
+        )
         print("Dry run: no commands will be invoked and no campaign log will be written.")
     else:
         try:
@@ -3026,7 +3894,89 @@ def run_campaign(args: argparse.Namespace) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return 2
         campaign_provenance_path, campaign_provenance = new_campaign_provenance(
-            config_dir, runs_dir, analysis_manifest
+            config_dir, runs_dir, analysis_manifest, policy_binding
+        )
+        campaign_provenance["cooldown_anchor"] = frozen_cooldown_anchor
+        campaign_provenance["cooldown_anchor_strategy"] = (
+            "neg8_reference_start_then_first_admission_passing"
+            if neg8_reference_expected
+            else "first_admission_passing"
+        )
+        write_campaign_provenance(campaign_provenance_path, campaign_provenance)
+        try:
+            environment_preflight = campaign_environment_preflight(
+                policy_binding,
+                arm_quiet_mode=args.arm_quiet_mode,
+                arm_countdown_s=args.arm_countdown_s,
+                override_path=args.environment_override,
+            )
+        except Exception as exc:  # noqa: BLE001 - preflight errors fail before member 1
+            environment_error = {
+                "status": "error",
+                "reason": f"{type(exc).__name__}: {exc}",
+            }
+            campaign_provenance["environment_preflight"] = environment_error
+            write_campaign_provenance(campaign_provenance_path, campaign_provenance)
+            append_environment_preflight_verdict(
+                log_path,
+                analysis_manifest=analysis_manifest,
+                campaign_provenance_path=campaign_provenance_path,
+                preflight=preflight,
+                environment_guard=environment_error,
+                reason="environment preflight failed before member 1",
+            )
+            print(f"error: environment preflight failed: {exc}", file=sys.stderr)
+            try:
+                lock_path.unlink()
+            except FileNotFoundError:
+                pass
+            return 2
+        campaign_provenance["environment_preflight"] = environment_preflight
+        write_campaign_provenance(campaign_provenance_path, campaign_provenance)
+        preflight["environment_guard"] = environment_preflight
+        if not environment_preflight["admitted"]:
+            evaluation = environment_preflight["evaluation"]
+            failed_findings = [
+                finding
+                for finding in evaluation["findings"]
+                if finding["status"] != "pass"
+            ]
+            print(
+                "ENVIRONMENT PREFLIGHT FAILED: "
+                + "; ".join(
+                    f"{row['field']}={row['actual']!r} ({row['status']})"
+                    for row in failed_findings
+                ),
+                file=sys.stderr,
+            )
+            print(
+                "override binding: "
+                f"snapshot_sha256={evaluation['snapshot_sha256']} "
+                f"findings_sha256={evaluation['findings_sha256']}",
+                file=sys.stderr,
+            )
+            append_environment_preflight_verdict(
+                log_path,
+                analysis_manifest=analysis_manifest,
+                campaign_provenance_path=campaign_provenance_path,
+                preflight=preflight,
+                environment_guard=environment_preflight,
+                reason="environment preflight rejected before member 1",
+            )
+            try:
+                lock_path.unlink()
+            except FileNotFoundError:
+                pass
+            return 1
+
+    child_environment = os.environ.copy()
+    child_environment[CAMPAIGN_POLICY_PATH_ENV] = str(policy_binding.path)
+    child_environment[CAMPAIGN_POLICY_SHA256_ENV] = policy_binding.sha256
+    if campaign_provenance is not None:
+        child_environment[CAMPAIGN_PREFLIGHT_JSON_ENV] = json.dumps(
+            campaign_provenance["environment_preflight"],
+            sort_keys=True,
+            separators=(",", ":"),
         )
 
     try:
@@ -3074,7 +4024,14 @@ def run_campaign(args: argparse.Namespace) -> int:
             elif order_warning is not None:
                 order_extra = {"block_order_warning": order_warning}
             state = existing_state(info, runs_dir)
-            command = command_for(config_path, runs_dir, args.cli_cmd)
+            command = command_for(
+                config_path,
+                runs_dir,
+                args.cli_cmd,
+                frozen_cooldown_anchor=(
+                    frozen_cooldown_anchor if info.repetitions > 1 else None
+                ),
+            )
 
             if args.dry_run:
                 counts["dry_run"] += 1
@@ -3253,38 +4210,102 @@ def run_campaign(args: argparse.Namespace) -> int:
 
             assert campaign_provenance_path is not None
             assert campaign_provenance is not None
+            physical_bundle_dirs = expected_member_dirs(info, runs_dir)
+            first_physical_bundle_id = physical_bundle_dirs[0].name
+            following_physical_info = replace(
+                info,
+                run_id=first_physical_bundle_id,
+                raw_run_id=first_physical_bundle_id,
+                repetitions=1,
+            )
             if campaign_provenance.get("first_physical_run_id") is None:
                 cooldown_note = {
+                    **_cooldown_policy_decision_surface(
+                        policy_binding.policy.cooldown
+                    ),
                     "result": "first_run_exempt",
                     "session_id": campaign_provenance["session_id"],
-                    "following_run_id": info.run_id,
+                    "following_run_id": first_physical_bundle_id,
                     "recorded_at": utc_timestamp(),
                 }
-                campaign_provenance["first_physical_run_id"] = info.run_id
+                campaign_provenance["first_physical_run_id"] = first_physical_bundle_id
                 write_campaign_provenance(campaign_provenance_path, campaign_provenance)
             elif previous_physical_info is not None and previous_physical_evaluation is not None:
                 cooldown_note = campaign_cooldown_before_member(
                     previous_info=previous_physical_info,
                     previous_evaluation=previous_physical_evaluation,
-                    following_info=info,
+                    following_info=following_physical_info,
                     provenance_path=campaign_provenance_path,
                     session_id=campaign_provenance["session_id"],
+                    policy_binding=policy_binding,
+                    frozen_anchor=frozen_cooldown_anchor,
                 )
             else:
                 cooldown_note = {
                     "result": "unknown",
                     "reason": "previous physical member evaluation unavailable",
                     "session_id": campaign_provenance["session_id"],
-                    "following_run_id": info.run_id,
+                    "following_run_id": first_physical_bundle_id,
                     "recorded_at": utc_timestamp(),
                 }
-            for bundle_dir in expected_member_dirs(info, runs_dir):
-                cooldown_by_bundle[bundle_dir.name] = cooldown_note
+            cooldown_by_bundle[first_physical_bundle_id] = cooldown_note
+
+            if (
+                policy_binding.policy.idle_admission.enabled
+                and cooldown_note.get("result") == "unknown"
+            ):
+                blocked_bundle_ids = [path.name for path in physical_bundle_dirs]
+                missing_members.extend(blocked_bundle_ids)
+                failures += 1
+                counts["failed"] += 1
+                print(
+                    f"failed {info.run_id}: cooldown v2 failed closed before invoke: "
+                    f"{cooldown_note.get('reason', 'unknown reference')}",
+                    file=sys.stderr,
+                )
+                record_campaign_member_provenance(
+                    campaign_provenance_path,
+                    campaign_provenance,
+                    info=info,
+                    bundle_ids=blocked_bundle_ids,
+                    evaluations=[],
+                    execution="blocked_before_invoke",
+                    cooldown=cooldown_note,
+                )
+                append_log(
+                    log_path,
+                    log_row(
+                        config_path=config_path,
+                        run_id=info.run_id,
+                        status="failed",
+                        exit_code=None,
+                        duration_s=None,
+                        extra={
+                            **order_extra,
+                            "preceding_campaign_cooldown": cooldown_note,
+                            "blocked_before_invoke": True,
+                            "campaign_provenance_manifest": str(
+                                campaign_provenance_path
+                            ),
+                        },
+                    ),
+                )
+                if failures >= args.max_failures:
+                    break
+                continue
 
             start = time.monotonic()
-            result = subprocess.run(command, check=False)
+            result = subprocess.run(command, check=False, env=child_environment)
             duration_s = time.monotonic() - start
             exit_code = result.returncode
+            physical_cooldowns = _physical_cooldown_evidence_for_config(
+                info,
+                runs_dir,
+                cooldown_note,
+                campaign_provenance_path,
+                policy_binding.policy.cooldown,
+            )
+            cooldown_by_bundle.update(physical_cooldowns)
             evaluations = evaluate_members(
                 info, runs_dir, waivers, cooldown_by_bundle
             )
@@ -3292,6 +4313,31 @@ def run_campaign(args: argparse.Namespace) -> int:
             if evaluations:
                 previous_physical_info = info
                 previous_physical_evaluation = evaluations[-1]
+                if (
+                    policy_binding.policy.idle_admission.enabled
+                    and frozen_cooldown_anchor is None
+                    and (
+                        not neg8_reference_expected
+                        or _is_neg8_reference_start(info)
+                    )
+                ):
+                    source_kind = (
+                        "neg8_reference_start"
+                        if _is_neg8_reference_start(info)
+                        else "first_admission_passing_baseline"
+                    )
+                    candidate_anchor = _first_eligible_cooldown_anchor(
+                        evaluations,
+                        info,
+                        policy_binding,
+                        source_kind=source_kind,
+                    )
+                    if candidate_anchor is not None:
+                        frozen_cooldown_anchor = candidate_anchor
+                        campaign_provenance["cooldown_anchor"] = candidate_anchor
+                        write_campaign_provenance(
+                            campaign_provenance_path, campaign_provenance
+                        )
             missing_after_run = [
                 evaluation.bundle_id
                 for evaluation in evaluations
@@ -3355,6 +4401,7 @@ def run_campaign(args: argparse.Namespace) -> int:
                 evaluations=evaluations,
                 execution="invoked",
                 cooldown=cooldown_note,
+                cooldowns_by_bundle=physical_cooldowns,
             )
             append_log(
                 log_path,

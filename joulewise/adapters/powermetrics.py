@@ -134,6 +134,7 @@ class PowermetricsTelemetryAdapter:
         self._pre_idle_records: list[PowermetricsRecord] = []
         self._pre_idle_quality: dict[str, float | bool | None] | None = None
         self._pending_captures: dict[str, Path] = {}
+        self._idle_attempts_by_run: dict[str, int] = {}
 
     def device_metadata(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -156,31 +157,49 @@ class PowermetricsTelemetryAdapter:
             )
 
         count = self._idle_count(config)
+        attempt = 1
+        if context is not None:
+            attempt = self._idle_attempts_by_run.get(context.run_id, 0) + 1
+            self._idle_attempts_by_run[context.run_id] = attempt
+        artifact_name = (
+            RAW_IDLE_NAME
+            if attempt == 1
+            else f"powermetrics_idle_attempt_{attempt}.plist"
+        )
+        rich_artifact_name = (
+            RICH_IDLE_NAME
+            if attempt == 1
+            else f"rich_telemetry_idle_attempt_{attempt}.jsonl"
+        )
         capture_start_s = self._clock.now()
         data = self._run_bounded_capture(
             config,
             count=count,
-            artifact_name=RAW_IDLE_NAME,
+            artifact_name=artifact_name,
             context=context,
         )
         if context is not None:
-            self._persist_capture(context, RAW_IDLE_NAME, data)
-        self._release_capture(RAW_IDLE_NAME)
+            self._persist_capture(context, artifact_name, data)
+        self._release_capture(artifact_name)
         records, diagnostic = _parse_powermetrics_records(
             data, timestamp_anchor_s=capture_start_s
         )
         self._record_parse_diagnostic(
             diagnostic,
-            artifact=f"raw/{RAW_IDLE_NAME}",
-            capture="idle_baseline",
+            artifact=f"raw/{artifact_name}",
+            capture=f"idle_baseline_attempt_{attempt}",
         )
         rich_records = decode_rich_telemetry(data)
         if context is not None:
             self._write_rich_artifact(
                 context=context,
-                name=RICH_IDLE_NAME,
+                name=rich_artifact_name,
                 data=rich_telemetry_jsonl_from_records(rich_records),
-                error_key="rich_telemetry_idle_error",
+                error_key=(
+                    "rich_telemetry_idle_error"
+                    if attempt == 1
+                    else f"rich_telemetry_idle_attempt_{attempt}_error"
+                ),
             )
         self._remember_records(records, timestamp_anchor_s=capture_start_s)
         totals = [record.combined_power_w for record in records]

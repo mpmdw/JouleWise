@@ -131,9 +131,31 @@ not create, mount, download, pin, copy to, or verify restoration from a backup.
 
 Quiet-machine output always warns that quietness cannot be certified from a
 snapshot. It additionally reports detectable concerns such as battery power,
-low-power mode, elevated one-minute load, active displays, and failed
-environment probes. No doctor result authorizes a `[QUIET-MAC]` collection
-while agent load is present.
+low-power mode, elevated one-minute load, active displays, an engaged
+screensaver, non-Nominal thermal pressure, and failed environment probes. The
+quiet-machine check consumes the same pure environment-policy evaluator as the
+campaign guard, but only advisorily: its report remains `warn`, including when
+all observed critical findings pass. No doctor result is a quietness
+certificate or authorizes a `[QUIET-MAC]` collection while agent load is
+present.
+
+The advisor's nullable sudo-free snapshot includes `external_connected`,
+`low_power_mode`, `display_power_state` (`all_asleep`, `any_awake`, or
+`unknown` across all online displays), `screensaver_engaged`,
+`screensaver_module`, `screensaver_delay_s`, `hid_idle_s`, and thermal
+pressure. Display evidence comes from `pmset -g systemstate`; screensaver
+configuration comes from `defaults -currentHost read
+com.apple.screensaver`, with an absent `idleTime` interpreted as the macOS
+1200-second default; current HID idle comes from `ioreg -c IOHIDSystem`.
+Unrecognized output or probe failure is unknown/null, never a pass.
+
+Load averages remain useful preflight evidence and doctor may warn on an
+elevated one-minute value, but load is not a campaign member-admission
+predicate. The enforcing campaign preflight separately runs after campaign
+lock acquisition and records the exact evaluator findings and snapshot
+digests. It requires the policy-selected critical fields to pass and fails
+closed on critical unknowns; this enforcement does not strengthen the
+meaning of a prior doctor report.
 
 ## Testability and Mutation Boundary
 

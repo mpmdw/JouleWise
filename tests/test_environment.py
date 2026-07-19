@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import importlib.metadata
+import shlex
 import subprocess
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from joulewise.environment import collect_environment_snapshot
+from joulewise.environment import (
+    collect_environment_snapshot,
+    evaluate_environment_policy,
+)
 
 
 def completed(command: list[str], stdout: str = "", returncode: int = 0):
@@ -34,6 +39,17 @@ SUCCESS_OUTPUTS = {
     ),
     ("pmset", "-g"): " lowpowermode      1\n",
     ("pmset", "-g", "assertions"): "   PreventUserIdleDisplaySleep    1\n",
+    ("pmset", "-g", "systemstate"): (
+        # Verbatim shape observed live on macOS (Darwin 25.5.0, 2026-07-17):
+        # the capabilities line reads "Capabilities are:", not "Capabilities:".
+        "Current System Capabilities are: CPU Audio Network \n"
+        "Current Power State: 4\n"
+    ),
+    ("pmset", "-g", "therm"): "No thermal warning level has been recorded\n",
+    ("defaults", "-currentHost", "read", "com.apple.screensaver"): (
+        "{ moduleDict = { moduleName = Ventura; }; idleTime = 1200; }\n"
+    ),
+    ("ioreg", "-c", "IOHIDSystem"): '"HIDIdleTime" = 5000000000\n',
     ("memory_pressure", "-Q"): "System-wide memory free percentage: 42%\n",
     ("vm_stat",): (
         "Mach Virtual Memory Statistics: (page size of 4096 bytes)\n"
@@ -75,6 +91,9 @@ COMMAND_FIELDS = {
     "pmset_batt": ("power_source", "battery_percent", "battery_state"),
     "pmset": ("low_power_mode",),
     "pmset_assertions": ("display_sleep_prevented",),
+    "pmset_systemstate": ("display_power_state",),
+    "screensaver_defaults": ("screensaver_delay_s",),
+    "ioreg_hid_idle": ("hid_idle_s",),
     "system_profiler_spdisplays": (
         "display",
     ),
@@ -87,6 +106,9 @@ COMMANDS_BY_ERROR_KEY = {
     "pmset_batt": ("pmset", "-g", "batt"),
     "pmset": ("pmset", "-g"),
     "pmset_assertions": ("pmset", "-g", "assertions"),
+    "pmset_systemstate": ("pmset", "-g", "systemstate"),
+    "screensaver_defaults": ("defaults", "-currentHost", "read", "com.apple.screensaver"),
+    "ioreg_hid_idle": ("ioreg", "-c", "IOHIDSystem"),
     "system_profiler_spdisplays": ("system_profiler", "SPDisplaysDataType", "-json"),
     "uptime": ("uptime",),
     "sw_vers": ("sw_vers",),
@@ -99,6 +121,103 @@ def successful_fake_run(command, **kwargs):
 
 
 class EnvironmentSnapshotTests(unittest.TestCase):
+    def test_quiet_mac_shell_accepts_live_capabilities_are_spelling(self) -> None:
+        pattern = r"Current System Capabilities( are)?:.*Graphics"
+        script = (
+            Path(__file__).resolve().parents[1] / "scripts" / "quiet_mac_prep.sh"
+        ).read_text(encoding="utf-8")
+        self.assertIn(pattern, script)
+        result = subprocess.run(
+            ["bash", "-c", f"grep -E {shlex.quote(pattern)} >/dev/null"],
+            input="Current System Capabilities are: CPU Graphics Audio Network\n",
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0)
+
+    def test_shared_policy_evaluator_fails_closed_but_never_gates_load_average(self) -> None:
+        snapshot = {
+            "power_source": "AC Power",
+            "power": {"external_connected": True},
+            "low_power_mode": False,
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "thermal_pressure": "nominal",
+            "load_average_1m": 999.0,
+        }
+        clean = evaluate_environment_policy(snapshot)
+        self.assertTrue(clean["eligible"])
+        self.assertFalse(clean["load_average_evidence"]["admission_gate"])
+
+        unknown = dict(snapshot)
+        unknown["screensaver_engaged"] = None
+        blocked = evaluate_environment_policy(unknown)
+        self.assertFalse(blocked["eligible"])
+        finding = next(
+            row for row in blocked["findings"] if row["field"] == "screensaver_engaged"
+        )
+        self.assertEqual(finding["status"], "unknown")
+        self.assertNotEqual(clean["snapshot_sha256"], blocked["snapshot_sha256"])
+
+    def test_display_and_screensaver_probes_parse_defensively(self) -> None:
+        outputs = {
+            **SUCCESS_OUTPUTS,
+            ("system_profiler", "SPDisplaysDataType", "-json"): """{
+              "SPDisplaysDataType": [{"spdisplays_ndrvs": [{
+                "spdisplays_online": "spdisplays_yes",
+                "spdisplays_connection_type": "spdisplays_internal"
+              }]}]
+            }""",
+            ("pmset", "-g", "systemstate"): (
+                "Current System Capabilities are: CPU Graphics Audio Network \n"
+                "Current Power State: 4\n"
+            ),
+            ("defaults", "-currentHost", "read", "com.apple.screensaver"): (
+                "{ moduleDict = { moduleName = Ventura; }; }\n"
+            ),
+            ("ioreg", "-c", "IOHIDSystem"): '"HIDIdleTime" = 1200000000001\n',
+        }
+
+        with patch(
+            "joulewise.environment.subprocess.run",
+            side_effect=lambda command, **kwargs: completed(
+                command, outputs[tuple(command)]
+            ),
+        ):
+            snapshot = collect_environment_snapshot()
+
+        self.assertEqual(snapshot["display_power_state"], "any_awake")
+        self.assertEqual(snapshot["screensaver_delay_s"], 1200)
+        self.assertGreater(snapshot["hid_idle_s"], 1200)
+        self.assertIs(snapshot["screensaver_engaged"], True)
+
+    def test_missing_screensaver_defaults_domain_uses_macos_default(self) -> None:
+        def fake_run(command, **kwargs):
+            if tuple(command) == (
+                "defaults",
+                "-currentHost",
+                "read",
+                "com.apple.screensaver",
+            ):
+                return subprocess.CompletedProcess(
+                    command,
+                    1,
+                    stdout="",
+                    stderr=(
+                        "Domain com.apple.screensaver does not exist\n"
+                    ),
+                )
+            return successful_fake_run(command, **kwargs)
+
+        with patch("joulewise.environment.subprocess.run", side_effect=fake_run):
+            snapshot = collect_environment_snapshot()
+
+        self.assertNotIn("screensaver_defaults", snapshot["errors"])
+        self.assertEqual(snapshot["screensaver_delay_s"], 1200)
+        self.assertIsNone(snapshot["screensaver_module"])
+        self.assertIs(snapshot["screensaver_engaged"], False)
+
     def test_collect_environment_snapshot_records_present_and_absent_package_versions(self) -> None:
         def fake_version(distribution: str) -> str:
             if distribution == "mlx":
@@ -471,6 +590,9 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         for key, value in snapshot.items():
             if key == "errors":
                 continue
+            if key == "thermal_probe_reason":
+                self.assertEqual(value, "not_found")
+                continue
             if key == "clock_sync":
                 self.assertEqual(value["status"], "limited_without_admin")
                 self.assertFalse(value["timed_running"])
@@ -494,6 +616,10 @@ class EnvironmentSnapshotTests(unittest.TestCase):
                 "pmset_batt": "not_found",
                 "pmset": "not_found",
                 "pmset_assertions": "not_found",
+                "pmset_systemstate": "not_found",
+                "screensaver_defaults": "not_found",
+                "ioreg_hid_idle": "not_found",
+                "pmset_therm": "not_found",
                 "memory_pressure": "not_found",
                 "vm_stat": "not_found",
                 "sysctl_hw_memsize": "not_found",
@@ -519,6 +645,9 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         for key, value in snapshot.items():
             if key == "errors":
                 continue
+            if key == "thermal_probe_reason":
+                self.assertEqual(value, "failed")
+                continue
             if key == "clock_sync":
                 self.assertEqual(value["status"], "limited_without_admin")
                 self.assertFalse(value["timed_running"])
@@ -542,6 +671,10 @@ class EnvironmentSnapshotTests(unittest.TestCase):
                 "pmset_batt": "failed",
                 "pmset": "failed",
                 "pmset_assertions": "failed",
+                "pmset_systemstate": "failed",
+                "screensaver_defaults": "failed",
+                "ioreg_hid_idle": "failed",
+                "pmset_therm": "failed",
                 "memory_pressure": "failed",
                 "vm_stat": "failed",
                 "sysctl_hw_memsize": "failed",
@@ -629,6 +762,12 @@ class EnvironmentSnapshotTests(unittest.TestCase):
         self.assertEqual(snapshot["load_average_5m"], 0.20)
         self.assertEqual(snapshot["load_average_15m"], 0.30)
         self.assertEqual(snapshot["product_version"], "15.5")
+        self.assertEqual(snapshot["display_power_state"], "unknown")
+        self.assertEqual(snapshot["screensaver_module"], "Ventura")
+        self.assertEqual(snapshot["screensaver_delay_s"], 1200)
+        self.assertEqual(snapshot["hid_idle_s"], 5.0)
+        self.assertIs(snapshot["screensaver_engaged"], False)
+        self.assertEqual(snapshot["thermal_pressure"], "nominal")
         self.assertEqual(snapshot["errors"], {})
 
 

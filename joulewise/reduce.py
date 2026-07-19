@@ -631,7 +631,51 @@ def _window_evidence_precheck(
             )
             for (block_id, level_id), intervals in sorted(level_windows.items())
         }
+    _apply_environment_claim_barrier(result, metadata)
     return result
+
+
+def _environment_claim_reasons(metadata: dict[str, Any]) -> list[str]:
+    reasons: list[str] = []
+    admission = metadata.get("environment_admission")
+    if (
+        isinstance(admission, dict)
+        and admission.get("claim_reason") == "environment_admission_failed"
+    ):
+        reasons.append("environment_admission_failed")
+    preflight = metadata.get("campaign_environment_preflight")
+    if isinstance(preflight, dict) and isinstance(preflight.get("override"), dict):
+        reasons.append("environment_override")
+    return reasons
+
+
+def _apply_environment_claim_barrier(
+    prechecks: dict[str, Any], metadata: dict[str, Any]
+) -> None:
+    """Stamp unwaivable reasons on gross, idle-subtracted, and throughput claims."""
+
+    reasons = _environment_claim_reasons(metadata)
+    if not reasons:
+        return
+    for key in ("gross_request", "gross_batch_group", "idle_subtracted_request"):
+        gate = prechecks.get(key)
+        if not isinstance(gate, dict):
+            continue
+        existing = gate.get("reasons")
+        merged = set(existing if isinstance(existing, list) else [])
+        merged.update(reasons)
+        gate["reasons"] = sorted(merged)
+        gate["eligible"] = False
+    prechecks["throughput"] = {
+        "eligible": False,
+        "reasons": sorted(reasons),
+        "metric_names": [
+            "throughput_tokens_s",
+            "inter_token_throughput_tokens_s",
+            "decode_phase_output_throughput_tokens_s",
+        ],
+        "universal_claim_barrier": True,
+    }
 
 
 def _windows_evidence_precheck(
@@ -1448,6 +1492,7 @@ def _window_evidence_precheck_v060(
                 "window_count": len(windows),
                 "windows": windows,
             }
+    _apply_environment_claim_barrier(result, metadata)
     return result
 
 

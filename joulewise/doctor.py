@@ -21,7 +21,10 @@ from pathlib import Path
 from typing import Any, Sequence
 
 from joulewise.adapters.powermetrics import POWER_METRICS, SAMPLERS
-from joulewise.environment import collect_environment_snapshot, probe_thermal_pressure
+from joulewise.environment import (
+    collect_environment_snapshot,
+    evaluate_environment_policy,
+)
 from joulewise.schemas import BenchmarkConfig, ConfigKeyWarning
 
 
@@ -69,6 +72,12 @@ class DoctorProbeFixture:
     load_average_1m: float | None
     display_active_count: int | None
     environment_errors: dict[str, str]
+    external_connected: bool | None = None
+    display_power_state: str | None = None
+    screensaver_engaged: bool | None = None
+    screensaver_module: str | None = None
+    screensaver_delay_s: float | None = None
+    hid_idle_s: float | None = None
 
 
 def _package_version(distribution: str) -> dict[str, str | bool | None]:
@@ -122,7 +131,8 @@ def collect_live_probe(
     else:
         sudo_ok, sudo_reason = False, "powermetrics_not_found"
 
-    thermal_pressure, thermal_reason = probe_thermal_pressure(timeout_s=timeout_s)
+    thermal_pressure = environment.get("thermal_pressure")
+    thermal_reason = environment.get("thermal_probe_reason")
 
     destination_text = str(backup_destination) if backup_destination is not None else None
     backup_present: bool | None = None
@@ -169,6 +179,16 @@ def collect_live_probe(
             display.get("active_displays") if isinstance(display, dict) else None
         ),
         environment_errors=dict(environment.get("errors", {})),
+        external_connected=(
+            environment.get("power", {}).get("external_connected")
+            if isinstance(environment.get("power"), dict)
+            else None
+        ),
+        display_power_state=environment.get("display_power_state"),
+        screensaver_engaged=environment.get("screensaver_engaged"),
+        screensaver_module=environment.get("screensaver_module"),
+        screensaver_delay_s=environment.get("screensaver_delay_s"),
+        hid_idle_s=environment.get("hid_idle_s"),
     )
 
 
@@ -485,10 +505,41 @@ def build_doctor_report(
     quiet_reasons = [
         "doctor cannot certify machine quietness; stop agents and unrelated workloads before measurement"
     ]
-    if probe.low_power_mode is True:
-        quiet_reasons.append("low power mode is enabled")
-    if probe.power_source is not None and probe.power_source != "AC Power":
-        quiet_reasons.append(f"power source is {probe.power_source}")
+    environment_evaluation = evaluate_environment_policy(
+        {
+            "power_source": probe.power_source,
+            "power": {"external_connected": probe.external_connected},
+            "low_power_mode": probe.low_power_mode,
+            "display_power_state": probe.display_power_state,
+            "screensaver_engaged": probe.screensaver_engaged,
+            "screensaver_module": probe.screensaver_module,
+            "screensaver_delay_s": probe.screensaver_delay_s,
+            "hid_idle_s": probe.hid_idle_s,
+            "thermal_pressure": probe.thermal_pressure,
+            "load_average_1m": probe.load_average_1m,
+        }
+    )
+    finding_messages = {
+        "power_source_not_ac": "power source is not AC Power",
+        "external_power_not_connected": "external power is not connected",
+        "low_power_mode_enabled": "low power mode is enabled",
+        "display_not_all_asleep": "online displays are not all asleep",
+        "screensaver_engaged": "screensaver is engaged",
+        "thermal_not_nominal": "thermal pressure is not nominal",
+    }
+    for finding in environment_evaluation["findings"]:
+        if finding["status"] == "pass":
+            continue
+        if (
+            finding["code"] == "power_source_not_ac"
+            and finding["actual"] is not None
+        ):
+            message = f"power source is {finding['actual']}"
+        else:
+            message = finding_messages[finding["code"]]
+        if finding["status"] == "unknown":
+            message += " (probe unknown)"
+        quiet_reasons.append(message)
     if (
         probe.load_average_1m is not None
         and probe.logical_cpu_count is not None
@@ -511,6 +562,13 @@ def build_doctor_report(
                 "load_average_1m": probe.load_average_1m,
                 "logical_cpu_count": probe.logical_cpu_count,
                 "display_active_count": probe.display_active_count,
+                "display_power_state": probe.display_power_state,
+                "external_connected": probe.external_connected,
+                "screensaver_engaged": probe.screensaver_engaged,
+                "screensaver_module": probe.screensaver_module,
+                "screensaver_delay_s": probe.screensaver_delay_s,
+                "hid_idle_s": probe.hid_idle_s,
+                "environment_policy_evaluation": environment_evaluation,
                 "environment_probe_errors": probe.environment_errors,
             },
         )

@@ -1,6 +1,14 @@
 # JouleWise Run State
 
-Last updated: 2026-07-17 (SESSION ARC COMPLETE: Window A floors
+Last updated: 2026-07-18 (late). NEXT SESSION: the D-077 adversarial arc
+is COMPLETE and landed as PR #77 (`impl/env-guard-cooldown` at
+`ad0920b`, fix rounds 3-8; see the 2026-07-18 D-077 checkpoint below).
+Start by checking PR #77 CI + Ed's merge decision; after merge, the
+[QUIET-MAC] resume items are the display-asleep probe capture during
+quiet-window prep and the suite ABBA re-calibration under the new guard
+(D-076 comparative floor cells stay caveated until re-run).
+
+Prior arc (2026-07-17, SESSION ARC COMPLETE: Window A floors
 published (222 strict-valid bundles; P2-015 partial pending P2-039
 artifact + P2-037 adjudication); advisor brief delivered
 (docs/advisor_briefs/); Ed DEPLOYED the README-first site + Learn
@@ -76,7 +84,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-17). Latest report: [Window A: shakedown+floors+brief, exploratory block (OLMoE/Qwen3-4B/122B), D-075 intake, site deployed](docs/run_reports/2026-07-17-window-a-floors.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-07-18). Latest report: [D-077 fix rounds 3-8: anchor-boundary hardening, adversarial arc closed, PR #77 open](docs/run_reports/2026-07-18-d077-fix-rounds.md).
 
 ### [ED-EXTERNAL]
 
@@ -92,7 +100,91 @@ Source of truth for work selection: [state kernel](docs/process/state_kernel.jso
 
 <!-- END GENERATED: state-kernel run-state-intake -->
 
-## Superseded stop card (C-028)
+## CHECKPOINT 2026-07-18 (late): D-077 adversarial arc complete, PR #77 open
+
+The RESUME list from the 2026-07-17 checkpoint is fully executed. The
+relaunched execution-lens review, fix rounds 1-2, and their delta
+re-audits had already run earlier on 2026-07-18 (commits `1aebf14`,
+`6d80039`); this session closed the surviving P1 (child accepted any
+JSON object as the frozen cooldown anchor) plus every finding from four
+further delta re-audits, as fix rounds 3-8 in commit `ad0920b`:
+canonical anchor validator (`joulewise/cooldown_anchor.py`) enforced
+fail-closed at parent/CLI/controller boundaries; collision-safe,
+crash-atomic, flock-serialized rejection-verdict custody
+(`experiments/rejections/`); physical-domain baseline validation (the
+`inf`-anchor fail-open gate is closed); discriminating process-race
+regression. Suite green lead-side at every round boundary, final
+`Ran 1746 tests`, `OK (skipped=12)`. Awake-half live probe validation
+passed on real hardware (zero probe errors); the Ventura screensaver is
+now disabled on the machine (`idleTime = 0`). PR #77 carries the gate
+narrative; merge is Ed's call. Full record:
+`docs/run_reports/2026-07-18-d077-fix-rounds.md`. Tooling: codex-run-v3
+xhigh review-genre sessions ended with null final messages 4x
+(bridge-resume recovered each; personal-tooling defect, recorded in the
+run report and the global codex-delegation skill field notes, not the
+repo queue).
+
+## CHECKPOINT 2026-07-18: Claude script bridge runs in the pet's app task
+
+The actual Claude Code fallback route is `scripts/codex-bridge`, not the MCP
+server for recent audited work. The wrapper now sends `new` and `review` turns
+through a dedicated app-owned Codex desktop task when the local host id is
+configured. This is the same local-conversation state the native pet consumes;
+the prior observer-only diagnosis was incorrect because the pet never reads
+`~/.codex/claude-spawned/index.jsonl`. A live Sol/high smoke appeared in the
+Codex app as thread `019f77a6-3612-7332-9f5e-be9fbde56be5`, turn
+`019f77a9-2827-7de1-accf-ac2eda21927e`, and returned
+`JOULEWISE_NATIVE_PET_BRIDGE_OK` through the script. Adaptive effort remains
+unchanged: `high` fallback/default, `xhigh` only on named hard-task triggers,
+and `ultra` only for sessions that must spawn subagents. Full record:
+`docs/run_reports/2026-07-18-claude-codex-pet-observer.md`.
+
+Committed 2026-07-18 on `impl/env-guard-cooldown` (after the D-077
+packet boundary `6d80039`) with a lead execution review at the bench:
+IPC socket ownership/permission checks, PID-checked host-task lock,
+interrupt-on-terminate, no-network sandbox policy, and one-hop rule all
+verified in `scripts/codex-app-bridge.mjs`; real-socket fake-router
+tests plus observer lifecycle tests included; canonical suite green
+lead-side (`Ran 1722 tests`, `OK (skipped=12)`). The same commit
+carries the doctor-driven CLAUDE.md trims (global + repo; content
+deduplicated into `.claude/skills/codex/SKILL.md`, which is the
+operating home) and stamp-only `docs/site/*.html` provenance refresh.
+
+## CHECKPOINT 2026-07-17 (late session): env-guard branch open, review pending
+
+Window A floors contamination diagnosed from primary data: macOS Ventura
+*video* screensaver on an awake display contaminated 43/50 suite-calibration
+bundles (~+30% energy, −11% throughput; engage at HID-idle +20 min, dismiss on
+unlock — pmset assertion log corroborated to the second). The six "low"
+su-ABBA runs (18:16–18:36 UTC) are the only CLEAN suite runs; comparative
+suite floors (4.923 J item / 24.62 J suite) are transition artifacts. The
+professor's power-source hypothesis is refuted (AC/140 W/100% throughout).
+Details: memory note + `docs/run_reports/2026-07-17-environment-guard.md`.
+
+Branch `impl/env-guard-cooldown` (pushed, commit e2813ee) holds the D-077
+response: environment-guard preflight (+`--arm-quiet-mode`), per-run idle
+admission gate, cooldown v2, unwaivable `environment_admission_failed` claim
+barrier, policy sidecars, contract/doc updates. Design consult (Sol xhigh,
+thread 019f7356-32d3) adjudicated and encoded; implementation by Sol xhigh
+(thread 019f7362-6627, resumed via codex-bridge after an MCP transport
+timeout); session-close scope check SCOPE_OK; full suite green lead-side
+(OK, 12 skips). Lead bench fix included: `pmset -g systemstate` parser now
+accepts the live "Capabilities are:" form (was null → fail-closed on real
+hardware); fixtures pinned to verbatim live output.
+
+RESUME (in order):
+1. Relaunch the adversarial review round (was stopped mid-run at checkpoint):
+   fresh read-only Sol xhigh, execution lens, over `git diff main...impl/env-guard-cooldown`
+   (prompt shape in `.codex-bridge/` prompt snapshots); lead holds the
+   contract lens (done for cooldown_gate/claim-barrier/anchor hunks).
+2. Triage findings → fix rounds (defect-shaped regressions) → DELTA RE-AUDIT.
+3. Live-validate flagged probes during next quiet-window prep:
+   `pmset -g systemstate` display-asleep form + screensaver-engaged probe
+   while a screensaver is actually running (run report flags
+   `live_validation_provisional`).
+4. PR per operation-loop §5 gate shape; then re-run suite ABBA calibration
+   under the new guard ([QUIET-MAC], needs Ed) — floors D-076 figures for
+   suite comparative cells must be recomputed/caveated pending re-run.
 
 Status: **CLEARED 2026-07-11.** Every clearance criterion met: all
 checkpoint-#4 resume items executed (P2-044 fix+merge #55; P2-037
@@ -163,6 +255,8 @@ work-selection authority. Use the generated region above for selection.
 Parenthetical states below are historical at each report's head; they are not
 current restart instructions. Current state is the C-028 block above.
 
+- 2026-07-18 Claude Code script bridge + native pet integration:
+  `docs/run_reports/2026-07-18-claude-codex-pet-observer.md`
 - 2026-07-13 Bridge v1: bridge-protocol/v1 contract + scripts/bridge tooling
   (PR #64; co-designed with Sol over the bridge itself):
   `docs/run_reports/2026-07-13-bridge-v1.md`

@@ -19,6 +19,10 @@ Defaults: model gpt-5.6-sol, reasoning effort high. Callers select xhigh for
 hard individual work or ultra only for sessions that must spawn subagents by
 setting CODEX_REASONING_EFFORT deliberately.
 
+When .codex-bridge/app-host-thread-id exists, new and review run their real
+turn in that Codex desktop task so the native pet sees app-owned activity.
+Set CODEX_APP_BRIDGE=off to require the standalone CLI transport.
+
 Governed delegated runs follow docs/contracts/bridge_protocol.md: the prompt
 begins with a BRIDGE_TASK_V1 header; audited runs that emit a full
 claude-codex-report/v1 body are exempt from the bridge-report/v1 trailer.
@@ -53,6 +57,85 @@ prompt_preview() {
   fi
 }
 
+observer_emit() {
+  local event="$1"
+  local status_text="$2"
+  local session_id="$3"
+  local message="$4"
+  local timestamp preview
+
+  mkdir -p "$observer_dir" 2>/dev/null || true
+  timestamp="$(now_utc)"
+  preview="$(prompt_preview)"
+  {
+    printf '{"schema_version":1'
+    printf ',"event":%s' "$(json_quote "$event")"
+    printf ',"timestamp":%s' "$(json_quote "$timestamp")"
+    printf ',"run_key":%s' "$(json_quote "$run_id")"
+    printf ',"session_id":%s' "$(json_quote "$session_id")"
+    printf ',"status":%s' "$(json_quote "$status_text")"
+    printf ',"message":%s' "$(json_quote "$message")"
+    printf ',"cwd":%s' "$(json_quote "$repo_root")"
+    printf ',"out":%s' "$(json_quote "$response_file")"
+    printf ',"log":%s' "$(json_quote "$log_file")"
+    printf ',"status_file":%s' "$(json_quote "$status_file")"
+    printf ',"observer_file":%s' "$(json_quote "$observer_file")"
+    printf ',"timeout_s":%s' "$(json_quote "")"
+    printf ',"sandbox":%s' "$(json_quote "$observer_sandbox")"
+    printf ',"resume":%s' "$(json_quote "$observer_resume")"
+    printf ',"codex_pid":%s' "$(json_quote "$codex_pid")"
+    printf ',"prompt_preview":%s' "$(json_quote "$preview")"
+    printf ',"transport":%s' "$(json_quote "$bridge_transport")"
+    printf ',"caller":%s' "$(json_quote "claude-code")"
+    printf '}\n'
+  } >> "$observer_index" 2>/dev/null || true
+  {
+    printf '{"schema_version":1'
+    printf ',"event":%s' "$(json_quote "$event")"
+    printf ',"timestamp":%s' "$(json_quote "$timestamp")"
+    printf ',"run_key":%s' "$(json_quote "$run_id")"
+    printf ',"session_id":%s' "$(json_quote "$session_id")"
+    printf ',"status":%s' "$(json_quote "$status_text")"
+    printf ',"message":%s' "$(json_quote "$message")"
+    printf ',"cwd":%s' "$(json_quote "$repo_root")"
+    printf ',"out":%s' "$(json_quote "$response_file")"
+    printf ',"log":%s' "$(json_quote "$log_file")"
+    printf ',"status_file":%s' "$(json_quote "$status_file")"
+    printf ',"timeout_s":%s' "$(json_quote "")"
+    printf ',"sandbox":%s' "$(json_quote "$observer_sandbox")"
+    printf ',"resume":%s' "$(json_quote "$observer_resume")"
+    printf ',"codex_pid":%s' "$(json_quote "$codex_pid")"
+    printf ',"prompt_preview":%s' "$(json_quote "$preview")"
+    printf ',"transport":%s' "$(json_quote "$bridge_transport")"
+    printf ',"caller":%s' "$(json_quote "claude-code")"
+    printf '}\n'
+  } >> "$observer_file" 2>/dev/null || true
+}
+
+observer_session_ready_if_needed() {
+  local session_id="$1"
+  [[ -n "$session_id" ]] || return 0
+  if [[ ! -f "$observer_file" ]] ||
+    ! grep -Fq "\"session_id\":\"$session_id\"" "$observer_file"; then
+    observer_emit "SESSION_READY" "RUNNING" "$session_id" "session id captured"
+  fi
+}
+
+observer_watch_session_id() {
+  local attempt session_id
+  for ((attempt = 0; attempt < 120; attempt += 1)); do
+    session_id="$(session_id_from_log || true)"
+    if [[ -n "$session_id" ]]; then
+      observer_session_ready_if_needed "$session_id"
+      return 0
+    fi
+    kill -0 "$codex_pid" 2>/dev/null || return 0
+    sleep 1
+  done
+  observer_emit "SESSION_PENDING" "RUNNING" "" \
+    "session id not found within observer window"
+}
+
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 bridge_dir="${CODEX_BRIDGE_DIR:-"$repo_root/.codex-bridge"}"
 prompt_dir="$bridge_dir/prompts"
@@ -67,6 +150,17 @@ resume_model_args=(-c "model=$codex_model" -c "model_reasoning_effort=$codex_eff
 last_message="$bridge_dir/last-message.md"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 manifest_file="$bridge_dir/invocation_manifest.jsonl"
+app_bridge_helper="$repo_root/scripts/codex-app-bridge.mjs"
+app_host_file="${CODEX_APP_BRIDGE_HOST_FILE:-$bridge_dir/app-host-thread-id}"
+app_bridge_enabled=0
+app_host_thread_id=""
+bridge_transport="cli-bridge"
+if [[ "${CODEX_APP_BRIDGE:-auto}" != "off" && -s "$app_host_file" && -f "$app_bridge_helper" ]]; then
+  app_host_thread_id="$(tr -d '[:space:]' < "$app_host_file")"
+  if [[ -n "$app_host_thread_id" ]]; then
+    app_bridge_enabled=1
+  fi
+fi
 
 if [[ $# -lt 1 ]]; then
   usage
@@ -80,10 +174,43 @@ log_file="$bridge_dir/$run_id.log"
 status_file="$bridge_dir/$run_id.status"
 prompt_file="$prompt_dir/$run_id.prompt.txt"
 response_file="$response_dir/$run_id.response.md"
+observer_dir="${CODEX_OBSERVER_DIR:-${CODEX_HOME:-"$HOME/.codex"}/claude-spawned}"
+observer_index="$observer_dir/index.jsonl"
+observer_file="$bridge_dir/$run_id.codex-observer.jsonl"
 target_session_id=""
 prompt_source="none"
 prompt_arg_count=0
 started_at="$(now_utc)"
+observer_sandbox="workspace-write"
+observer_resume="0"
+codex_pid=""
+tee_pid=""
+observer_watch_pid=""
+bridge_pipe=""
+observer_started=0
+observer_finished=0
+
+if [[ "$mode" == "review" ]]; then
+  observer_sandbox="read-only"
+elif [[ "$mode" == "resume" ]]; then
+  observer_resume="1"
+fi
+
+cleanup_bridge() {
+  local rc=$?
+  if [[ "$observer_started" == "1" && "$observer_finished" == "0" ]]; then
+    [[ -n "$codex_pid" ]] && kill "$codex_pid" 2>/dev/null || true
+    [[ -n "$tee_pid" ]] && kill "$tee_pid" 2>/dev/null || true
+    [[ -n "$observer_watch_pid" ]] && kill "$observer_watch_pid" 2>/dev/null || true
+    [[ -n "$bridge_pipe" ]] && rm -f "$bridge_pipe"
+    printf 'FAILED rc=%s\n' "$rc" > "$status_file" 2>/dev/null || true
+    observer_session_ready_if_needed "$(session_id_from_log || true)"
+    observer_emit "FINISHED" "FAILED rc=$rc" "$(session_id_from_log || true)" \
+      "codex bridge wrapper exited before normal completion"
+    observer_finished=1
+  fi
+}
+trap cleanup_bridge EXIT
 
 write_prompt_from_args() {
   prompt_source="argv"
@@ -108,14 +235,77 @@ run_codex() {
   shift
   local rc
 
+  bridge_pipe="$bridge_dir/.$run_id.output.pipe"
+  rm -f "$bridge_pipe"
+  mkfifo "$bridge_pipe"
+  tee "$log_file" < "$bridge_pipe" &
+  tee_pid=$!
+
   set +e
   if [[ -n "$stdin_file" ]]; then
-    (cd "$repo_root" && "$codex_bin" "$@" < "$stdin_file") 2>&1 | tee "$log_file"
-    rc=${PIPESTATUS[0]}
+    (cd "$repo_root" && exec "$codex_bin" "$@" < "$stdin_file") \
+      > "$bridge_pipe" 2>&1 &
   else
-    (cd "$repo_root" && "$codex_bin" "$@") 2>&1 | tee "$log_file"
-    rc=${PIPESTATUS[0]}
+    (cd "$repo_root" && exec "$codex_bin" "$@") > "$bridge_pipe" 2>&1 &
   fi
+  codex_pid=$!
+  printf 'RUNNING\n' > "$status_file"
+  observer_started=1
+  observer_emit "RUNNING" "RUNNING" "" "codex bridge process launched"
+  if [[ -n "$target_session_id" && "$target_session_id" != "--last" ]]; then
+    observer_session_ready_if_needed "$target_session_id"
+  fi
+  observer_watch_session_id &
+  observer_watch_pid=$!
+
+  wait "$codex_pid"
+  rc=$?
+  wait "$tee_pid" 2>/dev/null || true
+  kill "$observer_watch_pid" 2>/dev/null || true
+  wait "$observer_watch_pid" 2>/dev/null || true
+  observer_session_ready_if_needed "$(session_id_from_log || true)"
+  rm -f "$bridge_pipe"
+  bridge_pipe=""
+  set -e
+  return "$rc"
+}
+
+run_app_codex() {
+  local rc
+
+  bridge_transport="desktop-thread-follower"
+  target_session_id="$app_host_thread_id"
+  bridge_pipe="$bridge_dir/.$run_id.output.pipe"
+  rm -f "$bridge_pipe"
+  mkfifo "$bridge_pipe"
+  tee "$log_file" < "$bridge_pipe" &
+  tee_pid=$!
+
+  set +e
+  (
+    cd "$repo_root"
+    exec node "$app_bridge_helper" \
+      --thread-id "$app_host_thread_id" \
+      --prompt-file "$prompt_file" \
+      --output-file "$response_file" \
+      --cwd "$repo_root" \
+      --model "$codex_model" \
+      --effort "$codex_effort" \
+      --sandbox "$observer_sandbox" \
+      --lock-file "$bridge_dir/app-host-thread.lock"
+  ) > "$bridge_pipe" 2>&1 &
+  codex_pid=$!
+  printf 'RUNNING\n' > "$status_file"
+  observer_started=1
+  observer_emit "RUNNING" "RUNNING" "$app_host_thread_id" \
+    "Codex desktop bridge turn launched"
+  observer_session_ready_if_needed "$app_host_thread_id"
+
+  wait "$codex_pid"
+  rc=$?
+  wait "$tee_pid" 2>/dev/null || true
+  rm -f "$bridge_pipe"
+  bridge_pipe=""
   set -e
   return "$rc"
 }
@@ -144,11 +334,15 @@ finish_invocation() {
   log_sha="$(sha256_file "$log_file")"
   session_id="$(session_id_from_log)"
   preview="$(prompt_preview)"
+  observer_session_ready_if_needed "$session_id"
+  observer_emit "FINISHED" "$status" "$session_id" "codex bridge process exited"
+  observer_finished=1
 
   {
     printf '{"schema_version":1'
     printf ',"run_id":%s' "$(json_quote "$run_id")"
     printf ',"tool":%s' "$(json_quote "scripts/codex-bridge")"
+    printf ',"transport":%s' "$(json_quote "$bridge_transport")"
     printf ',"mode":%s' "$(json_quote "$mode")"
     printf ',"started_at":%s' "$(json_quote "$started_at")"
     printf ',"finished_at":%s' "$(json_quote "$finished_at")"
@@ -171,6 +365,8 @@ finish_invocation() {
     printf ',"log_path":%s' "$(json_quote "$log_file")"
     printf ',"log_sha256":%s' "$(json_quote "$log_sha")"
     printf ',"status_file":%s' "$(json_quote "$status_file")"
+    printf ',"observer_file":%s' "$(json_quote "$observer_file")"
+    printf ',"observer_index":%s' "$(json_quote "$observer_index")"
     printf ',"consumed_by":%s' "$(json_quote "")"
     printf ',"disposition":%s' "$(json_quote "pending")"
     printf ',"commit_or_pr":%s' "$(json_quote "")"
@@ -189,13 +385,29 @@ run_and_record() {
   return "$rc"
 }
 
+run_app_and_record() {
+  local rc
+  if run_app_codex; then
+    rc=0
+  else
+    rc=$?
+  fi
+  finish_invocation "$rc"
+  return "$rc"
+}
+
 case "$mode" in
   new)
     if [[ $# -gt 0 ]]; then
       write_prompt_from_args "$@"
-      run_and_record "" exec "${fresh_model_args[@]}" -C "$repo_root" -s workspace-write -o "$response_file" "$*"
     else
       write_prompt_from_stdin
+    fi
+    if [[ "$app_bridge_enabled" == "1" ]]; then
+      run_app_and_record
+    elif [[ "$prompt_source" == "argv" ]]; then
+      run_and_record "" exec "${fresh_model_args[@]}" -C "$repo_root" -s workspace-write -o "$response_file" "$*"
+    else
       run_and_record "$prompt_file" exec "${fresh_model_args[@]}" -C "$repo_root" -s workspace-write -o "$response_file" -
     fi
     ;;
@@ -230,9 +442,14 @@ case "$mode" in
   review)
     if [[ $# -gt 0 ]]; then
       write_prompt_from_args "$@"
-      run_and_record "" exec "${fresh_model_args[@]}" review -o "$response_file" "$*"
     else
       write_prompt_from_stdin
+    fi
+    if [[ "$app_bridge_enabled" == "1" ]]; then
+      run_app_and_record
+    elif [[ "$prompt_source" == "argv" ]]; then
+      run_and_record "" exec "${fresh_model_args[@]}" review -o "$response_file" "$*"
+    else
       run_and_record "$prompt_file" exec "${fresh_model_args[@]}" review -o "$response_file" -
     fi
     ;;

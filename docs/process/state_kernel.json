@@ -3,8 +3,8 @@
   "active_stop_card": null,
   "authority": "AUTHORITATIVE_WORK_SELECTION_STATE",
   "latest_report": {
-    "label": "Window A: shakedown+floors+brief, exploratory block (OLMoE/Qwen3-4B/122B), D-075 intake, site deployed",
-    "path": "docs/run_reports/2026-07-17-window-a-floors.md"
+    "label": "D-077 fix rounds 3-8: anchor-boundary hardening, adversarial arc closed, PR #77 open",
+    "path": "docs/run_reports/2026-07-18-d077-fix-rounds.md"
   },
   "schema": "docs/process/state_kernel.schema.json",
   "schema_version": 3,
@@ -2220,5 +2220,5 @@
       "stop_card": null
     }
   },
-  "updated": "2026-07-17"
+  "updated": "2026-07-18"
 }

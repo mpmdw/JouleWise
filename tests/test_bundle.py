@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import dataclasses
 import hashlib
 import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -21,6 +24,7 @@ from joulewise.bundle import (
     generate_run_id,
     sanitize_id_component,
     write_experiment_manifest,
+    write_experiment_rejection_verdict,
     write_derived_artifact,
     write_raw_artifact,
 )
@@ -896,7 +900,7 @@ class ExperimentManifestTests(unittest.TestCase):
         leftovers = [
             entry.name
             for entry in (self.runs_root / "experiments").iterdir()
-            if entry.name != path.name
+            if entry.name not in {path.name, ".custody.lock"}
         ]
         self.assertEqual(leftovers, [])
 
@@ -971,8 +975,505 @@ class ExperimentManifestTests(unittest.TestCase):
         write_experiment_manifest(
             self.runs_root, {"experiment_id": "exp-001", "members": ["exp-001__r1"]}
         )
-        entries = sorted(p.name for p in (self.runs_root / "experiments").iterdir())
+        entries = sorted(
+            p.name
+            for p in (self.runs_root / "experiments").iterdir()
+            if p.name != ".custody.lock"
+        )
         self.assertEqual(entries, ["exp-001.json"])
+        self.assertTrue(
+            (self.runs_root / "experiments" / ".custody.lock").is_file()
+        )
+
+    def test_rejection_collision_preserves_manifest_and_uses_unique_artifacts(
+        self,
+    ) -> None:
+        manifest_path = write_experiment_manifest(
+            self.runs_root,
+            {"experiment_id": "exp-001", "members": ["exp-001__r1"]},
+        )
+        original_bytes = manifest_path.read_bytes()
+        rejection = {
+            "experiment_id": "exp-001",
+            "members": [],
+            "terminal_verdict": {
+                "schema_version": "joulewise.cooldown_anchor_verdict.v1",
+                "record_type": "cooldown_anchor_verdict",
+                "decision": "fail_closed",
+            },
+        }
+
+        first = write_experiment_rejection_verdict(self.runs_root, rejection)
+        second = write_experiment_rejection_verdict(self.runs_root, rejection)
+
+        self.assertEqual(manifest_path.read_bytes(), original_bytes)
+        self.assertEqual(
+            first,
+            self.runs_root
+            / "experiments"
+            / "rejections"
+            / "exp-001__cooldown_anchor_rejection.json",
+        )
+        self.assertEqual(
+            second,
+            self.runs_root
+            / "experiments"
+            / "rejections"
+            / "exp-001__cooldown_anchor_rejection__2.json",
+        )
+        self.assertEqual(json.loads(first.read_text()), rejection)
+        self.assertEqual(json.loads(second.read_text()), rejection)
+
+    def test_first_rejection_may_claim_absent_manifest_path(self) -> None:
+        rejection = {
+            "experiment_id": "exp-001",
+            "members": [],
+            "terminal_verdict": {
+                "schema_version": "joulewise.cooldown_anchor_verdict.v1",
+                "record_type": "cooldown_anchor_verdict",
+                "decision": "fail_closed",
+            },
+        }
+
+        path = write_experiment_rejection_verdict(self.runs_root, rejection)
+
+        self.assertEqual(path, self.runs_root / "experiments" / "exp-001.json")
+        self.assertEqual(json.loads(path.read_text()), rejection)
+
+    def test_manifest_relocates_canonical_rejection_before_publication(self) -> None:
+        rejection = {
+            "experiment_id": "exp-001",
+            "members": [],
+            "terminal_verdict": {
+                "schema_version": "joulewise.cooldown_anchor_verdict.v1",
+                "record_type": "cooldown_anchor_verdict",
+                "decision": "fail_closed",
+            },
+        }
+        canonical_path = write_experiment_rejection_verdict(
+            self.runs_root, rejection
+        )
+        rejection_bytes = canonical_path.read_bytes()
+        manifest = {
+            "experiment_id": "exp-001",
+            "members": ["exp-001__r1"],
+        }
+
+        manifest_path = write_experiment_manifest(self.runs_root, manifest)
+
+        relocated_path = (
+            self.runs_root
+            / "experiments"
+            / "rejections"
+            / "exp-001__cooldown_anchor_rejection.json"
+        )
+        self.assertEqual(manifest_path, canonical_path)
+        self.assertEqual(json.loads(manifest_path.read_text()), manifest)
+        self.assertEqual(relocated_path.read_bytes(), rejection_bytes)
+        self.assertEqual(json.loads(relocated_path.read_text()), rejection)
+
+    def test_manifest_relocation_failure_preserves_canonical_rejection(
+        self,
+    ) -> None:
+        rejection = {
+            "experiment_id": "exp-relocation-failure",
+            "members": [],
+            "terminal_verdict": {
+                "schema_version": "joulewise.cooldown_anchor_verdict.v1",
+                "record_type": "cooldown_anchor_verdict",
+                "decision": "fail_closed",
+            },
+        }
+        canonical_path = write_experiment_rejection_verdict(
+            self.runs_root, rejection
+        )
+        rejection_bytes = canonical_path.read_bytes()
+
+        with mock.patch(
+            "joulewise.bundle._claim_staged_json",
+            side_effect=OSError("simulated relocation failure"),
+        ):
+            with self.assertRaisesRegex(OSError, "relocation failure"):
+                write_experiment_manifest(
+                    self.runs_root,
+                    {
+                        "experiment_id": "exp-relocation-failure",
+                        "members": ["exp-relocation-failure__r1"],
+                    },
+                )
+
+        self.assertEqual(canonical_path.read_bytes(), rejection_bytes)
+        self.assertEqual(json.loads(canonical_path.read_text()), rejection)
+        extra_files = [
+            entry
+            for entry in (self.runs_root / "experiments").rglob("*")
+            if (
+                entry.is_file()
+                and entry != canonical_path
+                and entry.name != ".custody.lock"
+            )
+        ]
+        self.assertEqual(extra_files, [])
+
+    def test_unparsable_canonical_artifact_fails_closed_without_replacement(
+        self,
+    ) -> None:
+        experiments_dir = self.runs_root / "experiments"
+        experiments_dir.mkdir(parents=True)
+        canonical_path = experiments_dir / "corrupt-custody.json"
+        corrupt_bytes = b'{"experiment_id":"corrupt-custody","members":['
+        canonical_path.write_bytes(corrupt_bytes)
+
+        with self.assertRaisesRegex(
+            BundleError,
+            rf"{re.escape(str(canonical_path))}.*unparsable JSON",
+        ):
+            write_experiment_manifest(
+                self.runs_root,
+                {
+                    "experiment_id": "corrupt-custody",
+                    "members": ["corrupt-custody__r1"],
+                },
+            )
+
+        self.assertEqual(canonical_path.read_bytes(), corrupt_bytes)
+        self.assertEqual(
+            sorted(path.name for path in experiments_dir.glob("*.json")),
+            ["corrupt-custody.json"],
+        )
+
+    def test_sixty_four_concurrent_rejections_claim_unique_complete_paths(
+        self,
+    ) -> None:
+        rejection = {
+            "experiment_id": "concurrent-claim",
+            "members": [],
+            "terminal_verdict": {
+                "schema_version": "joulewise.cooldown_anchor_verdict.v1",
+                "record_type": "cooldown_anchor_verdict",
+                "decision": "fail_closed",
+            },
+        }
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=64) as pool:
+            paths = list(
+                pool.map(
+                    lambda _index: write_experiment_rejection_verdict(
+                        self.runs_root, rejection
+                    ),
+                    range(64),
+                )
+            )
+
+        self.assertEqual(len(paths), 64)
+        self.assertEqual(len(set(paths)), 64)
+        self.assertEqual(
+            sum(
+                path == self.runs_root / "experiments" / "concurrent-claim.json"
+                for path in paths
+            ),
+            1,
+        )
+        for path in paths:
+            self.assertEqual(json.loads(path.read_text()), rejection)
+
+    def test_process_custody_lock_blocks_rejection_during_manifest_claim(
+        self,
+    ) -> None:
+        manifest_child = r'''
+import sys
+import time
+from pathlib import Path
+from unittest import mock
+
+import joulewise.bundle as bundle
+
+runs_root = Path(sys.argv[1])
+lock_held = Path(sys.argv[2])
+release_lock = Path(sys.argv[3])
+real_classify = bundle._existing_cooldown_anchor_rejection_payload
+call_count = [0]
+
+def pause_during_authoritative_inspection(path):
+    result = real_classify(path)
+    call_count[0] += 1
+    if call_count[0] == 2:
+        lock_held.write_text("ready\n")
+        deadline = time.monotonic() + 15.0
+        while not release_lock.exists():
+            if time.monotonic() >= deadline:
+                raise RuntimeError("timed out waiting to release custody lock")
+            time.sleep(0.001)
+    return result
+
+with mock.patch.object(
+    bundle,
+    "_existing_cooldown_anchor_rejection_payload",
+    side_effect=pause_during_authoritative_inspection,
+):
+    bundle.write_experiment_manifest(
+        runs_root,
+        {
+            "experiment_id": "custody-race",
+            "members": ["custody-race__r1"],
+        },
+    )
+'''
+        rejection_child = r'''
+import sys
+import time
+from pathlib import Path
+
+from joulewise.bundle import write_experiment_rejection_verdict
+
+runs_root = Path(sys.argv[1])
+attempt_started = Path(sys.argv[2])
+attempt_started.write_text("ready\n")
+write_experiment_rejection_verdict(
+    runs_root,
+    {
+        "experiment_id": "custody-race",
+        "members": [],
+        "writer_index": 1,
+        "terminal_verdict": {
+            "schema_version": "joulewise.cooldown_anchor_verdict.v1",
+            "record_type": "cooldown_anchor_verdict",
+            "decision": "fail_closed",
+        },
+    },
+)
+'''
+        lock_held = self.runs_root / "manifest-lock-held"
+        release_lock = self.runs_root / "release-manifest-lock"
+        attempt_started = self.runs_root / "rejection-attempt-started"
+        manifest_process = subprocess.Popen(
+            [
+                sys.executable,
+                "-c",
+                manifest_child,
+                str(self.runs_root),
+                str(lock_held),
+                str(release_lock),
+            ],
+            cwd=REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        rejection_process: subprocess.Popen[str] | None = None
+        processes = [manifest_process]
+        try:
+            deadline = time.monotonic() + 15.0
+            while not lock_held.exists() and manifest_process.poll() is None:
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.001)
+            self.assertTrue(
+                lock_held.exists(),
+                "manifest did not pause in its authoritative custody window",
+            )
+
+            rejection_process = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-c",
+                    rejection_child,
+                    str(self.runs_root),
+                    str(attempt_started),
+                ],
+                cwd=REPO_ROOT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            processes.append(rejection_process)
+            deadline = time.monotonic() + 15.0
+            while (
+                not attempt_started.exists()
+                and rejection_process.poll() is None
+            ):
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.001)
+            self.assertTrue(
+                attempt_started.exists(),
+                "rejection writer did not begin its custody claim",
+            )
+            with self.assertRaises(
+                subprocess.TimeoutExpired,
+                msg="rejection writer bypassed the held process custody lock",
+            ):
+                rejection_process.wait(timeout=1.0)
+
+            release_lock.write_text("release\n")
+            manifest_stdout, manifest_stderr = manifest_process.communicate(
+                timeout=15
+            )
+            rejection_stdout, rejection_stderr = rejection_process.communicate(
+                timeout=15
+            )
+            self.assertEqual(
+                manifest_process.returncode,
+                0,
+                f"manifest child failed: {manifest_stdout}\n{manifest_stderr}",
+            )
+            self.assertEqual(
+                rejection_process.returncode,
+                0,
+                f"rejection child failed: {rejection_stdout}\n{rejection_stderr}",
+            )
+        finally:
+            release_lock.touch(exist_ok=True)
+            for process in processes:
+                if process.poll() is None:
+                    process.kill()
+                process.wait(timeout=5)
+
+        experiments_dir = self.runs_root / "experiments"
+        canonical_path = experiments_dir / "custody-race.json"
+        self.assertEqual(
+            json.loads(canonical_path.read_text()),
+            {
+                "experiment_id": "custody-race",
+                "members": ["custody-race__r1"],
+            },
+        )
+        rejection_paths = sorted(
+            (experiments_dir / "rejections").glob(
+                "custody-race__cooldown_anchor_rejection*.json"
+            )
+        )
+        self.assertEqual(len(rejection_paths), 1)
+        self.assertEqual(json.loads(rejection_paths[0].read_text())["writer_index"], 1)
+        self.assertTrue((experiments_dir / ".custody.lock").is_file())
+        self.assertNotIn(
+            experiments_dir / ".custody.lock",
+            set(experiments_dir.rglob("*.json")),
+        )
+
+    def test_exclusive_rejection_closes_raw_fd_when_fdopen_rejects_ownership(
+        self,
+    ) -> None:
+        rejection = {
+            "experiment_id": "fdopen-failure",
+            "members": [],
+            "terminal_verdict": {
+                "schema_version": "joulewise.cooldown_anchor_verdict.v1",
+                "record_type": "cooldown_anchor_verdict",
+                "decision": "fail_closed",
+            },
+        }
+        captured_fd: int | None = None
+
+        def rejecting_fdopen(fd: int, *args, **kwargs):
+            nonlocal captured_fd
+            captured_fd = fd
+            raise OSError("simulated fdopen ownership failure")
+
+        try:
+            with mock.patch(
+                "joulewise.bundle.os.fdopen", side_effect=rejecting_fdopen
+            ):
+                with self.assertRaisesRegex(OSError, "ownership failure"):
+                    write_experiment_rejection_verdict(self.runs_root, rejection)
+
+            self.assertIsNotNone(captured_fd)
+            with self.assertRaises(OSError):
+                os.fstat(captured_fd)
+            self.assertFalse(
+                (self.runs_root / "experiments" / "fdopen-failure.json").exists()
+            )
+        finally:
+            if captured_fd is not None:
+                try:
+                    os.close(captured_fd)
+                except OSError:
+                    pass
+
+    def test_killed_exclusive_rejection_never_leaves_truncated_destination(
+        self,
+    ) -> None:
+        marker_path = Path(self._tmp.name) / "partial-write-ready"
+        rejection = {
+            "experiment_id": "atomic-claim",
+            "members": [],
+            "terminal_verdict": {
+                "schema_version": "joulewise.cooldown_anchor_verdict.v1",
+                "record_type": "cooldown_anchor_verdict",
+                "decision": "fail_closed",
+            },
+        }
+        child = r'''
+import os
+import sys
+import time
+from pathlib import Path
+from unittest import mock
+
+from joulewise.bundle import write_experiment_rejection_verdict
+
+runs_root = Path(sys.argv[1])
+marker_path = Path(sys.argv[2])
+real_fdopen = os.fdopen
+
+class PartialWriteHandle:
+    def __init__(self, fd, *args, **kwargs):
+        self._handle = real_fdopen(fd, *args, **kwargs)
+
+    def __enter__(self):
+        self._handle.__enter__()
+        return self
+
+    def __exit__(self, *args):
+        return self._handle.__exit__(*args)
+
+    def write(self, payload):
+        self._handle.write(payload[:17])
+        self._handle.flush()
+        os.fsync(self._handle.fileno())
+        marker_path.write_text("ready\n")
+        while True:
+            time.sleep(60)
+
+    def flush(self):
+        return self._handle.flush()
+
+    def fileno(self):
+        return self._handle.fileno()
+
+with mock.patch("joulewise.bundle.os.fdopen", side_effect=PartialWriteHandle):
+    write_experiment_rejection_verdict(
+        runs_root,
+        {
+            "experiment_id": "atomic-claim",
+            "members": [],
+            "terminal_verdict": {
+                "schema_version": "joulewise.cooldown_anchor_verdict.v1",
+                "record_type": "cooldown_anchor_verdict",
+                "decision": "fail_closed",
+            },
+        },
+    )
+'''
+        process = subprocess.Popen(
+            [sys.executable, "-c", child, str(self.runs_root), str(marker_path)],
+            cwd=REPO_ROOT,
+        )
+        self.addCleanup(
+            lambda: process.kill() if process.poll() is None else None
+        )
+        for _ in range(500):
+            if marker_path.exists() or process.poll() is not None:
+                break
+            time.sleep(0.01)
+        self.assertTrue(marker_path.exists(), "child did not reach partial write")
+
+        process.kill()
+        process.wait(timeout=5)
+
+        destination = self.runs_root / "experiments" / "atomic-claim.json"
+        if destination.exists():
+            self.assertEqual(json.loads(destination.read_text()), rejection)
 
 
 if __name__ == "__main__":

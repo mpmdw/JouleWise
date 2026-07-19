@@ -41,7 +41,12 @@ from joulewise.bundle_read import (
     axi_v2_validation_problems,
 )
 from joulewise.clock import Clock, FakeClock, SystemClock
-from joulewise.controller import run_benchmark, run_experiment
+from joulewise.controller import (
+    record_cooldown_anchor_rejection,
+    run_benchmark,
+    run_experiment,
+)
+from joulewise.cooldown_anchor import cooldown_anchor_eligibility
 from joulewise.doctor import doctor_report, exit_code as doctor_exit_code
 from joulewise.doctor import render_human as render_doctor_human
 from joulewise.doctor import render_json as render_doctor_json
@@ -248,8 +253,47 @@ def _cmd_run(args: argparse.Namespace) -> int:
     """
     config = BenchmarkConfig.from_mapping(_load_config(Path(args.config)))
     clock = _select_clock(config)
+    frozen_cooldown_anchor = None
+    if args.frozen_cooldown_anchor_json is not None:
+        try:
+            frozen_cooldown_anchor = json.loads(args.frozen_cooldown_anchor_json)
+        except json.JSONDecodeError as exc:
+            raise SchemaError(
+                "--frozen-cooldown-anchor-json is not valid JSON: "
+                f"{exc.msg} at line {exc.lineno} column {exc.colno}"
+            ) from exc
+        anchor_eligibility = cooldown_anchor_eligibility(frozen_cooldown_anchor)
+        if not anchor_eligibility["eligible"]:
+            verdict_path = None
+            if config.workload_profile.repetitions > 1:
+                verdict_path = record_cooldown_anchor_rejection(
+                    config,
+                    Path(args.runs_dir),
+                    clock,
+                    frozen_cooldown_anchor,
+                    anchor_eligibility,
+                    boundary="cli_accept",
+                )
+            verdict_note = (
+                f"; verdict={verdict_path}" if verdict_path is not None else ""
+            )
+            raise SchemaError(
+                "--frozen-cooldown-anchor-json rejected fail-closed: "
+                + ", ".join(anchor_eligibility["reasons"])
+                + verdict_note
+            )
     if config.workload_profile.repetitions > 1:
-        manifest_path, members = run_experiment(config, Path(args.runs_dir), clock)
+        experiment_kwargs = (
+            {"frozen_cooldown_anchor": frozen_cooldown_anchor}
+            if frozen_cooldown_anchor is not None
+            else {}
+        )
+        manifest_path, members = run_experiment(
+            config,
+            Path(args.runs_dir),
+            clock,
+            **experiment_kwargs,
+        )
         for bundle_path, summary in members:
             print(_bundle_line(bundle_path, summary))
         print(f"experiment: {manifest_path} members={len(members)}")
@@ -257,6 +301,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
             summary.status == RunStatus.SUCCEEDED for _, summary in members
         )
         return 0 if all_succeeded else 3
+    if frozen_cooldown_anchor is not None:
+        raise SchemaError(
+            "--frozen-cooldown-anchor-json requires workload_profile.repetitions > 1"
+        )
     bundle_path, summary = run_benchmark(config, Path(args.runs_dir), clock)
     print(_bundle_line(bundle_path, summary))
     return 0 if summary.status == RunStatus.SUCCEEDED else 3
@@ -1796,6 +1844,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--runs-dir",
         default="runs",
         help="directory the run bundle is written under (default: runs/)",
+    )
+    run.add_argument(
+        "--frozen-cooldown-anchor-json",
+        help=(
+            "campaign-owned immutable cooldown anchor JSON passed explicitly "
+            "to a multi-repetition experiment"
+        ),
     )
     run.set_defaults(func=_cmd_run)
 
