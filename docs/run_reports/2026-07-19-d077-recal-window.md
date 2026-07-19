@@ -92,6 +92,26 @@ curiosity, made harmless by the admission guard.
   wrapper's own test suite 148/149 on both patched and backup versions (the
   one failure pre-exists the patch).
 
+## Tranche 3 (overnight, same night): optional blocks 08 + 09 closed
+
+A second bracketed mini-window in `runs_recal2_20260719/` (fresh runs root;
+frozen run_ids would collide with tranche 1–2), same production policy and
+arming, launched after the canonical suite gate on the probe-fix head:
+
+- NEG-8 start — 1/1.
+- Block 08 long-request absolute — **20/20 succeeded** (~62 s each). This
+  closes the documented gap "Optional block 08 was not run, so no
+  long-prompt or long-decode request floor exists" (07-17 floors report).
+- Block 09 short-prefill ABBA — **40/40 succeeded**.
+- NEG-8 end — 1/1.
+
+**62/62 bundles strict-valid** (single-process lead validation);
+`backup_runs.sh` reported 63 artifact dir(s) backed up to
+`~/JouleWise-backup/runs`, exit 0. Combined with tranches 1–2 the night
+produced **94 strict-valid measurement bundles** across two bracketed
+windows, zero contaminated members admitted, two honest guard aborts, and
+zero admission failures after the probe fixes.
+
 ## Open follow-ups
 
 - Comparative/absolute floor re-extraction from this corpus (P2-015

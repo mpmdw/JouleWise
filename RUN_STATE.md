@@ -5,13 +5,19 @@ RE-CALIBRATION WINDOW IS COMPLETE — 32/32 strict-valid bundles in
 `runs_recal_20260718/` (NEG-8 start/end brackets, all five su-ABBA
 comparative blocks, full suite-absolute block), collected under the
 production environment-guard policy with per-run admission evidence
-(record: `docs/run_reports/2026-07-19-d077-recal-window.md`). PR #77
-(D-077 fix rounds) is MERGED; PR #78 (macOS 26 environment-probe fixes,
-live-validated by the campaign itself) awaits Ed's merge. NEXT WORK:
-(1) floor re-extraction from the recal corpus (supersedes the caveated
-07-17 suite cells; P2-015 analysis), (2) PR #78 merge + suite-test
-profiler patch/cache follow-up, (3) [AGENT] A4 AXI-SB-ADAPTER remains
-the agent-lane head. Ed-side: `sudo pmset -c displaysleep 10`.
+(record: `docs/run_reports/2026-07-19-d077-recal-window.md`). A second
+bracketed overnight window (`runs_recal2_20260719/`) then closed the
+optional-block gaps: block 08 long-request absolute 20/20 (the missing
+long-request floor now has evidence), block 09 short-prefill ABBA 40/40,
+both NEG-8 brackets — 62/62 strict-valid, backed up. Night total: 94
+strict-valid bundles, zero contaminated members admitted. PR #77 (D-077
+fix rounds) is MERGED; PR #78 (macOS 26 environment-probe fixes,
+live-validated by the campaigns themselves) awaits Ed's merge. NEXT
+WORK: (1) floor re-extraction from BOTH recal corpora (supersedes the
+caveated 07-17 suite cells and adds the long-request + short-prefill
+floors; P2-015 analysis), (2) PR #78 merge + suite-test profiler
+patch/cache follow-up, (3) [AGENT] A4 AXI-SB-ADAPTER remains the
+agent-lane head. Ed-side: `sudo pmset -c displaysleep 10`.
 
 Prior arc (2026-07-17, SESSION ARC COMPLETE: Window A floors
 published (222 strict-valid bundles; P2-015 partial pending P2-039
