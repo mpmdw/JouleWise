@@ -1099,6 +1099,97 @@ class SpecMembershipBindingTests(_PermissiveStrictValidatorMixin, unittest.TestC
             refusals[0]["reason"], "campaign_member_omitted_from_spec"
         )
 
+    def test_omitted_null_manifest_member_refuses_as_unattributable(self) -> None:
+        # Fix round 3 (defect-shaped): a bundle whose provenance is ambiguous
+        # (claimed by TWO campaign manifests -> campaign_cooldown_evidence
+        # collapses it to manifest=None) must NOT be able to slip out of the
+        # completeness check when the spec omits it.  Fix round 2 scoped the
+        # guard by resolved manifest and dropped every null-manifest bundle from
+        # attribution, so an OMITTED unattributable member escaped entirely.
+        # We cannot prove such a member does not belong to the addressed
+        # campaign, so omitting it must fail closed with a distinct reason.
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            addressed_ids = ["gross-r01", "gross-r02"]
+            shared = "shared-r03"
+            # The SAME bundle_id appears in two campaign manifests with
+            # different session ids -> conflicting normalized rows -> the join
+            # resolves it to {manifest: None}.
+            install_synthetic_recovered_manifest(
+                runs_root, addressed_ids + [shared], session_id="gross-campaign"
+            )
+            install_synthetic_recovered_manifest(
+                runs_root, ["decode-r01", shared], session_id="decode-campaign"
+            )
+            for bundle_id in addressed_ids + [shared, "decode-r01"]:
+                write_bundle(runs_root, bundle_id, make_summary(40.0))
+            # Precondition: the shared bundle is genuinely unattributable.
+            joined = campaign_cooldown_evidence(runs_root)
+            self.assertIsNone(joined[shared]["manifest"])
+            # Spec addresses the gross campaign but silently drops the shared,
+            # high-scatter member.
+            spec = {
+                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                "cells": [
+                    {
+                        "cell_id": "DF-RQ-GROSS-MID",
+                        "kind": "absolute",
+                        "metric": "gross_energy_j",
+                        "window_class": "request",
+                        "members": [
+                            {"slot": b, "bundle_id": b} for b in addressed_ids
+                        ],
+                    }
+                ],
+            }
+            report = extract_cells(runs_root, spec)
+        self.assertFalse(report["all_cells_extractable"])
+        refusals = report["spec_membership_refusals"]
+        self.assertEqual([row["bundle_id"] for row in refusals], [shared])
+        self.assertEqual(
+            refusals[0]["reason"], "campaign_member_unattributable"
+        )
+        # The addressed cell itself remains clean; the refusal is report-level.
+        self.assertTrue(report["cells"][0]["extractable"])
+
+    def test_referenced_null_manifest_member_not_flagged_unattributable(self) -> None:
+        # Complement to the defect fix: a null-manifest member that the spec
+        # DOES reference is not spuriously flagged as unattributable — it faces
+        # its own member gate instead of the completeness refusal.
+        with tempfile.TemporaryDirectory() as tmp:
+            runs_root = Path(tmp)
+            shared = "shared-r03"
+            install_synthetic_recovered_manifest(
+                runs_root, ["gross-r01", "gross-r02", shared], session_id="gross-campaign"
+            )
+            install_synthetic_recovered_manifest(
+                runs_root, ["decode-r01", shared], session_id="decode-campaign"
+            )
+            for bundle_id in ["gross-r01", "gross-r02", shared, "decode-r01"]:
+                write_bundle(runs_root, bundle_id, make_summary(40.0))
+            joined = campaign_cooldown_evidence(runs_root)
+            self.assertIsNone(joined[shared]["manifest"])
+            spec = {
+                "schema_version": EXTRACTION_SPEC_SCHEMA_VERSION,
+                "cells": [
+                    {
+                        "cell_id": "DF-RQ-GROSS-MID",
+                        "kind": "absolute",
+                        "metric": "gross_energy_j",
+                        "window_class": "request",
+                        "members": [
+                            {"slot": b, "bundle_id": b}
+                            for b in ["gross-r01", "gross-r02", shared]
+                        ],
+                    }
+                ],
+            }
+            report = extract_cells(runs_root, spec)
+        self.assertNotIn(
+            "campaign_member_unattributable",
+            {row["reason"] for row in report["spec_membership_refusals"]},
+        )
+
     def test_full_coverage_has_no_membership_refusal(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             runs_root = Path(tmp)

@@ -122,6 +122,7 @@ CELL_REFUSAL_CODES = (
     "campaign_cooldown_evidence_missing",
     "cooldown_cap_hit_unverified",
     "campaign_member_omitted_from_spec",
+    "campaign_member_unattributable",
     "cap_hit_drift_term_unavailable",
     "insufficient_members_after_exclusion",
     "anchor_energy_envelope_unrecorded",
@@ -823,19 +824,29 @@ def extract_cells(
     # reuse its attribution, never re-read manifests here); a campaign is
     # "addressed" iff the spec references at least one of its members.  Members
     # whose provenance is ambiguous/unattributable (``manifest`` null, e.g.
-    # conflicting duplicate records) cannot be tied to a campaign and so cannot
-    # be completeness-checked; if referenced they still fail their own member
-    # gate, so omitting them is never a fail-open path.
+    # conflicting duplicate records — the SAME bundle_id claimed by two campaign
+    # manifests, or duplicate rows within one) cannot be tied to a campaign, so
+    # we cannot prove they do NOT belong to a campaign the spec addresses.  A
+    # referenced unattributable member still faces its own member gate, but an
+    # OMITTED unattributable member would silently escape the completeness check
+    # (fix round 3): drop a high-scatter bundle by making its provenance
+    # ambiguous and the false-effect floor shrinks unrecorded.  Fail closed —
+    # any resolved null-manifest cooldown the spec does not reference refuses the
+    # whole extraction with ``campaign_member_unattributable``.
     campaign_member_ids: dict[str, set[str]] = {}
+    unattributable_ids: set[str] = set()
     for bundle_id, cooldown in cooldowns.items():
         manifest = cooldown.get("manifest") if isinstance(cooldown, Mapping) else None
         if isinstance(manifest, str) and manifest:
             campaign_member_ids.setdefault(manifest, set()).add(bundle_id)
+        else:
+            unattributable_ids.add(bundle_id)
     omitted_ids: set[str] = set()
     for member_ids in campaign_member_ids.values():
         if member_ids & referenced_bundle_ids:
             omitted_ids |= member_ids - referenced_bundle_ids
     omitted = sorted(omitted_ids)
+    unattributable_omitted = sorted(unattributable_ids - referenced_bundle_ids)
     spec_membership_refusals = [
         {
             "reason": "campaign_member_omitted_from_spec",
@@ -847,6 +858,17 @@ def extract_cells(
             ),
         }
         for bundle_id in omitted
+    ] + [
+        {
+            "reason": "campaign_member_unattributable",
+            "bundle_id": bundle_id,
+            "campaign_cooldown_result": (
+                cooldowns[bundle_id].get("result")
+                if isinstance(cooldowns[bundle_id], Mapping)
+                else None
+            ),
+        }
+        for bundle_id in unattributable_omitted
     ]
 
     return {
