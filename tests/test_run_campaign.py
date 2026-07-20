@@ -4623,7 +4623,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         )
 
     def test_extension_version_and_profile_constraints_fail_closed(self) -> None:
-        from joulewise.idle_admission import IdleAdmissionPolicyError
+        from joulewise.schemas import SchemaError
 
         tampered = self._write_extended_sidecar(
             "production",
@@ -4631,7 +4631,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 schema_version="joulewise.idle_admission_extension.v0"
             ),
         )
-        with self.assertRaises(IdleAdmissionPolicyError):
+        with self.assertRaises(SchemaError):
             run_campaign_module.load_campaign_policy(str(tampered))
         loosened = self._write_extended_sidecar(
             "production",
@@ -4639,7 +4639,7 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
                 "cpu_criteria"
             ].update(on_missing_telemetry="flag"),
         )
-        with self.assertRaises(IdleAdmissionPolicyError):
+        with self.assertRaises(SchemaError):
             run_campaign_module.load_campaign_policy(str(loosened))
 
     def test_sidecar_without_extension_yields_named_condition(self) -> None:
@@ -4972,6 +4972,83 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertEqual(whole_window["neg8_bracket"]["decision"], "passed")
         self.assertNotIn(
             "neg8_bracket_not_evaluated", whole_window["conditions"]
+        )
+
+    def test_whole_window_cli_scans_runs_root_and_emits_named_neg8_verdict(self) -> None:
+        binding = self._binding()
+        for bundle_id, gross_energy_j in (
+            ("p2-neg8-reference-start__r1", 8.0),
+            ("p2-neg8-reference-end__r1", 8.04),
+        ):
+            member = self._member(
+                bundle_id,
+                records=_clean_idle_records(),
+                gross_energy_j=gross_energy_j,
+            )
+            (member.bundle_path / "summary_metrics.json").write_text(
+                json.dumps({"status": "succeeded", **member.summary}) + "\n"
+            )
+            (member.bundle_path / "metadata.json").write_text(
+                json.dumps(member.metadata) + "\n"
+            )
+
+        args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+            ]
+        )
+        self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 0)
+        verdict = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
+        self.assertEqual(
+            verdict["record_type"], "idle_admission_whole_window_verdict"
+        )
+        self.assertEqual(verdict["status"], "passed")
+        self.assertEqual(
+            verdict["idle_admission_core"]["neg8_bracket"]["decision"],
+            "passed",
+        )
+        self.assertNotIn(
+            "neg8_bracket_not_evaluated",
+            verdict["idle_admission_core"]["conditions"],
+        )
+
+    def test_whole_window_production_verdict_fails_closed_without_end_reference(self) -> None:
+        binding = self._binding()
+        member = self._member(
+            "p2-neg8-reference-start__r1",
+            records=_clean_idle_records(),
+            gross_energy_j=8.0,
+        )
+        (member.bundle_path / "summary_metrics.json").write_text(
+            json.dumps({"status": "succeeded", **member.summary}) + "\n"
+        )
+        (member.bundle_path / "metadata.json").write_text(
+            json.dumps(member.metadata) + "\n"
+        )
+        args = run_campaign_module.parse_args(
+            [
+                "--whole-window-verdict",
+                "--runs-dir",
+                str(self.root),
+                "--campaign-policy",
+                str(binding.path),
+            ]
+        )
+
+        self.assertEqual(run_campaign_module.run_whole_window_verdict(args), 1)
+        verdict = read_all_jsonl(self.root / "campaign_log.jsonl")[-1]
+        self.assertEqual(verdict["status"], "failed")
+        self.assertEqual(
+            verdict["idle_admission_core"]["neg8_bracket"]["decision"],
+            "failed",
+        )
+        self.assertIn(
+            "neg8_bracket_missing",
+            verdict["idle_admission_core"]["conditions"],
         )
 
 

@@ -243,11 +243,10 @@ class Neg8BracketPolicy:
 class IdleAdmissionExtension:
     """Additive, hash-bound idle-admission policy extension (T0.5 core).
 
-    The extension travels as the ``idle_admission_extension`` key of the
-    campaign policy sidecar.  ``CampaignPolicy.from_mapping`` predates the
-    key and rejects unknown keys, so the loader strips the section before
-    the base parse and hands it here together with the base profile; the
-    sidecar's byte hash still covers every extension byte.
+    The extension travels as the additive ``idle_admission_extension`` key
+    of the typed campaign policy sidecar.  Its profile-dependent invariants
+    are validated while the full sidecar byte hash continues to bind every
+    extension field.
     """
 
     schema_version: str

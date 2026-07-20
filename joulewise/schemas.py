@@ -24,6 +24,10 @@ from joulewise.axi_decode_config import (
     axi_config_schema_defs,
     normalized_json_bytes as axi_normalized_json_bytes,
 )
+from joulewise.idle_admission import (
+    IdleAdmissionExtension,
+    IdleAdmissionPolicyError,
+)
 from joulewise.validation import finite_float
 
 CONFIG_SCHEMA_VERSION = "0.1"
@@ -550,6 +554,7 @@ class CampaignPolicy:
     environment_guard: EnvironmentGuardPolicy
     idle_admission: IdleAdmissionPolicy
     cooldown: CooldownPolicy
+    idle_admission_extension: IdleAdmissionExtension | None = None
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any]) -> "CampaignPolicy":
@@ -566,6 +571,7 @@ class CampaignPolicy:
                     "environment_guard",
                     "idle_admission",
                     "cooldown",
+                    "idle_admission_extension",
                 }
             ),
         )
@@ -591,6 +597,18 @@ class CampaignPolicy:
                 "idle_admission.on_fail='flag' is permitted only for an "
                 "exploratory campaign policy"
             )
+        extension_raw = data.get("idle_admission_extension")
+        try:
+            extension = (
+                IdleAdmissionExtension.from_mapping(
+                    extension_raw,
+                    profile=profile.value,
+                )
+                if extension_raw is not None
+                else None
+            )
+        except IdleAdmissionPolicyError as exc:
+            raise SchemaError(str(exc)) from exc
         return cls(
             schema_version=schema_version,
             policy_id=_require_string(data.get("policy_id"), "campaign_policy.policy_id"),
@@ -603,6 +621,7 @@ class CampaignPolicy:
             ),
             idle_admission=admission,
             cooldown=CooldownPolicy.from_mapping(data.get("cooldown")),
+            idle_admission_extension=extension,
         )
 
     def to_dict(self) -> dict[str, Any]:

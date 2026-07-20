@@ -182,6 +182,15 @@ class BenchmarkConfigTests(unittest.TestCase):
         self.assertEqual([policy.profile.value for policy in policies], ["production", "exploratory"])
         self.assertEqual(policies[0].idle_admission.on_fail.value, "abort")
         self.assertEqual(policies[1].idle_admission.on_fail.value, "flag")
+        self.assertTrue(policies[0].idle_admission_extension.claim_bearing)
+        self.assertFalse(policies[1].idle_admission_extension.claim_bearing)
+        self.assertEqual(
+            policies[0].idle_admission_extension.cpu_criteria.min_samples, 30
+        )
+        self.assertEqual(
+            policies[0].to_dict()["idle_admission_extension"]["schema_version"],
+            "joulewise.idle_admission_extension.v1",
+        )
         self.assertEqual(policies[0].cooldown.coverage_fraction, 0.8)
         normalized_after = json.dumps(config.to_dict(), indent=2, sort_keys=True) + "\n"
         self.assertEqual(normalized_after, normalized_before)
@@ -190,6 +199,20 @@ class BenchmarkConfigTests(unittest.TestCase):
             PINNED_CONFIG_SHA256["mock_local.json"],
         )
         self.assertNotIn("campaign_policy", config.to_dict())
+
+    def test_campaign_policy_extension_is_additive_and_fail_closed(self) -> None:
+        path = ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"
+        payload = json.loads(path.read_text())
+        payload["idle_admission_extension"]["cpu_criteria"]["unexpected"] = 1
+        with self.assertRaisesRegex(
+            SchemaError,
+            "idle_admission_extension.cpu_criteria has unknown key",
+        ):
+            CampaignPolicy.from_mapping(payload)
+
+        legacy = json.loads(path.read_text())
+        legacy.pop("idle_admission_extension")
+        self.assertIsNone(CampaignPolicy.from_mapping(legacy).idle_admission_extension)
 
     def test_cooldown_coverage_fraction_is_bounded(self) -> None:
         path = ROOT / "configs" / "campaign_policies" / "quiet_mac_p2_production.json"

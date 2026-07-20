@@ -563,6 +563,16 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 root / "rich_telemetry_idle_attempt_2.jsonl"
             ).read_text().splitlines()
             self.assertEqual(len(retry_rich), 5)
+            first_live = adapter.idle_admission_records(run_id="run-1", attempt=1)
+            retry_live = adapter.idle_admission_records(run_id="run-1", attempt=2)
+            self.assertEqual(len(first_live), 5)
+            self.assertEqual(len(retry_live), 5)
+            self.assertAlmostEqual(
+                first_live[0]["processor_combined_power_w"], 1.47572, places=12
+            )
+            self.assertIsNone(
+                adapter.idle_admission_records(run_id="run-1", attempt=3)
+            )
 
     def test_measure_idle_rich_write_failure_does_not_break_baseline(self) -> None:
         fixture = FIXTURE.read_bytes()

@@ -120,6 +120,9 @@ ANALYSIS_MANIFEST_NAME = "analysis_manifest.json"
 NON_CONFIG_SIDECARS = frozenset({ORDER_MANIFEST_NAME, ANALYSIS_MANIFEST_NAME})
 CAMPAIGN_VERDICT_SCHEMA = "joulewise.campaign_verdict.v2"
 CAMPAIGN_PROVENANCE_SCHEMA = "joulewise.campaign_provenance.v1"
+IDLE_ADMISSION_WHOLE_WINDOW_SCHEMA = (
+    "joulewise.idle_admission_whole_window_verdict.v1"
+)
 CLAIM_READINESS_NOTE = (
     "This verdict checks analysis inputs only; P2-037 decides claim outcomes."
 )
@@ -476,44 +479,47 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar=("BUNDLE_DIR", "SIDECAR_JSON"),
         help="Post-hoc expected-vs-realized prompt-hash check for one suite bundle",
     )
+    parser.add_argument(
+        "--whole-window-verdict",
+        action="store_true",
+        help=(
+            "Evaluate the idle-admission/NEG-8 verdict over every finalized "
+            "top-level bundle already present under --runs-dir"
+        ),
+    )
     args = parser.parse_args(argv)
-    if args.config_dir is None and args.check_prompt_hashes is None:
-        parser.error("config_dir is required unless --check-prompt-hashes is used")
-    if args.config_dir is not None and args.check_prompt_hashes is not None:
-        parser.error("config_dir cannot be combined with --check-prompt-hashes")
+    alternate_modes = int(args.check_prompt_hashes is not None) + int(
+        args.whole_window_verdict
+    )
+    if args.config_dir is None and alternate_modes == 0:
+        parser.error(
+            "config_dir is required unless --check-prompt-hashes or "
+            "--whole-window-verdict is used"
+        )
+    if args.config_dir is not None and alternate_modes:
+        parser.error(
+            "config_dir cannot be combined with --check-prompt-hashes or "
+            "--whole-window-verdict"
+        )
+    if alternate_modes > 1:
+        parser.error(
+            "--check-prompt-hashes and --whole-window-verdict are mutually exclusive"
+        )
     if args.arm_countdown_s < 0:
         parser.error("--arm-countdown-s must be >= 0")
     return args
-
-
-IDLE_ADMISSION_EXTENSION_KEY = "idle_admission_extension"
 
 
 def load_campaign_policy(path_text: str) -> CampaignPolicyBinding:
     path = Path(path_text)
     raw = path.read_bytes()
     payload = json.loads(raw)
-    extension_raw: Any = None
-    if isinstance(payload, dict) and IDLE_ADMISSION_EXTENSION_KEY in payload:
-        # ``CampaignPolicy.from_mapping`` predates the T0.5 extension and
-        # rejects unknown keys; the extension is stripped for the base parse
-        # and parsed by its own fail-closed schema.  The binding hash below
-        # still covers every sidecar byte, extension included, so any change
-        # to the new fields changes the campaign policy identity.
-        extension_raw = payload.pop(IDLE_ADMISSION_EXTENSION_KEY)
     policy = CampaignPolicy.from_mapping(payload)
-    extension = (
-        IdleAdmissionExtension.from_mapping(
-            extension_raw, profile=policy.profile.value
-        )
-        if extension_raw is not None
-        else None
-    )
     return CampaignPolicyBinding(
         path=path,
         policy=policy,
         sha256=hashlib.sha256(raw).hexdigest(),
-        idle_admission_extension=extension,
+        idle_admission_extension=policy.idle_admission_extension,
     )
 
 
@@ -2878,6 +2884,8 @@ def _bundle_matches_neg8_marker(bundle_id: str, marker: str) -> bool:
 def idle_admission_core_verdict(
     evaluations: Sequence[MemberEvaluation],
     policy_binding: CampaignPolicyBinding,
+    *,
+    whole_window: bool = False,
 ) -> dict[str, Any]:
     """Post-hoc T0.5 idle-admission core surface for the campaign verdict.
 
@@ -2952,10 +2960,10 @@ def idle_admission_core_verdict(
     # invocations, so the comparison is only sound when BOTH reference bundles
     # are evaluated together.  A per-segment invocation records the non-drift
     # ``neg8_bracket_not_evaluated`` condition rather than a spurious
-    # ``failed``/``missing``.  A reference bundle that is genuinely absent from
-    # a whole-window invocation is still caught by the collection verdict's
-    # missing-member handling.
-    if neg8_start_seen and neg8_end_seen:
+    # ``failed``/``missing``.  In explicit whole-window mode a genuinely absent
+    # reference is handed to the bracket evaluator and fails with the named
+    # ``neg8_bracket_missing`` condition.
+    if whole_window or (neg8_start_seen and neg8_end_seen):
         bracket = evaluate_neg8_bracket(neg8_start, neg8_end, extension.neg8_bracket)
     else:
         bracket = neg8_bracket_not_evaluated(
@@ -2968,6 +2976,74 @@ def idle_admission_core_verdict(
     section["neg8_bracket"] = bracket
     section["conditions"] = sorted(conditions)
     return section
+
+
+def _whole_window_member(bundle_path: Path) -> MemberEvaluation:
+    """Load only the existing fields consumed by the idle-admission core."""
+
+    summary, _summary_problem = _load_json_object(
+        bundle_path / "summary_metrics.json", "summary_metrics.json"
+    )
+    metadata, _metadata_problem = _load_json_object(
+        bundle_path / "metadata.json", "metadata.json"
+    )
+    status = summary.get("status") if isinstance(summary, dict) else None
+    return MemberEvaluation(
+        bundle_id=bundle_path.name,
+        bundle_path=bundle_path,
+        config_name="<whole-window-existing-bundle>",
+        status=status if isinstance(status, str) else None,
+        strict_valid=False,
+        summary=summary,
+        metadata=metadata,
+    )
+
+
+def run_whole_window_verdict(args: argparse.Namespace) -> int:
+    """Emit the prospective NEG-8 verdict across a completed runs root."""
+
+    runs_dir = Path(args.runs_dir)
+    if not runs_dir.is_dir():
+        raise ValueError(f"--runs-dir is not a directory: {runs_dir}")
+    policy_binding = load_campaign_policy(args.campaign_policy)
+    bundle_paths = sorted(
+        path
+        for path in runs_dir.iterdir()
+        if path.is_dir() and (path / "summary_metrics.json").is_file()
+    )
+    evaluations = [_whole_window_member(path) for path in bundle_paths]
+    core = idle_admission_core_verdict(
+        evaluations, policy_binding, whole_window=True
+    )
+    bracket = core.get("neg8_bracket")
+    bracket_decision = (
+        bracket.get("decision") if isinstance(bracket, dict) else None
+    )
+    if policy_binding.idle_admission_extension is None:
+        status = "invalid"
+    elif bracket_decision == "passed":
+        status = "passed"
+    elif policy_binding.policy.profile.value == "exploratory":
+        status = "flagged"
+    else:
+        status = "failed"
+    row = {
+        "schema_version": IDLE_ADMISSION_WHOLE_WINDOW_SCHEMA,
+        "timestamp": utc_timestamp(),
+        "record_type": "idle_admission_whole_window_verdict",
+        "status": status,
+        "runs_dir": str(runs_dir),
+        "campaign_policy": policy_binding.to_metadata(),
+        "bundle_ids": [evaluation.bundle_id for evaluation in evaluations],
+        "idle_admission_core": core,
+    }
+    log_path = Path(args.log) if args.log else runs_dir / "campaign_log.jsonl"
+    append_log(log_path, row)
+    print(f"NEG-8 WHOLE-WINDOW VERDICT: {status}")
+    print(f"  decision: {bracket_decision}")
+    for condition in core["conditions"]:
+        print(f"  condition: {condition}")
+    return 0 if status in {"passed", "flagged"} else 1
 
 
 def _manifest_readiness_reasons(state: AnalysisManifestState) -> list[str]:
@@ -4776,6 +4852,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.check_prompt_hashes is not None:
             return run_prompt_hash_check(args)
+        if args.whole_window_verdict:
+            return run_whole_window_verdict(args)
         return run_campaign(args)
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)

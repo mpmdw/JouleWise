@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -15,6 +16,9 @@ from unittest.mock import patch
 import joulewise.adapters as adapters
 from joulewise.clock import Clock, FakeClock
 from joulewise.controller import (
+    CAMPAIGN_POLICY_PATH_ENV,
+    CAMPAIGN_POLICY_SHA256_ENV,
+    CAMPAIGN_PREFLIGHT_JSON_ENV,
     STATUS_BY_REASON,
     _suite_rep_index_from_run_id,
     run_benchmark,
@@ -527,9 +531,17 @@ class AdmissionIdleTelemetry(SuspectIdleTelemetry):
 
     name = "admission-idle"
 
-    def __init__(self, inner: Any, suspect_sequence: list[bool]) -> None:
+    def __init__(
+        self,
+        inner: Any,
+        suspect_sequence: list[bool],
+        cpu_busy_sequence: list[float] | None = None,
+        combined_power_sequence: list[float] | None = None,
+    ) -> None:
         super().__init__(inner)
         self._suspect_sequence = list(suspect_sequence)
+        self._cpu_busy_sequence = list(cpu_busy_sequence or [0.1])
+        self._combined_power_sequence = list(combined_power_sequence or [0.1])
         self._attempt = 0
 
     def measure_idle(self, config: BenchmarkConfig, context=None):
@@ -546,10 +558,38 @@ class AdmissionIdleTelemetry(SuspectIdleTelemetry):
             idle_window_suspect=suspect,
         )
 
+    def idle_admission_records(self, *, run_id: str, attempt: int):
+        index = min(attempt - 1, len(self._cpu_busy_sequence) - 1)
+        power_index = min(attempt - 1, len(self._combined_power_sequence) - 1)
+        busy = self._cpu_busy_sequence[index]
+        power_w = self._combined_power_sequence[power_index]
+        return [
+            {
+                "processor_combined_power_w": power_w,
+                "clusters": [
+                    {
+                        "cpus": [
+                            {"idle_ratio": 1.0 - busy, "down_ratio": 0.0},
+                            {"idle_ratio": 0.0, "down_ratio": 1.0},
+                        ]
+                    }
+                ],
+            }
+            for _ in range(30)
+        ]
+
 
 class AdmissionIdleRegistry:
-    def __init__(self, suspect_sequence: list[bool]) -> None:
+    def __init__(
+        self,
+        suspect_sequence: list[bool],
+        *,
+        cpu_busy_sequence: list[float] | None = None,
+        combined_power_sequence: list[float] | None = None,
+    ) -> None:
         self._suspect_sequence = suspect_sequence
+        self._cpu_busy_sequence = cpu_busy_sequence
+        self._combined_power_sequence = combined_power_sequence
 
     def resolve_runtime(self, config: BenchmarkConfig, clock: Clock):
         return adapters.resolve_runtime(config, clock)
@@ -557,7 +597,12 @@ class AdmissionIdleRegistry:
     def resolve_telemetry(self, config: BenchmarkConfig, clock: Clock):
         telemetry, failure = adapters.resolve_telemetry(config, clock)
         if telemetry is not None:
-            telemetry = AdmissionIdleTelemetry(telemetry, self._suspect_sequence)
+            telemetry = AdmissionIdleTelemetry(
+                telemetry,
+                self._suspect_sequence,
+                self._cpu_busy_sequence,
+                self._combined_power_sequence,
+            )
         return telemetry, failure
 
     def resolve_transport(self, config: BenchmarkConfig):
@@ -1245,6 +1290,180 @@ class HappyPathTests(ControllerTestCase):
         self.assertIs(admission["critical_environment_passed"], True)
         self.assertIs(admission["reference_provenance_present"], True)
 
+    def test_production_cpu_busy_retry_then_abort_is_enforced_pre_invoke(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        bundle_path, summary = run_benchmark(
+            make_config("controller-cpu-admission-abort"),
+            self.runs_root,
+            self.clock,
+            registry=AdmissionIdleRegistry(
+                [False, False], cpu_busy_sequence=[0.9, 0.8]
+            ),
+            environment_snapshot=snapshot,
+            campaign_policy=policy,
+            campaign_policy_binding=binding,
+            campaign_environment_preflight=preflight,
+        )
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        admission = metadata["environment_admission"]
+        self.assertEqual(admission["decision"], "abort")
+        self.assertEqual(len(admission["attempts"]), 2)
+        self.assertEqual(
+            [row["cpu_admission"]["decision"] for row in admission["attempts"]],
+            ["failed", "failed"],
+        )
+        self.assertTrue(
+            all(row["gpu_admitted"] for row in admission["attempts"])
+        )
+        events = self.read_events(bundle_path)
+        self.assertNotIn("sampling_started", [event["event_type"] for event in events])
+
+    def test_cpu_retry_ledger_pairs_final_attempt_before_admitting(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        bundle_path, summary = run_benchmark(
+            make_config("controller-cpu-admission-retry-pass"),
+            self.runs_root,
+            self.clock,
+            registry=AdmissionIdleRegistry(
+                [False, False], cpu_busy_sequence=[0.9, 0.1]
+            ),
+            environment_snapshot=snapshot,
+            campaign_policy=policy,
+            campaign_policy_binding=binding,
+            campaign_environment_preflight=preflight,
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        admission = json.loads((bundle_path / "metadata.json").read_text())[
+            "environment_admission"
+        ]
+        self.assertEqual(admission["decision"], "admitted")
+        self.assertEqual(
+            [row["attempt"] for row in admission["attempts"]], [1, 2]
+        )
+        self.assertEqual(
+            [row["admitted"] for row in admission["attempts"]], [False, True]
+        )
+        self.assertGreater(
+            admission["attempts"][0]["cpu_admission"]["cpu_busy_ratio_p95"],
+            admission["attempts"][1]["cpu_admission"]["cpu_busy_ratio_p95"],
+        )
+
+    def test_exploratory_cpu_failure_is_lenient_but_claim_flagged(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=True
+        )
+        bundle_path, summary = run_benchmark(
+            make_config("controller-cpu-admission-exploratory"),
+            self.runs_root,
+            self.clock,
+            registry=AdmissionIdleRegistry(
+                [False, False], combined_power_sequence=[2.0, 2.0]
+            ),
+            environment_snapshot=snapshot,
+            campaign_policy=policy,
+            campaign_policy_binding=binding,
+            campaign_environment_preflight=preflight,
+        )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        admission = json.loads((bundle_path / "metadata.json").read_text())[
+            "environment_admission"
+        ]
+        self.assertEqual(admission["decision"], "flagged")
+        self.assertFalse(
+            admission["idle_admission_extension"]["claim_bearing"]
+        )
+        self.assertIn(
+            "processor_combined_power_w_p95_exceeded",
+            admission["attempts"][-1]["cpu_admission"]["conditions"],
+        )
+        self.assertIn(
+            "environment_admission_failed",
+            summary.window_evidence_precheck["gross_request"]["reasons"],
+        )
+
+    def test_production_missing_cpu_telemetry_fails_closed_on_live_clock(self) -> None:
+        policy, binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        clean_guard = {
+            "display_power_state": "all_asleep",
+            "screensaver_engaged": False,
+            "screensaver_module": "Ventura",
+            "screensaver_delay_s": 1200,
+            "hid_idle_s": 5.0,
+            "power": {
+                "adapter_watts": 140.0,
+                "adapter_description": "140W USB-C Power Adapter",
+            },
+            "errors": {},
+        }
+        with patch(
+            "joulewise.controller.collect_environment_guard_observation",
+            return_value=clean_guard,
+        ):
+            bundle_path, summary = run_benchmark(
+                make_config("controller-cpu-admission-missing-live"),
+                self.runs_root,
+                DeterministicClock(),
+                environment_snapshot=snapshot,
+                campaign_policy=policy,
+                campaign_policy_binding=binding,
+                campaign_environment_preflight=preflight,
+            )
+
+        self.assertEqual(summary.status, RunStatus.FAILED)
+        admission = json.loads((bundle_path / "metadata.json").read_text())[
+            "environment_admission"
+        ]
+        self.assertEqual(admission["decision"], "abort")
+        self.assertEqual(len(admission["attempts"]), 2)
+        self.assertTrue(admission["attempts"][-1]["cpu_admission_enforced"])
+        self.assertIn(
+            "cpu_baseline_telemetry_missing",
+            admission["attempts"][-1]["cpu_admission"]["conditions"],
+        )
+
+    def test_extension_sidecar_reparses_in_child_environment_path(self) -> None:
+        policy, _binding, preflight, snapshot = campaign_policy_fixture(
+            exploratory=False
+        )
+        raw = PRODUCTION_POLICY_PATH.read_bytes()
+        policy_sha = hashlib.sha256(raw).hexdigest()
+        preflight["policy_sha256"] = policy_sha
+        with patch.dict(
+            os.environ,
+            {
+                CAMPAIGN_POLICY_PATH_ENV: str(PRODUCTION_POLICY_PATH),
+                CAMPAIGN_POLICY_SHA256_ENV: policy_sha,
+                CAMPAIGN_PREFLIGHT_JSON_ENV: json.dumps(preflight),
+            },
+            clear=False,
+        ):
+            bundle_path, summary = run_benchmark(
+                make_config("controller-child-extension-sidecar"),
+                self.runs_root,
+                self.clock,
+                registry=AdmissionIdleRegistry([False]),
+                environment_snapshot=snapshot,
+            )
+
+        self.assertEqual(summary.status, RunStatus.SUCCEEDED)
+        metadata = json.loads((bundle_path / "metadata.json").read_text())
+        self.assertEqual(
+            metadata["campaign_policy"]["idle_admission_extension"][
+                "schema_version"
+            ],
+            policy.idle_admission_extension.schema_version,
+        )
+
     def test_post_capture_guard_observation_aborts_awake_display(self) -> None:
         policy, binding, preflight, snapshot = campaign_policy_fixture(
             exploratory=False
@@ -1261,7 +1480,7 @@ class HappyPathTests(ControllerTestCase):
         with patch(
             "joulewise.controller.collect_environment_guard_observation",
             side_effect=[clean, awake],
-        ):
+        ) as collect_guard:
             bundle_path, summary = run_benchmark(
                 make_config("controller-post-capture-awake"),
                 self.runs_root,
@@ -1281,6 +1500,12 @@ class HappyPathTests(ControllerTestCase):
         self.assertEqual(
             [row["phase"] for row in admission["guard_observations"]],
             ["before_attempt_1", "after_attempt_1"],
+        )
+        self.assertTrue(
+            all(
+                call.kwargs == {"include_adapter_power": True}
+                for call in collect_guard.call_args_list
+            )
         )
 
     def test_environment_override_makes_member_universally_claim_ineligible(self) -> None:

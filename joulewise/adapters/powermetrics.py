@@ -145,6 +145,9 @@ class PowermetricsTelemetryAdapter:
         self._pre_idle_quality: dict[str, float | bool | None] | None = None
         self._pending_captures: dict[str, Path] = {}
         self._idle_attempts_by_run: dict[str, int] = {}
+        self._idle_admission_records_by_run: dict[
+            str, dict[int, list[dict[str, Any]]]
+        ] = {}
 
     def device_metadata(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -154,6 +157,24 @@ class PowermetricsTelemetryAdapter:
         if isinstance(powermetrics, dict) and powermetrics.get("samplers_probe", {}).get("reason") != "not_probed":
             self._device_metadata["powermetrics"] = powermetrics
         return self._device_metadata
+
+    def idle_admission_records(
+        self,
+        *,
+        run_id: str,
+        attempt: int,
+    ) -> list[dict[str, Any]] | None:
+        """Expose one just-captured idle window to live admission.
+
+        This is an in-memory controller seam: it does not replace or alter the
+        preserved raw/rich artifacts, and attempt selection is explicit so a
+        retry verdict cannot accidentally consume attempt-1 CPU telemetry.
+        """
+
+        records = self._idle_admission_records_by_run.get(run_id, {}).get(attempt)
+        if records is None:
+            return None
+        return [dict(record) for record in records]
 
     def measure_idle(
         self, config: BenchmarkConfig, context: RunContext | None = None
@@ -200,6 +221,10 @@ class PowermetricsTelemetryAdapter:
             capture=f"idle_baseline_attempt_{attempt}",
         )
         rich_records = decode_rich_telemetry(data)
+        if context is not None:
+            self._idle_admission_records_by_run.setdefault(context.run_id, {})[
+                attempt
+            ] = [dict(record) for record in rich_records]
         if context is not None:
             self._write_rich_artifact(
                 context=context,

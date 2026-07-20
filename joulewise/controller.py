@@ -84,6 +84,7 @@ from joulewise.environment import (
     empty_environment_snapshot,
     evaluate_environment_policy,
 )
+from joulewise.idle_admission import evaluate_cpu_idle_admission
 from joulewise.interfaces import (
     AttemptIdentity,
     AdapterFailure,
@@ -327,6 +328,14 @@ def _campaign_policy_from_environment() -> tuple[
         "sha256": actual_sha,
         "source": path_text,
     }
+    if policy.idle_admission_extension is not None:
+        extension = policy.idle_admission_extension
+        binding["idle_admission_extension"] = {
+            "schema_version": extension.schema_version,
+            "policy_version": extension.policy_version,
+            "claim_bearing": extension.claim_bearing,
+            "sha256": extension.sha256(),
+        }
     return policy, binding, preflight
 
 
@@ -679,6 +688,14 @@ class _Execution:
                 "decision": None,
                 "claim_reason": None,
             }
+            extension = self._campaign_policy.idle_admission_extension
+            if extension is not None:
+                self._environment_admission["idle_admission_extension"] = {
+                    "schema_version": extension.schema_version,
+                    "policy_version": extension.policy_version,
+                    "claim_bearing": extension.claim_bearing,
+                    "sha256": extension.sha256(),
+                }
             observation = self._admission_guard_observation("before_attempt_1")
             environment_reason = self._admission_environment_failure(observation)
             if environment_reason is not None:
@@ -700,7 +717,7 @@ class _Execution:
         self._baseline = self._measure_idle_admission_attempt(1, attempts)
         if admission is not None and admission.enabled:
             self._enforce_post_capture_admission_guard(1)
-            if self._baseline.idle_window_suspect is not False:
+            if not attempts[-1]["admitted"]:
                 observation = self._admission_guard_observation("before_attempt_2")
                 environment_reason = self._admission_environment_failure(observation)
                 if environment_reason is not None:
@@ -716,7 +733,7 @@ class _Execution:
                 self._baseline = self._measure_idle_admission_attempt(2, attempts)
                 self._enforce_post_capture_admission_guard(2)
             assert self._environment_admission is not None
-            if self._baseline.idle_window_suspect is False:
+            if attempts[-1]["admitted"]:
                 self._environment_admission["decision"] = "admitted"
             elif admission.on_fail == AdmissionFailureAction.ABORT:
                 reason = "idle environment admission failed after one retry"
@@ -774,13 +791,40 @@ class _Execution:
         self._capture_adapter_alignments()
         self._capture_adapter_metadata()
         if self._campaign_policy is not None:
-            attempts.append(
-                {
-                    "attempt": attempt,
-                    "baseline": _jsonable(asdict(baseline)),
-                    "admitted": baseline.idle_window_suspect is False,
-                }
-            )
+            gpu_admitted = baseline.idle_window_suspect is False
+            row: dict[str, Any] = {
+                "attempt": attempt,
+                "baseline": _jsonable(asdict(baseline)),
+                "admitted": gpu_admitted,
+            }
+            extension = self._campaign_policy.idle_admission_extension
+            if extension is not None:
+                records = _adapter_idle_admission_records(
+                    self._telemetry,
+                    run_id=self._context.run_id,
+                    attempt=attempt,
+                )
+                cpu_admission = evaluate_cpu_idle_admission(
+                    records,
+                    extension.cpu_criteria,
+                    gpu_admitted=gpu_admitted,
+                )
+                cpu_enforced = records is not None or not isinstance(
+                    self._clock, FakeClock
+                )
+                row.update(
+                    {
+                        "gpu_admitted": gpu_admitted,
+                        "cpu_admission": cpu_admission,
+                        "cpu_admission_enforced": cpu_enforced,
+                        "admitted": (
+                            cpu_admission["admitted"]
+                            if cpu_enforced
+                            else gpu_admitted
+                        ),
+                    }
+                )
+            attempts.append(row)
         return baseline
 
     def _admission_guard_observation(self, phase: str) -> dict[str, Any]:
@@ -797,7 +841,9 @@ class _Execution:
                 "skip_reason": "fake_clock",
             }
         else:
-            observation = collect_environment_guard_observation()
+            observation = collect_environment_guard_observation(
+                include_adapter_power=True
+            )
             observation["capture_skipped"] = False
         observation["phase"] = phase
         if self._environment_admission is not None:
@@ -2215,6 +2261,34 @@ def _adapter_metadata(adapter: Any) -> dict[str, Any]:
     if not isinstance(metadata, dict):
         return {}
     return dict(metadata)
+
+
+def _adapter_idle_admission_records(
+    adapter: Any,
+    *,
+    run_id: str,
+    attempt: int,
+) -> list[dict[str, Any]] | None:
+    """Read the just-captured rich idle rows through an optional adapter seam.
+
+    Admission runs before workload invocation, so the controller must consume
+    in-memory evidence rather than re-opening the derived bundle artifact.
+    Adapters without the seam yield missing telemetry, which the production
+    extension fails closed and the exploratory extension labels/flags.
+    """
+
+    if adapter is None:
+        return None
+    getter = getattr(adapter, "idle_admission_records", None)
+    if not callable(getter):
+        return None
+    try:
+        records = getter(run_id=run_id, attempt=attempt)
+    except Exception:  # noqa: BLE001 - policy evaluator owns fail-closed mapping.
+        return None
+    if not isinstance(records, list):
+        return None
+    return [dict(record) if isinstance(record, dict) else record for record in records]
 
 
 def _adapter_cleanup_report(adapter: Any) -> list[dict[str, Any]]:

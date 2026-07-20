@@ -22,6 +22,25 @@
     "on_fail": "flag",
     "retry_attempts": 1
   },
+  "idle_admission_extension": {
+    "adapter_wattage": {
+      "require_known_wattage": false
+    },
+    "claim_bearing": false,
+    "cpu_criteria": {
+      "cpu_busy_ratio_p95_max": 0.5,
+      "min_samples": 30,
+      "on_missing_telemetry": "flag",
+      "processor_combined_power_w_p95_max": 1.0
+    },
+    "neg8_bracket": {
+      "max_abs_delta_j": 0.05,
+      "max_rel_delta": 0.25,
+      "require_bracket": false
+    },
+    "policy_version": "idle-admission-core-v1",
+    "schema_version": "joulewise.idle_admission_extension.v1"
+  },
   "policy_id": "quiet-mac-exploratory",
   "policy_version": "environment-guard-cooldown-v2",
   "profile": "exploratory",

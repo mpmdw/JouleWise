@@ -391,13 +391,34 @@ changes the policy identity; the extension additionally records its own
 canonical-JSON sha256 and requires exact schema/policy version strings and
 exact keys (unknown or missing keys are rejected).
 
-Deployment note (post-merge hookup required): `CampaignPolicy.from_mapping`
-in `joulewise/schemas.py` currently rejects unknown top-level sidecar keys,
-and the controller re-parses the sidecar from disk for child runs.
-`run_campaign.py` therefore strips and parses the extension itself, but the
-tracked production/exploratory sidecars must not carry the
-`idle_admission_extension` key until the schema hookup lands. Reference
-production extension block (paste at sidecar top level with the hookup):
+Deployment note (C2 hookup complete): `CampaignPolicy.from_mapping` now owns
+the typed additive extension parse, including profile-dependent fail-closed
+validation, so controller child runs re-parse the full hash-bound sidecar
+without a runner-side strip/parse workaround. The tracked production and
+exploratory sidecars carry the extension. During each live admission attempt,
+the powermetrics adapter exposes that attempt's rich CPU records in memory;
+the controller evaluates CPU/combined-power criteria before workload invoke,
+records the result in the existing `environment_admission.attempts` ledger,
+and retries/aborts or flags according to the base policy. Attempt selection is
+explicit, so the final admission decision and final CPU telemetry cannot be
+paired across retries. Missing adapter telemetry fails closed on live clocks;
+`FakeClock` fixture runs retain the pre-hookup GPU decision and record
+`cpu_admission_enforced: false` alongside the named missing-telemetry result.
+Live guard observations opt in to adapter-power capture.
+
+At window end, chain scripts can run:
+
+```sh
+python3 scripts/run_campaign.py --whole-window-verdict \
+  --runs-dir RUNS_ROOT --campaign-policy POLICY_SIDECAR
+```
+
+This scans finalized top-level bundles in the runs root, appends an
+`idle_admission_whole_window_verdict` row to the campaign log, and evaluates
+NEG-8 in explicit whole-window mode. A required missing reference or a
+threshold failure returns nonzero under production; exploratory remains
+non-claim-bearing and emits a labeled `flagged` verdict. The deployed
+production extension is:
 
 ```json
 "idle_admission_extension": {
