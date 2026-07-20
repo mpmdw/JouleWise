@@ -1,0 +1,92 @@
+{"timestamp_s": 1784491073.44508, "event_type": "run_started", "phase": "run", "message": "run p2015-df-rq-short-abs-r01 started", "metadata": {"run_id": "p2015-df-rq-short-abs-r01"}}
+{"timestamp_s": 1784491073.445091, "event_type": "stage_started", "phase": "validate", "message": "stage validate started", "metadata": {}}
+{"timestamp_s": 1784491073.446031, "event_type": "stage_completed", "phase": "validate", "message": "stage validate completed", "metadata": {"transport": "local", "runtime": "mlx", "telemetry": "powermetrics"}}
+{"timestamp_s": 1784491073.446033, "event_type": "stage_started", "phase": "prepare", "message": "stage prepare started", "metadata": {}}
+{"timestamp_s": 1784491074.8968608, "event_type": "stage_completed", "phase": "prepare", "message": "stage prepare completed", "metadata": {}}
+{"timestamp_s": 1784491074.896896, "event_type": "stage_started", "phase": "idle_baseline", "message": "stage idle_baseline started", "metadata": {}}
+{"timestamp_s": 1784491116.645519, "event_type": "stage_completed", "phase": "idle_baseline", "message": "stage idle_baseline completed", "metadata": {"power_w_mean": 0.08898363771419929, "duration_s": 36.242620696, "admission_attempts": 1, "admission_decision": "admitted"}}
+{"timestamp_s": 1784491116.6455371, "event_type": "stage_started", "phase": "warmup", "message": "stage warmup started", "metadata": {}}
+{"timestamp_s": 1784491121.7881548, "event_type": "stage_completed", "phase": "warmup", "message": "stage warmup completed", "metadata": {"warmup_runs": 1, "warmup_seconds": 5.0}}
+{"timestamp_s": 1784491121.7882361, "event_type": "stage_started", "phase": "measured_run", "message": "stage measured_run started", "metadata": {}}
+{"timestamp_s": 1784491122.808424, "event_type": "sampling_started", "phase": "measured_run", "message": "telemetry sampling confirmed active", "metadata": {}}
+{"timestamp_s": 1784491122.808466, "event_type": "phase_start", "phase": "tokenize", "message": "mlx tokenization started", "metadata": {}}
+{"timestamp_s": 1784491122.8088698, "event_type": "phase_end", "phase": "tokenize", "message": "mlx tokenization completed", "metadata": {"prompt_tokens": 128}}
+{"timestamp_s": 1784491122.808873, "event_type": "phase_start", "phase": "generation_setup", "message": "mlx generation setup started", "metadata": {}}
+{"timestamp_s": 1784491122.8089159, "event_type": "phase_end", "phase": "generation_setup", "message": "mlx generation setup completed", "metadata": {"requested_output_tokens": 64, "eos_suppressed": true}}
+{"timestamp_s": 1784491122.8089201, "event_type": "phase_start", "phase": "prefill", "message": "mlx prefill started", "metadata": {"phase_boundary_method": "first_token", "prompt_tokens": 128, "requested_output_tokens": 64, "eos_suppressed": true}}
+{"timestamp_s": 1784491122.941777, "event_type": "phase_end", "phase": "prefill", "message": "mlx prefill completed", "metadata": {"phase_boundary_method": "first_token"}}
+{"timestamp_s": 1784491122.941782, "event_type": "phase_start", "phase": "decode", "message": "mlx decode started", "metadata": {"phase_boundary_method": "first_token", "max_tokens": 64, "eos_suppressed": true, "original_eos_token_ids": [151645]}}
+{"timestamp_s": 1784491122.941783, "event_type": "token", "phase": "decode", "message": "mlx token 0", "metadata": {"index": 0}}
+{"timestamp_s": 1784491122.945257, "event_type": "token", "phase": "decode", "message": "mlx token 1", "metadata": {"index": 1}}
+{"timestamp_s": 1784491122.9489322, "event_type": "token", "phase": "decode", "message": "mlx token 2", "metadata": {"index": 2}}
+{"timestamp_s": 1784491122.9525492, "event_type": "token", "phase": "decode", "message": "mlx token 3", "metadata": {"index": 3}}
+{"timestamp_s": 1784491122.9561632, "event_type": "token", "phase": "decode", "message": "mlx token 4", "metadata": {"index": 4}}
+{"timestamp_s": 1784491122.9598238, "event_type": "token", "phase": "decode", "message": "mlx token 5", "metadata": {"index": 5}}
+{"timestamp_s": 1784491122.963487, "event_type": "token", "phase": "decode", "message": "mlx token 6", "metadata": {"index": 6}}
+{"timestamp_s": 1784491122.967139, "event_type": "token", "phase": "decode", "message": "mlx token 7", "metadata": {"index": 7}}
+{"timestamp_s": 1784491122.970811, "event_type": "token", "phase": "decode", "message": "mlx token 8", "metadata": {"index": 8}}
+{"timestamp_s": 1784491122.974475, "event_type": "token", "phase": "decode", "message": "mlx token 9", "metadata": {"index": 9}}
+{"timestamp_s": 1784491122.978126, "event_type": "token", "phase": "decode", "message": "mlx token 10", "metadata": {"index": 10}}
+{"timestamp_s": 1784491122.981792, "event_type": "token", "phase": "decode", "message": "mlx token 11", "metadata": {"index": 11}}
+{"timestamp_s": 1784491122.985441, "event_type": "token", "phase": "decode", "message": "mlx token 12", "metadata": {"index": 12}}
+{"timestamp_s": 1784491122.989074, "event_type": "token", "phase": "decode", "message": "mlx token 13", "metadata": {"index": 13}}
+{"timestamp_s": 1784491122.992748, "event_type": "token", "phase": "decode", "message": "mlx token 14", "metadata": {"index": 14}}
+{"timestamp_s": 1784491122.99634, "event_type": "token", "phase": "decode", "message": "mlx token 15", "metadata": {"index": 15}}
+{"timestamp_s": 1784491122.99987, "event_type": "token", "phase": "decode", "message": "mlx token 16", "metadata": {"index": 16}}
+{"timestamp_s": 1784491123.003399, "event_type": "token", "phase": "decode", "message": "mlx token 17", "metadata": {"index": 17}}
+{"timestamp_s": 1784491123.006996, "event_type": "token", "phase": "decode", "message": "mlx token 18", "metadata": {"index": 18}}
+{"timestamp_s": 1784491123.010677, "event_type": "token", "phase": "decode", "message": "mlx token 19", "metadata": {"index": 19}}
+{"timestamp_s": 1784491123.014387, "event_type": "token", "phase": "decode", "message": "mlx token 20", "metadata": {"index": 20}}
+{"timestamp_s": 1784491123.018042, "event_type": "token", "phase": "decode", "message": "mlx token 21", "metadata": {"index": 21}}
+{"timestamp_s": 1784491123.021739, "event_type": "token", "phase": "decode", "message": "mlx token 22", "metadata": {"index": 22}}
+{"timestamp_s": 1784491123.025409, "event_type": "token", "phase": "decode", "message": "mlx token 23", "metadata": {"index": 23}}
+{"timestamp_s": 1784491123.029145, "event_type": "token", "phase": "decode", "message": "mlx token 24", "metadata": {"index": 24}}
+{"timestamp_s": 1784491123.0328152, "event_type": "token", "phase": "decode", "message": "mlx token 25", "metadata": {"index": 25}}
+{"timestamp_s": 1784491123.0365021, "event_type": "token", "phase": "decode", "message": "mlx token 26", "metadata": {"index": 26}}
+{"timestamp_s": 1784491123.04018, "event_type": "token", "phase": "decode", "message": "mlx token 27", "metadata": {"index": 27}}
+{"timestamp_s": 1784491123.0438368, "event_type": "token", "phase": "decode", "message": "mlx token 28", "metadata": {"index": 28}}
+{"timestamp_s": 1784491123.047515, "event_type": "token", "phase": "decode", "message": "mlx token 29", "metadata": {"index": 29}}
+{"timestamp_s": 1784491123.0511959, "event_type": "token", "phase": "decode", "message": "mlx token 30", "metadata": {"index": 30}}
+{"timestamp_s": 1784491123.054862, "event_type": "token", "phase": "decode", "message": "mlx token 31", "metadata": {"index": 31}}
+{"timestamp_s": 1784491123.05856, "event_type": "token", "phase": "decode", "message": "mlx token 32", "metadata": {"index": 32}}
+{"timestamp_s": 1784491123.062228, "event_type": "token", "phase": "decode", "message": "mlx token 33", "metadata": {"index": 33}}
+{"timestamp_s": 1784491123.065887, "event_type": "token", "phase": "decode", "message": "mlx token 34", "metadata": {"index": 34}}
+{"timestamp_s": 1784491123.0695539, "event_type": "token", "phase": "decode", "message": "mlx token 35", "metadata": {"index": 35}}
+{"timestamp_s": 1784491123.0732422, "event_type": "token", "phase": "decode", "message": "mlx token 36", "metadata": {"index": 36}}
+{"timestamp_s": 1784491123.0769331, "event_type": "token", "phase": "decode", "message": "mlx token 37", "metadata": {"index": 37}}
+{"timestamp_s": 1784491123.0806022, "event_type": "token", "phase": "decode", "message": "mlx token 38", "metadata": {"index": 38}}
+{"timestamp_s": 1784491123.084299, "event_type": "token", "phase": "decode", "message": "mlx token 39", "metadata": {"index": 39}}
+{"timestamp_s": 1784491123.0879738, "event_type": "token", "phase": "decode", "message": "mlx token 40", "metadata": {"index": 40}}
+{"timestamp_s": 1784491123.0916748, "event_type": "token", "phase": "decode", "message": "mlx token 41", "metadata": {"index": 41}}
+{"timestamp_s": 1784491123.095367, "event_type": "token", "phase": "decode", "message": "mlx token 42", "metadata": {"index": 42}}
+{"timestamp_s": 1784491123.099045, "event_type": "token", "phase": "decode", "message": "mlx token 43", "metadata": {"index": 43}}
+{"timestamp_s": 1784491123.1026938, "event_type": "token", "phase": "decode", "message": "mlx token 44", "metadata": {"index": 44}}
+{"timestamp_s": 1784491123.106366, "event_type": "token", "phase": "decode", "message": "mlx token 45", "metadata": {"index": 45}}
+{"timestamp_s": 1784491123.109971, "event_type": "token", "phase": "decode", "message": "mlx token 46", "metadata": {"index": 46}}
+{"timestamp_s": 1784491123.113536, "event_type": "token", "phase": "decode", "message": "mlx token 47", "metadata": {"index": 47}}
+{"timestamp_s": 1784491123.1170712, "event_type": "token", "phase": "decode", "message": "mlx token 48", "metadata": {"index": 48}}
+{"timestamp_s": 1784491123.120678, "event_type": "token", "phase": "decode", "message": "mlx token 49", "metadata": {"index": 49}}
+{"timestamp_s": 1784491123.124374, "event_type": "token", "phase": "decode", "message": "mlx token 50", "metadata": {"index": 50}}
+{"timestamp_s": 1784491123.128047, "event_type": "token", "phase": "decode", "message": "mlx token 51", "metadata": {"index": 51}}
+{"timestamp_s": 1784491123.1317341, "event_type": "token", "phase": "decode", "message": "mlx token 52", "metadata": {"index": 52}}
+{"timestamp_s": 1784491123.135423, "event_type": "token", "phase": "decode", "message": "mlx token 53", "metadata": {"index": 53}}
+{"timestamp_s": 1784491123.139123, "event_type": "token", "phase": "decode", "message": "mlx token 54", "metadata": {"index": 54}}
+{"timestamp_s": 1784491123.142817, "event_type": "token", "phase": "decode", "message": "mlx token 55", "metadata": {"index": 55}}
+{"timestamp_s": 1784491123.1465018, "event_type": "token", "phase": "decode", "message": "mlx token 56", "metadata": {"index": 56}}
+{"timestamp_s": 1784491123.1502059, "event_type": "token", "phase": "decode", "message": "mlx token 57", "metadata": {"index": 57}}
+{"timestamp_s": 1784491123.1538901, "event_type": "token", "phase": "decode", "message": "mlx token 58", "metadata": {"index": 58}}
+{"timestamp_s": 1784491123.157579, "event_type": "token", "phase": "decode", "message": "mlx token 59", "metadata": {"index": 59}}
+{"timestamp_s": 1784491123.161289, "event_type": "token", "phase": "decode", "message": "mlx token 60", "metadata": {"index": 60}}
+{"timestamp_s": 1784491123.164974, "event_type": "token", "phase": "decode", "message": "mlx token 61", "metadata": {"index": 61}}
+{"timestamp_s": 1784491123.168674, "event_type": "token", "phase": "decode", "message": "mlx token 62", "metadata": {"index": 62}}
+{"timestamp_s": 1784491123.1723971, "event_type": "token", "phase": "decode", "message": "mlx token 63", "metadata": {"index": 63}}
+{"timestamp_s": 1784491123.179361, "event_type": "phase_end", "phase": "decode", "message": "mlx decode completed", "metadata": {"phase_boundary_method": "first_token", "emitted_tokens": 64, "requested_output_tokens": 64}}
+{"timestamp_s": 1784491123.179584, "event_type": "sampling_stopped", "phase": "measured_run", "message": "telemetry sampling stopped", "metadata": {}}
+{"timestamp_s": 1784491123.809623, "event_type": "stage_completed", "phase": "measured_run", "message": "stage measured_run completed", "metadata": {"sample_count": 27, "runtime_event_count": 72}}
+{"timestamp_s": 1784491123.80964, "event_type": "stage_started", "phase": "idle_drift_sentinel", "message": "stage idle_drift_sentinel started", "metadata": {}}
+{"timestamp_s": 1784491130.958955, "event_type": "stage_completed", "phase": "idle_drift_sentinel", "message": "stage idle_drift_sentinel completed", "metadata": {"status": "bounded", "duration_requested_s": 5.0}}
+{"timestamp_s": 1784491130.958963, "event_type": "stage_started", "phase": "cleanup", "message": "stage cleanup started", "metadata": {}}
+{"timestamp_s": 1784491131.164944, "event_type": "stage_completed", "phase": "cleanup", "message": "stage cleanup completed", "metadata": {"cleanup_ok": true, "memory_snapshots": [{"label": "cleanup_start", "captured_at_s": 1784491130.959022, "process_rss_bytes": 1176764416, "mlx_metal": {"api_available": true, "active_memory_bytes": 871558152, "cache_memory_bytes": 11307774, "peak_memory_bytes": 1119317776}}]}}
+{"timestamp_s": 1784491131.164971, "event_type": "stage_started", "phase": "reduce", "message": "stage reduce started", "metadata": {}}
+{"timestamp_s": 1784491131.815346, "event_type": "stage_completed", "phase": "reduce", "message": "stage reduce completed", "metadata": {}}
+{"timestamp_s": 1784491131.815812, "event_type": "run_finalized", "phase": "run", "message": "bundle finalized", "metadata": {}}

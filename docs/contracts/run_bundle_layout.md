@@ -473,6 +473,54 @@ Only the six frozen legacy identities retain `plist_anchor_offset_s` and the
 legacy cumulative-elapsed algorithm. Neither schema version, date, directory
 name, nor additive-field absence selects the legacy path.
 
+### D-078 additive era: `p2-038.2` and reducer `0.5.1` / `0.6.1`
+
+New captures record `uncertainty_evidence` with schema `p2-038.2`: the clock
+anchor is the midpoint of the ADMISSIBLE interval formed by intersecting the
+censored native whole-second constraints `[T_i - q_i, T_i + 1 - q_i)` over
+every record (no outlier deletion) with the causal
+pre-spawn/first-parse interval mapped through the wall-minus-monotonic
+envelope. The old spawn bracket is a causal SET constraint, never a midpoint
+estimate. Exact dispatch for stored `p2-038.1` evidence is retained. Any
+failure (missing/malformed/non-monotone native stamps, `is_delta != true`,
+nonpositive/nonfinite elapsed, energy-versus-power*duration inconsistency,
+no native second rollover before the workload, empty intersection,
+wall-minus-monotonic range > 5 ms or step, first-parse lag > 0.25 s,
+missing edge coverage under any admissible shift) is the
+`clock_anchor_unresolved` claim barrier - never a fallback. The adapter's
+`start_sampling` refuses to return before one native whole-second rollover,
+and measured-run `rich_telemetry.jsonl` timestamps move with the corrected
+anchor. The retained stop prefix keeps a record that brackets the stop marker
+under the EARLIEST admissible anchor.
+
+Reducers `0.5.1` (and AXI `0.6.1`) re-derive this anchor from the raw
+capture, re-anchor the summed curve, and add (additively; `0.5.0`/`0.6.0`
+replays stay byte-frozen):
+
+- summary field `energy_anchor_shift_envelopes`: JSON-Pointer metric paths
+  mapped to `{method: "common_trace_shift_interval_overlap_v1",
+  anchor_bound_s, point_j, lower_j, upper_j, max_abs_delta_j}` - the
+  CONTINUOUS envelope of each energy metric under one COMMON anchor shift in
+  `[-B_effective, +B_effective]`, evaluated at every trace-edge/window-edge
+  breakpoint (endpoint-only evaluation is unsound; interior extrema exist).
+  Idle subtraction translates the gross envelope; fixed token denominators
+  scale it; disjoint phase intervals sum under the shared shift.
+- `energy_bound_terms_j.E_clock_anchor_shift_bound_j`: the request-level
+  scalar (the gross envelope's max absolute deviation).
+- window-evidence precheck reasons `clock_anchor_unresolved`,
+  `anchor_energy_envelope_unrecorded`, and
+  `anchor_energy_envelope_exceeds_quarter_metric`
+  (`(max(P-lower, upper-P) + I_joint) / |P| <= 0.25`, zero-point/nonzero
+  bound failing closed). `B_effective = max(B_bundle, B_fiducial)`; the
+  optional `metadata.instrument_calibration` block references a
+  `docs/contracts/powermetrics_fiducial.md` artifact by
+  `artifact_sha256` and supplies `b_fiducial_s` (an invalid block is
+  `clock_anchor_unresolved`).
+- `energy_uncertainty_status = "bounded"` only when every required bound
+  term (drift, both interpolation terms, anchor shift) is present.
+  Interval-support traces keep both interpolation terms exactly 0; point
+  traces combine conservatively and never double-count.
+
 ## Summary Metrics Minimum Fields
 
 Summary completion is status-specific and enforced by the shared bundle

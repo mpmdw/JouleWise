@@ -142,7 +142,7 @@ class CliTests(unittest.TestCase):
                 "strict: unsupported reducer version "
                 "'0.4.1' for current-era bundle; superseded versions "
                 "cannot claim the current inter_token_throughput_tokens_s "
-                "reduction shape and explicit re-reduction with 0.5.0 is "
+                f"reduction shape and explicit re-reduction with {SUMMARY_REDUCER_VERSION} is "
                 "required",
                 validate_bundle(adversarial_bundle, strict=True),
             )
@@ -166,7 +166,8 @@ class CliTests(unittest.TestCase):
                         "strict: unsupported reducer version "
                         f"'{version}' for current-era bundle; superseded versions "
                         "cannot claim the current inter_token_throughput_tokens_s "
-                        "reduction shape and explicit re-reduction with 0.5.0 is "
+                        "reduction shape and explicit re-reduction with "
+                        f"{SUMMARY_REDUCER_VERSION} is "
                         "required",
                         validate_bundle(bundle, strict=True),
                     )
@@ -182,7 +183,7 @@ class CliTests(unittest.TestCase):
                 current_summary["summary_provenance"]["reducer_version"],
                 SUMMARY_REDUCER_VERSION,
             )
-            self.assertEqual(SUMMARY_REDUCER_VERSION, "0.5.0")
+            self.assertEqual(SUMMARY_REDUCER_VERSION, "0.5.1")
             self.assertEqual(validate_bundle(current_bundle, strict=True), [])
 
     def test_weighted_idle_drift_flips_strict_verdict_from_legacy_counterfactual(
@@ -220,7 +221,8 @@ class CliTests(unittest.TestCase):
             )
 
             self.assertEqual(
-                weighted_summary["summary_provenance"]["reducer_version"], "0.5.0"
+                weighted_summary["summary_provenance"]["reducer_version"],
+                SUMMARY_REDUCER_VERSION,
             )
             self.assertEqual(weighted_summary["idle_mean_uncertainty"]["status"], "estimated")
             self.assertEqual(validate_bundle(bundle, strict=True), [])

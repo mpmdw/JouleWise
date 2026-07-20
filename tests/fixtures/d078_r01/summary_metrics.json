@@ -1,0 +1,236 @@
+{
+  "decode_latency_s": 0.23061418533325195,
+  "energy_bound_terms_j": {
+    "E_drift_bound_j": 0.26329326564629524,
+    "E_interpolation_edge_bound_j": 0.0,
+    "E_interpolation_joint_edge_bound_j": 0.0
+  },
+  "energy_output_token_j": 0.003769387493991548,
+  "energy_request_j": 0.24124079961545908,
+  "energy_token_j": 0.0012564624979971826,
+  "energy_uncertainty_status": "not_estimable",
+  "energy_variance_terms_j2": {
+    "E_gross_repetition_j2": null,
+    "E_idle_mean_j2": 4.7138766772717683e-07
+  },
+  "failure_message": null,
+  "failure_reason": null,
+  "gross_energy_j": 0.2742679692914486,
+  "idle_baseline": {
+    "duration_s": 36.242620696,
+    "gpu_freq_hz_mean": 11.266666666666667,
+    "gpu_freq_mhz_mean": 11.266666666666667,
+    "gpu_idle_ratio_mean": 0.99858973,
+    "gpu_idle_ratio_min": 0.924069,
+    "idle_window_suspect": false,
+    "power_w_mean": 0.08898363771419929,
+    "power_w_stddev": 0.028041367979448627,
+    "sample_count": 300,
+    "telemetry_backend": "powermetrics"
+  },
+  "idle_mean_uncertainty": {
+    "bandwidth_s": 10.0,
+    "cadence_p95_p05_ratio": 1.0839275365984955,
+    "correlation_scope": "independent_run",
+    "effective_sample_size": 229.79606088659105,
+    "governed_variance_of_mean_w2": 3.421809386658332e-06,
+    "hac_variance_of_mean_w2": 3.421809386658332e-06,
+    "iid_variance_of_mean_w2": 2.622451246735798e-06,
+    "lag_count": 82,
+    "median_sample_interval_s": 0.1208247915,
+    "method": "duration_weighted_newey_west_bartlett_10s_iid_floor_v2",
+    "raw_sample_count": 300,
+    "reason_codes": [],
+    "sample_variance_w2": 0.0007863183181588469,
+    "source_artifact": "raw/powermetrics_idle.plist",
+    "source_sha256": "c7fe34efd72b89e5427c30dcead1297185b90dfa13d910a05d9b7fdc5f9d04a1",
+    "status": "estimated"
+  },
+  "idle_subtracted_energy_j": 0.24124079961545908,
+  "inter_token_throughput_tokens_s": 273.18354206598804,
+  "measurement_quality": {
+    "cooldown_cap_hit": null,
+    "dropped_samples": 0,
+    "idle_power_w_stddev": 0.028041367979448627,
+    "idle_window_suspect": false,
+    "observed_sampling_hz": 8.816304567162172,
+    "phase_identifiability": {
+      "decode": "identifiable",
+      "generation_setup": "not_resolvable_sample_count",
+      "prefill": "not_resolvable_sample_count",
+      "tokenize": "not_resolvable_sample_count"
+    },
+    "remote_cleanup_failed": null,
+    "requested_sampling_hz": 10.0,
+    "runtime_cleanup_ok": true,
+    "telemetry_source": "powermetrics",
+    "thermal_drift_c": null,
+    "token_count_source": "runtime_observed",
+    "token_counts_source": "runtime_observed"
+  },
+  "phase_energy_j": {
+    "decode": 0.18577080959892273,
+    "generation_setup": 3.5597033500671385e-05,
+    "prefill": 0.08794402541351319,
+    "tokenize": 0.0003350076375007629
+  },
+  "status": "succeeded",
+  "suite_metrics": null,
+  "summary_provenance": {
+    "config_schema_version": "0.1",
+    "reducer_id": "joulewise.reduce_bundle",
+    "reducer_version": "0.5.0",
+    "summary_schema_version": "0.1"
+  },
+  "throughput_tokens_s": 277.5197887654482,
+  "ttft_s": 0.13335895538330078,
+  "uncertainty": null,
+  "window_evidence_precheck": {
+    "gross_request": {
+      "cadence_ratio": 3.23281998886923,
+      "cadence_ratio_min": 4.0,
+      "clock_anchor_bound_s": 1.1299676895141602,
+      "eligible": false,
+      "in_window_sample_count": 4,
+      "interpolation_edge_bound_j": 0.0,
+      "interpolation_joint_edge_bound_j": 0.0,
+      "metric_name": "gross_energy_j",
+      "observed_bracketing_max_sample_gap_s": 0.11390972137451172,
+      "observed_window_p95_sample_gap_s": 0.11480998992919922,
+      "reasons": [
+        "cadence_ratio_below_threshold",
+        "clock_bound_exceeds_quarter_window"
+      ],
+      "window_class": "gross_request",
+      "window_duration_s": 0.37116003036499023
+    },
+    "idle_subtracted_request": {
+      "cadence_ratio": 3.23281998886923,
+      "cadence_ratio_min": 4.0,
+      "clock_anchor_bound_s": 1.1299676895141602,
+      "eligible": false,
+      "in_window_sample_count": 4,
+      "interpolation_edge_bound_j": 0.0,
+      "interpolation_joint_edge_bound_j": 0.0,
+      "metric_name": "idle_subtracted_energy_j",
+      "observed_bracketing_max_sample_gap_s": 0.11390972137451172,
+      "observed_window_p95_sample_gap_s": 0.11480998992919922,
+      "reasons": [
+        "cadence_ratio_below_threshold",
+        "clock_bound_exceeds_quarter_window"
+      ],
+      "window_class": "idle_subtracted_request",
+      "window_duration_s": 0.37116003036499023
+    },
+    "phase": {
+      "decode": {
+        "eligible": false,
+        "reasons": [
+          "clock_bound_exceeds_quarter_window"
+        ],
+        "window_count": 1,
+        "windows": [
+          {
+            "cadence_ratio": 2.069324345651939,
+            "cadence_ratio_min": 2.0,
+            "clock_anchor_bound_s": 1.1299676895141602,
+            "eligible": false,
+            "in_window_sample_count": 3,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "observed_bracketing_max_sample_gap_s": 0.11390972137451172,
+            "observed_window_p95_sample_gap_s": 0.11480998992919922,
+            "reasons": [
+              "clock_bound_exceeds_quarter_window"
+            ],
+            "window_duration_s": 0.2375791072845459
+          }
+        ]
+      },
+      "generation_setup": {
+        "eligible": false,
+        "reasons": [
+          "cadence_ratio_unrecorded",
+          "clock_bound_exceeds_quarter_window",
+          "insufficient_in_window_samples"
+        ],
+        "window_count": 1,
+        "windows": [
+          {
+            "cadence_ratio": null,
+            "cadence_ratio_min": 2.0,
+            "clock_anchor_bound_s": 1.1299676895141602,
+            "eligible": false,
+            "in_window_sample_count": 1,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "observed_bracketing_max_sample_gap_s": 0.11332535743713379,
+            "observed_window_p95_sample_gap_s": null,
+            "reasons": [
+              "cadence_ratio_unrecorded",
+              "clock_bound_exceeds_quarter_window",
+              "insufficient_in_window_samples"
+            ],
+            "window_duration_s": 4.291534423828125e-05
+          }
+        ]
+      },
+      "prefill": {
+        "eligible": false,
+        "reasons": [
+          "cadence_ratio_unrecorded",
+          "clock_bound_exceeds_quarter_window",
+          "insufficient_in_window_samples"
+        ],
+        "window_count": 1,
+        "windows": [
+          {
+            "cadence_ratio": null,
+            "cadence_ratio_min": 2.0,
+            "clock_anchor_bound_s": 1.1299676895141602,
+            "eligible": false,
+            "in_window_sample_count": 2,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "observed_bracketing_max_sample_gap_s": 0.11352729797363281,
+            "observed_window_p95_sample_gap_s": null,
+            "reasons": [
+              "cadence_ratio_unrecorded",
+              "clock_bound_exceeds_quarter_window",
+              "insufficient_in_window_samples"
+            ],
+            "window_duration_s": 0.1328568458557129
+          }
+        ]
+      },
+      "tokenize": {
+        "eligible": false,
+        "reasons": [
+          "cadence_ratio_unrecorded",
+          "clock_bound_exceeds_quarter_window",
+          "insufficient_in_window_samples"
+        ],
+        "window_count": 1,
+        "windows": [
+          {
+            "cadence_ratio": null,
+            "cadence_ratio_min": 2.0,
+            "clock_anchor_bound_s": 1.1299676895141602,
+            "eligible": false,
+            "in_window_sample_count": 1,
+            "interpolation_edge_bound_j": 0.0,
+            "interpolation_joint_edge_bound_j": 0.0,
+            "observed_bracketing_max_sample_gap_s": 0.11332535743713379,
+            "observed_window_p95_sample_gap_s": null,
+            "reasons": [
+              "cadence_ratio_unrecorded",
+              "clock_bound_exceeds_quarter_window",
+              "insufficient_in_window_samples"
+            ],
+            "window_duration_s": 0.0004038810729980469
+          }
+        ]
+      }
+    }
+  }
+}

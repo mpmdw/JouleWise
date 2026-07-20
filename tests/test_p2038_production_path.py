@@ -29,7 +29,6 @@ from joulewise.clock import SystemClock
 from joulewise.controller import run_benchmark
 from joulewise.reduce import reduce_bundle
 from joulewise.schemas import BenchmarkConfig
-from scripts.run_campaign import assert_production_uncertainty
 
 
 FIXTURE_PROCESS = Path(__file__).parent / "fixtures" / "fake_powermetrics_process.py"
@@ -138,10 +137,26 @@ class P2038ProductionPathTests(unittest.TestCase):
             self.assertTrue((bundle / "raw" / "powermetrics_idle_post.plist").is_file())
             self.assertNotIn("clock_anchor_bound_s", metadata.get("extra", {}))
             self.assertNotIn("idle_drift_bound_w", metadata.get("extra", {}))
-            self.assertEqual(metadata["uncertainty_evidence"]["schema_version"], "p2-038.1")
-            request_gate = stored["window_evidence_precheck"][
-                "idle_subtracted_request"
-            ]
+            self.assertEqual(metadata["uncertainty_evidence"]["schema_version"], "p2-038.2")
+            clock_anchor = metadata["uncertainty_evidence"]["clock_anchor"]
+            self.assertEqual(clock_anchor["status"], "bounded")
+            self.assertEqual(
+                clock_anchor["method"],
+                "powermetrics_native_second_censored_intersection_v1",
+            )
+            self.assertGreaterEqual(clock_anchor["native_rollover_count"], 1)
+            self.assertIn("energy_anchor_shift_envelopes", stored)
+            self.assertIn(
+                "/gross_energy_j", stored["energy_anchor_shift_envelopes"]
+            )
+            self.assertIsNotNone(
+                stored["energy_bound_terms_j"]["E_clock_anchor_shift_bound_j"]
+            )
+            # D-078: the mock runtime does no real GPU work, so the
+            # idle-subtracted metric is near zero and legitimately fails the
+            # anchor-envelope quarter-metric ratio. The gross-energy gate has
+            # meaningful magnitude and is the eligible request claim here.
+            request_gate = stored["window_evidence_precheck"]["gross_request"]
             self.assertIs(request_gate["eligible"], True)
             self.assertIsNotNone(
                 request_gate["observed_bracketing_max_sample_gap_s"]
@@ -155,10 +170,29 @@ class P2038ProductionPathTests(unittest.TestCase):
             support_end_s = reader.summed_curve()[-1].support_end_s
             self.assertIsNotNone(support_end_s)
             self.assertGreaterEqual(support_end_s, measured_window.end_s)
-            assertion = assert_production_uncertainty(
-                bundle, allow_mock_runtime=True
+            # scripts/run_campaign.assert_production_uncertainty still pins
+            # p2-038.1 (outside this stream's write scope); replicate its
+            # bundle-level guarantees against the p2-038.2 evidence here.
+            for key in (
+                "clock_anchor_bound_s",
+                "marker_to_first_sample_phase_bound_s",
+                "marker_to_last_sample_phase_bound_s",
+                "idle_drift_bound_w",
+            ):
+                self.assertIsInstance(metadata.get(key), float)
+                self.assertGreaterEqual(metadata[key], 0.0)
+            self.assertEqual(
+                metadata["uncertainty_evidence"]["sample_phase"]["status"],
+                "bounded",
             )
-            self.assertIs(assertion["request_eligible"], True)
+            self.assertEqual(
+                metadata["uncertainty_evidence"]["idle_drift"]["status"],
+                "bounded",
+            )
+            self.assertIs(
+                stored["window_evidence_precheck"]["gross_request"]["eligible"],
+                True,
+            )
 
     def test_rail_only_sentinels_withhold_drift_but_leave_gross_eligible(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -251,8 +285,7 @@ class P2038ProductionPathTests(unittest.TestCase):
 
     def test_real_path_exercises_fail_closed_gate_reasons_without_scalar_edits(self) -> None:
         expected = {
-            "inconsistent": "clock_bound_unrecorded",
-            "wide": "clock_bound_exceeds_quarter_window",
+            "inconsistent": "clock_anchor_unresolved",
             "contaminated_post": "drift_term_unknown",
         }
         for mode, reason in expected.items():
@@ -266,6 +299,20 @@ class P2038ProductionPathTests(unittest.TestCase):
                 ]
                 self.assertIs(request_gate["eligible"], False)
                 self.assertIn(reason, request_gate["reasons"])
+        # D-078: a wide first sampling interval no longer poisons the anchor
+        # bound - the censored intersection pins record 0 from the native
+        # stamps, so the request gate stays legitimately eligible.
+        with self.subTest(mode="wide"), tempfile.TemporaryDirectory() as tmp:
+            bundle, summary = self.run_mode(Path(tmp), "wide")
+            self.assertEqual(summary.status.value, "succeeded")
+            self.assertEqual(validate_bundle(bundle, strict=True), [])
+            stored = json.loads((bundle / "summary_metrics.json").read_text())
+            request_gate = stored["window_evidence_precheck"]["gross_request"]
+            self.assertIs(request_gate["eligible"], True)
+            self.assertLess(
+                request_gate["clock_anchor_bound_s"],
+                0.25 * request_gate["window_duration_s"],
+            )
 
     def test_strict_rederivation_rejects_evidence_raw_and_marker_tampering(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

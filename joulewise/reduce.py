@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import math
 import statistics
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +53,11 @@ from joulewise.bundle_read import (
     TracePoint,
     Window,
     axi_v2_validation_problems,
+)
+from joulewise.uncertainty_evidence import (
+    CLOCK_ANCHOR_UNRESOLVED,
+    derive_powermetrics_anchor_v2,
+    stamp_from_mapping,
 )
 from joulewise.idle_dependence import (
     FROZEN_METHOD_ID_V1,
@@ -84,14 +90,29 @@ from joulewise.validation import finite_float
 REDUCER_ID = SUMMARY_REDUCER_ID
 REDUCER_VERSION = SUMMARY_REDUCER_VERSION
 FROZEN_REDUCER_VERSIONS = frozenset({"0.4.1", "0.4.2"})
-AXI_REDUCER_VERSION = "0.6.0"
+# D-078: 0.5.0 (point-anchor era) and 0.6.0 (frozen AXI burst arm) replay
+# byte-identically; 0.5.1/0.6.1 add the censored-intersection anchor
+# re-derivation plus the continuous common-shift energy envelopes.
+POINT_ANCHOR_FROZEN_REDUCER_VERSION = "0.5.0"
+AXI_FROZEN_REDUCER_VERSION = "0.6.0"
+AXI_REDUCER_VERSION = "0.6.1"
+AXI_REDUCER_VERSIONS = frozenset(
+    {AXI_FROZEN_REDUCER_VERSION, AXI_REDUCER_VERSION}
+)
+ANCHOR_SHIFT_METHOD = "common_trace_shift_interval_overlap_v1"
+RAW_POWERMETRICS_NAME = "powermetrics.plist"
 MIN_PHASE_SAMPLES = 3
 SHORT_WINDOW_CADENCE_RATIO_MIN = 2.0
 REQUEST_WINDOW_CADENCE_RATIO_MIN = 4.0
+ANCHOR_ENVELOPE_METRIC_RATIO_MAX = 0.25
 
 __all__ = [
     "MIN_PHASE_SAMPLES",
+    "ANCHOR_SHIFT_METHOD",
+    "AXI_FROZEN_REDUCER_VERSION",
     "AXI_REDUCER_VERSION",
+    "AXI_REDUCER_VERSIONS",
+    "POINT_ANCHOR_FROZEN_REDUCER_VERSION",
     "REDUCER_ID",
     "REDUCER_VERSION",
     "reduce_bundle",
@@ -538,6 +559,8 @@ def _window_evidence_precheck(
     measured_window: Window,
     request_bound_terms_j: dict[str, float | None],
     idle_baseline: IdleBaseline | None,
+    *,
+    clock_bound_override_s: float | None = None,
 ) -> dict[str, Any]:
     # P2-040 FIX-2 (STA-5): metric-specific request gates. ``gross_request``
     # never requires idle/drift evidence; ``idle_subtracted_request`` requires
@@ -552,6 +575,7 @@ def _window_evidence_precheck(
         require_drift=False,
         require_cooldown=True,
         bound_terms_j=request_bound_terms_j,
+        clock_bound_override_s=clock_bound_override_s,
     )
     gross_request["metric_name"] = "gross_energy_j"
     gross_request["window_class"] = "gross_request"
@@ -567,6 +591,7 @@ def _window_evidence_precheck(
         require_idle_baseline=True,
         idle_baseline=idle_baseline,
         bound_terms_j=request_bound_terms_j,
+        clock_bound_override_s=clock_bound_override_s,
     )
     idle_subtracted_request["metric_name"] = "idle_subtracted_energy_j"
     idle_subtracted_request["window_class"] = "idle_subtracted_request"
@@ -586,6 +611,7 @@ def _window_evidence_precheck(
                 cadence_ratio_min=SHORT_WINDOW_CADENCE_RATIO_MIN,
                 require_sample_count=True,
                 require_drift=False,
+                clock_bound_override_s=clock_bound_override_s,
             )
             for phase, intervals in sorted(phase_windows.items())
         }
@@ -600,6 +626,7 @@ def _window_evidence_precheck(
                 cadence_ratio_min=SHORT_WINDOW_CADENCE_RATIO_MIN,
                 require_sample_count=True,
                 require_drift=False,
+                clock_bound_override_s=clock_bound_override_s,
             )
             for item in item_windows
         }
@@ -614,6 +641,7 @@ def _window_evidence_precheck(
                 cadence_ratio_min=SHORT_WINDOW_CADENCE_RATIO_MIN,
                 require_sample_count=True,
                 require_drift=False,
+                clock_bound_override_s=clock_bound_override_s,
             )
             for block_id, intervals in sorted(block_windows.items())
         }
@@ -628,6 +656,7 @@ def _window_evidence_precheck(
                 cadence_ratio_min=SHORT_WINDOW_CADENCE_RATIO_MIN,
                 require_sample_count=True,
                 require_drift=False,
+                clock_bound_override_s=clock_bound_override_s,
             )
             for (block_id, level_id), intervals in sorted(level_windows.items())
         }
@@ -686,6 +715,7 @@ def _windows_evidence_precheck(
     cadence_ratio_min: float,
     require_sample_count: bool,
     require_drift: bool,
+    clock_bound_override_s: float | None = None,
 ) -> dict[str, Any]:
     entries = [
         _window_evidence_precheck_for_window(
@@ -695,6 +725,7 @@ def _windows_evidence_precheck(
             cadence_ratio_min=cadence_ratio_min,
             require_sample_count=require_sample_count,
             require_drift=require_drift,
+            clock_bound_override_s=clock_bound_override_s,
         )
         for window in windows
     ]
@@ -719,6 +750,7 @@ def _window_evidence_precheck_for_window(
     require_idle_baseline: bool = False,
     idle_baseline: IdleBaseline | None = None,
     bound_terms_j: dict[str, float | None] | None = None,
+    clock_bound_override_s: float | None = None,
 ) -> dict[str, Any]:
     reasons: list[str] = []
     if window.duration_s <= 0.0:
@@ -740,7 +772,11 @@ def _window_evidence_precheck_for_window(
     elif cadence_ratio < cadence_ratio_min:
         reasons.append("cadence_ratio_below_threshold")
 
-    clock_bound_s = _clock_anchor_bound_s(metadata)
+    clock_bound_s = (
+        clock_bound_override_s
+        if clock_bound_override_s is not None
+        else _clock_anchor_bound_s(metadata)
+    )
     if clock_bound_s is None:
         reasons.append("clock_bound_unrecorded")
     elif clock_bound_s > 0.25 * window.duration_s:
@@ -885,6 +921,568 @@ def _bracketing_gap_s(curve: list[TracePoint], t: float) -> float | None:
 
 
 # ----------------------------------------------------------------------------
+# D-078 anchor context + continuous common-shift energy envelopes
+
+
+@dataclass(frozen=True)
+class _AnchorContext:
+    """Resolved (or fail-closed) clock-anchor state for anchor-era reducers."""
+
+    telemetry_is_powermetrics: bool
+    unresolved: bool
+    bound_s: float | None
+    curve: list[TracePoint] | None
+    anchor_epoch_s: float | None
+    bundle_bound_s: float | None
+    fiducial_bound_s: float | None
+    detail: str | None
+
+
+def _unresolved_anchor_context(detail: str) -> _AnchorContext:
+    return _AnchorContext(
+        telemetry_is_powermetrics=True,
+        unresolved=True,
+        bound_s=None,
+        curve=None,
+        anchor_epoch_s=None,
+        bundle_bound_s=None,
+        fiducial_bound_s=None,
+        detail=detail,
+    )
+
+
+def _derive_anchor_context(
+    reader: BundleReader, metadata: dict[str, Any]
+) -> _AnchorContext:
+    """Re-derive the D-078 censored-intersection anchor from primary evidence.
+
+    Powermetrics bundles must re-resolve their record-0 window END from the
+    raw plist's native whole-second stamps intersected with the causal clock
+    stamp interval; every failure is the ``clock_anchor_unresolved`` claim
+    barrier, never a fallback to the stored point anchor. Non-powermetrics
+    backends keep their recorded clock bound for the envelope and are never
+    "unresolved" (their traces are not native-stamped)."""
+
+    if _telemetry_source(metadata) != "powermetrics":
+        return _AnchorContext(
+            telemetry_is_powermetrics=False,
+            unresolved=False,
+            bound_s=_clock_anchor_bound_s(metadata),
+            curve=None,
+            anchor_epoch_s=None,
+            bundle_bound_s=None,
+            fiducial_bound_s=None,
+            detail=None,
+        )
+    evidence = metadata.get("uncertainty_evidence")
+    clock_anchor = (
+        evidence.get("clock_anchor") if isinstance(evidence, dict) else None
+    )
+    stamp_rows = (
+        clock_anchor.get("clock_stamps") if isinstance(clock_anchor, dict) else None
+    )
+    if not isinstance(stamp_rows, dict):
+        return _unresolved_anchor_context("clock_stamps_unavailable")
+    try:
+        stamps = {
+            name: stamp_from_mapping(value)
+            for name, value in stamp_rows.items()
+            if isinstance(value, dict)
+        }
+    except (KeyError, TypeError, ValueError):
+        return _unresolved_anchor_context("clock_stamps_malformed")
+    raw_path = reader.path / "raw" / RAW_POWERMETRICS_NAME
+    if not raw_path.is_file():
+        return _unresolved_anchor_context("raw_capture_unavailable")
+    # Imported lazily so the pure reducer only pays for the adapter parser on
+    # the powermetrics path (and to keep the adapter package optional in
+    # analysis-only environments).
+    from joulewise.adapters.powermetrics import (
+        anchor_records_from_powermetrics,
+        parse_powermetrics_records,
+    )
+
+    try:
+        raw_records = parse_powermetrics_records(raw_path.read_bytes())
+    except (OSError, ValueError):
+        return _unresolved_anchor_context("raw_capture_unparseable")
+    derivation = derive_powermetrics_anchor_v2(
+        stamps=stamps,
+        records=anchor_records_from_powermetrics(raw_records),
+    )
+    if derivation.get("status") != "bounded":
+        return _unresolved_anchor_context(
+            str(derivation.get("detail", "anchor_derivation_failed"))
+        )
+    anchor_s = float(derivation["first_sample_end_point_epoch_s"])
+    bundle_bound_s = float(derivation["effective_clock_anchor_bound_s"])
+    fiducial_bound_s: float | None = None
+    calibration = metadata.get("instrument_calibration")
+    if calibration is not None:
+        if not isinstance(calibration, dict):
+            return _unresolved_anchor_context("instrument_calibration_invalid")
+        b_fiducial = calibration.get("b_fiducial_s")
+        artifact_sha256 = calibration.get("artifact_sha256")
+        if (
+            isinstance(b_fiducial, bool)
+            or not isinstance(b_fiducial, int | float)
+            or not math.isfinite(float(b_fiducial))
+            or float(b_fiducial) < 0.0
+            or not isinstance(artifact_sha256, str)
+            or len(artifact_sha256) != 64
+        ):
+            return _unresolved_anchor_context("instrument_calibration_invalid")
+        fiducial_bound_s = float(b_fiducial)
+    effective_bound_s = max(bundle_bound_s, fiducial_bound_s or 0.0)
+    cumulative_s = 0.0
+    curve: list[TracePoint] = []
+    for index, record in enumerate(raw_records):
+        elapsed_s = record.elapsed_ns / 1_000_000_000.0
+        if index > 0:
+            cumulative_s += elapsed_s
+        end_s = anchor_s + cumulative_s
+        curve.append(
+            TracePoint(
+                t=end_s,
+                power_w=record.combined_power_w,
+                support_start_s=end_s - elapsed_s,
+                support_end_s=end_s,
+            )
+        )
+    return _AnchorContext(
+        telemetry_is_powermetrics=True,
+        unresolved=False,
+        bound_s=effective_bound_s,
+        curve=curve,
+        anchor_epoch_s=anchor_s,
+        bundle_bound_s=bundle_bound_s,
+        fiducial_bound_s=fiducial_bound_s,
+        detail=None,
+    )
+
+
+def _assert_trace_matches_raw(
+    stored: list[TracePoint], derived: list[TracePoint]
+) -> None:
+    """Fail closed when power_trace.csv disagrees with the raw capture.
+
+    The corrected timeline is a uniform shift of the stored one, so the two
+    curves must agree in length, power, support widths, and relative spacing.
+    """
+
+    if len(stored) != len(derived):
+        raise _ReduceError(
+            "power_trace.csv does not match raw powermetrics evidence "
+            f"(row count {len(stored)} vs raw-derived {len(derived)})"
+        )
+    if not stored:
+        return
+    for index, (left, right) in enumerate(zip(stored, derived)):
+        if abs(left.power_w - right.power_w) > 1e-9 * max(1.0, abs(right.power_w)):
+            raise _ReduceError(
+                "power_trace.csv does not match raw powermetrics evidence "
+                f"(power mismatch at summed sample {index})"
+            )
+        left_width = (
+            left.support_end_s - left.support_start_s
+            if left.support_start_s is not None and left.support_end_s is not None
+            else None
+        )
+        right_width = (
+            right.support_end_s - right.support_start_s
+            if right.support_start_s is not None and right.support_end_s is not None
+            else None
+        )
+        if left_width is None or right_width is None:
+            raise _ReduceError(
+                "power_trace.csv does not match raw powermetrics evidence "
+                f"(missing interval support at summed sample {index})"
+            )
+        if abs(left_width - right_width) > 1e-6:
+            raise _ReduceError(
+                "power_trace.csv does not match raw powermetrics evidence "
+                f"(support width mismatch at summed sample {index})"
+            )
+        if abs(
+            (left.t - stored[0].t) - (right.t - derived[0].t)
+        ) > 1e-6:
+            raise _ReduceError(
+                "power_trace.csv does not match raw powermetrics evidence "
+                f"(relative spacing mismatch at summed sample {index})"
+            )
+
+
+def _anchor_coverage_ok(
+    contributions: list[tuple[list[TracePoint], list[Window]]],
+    bound_s: float,
+) -> bool:
+    """Trace support must cover every window edge under EVERY admissible shift."""
+
+    for curve, windows in contributions:
+        if not curve or not windows:
+            return False
+        if curve[0].support_start_s is not None:
+            trace_start_s = min(
+                point.support_start_s
+                for point in curve
+                if point.support_start_s is not None
+            )
+            trace_end_s = max(
+                point.support_end_s
+                for point in curve
+                if point.support_end_s is not None
+            )
+        else:
+            trace_start_s = curve[0].t
+            trace_end_s = curve[-1].t
+        for window in windows:
+            if trace_start_s + bound_s > window.start_s:
+                return False
+            if trace_end_s - bound_s < window.end_s:
+                return False
+    return True
+
+
+def _shift_energy_j(
+    contributions: list[tuple[list[TracePoint], list[Window]]],
+    delta_s: float,
+) -> float:
+    """Total energy over the windows with every trace shifted by ``delta_s``."""
+
+    total = 0.0
+    for curve, windows in contributions:
+        if curve and curve[0].support_start_s is not None:
+            for window in windows:
+                total += math.fsum(
+                    point.power_w
+                    * max(
+                        0.0,
+                        min(
+                            window.end_s,
+                            (
+                                point.support_end_s
+                                if point.support_end_s is not None
+                                else point.t
+                            )
+                            + delta_s,
+                        )
+                        - max(
+                            window.start_s,
+                            (
+                                point.support_start_s
+                                if point.support_start_s is not None
+                                else point.t
+                            )
+                            + delta_s,
+                        ),
+                    )
+                    for point in curve
+                )
+        else:
+            # Shifting a point curve by +delta equals integrating the
+            # unshifted curve over the window translated by -delta.
+            for window in windows:
+                total += _integrate(
+                    curve, window.start_s - delta_s, window.end_s - delta_s
+                )
+    return total
+
+
+def _anchor_shift_breakpoints(
+    contributions: list[tuple[list[TracePoint], list[Window]]],
+    bound_s: float,
+) -> list[float]:
+    """Every delta where a trace-support boundary meets a window boundary."""
+
+    deltas = {-bound_s, 0.0, bound_s}
+    for curve, windows in contributions:
+        edges: list[float] = []
+        if curve and curve[0].support_start_s is not None:
+            for point in curve:
+                if point.support_start_s is not None:
+                    edges.append(point.support_start_s)
+                if point.support_end_s is not None:
+                    edges.append(point.support_end_s)
+        else:
+            edges.extend(point.t for point in curve)
+        for window in windows:
+            for window_edge in (window.start_s, window.end_s):
+                for trace_edge in edges:
+                    delta = window_edge - trace_edge
+                    if -bound_s <= delta <= bound_s:
+                        deltas.add(delta)
+    return sorted(deltas)
+
+
+def _anchor_shift_envelope(
+    contributions: list[tuple[list[TracePoint], list[Window]]],
+    bound_s: float | None,
+) -> dict[str, float | str] | None:
+    """Continuous envelope of the summed energy under one common anchor shift.
+
+    Exact for interval-support traces: the energy is piecewise linear in the
+    shift, so evaluating every trace-edge/window-edge breakpoint plus both
+    endpoints is exhaustive (endpoint-only evaluation is UNSOUND - interior
+    extrema exist). Point traces are piecewise quadratic between breakpoints;
+    each segment's quadratic is reconstructed exactly from its endpoints and
+    midpoint and its interior vertex included."""
+
+    if bound_s is None or not math.isfinite(bound_s) or bound_s < 0.0:
+        return None
+    if not contributions or any(
+        not curve or not windows for curve, windows in contributions
+    ):
+        return None
+    point_j = _shift_energy_j(contributions, 0.0)
+    if not _anchor_coverage_ok(contributions, bound_s):
+        return None
+    breakpoints = _anchor_shift_breakpoints(contributions, bound_s)
+    values = [_shift_energy_j(contributions, delta) for delta in breakpoints]
+    lower_j = min(values)
+    upper_j = max(values)
+    interval_support = all(
+        curve[0].support_start_s is not None for curve, _windows in contributions
+    )
+    if not interval_support:
+        # Piecewise-quadratic refinement between adjacent breakpoints.
+        for (d0, e0), (d1, e1) in zip(
+            zip(breakpoints, values), zip(breakpoints[1:], values[1:])
+        ):
+            if d1 <= d0:
+                continue
+            mid = (d0 + d1) / 2.0
+            e_mid = _shift_energy_j(contributions, mid)
+            lower_j = min(lower_j, e_mid)
+            upper_j = max(upper_j, e_mid)
+            # Centered form e(d) = e_mid + s*(d-mid) + 0.5*c*(d-mid)^2 fitted
+            # exactly through the three samples; include the interior vertex.
+            c = 4.0 * (e0 - 2.0 * e_mid + e1) / ((d1 - d0) ** 2)
+            s = (e1 - e0) / (d1 - d0)
+            if c != 0.0:
+                vertex = mid - s / c
+                if d0 < vertex < d1:
+                    e_vertex = _shift_energy_j(contributions, vertex)
+                    lower_j = min(lower_j, e_vertex)
+                    upper_j = max(upper_j, e_vertex)
+    if not (
+        math.isfinite(lower_j)
+        and math.isfinite(upper_j)
+        and lower_j <= point_j <= upper_j
+    ):
+        return None
+    return {
+        "method": ANCHOR_SHIFT_METHOD,
+        "anchor_bound_s": bound_s,
+        "point_j": point_j,
+        "lower_j": lower_j,
+        "upper_j": upper_j,
+        "max_abs_delta_j": max(point_j - lower_j, upper_j - point_j),
+    }
+
+
+def _translate_envelope(
+    envelope: dict[str, float | str] | None,
+    offset_j: float,
+) -> dict[str, float | str] | None:
+    if envelope is None:
+        return None
+    translated = dict(envelope)
+    for key in ("point_j", "lower_j", "upper_j"):
+        translated[key] = float(envelope[key]) + offset_j
+    return translated
+
+
+def _scale_envelope(
+    envelope: dict[str, float | str] | None,
+    factor: float,
+) -> dict[str, float | str] | None:
+    if envelope is None or not math.isfinite(factor):
+        return None
+    scaled = dict(envelope)
+    scaled["point_j"] = float(envelope["point_j"]) * factor
+    lower = float(envelope["lower_j"]) * factor
+    upper = float(envelope["upper_j"]) * factor
+    scaled["lower_j"] = min(lower, upper)
+    scaled["upper_j"] = max(lower, upper)
+    scaled["max_abs_delta_j"] = max(
+        scaled["point_j"] - scaled["lower_j"],
+        scaled["upper_j"] - scaled["point_j"],
+    )
+    return scaled
+
+
+def _json_pointer_token(token: str) -> str:
+    return token.replace("~", "~0").replace("/", "~1")
+
+
+def _anchor_envelope_gate_reasons(
+    envelope: dict[str, Any] | None,
+    joint_interpolation_bound_j: float | None,
+) -> list[str]:
+    """The D-078 precheck additions for one enveloped energy metric."""
+
+    if envelope is None:
+        return ["anchor_energy_envelope_unrecorded"]
+    try:
+        point_j = float(envelope["point_j"])
+        lower_j = float(envelope["lower_j"])
+        upper_j = float(envelope["upper_j"])
+    except (KeyError, TypeError, ValueError):
+        return ["anchor_energy_envelope_unrecorded"]
+    if not (
+        math.isfinite(point_j)
+        and math.isfinite(lower_j)
+        and math.isfinite(upper_j)
+        and lower_j <= point_j <= upper_j
+    ):
+        return ["anchor_energy_envelope_unrecorded"]
+    deviation_j = max(point_j - lower_j, upper_j - point_j)
+    joint_j = (
+        joint_interpolation_bound_j
+        if isinstance(joint_interpolation_bound_j, int | float)
+        and math.isfinite(joint_interpolation_bound_j)
+        else 0.0
+    )
+    if point_j == 0.0:
+        if deviation_j + joint_j > 0.0:
+            return ["anchor_energy_envelope_exceeds_quarter_metric"]
+        return []
+    if (deviation_j + joint_j) / abs(point_j) > ANCHOR_ENVELOPE_METRIC_RATIO_MAX:
+        return ["anchor_energy_envelope_exceeds_quarter_metric"]
+    return []
+
+
+def _merge_gate_reasons(gate: dict[str, Any], reasons: list[str]) -> None:
+    if not reasons:
+        return
+    existing = gate.get("reasons")
+    merged = set(existing if isinstance(existing, list) else [])
+    merged.update(reasons)
+    gate["reasons"] = sorted(merged)
+    gate["eligible"] = False
+
+
+def _apply_anchor_claim_gates(
+    prechecks: dict[str, Any],
+    anchor_ctx: _AnchorContext,
+    envelopes: dict[str, Any],
+    *,
+    gross_pointer: str,
+    request_joint_bound_j: float | None,
+) -> None:
+    """Stamp the D-078 anchor barrier/envelope reasons onto the energy gates."""
+
+    if anchor_ctx.unresolved:
+        for key in (
+            "gross_request",
+            "gross_batch_group",
+            "idle_subtracted_request",
+        ):
+            gate = prechecks.get(key)
+            if isinstance(gate, dict):
+                _merge_gate_reasons(gate, [CLOCK_ANCHOR_UNRESOLVED])
+        for group_key in ("phase", "item", "block", "level"):
+            group = prechecks.get(group_key)
+            if not isinstance(group, dict):
+                continue
+            for gate in group.values():
+                if isinstance(gate, dict):
+                    _merge_gate_reasons(gate, [CLOCK_ANCHOR_UNRESOLVED])
+        return
+    for key, pointer in (
+        ("gross_request", gross_pointer),
+        ("gross_batch_group", gross_pointer),
+        ("idle_subtracted_request", "/idle_subtracted_energy_j"),
+    ):
+        gate = prechecks.get(key)
+        if isinstance(gate, dict):
+            _merge_gate_reasons(
+                gate,
+                _anchor_envelope_gate_reasons(
+                    envelopes.get(pointer), request_joint_bound_j
+                ),
+            )
+    phases = prechecks.get("phase")
+    if isinstance(phases, dict):
+        for phase, gate in phases.items():
+            if not isinstance(gate, dict):
+                continue
+            pointer = "/phase_energy_j/" + _json_pointer_token(str(phase))
+            # Interval-support traces have exactly-zero interpolation terms;
+            # point traces conservatively reuse the request-level joint bound.
+            _merge_gate_reasons(
+                gate,
+                _anchor_envelope_gate_reasons(
+                    envelopes.get(pointer), request_joint_bound_j
+                ),
+            )
+
+
+def _energy_anchor_envelopes_v05(
+    *,
+    curve: list[TracePoint],
+    window: Window,
+    phase_windows: dict[str, list[Window]],
+    idle_baseline: IdleBaseline | None,
+    total_tokens: int | None,
+    output_token_count: int | None,
+    bound_s: float | None,
+) -> dict[str, Any] | None:
+    """JSON-Pointer metric paths -> continuous common-shift envelopes.
+
+    One shared shift drives every metric (anchor error is fully correlated);
+    idle subtraction translates the gross envelope by ``idle_mean * duration``
+    and fixed token denominators scale it. Disjoint phase intervals are summed
+    as a function of the shared shift, never independently maximized."""
+
+    envelopes: dict[str, Any] = {}
+    gross = _anchor_shift_envelope([(curve, [window])], bound_s)
+    if gross is not None:
+        envelopes["/gross_energy_j"] = gross
+        if idle_baseline is not None:
+            idle_env = _translate_envelope(
+                gross, -idle_baseline.power_w_mean * window.duration_s
+            )
+            envelopes["/idle_subtracted_energy_j"] = idle_env
+            envelopes["/energy_request_j"] = dict(idle_env)
+            if total_tokens:
+                envelopes["/energy_token_j"] = _scale_envelope(
+                    idle_env, 1.0 / total_tokens
+                )
+            if output_token_count:
+                envelopes["/energy_output_token_j"] = _scale_envelope(
+                    idle_env, 1.0 / output_token_count
+                )
+    for phase, intervals in sorted((phase_windows or {}).items()):
+        env = _anchor_shift_envelope([(curve, intervals)], bound_s)
+        if env is not None:
+            envelopes["/phase_energy_j/" + _json_pointer_token(phase)] = env
+    return envelopes or None
+
+
+def _shift_curve(curve: list[TracePoint], delta_s: float) -> list[TracePoint]:
+    if delta_s == 0.0:
+        return curve
+    return [
+        TracePoint(
+            t=point.t + delta_s,
+            power_w=point.power_w,
+            support_start_s=(
+                point.support_start_s + delta_s
+                if point.support_start_s is not None
+                else None
+            ),
+            support_end_s=(
+                point.support_end_s + delta_s
+                if point.support_end_s is not None
+                else None
+            ),
+        )
+        for point in curve
+    ]
+
+
+# ----------------------------------------------------------------------------
 # Top-level reducer
 
 
@@ -918,7 +1516,7 @@ def reduce_bundle(
         # block; status/reason/message still make the failure structured.
         summary_type = (
             SummaryMetricsV060
-            if reducer_version == AXI_REDUCER_VERSION
+            if reducer_version in AXI_REDUCER_VERSIONS
             else SummaryMetrics
         )
         return summary_type(
@@ -931,8 +1529,14 @@ def reduce_bundle(
     idle_baseline: IdleBaseline | None = None
     try:
         idle_baseline = _idle_baseline(metadata)
-        if reducer_version == AXI_REDUCER_VERSION:
-            return _reduce_v060(reader, config, metadata, idle_baseline)
+        if reducer_version in AXI_REDUCER_VERSIONS:
+            return _reduce_v060(
+                reader,
+                config,
+                metadata,
+                idle_baseline,
+                reducer_version=reducer_version,
+            )
         return _reduce(
             reader,
             config,
@@ -943,7 +1547,7 @@ def reduce_bundle(
     except (_ReduceError, BundleReadError) as exc:
         summary_type = (
             SummaryMetricsV060
-            if reducer_version == AXI_REDUCER_VERSION
+            if reducer_version in AXI_REDUCER_VERSIONS
             else SummaryMetrics
         )
         return summary_type(
@@ -985,14 +1589,20 @@ def _resolve_reducer_version(
                 "finalized bundle reducer version is missing; dispatch refuses to guess"
             )
         elif reader.is_event_v2():
-            requested = AXI_REDUCER_VERSION
+            # Controller finalization stays on the byte-frozen 0.6.0 burst
+            # arm. The D-078 anchor era (0.6.1) is powermetrics-specific and
+            # AXI runs use mock telemetry today, so 0.6.1 is reached only by
+            # an explicit re-reduction request, keeping the event-v2 opt-in
+            # gate (config + event + reducer 0.6.0) satisfied by default.
+            requested = AXI_FROZEN_REDUCER_VERSION
         else:
             requested = REDUCER_VERSION
 
-    supported = FROZEN_REDUCER_VERSIONS | {
-        REDUCER_VERSION,
-        AXI_REDUCER_VERSION,
-    }
+    supported = (
+        FROZEN_REDUCER_VERSIONS
+        | {POINT_ANCHOR_FROZEN_REDUCER_VERSION, REDUCER_VERSION}
+        | AXI_REDUCER_VERSIONS
+    )
     if requested not in supported:
         raise ValueError(f"unsupported reducer version: {requested!r}")
 
@@ -1011,10 +1621,11 @@ def _resolve_reducer_version(
             "request_decode_metrics",
         )
     )
-    if requested == AXI_REDUCER_VERSION:
+    if requested in AXI_REDUCER_VERSIONS:
         if not config_v2 or not event_v2:
             raise ValueError(
-                "reducer 0.6.0 requires AXI config extension and event semantics v2"
+                f"reducer {requested} requires AXI config extension and "
+                "event semantics v2"
             )
     elif config_v2 or event_v2 or v060_shape:
         raise ValueError(
@@ -1090,6 +1701,8 @@ def _reduce_v060(
     config: BenchmarkConfig,
     metadata: dict[str, Any],
     idle_baseline: IdleBaseline | None,
+    *,
+    reducer_version: str = AXI_FROZEN_REDUCER_VERSION,
 ) -> SummaryMetricsV060:
     evidence_problems = axi_v2_validation_problems(
         reader,
@@ -1106,6 +1719,25 @@ def _reduce_v060(
             f"measured_run window duration must be > 0 s; got {window.duration_s}"
         )
     curve = reader.summed_curve()
+
+    # D-078 (0.6.1 only): the frozen 0.6.0 burst arm has the same point-anchor
+    # defect and stays byte-frozen; 0.6.1 re-anchors the shared timeline.
+    anchor_ctx: _AnchorContext | None = None
+    anchor_shift_s = 0.0
+    if reducer_version == AXI_REDUCER_VERSION:
+        anchor_ctx = _derive_anchor_context(reader, metadata)
+        if not anchor_ctx.telemetry_is_powermetrics:
+            # See the 0.5.1 arm: anchor-era semantics are powermetrics-only.
+            anchor_ctx = None
+        elif anchor_ctx.curve is not None:
+            _assert_trace_matches_raw(curve, anchor_ctx.curve)
+            if curve:
+                anchor_shift_s = anchor_ctx.curve[0].t - curve[0].t
+            curve = anchor_ctx.curve
+
+    def _source_curve(source_identity: str) -> list[TracePoint]:
+        return _shift_curve(reader.source_curve(source_identity), anchor_shift_s)
+
     if _in_window_sample_count(curve, window) < 2:
         raise _ReduceError(
             "fewer than 2 power samples inside the measured_run window"
@@ -1129,7 +1761,7 @@ def _reduce_v060(
 
     phase_energy_j: dict[str, float] = {}
     for (source, phase), windows in group_unions.items():
-        source_curve = reader.source_curve(source)
+        source_curve = _source_curve(source)
         phase_energy_j[phase] = phase_energy_j.get(phase, 0.0) + math.fsum(
             _integrate(source_curve, item.start_s, item.end_s)
             for item in windows
@@ -1157,7 +1789,7 @@ def _reduce_v060(
         for (source, candidate), windows in group_unions.items():
             if candidate != phase:
                 continue
-            source_curve = reader.source_curve(source)
+            source_curve = _source_curve(source)
             if any(
                 item.duration_s > 0
                 and _in_window_sample_count(source_curve, item) < MIN_PHASE_SAMPLES
@@ -1334,6 +1966,62 @@ def _reduce_v060(
     )
 
     bound_terms = _energy_bound_terms_j(metadata, curve, window)
+    energy_anchor_shift_envelopes: dict[str, Any] | None = None
+    energy_uncertainty_status = "not_estimable"
+    clock_bound_override_s: float | None = None
+    gross_pointer = (
+        "/batch_group_gross_energy_j"
+        if group_gross is not None
+        else "/gross_energy_j"
+    )
+    if anchor_ctx is not None:
+        if not anchor_ctx.unresolved:
+            envelopes: dict[str, Any] = {}
+            gross_env = _anchor_shift_envelope([(curve, [window])], anchor_ctx.bound_s)
+            if gross_env is not None:
+                envelopes["/gross_energy_j"] = gross_env
+                if group_gross is not None:
+                    envelopes["/batch_group_gross_energy_j"] = dict(gross_env)
+                if idle_baseline is not None:
+                    envelopes["/idle_subtracted_energy_j"] = _translate_envelope(
+                        gross_env,
+                        -idle_baseline.power_w_mean * window.duration_s,
+                    )
+            for phase in sorted({phase for _source, phase in group_unions}):
+                contributions = [
+                    (_source_curve(source), windows)
+                    for (source, candidate), windows in sorted(group_unions.items())
+                    if candidate == phase
+                ]
+                phase_env = _anchor_shift_envelope(contributions, anchor_ctx.bound_s)
+                if phase_env is not None:
+                    envelopes[
+                        "/phase_energy_j/" + _json_pointer_token(phase)
+                    ] = phase_env
+            energy_anchor_shift_envelopes = envelopes or None
+            if anchor_ctx.telemetry_is_powermetrics:
+                clock_bound_override_s = anchor_ctx.bound_s
+        gross_envelope = (energy_anchor_shift_envelopes or {}).get(
+            "/gross_energy_j"
+        )
+        bound_terms["E_clock_anchor_shift_bound_j"] = (
+            float(gross_envelope["max_abs_delta_j"])
+            if gross_envelope is not None
+            else None
+        )
+        energy_uncertainty_status = (
+            "bounded"
+            if all(
+                bound_terms.get(key) is not None
+                for key in (
+                    "E_drift_bound_j",
+                    "E_interpolation_edge_bound_j",
+                    "E_interpolation_joint_edge_bound_j",
+                    "E_clock_anchor_shift_bound_j",
+                )
+            )
+            else "not_estimable"
+        )
     window_precheck = _window_evidence_precheck_v060(
         metadata,
         curve,
@@ -1341,9 +2029,20 @@ def _reduce_v060(
         bound_terms,
         idle_baseline,
         group_unions,
-        reader,
+        _source_curve,
         static_batch=group_gross is not None,
+        clock_bound_override_s=clock_bound_override_s,
     )
+    if anchor_ctx is not None:
+        _apply_anchor_claim_gates(
+            window_precheck,
+            anchor_ctx,
+            energy_anchor_shift_envelopes or {},
+            gross_pointer=gross_pointer,
+            request_joint_bound_j=bound_terms.get(
+                "E_interpolation_joint_edge_bound_j"
+            ),
+        )
     idle_mean_uncertainty = derive_idle_mean_uncertainty(
         reader,
         idle_baseline,
@@ -1391,12 +2090,13 @@ def _reduce_v060(
         measurement_quality=quality,
         phase_energy_j=phase_energy_j or None,
         suite_metrics=None,
-        energy_uncertainty_status="not_estimable",
+        energy_uncertainty_status=energy_uncertainty_status,
         idle_mean_uncertainty=idle_mean_uncertainty,
         energy_variance_terms_j2=_energy_variance_terms_j2(
             idle_mean_uncertainty, window
         ),
         energy_bound_terms_j=bound_terms,
+        energy_anchor_shift_envelopes=energy_anchor_shift_envelopes,
         window_evidence_precheck=window_precheck,
         decode_counter_rollup=counter_rollup,
         batch_group_gross_energy_j=group_gross,
@@ -1417,7 +2117,7 @@ def _reduce_v060(
         decode_emission_burst_size_p95_tokens=bundle_bursts[2],
         decode_emission_burst_size_max_tokens=bundle_bursts[3],
         request_decode_metrics=request_metrics,
-        summary_provenance=_summary_provenance(AXI_REDUCER_VERSION),
+        summary_provenance=_summary_provenance(reducer_version),
     )
 
 
@@ -1428,9 +2128,10 @@ def _window_evidence_precheck_v060(
     bound_terms: dict[str, float | None],
     idle_baseline: IdleBaseline | None,
     group_unions: dict[tuple[str, str], list[Window]],
-    reader: BundleReader,
+    source_curve: Any,
     *,
     static_batch: bool,
+    clock_bound_override_s: float | None = None,
 ) -> dict[str, Any]:
     gross = _window_evidence_precheck_for_window(
         curve,
@@ -1441,6 +2142,7 @@ def _window_evidence_precheck_v060(
         require_drift=False,
         require_cooldown=True,
         bound_terms_j=bound_terms,
+        clock_bound_override_s=clock_bound_override_s,
     )
     gross_key = "gross_batch_group" if static_batch else "gross_request"
     gross["metric_name"] = (
@@ -1458,6 +2160,7 @@ def _window_evidence_precheck_v060(
         require_idle_baseline=True,
         idle_baseline=idle_baseline,
         bound_terms_j=bound_terms,
+        clock_bound_override_s=clock_bound_override_s,
     )
     idle["metric_name"] = "idle_subtracted_energy_j"
     idle["window_class"] = "idle_subtracted_request"
@@ -1471,12 +2174,13 @@ def _window_evidence_precheck_v060(
     for (source, phase), windows in sorted(group_unions.items()):
         phase_rows.setdefault(phase, []).append(
             _windows_evidence_precheck(
-                reader.source_curve(source),
+                source_curve(source),
                 metadata,
                 windows,
                 cadence_ratio_min=SHORT_WINDOW_CADENCE_RATIO_MIN,
                 require_sample_count=True,
                 require_drift=False,
+                clock_bound_override_s=clock_bound_override_s,
             )
         )
     if phase_rows:
@@ -1512,6 +2216,20 @@ def _reduce(
         )
 
     curve = reader.summed_curve()
+
+    # D-078 (0.5.1 only): re-derive the censored-intersection anchor from the
+    # raw capture and move the whole timeline onto it; frozen arms keep the
+    # stored point-anchor timeline byte-identically.
+    anchor_ctx: _AnchorContext | None = None
+    if reducer_version == REDUCER_VERSION:
+        anchor_ctx = _derive_anchor_context(reader, metadata)
+        if not anchor_ctx.telemetry_is_powermetrics:
+            # The D-078 anchor defect and its envelope are native-stamped
+            # powermetrics phenomena; other backends keep 0.5.0 semantics.
+            anchor_ctx = None
+        elif anchor_ctx.curve is not None:
+            _assert_trace_matches_raw(curve, anchor_ctx.curve)
+            curve = anchor_ctx.curve
 
     # P2-040 FIX-1 (ARC-3): a nonpositive measured window cannot be a
     # claim-bearing succeeded measurement; fail closed before any derivation.
@@ -1575,9 +2293,62 @@ def _reduce(
         idle_mean_uncertainty, window
     )
     energy_bound_terms_j = _energy_bound_terms_j(metadata, curve, window)
+    energy_anchor_shift_envelopes: dict[str, Any] | None = None
+    energy_uncertainty_status = "not_estimable"
+    clock_bound_override_s: float | None = None
+    if anchor_ctx is not None:
+        if not anchor_ctx.unresolved:
+            energy_anchor_shift_envelopes = _energy_anchor_envelopes_v05(
+                curve=curve,
+                window=window,
+                phase_windows=phase_windows,
+                idle_baseline=idle_baseline,
+                total_tokens=total_tokens,
+                output_token_count=output_token_count,
+                bound_s=anchor_ctx.bound_s,
+            )
+            if anchor_ctx.telemetry_is_powermetrics:
+                clock_bound_override_s = anchor_ctx.bound_s
+        gross_envelope = (energy_anchor_shift_envelopes or {}).get(
+            "/gross_energy_j"
+        )
+        energy_bound_terms_j["E_clock_anchor_shift_bound_j"] = (
+            float(gross_envelope["max_abs_delta_j"])
+            if gross_envelope is not None
+            else None
+        )
+        energy_uncertainty_status = (
+            "bounded"
+            if all(
+                energy_bound_terms_j.get(key) is not None
+                for key in (
+                    "E_drift_bound_j",
+                    "E_interpolation_edge_bound_j",
+                    "E_interpolation_joint_edge_bound_j",
+                    "E_clock_anchor_shift_bound_j",
+                )
+            )
+            else "not_estimable"
+        )
     window_evidence_precheck = _window_evidence_precheck(
-        reader, metadata, curve, window, energy_bound_terms_j, idle_baseline
+        reader,
+        metadata,
+        curve,
+        window,
+        energy_bound_terms_j,
+        idle_baseline,
+        clock_bound_override_s=clock_bound_override_s,
     )
+    if anchor_ctx is not None:
+        _apply_anchor_claim_gates(
+            window_evidence_precheck,
+            anchor_ctx,
+            energy_anchor_shift_envelopes or {},
+            gross_pointer="/gross_energy_j",
+            request_joint_bound_j=energy_bound_terms_j.get(
+                "E_interpolation_joint_edge_bound_j"
+            ),
+        )
     if idle_baseline is None:
         window_evidence_precheck["idle_subtracted_request"]["energy_evidence"] = (
             EnergyEvidence.ABSENT.value
@@ -1624,10 +2395,11 @@ def _reduce(
         measurement_quality=quality,
         phase_energy_j=phase_energy_j,
         suite_metrics=suite_metrics,
-        energy_uncertainty_status="not_estimable",
+        energy_uncertainty_status=energy_uncertainty_status,
         idle_mean_uncertainty=idle_mean_uncertainty,
         energy_variance_terms_j2=energy_variance_terms_j2,
         energy_bound_terms_j=energy_bound_terms_j,
+        energy_anchor_shift_envelopes=energy_anchor_shift_envelopes,
         window_evidence_precheck=window_evidence_precheck,
         summary_provenance=_summary_provenance(reducer_version),
     )
@@ -1640,7 +2412,7 @@ def _summary_provenance(reducer_version: str) -> dict[str, str]:
         "reducer_version": reducer_version,
         "config_schema_version": CONFIG_SCHEMA_VERSION,
     }
-    if reducer_version == AXI_REDUCER_VERSION:
+    if reducer_version in AXI_REDUCER_VERSIONS:
         provenance["event_semantics_version"] = "joulewise.events.v2"
     return provenance
 

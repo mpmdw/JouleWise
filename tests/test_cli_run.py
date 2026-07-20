@@ -32,6 +32,13 @@ from joulewise.bundle_read import Window
 from joulewise.controller import run_benchmark
 from joulewise.reduce import reduce_bundle
 from joulewise.schemas import BenchmarkConfig, RunStatus
+from tests.test_powermetrics import (
+    FIXTURE_D0_S,
+    SPAWN_ADVANCE_S,
+    documents_to_stream,
+    fixture_documents,
+    rebased_documents,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_CONFIG_PATH = REPO_ROOT / "configs" / "examples" / "mock_local.json"
@@ -555,7 +562,7 @@ class StrictValidateTests(CliRunTestCase):
             "strict: unsupported reducer version "
             "'0.4.1' for current-era bundle; superseded versions "
             "cannot claim the current inter_token_throughput_tokens_s "
-            "reduction shape and explicit re-reduction with 0.5.0 is "
+            "reduction shape and explicit re-reduction with 0.5.1 is "
             "required",
             validate_bundle(bundle, strict=True),
         )
@@ -573,7 +580,7 @@ class StrictValidateTests(CliRunTestCase):
             "strict: unsupported reducer version "
             "'0.4.1' for current-era bundle; superseded versions "
             "cannot claim the current inter_token_throughput_tokens_s "
-            "reduction shape and explicit re-reduction with 0.5.0 is "
+            "reduction shape and explicit re-reduction with 0.5.1 is "
             "required",
             validate_bundle(bundle, strict=True),
         )
@@ -1122,11 +1129,23 @@ class StrictValidateTests(CliRunTestCase):
                 Path(command[command.index("-o") + 1]).write_bytes(fixture)
             return _completed(command)
 
+        clock = FakeClock(start=1_783_394_100.0)
+
         class FakePopen:
             def __init__(self, command, **kwargs):
                 self.path = Path(command[command.index("-o") + 1])
-                self.path.write_bytes(fixture)
+                # Rebase the fixture's native whole-second dates onto the fake
+                # clock so the D-078 censored-intersection anchor resolves.
+                self.path.write_bytes(
+                    documents_to_stream(
+                        rebased_documents(
+                            fixture_documents(),
+                            first_endpoint_s=clock.now() + FIXTURE_D0_S,
+                        )
+                    )
+                )
                 self.returncode = None
+                clock.sleep(SPAWN_ADVANCE_S)
 
             def poll(self):
                 return self.returncode
@@ -1148,7 +1167,7 @@ class StrictValidateTests(CliRunTestCase):
             bundle, summary = run_benchmark(
                 config,
                 self.runs_dir,
-                FakeClock(start=1_783_394_100.0),
+                clock,
             )
         self.assertEqual(summary.status, RunStatus.SUCCEEDED)
         self.assertTrue((bundle / "raw" / RAW_SAMPLES_NAME).is_file())
