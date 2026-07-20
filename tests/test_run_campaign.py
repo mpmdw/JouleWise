@@ -4,6 +4,7 @@ import importlib.util
 import hashlib
 import io
 import json
+import math
 import os
 import shutil
 import shlex
@@ -4462,6 +4463,317 @@ class RunCampaignTests(unittest.TestCase):
             gate = read_all_jsonl(log_path)[0]
             self.assertEqual(gate["status"], "failed")
             self.assertEqual(gate["code"], "backup_failed")
+
+
+def _idle_admission_extension_mapping(profile: str) -> dict:
+    mapping = {
+        "schema_version": "joulewise.idle_admission_extension.v1",
+        "policy_version": "idle-admission-core-v1",
+        "claim_bearing": True,
+        "cpu_criteria": {
+            "cpu_busy_ratio_p95_max": 0.5,
+            "processor_combined_power_w_p95_max": 1.0,
+            "min_samples": 3,
+            "on_missing_telemetry": "fail",
+        },
+        "adapter_wattage": {"require_known_wattage": True},
+        "neg8_bracket": {
+            "require_bracket": True,
+            "max_abs_delta_j": 0.5,
+            "max_rel_delta": 0.0625,
+        },
+    }
+    if profile == "exploratory":
+        mapping["claim_bearing"] = False
+        mapping["cpu_criteria"]["on_missing_telemetry"] = "flag"
+        mapping["adapter_wattage"]["require_known_wattage"] = False
+        mapping["neg8_bracket"]["require_bracket"] = False
+    return mapping
+
+
+def _clean_idle_records(count: int = 5) -> list[dict]:
+    return [
+        {
+            "processor_combined_power_w": 0.15,
+            "clusters": [
+                {
+                    "cpus": [
+                        {"idle_ratio": 0.95, "down_ratio": 0.0},
+                        {"idle_ratio": 0.99, "down_ratio": 0.0},
+                    ]
+                }
+            ],
+        }
+        for _ in range(count)
+    ]
+
+
+class IdleAdmissionCoreVerdictTests(unittest.TestCase):
+    """T0.5 idle-admission core: sidecar binding + campaign-verdict surface."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+
+    def _write_extended_sidecar(
+        self, profile: str = "production", mutate=None
+    ) -> Path:
+        source = (
+            ROOT
+            / "configs"
+            / "campaign_policies"
+            / (
+                "quiet_mac_p2_production.json"
+                if profile == "production"
+                else "quiet_mac_exploratory.json"
+            )
+        )
+        payload = json.loads(source.read_text(encoding="utf-8"))
+        payload["idle_admission_extension"] = _idle_admission_extension_mapping(
+            profile
+        )
+        if mutate is not None:
+            mutate(payload)
+        path = self.root / f"policy_{profile}.json"
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        return path
+
+    def _binding(self, *, profile: str = "production"):
+        return run_campaign_module.load_campaign_policy(
+            str(self._write_extended_sidecar(profile))
+        )
+
+    def _member(
+        self,
+        bundle_id: str,
+        *,
+        records: list[dict] | None,
+        adapter_watts=140,
+        adapter_description="140W USB-C Power Adapter",
+        gross_energy_j: float | None = None,
+        admission_decision: str | None = "admitted",
+    ):
+        bundle_path = self.root / bundle_id
+        bundle_path.mkdir(parents=True, exist_ok=True)
+        if records is not None:
+            (bundle_path / "rich_telemetry_idle.jsonl").write_text(
+                "".join(json.dumps(record) + "\n" for record in records)
+            )
+        metadata: dict = {
+            "environment": {
+                "power_source": "AC Power",
+                "power": {
+                    "adapter_watts": adapter_watts,
+                    "adapter_description": adapter_description,
+                },
+            }
+        }
+        if admission_decision is not None:
+            metadata["environment_admission"] = {"decision": admission_decision}
+        summary = (
+            {"gross_energy_j": gross_energy_j} if gross_energy_j is not None else {}
+        )
+        return run_campaign_module.MemberEvaluation(
+            bundle_id=bundle_id,
+            bundle_path=bundle_path,
+            config_name=f"{bundle_id}.json",
+            status="succeeded",
+            strict_valid=True,
+            summary=summary,
+            metadata=metadata,
+        )
+
+    def test_load_campaign_policy_parses_and_hash_binds_extension(self) -> None:
+        path = self._write_extended_sidecar("production")
+        binding = run_campaign_module.load_campaign_policy(str(path))
+        self.assertIsNotNone(binding.idle_admission_extension)
+        self.assertTrue(binding.idle_admission_extension.claim_bearing)
+        self.assertEqual(
+            binding.sha256, hashlib.sha256(path.read_bytes()).hexdigest()
+        )
+        metadata = binding.to_metadata()
+        self.assertEqual(
+            metadata["idle_admission_extension"]["schema_version"],
+            "joulewise.idle_admission_extension.v1",
+        )
+        # Byte-hash enforcement: changing one new field changes the campaign
+        # policy identity (binding hash) and the extension hash.
+        changed = self._write_extended_sidecar(
+            "production",
+            mutate=lambda payload: payload["idle_admission_extension"][
+                "cpu_criteria"
+            ].update(cpu_busy_ratio_p95_max=0.6),
+        )
+        rebound = run_campaign_module.load_campaign_policy(str(changed))
+        self.assertNotEqual(binding.sha256, rebound.sha256)
+        self.assertNotEqual(
+            metadata["idle_admission_extension"]["sha256"],
+            rebound.to_metadata()["idle_admission_extension"]["sha256"],
+        )
+
+    def test_extension_version_and_profile_constraints_fail_closed(self) -> None:
+        from joulewise.idle_admission import IdleAdmissionPolicyError
+
+        tampered = self._write_extended_sidecar(
+            "production",
+            mutate=lambda payload: payload["idle_admission_extension"].update(
+                schema_version="joulewise.idle_admission_extension.v0"
+            ),
+        )
+        with self.assertRaises(IdleAdmissionPolicyError):
+            run_campaign_module.load_campaign_policy(str(tampered))
+        loosened = self._write_extended_sidecar(
+            "production",
+            mutate=lambda payload: payload["idle_admission_extension"][
+                "cpu_criteria"
+            ].update(on_missing_telemetry="flag"),
+        )
+        with self.assertRaises(IdleAdmissionPolicyError):
+            run_campaign_module.load_campaign_policy(str(loosened))
+
+    def test_sidecar_without_extension_yields_named_condition(self) -> None:
+        binding = run_campaign_module.load_campaign_policy(
+            str(ROOT / "tests" / "fixtures" / "campaign_policy_test.json")
+        )
+        self.assertIsNone(binding.idle_admission_extension)
+        section = run_campaign_module.idle_admission_core_verdict([], binding)
+        self.assertEqual(
+            section["conditions"], ["idle_admission_extension_unconfigured"]
+        )
+        self.assertIsNone(section["extension"])
+
+    def test_clean_members_pass_with_stable_wattage_and_neg8_bracket(self) -> None:
+        binding = self._binding()
+        evaluations = [
+            self._member(
+                "p2-neg8-reference-start__r1",
+                records=_clean_idle_records(),
+                gross_energy_j=8.0,
+            ),
+            self._member("p2-work-a__r1", records=_clean_idle_records()),
+            self._member(
+                "p2-neg8-reference-end__r1",
+                records=_clean_idle_records(),
+                gross_energy_j=8.5,
+            ),
+        ]
+        section = run_campaign_module.idle_admission_core_verdict(
+            evaluations, binding
+        )
+        self.assertEqual(section["conditions"], [])
+        self.assertTrue(
+            all(row["cpu_admission"]["admitted"] for row in section["members"])
+        )
+        self.assertEqual(
+            section["adapter_wattage_continuity"]["decision"], "stable"
+        )
+        self.assertEqual(section["neg8_bracket"]["decision"], "passed")
+        self.assertEqual(section["neg8_bracket"]["abs_delta_j"], 0.5)
+
+    def test_missing_idle_telemetry_fails_closed_under_production(self) -> None:
+        binding = self._binding()
+        evaluations = [self._member("p2-work-a__r1", records=None)]
+        section = run_campaign_module.idle_admission_core_verdict(
+            evaluations, binding
+        )
+        member = section["members"][0]["cpu_admission"]
+        self.assertEqual(member["decision"], "failed")
+        self.assertIn("cpu_baseline_telemetry_missing", section["conditions"])
+
+    def test_cpu_active_member_fails_and_is_named(self) -> None:
+        binding = self._binding()
+        active = [
+            {
+                "processor_combined_power_w": 0.2,
+                "clusters": [{"cpus": [{"idle_ratio": 0.05, "down_ratio": 0.0}]}],
+            }
+            for _ in range(5)
+        ]
+        section = run_campaign_module.idle_admission_core_verdict(
+            [self._member("p2-work-a__r1", records=active)], binding
+        )
+        self.assertIn("cpu_busy_ratio_p95_exceeded", section["conditions"])
+        self.assertEqual(
+            section["members"][0]["cpu_admission"]["decision"], "failed"
+        )
+
+    def test_wattage_discontinuity_and_description_change_are_named(self) -> None:
+        binding = self._binding()
+        evaluations = [
+            self._member("m1__r1", records=_clean_idle_records(), adapter_watts=140),
+            self._member("m2__r1", records=_clean_idle_records(), adapter_watts=70),
+            self._member("m3__r1", records=_clean_idle_records(), adapter_watts=140),
+            self._member(
+                "m4__r1",
+                records=_clean_idle_records(),
+                adapter_watts=140,
+                adapter_description="96W USB-C Power Adapter",
+            ),
+        ]
+        section = run_campaign_module.idle_admission_core_verdict(
+            evaluations, binding
+        )
+        continuity = section["adapter_wattage_continuity"]
+        self.assertEqual(continuity["decision"], "flagged")
+        self.assertIn("adapter_wattage_discontinuity", section["conditions"])
+        self.assertIn("adapter_description_changed", section["conditions"])
+        self.assertEqual(
+            [
+                (row["from_watts"], row["to_watts"])
+                for row in continuity["wattage_transitions"]
+            ],
+            [(140.0, 70.0), (70.0, 140.0)],
+        )
+
+    def test_unknown_adapter_wattage_fails_closed_under_production(self) -> None:
+        binding = self._binding()
+        section = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "m1__r1",
+                    records=_clean_idle_records(),
+                    adapter_watts=None,
+                    adapter_description=None,
+                )
+            ],
+            binding,
+        )
+        self.assertEqual(
+            section["adapter_wattage_continuity"]["decision"], "failed"
+        )
+        self.assertIn("adapter_wattage_unknown", section["conditions"])
+
+    def test_neg8_bracket_edge_cases_in_verdict(self) -> None:
+        binding = self._binding()
+
+        def section_for(end_gross: float | None) -> dict:
+            evaluations = [
+                self._member(
+                    "p2-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                )
+            ]
+            if end_gross is not None:
+                evaluations.append(
+                    self._member(
+                        "p2-neg8-reference-end__r1",
+                        records=_clean_idle_records(),
+                        gross_energy_j=end_gross,
+                    )
+                )
+            return run_campaign_module.idle_admission_core_verdict(
+                evaluations, binding
+            )
+
+        exactly_on = section_for(8.5)
+        self.assertEqual(exactly_on["neg8_bracket"]["decision"], "passed")
+        one_ulp_over = section_for(math.nextafter(8.5, math.inf))
+        self.assertEqual(one_ulp_over["neg8_bracket"]["decision"], "failed")
+        missing = section_for(None)
+        self.assertEqual(missing["neg8_bracket"]["decision"], "failed")
+        self.assertIn("neg8_bracket_missing", missing["conditions"])
 
 
 if __name__ == "__main__":
