@@ -29,7 +29,7 @@ from joulewise.validation import finite_float
 CONFIG_SCHEMA_VERSION = "0.1"
 SUMMARY_SCHEMA_VERSION = "0.1"
 SUMMARY_REDUCER_ID = "joulewise.reduce_bundle"
-SUMMARY_REDUCER_VERSION = "0.5.0"
+SUMMARY_REDUCER_VERSION = "0.5.1"
 
 _PROMPT_SOURCE_FIELDS = (
     "prompt_text",
@@ -1426,6 +1426,10 @@ class SummaryMetrics:
     idle_mean_uncertainty: dict[str, Any] | None = None
     energy_variance_terms_j2: dict[str, float | None] | None = None
     energy_bound_terms_j: dict[str, float | None] | None = None
+    # D-078 (reducer 0.5.1/0.6.1, additive): JSON-Pointer metric paths ->
+    # continuous common-shift anchor energy envelopes. Serialized only when
+    # set, so frozen 0.4.x/0.5.0/0.6.0 replays stay byte-identical.
+    energy_anchor_shift_envelopes: dict[str, Any] | None = None
     window_evidence_precheck: dict[str, Any] | None = None
     summary_provenance: dict[str, str] | None = field(
         default_factory=lambda: {
@@ -1444,7 +1448,12 @@ class SummaryMetrics:
             raise SchemaError(problems[0])
 
     def _payload(self) -> dict[str, Any]:
-        return _enum_to_value(asdict(self))
+        payload = _enum_to_value(asdict(self))
+        # Additive D-078 field: omitted (not null) when unset so that frozen
+        # 0.4.x/0.5.0/0.6.0 reducer arms keep their byte-frozen serializations.
+        if payload.get("energy_anchor_shift_envelopes") is None:
+            payload.pop("energy_anchor_shift_envelopes", None)
+        return payload
 
     def to_dict(self) -> dict[str, Any]:
         self.validate()
@@ -1493,6 +1502,7 @@ class SummaryMetrics:
                 },
                 "energy_variance_terms_j2": {"type": ["object", "null"]},
                 "energy_bound_terms_j": {"type": ["object", "null"]},
+                "energy_anchor_shift_envelopes": {"type": ["object", "null"]},
                 "window_evidence_precheck": {"type": ["object", "null"]},
                 "summary_provenance": {
                     "anyOf": [{"$ref": "#/$defs/summary_provenance"}, {"type": "null"}]
@@ -1946,7 +1956,7 @@ class SummaryMetricsV060(SummaryMetrics):
             "config_schema_version", "event_semantics_version",
         }:
             raise SchemaError("0.6.0 summary_provenance exact keys mismatch")
-        if provenance.get("reducer_version") != "0.6.0" or provenance.get("event_semantics_version") != EVENT_SEMANTICS_VERSION:
+        if provenance.get("reducer_version") not in {"0.6.0", "0.6.1"} or provenance.get("event_semantics_version") != EVENT_SEMANTICS_VERSION:
             raise SchemaError("0.6.0 summary provenance version mismatch")
         if self.decode_counter_rollup is None:
             raise SchemaError("0.6.0 succeeded summary requires decode_counter_rollup")

@@ -37,7 +37,10 @@ from joulewise.clock import ClockStamp, FakeClock
 from joulewise.controller import run_benchmark
 from joulewise.interfaces import RunContext, TelemetryAdapter
 from joulewise.schemas import BenchmarkConfig, FailureReason, RunStatus, TelemetryBackend
-from joulewise.uncertainty_evidence import derive_powermetrics_clock_evidence
+from joulewise.uncertainty_evidence import (
+    derive_powermetrics_clock_evidence,
+    derive_powermetrics_clock_evidence_v2,
+)
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "powermetrics_sample.plist"
 CORRUPT_PLIST = b"<?xml version='1.0'?><plist><dict><key>timestamp</key>"
@@ -76,6 +79,54 @@ def fixture_documents() -> list[dict[str, Any]]:
 
 def documents_to_stream(documents: list[dict[str, Any]]) -> bytes:
     return b"\0".join(plistlib.dumps(document) for document in documents)
+
+
+def energy_consistent(document: dict[str, Any]) -> dict[str, Any]:
+    """Recompute rail energy counters so power * elapsed matches (D-078)."""
+
+    result = deepcopy(document)
+    elapsed_s = int(result["elapsed_ns"]) / 1_000_000_000.0
+    processor = result["processor"]
+    for rail, counter in (
+        ("cpu_power", "cpu_energy"),
+        ("gpu_power", "gpu_energy"),
+        ("ane_power", "ane_energy"),
+    ):
+        processor[counter] = round(float(processor[rail]) * elapsed_s)
+    return result
+
+
+def rebased_documents(
+    documents: list[dict[str, Any]], *, first_endpoint_s: float
+) -> list[dict[str, Any]]:
+    """Rebase native whole-second dates so record 0 ends at the given epoch.
+
+    Keeps every ``elapsed_ns`` and re-floors each record's END onto the fake
+    clock's epoch domain, exactly like real powermetrics quantizes its
+    ``<date>`` stamps, so the D-078 censored intersection resolves against
+    FakeClock stamps."""
+
+    rebased = []
+    relative_endpoint_s = 0.0
+    for index, document in enumerate(documents):
+        document = deepcopy(document)
+        if index > 0:
+            relative_endpoint_s += int(document["elapsed_ns"]) / 1_000_000_000.0
+        document["timestamp"] = datetime.fromtimestamp(
+            math.floor(first_endpoint_s + relative_endpoint_s), timezone.utc
+        )
+        rebased.append(document)
+    return rebased
+
+
+# The fixture's record-0 averaging interval; a resolvable v2 anchor requires
+# first_parse to land at least this far after pre_spawn (record 0 must fit
+# causally between the spawn and its first parse).
+FIXTURE_D0_S = 1.011034583
+# Fake-clock advance applied by test Popens between spawn and readiness: the
+# causal interval becomes [E, E + 0.2] for a rebase at endpoint E, so the v2
+# anchor midpoint is E + 0.1 with a +-0.1-ish bundle bound.
+SPAWN_ADVANCE_S = FIXTURE_D0_S + 0.2
 
 
 def utc_epoch(value) -> float:
@@ -738,9 +789,12 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 self.assertEqual(len({sample.timestamp_s for sample in rows}), 1)
 
     def test_evidence_stop_drains_until_boundary_bracketing_sample(self) -> None:
-        documents = fixture_documents()
+        rebase_endpoint_s = 1000.0
+        documents = rebased_documents(
+            fixture_documents(), first_endpoint_s=rebase_endpoint_s
+        )
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
-        clock = FakeClock(start=100.0)
+        clock = FakeClock(start=rebase_endpoint_s - FIXTURE_D0_S)
         operational_now = [0.0]
         instances = []
 
@@ -752,12 +806,13 @@ class PowermetricsAdapterTests(unittest.TestCase):
             def __init__(self, command, **kwargs):
                 instances.append(self)
                 self.path = Path(command[command.index("-o") + 1])
-                self.pre_drain_bytes = documents_to_stream(documents[:1])
+                self.pre_drain_bytes = documents_to_stream(documents[:2])
                 self.path.write_bytes(self.pre_drain_bytes)
                 self.returncode = None
                 self.terminated = False
-                self.appended = 0
+                self.appended = 1
                 self.final_bytes = None
+                clock.sleep(SPAWN_ADVANCE_S)
 
             def poll(self):
                 return self.returncode
@@ -817,25 +872,37 @@ class PowermetricsAdapterTests(unittest.TestCase):
         final_frames = instances[0].final_bytes.split(b"\0")
         pre_drain_frames = instances[0].pre_drain_bytes.split(b"\0")
         self.assertEqual(final_frames[: len(pre_drain_frames)], pre_drain_frames)
-        self.assertEqual(
-            len(final_frames),
-            len(pre_drain_frames) + len(documents) - 1,
-        )
+        self.assertEqual(len(final_frames), len(documents))
         for frame in pre_drain_frames:
             self.assertEqual(final_frames.count(frame), 1)
         self.assertEqual(len(endpoints), 3)
-        expected_endpoints = [sampling_started.epoch_s]
+        # v2 anchor: admissible interval midpoint of the causal interval
+        # [rebase endpoint, first-parse epoch] within the native intersection.
+        expected_anchor_s = (
+            rebase_endpoint_s + (rebase_endpoint_s + 0.2)
+        ) / 2.0
+        expected_endpoints = [expected_anchor_s]
         expected_endpoints.extend(
-            sampling_started.epoch_s
+            expected_anchor_s
             + math.fsum(
                 int(document["elapsed_ns"]) / 1_000_000_000.0
                 for document in documents[1 : index + 1]
             )
             for index in range(1, 3)
         )
-        self.assertEqual(endpoints, expected_endpoints)
+        for actual, expected in zip(endpoints, expected_endpoints, strict=True):
+            self.assertAlmostEqual(actual, expected, places=6)
         self.assertLess(expected_endpoints[-2], sampling_stopped.epoch_s)
-        self.assertGreaterEqual(expected_endpoints[-1], sampling_stopped.epoch_s)
+        self.assertGreaterEqual(
+            # The retained prefix must bracket the stop marker under the
+            # EARLIEST allowed anchor, i.e. from the rebase endpoint itself.
+            rebase_endpoint_s
+            + math.fsum(
+                int(document["elapsed_ns"]) / 1_000_000_000.0
+                for document in documents[1:3]
+            ),
+            sampling_stopped.epoch_s,
+        )
 
     def test_evidence_stop_captures_r4_timestamp_domain_bracket(self) -> None:
         sampling_started_epoch_s = 1_784_277_539.8827362
@@ -843,7 +910,10 @@ class PowermetricsAdapterTests(unittest.TestCase):
         missing_support_s = 0.034621477127075195
         anchor_lag_s = 0.5188790559768677
         next_interval_ns = 113_498_166
-        point_anchor_s = sampling_started_epoch_s - anchor_lag_s
+        # v2: record 0's window END must trail first_parse by at most the
+        # 0.25 s first-parse lag cap; the drain BUDGET still uses the
+        # spawn-bracket half-width (anchor_lag_s) independently.
+        point_anchor_s = sampling_started_epoch_s - 0.2
         sampling_stopped_epoch_s = sampling_started_epoch_s + window_duration_s
         initial_cumulative_ns = round(
             (
@@ -877,7 +947,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 math.floor(point_anchor_s + relative_endpoint_s),
                 timezone.utc,
             )
-            documents.append(document)
+            documents.append(energy_consistent(document))
 
         config = make_config(sampling={"power_hz": 10.0, "idle_seconds": 5.0})
         clock = FakeClock(start=sampling_started_epoch_s - 2.0 * anchor_lag_s)
@@ -1026,8 +1096,11 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 documents_to_stream(fixture_documents()[:1])
             )
             with patch(
-                "joulewise.adapters.powermetrics.derive_powermetrics_clock_evidence",
-                return_value=({}, 90.0),
+                "joulewise.adapters.powermetrics.derive_powermetrics_clock_evidence_v2",
+                return_value=(
+                    {"clock_anchor": {"admissible_lower_epoch_s": 90.0}},
+                    90.0,
+                ),
             ):
                 result = adapter._drain_until_stop_bracket(
                     config,
@@ -1096,42 +1169,27 @@ class PowermetricsAdapterTests(unittest.TestCase):
                     places=12,
                 )
 
-    def test_evidence_stop_freezes_prefix_against_final_authoritative_anchor(self) -> None:
-        documents = fixture_documents()
+    def test_evidence_stop_freezes_prefix_for_earliest_allowed_anchor(self) -> None:
+        # D-078: the retained stop prefix must bracket the stop marker under
+        # the EARLIEST admissible anchor, so a record that the midpoint
+        # anchor alone would deem redundant is still kept.
+        rebase_endpoint_s = 1000.0
+        documents = rebased_documents(
+            fixture_documents(), first_endpoint_s=rebase_endpoint_s
+        )
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
-
-        class FinalAnchorShiftClock(FakeClock):
-            def __init__(self) -> None:
-                super().__init__(start=100.0)
-                self.stamp_calls = 0
-
-            def stamp(self) -> ClockStamp:
-                self.stamp_calls += 1
-                stamp = super().stamp()
-                if self.stamp_calls != 5:
-                    return stamp
-                # The authoritative post-termination stamp widens the
-                # wall/monotonic envelope to the left. The provisional stop
-                # stamp anchors record 0 at 100; the final anchor is 99.
-                return ClockStamp(
-                    epoch_s=stamp.epoch_s,
-                    monotonic_before_s=stamp.monotonic_before_s + 2.0,
-                    monotonic_after_s=stamp.monotonic_after_s + 2.0,
-                    wall_resolution_s=stamp.wall_resolution_s,
-                    monotonic_resolution_s=stamp.monotonic_resolution_s,
-                )
-
-        clock = FinalAnchorShiftClock()
+        clock = FakeClock(start=rebase_endpoint_s - FIXTURE_D0_S)
 
         def fake_run(command, **kwargs):
             Path(command[command.index("-o") + 1]).write_bytes(FIXTURE.read_bytes())
             return completed(command)
 
-        class AnchorShiftPopen:
+        class BracketedPopen:
             def __init__(self, command, **kwargs):
                 self.path = Path(command[command.index("-o") + 1])
                 self.path.write_bytes(documents_to_stream(documents[:4]))
                 self.returncode = None
+                clock.sleep(SPAWN_ADVANCE_S)
 
             def poll(self):
                 return self.returncode
@@ -1152,11 +1210,11 @@ class PowermetricsAdapterTests(unittest.TestCase):
         )
         with (
             patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
-            patch("joulewise.adapters.powermetrics.subprocess.Popen", AnchorShiftPopen),
+            patch("joulewise.adapters.powermetrics.subprocess.Popen", BracketedPopen),
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
             sampling_started = clock.stamp()
-            clock.sleep(1.5)
+            clock.sleep(1.9)
             sampling_stopped = clock.stamp()
             result = adapter.stop_sampling_with_evidence(
                 config,
@@ -1169,9 +1227,27 @@ class PowermetricsAdapterTests(unittest.TestCase):
             result.samples[index].timestamp_s
             for index in range(0, len(result.samples), len(RAIL_MANIFEST))
         ]
-        self.assertEqual(clock.stamp_calls, 5)
+        cumulative = [0.0]
+        for document in documents[1:]:
+            cumulative.append(
+                cumulative[-1] + int(document["elapsed_ns"]) / 1_000_000_000.0
+            )
+        expected_anchor_s = (
+            rebase_endpoint_s + (rebase_endpoint_s + 0.2)
+        ) / 2.0
+        # The midpoint anchor already brackets the stop at record 2 ...
+        self.assertGreaterEqual(
+            expected_anchor_s + cumulative[2], sampling_stopped.epoch_s
+        )
+        # ... but the earliest admissible anchor does not, so record 3 must
+        # be retained.
+        self.assertLess(
+            rebase_endpoint_s + cumulative[2], sampling_stopped.epoch_s
+        )
+        self.assertGreaterEqual(
+            rebase_endpoint_s + cumulative[3], sampling_stopped.epoch_s
+        )
         self.assertEqual(len(endpoints), 4)
-        self.assertLess(endpoints[-2], sampling_stopped.epoch_s)
         self.assertGreaterEqual(endpoints[-1], sampling_stopped.epoch_s)
 
     def test_final_prefix_extraction_does_not_start_at_deadline_boundary(self) -> None:
@@ -1192,7 +1268,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
             ExtractionGuard(documents_to_stream(documents)),
             native_records=records,
             diagnostic=None,
-            point_anchor_s=101.0,
+            earliest_anchor_s=101.0,
             sampling_stopped=ClockStamp(
                 epoch_s=102.0,
                 monotonic_before_s=102.0,
@@ -1220,7 +1296,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
             def __init__(self, command, **kwargs):
                 instances.append(self)
                 Path(command[command.index("-o") + 1]).write_bytes(
-                    documents_to_stream(documents[:1])
+                    documents_to_stream(documents[:2])
                 )
                 self.returncode = None
                 self.terminated = False
@@ -1278,7 +1354,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
             def __init__(self, command, **kwargs):
                 instances.append(self)
                 self.path = Path(command[command.index("-o") + 1])
-                self.path.write_bytes(documents_to_stream(documents[:1]))
+                self.path.write_bytes(documents_to_stream(documents[:2]))
                 self.returncode = None
                 self.terminated = False
 
@@ -1325,7 +1401,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
         def deadline_guarded_derive(*args, **kwargs):
             if instances and not instances[0].terminated:
                 raise AssertionError("deadline must skip provisional derivation")
-            return derive_powermetrics_clock_evidence(*args, **kwargs)
+            return derive_powermetrics_clock_evidence_v2(*args, **kwargs)
 
         adapter = PowermetricsTelemetryAdapter(
             clock,
@@ -1340,7 +1416,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 side_effect=tracking_parse,
             ),
             patch(
-                "joulewise.adapters.powermetrics.derive_powermetrics_clock_evidence",
+                "joulewise.adapters.powermetrics.derive_powermetrics_clock_evidence_v2",
                 side_effect=deadline_guarded_derive,
             ),
         ):
@@ -1359,15 +1435,23 @@ class PowermetricsAdapterTests(unittest.TestCase):
         self.assertAlmostEqual(operational_now[0], 1.25, places=12)
         self.assertTrue(drain_read_consumed[0])
         self.assertTrue(parse_calls)
-        self.assertEqual(parse_calls[0], documents_to_stream(documents[:1]))
-        self.assertEqual(set(parse_calls[1:]), {documents_to_stream(documents)})
+        self.assertEqual(parse_calls[0], documents_to_stream(documents[:2]))
+        # The drain's bracket probe parses only the pre-growth capture; the
+        # grown capture is parsed after termination for the fail-closed
+        # native-endpoint trace reconstruction.
+        self.assertEqual(
+            set(parse_calls[1:]), {documents_to_stream(documents)}
+        )
         self.assertEqual(len(result.samples), len(documents) * len(RAIL_MANIFEST))
 
     def test_evidence_stop_hard_times_out_on_silent_sampler(self) -> None:
-        documents = fixture_documents()
+        rebase_endpoint_s = 1000.0
+        documents = rebased_documents(
+            fixture_documents(), first_endpoint_s=rebase_endpoint_s
+        )
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
-        clock = FakeClock(start=100.0)
-        anchor_lag_s = 0.5188790559768677
+        clock = FakeClock(start=rebase_endpoint_s - FIXTURE_D0_S)
+        anchor_lag_s = SPAWN_ADVANCE_S / 2.0
         operational_now = [0.0]
         instances = []
 
@@ -1379,11 +1463,11 @@ class PowermetricsAdapterTests(unittest.TestCase):
             def __init__(self, command, **kwargs):
                 instances.append(self)
                 Path(command[command.index("-o") + 1]).write_bytes(
-                    documents_to_stream(documents[:1])
+                    documents_to_stream(documents[:2])
                 )
                 self.returncode = None
                 self.terminated = False
-                clock.sleep(2.0 * anchor_lag_s)
+                clock.sleep(SPAWN_ADVANCE_S)
 
             def poll(self):
                 return self.returncode
@@ -1420,19 +1504,22 @@ class PowermetricsAdapterTests(unittest.TestCase):
             )
 
         self.assertTrue(instances[0].terminated)
-        self.assertEqual(len(result.samples), len(RAIL_MANIFEST))
+        self.assertEqual(len(result.samples), 2 * len(RAIL_MANIFEST))
         self.assertAlmostEqual(
             operational_now[0],
             anchor_lag_s + 2.0 / config.sampling.power_hz + 0.25,
-            places=12,
+            places=9,
         )
         self.assertLess(result.samples[-1].interval_end_s, sampling_stopped.epoch_s)
 
     def test_evidence_stop_preserves_current_in_window_timestamp_construction(self) -> None:
-        documents = fixture_documents()
+        rebase_endpoint_s = 1000.0
+        documents = rebased_documents(
+            fixture_documents(), first_endpoint_s=rebase_endpoint_s
+        )
         initial_documents = documents[:3]
         config = make_config(sampling={"power_hz": 2.0, "idle_seconds": 5.0})
-        clock = FakeClock(start=100.0)
+        clock = FakeClock(start=rebase_endpoint_s - FIXTURE_D0_S)
         adapter = PowermetricsTelemetryAdapter(
             clock,
             drain_sleep=lambda _seconds: (_ for _ in ()).throw(
@@ -1450,6 +1537,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
                     documents_to_stream(initial_documents)
                 )
                 self.returncode = None
+                clock.sleep(SPAWN_ADVANCE_S)
 
             def poll(self):
                 return self.returncode
@@ -1467,7 +1555,9 @@ class PowermetricsAdapterTests(unittest.TestCase):
         ):
             self.assertTrue(adapter.start_sampling(config).ok)
             sampling_started = clock.stamp()
-            clock.sleep(2.0)
+            # Keep the stop marker bracketed by the initial capture under the
+            # EARLIEST admissible anchor (the rebase endpoint itself).
+            clock.sleep(1.8)
             result = adapter.stop_sampling_with_evidence(
                 config,
                 None,
@@ -1479,16 +1569,20 @@ class PowermetricsAdapterTests(unittest.TestCase):
             result.samples[index].timestamp_s
             for index in range(0, len(result.samples), len(RAIL_MANIFEST))
         ]
-        expected_endpoints = [100.0]
+        expected_anchor_s = (
+            rebase_endpoint_s + (rebase_endpoint_s + 0.2)
+        ) / 2.0
+        expected_endpoints = [expected_anchor_s]
         expected_endpoints.extend(
-            100.0
+            expected_anchor_s
             + math.fsum(
                 int(document["elapsed_ns"]) / 1_000_000_000.0
                 for document in initial_documents[1 : index + 1]
             )
             for index in range(1, len(initial_documents))
         )
-        self.assertEqual(endpoints, expected_endpoints)
+        for actual, expected in zip(endpoints, expected_endpoints, strict=True):
+            self.assertAlmostEqual(actual, expected, places=6)
 
     def test_stop_sampling_rich_write_failure_does_not_break_samples(self) -> None:
         fixture = FIXTURE.read_bytes()
@@ -1866,24 +1960,34 @@ class PowermetricsAdapterTests(unittest.TestCase):
             self.assertTrue((root / RICH_TELEMETRY_NAME).exists())
 
     def test_run_bundle_metadata_records_dropped_powermetrics_tail_diagnostic(self) -> None:
-        fixture = FIXTURE.read_bytes()
         tail = b"<plist"
-        truncated_stream = fixture + b"\0" + tail
         config = make_config(
             workload_profile={"output_tokens": 300},
             sampling={"power_hz": 2.0, "idle_seconds": 5.0},
         )
+        clock = FakeClock(start=10.0)
+        state: dict[str, bytes] = {}
 
         def fake_run(command, **kwargs):
             if "-o" in command:
-                Path(command[command.index("-o") + 1]).write_bytes(fixture)
+                Path(command[command.index("-o") + 1]).write_bytes(
+                    FIXTURE.read_bytes()
+                )
             return completed(command)
 
         class TruncatedTailPopen:
             def __init__(self, command, **kwargs):
                 self.path = Path(command[command.index("-o") + 1])
-                self.path.write_bytes(fixture)
+                # Rebase the native dates onto the fake clock domain so the
+                # D-078 censored intersection resolves for this run.
+                documents = rebased_documents(
+                    fixture_documents(),
+                    first_endpoint_s=clock.now() + FIXTURE_D0_S,
+                )
+                state["stream"] = documents_to_stream(documents)
+                self.path.write_bytes(state["stream"])
                 self.returncode = None
+                clock.sleep(SPAWN_ADVANCE_S)
 
             def poll(self):
                 return self.returncode
@@ -1892,7 +1996,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 self.returncode = 0
 
             def communicate(self, timeout=None):
-                self.path.write_bytes(truncated_stream)
+                self.path.write_bytes(state["stream"] + b"\0" + tail)
                 self.returncode = 0
                 return b"", b""
 
@@ -1901,20 +2005,23 @@ class PowermetricsAdapterTests(unittest.TestCase):
                 patch("joulewise.adapters.powermetrics.subprocess.run", side_effect=fake_run),
                 patch("joulewise.adapters.powermetrics.subprocess.Popen", TruncatedTailPopen),
             ):
-                bundle_path, summary = run_benchmark(config, Path(tmp), FakeClock(start=10.0))
+                bundle_path, summary = run_benchmark(config, Path(tmp), clock)
 
             self.assertEqual(summary.status, RunStatus.SUCCEEDED)
-            expected_cutoff = b"\0".join(fixture.split(b"\0")[:4]) + b"\0" + tail
             self.assertEqual(
                 (bundle_path / "raw" / RAW_SAMPLES_NAME).read_bytes(),
-                expected_cutoff,
+                state["stream"] + b"\0" + tail,
             )
-            self.assertEqual(len((bundle_path / "power_trace.csv").read_text().splitlines()), 13)
+            self.assertEqual(len((bundle_path / "power_trace.csv").read_text().splitlines()), 16)
             self.assertEqual(
                 (bundle_path / "power_trace.csv").read_text().splitlines()[0],
                 "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s",
             )
             metadata = json.loads((bundle_path / "metadata.json").read_text())
+            self.assertEqual(
+                metadata["uncertainty_evidence"]["clock_anchor"]["status"],
+                "bounded",
+            )
             diagnostics = metadata["device"]["parse_diagnostics"]
             measured = [
                 diagnostic
@@ -1924,7 +2031,7 @@ class PowermetricsAdapterTests(unittest.TestCase):
             self.assertEqual(len(measured), 1)
             self.assertEqual(measured[0]["capture"], "measured_run")
             self.assertEqual(measured[0]["action"], "dropped_final_unparseable_frame")
-            self.assertEqual(measured[0]["frame_index"], 4)
+            self.assertEqual(measured[0]["frame_index"], 5)
             self.assertEqual(measured[0]["byte_count"], len(tail))
             self.assertEqual(measured[0]["sha256"], hashlib.sha256(tail).hexdigest())
 

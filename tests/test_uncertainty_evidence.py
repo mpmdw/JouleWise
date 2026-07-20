@@ -202,3 +202,196 @@ class IdleDriftEvidenceTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AnchorV2Tests(unittest.TestCase):
+    """D-078 censored-intersection estimator: value oracle + fail-closed matrix."""
+
+    @staticmethod
+    def record(
+        elapsed_s: float = 1.0,
+        native_s: float = 1000.0,
+        power_w: float = 1.0,
+        energy_j: float | None = None,
+        is_delta: bool | None = True,
+    ):
+        from joulewise.uncertainty_evidence import NativeAnchorRecord
+
+        return NativeAnchorRecord(
+            elapsed_s=elapsed_s,
+            native_timestamp_s=native_s,
+            power_w=power_w,
+            energy_j=(power_w * elapsed_s if energy_j is None else energy_j),
+            is_delta=is_delta,
+        )
+
+    @staticmethod
+    def exact_stamp(epoch: float) -> ClockStamp:
+        return ClockStamp(epoch, epoch, epoch, 0.0, 0.0)
+
+    def stamps(
+        self,
+        *,
+        pre_spawn: float = 999.0,
+        first_parse: float = 1000.3,
+    ) -> dict[str, ClockStamp]:
+        return {
+            "pre_spawn": self.exact_stamp(pre_spawn),
+            "first_parse": self.exact_stamp(first_parse),
+            "sampling_started": self.exact_stamp(first_parse + 0.1),
+            "sampling_stopped": self.exact_stamp(first_parse + 3.0),
+            "post_parse": self.exact_stamp(first_parse + 3.1),
+        }
+
+    def records(self):
+        return [
+            self.record(native_s=1000.0),
+            self.record(native_s=1001.0),
+            self.record(native_s=1002.0),
+        ]
+
+    def derive(self, stamps=None, records=None):
+        from joulewise.uncertainty_evidence import derive_powermetrics_anchor_v2
+
+        return derive_powermetrics_anchor_v2(
+            stamps=self.stamps() if stamps is None else stamps,
+            records=self.records() if records is None else records,
+        )
+
+    def assert_unresolved(self, result, detail: str) -> None:
+        self.assertEqual(result["status"], "unknown")
+        self.assertEqual(result["reason"], "clock_anchor_unresolved")
+        self.assertEqual(result["detail"], detail)
+
+    def test_hand_computed_intersection_midpoint_and_bound(self) -> None:
+        result = self.derive()
+        self.assertEqual(result["status"], "bounded")
+        # N = [1000, 1001); C = [999 + 1.0, 1000.3] -> I = [1000, 1000.3].
+        self.assertEqual(result["native_intersection_lower_epoch_s"], 1000.0)
+        self.assertEqual(result["native_intersection_upper_epoch_s"], 1001.0)
+        self.assertEqual(result["admissible_lower_epoch_s"], 1000.0)
+        self.assertAlmostEqual(result["admissible_upper_epoch_s"], 1000.3, places=12)
+        self.assertAlmostEqual(
+            result["first_sample_end_point_epoch_s"], 1000.15, places=12
+        )
+        self.assertAlmostEqual(result["anchor_only_bound_s"], 0.15, places=12)
+        self.assertAlmostEqual(
+            result["effective_clock_anchor_bound_s"], 0.15, places=12
+        )
+        self.assertAlmostEqual(result["first_parse_lag_s"], 0.0, places=12)
+        self.assertEqual(result["native_rollover_count"], 2)
+
+    def test_irregular_elapsed_tightens_native_intersection(self) -> None:
+        records = [
+            self.record(elapsed_s=1.0, native_s=1000.0),
+            self.record(elapsed_s=0.9, native_s=1000.0),
+            self.record(elapsed_s=1.05, native_s=1001.0),
+        ]
+        # q = [0, 0.9, 1.95]; N = [max(1000, 999.1, 999.05),
+        #                          min(1001, 1000.1, 1000.05)) = [1000, 1000.05)
+        result = self.derive(records=records)
+        self.assertEqual(result["status"], "bounded")
+        self.assertEqual(result["native_intersection_lower_epoch_s"], 1000.0)
+        self.assertAlmostEqual(
+            result["native_intersection_upper_epoch_s"], 1000.05, places=9
+        )
+
+    def test_missing_stamp_fails_closed(self) -> None:
+        stamps = self.stamps()
+        del stamps["post_parse"]
+        self.assert_unresolved(self.derive(stamps=stamps), "clock_stamp_unavailable")
+
+    def test_no_rollover_fails_closed(self) -> None:
+        records = [self.record(native_s=1000.0), self.record(native_s=1000.0)]
+        self.assert_unresolved(
+            self.derive(records=records), "no_native_second_rollover"
+        )
+
+    def test_non_monotone_native_stamps_fail_closed(self) -> None:
+        records = [
+            self.record(native_s=1001.0),
+            self.record(native_s=1000.0),
+            self.record(native_s=1002.0),
+        ]
+        self.assert_unresolved(
+            self.derive(records=records), "native_timestamps_non_monotone"
+        )
+
+    def test_nonpositive_elapsed_fails_closed(self) -> None:
+        records = self.records()
+        records[1] = self.record(elapsed_s=0.0, native_s=1001.0)
+        self.assert_unresolved(
+            self.derive(records=records), "native_record_malformed"
+        )
+
+    def test_not_delta_aggregate_fails_closed(self) -> None:
+        records = self.records()
+        records[0] = self.record(is_delta=None)
+        self.assert_unresolved(
+            self.derive(records=records), "native_record_not_delta_aggregate"
+        )
+
+    def test_energy_power_inconsistency_fails_closed_without_outlier_deletion(
+        self,
+    ) -> None:
+        # One inconsistent record kills the whole derivation - it is never
+        # dropped as an outlier.
+        records = self.records()
+        records[2] = self.record(native_s=1002.0, power_w=5.0, energy_j=1.0)
+        self.assert_unresolved(
+            self.derive(records=records), "native_energy_power_inconsistent"
+        )
+
+    def test_contradicting_later_record_empties_native_intersection(self) -> None:
+        # Record 2's censored constraint [1002 - 1, 1003 - 1) does not meet
+        # record 0's [1000, 1001): a later record contradicting the pre-start
+        # estimate fails closed.
+        records = [
+            self.record(native_s=1000.0),
+            self.record(native_s=1002.0),
+        ]
+        self.assert_unresolved(
+            self.derive(records=records), "native_intersection_empty"
+        )
+
+    def test_empty_causal_intersection_fails_closed(self) -> None:
+        stamps = self.stamps(pre_spawn=1000.5, first_parse=1000.9)
+        # C = [1001.5, 1000.9] is empty against N = [1000, 1001).
+        self.assert_unresolved(
+            self.derive(stamps=stamps), "admissible_interval_empty"
+        )
+
+    def test_wall_minus_monotonic_step_fails_closed(self) -> None:
+        stamps = self.stamps()
+        stamps["post_parse"] = ClockStamp(1003.4 + 0.010, 1003.4, 1003.4, 0.0, 0.0)
+        result = self.derive(stamps=stamps)
+        self.assert_unresolved(result, "wall_minus_monotonic_span_exceeded")
+        self.assertGreater(result["wall_minus_monotonic_span_s"], 0.005)
+
+    def test_first_parse_lag_beyond_limit_fails_closed(self) -> None:
+        stamps = self.stamps(first_parse=1001.5)
+        # U = min(N_U, C_U) = 1001; lag = 1001.5 - 1001 = 0.5 > 0.25.
+        result = self.derive(stamps=stamps)
+        self.assert_unresolved(result, "first_parse_lag_exceeded")
+        self.assertAlmostEqual(result["first_parse_lag_s"], 0.5, places=9)
+
+    def test_full_evidence_wrapper_reports_v2_schema_and_phase(self) -> None:
+        from joulewise.uncertainty_evidence import (
+            SCHEMA_VERSION_V2,
+            derive_powermetrics_clock_evidence_v2,
+        )
+
+        evidence, point = derive_powermetrics_clock_evidence_v2(
+            stamps=self.stamps(), records=self.records()
+        )
+        self.assertEqual(evidence["schema_version"], SCHEMA_VERSION_V2)
+        self.assertAlmostEqual(point, 1000.15, places=12)
+        self.assertEqual(evidence["sample_phase"]["status"], "bounded")
+        unresolved, no_point = derive_powermetrics_clock_evidence_v2(
+            stamps={}, records=[]
+        )
+        self.assertIsNone(no_point)
+        self.assertEqual(
+            unresolved["sample_phase"],
+            {"status": "unknown", "reason": "clock_anchor_unresolved"},
+        )

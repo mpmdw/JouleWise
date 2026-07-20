@@ -28,9 +28,13 @@ from joulewise.adapters.powermetrics import (
     RAW_IDLE_NAME,
     RAW_IDLE_POST_NAME,
     RAW_SAMPLES_NAME,
+    RICH_TELEMETRY_NAME,
+    anchor_records_from_powermetrics,
+    trace_fallback_endpoint,
     decode_rich_telemetry,
     idle_window_gpu_quality,
     parse_powermetrics_records,
+    rich_telemetry_jsonl,
     samples_from_raw_powermetrics,
 )
 from joulewise.bundle import BundleError
@@ -71,7 +75,11 @@ from joulewise.output_identity import (
     build_output_identity_report,
     render_output_identity_report,
 )
-from joulewise.reduce import reduce_bundle
+from joulewise.reduce import (
+    AXI_REDUCER_VERSION,
+    AXI_REDUCER_VERSIONS,
+    reduce_bundle,
+)
 from joulewise.report import ReportError, generate_report
 from joulewise.schemas import (
     BenchmarkConfig,
@@ -87,8 +95,10 @@ from joulewise.schemas import (
 from joulewise.validation import finite_float
 from joulewise.uncertainty_evidence import (
     SCHEMA_VERSION as P2038_SCHEMA_VERSION,
+    SCHEMA_VERSION_V2 as P2038_SCHEMA_VERSION_V2,
     derive_idle_drift_evidence,
     derive_powermetrics_clock_evidence,
+    derive_powermetrics_clock_evidence_v2,
     stamp_from_mapping,
 )
 
@@ -359,7 +369,9 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     ) or (
         isinstance(summary, dict)
         and isinstance(summary.get("summary_provenance"), dict)
-        and summary["summary_provenance"].get("reducer_version") == "0.6.0"
+        and isinstance(summary["summary_provenance"].get("reducer_version"), str)
+        and summary["summary_provenance"]["reducer_version"]
+        in AXI_REDUCER_VERSIONS
     )
     if axi_selected:
         # Event-v2 evidence is validated completely before reducer
@@ -373,21 +385,31 @@ def _strict_problems(reader: BundleReader) -> list[str]:
             or summary.get("status") != RunStatus.SUCCEEDED.value
         ):
             return []
+        recorded_axi_version = (
+            summary["summary_provenance"].get("reducer_version")
+            if isinstance(summary.get("summary_provenance"), dict)
+            else None
+        )
+        comparison_axi_version = (
+            recorded_axi_version
+            if recorded_axi_version in AXI_REDUCER_VERSIONS
+            else AXI_REDUCER_VERSION
+        )
         try:
             fresh = reduce_bundle(
                 reader.path,
-                reducer_version="0.6.0",
+                reducer_version=comparison_axi_version,
             ).to_dict()
         except (ValueError, SchemaError) as exc:
             return [
-                "axi:event_semantics_invalid: strict reducer 0.6.0 "
+                f"axi:event_semantics_invalid: strict reducer {comparison_axi_version} "
                 f"dispatch failed: {exc}"
             ]
         differing = _strict_summary_differences(fresh, summary)
         if differing:
             return [
                 "axi:event_semantics_invalid: summary_metrics.json does not "
-                "match a fresh 0.6.0 "
+                f"match a fresh {comparison_axi_version} "
                 "re-reduction of event-v2 evidence (differing keys: "
                 + ", ".join(differing)
                 + ")"
@@ -452,6 +474,7 @@ def _strict_problems(reader: BundleReader) -> list[str]:
     problems.extend(_strict_budgeted_suite_prompt_count_problems(reader))
     problems.extend(_strict_uncertainty_evidence_problems(reader))
     problems.extend(_strict_raw_to_trace_problems(reader))
+    problems.extend(_strict_rich_telemetry_problems(reader))
     # A schema-invalid stored summary is already rejected structurally.  Do
     # not add a second derivation-drift diagnosis for the same malformed
     # object; semantic re-reduction remains applicable to valid summaries.
@@ -508,6 +531,16 @@ _STRICT_ADDITIVE_ABSENT_TOLERANCE = {
 # pre-repair 0.5.0 summaries remain distinguishable by this field's absence;
 # when present, normal recursive strict comparison still checks its value.
 ADDED_DURING_0_5_0 = frozenset({"idle_baseline.gpu_freq_mhz_mean"})
+
+# D-078: fields minted by reducer 0.5.1 (anchor-shift envelopes). A stored
+# summary labelled 0.5.0 that carries any of these relabelled itself out of
+# the frozen point-anchor arm and is rejected.
+ADDED_SINCE_0_5_0 = frozenset(
+    {
+        "energy_anchor_shift_envelopes",
+        "energy_bound_terms_j.E_clock_anchor_shift_bound_j",
+    }
+)
 
 ADDED_SINCE_0_3_0 = frozenset(
     {
@@ -740,15 +773,24 @@ def _strict_reducer_version_dispatch(
     if reducer_version == SUMMARY_REDUCER_VERSION:
         return [], set(ADDED_DURING_0_5_0), False, None
     frozen_absence: set[str]
-    if reducer_version == "0.4.2":
+    relabel_markers: set[str]
+    if reducer_version == "0.5.0":
+        # D-078 frozen point-anchor arm: replayed byte-identically. The
+        # gpu_freq_mhz_mean field legitimately appears within the 0.5.0 era
+        # (WO-007), so only the 0.5.1-minted fields mark a relabel.
         frozen_absence = set(ADDED_DURING_0_5_0)
+        relabel_markers = set(ADDED_SINCE_0_5_0)
+    elif reducer_version == "0.4.2":
+        frozen_absence = set(ADDED_DURING_0_5_0)
+        relabel_markers = frozen_absence | ADDED_SINCE_0_5_0
     elif reducer_version == "0.4.1":
         frozen_absence = set(ADDED_SINCE_0_4_1 | ADDED_DURING_0_5_0)
+        relabel_markers = frozen_absence | ADDED_SINCE_0_5_0
     else:
         return _unsupported_reducer_version_problems(reducer_version), set(), False, None
-    # A current 0.5.0 summary cannot opt into a frozen arm by changing only its
-    # version label. Authentic 0.4.x shapes predate these additive fields.
-    if any(_summary_path_present(summary, path) for path in frozen_absence):
+    # A current summary cannot opt into a frozen arm by changing only its
+    # version label. Authentic frozen shapes predate these additive fields.
+    if any(_summary_path_present(summary, path) for path in relabel_markers):
         return _unsupported_reducer_version_problems(reducer_version), set(), False, None
     return [], frozen_absence, False, reducer_version
 
@@ -1111,7 +1153,8 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
             "missing for current-era powermetrics bundle"
         ]
     problems: list[str] = []
-    if evidence.get("schema_version") != P2038_SCHEMA_VERSION:
+    schema_version = evidence.get("schema_version")
+    if schema_version not in {P2038_SCHEMA_VERSION, P2038_SCHEMA_VERSION_V2}:
         problems.append(
             "strict: uncertainty evidence: unsupported or missing schema_version"
         )
@@ -1138,17 +1181,40 @@ def _strict_uncertainty_evidence_problems(reader: BundleReader) -> list[str]:
             if isinstance(value, dict)
         }
         raw_records = parse_powermetrics_records(raw_path.read_bytes())
-        expected, _point = derive_powermetrics_clock_evidence(
-            stamps=stamps,
-            elapsed_s=[record.elapsed_ns / 1_000_000_000.0 for record in raw_records],
-            plist_timestamp_s=[
-                float(record.metadata["plist_timestamp_s"]) for record in raw_records
-            ],
-        )
+        if schema_version == P2038_SCHEMA_VERSION_V2:
+            expected, _point = derive_powermetrics_clock_evidence_v2(
+                stamps=stamps,
+                records=anchor_records_from_powermetrics(raw_records),
+            )
+        else:
+            # Exact dispatch for stored p2-038.1 evidence (D-078): the frozen
+            # spawn-bracket derivation is replayed, never re-derived as v2.
+            expected, _point = derive_powermetrics_clock_evidence(
+                stamps=stamps,
+                elapsed_s=[
+                    record.elapsed_ns / 1_000_000_000.0 for record in raw_records
+                ],
+                plist_timestamp_s=[
+                    float(record.metadata["plist_timestamp_s"])
+                    for record in raw_records
+                ],
+            )
     except (KeyError, OSError, TypeError, ValueError) as exc:
         return problems + [
             f"strict: uncertainty evidence: cannot re-derive clock evidence: {exc}"
         ]
+    expected_anchor = expected["clock_anchor"]
+    if (
+        schema_version == P2038_SCHEMA_VERSION_V2
+        and isinstance(expected_anchor, dict)
+        and expected_anchor.get("status") != "bounded"
+        and raw_records
+    ):
+        # Replay the adapter's deterministic structural fallback so stored
+        # unresolved evidence remains byte-verifiable.
+        endpoint_s, method = trace_fallback_endpoint(stamps, raw_records)
+        expected_anchor["trace_fallback_endpoint_epoch_s"] = endpoint_s
+        expected_anchor["trace_fallback_method"] = method
     if clock_anchor != expected["clock_anchor"]:
         problems.append(
             "strict: uncertainty evidence: clock_anchor does not match paired-clock/raw-plist derivation"
@@ -1351,10 +1417,7 @@ def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
                 return [
                     "strict: raw-to-trace: current-era clock_anchor evidence is missing"
                 ]
-            point_s = finite_float(
-                clock_anchor.get("first_sample_end_point_epoch_s"),
-                "metadata.uncertainty_evidence.clock_anchor.first_sample_end_point_epoch_s",
-            )
+            point_s = _powermetrics_trace_endpoint_s(evidence, clock_anchor)
             expected = samples_from_raw_powermetrics(
                 raw_path.read_bytes(),
                 first_record_endpoint_s=point_s,
@@ -1365,6 +1428,80 @@ def _verify_powermetrics_raw_to_trace(reader: BundleReader) -> list[str]:
     return _compare_raw_derived_samples(
         reader, expected, require_interval_support=require_interval_support
     )
+
+
+def _powermetrics_trace_endpoint_s(
+    evidence: dict[str, Any], clock_anchor: dict[str, Any]
+) -> float:
+    """The record-0 window END the stored trace/rich telemetry must replay.
+
+    Bounded evidence uses the anchor point. A p2-038.2 unresolved anchor
+    (``clock_anchor_unresolved``) records the adapter's structural fallback
+    endpoint instead; strict replays it exactly, and the claim barrier stays
+    in the precheck, never here."""
+
+    if (
+        evidence.get("schema_version") == P2038_SCHEMA_VERSION_V2
+        and clock_anchor.get("status") != "bounded"
+    ):
+        return finite_float(
+            clock_anchor.get("trace_fallback_endpoint_epoch_s"),
+            "metadata.uncertainty_evidence.clock_anchor.trace_fallback_endpoint_epoch_s",
+        )
+    return finite_float(
+        clock_anchor.get("first_sample_end_point_epoch_s"),
+        "metadata.uncertainty_evidence.clock_anchor.first_sample_end_point_epoch_s",
+    )
+
+
+def _strict_rich_telemetry_problems(reader: BundleReader) -> list[str]:
+    """D-078: rich telemetry must move with the corrected anchor (p2-038.2).
+
+    Stored p2-038.1 bundles keep their legacy native-date reconstruction and
+    are not re-judged; p2-038.2 bundles must byte-match a re-derivation from
+    the raw capture at the stored anchor endpoint."""
+
+    if _validated_config_telemetry_backend(reader) != TelemetryBackend.POWERMETRICS:
+        return []
+    metadata = reader.raw_metadata()
+    if not isinstance(metadata, dict) or _strict_legacy_bundle_metadata(metadata):
+        return []
+    evidence = metadata.get("uncertainty_evidence")
+    if (
+        not isinstance(evidence, dict)
+        or evidence.get("schema_version") != P2038_SCHEMA_VERSION_V2
+    ):
+        return []
+    clock_anchor = evidence.get("clock_anchor")
+    if not isinstance(clock_anchor, dict):
+        return []
+    raw_path = reader.path / "raw" / RAW_SAMPLES_NAME
+    rich_path = reader.path / RICH_TELEMETRY_NAME
+    if not rich_path.is_file():
+        device = metadata.get("device")
+        if isinstance(device, dict) and device.get("rich_telemetry_error"):
+            return []
+        return [
+            f"strict: rich-telemetry: missing {RICH_TELEMETRY_NAME} without a "
+            "recorded rich_telemetry_error"
+        ]
+    try:
+        point_s = _powermetrics_trace_endpoint_s(evidence, clock_anchor)
+        expected = rich_telemetry_jsonl(
+            raw_path.read_bytes(), first_record_endpoint_s=point_s
+        )
+    except (OSError, ValueError) as exc:
+        return [f"strict: rich-telemetry: cannot re-derive {RICH_TELEMETRY_NAME}: {exc}"]
+    try:
+        stored = rich_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return [f"strict: rich-telemetry: cannot read {RICH_TELEMETRY_NAME}: {exc}"]
+    if stored != expected:
+        return [
+            f"strict: rich-telemetry: {RICH_TELEMETRY_NAME} does not match the "
+            "anchor-corrected re-derivation from the raw capture"
+        ]
+    return []
 
 
 def _verify_mock_raw_to_trace_exemption(reader: BundleReader) -> list[str]:
