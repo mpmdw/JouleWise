@@ -1,14 +1,24 @@
 # JouleWise Run State
 
-Last updated: 2026-07-19 (mid-day). NEXT SESSION: three re-calibration
-windows are COMPLETE (see below; third window: su-ABBA b06-b10 from
-clean main in runs_recal3_20260719, 22/22 strict-valid AND 22/22
-claim_eligible=true — first claim-eligible guard corpus; all 10 planned
-su-ABBA blocks now measured, 5 of them claim-eligible). PR #78 MERGED
-(b52abf3): probe fixes + three-lens-review-corrected advisor surfaces
-(floor restated as frozen-estimator ~1.13 J / ~0.77%; the -15% claim
-withdrawn; provenance gate documented). NEXT: verified extraction over
-all three corpora + P2-037; optional clean b01-b05 re-run window. The
+Last updated: 2026-07-19 (night). NEXT SESSION: the extended
+clean-provenance re-collection is COMPLETE — three further bracketed
+windows (`runs_recal4/5/6_20260719/`) produced **266/266 strict-valid,
+266/266 claim-eligible bundles** from clean main `e79279a`: su-ABBA
+b01-b05 re-run (comparative cell now complete at n=10 eligible blocks
+with recal3's b06-b10), suite absolute, request core, phase
+prefill/decode/short-prefill absolutes, long-request absolutes, and all
+four comparative ABBA families at n=10 blocks each. Every planned
+Window-A cell except DF-TELEM block 10 now has claim-eligible evidence
+at planned n (288 eligible bundles total). One mid-window unlock abort
+quarantined (guard's 4th live catch); Sol recompute audit of the
+exploratory readout before commit. Record:
+`docs/run_reports/2026-07-19-recal456-extended-window.md`. NEXT:
+verified extraction over runs_recal3/4/5/6 + P2-037 adjudication (sole
+gates before claim-bearing floors/MDEs); extraction must decide the
+treatment of the 9/10-negative suite ABBA position-in-block pattern.
+PR #78 MERGED (b52abf3): probe fixes + three-lens-review-corrected
+advisor surfaces (floor restated as frozen-estimator ~1.13 J / ~0.77%;
+the -15% claim withdrawn; provenance gate documented). The
 first window's record — 32/32 strict-valid bundles in
 `runs_recal_20260718/` (NEG-8 start/end brackets, all five su-ABBA
 comparative blocks, full suite-absolute block), collected under the
