@@ -346,7 +346,13 @@ additive campaign-policy sidecar section keyed `idle_admission_extension`
   `power.adapter_description`, plus a normalized
   `adapter_power_observation`) per admission observation when called with
   `include_adapter_power=True` (default off so pre-hookup callers keep
-  their exact probe sequence; the controller hookup opts in). The campaign
+  their exact probe sequence AND their exact observation shape; the
+  controller hookup opts in). Under the default flag the `power` block and
+  `adapter_power_observation` keys are ABSENT entirely - not present as
+  all-None placeholders - so the verdict's continuity scan (which treats any
+  guard observation carrying a `power` key as an adapter observation) never
+  ingests unverifiable unknown-wattage placeholders from callers that did not
+  opt in. The campaign
   verdict evaluates the ordered observation sequence: wattage
   discontinuities (the live 140->70->140 W negotiation precedent) and
   description/power-source changes are NAMED conditions - recorded data,
@@ -360,7 +366,17 @@ additive campaign-policy sidecar section keyed `idle_admission_extension`
   `neg8_bracket.max_rel_delta` (relative to the start gross); comparisons
   are `<=`, so exactly-on-threshold passes and one ULP over fails. A
   missing bracket fails closed when `neg8_bracket.require_bracket` is true
-  (mandatory for production).
+  (mandatory for production). The bracket is a WHOLE-WINDOW check: the drift
+  comparison is evaluated only by a verdict pass whose evaluated members
+  include BOTH the start and end reference bundles. The canonical Window-A
+  sequence runs the start and end references as SEPARATE `run_campaign.py`
+  invocations, so a per-segment invocation (only one reference, or neither)
+  records the non-drift condition `neg8_bracket_not_evaluated` with decision
+  `not_evaluated` instead of a spurious `failed`/`missing`; to obtain the
+  bracket comparison, run a whole-window verdict pass over both reference
+  bundles together. A reference bundle that is genuinely absent from a
+  whole-window pass is still caught by the collection verdict's
+  missing/failed member handling, not silently dropped.
 
 Verdict surface: `scripts/run_campaign.py` records the additive
 `idle_admission_core` section (schema

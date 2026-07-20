@@ -431,8 +431,10 @@ def collect_environment_guard_observation(
     140->70->140 W precedent) and description changes as named conditions.
     Capture stays fail-soft (``None`` on probe failure); the production
     admission policy is where unknown wattage fails closed.  The flag
-    defaults to off so pre-hookup callers keep their exact probe sequence;
-    the controller hookup opts in.
+    defaults to off so pre-hookup callers keep their exact probe sequence
+    AND their exact observation shape: the ``power`` block and
+    ``adapter_power_observation`` are present only when the flag is set.
+    The controller hookup opts in.
     """
 
     observation = {
@@ -450,13 +452,6 @@ def collect_environment_guard_observation(
             "external_display_count": None,
             "asleep_evidence_count": None,
             "asleep_display_count": None,
-        },
-        "power": {
-            "adapter_watts": None,
-            "adapter_description": None,
-            "external_connected": None,
-            "is_charging": None,
-            "fully_charged": None,
         },
         "errors": {},
     }
@@ -499,6 +494,18 @@ def collect_environment_guard_observation(
         timeout_s,
     )
     if include_adapter_power:
+        # The adapter-power surface is emitted ONLY when opted in; pre-hookup
+        # callers (default off) keep the exact legacy observation shape so
+        # existing consumers -- and the campaign verdict's adapter-continuity
+        # scan, which treats any guard dict containing "power" as an adapter
+        # observation -- never see all-None wattage blocks they cannot verify.
+        observation["power"] = {
+            "adapter_watts": None,
+            "adapter_description": None,
+            "external_connected": None,
+            "is_charging": None,
+            "fully_charged": None,
+        }
         _apply_command(
             observation,
             errors,
@@ -508,9 +515,10 @@ def collect_environment_guard_observation(
             timeout_s,
         )
     _derive_screensaver_engagement(observation)
-    observation["adapter_power_observation"] = extract_adapter_observation(
-        observation["power"], source="admission_guard_observation"
-    )
+    if include_adapter_power:
+        observation["adapter_power_observation"] = extract_adapter_observation(
+            observation["power"], source="admission_guard_observation"
+        )
     return observation
 
 

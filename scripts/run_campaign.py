@@ -80,6 +80,7 @@ from joulewise.idle_admission import (  # noqa: E402
     evaluate_cpu_idle_admission,
     evaluate_neg8_bracket,
     extract_adapter_observation,
+    neg8_bracket_not_evaluated,
 )
 from joulewise.analysis_engine.inputs import (  # noqa: E402
     cleanup_claim_evidence_flags,
@@ -2727,18 +2728,63 @@ def collection_verdict_for(categories: dict[str, list[str]]) -> tuple[str, list[
 IDLE_ADMISSION_CORE_SCHEMA = "joulewise.idle_admission_core_verdict.v1"
 
 
-def _load_idle_rich_telemetry(bundle_path: Path) -> list[dict[str, Any]] | None:
-    """Load the pre-run baseline rich telemetry, or ``None`` when unusable.
+def _final_idle_admission_attempt(evaluation: MemberEvaluation) -> int | None:
+    """Attempt number whose idle telemetry matches the recorded admission.
 
-    Missing files, unreadable bytes, and malformed JSONL all return ``None``
-    so the pure evaluator fails closed under a production policy instead of
-    admitting on partial evidence.
+    The controller records the FINAL retry attempt's admission decision, and
+    ``_gpu_admission_outcome`` reads that final decision, so the CPU-idle
+    evaluation must pair with the telemetry captured on that SAME attempt.
+    Attempt 1 lives in ``rich_telemetry_idle.jsonl``; attempt ``n`` (n>1) in
+    ``rich_telemetry_idle_attempt_{n}.jsonl`` (see
+    ``joulewise/adapters/powermetrics.py``).
+
+    Returns the final attempt number, ``1`` when no retry ledger is present
+    (pre-hookup bundles never retried), or ``None`` (fail closed) when the
+    recorded attempt ledger is malformed.
     """
 
-    path = bundle_path / "rich_telemetry_idle.jsonl"
+    metadata = evaluation.metadata if isinstance(evaluation.metadata, dict) else {}
+    admission = metadata.get("environment_admission")
+    if not isinstance(admission, dict):
+        return 1
+    attempts = admission.get("attempts")
+    if attempts is None:
+        return 1
+    if not isinstance(attempts, list) or not attempts:
+        return None
+    numbers: list[int] = []
+    for entry in attempts:
+        if not isinstance(entry, dict):
+            return None
+        value = entry.get("attempt")
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            return None
+        numbers.append(value)
+    return max(numbers)
+
+
+def _load_idle_rich_telemetry(
+    bundle_path: Path, attempt: int
+) -> list[dict[str, Any]] | None:
+    """Load the pre-run baseline rich telemetry, or ``None`` when unusable.
+
+    ``attempt`` selects the retry-matched artifact so CPU-idle evaluation
+    never pairs attempt-1 telemetry with a final-attempt GPU decision.
+    Missing files, unreadable bytes, and malformed JSONL all return ``None``
+    so the pure evaluator fails closed under a production policy instead of
+    admitting on partial evidence.  When the retried artifact is absent this
+    returns ``None`` as well (fail closed on exactly the retried admissions).
+    """
+
+    name = (
+        "rich_telemetry_idle.jsonl"
+        if attempt == 1
+        else f"rich_telemetry_idle_attempt_{attempt}.jsonl"
+    )
+    path = bundle_path / name
     try:
         text = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeDecodeError):
         return None
     records: list[dict[str, Any]] = []
     for line in text.splitlines():
@@ -2866,8 +2912,15 @@ def idle_admission_core_verdict(
     adapter_observations: list[dict[str, Any]] = []
     neg8_start: float | None = None
     neg8_end: float | None = None
+    neg8_start_seen = False
+    neg8_end_seen = False
     for evaluation in evaluations:
-        records = _load_idle_rich_telemetry(evaluation.bundle_path)
+        attempt = _final_idle_admission_attempt(evaluation)
+        records = (
+            _load_idle_rich_telemetry(evaluation.bundle_path, attempt)
+            if attempt is not None
+            else None
+        )
         cpu_admission = evaluate_cpu_idle_admission(
             records,
             extension.cpu_criteria,
@@ -2883,18 +2936,33 @@ def idle_admission_core_verdict(
                 "adapter_observation_count": len(member_observations),
             }
         )
-        if (
-            _bundle_matches_neg8_marker(evaluation.bundle_id, "neg8-reference-start")
-            and neg8_start is None
-        ):
-            neg8_start = _gross_energy_for(evaluation)
+        if _bundle_matches_neg8_marker(evaluation.bundle_id, "neg8-reference-start"):
+            if not neg8_start_seen:
+                neg8_start = _gross_energy_for(evaluation)
+            neg8_start_seen = True
         if _bundle_matches_neg8_marker(evaluation.bundle_id, "neg8-reference-end"):
             neg8_end = _gross_energy_for(evaluation)
+            neg8_end_seen = True
     continuity = evaluate_adapter_wattage_continuity(
         adapter_observations, extension.adapter_wattage
     )
     conditions.update(continuity["conditions"])
-    bracket = evaluate_neg8_bracket(neg8_start, neg8_end, extension.neg8_bracket)
+    # The NEG-8 bracket is a whole-window drift check: the canonical Window-A
+    # sequence runs the start and end references as SEPARATE run_campaign
+    # invocations, so the comparison is only sound when BOTH reference bundles
+    # are evaluated together.  A per-segment invocation records the non-drift
+    # ``neg8_bracket_not_evaluated`` condition rather than a spurious
+    # ``failed``/``missing``.  A reference bundle that is genuinely absent from
+    # a whole-window invocation is still caught by the collection verdict's
+    # missing-member handling.
+    if neg8_start_seen and neg8_end_seen:
+        bracket = evaluate_neg8_bracket(neg8_start, neg8_end, extension.neg8_bracket)
+    else:
+        bracket = neg8_bracket_not_evaluated(
+            extension.neg8_bracket,
+            start_gross_j=neg8_start,
+            end_gross_j=neg8_end,
+        )
     conditions.update(bracket["conditions"])
     section["adapter_wattage_continuity"] = continuity
     section["neg8_bracket"] = bracket

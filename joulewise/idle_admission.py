@@ -57,6 +57,12 @@ CONDITION_NEG8_BRACKET_MISSING = "neg8_bracket_missing"
 CONDITION_NEG8_REFERENCE_INVALID = "neg8_bracket_reference_invalid"
 CONDITION_NEG8_ABS_EXCEEDED = "neg8_bracket_abs_delta_exceeded"
 CONDITION_NEG8_REL_EXCEEDED = "neg8_bracket_rel_delta_exceeded"
+# Not a drift failure: the NEG-8 bracket is a WHOLE-WINDOW check that needs
+# both reference bundles in one verdict pass.  The canonical Window-A
+# sequence runs the start and end references as SEPARATE run_campaign
+# invocations, so any invocation lacking both references records this and
+# leaves the drift comparison for a whole-window verdict pass.
+CONDITION_NEG8_BRACKET_NOT_EVALUATED = "neg8_bracket_not_evaluated"
 
 
 class IdleAdmissionPolicyError(ValueError):
@@ -657,5 +663,44 @@ def evaluate_neg8_bracket(
         "end_gross_j": end_gross_j if isinstance(end_gross_j, int | float) and not isinstance(end_gross_j, bool) else None,
         "abs_delta_j": abs_delta_j,
         "rel_delta": rel_delta,
+        "policy": asdict(policy),
+    }
+
+
+def neg8_bracket_not_evaluated(
+    policy: Neg8BracketPolicy,
+    *,
+    start_gross_j: Any = None,
+    end_gross_j: Any = None,
+) -> dict[str, Any]:
+    """Structured NEG-8 result for an invocation that is not whole-window.
+
+    The bracket drift comparison requires BOTH reference bundles in a single
+    verdict pass.  When only one (or neither) reference is present -- the
+    per-segment production convention -- the invocation records this
+    non-drift condition instead of a spurious ``failed``/``missing`` result.
+    A whole-window verdict pass (both references evaluated together) still
+    performs the real comparison via :func:`evaluate_neg8_bracket`.
+    """
+
+    return {
+        "schema_version": NEG8_BRACKET_SCHEMA,
+        "decision": "not_evaluated",
+        "passed": False,
+        "conditions": [CONDITION_NEG8_BRACKET_NOT_EVALUATED],
+        "start_gross_j": (
+            start_gross_j
+            if isinstance(start_gross_j, int | float)
+            and not isinstance(start_gross_j, bool)
+            else None
+        ),
+        "end_gross_j": (
+            end_gross_j
+            if isinstance(end_gross_j, int | float)
+            and not isinstance(end_gross_j, bool)
+            else None
+        ),
+        "abs_delta_j": None,
+        "rel_delta": None,
         "policy": asdict(policy),
     }

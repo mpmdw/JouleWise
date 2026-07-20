@@ -937,7 +937,16 @@ class DisplayAsleepDerivationTests(unittest.TestCase):
         self.assertIn("ioreg_battery", observation["errors"])
 
     def test_guard_observation_default_skips_adapter_probe(self) -> None:
-        """Pre-hookup callers keep the exact legacy probe sequence."""
+        """Pre-hookup callers keep the exact legacy probe sequence AND shape.
+
+        Regression (fix round 1): the default-off observation must NOT carry
+        the ``power`` block or ``adapter_power_observation``.  The campaign
+        verdict's adapter-continuity scan treats any guard dict containing
+        ``power`` as an adapter observation, so emitting an all-None block
+        under the default flag silently changed the stored shape and would
+        contribute unverifiable unknown-wattage observations once a
+        require_known_wattage extension is configured.
+        """
 
         from joulewise.environment import collect_environment_guard_observation
 
@@ -964,9 +973,20 @@ class DisplayAsleepDerivationTests(unittest.TestCase):
         self.assertNotIn(
             ["ioreg", "-r", "-c", "AppleSmartBattery", "-d", "1"], commands
         )
-        self.assertIsNone(observation["power"]["adapter_watts"])
-        self.assertIsNone(
-            observation["adapter_power_observation"]["adapter_watts"]
+        # Legacy-shape equality: the adapter surface is absent entirely.
+        self.assertNotIn("power", observation)
+        self.assertNotIn("adapter_power_observation", observation)
+        self.assertEqual(
+            set(observation),
+            {
+                "display_power_state",
+                "screensaver_engaged",
+                "screensaver_module",
+                "screensaver_delay_s",
+                "hid_idle_s",
+                "display",
+                "errors",
+            },
         )
 
 

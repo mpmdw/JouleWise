@@ -4508,6 +4508,16 @@ def _clean_idle_records(count: int = 5) -> list[dict]:
     ]
 
 
+def _busy_idle_records(count: int = 5) -> list[dict]:
+    return [
+        {
+            "processor_combined_power_w": 0.2,
+            "clusters": [{"cpus": [{"idle_ratio": 0.05, "down_ratio": 0.0}]}],
+        }
+        for _ in range(count)
+    ]
+
+
 class IdleAdmissionCoreVerdictTests(unittest.TestCase):
     """T0.5 idle-admission core: sidecar binding + campaign-verdict surface."""
 
@@ -4771,9 +4781,198 @@ class IdleAdmissionCoreVerdictTests(unittest.TestCase):
         self.assertEqual(exactly_on["neg8_bracket"]["decision"], "passed")
         one_ulp_over = section_for(math.nextafter(8.5, math.inf))
         self.assertEqual(one_ulp_over["neg8_bracket"]["decision"], "failed")
+        # Start-only invocation is a per-segment run, not a whole-window pass:
+        # the bracket is not evaluated here (non-drift), never a spurious
+        # ``failed``/``missing``.
         missing = section_for(None)
-        self.assertEqual(missing["neg8_bracket"]["decision"], "failed")
-        self.assertIn("neg8_bracket_missing", missing["conditions"])
+        self.assertEqual(missing["neg8_bracket"]["decision"], "not_evaluated")
+        self.assertIn("neg8_bracket_not_evaluated", missing["conditions"])
+        self.assertNotIn("neg8_bracket_missing", missing["conditions"])
+
+    def test_corrupt_utf8_idle_telemetry_fails_closed_not_crash(self) -> None:
+        """Fix round 1: invalid UTF-8 bytes must fail closed, not crash.
+
+        ``_load_idle_rich_telemetry`` promised that unreadable bytes return
+        ``None``, but a stray non-UTF-8 byte raised ``UnicodeDecodeError``
+        (a ``ValueError``, not ``OSError``) which propagated out of
+        ``idle_admission_core_verdict`` and crashed the whole campaign at
+        verdict time -- before ``append_verdict`` -- losing the result.
+        """
+
+        binding = self._binding()
+        bundle_path = self.root / "p2-work-a__r1"
+        bundle_path.mkdir(parents=True, exist_ok=True)
+        (bundle_path / "rich_telemetry_idle.jsonl").write_bytes(
+            b'{"processor_combined_power_w": 0.1}\n\xff\xfe bad bytes\n'
+        )
+        evaluation = run_campaign_module.MemberEvaluation(
+            bundle_id="p2-work-a__r1",
+            bundle_path=bundle_path,
+            config_name="p2-work-a__r1.json",
+            status="succeeded",
+            strict_valid=True,
+            summary={},
+            metadata={"environment_admission": {"decision": "admitted"}},
+        )
+        # Must not raise.
+        section = run_campaign_module.idle_admission_core_verdict(
+            [evaluation], binding
+        )
+        member = section["members"][0]["cpu_admission"]
+        self.assertEqual(member["decision"], "failed")
+        self.assertIn("cpu_baseline_telemetry_missing", section["conditions"])
+
+    def _member_with_attempts(
+        self,
+        bundle_id: str,
+        *,
+        attempt1_records: list[dict] | None,
+        attempt2_records: list[dict] | None,
+        final_attempt: int,
+        admission_decision: str,
+    ):
+        bundle_path = self.root / bundle_id
+        bundle_path.mkdir(parents=True, exist_ok=True)
+        if attempt1_records is not None:
+            (bundle_path / "rich_telemetry_idle.jsonl").write_text(
+                "".join(json.dumps(r) + "\n" for r in attempt1_records)
+            )
+        if attempt2_records is not None:
+            (bundle_path / "rich_telemetry_idle_attempt_2.jsonl").write_text(
+                "".join(json.dumps(r) + "\n" for r in attempt2_records)
+            )
+        metadata = {
+            "environment": {
+                "power_source": "AC Power",
+                "power": {
+                    "adapter_watts": 140,
+                    "adapter_description": "140W USB-C Power Adapter",
+                },
+            },
+            "environment_admission": {
+                "decision": admission_decision,
+                "attempts": [
+                    {"attempt": n} for n in range(1, final_attempt + 1)
+                ],
+            },
+        }
+        return run_campaign_module.MemberEvaluation(
+            bundle_id=bundle_id,
+            bundle_path=bundle_path,
+            config_name=f"{bundle_id}.json",
+            status="succeeded",
+            strict_valid=True,
+            summary={},
+            metadata=metadata,
+        )
+
+    def test_cpu_admission_reads_final_attempt_telemetry(self) -> None:
+        """Fix round 1 (blocker): pair CPU telemetry with the final attempt.
+
+        The controller records the FINAL retry attempt's admission decision,
+        so CPU-idle evaluation must read the telemetry from that same attempt.
+        Here attempt 1 is CPU-clean but attempt 2 is CPU-busy and the final
+        (attempt-2) GPU decision is ``admitted``: reading attempt-1 telemetry
+        would fail OPEN and report ``admitted`` on exactly the retried (most
+        suspect) admission.  The fix must read attempt-2 telemetry and fail.
+        """
+
+        binding = self._binding()
+        evaluation = self._member_with_attempts(
+            "p2-work-a__r1",
+            attempt1_records=_clean_idle_records(),
+            attempt2_records=_busy_idle_records(),
+            final_attempt=2,
+            admission_decision="admitted",
+        )
+        section = run_campaign_module.idle_admission_core_verdict(
+            [evaluation], binding
+        )
+        member = section["members"][0]["cpu_admission"]
+        self.assertEqual(member["decision"], "failed")
+        self.assertIn("cpu_busy_ratio_p95_exceeded", section["conditions"])
+
+    def test_missing_final_attempt_telemetry_fails_closed(self) -> None:
+        """Fix round 1 (blocker): absent retried telemetry fails closed.
+
+        When the recorded final attempt is >1 but its rich-telemetry file is
+        absent, CPU-idle evaluation must fail closed rather than silently fall
+        back to attempt-1 telemetry.
+        """
+
+        binding = self._binding()
+        evaluation = self._member_with_attempts(
+            "p2-work-a__r1",
+            attempt1_records=_clean_idle_records(),
+            attempt2_records=None,
+            final_attempt=2,
+            admission_decision="admitted",
+        )
+        section = run_campaign_module.idle_admission_core_verdict(
+            [evaluation], binding
+        )
+        member = section["members"][0]["cpu_admission"]
+        self.assertEqual(member["decision"], "failed")
+        self.assertIn("cpu_baseline_telemetry_missing", section["conditions"])
+
+    def test_neg8_bracket_not_evaluated_for_per_segment_invocations(self) -> None:
+        """Fix round 1 (blocker): the bracket is a whole-window check.
+
+        The canonical Window-A sequence runs the start and end NEG-8
+        references as SEPARATE run_campaign invocations.  An end-only or a
+        no-reference invocation must record the non-drift
+        ``neg8_bracket_not_evaluated`` condition, never a spurious
+        ``failed``/``missing`` -- otherwise every real production verdict is
+        red and the prospective bracket acceptance never actually compares.
+        A whole-window pass (both references) still performs the comparison.
+        """
+
+        binding = self._binding()
+
+        end_only = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "p2-neg8-reference-end__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.5,
+                )
+            ],
+            binding,
+        )
+        self.assertEqual(end_only["neg8_bracket"]["decision"], "not_evaluated")
+        self.assertIn("neg8_bracket_not_evaluated", end_only["conditions"])
+        self.assertNotIn("neg8_bracket_missing", end_only["conditions"])
+
+        no_reference = run_campaign_module.idle_admission_core_verdict(
+            [self._member("p2-work-a__r1", records=_clean_idle_records())],
+            binding,
+        )
+        self.assertEqual(
+            no_reference["neg8_bracket"]["decision"], "not_evaluated"
+        )
+        self.assertIn(
+            "neg8_bracket_not_evaluated", no_reference["conditions"]
+        )
+
+        whole_window = run_campaign_module.idle_admission_core_verdict(
+            [
+                self._member(
+                    "p2-neg8-reference-start__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.0,
+                ),
+                self._member(
+                    "p2-neg8-reference-end__r1",
+                    records=_clean_idle_records(),
+                    gross_energy_j=8.5,
+                ),
+            ],
+            binding,
+        )
+        self.assertEqual(whole_window["neg8_bracket"]["decision"], "passed")
+        self.assertNotIn(
+            "neg8_bracket_not_evaluated", whole_window["conditions"]
+        )
 
 
 if __name__ == "__main__":
