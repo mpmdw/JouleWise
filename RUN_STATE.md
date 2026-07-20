@@ -1,24 +1,28 @@
 # JouleWise Run State
 
-Last updated: 2026-07-19 (night). NEXT SESSION: the extended
-clean-provenance re-collection is COMPLETE — three further bracketed
-windows (`runs_recal4/5/6_20260719/`) produced **266/266 strict-valid,
-266/266 claim-eligible bundles** from clean main `e79279a`: su-ABBA
-b01-b05 re-run (comparative cell now complete at n=10 eligible blocks
-with recal3's b06-b10), suite absolute, request core, phase
-prefill/decode/short-prefill absolutes, long-request absolutes, and all
-four comparative ABBA families at n=10 blocks each. Every planned
-Window-A cell except DF-TELEM block 10 now has claim-eligible evidence
-at planned n (288 eligible bundles total). One mid-window unlock abort
-quarantined (guard's 4th live catch); Sol recompute audit of the
-exploratory readout before commit. Record:
-`docs/run_reports/2026-07-19-recal456-extended-window.md`. NEXT:
-verified extraction over runs_recal3/4/5/6 + P2-037 adjudication (sole
-gates before claim-bearing floors/MDEs); extraction must decide the
-treatment of the 9/10-negative suite ABBA position-in-block pattern.
-PR #78 MERGED (b52abf3): probe fixes + three-lens-review-corrected
-advisor surfaces (floor restated as frozen-estimator ~1.13 J / ~0.77%;
-the -15% claim withdrawn; provenance gate documented). The
+Last updated: 2026-07-19 (late night). **SOUNDNESS GATE ACTIVE (D-078
+proposed): the Ed-directed measurement-soundness audit found a
+trace-time-anchor defect — power-trace timestamps are misaligned with
+runtime events (~0.5–1 s), so NO existing powermetrics corpus supports
+claim-bearing floors/MDEs as recorded** (all four P0 findings
+lead-verified from primary evidence; record:
+`docs/reviews/2026-07-19-measurement-soundness-audit.md`). The extended
+re-collection itself executed perfectly: three further bracketed windows
+(`runs_recal4/5/6_20260719/`, 266/266 strict-valid, clean SOURCE
+provenance, one unlock abort quarantined) + recal3 = 288 bundles, all
+planned Window-A cells except DF-TELEM at planned n. The corpus is
+retained as instrument/calibration evidence; arithmetic, token
+accounting, guard behavior, and ABBA execution all verified sound.
+NEXT (ordered; roadmap:
+`docs/phase_2/splitwise_replication_roadmap.md`): (1) [AGENT]
+INSTRUMENT REPAIR — tight causal trace-time anchor + anchor-envelope
+reduction; extraction honors window_evidence_precheck + campaign-log
+cooldown joins; analysis-engine 0.5.0/v2 wire compat; CPU-aware idle
+admission; (2) [QUIET-MAC] re-collect Window A under the fixed anchor
+(tonight proved ~280 bundles/night is routine); (3) then P2-006
+Qwen2.5-1.5B/7B pair campaign per the roadmap (Sol design consult
+adopted). The 2026-07-17 published floor table is caveated pending
+re-adjudication. Prior context: PR #78 MERGED (b52abf3). The
 first window's record — 32/32 strict-valid bundles in
 `runs_recal_20260718/` (NEG-8 start/end brackets, all five su-ABBA
 comparative blocks, full suite-absolute block), collected under the

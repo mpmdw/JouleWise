@@ -1,4 +1,25 @@
-# 2026-07-19 — Extended clean-provenance re-collection: 266 strict-valid, claim-eligible bundles across three bracketed windows; suite-ABBA comparative cell complete at n=10 eligible blocks
+# 2026-07-19 — Extended clean-provenance re-collection: 266 strict-valid bundles across three bracketed windows
+
+> **CORRECTION (same day, soundness audit — READ FIRST).** A same-day
+> Ed-directed measurement-soundness audit
+> (`docs/reviews/2026-07-19-measurement-soundness-audit.md`, findings
+> lead-verified from primary evidence) found a trace-time-anchor defect:
+> power-trace timestamps are misaligned with runtime events at the ~0.5–1 s
+> scale, so the request/phase/item point energies in this report are NOT
+> physically attributable to their stated windows (worst case: the short
+> request cell reports 0.274 J while ~8 J of workload energy sits outside
+> the marker window). This report's original "claim-eligible" headline
+> conflated SOURCE provenance (`source_provenance.claim_eligible=true`,
+> 266/266 — still true) with METRIC-level eligibility: the reducer's own
+> `window_evidence_precheck` passes only 50/288 whole-request gross metrics
+> (suite bundles) and zero phase/item windows. Four cooldown `cap_hit`
+> members additionally break clean-n for their cells (su-b01, short-prefill
+> r04, long-prompt r03, ph-prefill b03). The corpus stands as
+> instrument/calibration evidence; NO floor, MDE, or point energy below may
+> be promoted. The exploratory readout is retained for the audit trail with
+> per-item corrections inline. The prefill/decode "asymmetry" line is
+> additionally a shape artifact (target phase metrics differ ~0.62%), and
+> `jw_sentinel` is five items, not a 48-item suite.
 
 Ed-directed extended quiet window ("laptop can go dark again... collect all
 you can think of"; initially ~90 min, extended by Ed). Executed against clean
@@ -63,12 +84,13 @@ so each window start issued `pmset displaysleepnow` after confirming the
 operator HID-idle ≥ 90 s — the live-validated sequence from the 07-18/19
 windows.
 
-## The n=10 suite-ABBA comparative cell is complete and claim-eligible
+## The n=10 suite-ABBA comparative cell is complete (execution-wise)
 
 b01–b05 (this window, `runs_recal4`) + b06–b10 (`runs_recal3`) give all ten
-planned blocks under identical policy, guard, and clean provenance. The
-claim-bearing comparative floor moves from n=5 to the full planned n=10
-at the verified extraction.
+planned blocks under identical policy, guard, and clean source provenance.
+CORRECTION: per the soundness audit this does NOT yield a claim-bearing
+comparative floor as recorded — the b01-b1 member is a cooldown cap_hit and
+the anchor defect applies; see the banner above.
 
 ## Exploratory lead-side readout (NOT the verified extraction)
 

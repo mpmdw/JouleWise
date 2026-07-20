@@ -52,6 +52,13 @@ generated state kernel remains the work-selection authority.
 
 ### Published Window-A floor summary
 
+> **CAVEAT (2026-07-19 soundness audit):** a trace-time-anchor defect was
+> found in the powermetrics evidence path (power timestamps misaligned with
+> runtime events at the ~0.5–1 s scale). It affects the corpora behind this
+> table; every row below is **under re-adjudication** and none should be
+> cited as a promoted floor until the instrument is repaired and the rows
+> re-extracted. Record: `docs/reviews/2026-07-19-measurement-soundness-audit.md`.
+
 Every energy value below is a false-effect guard floor in joules on the **Apple
 M3 Max / powermetrics SoC-rail boundary (CPU + GPU + ANE)**. Gross is the D-067
 headline basis; idle-subtracted values are labeled within-device secondary
@@ -90,12 +97,23 @@ matching the 07-17 decode cell to ~0.1%. That corpus was
 claim-ineligible on source provenance (dirty collection tree); details:
 `docs/advisor_briefs/2026-07-19-recalibration-update.html`.
 
-UPDATE (2026-07-19 night): the clean re-run is done — **288 strict-valid,
-claim-eligible bundles** (`runs_recal3/4/5/6_20260719/`) cover every planned
-Window-A cell except DF-TELEM at planned n, including the complete n=10
-suite-ABBA comparative cell. The provenance gate is CLOSED; verified
-extraction + P2-037 are the sole remaining gates before claim-bearing
-floors/MDEs. Record:
+UPDATE (2026-07-19 night): the clean re-run is done — 288 strict-valid
+bundles with clean source provenance (`runs_recal3/4/5/6_20260719/`)
+cover every planned Window-A cell except DF-TELEM at planned n,
+including the complete n=10 suite-ABBA comparative cell; the source
+provenance gate is closed. **SUPERSEDING UPDATE (2026-07-19 late
+night): a same-day measurement-soundness audit (findings lead-verified
+from primary evidence) found a trace-time-anchor defect affecting ALL
+powermetrics corpora — power timestamps are misaligned with runtime
+events at the ~0.5–1 s scale, so request/phase point energies are not
+physically attributable to their windows and no claim-bearing floor or
+MDE will be published from existing corpora as recorded.** The corpora
+are retained as instrument/calibration evidence; the environment guard,
+arithmetic identities, and token accounting all verified sound. Path
+forward: instrument repair (tight causal time anchor + anchor-envelope
+reduction, precheck-honest extraction), then re-collection — the
+guard-protected protocol now collects ~280 bundles per night routinely.
+Records: `docs/reviews/2026-07-19-measurement-soundness-audit.md`,
 `docs/run_reports/2026-07-19-recal456-extended-window.md`.
 
 ### Exploratory follow-on — not a promoted claim
@@ -244,7 +262,8 @@ implementing the statistical-uncertainty protocol) queued.
 
 | date | label | one-line outcome | run-report link |
 |---|---|---|---|
-| 2026-07-19 | Extended clean-provenance re-collection | 266/266 strict-valid, claim-eligible bundles from clean main (288 total with the completion window); suite-ABBA comparative cell complete at n=10 eligible blocks; absolutes + all four ABBA families at planned n; one unlock abort quarantined (guard's 4th live catch); Sol recompute audit PASS. | `docs/run_reports/2026-07-19-recal456-extended-window.md` |
+| 2026-07-19 | Measurement-soundness audit (Ed-directed) | VERDICT: unsound for claim-bearing use as recorded — trace-time-anchor defect misattributes request/phase energies (all four P0s lead-verified); metric-level prechecks already failed 238/288 request metrics; four cooldown cap hits unjoined; analysis-engine wire incompat. Corpora demoted to instrument evidence; published 07-17 floor table caveated; instrument-repair path defined. | `docs/reviews/2026-07-19-measurement-soundness-audit.md` |
+| 2026-07-19 | Extended clean-provenance re-collection | 266/266 strict-valid bundles with clean SOURCE provenance from clean main (288 total with the completion window); all planned cells except DF-TELEM executed at planned n; one unlock abort quarantined (guard's 4th live catch); Sol recompute audit PASS on arithmetic. See the superseding soundness-audit row above for claim status. | `docs/run_reports/2026-07-19-recal456-extended-window.md` |
 | 2026-07-19 | Suite re-calibration under the guard (preliminary, review-corrected) | 94 strict-valid bundles; suite 147.96 ± 0.39 J clean; provisional comparative floor ≈ 1.13 J (~0.77%, 5/10 blocks); claim-ineligible on provenance pending clean re-run; three-lens review corrected two over-promoted claims. | `docs/run_reports/2026-07-19-d077-recal-window.md` |
 | 2026-07-18 | Contamination diagnosis + environment-guard hardening (D-077) | Suite-cell inflation attributed to the macOS video screensaver on an awake idle display (43/50 bundles; power-source hypothesis refuted); suite comparative cells caveated pending re-run; the D-077 guard (preflight, idle admission, cooldown v2, claim barrier, anchor custody) was built and taken through an eight-round adversarial arc. | `docs/run_reports/2026-07-17-environment-guard.md`; `docs/run_reports/2026-07-18-d077-fix-rounds.md` |
 | 2026-07-17 | exploratory block + D-075 re-wrap | Nine retained OLMoE/Qwen bundles re-validated and extracted as unmatched, claim-evidence-flagged exploratory observations; DSpark/DFlash smokes and D-075's ranked extension-axis intake folded in without promoting evidence; Ed's manual site deployment recorded as the new drift baseline. | `docs/run_reports/2026-07-17-window-a-floors.md` (final re-wrap addendum; lead gate pending) |

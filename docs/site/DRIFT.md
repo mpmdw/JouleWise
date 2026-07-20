@@ -1,6 +1,20 @@
 # Site drift report (D-068)
 
-Refreshed: 2026-07-19c (extended clean-provenance window + status-page
+Refreshed: 2026-07-19d (SOUNDNESS AUDIT — deploy priority raised). The
+live capsule now shows SUPERSEDED claim posture: the deployed Status
+page presents the 07-17 floor table uncaveated and the night's corpus
+as claim-ready. Repo truth: D-078 soundness gate — a trace-time-anchor
+defect makes all existing powermetrics point energies non-attributable
+as recorded; the floor table is caveated pending re-adjudication; the
+288-bundle corpus is instrument evidence only
+(docs/reviews/2026-07-19-measurement-soundness-audit.md). PROJECT_STATUS
+carries the superseding update + audit ledger row; RUN_STATE carries the
+gate; the Status page split (2026-07-19c note below) is also undeployed.
+Because the deployed page overstates claim status, Ed may want to
+deploy sooner than usual. Three-step: git pull; build_site +
+pack_capsule; npx lakebed deploy. Automation informs; Ed deploys.
+
+Prior refresh: 2026-07-19c (extended clean-provenance window + status-page
 split). The live capsule is now BEHIND the repo in two ways: (1)
 PROJECT_STATUS gained the night's UPDATE (288 strict-valid,
 claim-eligible bundles across runs_recal3/4/5/6; n=10 suite-ABBA cell

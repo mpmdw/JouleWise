@@ -100,6 +100,7 @@ be re-derived by a future agent gets an entry here.
 | D-075 | Extension-axis intake: ranked fold-in without new thesis proliferation | accepted |
 | D-076 | Site capacity right-sizing (AUD-WO-039 review): measured-first budgets | accepted |
 | D-077 | Environment guard, idle admission, and cooldown v2 | accepted |
+| D-078 | Soundness gate: no claim-bearing extraction from time-anchor-defective powermetrics corpora | accepted (Ed ratification pending) |
 
 ---
 
@@ -4014,3 +4015,38 @@ early exits now retain a terminal campaign verdict; missing screensaver
 defaults domains use the macOS 20-minute default; and the two D-077 claim
 barriers are registered in the canonical reducer vocabulary. These are
 defect corrections to the accepted policy, not new policy alternatives.
+
+## D-078: Soundness gate — no claim-bearing extraction from time-anchor-defective powermetrics corpora
+
+Date: 2026-07-19. Owner: lead session under Ed's soundness-audit directive;
+Ed ratification pending (recorded here so the gate binds future sessions
+immediately; Ed may amend).
+
+The 2026-07-19 measurement-soundness audit
+(`docs/reviews/2026-07-19-measurement-soundness-audit.md`; all P0 findings
+lead-verified from primary evidence) found that powermetrics trace
+timestamps are misaligned with runtime events at the ~0.5–1 s scale
+(pre-spawn/first-parse midpoint anchor), making request/phase/item point
+energies physically non-attributable as recorded across ALL existing
+powermetrics corpora, including the 2026-07-17 published floor extraction.
+
+Binding until amended:
+
+1. No claim-bearing floor, MDE, or L2/L3 energy claim may be published from
+   any corpus collected under the defective anchor. Existing corpora are
+   instrument/calibration evidence only.
+2. Extraction must treat `window_evidence_precheck` as a hard gate and must
+   join campaign-log cooldown/admission evidence (cap hits are not clean n).
+   "Claim-eligible" narrative language may describe METRIC-level eligibility
+   only, never source provenance alone.
+3. The repair path (roadmap Phase 0,
+   `docs/phase_2/splitwise_replication_roadmap.md`): tight causal anchor +
+   anchor-shift joule envelope in reduction, analysis-engine 0.5.0/v2 wire
+   compat, CPU-aware idle admission, prospective NEG-8 acceptance threshold.
+   Stored summaries are never rewritten; fixes are prospective.
+4. The 2026-07-17 published floor table is caveated in PROJECT_STATUS
+   pending re-extraction; advisor-brief/site correction timing is Ed's
+   deployment decision (D-068).
+
+Revisit trigger: Phase 0 repair lands with live pulse-validation evidence,
+or Ed rules a different salvage/disposition for existing corpora.
